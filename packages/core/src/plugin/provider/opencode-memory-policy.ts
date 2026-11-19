@@ -97,9 +97,8 @@ export interface Context {
 }
 
 /**
- * When and how much of the workspace's memory reaches a session without the agent asking, how it reads, and when a
- * user's message is likely a correction of an entry the session was given. The plugin only runs what the policy says,
- * so changing delivery means changing `current`.
+ * When and how much of the workspace's memory reaches a session without the agent asking, and how it reads. The plugin
+ * only runs what the policy says, so changing delivery means changing `current`.
  */
 export interface Policy {
   /**
@@ -128,9 +127,7 @@ export interface Policy {
   readonly timeout: Duration.Input
   /** The message that delivers `entries` to the session at `moment`. */
   readonly render: (entries: ReadonlyArray<Injected>, moment: Moment) => string
-  /** The given entry a user's message likely corrects, if any. Runs on every prompt, so it must be cheap. */
-  readonly correction: (message: string, given: ReadonlyArray<Given>) => Given | undefined
-  /** The reminder the request after that message gets. */
+  /** The reminder the request after a user's message that corrects a given entry gets. */
   readonly nudge: (entry: Given) => string
   /**
    * What replaces that reminder once the entry was written or the reminder lapsed: it withdraws the reminder only, and
@@ -139,8 +136,6 @@ export interface Policy {
   readonly withdrawn: (id: string) => string
   /** Whether a command is a test or build run, the kind that tells whether a fix worked. Runs on every shell command. */
   readonly test: (command: string) => boolean
-  /** Whether a user's message reads as correcting the agent. Runs on every prompt, so it must be cheap. */
-  readonly corrective: (message: string) => boolean
   /**
    * The standing block for a session in `repo` (`host/owner/name`): the system part every request of the session
    * carries, the entries in it, and those over the cap, or no text when none applies.
@@ -160,7 +155,6 @@ const MAX_COMMAND = 1000
 const MAX_ERROR = 2000
 const MAX_FILES = 20
 const MAX_SNIPPET = 120
-const CORRECTION_TERMS = 2
 const STANDING_ENTRIES = 5
 const STANDING_TOKENS = 2000
 
@@ -169,8 +163,7 @@ const STANDING_TOKENS = 2000
  * unforked session's first prompt, with the files attached to it or named in it), and when a command fails (the task again, with the
  * end of the command's output and the files the agent worked on as context), at most twice per session. Console returns
  * only the few entries above its relevance bar, within its token budget, and never the same revision twice in a session.
- * Injected entries come whole, so using one takes no `read`. A message reads as a correction when it says so (instead,
- * don't, wrong, ...) and shares at least two distinctive terms with an entry the session was given.
+ * Injected entries come whole, so using one takes no `read`.
  */
 export const initial: Policy = {
   inject: (moment, signals, session) => {
@@ -209,19 +202,7 @@ export const initial: Policy = {
       ),
       "</workspace-memory>",
     ].join("\n"),
-  correction: (message, given) => {
-    if (!CORRECTION.test(message)) return undefined
-    const words = terms(message)
-    return given
-      .map((entry) => ({
-        entry,
-        shared: [...terms(`${entry.title}\n${entry.text}`)].filter((term) => words.has(term)),
-      }))
-      .filter((candidate) => candidate.shared.length >= CORRECTION_TERMS)
-      .toSorted((a, b) => b.shared.length - a.shared.length)[0]?.entry
-  },
   test: (command) => TEST.test(command),
-  corrective: (message) => CORRECTION.test(message),
   // The repository's verified conventions, whole, as one labelled system part: house rules score too low against task
   // text for task-start injection to find them, so they stand in every request instead. At most 5 entries and 2,000
   // tokens, oldest id first so the block is byte-stable and the cached prefix holds; over the cap the most recently
@@ -315,23 +296,6 @@ const TEST =
 /** What test runners, compilers and interpreters print when something failed. */
 const FAILURE =
   /\b[1-9]\d* (?:fail|failed|failing|failures?|errors?)\b|\(fail\)|^\s*(?:error|Error|ERROR)\b[:[]|\b\w*Error: |Traceback \(most recent call last\)|\bFAILED\b|\bpanicked at\b|✘/m
-const CORRECTION =
-  /\b(?:instead|rather|actually|wrong|incorrect|outdated|deprecated|obsolete|no longer|not anymore|stop|don'?t|do not|never|shouldn'?t|should not|isn'?t|is not|doesn'?t|does not|not \w+ but)\b|^\s*no\b/i
-const STOP = new Set(
-  "this that with from have should would could when what then there their they them your about into just like also only some than make more need does instead rather actually because which where will been were here using used file code please want don't doesn't isn't shouldn't".split(
-    " ",
-  ),
-)
-
-/** Lowercased words and identifiers of four or more characters, paths and dotted names kept whole. */
-function terms(text: string) {
-  return new Set(
-    (text.toLowerCase().match(/[a-z0-9][a-z0-9_.\/'-]{3,}/g) ?? [])
-      // A sentence's full stop or quote isn't part of the path or name before it.
-      .map((term) => term.replace(/[._/'-]+$/, ""))
-      .filter((term) => term.length >= 4 && !STOP.has(term)),
-  )
-}
 
 function line(text: string) {
   return text

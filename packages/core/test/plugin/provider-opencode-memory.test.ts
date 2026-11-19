@@ -114,12 +114,26 @@ const injected = (id: string, score: number, revision = 1) => ({
   deliveryID: `mdl_${id}`,
 })
 
+/** A decision request as Console's decision endpoint takes it. */
+type Decision = {
+  readonly model: string
+  readonly state: string
+  readonly questions: Record<string, { type: string; instructions: string; criteria: Record<string, string> }>
+}
+
 /** Console's memory routes and config, in-process, with the request and response shapes and error tags Console uses. */
 function fakeConsole() {
   const state = {
     memory: true,
     /** The OpenCode config Console hands out, such as its MCP servers. */
     config: {} as Record<string, unknown>,
+    /**
+     * How Console's decision endpoint answers a request's questions, or the status it refuses with; unset, it isn't
+     * there (404), as when the member's Console can't answer decisions.
+     */
+    decide: undefined as ((request: Decision) => Record<string, unknown> | number) | undefined,
+    /** The decision requests, apart from the memory requests. */
+    decisions: new Array<Decision & { authorization: string | null }>(),
     hits: new Array<ReturnType<typeof hit>>(),
     injected: new Array<ReturnType<typeof injected>>(),
     /** An entry close enough to refuse a publish without `distinctFrom`. */
@@ -187,6 +201,14 @@ function fakeConsole() {
       // The list the reachable set is checked against, which the plugin keeps fresh on its own: not logged.
       if (url.pathname === "/api/memory/anchors")
         return state.stalled ? new Promise<Response>(() => {}) : Response.json({ anchors: state.anchors })
+      if (url.pathname === "/inference/systemone/v1/systemone") {
+        const asked = (await request.json()) as Decision
+        state.decisions.push({ ...asked, authorization: request.headers.get("authorization") })
+        const answer = state.decide?.(asked) ?? 404
+        return typeof answer === "number"
+          ? Response.json({ error: "no" }, { status: answer })
+          : Response.json({ model: "jev-1.13", answers: answer })
+      }
       if (url.pathname === "/api/v2/config")
         return Response.json(state.config, { headers: state.memory ? { [OpencodeMemory.header]: "1" } : {} })
       const body = (request.method === "GET" ? undefined : await request.json()) as Record<string, unknown> | undefined
@@ -408,6 +430,21 @@ const prompt = (sessionID: Session.ID, text: string, metadata?: Record<string, u
       delivery: "steer",
     })
   })
+
+/** A yes-or-no answer, and a choice answer, as Console's decision endpoint gives them. */
+const yes = (probability: number) => ({ type: "noul", noul: probability })
+const picked = (probabilities: Record<string, number>) => ({
+  type: "choice",
+  choice: Object.entries(probabilities).toSorted((a, b) => b[1] - a[1])[0]?.[0],
+  confidence: 1,
+  probabilities,
+})
+
+/**
+ * Waits until the session's last prompt has been judged and recorded: the session's next event waits for it, as the
+ * agent's tool calls after a prompt do.
+ */
+const judged = (sessionID: Session.ID) => ran(sessionID, "read", { path: "README.md" })
 
 /** A completed tool call, as the tool hooks report it. */
 const ran = (
@@ -948,6 +985,8 @@ describe("OpencodePlugin memory", () => {
         const hooks = yield* PluginHooks.Service
         const session = yield* host.session.create({})
         console.state.injected = [injected("mem_a", 0.95), injected("mem_b", 0.7)]
+        // Both apply to the task.
+        console.state.decide = () => ({ applies: { type: "noul", noul: 0.9 } })
 
         yield* prompt(session.id, "  Fix the deploy ")
         const first = request(session.id, "Fix the deploy")
@@ -956,7 +995,16 @@ describe("OpencodePlugin memory", () => {
           {
             method: "POST",
             path: "/api/memory/inject",
-            body: { sessionID: session.id, moment: "prompt", query: "Fix the deploy", context: {} },
+            // Console's candidates, judged here.
+            body: {
+              sessionID: session.id,
+              moment: "prompt",
+              query: "Fix the deploy",
+              context: {},
+              limit: 10,
+              minScore: 0,
+              maxTokens: 20_000,
+            },
             authorization: "Bearer secret",
           },
         ])
@@ -1293,6 +1341,9 @@ describe("OpencodePlugin memory", () => {
             errors: [output.slice(-2000)],
             commands: ["bun test 2>&1 | tail -40"],
           },
+          limit: 10,
+          minScore: 0,
+          maxTokens: 20_000,
         })
         // Delivered in the command's own result, after what it printed; no message of its own.
         expect(resultText(failed)).toStartWith(JSON.stringify({ exitCode: 0, output }))
@@ -1332,15 +1383,33 @@ describe("OpencodePlugin memory", () => {
           const session = yield* host.session.create({})
           const instructions = host.session.instructions.entry.list({ sessionID: session.id })
           console.state.injected = [injected("mem_deploy", 0.9)]
+          // Which given entry a message corrects is Console's decision: here, any message that says it's wrong.
+          console.state.decide = (asked) =>
+            asked.questions.corrects
+              ? {
+                  corrects: /wrong|should say/.test(asked.state)
+                    ? picked({ mem_deploy: 0.93, none: 0.07 })
+                    : picked({ mem_deploy: 0.02, none: 0.98 }),
+                }
+              : asked.questions.applies
+                ? { applies: yes(0.9) }
+                : { lasting: yes(0.1) }
           yield* prompt(session.id, "Deploy the worker")
           yield* hooks.trigger("session", "context", request(session.id, "Deploy the worker"))
 
           // Not a correction: no reminder.
           yield* prompt(session.id, "Thanks, go ahead with mem_deploy body")
+          yield* judged(session.id)
           expect(yield* instructions).toEqual([])
+          // Asked once, over the entries the session was given.
+          const asked = console.state.decisions.filter((item) => item.questions.corrects)
+          expect(asked).toHaveLength(1)
+          expect(asked[0]).toMatchObject({ model: "jev-1.13", authorization: "Bearer secret" })
+          expect(Object.keys(asked[0]!.questions.corrects!.criteria)).toEqual(["none", "mem_deploy"])
 
           // The injected entry's body reads "Body of mem_deploy"; the user says otherwise.
           yield* prompt(session.id, "No, that body of mem_deploy is wrong, deploy with wrangler instead")
+          yield* judged(session.id)
           const nudge = OpencodeMemoryPolicy.initial.nudge({
             id: "mem_deploy",
             revision: 1,
@@ -1369,9 +1438,75 @@ describe("OpencodePlugin memory", () => {
             },
           ])
           yield* prompt(session.id, "Actually the body of mem_deploy should say wrangler, not npm")
+          yield* judged(session.id)
           expect((yield* instructions)[0]?.value).toContain("mem_deploy r2")
         }),
       ),
+  )
+
+  it.effect("delivers only the candidates the decision finds apply to the task, best first, three at most", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host } = yield* start(console)
+        const hooks = yield* PluginHooks.Service
+        console.state.injected = [
+          injected("mem_a", 0.95),
+          injected("mem_b", 0.5),
+          injected("mem_c", 0.4),
+          injected("mem_d", 0.3),
+          injected("mem_e", 0.2),
+        ]
+        const applies: Record<string, number> = { mem_a: 0.2, mem_b: 0.7, mem_c: 0.9, mem_d: 0.5, mem_e: 0.3 }
+        console.state.decide = (asked) =>
+          asked.questions.applies
+            ? { applies: yes(applies[/Entry (mem_\w)/.exec(asked.state)?.[1] ?? ""] ?? 0) }
+            : { lasting: yes(0.1) }
+        const session = yield* host.session.create({})
+        yield* prompt(session.id, "Fix the deploy")
+        const first = request(session.id, "Fix the deploy")
+        yield* hooks.trigger("session", "context", first)
+        // mem_a scores highest at Console but doesn't apply; the two that do come best first.
+        expect(texts(first)[1]).toBe(
+          OpencodeMemoryPolicy.initial.render([injected("mem_c", 0.4), injected("mem_b", 0.5)], {
+            type: "prompt",
+            text: "Fix the deploy",
+            files: [],
+          }),
+        )
+        expect(console.state.decisions.filter((item) => item.questions.applies)).toHaveLength(5)
+
+        // However many apply, three at most.
+        console.state.decide = (asked) => (asked.questions.applies ? { applies: yes(0.9) } : { lasting: yes(0.1) })
+        const busy = yield* host.session.create({})
+        yield* prompt(busy.id, "Fix the deploy")
+        const many = request(busy.id, "Fix the deploy")
+        yield* hooks.trigger("session", "context", many)
+        expect(texts(many)[1]).toBe(
+          OpencodeMemoryPolicy.initial.render(
+            [injected("mem_a", 0.95), injected("mem_b", 0.5), injected("mem_c", 0.4)],
+            {
+              type: "prompt",
+              text: "Fix the deploy",
+              files: [],
+            },
+          ),
+        )
+
+        // Without decisions, Console's own bar on the scores: only mem_a reaches it.
+        console.state.decide = () => 503
+        const other = yield* host.session.create({})
+        yield* prompt(other.id, "Fix the deploy")
+        const fallback = request(other.id, "Fix the deploy")
+        yield* hooks.trigger("session", "context", fallback)
+        expect(texts(fallback)[1]).toBe(
+          OpencodeMemoryPolicy.initial.render([injected("mem_a", 0.95)], {
+            type: "prompt",
+            text: "Fix the deploy",
+            files: [],
+          }),
+        )
+      }),
+    ),
   )
 
   it.effect("doesn't inject a revision the session already read, but does inject its correction", () =>
@@ -1977,6 +2112,74 @@ describe("OpencodePlugin memory capture", () => {
     console.state.requests.filter((item) => item.path === "/api/memory/entries")
 
   capturing("console_memory,memory_capture").effect(
+    "distils and confirms a rule the decision says the user stated, though no rule wording shows it",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const rule = "Money parameters carry a Cents suffix in this codebase"
+          // Wording alone wouldn't make it a rule; the decision does.
+          expect(OpencodeMemoryCapture.fallback.lasting(rule)).toBe(false)
+          console.state.decide = (asked) =>
+            asked.questions.lasting ? { lasting: yes(asked.state.includes("Cents suffix") ? 0.92 : 0.1) } : 503
+          distiller.reply = JSON.stringify({
+            candidates: [
+              {
+                kind: "convention",
+                title: "Money parameters end in Cents",
+                body: "Claim: x\nApplies when: x\nAction: x\nVerify: x\nAnchors: x\nEvidence: the user said so",
+                basis: "user",
+                quote: rule,
+              },
+            ],
+          })
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          yield* prompt(session.id, rule)
+          yield* waitUntil(Effect.sync(() => publishes(console).length === 1))
+          expect(publishes(console)[0]?.body).toMatchObject({ evidence: [{ kind: "confirmation", ref: rule }] })
+          expect(console.state.decisions.filter((item) => item.questions.lasting)).toHaveLength(1)
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
+    "publishes an observed lesson only when the decision finds it durable, not a note about this one task",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const lesson = (title: string) => ({
+            kind: "gotcha",
+            title,
+            body: "Claim: x\nApplies when: x\nAction: x\nVerify: x\nAnchors: x\nEvidence: x",
+          })
+          distiller.reply = JSON.stringify({
+            candidates: [lesson("How this fix parses dates"), lesson("Tests need TZ=UTC")],
+          })
+          console.state.decide = (asked) =>
+            asked.questions.durable
+              ? asked.state.includes("Title: How this fix parses dates")
+                ? { durable: yes(0.9), fix_record: yes(0.9) }
+                : { durable: yes(0.95), fix_record: yes(0.05) }
+              : 503
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          yield* prompt(session.id, "Fix the date parsing")
+          yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: " 1 fail" })
+          yield* ran(session.id, "edit", { path: "src/dates.ts" })
+          yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 1 pass" })
+          yield* waitUntil(
+            Effect.sync(() => console.state.decisions.filter((item) => item.questions.durable).length === 2),
+          )
+          yield* waitUntil(Effect.sync(() => publishes(console).length === 1))
+          yield* drain
+          expect(publishes(console).map((item) => (item.body as { title: string }).title)).toEqual([
+            "Tests need TZ=UTC",
+          ])
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
     "sends a rule the user stated without the session's taint, while what it observed stays tainted",
     () =>
       withConsole((console) =>
@@ -2328,11 +2531,12 @@ describe("OpencodeMemoryCapture", () => {
     tail: "",
   })
   const edit: OpencodeMemoryCapture.Event = { type: "edit", files: ["src/a.ts"] }
-  const ask = (text: string, correction = false, user = true): OpencodeMemoryCapture.Event => ({
+  const ask = (text: string, correction = false, user = true, lasting = false): OpencodeMemoryCapture.Event => ({
     type: "prompt",
     text,
     correction,
     user,
+    lasting,
   })
 
   test("finds the work boundaries the harness sees", () => {
@@ -2342,15 +2546,12 @@ describe("OpencodeMemoryCapture", () => {
     expect(boundary([], { type: "commit", sha: "abc" })).toBe("commit")
     expect(boundary([edit], ask("Now add a test"))).toBe("task")
     expect(boundary([edit], ask("No, don't change the config", true))).toBe("correction")
-    // A team rule the user states is a boundary of its own, work or not; a task that only says "never" isn't.
-    expect(boundary([], ask("From now on we always name money parameters with a Cents suffix"))).toBe("rule")
-    expect(boundary([edit], ask("Our convention is one test file per module"))).toBe("rule")
+    // A message of the user's judged to state a lasting rule is a boundary of its own, work or not; a request for this
+    // task isn't, and only the user's own message states one.
+    expect(boundary([], ask("Money parameters carry a Cents suffix", false, true, true))).toBe("rule")
+    expect(boundary([edit], ask("Our convention is one test file per module", false, true, true))).toBe("rule")
     expect(boundary([], ask("Add refund(); it must never return more than the original"))).toBeUndefined()
-    // An ordinary task that names the repository isn't a rule, and only what a person typed states one.
-    expect(boundary([], ask("Fix the flaky date test in this repo"))).toBeUndefined()
-    expect(boundary([], ask("From now on we always name money parameters with a Cents suffix", false, false))).toBe(
-      undefined,
-    )
+    expect(boundary([], ask("Money parameters carry a Cents suffix", false, false, true))).toBeUndefined()
     expect(boundary([edit], { type: "subtask" })).toBe("subtask")
     expect(boundary([edit], { type: "compaction" })).toBe("compaction")
     // Without work in between: no task, correction, subtask or compaction boundary.
@@ -2379,19 +2580,35 @@ describe("OpencodeMemoryCapture", () => {
     ])
   })
 
-  test("backs a candidate with the user's words only when they quote a rule the user stated", () => {
-    const segment = [ask("Add isWeekend. From now on we never mock the clock in tests.")]
+  test("backs a candidate with the user's words only when they quote a message judged to state a lasting rule", () => {
+    const message = "Add isWeekend. From now on we never mock the clock in tests."
     const candidate = (quote?: string, basis: "user" | "observed" = "user") =>
       ({ kind: "convention", title: "T", body: "B", basis, ...(quote === undefined ? {} : { quote }) }) as const
-    expect(OpencodeMemoryCapture.backing(candidate("From now on we never mock the clock"), segment)).toBe("confirmed")
-    // A task request, a misquote, or no quote: not the user's confirmation, and not worth keeping as one.
-    expect(OpencodeMemoryCapture.backing(candidate("Add isWeekend."), segment)).toBe("dropped")
-    expect(OpencodeMemoryCapture.backing(candidate("we never stub the network in tests"), segment)).toBe("dropped")
-    expect(OpencodeMemoryCapture.backing(candidate(), segment)).toBe("dropped")
-    expect(OpencodeMemoryCapture.backing(candidate(undefined, "observed"), segment)).toBe("observed")
+    const backing = OpencodeMemoryCapture.backing
+    const lasting = [ask(message, false, true, true)]
+    expect(backing(candidate("From now on we never mock the clock"), lasting)).toBe("confirmed")
+    // Quoting a message that only asks for this task is no confirmation: the candidate stands as an observation.
+    expect(backing(candidate("From now on we never mock the clock"), [ask(message)])).toBe("observed")
+    // A misquote, a quote too short to tell, or none: dropped.
+    expect(backing(candidate("we never stub the network in tests"), lasting)).toBe("dropped")
+    expect(backing(candidate("we never"), lasting)).toBe("dropped")
+    expect(backing(candidate(), lasting)).toBe("dropped")
+    expect(backing(candidate(undefined, "observed"), lasting)).toBe("observed")
     // The same words in a message that isn't the user's (a subagent's task, an automation's) aren't their confirmation.
-    const given = [ask("Add isWeekend. From now on we never mock the clock in tests.", false, false)]
-    expect(OpencodeMemoryCapture.backing(candidate("From now on we never mock the clock"), given)).toBe("dropped")
+    expect(backing(candidate("From now on we never mock the clock"), [ask(message, false, false, true)])).toBe(
+      "dropped",
+    )
+  })
+
+  test("reads a message the stricter way when no decision can be had", () => {
+    const fallback = OpencodeMemoryCapture.fallback
+    // Only an explicit team rule, never a task request that says "never" or names the repository.
+    expect(fallback.lasting("From now on we always name money parameters with a Cents suffix")).toBe(true)
+    expect(fallback.lasting("Our convention is one test file per module")).toBe(true)
+    expect(fallback.lasting("Add refund(); it must never return more than the original")).toBe(false)
+    expect(fallback.lasting("Fix the flaky date test in this repo")).toBe(false)
+    expect(fallback.correcting("No, don't change the config")).toBe(true)
+    expect(fallback.correcting("Add a test for isWeekend")).toBe(false)
   })
 
   test("applies a correction's edits to an entry's whole text, only when each matches exactly once", () => {
@@ -2544,18 +2761,6 @@ describe("OpencodeMemoryPolicy.initial", () => {
     // Unpiped, a zero exit is a success whatever it prints, as a search for errors is.
     expect(failed("grep -rn error: src", "src/a.ts:1: error: x", 0)).toBe(false)
     expect(failed("make || echo done", "Error: x", 0)).toBe(false)
-  })
-
-  test("reads a message as a correction only with correcting words and two shared terms", () => {
-    const given = [
-      { id: "mem_a", revision: 3, title: "Deploys use wrangler", text: "Run wrangler deploy from apps/worker." },
-      { id: "mem_b", revision: 1, title: "Tests", text: "Run bun test in packages/core." },
-    ]
-    const correction = OpencodeMemoryPolicy.initial.correction
-    expect(correction("Don't use wrangler deploy, use the pipeline", given)?.id).toBe("mem_a")
-    expect(correction("Run wrangler deploy now", given)).toBeUndefined()
-    expect(correction("No, that's wrong", given)).toBeUndefined()
-    expect(correction("Actually run tests in packages/core with vitest", given)?.id).toBe("mem_b")
   })
 })
 

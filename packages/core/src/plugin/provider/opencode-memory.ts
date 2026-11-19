@@ -12,7 +12,7 @@ import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
 import { AppProcess } from "@opencode/util/process"
-import { Clock, Effect, Exit, Fiber, Option, Schema, Scope, Stream } from "effect"
+import { Clock, Effect, Exit, Fiber, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
 import { Config } from "../../config.js"
@@ -26,6 +26,7 @@ import { SessionEnvironment } from "../../session/environment.js"
 import { ShellSelect } from "../../shell/select.js"
 import { OpencodeMemoryAccess } from "./opencode-memory-access.js"
 import { OpencodeMemoryCapture } from "./opencode-memory-capture.js"
+import { OpencodeMemoryDecide } from "./opencode-memory-decide.js"
 import { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
 import { OpencodeMemoryVerify } from "./opencode-memory-verify.js"
 import { OpencodeWatches } from "./opencode-watches.js"
@@ -68,6 +69,15 @@ const WRITER = Agent.ID.make("memory-writer")
  * from, so what its tools answer isn't outside input.
  */
 const CONSOLE_MCP = "opencode_console"
+/**
+ * What a task-start or failure-time injection asks Console for, to judge each candidate itself: Console's top
+ * candidates, whatever their score, and the most a token budget Console takes allows.
+ */
+const CANDIDATES = { limit: 10, minScore: 0, maxTokens: 20_000 }
+/** The most entries one injection delivers, as Console does. */
+const MAX_DELIVERED = 3
+/** Without a decision, Console's own bar for an injected entry's score. */
+const FALLBACK_SCORE = 0.75
 /** The evidence a fix the plugin re-ran itself carries, with the commit's hash. */
 const VERIFIED = "verified-fix"
 /** The session instruction entries memory keeps: entries again after a compaction, and a correction reminder. */
@@ -225,6 +235,8 @@ type Tracked = {
   readonly revisions: Map<string, Map<number, number>>
   /** The latest revision this session wrote of each entry it wrote. */
   readonly edited: Map<string, number>
+  /** One event at a time into the session's segment, in the order they happened. */
+  readonly order: Semaphore.Semaphore
   /**
    * Per entry, the revisions this session was shown whole since its last compaction: read, injected or written by it.
    * A rewrite or retire replaces what the entry says, so it starts from one of these.
@@ -284,6 +296,7 @@ export const make = Effect.fnUntraced(function* (
   const environments = yield* SessionEnvironment.Service
   const shells = yield* ShellSelect.Service
   const verify = OpencodeMemoryVerify.make({ git, processes, shell: shells.resolve({ priority: "config" }) })
+  const decide = OpencodeMemoryDecide.make({ http, console: Effect.sync(() => current?.console) })
   const github = yield* OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
@@ -294,6 +307,7 @@ export const make = Effect.fnUntraced(function* (
       given: new Map(),
       revisions: new Map(),
       edited: new Map(),
+      order: Semaphore.makeUnsafe(1),
       shown: new Map(),
       delivered: new Map(),
       compactions: 0,
@@ -709,6 +723,17 @@ export const make = Effect.fnUntraced(function* (
             return yield* Effect.logDebug("memory candidate dropped: not a rule the user stated", {
               title: candidate.title,
             })
+          // A lesson the work showed goes out only when it's durable, not a note about this one task; a rule the user
+          // confirmed is the user's to keep.
+          if (backing === "observed") {
+            const durable = yield* decide.durable(
+              candidate,
+              ("repo" in source && source.repo ? repoName(source.repo) : undefined) ??
+                path.basename(ctx.location.directory),
+            )
+            if (durable !== undefined && durable < OpencodeMemoryDecide.DURABLE)
+              return yield* Effect.logDebug("memory candidate dropped: task-specific", { title: candidate.title })
+          }
           const evidence = [
             ...observed,
             ...(backing === "confirmed"
@@ -862,6 +887,9 @@ export const make = Effect.fnUntraced(function* (
      * Kept in memory only: a restart loses the open segment, never anything published.
      */
     const record = (sessionID: Session.ID, event: OpencodeMemoryCapture.Event) =>
+      tracked(sessionID).order.withPermit(recorded(sessionID, event, tracked(sessionID).turn))
+    /** `record` for a caller that holds the session's order; `turn` is the user turn the event belongs to. */
+    const recorded = (sessionID: Session.ID, event: OpencodeMemoryCapture.Event, turn: Tracked["turn"]) =>
       Effect.gen(function* () {
         if (!capturing) return
         const state = tracked(sessionID)
@@ -881,7 +909,6 @@ export const make = Effect.fnUntraced(function* (
         const opens = event.type === "prompt" && boundary === "task"
         const segment = opens ? [...state.segment] : [...state.segment, event]
         state.segment.splice(0, state.segment.length, ...(opens ? [event] : []))
-        const turn = state.turn
         yield* distill(sessionID, segment, boundary, turn).pipe(
           Effect.andThen(attempt(sessionID, turn)),
           Effect.forkIn(lease, { startImmediately: true }),
@@ -988,19 +1015,41 @@ export const make = Effect.fnUntraced(function* (
           session,
         )
         if (!inject) return undefined
-        const answer = yield* reader.pipe(
+        // Console's candidates, each judged on whether it applies to this task or failure; without any decision,
+        // Console's own bar on their scores.
+        const task = moment.type === "prompt" ? moment.text : (state.task ?? moment.command)
+        const delivered = yield* reader.pipe(
           Effect.flatMap((set) =>
             call(Schema.Struct({ entries: Schema.Array(Injected) }), "POST", "/api/memory/inject", {
               sessionID,
               moment: moment.type,
               ...inject,
+              ...CANDIDATES,
               ...set,
             }),
+          ),
+          Effect.flatMap((answer) =>
+            Effect.forEach(
+              answer.entries,
+              (entry) =>
+                decide.applies(moment, task, entry).pipe(Effect.map((probability) => ({ entry, probability }))),
+              { concurrency: 4 },
+            ),
+          ),
+          Effect.map((judged) =>
+            judged.every((item) => item.probability === undefined)
+              ? judged.filter((item) => item.entry.score >= FALLBACK_SCORE).map((item) => item.entry)
+              : judged
+                  .filter((item) => (item.probability ?? 0) >= OpencodeMemoryDecide.APPLIES)
+                  .toSorted((a, b) => (b.probability ?? 0) - (a.probability ?? 0))
+                  .map((item) => item.entry),
           ),
           Effect.timeout(policy.timeout),
         )
         // Console injects a revision once per session; a revision the agent already has isn't injected either.
-        return answer.entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision)
+        return delivered
+          .filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision)
+          .slice(0, MAX_DELIVERED)
       }).pipe(Effect.catch((cause) => Effect.logDebug("memory injection failed", { cause }).pipe(Effect.as(undefined))))
     // Task start is asked in the background, so the prompt doesn't wait on Console; one at a time per session.
     const begin = (sessionID: Session.ID, moment: OpencodeMemoryPolicy.Moment) =>
@@ -1032,16 +1081,47 @@ export const make = Effect.fnUntraced(function* (
         const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.option)
         const user =
           Option.isSome(session) && session.value.parentID === undefined && event.metadata?.automation === undefined
-        const corrected = user ? policy.correction(event.prompt.text, [...state.given.values()]) : undefined
-        yield* record(event.sessionID, {
-          type: "prompt",
-          text: event.prompt.text.slice(0, MAX_TAIL),
-          correction: user && (corrected !== undefined || policy.corrective(event.prompt.text)),
-          user,
-        })
-        // The distillation this message started has the turn it closed; a new one begins.
+        const text = event.prompt.text
+        const given = [...state.given.values()]
+        // The distillation this message starts has the turn it closes; a new one begins.
+        const closed = state.turn
         state.turn = { commits: [], tests: [], pending: [] }
-        if (corrected) yield* remind(event.sessionID, corrected)
+        // Judged off the prompt's path: whether it states a lasting rule, and which given entry it corrects. The
+        // session's later events wait for it, so the segment keeps their order. Without a decision, the stricter reading.
+        yield* state.order
+          .withPermit(
+            Effect.gen(function* () {
+              const [lasting, corrected] = user
+                ? yield* Effect.all(
+                    [decide.lasting(text), given.length > 0 ? decide.corrects(text, given) : Effect.succeed(undefined)],
+                    { concurrency: 2 },
+                  )
+                : [undefined, undefined]
+              const rule =
+                user &&
+                (lasting === undefined
+                  ? OpencodeMemoryCapture.fallback.lasting(text)
+                  : lasting >= OpencodeMemoryDecide.LASTING)
+              const entry =
+                corrected?.id !== undefined && corrected.p >= OpencodeMemoryDecide.CORRECTS
+                  ? given.find((item) => item.id === corrected.id)
+                  : undefined
+              const correcting = lasting === undefined ? OpencodeMemoryCapture.fallback.correcting(text) : rule
+              yield* recorded(
+                event.sessionID,
+                {
+                  type: "prompt",
+                  text: text.slice(0, MAX_TAIL),
+                  correction: user && (entry !== undefined || correcting),
+                  user,
+                  lasting: rule,
+                },
+                closed,
+              )
+              if (entry) yield* remind(event.sessionID, entry)
+            }),
+          )
+          .pipe(Effect.forkIn(lease, { startImmediately: true }))
         yield* begin(event.sessionID, {
           type: "prompt",
           text: event.prompt.text,

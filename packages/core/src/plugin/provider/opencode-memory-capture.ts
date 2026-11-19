@@ -9,7 +9,14 @@ import { Option, Schema } from "effect"
  * `commit` a commit the session made, `subtask` a subagent finishing, `compaction` the conversation being compacted.
  */
 export type Event =
-  | { readonly type: "prompt"; readonly text: string; readonly correction: boolean; readonly user: boolean }
+  | {
+      readonly type: "prompt"
+      readonly text: string
+      readonly correction: boolean
+      readonly user: boolean
+      /** The user's message states a lasting team rule, decision or correction, not only a request for this task. */
+      readonly lasting?: boolean
+    }
   | {
       readonly type: "shell"
       readonly command: string
@@ -31,11 +38,20 @@ export type Event =
 export type Boundary = "task" | "commit" | "test" | "correction" | "rule" | "subtask" | "compaction"
 
 /**
- * A user's message that states a standing team rule or decision rather than asking for this task's work. Narrow on
- * purpose: each one is a distillation of its own, so a phrase ordinary task requests use ("in this repo") isn't one.
+ * Without a decision, whether a user's message states a standing team rule or decision: narrow on purpose, so it misses
+ * most rules rather than taking a task request for one.
  */
 const STATED =
   /\b(?:from now on|going forward|(?:we|our team|the team) (?:always|never|use|prefer|don'?t|do not)|our (?:convention|rule|policy|style)|team (?:rule|convention|decision|policy))\b/i
+/** Without a decision, whether a user's message reads as correcting the agent. */
+const CORRECTION =
+  /\b(?:instead|rather|actually|wrong|incorrect|outdated|deprecated|obsolete|no longer|not anymore|stop|don'?t|do not|never|shouldn'?t|should not|isn'?t|is not|doesn'?t|does not|not \w+ but)\b|^\s*no\b/i
+
+/** What a message is taken for when no decision can be had: the stricter reading, never a more permissive one. */
+export const fallback = {
+  lasting: (text: string) => STATED.test(text),
+  correcting: (text: string) => CORRECTION.test(text),
+}
 
 /**
  * The boundary `event` closes after `segment`, the events since the last one, or undefined. A new task message, a
@@ -45,7 +61,7 @@ const STATED =
  * run, no file changed): a message that reads as a correction corrects work.
  */
 export function boundary(segment: ReadonlyArray<Event>, event: Event): Boundary | undefined {
-  if (event.type === "prompt" && event.user && STATED.test(event.text)) return "rule"
+  if (event.type === "prompt" && event.user && event.lasting) return "rule"
   const worked = segment.some((item) => item.type === "shell" || item.type === "edit")
   if (event.type === "commit") return "commit"
   if (event.type === "shell" && event.test && !event.failed)
@@ -165,24 +181,21 @@ export function candidates(text: string): ReadonlyArray<Candidate> {
   }).slice(0, 2)
 }
 
-/** Words that make a sentence a rule, a decision or a correction rather than a request for this task. */
-const RULE =
-  /\b(?:always|never|must|should(?:n'?t)?|don'?t|do not|avoid|instead|from now on|going forward|in this repo(?:sitory)?|we (?:use|prefer|always|never|don'?t)|our|convention|rule|policy|prefer(?:red)?|required?|no longer|not anymore|actually|wrong)\b/i
 const MIN_QUOTE = 12
 
 /**
  * Whether the user's own words back a candidate: `confirmed` when it says the user stated it and quotes, word for word,
- * a message a person typed in the segment that reads as a rule, decision or correction (the user's confirmation, which
- * Console promotes on); `observed` for a candidate from the work itself; `dropped` for a claimed user statement that
- * isn't one: a misquote, or a task request, which holds for that task only.
+ * a message of theirs in the segment that states a lasting rule, decision or correction (the user's confirmation, which
+ * Console promotes on); `observed` for a candidate from the work itself, or one quoting a message that only asks for
+ * this task; `dropped` for a misquote.
  */
 export function backing(candidate: Candidate, segment: ReadonlyArray<Event>): "confirmed" | "observed" | "dropped" {
   if (candidate.basis !== "user") return "observed"
   const quote = flat(candidate.quote ?? "")
-  if (quote.length < MIN_QUOTE || !RULE.test(quote)) return "dropped"
-  return segment.some((event) => event.type === "prompt" && event.user && flat(event.text).includes(quote))
-    ? "confirmed"
-    : "dropped"
+  if (quote.length < MIN_QUOTE) return "dropped"
+  const said = segment.find((event) => event.type === "prompt" && event.user && flat(event.text).includes(quote))
+  if (said === undefined) return "dropped"
+  return said.type === "prompt" && said.lasting ? "confirmed" : "observed"
 }
 
 /**
