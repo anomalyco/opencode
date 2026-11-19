@@ -8,7 +8,7 @@ import { Message, SystemPart, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
 import type { Document } from "@opencode/schema/config"
-import type { Session } from "@opencode/schema/session"
+import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
 import { AppProcess } from "@opencode/util/process"
@@ -205,6 +205,8 @@ const Evidence = Schema.Array(Schema.Struct({ kind: Schema.Literals(["pr", "test
     description:
       "What shows it holds: a test or command you ran and saw pass, or a PR. Recorded with the entry; it doesn't make an entry live by itself",
   })
+/** What a finished subagent call answers: the child session it ran in. */
+const SubagentMetadata = Schema.Struct({ sessionID: Schema.String })
 /** What reading an MCP resource names: the server it comes from. */
 const ResourceInput = Schema.Struct({ server: Schema.String })
 /** `git commit`, after any global options, as its own command. */
@@ -1069,10 +1071,22 @@ export const make = Effect.fnUntraced(function* (
         const files = touched(event.tool, event.input)
           .map((file) => relative(ctx.location.directory, file))
           .filter((file) => file !== ".")
-        if (files.length > 0) yield* record(event.sessionID, { type: event.tool === "read" ? "read" : "edit", files })
-        if (event.tool === "subagent") yield* record(event.sessionID, { type: "subtask" })
+        const fromOutside = yield* outside(event, files)
+        if (files.length > 0)
+          yield* record(
+            event.sessionID,
+            event.tool === "read"
+              ? { type: "read", files, ...(fromOutside ? { outside: true } : {}) }
+              : { type: "edit", files },
+          )
+        if (event.tool === "subagent") {
+          // A subagent that took in outside input has tainted this session too, through its parent.
+          const child = Schema.decodeUnknownOption(SubagentMetadata)(event.result.metadata)
+          const read = Option.isSome(child) && (yield* tainted(Session.ID.make(child.value.sessionID)))
+          yield* record(event.sessionID, { type: "subtask", ...(read ? { outside: true } : {}) })
+        }
         if (event.tool !== "read") files.forEach((file) => tracked(event.sessionID).wrote.add(file))
-        if (yield* outside(event, files)) yield* taint(event.sessionID)
+        if (fromOutside) yield* taint(event.sessionID)
         if (files.length > 0) {
           const state = tracked(event.sessionID)
           files.forEach((file) => {
