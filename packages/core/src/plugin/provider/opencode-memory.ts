@@ -490,11 +490,13 @@ export const make = Effect.fnUntraced(function* (
     ...(input.errors === undefined ? {} : { errors: input.errors }),
   })
 
-  // The model distillation runs on: a DeepSeek flash model when one is available, else OpenCode's default.
+  // The model distillation runs on: a DeepSeek flash model when one is available, a paid one before a free one (free
+  // routes may refuse a signed-in caller), else OpenCode's default.
   const distiller = yield* Effect.cached(
     ctx.model.list({ types: ["chat"] }).pipe(
       Effect.map((models) => {
-        const found = models.data.find((model) => /deepseek/i.test(model.id) && /flash/i.test(model.id))
+        const flash = models.data.filter((model) => /deepseek/i.test(model.id) && /flash/i.test(model.id))
+        const found = flash.find((model) => !/free/i.test(model.id)) ?? flash[0]
         return found === undefined ? undefined : { id: found.id, providerID: found.providerID }
       }),
       Effect.orElseSucceed(() => undefined),
@@ -513,10 +515,15 @@ export const make = Effect.fnUntraced(function* (
   ) =>
     Effect.gen(function* () {
       const model = yield* distiller
-      const answer = yield* ctx.experimental.generate.text({
-        prompt: OpencodeMemoryCapture.prompt({ segment, boundary }),
-        ...(model === undefined ? {} : { model }),
-      })
+      const prompt = OpencodeMemoryCapture.prompt({ segment, boundary })
+      // A listed model can still refuse the request; OpenCode's default model is the fallback.
+      const answer = yield* ctx.experimental.generate
+        .text({ prompt, ...(model === undefined ? {} : { model }) })
+        .pipe(
+          Effect.catch((cause) =>
+            model === undefined ? Effect.fail(cause) : ctx.experimental.generate.text({ prompt }),
+          ),
+        )
       const found = OpencodeMemoryCapture.candidates(answer.text)
       if (found.length === 0) return
       const source = yield* checkout
