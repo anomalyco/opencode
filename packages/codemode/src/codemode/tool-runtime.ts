@@ -1,11 +1,7 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
-import type { Json } from "../language/data.js"
-import { compareText } from "../language/runtime/operations.js"
 import type { DiagnosticKind } from "./codemode.js"
 import { ToolError, toolError } from "./tool-error.js"
-import { Host } from "../language/host-function.js"
-import { HostFailure } from "../language/runtime/model.js"
-import type { Run } from "../language/runtime/execute.js"
+import { Host, HostFailure, type Json, type Run } from "psychoscript"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,
@@ -858,3 +854,5 @@ const toJson = (value: unknown): Json | undefined => {
 }
 
 export * as ToolRuntime from "./tool-runtime.js"
+
+const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
