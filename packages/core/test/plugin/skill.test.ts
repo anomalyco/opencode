@@ -59,14 +59,10 @@ describe("SkillPlugin.Plugin", () => {
       expect(files?.has("api/index.md")).toBe(true)
       expect(files?.has("api/sessions.md")).toBe(true)
       expect(files?.get("api/index.md")).toContain("skill://opencode/api/sessions.md")
-      for (const content of files?.values() ?? []) {
-        expect(content).not.toContain("/api/credential")
-        expect(content).not.toContain("/permission/{requestID}/reply")
-      }
     }),
   )
 
-  it.live("keeps generated opencode API skill reference files in sync with OpenAPI and CodeModeApi policy", () =>
+  it.live("keeps generated opencode API skill reference files in sync with OpenAPI", () =>
     Effect.gen(function* () {
       const expected = yield* Effect.promise(() => renderApiSkillFiles())
       expect(SkillPlugin.OpencodeApiFiles).toEqual(expected)

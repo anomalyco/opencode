@@ -3,7 +3,6 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { CodeModeApi } from "../src/codemode/api.js"
 
 type JsonSchema = {
   readonly $ref?: string
@@ -130,7 +129,6 @@ export async function renderApiSkillFiles() {
       const operation = methods[method]
       if (!operation) continue
       const upper = method.toUpperCase()
-      if (CodeModeApi.isBlockedRoute(upper, routePath)) continue
       entries.push({
         method: upper,
         path: routePath,
@@ -156,7 +154,7 @@ export async function renderApiSkillFiles() {
   const indexLines: Array<string> = [
     "# OpenCode API Reference Index",
     "",
-    "Generated from the OpenCode OpenAPI contract, excluding endpoints restricted for agent calls.",
+    "Generated from the OpenCode OpenAPI contract.",
     "Requests to `opencode:///api/...` default `x-opencode-directory` to the current session directory unless overridden.",
     "",
     "## Reference Files",
@@ -210,8 +208,7 @@ function renderTopic(topic: Topic, entries: ReadonlyArray<Entry>, schemas: Reado
 
     const bodySchema = operation.requestBody?.content?.["application/json"]?.schema
     if (bodySchema) {
-      const filtered = omitBlockedFields(entry.method, entry.path, bodySchema)
-      lines.push(`- Body: \`${formatSchema(filtered, schemas, referenced, 2)}\``)
+      lines.push(`- Body: \`${formatSchema(bodySchema, schemas, referenced, 2)}\``)
     }
 
     const success = renderSuccessResponse(operation.responses, schemas, referenced)
@@ -229,15 +226,6 @@ function renderTopic(topic: Topic, entries: ReadonlyArray<Entry>, schemas: Reado
   }
 
   return `${lines.join("\n").trimEnd()}\n`
-}
-
-function omitBlockedFields(method: string, routePath: string, schema: JsonSchema): JsonSchema {
-  const isSessionMutation =
-    (method === "POST" && routePath === "/api/session") ||
-    (method === "PATCH" && routePath === "/api/session/{sessionID}")
-  if (!isSessionMutation || !schema.properties || !("permissions" in schema.properties)) return schema
-  const entries = Object.entries(schema.properties).filter(([key]) => key !== "permissions")
-  return { ...schema, properties: Object.fromEntries(entries) }
 }
 
 function renderSuccessResponse(

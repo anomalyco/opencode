@@ -77,20 +77,11 @@ it.live("dispatches Code Mode opencode:// requests in-process without HTTP auth 
               body: JSON.stringify({ title: "Child from codemode", parentID: ${JSON.stringify(session.data.id)} }),
             })).json()
             const fetched = await (await fetch("opencode:///api/session/" + created.data.id)).json()
-            const blocked = await Promise.allSettled([
-              fetch("opencode:///api/credential"),
-              fetch("opencode:///api/session", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ permissions: [] }),
-              }),
-            ])
             return {
               version: info.version,
               locationDir: loc.directory,
               childTitle: fetched.data.title,
               childParentID: fetched.data.parentID,
-              blockedStatuses: blocked.map((item) => item.status),
             }`,
         },
         {
@@ -109,12 +100,10 @@ it.live("dispatches Code Mode opencode:// requests in-process without HTTP auth 
       locationDir: string
       childTitle: string
       childParentID: string
-      blockedStatuses: Array<string>
     }
     expect(parsed.version).toBe("test-version")
     expect(parsed.locationDir).toBe(directory)
     expect(parsed.childTitle).toBe("Child from codemode")
     expect(parsed.childParentID).toBeTruthy()
-    expect(parsed.blockedStatuses).toEqual(["rejected", "rejected"])
   }),
 )

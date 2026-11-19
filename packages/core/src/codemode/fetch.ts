@@ -90,46 +90,25 @@ const redirectStatuses = new Set([301, 302, 303, 307, 308])
 const fetchOpencode = (url: string, init: Init) =>
   Effect.gen(function* () {
     const parsed = yield* CodeModeApi.parseUri(url)
-    const api = yield* Effect.serviceOption(CodeModeApi.Service)
-    if (Option.isNone(api))
-      return yield* Effect.fail(new Error("opencode:// URLs are unavailable in this environment."))
+    const api = Option.getOrElse(yield* Effect.serviceOption(CodeModeApi.Service), () => CodeModeApi.unavailable)
     const execution = yield* CodeModeExecution.Service
-    const permission = yield* Permission.Service
     const method = (init.method ?? "GET").toUpperCase()
-    yield* CodeModeApi.checkRequest({
-      method,
-      pathname: parsed.pathname,
-      body: init.body,
-      sessionID: execution.sessionID,
-    })
-    const source = { type: "tool" as const, messageID: execution.messageID, id: execution.id }
-    yield* permission
-      .assert({
-        action: "opencode",
-        resources: [`${method} ${parsed.pathname}`],
-        save: ["*"],
-        metadata: display([parsed.canonical, init]),
-        sessionID: execution.sessionID,
-        agent: execution.agent,
-        source,
-      })
-      .pipe(
-        Effect.catchTag("Permission.CorrectedError", (error) =>
-          Effect.fail(new Error(`The user rejected calling ${method} ${parsed.pathname}: ${error.feedback}`)),
-        ),
-      )
     const headers = new Headers(init.headers)
+    // Without a directory the server would answer for its own default Location, not the session's.
     const location = yield* Effect.serviceOption(Location.Service)
-    const query = new URLSearchParams(parsed.search)
-    if (Option.isSome(location) && !headers.has("x-opencode-directory") && !query.has("location[directory]"))
+    if (
+      Option.isSome(location) &&
+      !headers.has("x-opencode-directory") &&
+      !parsed.path.includes("location[directory]=")
+    )
       headers.set("x-opencode-directory", encodeURIComponent(location.value.directory))
-    const request = new Request(`http://opencode.local${parsed.pathname}${parsed.search}`, {
+    const request = new Request(`http://opencode.local${parsed.path}`, {
       method,
       headers,
       body: method === "GET" || method === "HEAD" ? undefined : init.body,
       signal: execution.signal,
     })
-    const response = yield* api.value.fetch(request)
+    const response = yield* api.fetch(request)
     return new Extension.StreamingResponse(response, false)
   })
 

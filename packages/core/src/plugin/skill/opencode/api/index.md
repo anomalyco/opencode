@@ -1,11 +1,11 @@
 # OpenCode API Reference Index
 
-Generated from the OpenCode OpenAPI contract, excluding endpoints restricted for agent calls.
+Generated from the OpenCode OpenAPI contract.
 Requests to `opencode:///api/...` default `x-opencode-directory` to the current session directory unless overridden.
 
 ## Reference Files
 
-### `skill://opencode/api/sessions.md` — Sessions, Messages & Forms (47)
+### `skill://opencode/api/sessions.md` — Sessions, Messages & Forms (53)
 
 Create, list, prompt, wait, interrupt, fork, revert, and inspect sessions, messages, inbox, and pending forms/permissions.
 
@@ -26,6 +26,7 @@ Create, list, prompt, wait, interrupt, fork, revert, and inspect sessions, messa
 - `POST /api/session/{sessionID}/command` — Run command
 - `POST /api/experimental/session/{sessionID}/skill` — Activate skill
 - `POST /api/session/{sessionID}/synthetic` — Add synthetic message
+- `POST /api/session/{sessionID}/shell` — Run shell command
 - `POST /api/session/{sessionID}/compact` — Compact session
 - `POST /api/experimental/session/{sessionID}/wait` — Wait for session
 - `POST /api/session/{sessionID}/revert/stage` — Stage session revert
@@ -47,15 +48,20 @@ Create, list, prompt, wait, interrupt, fork, revert, and inspect sessions, messa
 - `GET /api/session/{sessionID}/form` — List session forms
 - `POST /api/session/{sessionID}/form` — Create session form
 - `GET /api/session/{sessionID}/form/{formID}` — Get session form
+- `DELETE /api/session/{sessionID}/form/{formID}` — Cancel form
+- `POST /api/session/{sessionID}/form/{formID}/reply` — Reply to form
 - `PUT /api/session/{sessionID}/environment` — Set session environment
 - `POST /api/session/{sessionID}/view` — View session
 - `GET /api/session/{sessionID}/message` — Get session messages
 - `GET /api/form` — List pending forms
 - `GET /api/permission/request` — List pending permission requests
 - `GET /api/permission/saved` — List saved permissions
+- `PATCH /api/permission/saved/{id}` — Update saved permission
+- `DELETE /api/permission/saved/{id}` — Remove saved permission
 - `GET /api/session/{sessionID}/permission` — List session permission requests
 - `POST /api/session/{sessionID}/permission` — Create permission request
 - `GET /api/session/{sessionID}/permission/{requestID}` — Get permission request
+- `POST /api/session/{sessionID}/permission/{requestID}/reply` — Reply to pending permission request
 
 ### `skill://opencode/api/workspace.md` — Workspace, Projects & VCS (15)
 
@@ -95,7 +101,7 @@ List models, providers, usage limits, and invoke text, image, video, decision, o
 - `GET /api/provider/{providerID}` — Get provider
 - `GET /api/experimental/usage/limits` — Get usage limits
 
-### `skill://opencode/api/extensions.md` — Agents, Skills, Plugins & MCP (18)
+### `skill://opencode/api/extensions.md` — Agents, Skills, Plugins & MCP (31)
 
 Inspect agents, commands, skills, plugins, MCP servers/resources, integrations, RPC methods, and websearch providers.
 
@@ -107,25 +113,67 @@ Inspect agents, commands, skills, plugins, MCP servers/resources, integrations, 
 - `POST /api/plugin/update` — Update plugins
 - `GET /api/integration` — List integrations
 - `GET /api/integration/{integrationID}` — Get integration
+- `POST /api/experimental/integration/wellknown` — Add wellknown integration
+- `POST /api/integration/{integrationID}/connect/key` — Connect with key
+- `POST /api/integration/{integrationID}/connect/external` — Connect with external credentials
+- `POST /api/integration/{integrationID}/connect/oauth` — Begin OAuth connection
 - `GET /api/integration/{integrationID}/connect/oauth/{attemptID}` — Get OAuth attempt status
+- `DELETE /api/integration/{integrationID}/connect/oauth/{attemptID}` — Cancel OAuth connection
+- `POST /api/integration/{integrationID}/connect/oauth/{attemptID}/complete` — Complete OAuth connection
+- `POST /api/integration/{integrationID}/connect/command` — Begin command connection
 - `GET /api/integration/{integrationID}/connect/command/{attemptID}` — Get command attempt status
+- `DELETE /api/integration/{integrationID}/connect/command/{attemptID}` — Cancel command connection
 - `GET /api/mcp` — List MCP servers
+- `PUT /api/experimental/mcp/{server}` — Add MCP server
+- `DELETE /api/experimental/mcp/{server}` — Remove MCP server
 - `POST /api/experimental/mcp/{server}/connect` — Connect MCP server
 - `POST /api/experimental/mcp/{server}/disconnect` — Disconnect MCP server
 - `GET /api/mcp/resource` — List MCP resources
+- `POST /api/experimental/client-mcp/token` — Create client MCP WebSocket token
+- `GET /api/experimental/client-mcp` — Attach client MCP server
 - `GET /api/command` — List commands
 - `GET /api/skill` — List skills
 - `POST /api/rpc/{rpcID}/{method}` — Call a plugin RPC
 - `GET /api/websearch/provider` — List web search providers
+- `POST /api/websearch` — Search the web
 
-### `skill://opencode/api/runtime.md` — Runtime, Jobs, Automations & Artifacts (31)
+### `skill://opencode/api/runtime.md` — Runtime, Jobs, Automations & Artifacts (62)
 
 Server info, read-only config, background shells/jobs, automations, artifacts, blobs/media, SSE events, debug, and migration status.
 
 - `GET /api/info` — Get server info
+- `POST /api/pair` — Create pairing code
+- `GET /auth/connect/{code}` — Redeem pairing code
+- `GET /api/credential` — List credentials
+- `POST /api/credential` — Create credential
+- `PATCH /api/credential/{credentialID}` — Update credential
+- `DELETE /api/credential/{credentialID}` — Remove credential
+- `POST /api/credential/{credentialID}/activate` — Activate credential
+- `GET /api/fs/read/*` — Read file
+- `GET /api/fs/list` — List directory
+- `GET /api/fs/find` — Find files
+- `POST /api/experimental/fs/write` — Write file
+- `POST /api/experimental/fs/watch` — Watch file
+- `DELETE /api/experimental/fs/watch` — Unwatch file
 - `GET /api/event` — Subscribe to events
+- `GET /api/pty` — List PTY sessions
+- `POST /api/pty` — Create PTY session
+- `GET /api/pty/{ptyID}` — Get PTY session
+- `PUT /api/pty/{ptyID}` — Update PTY session
+- `DELETE /api/pty/{ptyID}` — Remove PTY session
+- `POST /api/pty/{ptyID}/connect-token` — Create PTY WebSocket token
+- `GET /api/pty/{ptyID}/connect` — Connect to PTY session
 - `GET /api/experimental/session/{sessionID}/terminal/read` — Read the session's most recently controlled terminal
 - `GET /api/experimental/session/{sessionID}/terminal`
+- `POST /api/experimental/session/{sessionID}/terminal`
+- `POST /api/experimental/persistent-pty/shutdown`
+- `POST /api/experimental/persistent-pty/handoff`
+- `GET /api/experimental/persistent-pty/{ptyID}`
+- `PUT /api/experimental/persistent-pty/{ptyID}`
+- `DELETE /api/experimental/persistent-pty/{ptyID}`
+- `GET /api/experimental/persistent-pty/{ptyID}/snapshot`
+- `POST /api/experimental/persistent-pty/{ptyID}/connect-token`
+- `GET /api/experimental/persistent-pty/{ptyID}/connect` — Connect to a persistent PTY
 - `GET /api/experimental/media/{hash}` — Read media blob
 - `GET /api/experimental/blob/{id}` — Read a blob
 - `GET /api/experimental/automation` — List automations
@@ -144,6 +192,7 @@ Server info, read-only config, background shells/jobs, automations, artifacts, b
 - `GET /api/experimental/job` — List background jobs
 - `POST /api/experimental/job/{id}/cancel` — Cancel background job
 - `GET /api/shell` — List running shell commands
+- `POST /api/shell` — Run shell command
 - `GET /api/shell/{id}` — Get shell command
 - `DELETE /api/shell/{id}` — Remove shell command
 - `GET /api/shell/{id}/output` — Read shell output
@@ -153,3 +202,4 @@ Server info, read-only config, background shells/jobs, automations, artifacts, b
 - `GET /api/experimental/migration/v1` — Get V1 migration status
 - `GET /api/config` — Get configuration
 - `GET /api/config/shell` — List available shells
+- `PATCH /api/experimental/config` — Update global configuration

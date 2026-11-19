@@ -37,17 +37,64 @@ List integrations. Retrieve available integrations and their authentication meth
 Get integration. Retrieve one integration and its authentication methods.
 - Returns: 200 `{ location: Location.PublicRef; data: Integration.Info }`
 
+## `POST /api/experimental/integration/wellknown`
+Add wellknown integration. Discover and persist an experimental wellknown integration source.
+- Body: `{ url: string }`
+- Returns: 204 No Content
+
+## `POST /api/integration/{integrationID}/connect/key`
+Connect with key. Run a key authentication method and store the resulting credential.
+- Body: `{ key: string; answer?: Form.Answer | null; label?: string | null }`
+- Returns: 204 No Content
+
+## `POST /api/integration/{integrationID}/connect/external`
+Connect with external credentials. Run an external authentication method and store a reference to its credential source.
+- Body: `{ methodID: string; answer?: Form.Answer | null; label?: string | null }`
+- Returns: 204 No Content
+
+## `POST /api/integration/{integrationID}/connect/oauth`
+Begin OAuth connection. Start an OAuth attempt and return the authorization details.
+- Body: `{ methodID: string; answer?: Form.Answer | null; label?: string | null }`
+- Returns: 200 `{ location: Location.PublicRef; data: Integration.AttemptEncoded }`
+
 ## `GET /api/integration/{integrationID}/connect/oauth/{attemptID}`
 Get OAuth attempt status. Poll the current status of an OAuth attempt.
 - Returns: 200 `{ location: Location.PublicRef; data: Integration.AttemptStatus }`
+
+## `DELETE /api/integration/{integrationID}/connect/oauth/{attemptID}`
+Cancel OAuth connection. Cancel an OAuth attempt and release its resources.
+- Returns: 204 No Content
+
+## `POST /api/integration/{integrationID}/connect/oauth/{attemptID}/complete`
+Complete OAuth connection. Complete a code-based OAuth attempt and store the resulting credential. For an automatic attempt with `paste`, `code` is the redirect URL copied from the browser, and the result arrives through the attempt status.
+- Body: `{ code?: string | null }`
+- Returns: 204 No Content
+
+## `POST /api/integration/{integrationID}/connect/command`
+Begin command connection. Start a command authentication attempt.
+- Body: `{ methodID: string; label?: string | null }`
+- Returns: 200 `{ location: Location.PublicRef; data: Integration.CommandAttempt }`
 
 ## `GET /api/integration/{integrationID}/connect/command/{attemptID}`
 Get command attempt status. Poll the current status and output of a command authentication attempt.
 - Returns: 200 `{ location: Location.PublicRef; data: Integration.CommandAttemptStatus }`
 
+## `DELETE /api/integration/{integrationID}/connect/command/{attemptID}`
+Cancel command connection. Cancel a command authentication attempt and terminate its process.
+- Returns: 204 No Content
+
 ## `GET /api/mcp`
 List MCP servers. Retrieve configured MCP servers and their connection status.
 - Returns: 200 `{ location: Location.PublicRef; data: Mcp.Server[] }`
+
+## `PUT /api/experimental/mcp/{server}`
+Add MCP server. Add an MCP server at runtime or replace an existing one, connecting it immediately.
+- Body: `{ config: Mcp.LocalConfigEncoded | Mcp.RemoteConfigEncoded }`
+- Returns: 204 No Content
+
+## `DELETE /api/experimental/mcp/{server}`
+Remove MCP server. Stop an MCP server and remove it from the runtime set until restart.
+- Returns: 204 No Content
 
 ## `POST /api/experimental/mcp/{server}/connect`
 Connect MCP server. Connect an MCP server at runtime, overriding a disabled configuration until restart.
@@ -60,6 +107,16 @@ Disconnect MCP server. Disconnect an MCP server at runtime, removing its tools u
 ## `GET /api/mcp/resource`
 List MCP resources. Retrieve resources and resource templates from connected MCP servers.
 - Returns: 200 `{ location: Location.PublicRef; data: Mcp.ResourceCatalog }`
+
+## `POST /api/experimental/client-mcp/token`
+Create client MCP WebSocket token. Create a short-lived single-use ticket for opening a client MCP WebSocket connection from a browser.
+- Query: `name: string`
+- Returns: 200 `{ location: Location.PublicRef; data: PtyTicket.ConnectToken }`
+
+## `GET /api/experimental/client-mcp`
+Attach client MCP server. Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; its tools stay available while the socket is open. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.
+- Query: `name: string`, `ticket?: string`
+- Returns: 200 `boolean`
 
 ## `GET /api/command`
 List commands. Retrieve currently registered commands.
@@ -78,19 +135,31 @@ Call a plugin RPC. Dispatch a method to the currently registered RPC at the requ
 List web search providers. Return the registered web search providers.
 - Returns: 200 `{ location: Location.PublicRef; data: WebSearch.Provider[] }`
 
+## `POST /api/websearch`
+Search the web. Run one web search through the selected provider. Specify a provider to override the configured default.
+- Body: `{ query: string; providerID?: string }`
+- Returns: 200 `{ location: Location.PublicRef; data: WebSearch.ResponseEncoded }`
+
 ## Types
 
 - `Agent.Info`: `{ id: string; name: string; model?: Model.Ref; request: Provider.Request; system?: string; description?: string; mode: "subagent" | "primary" | "all"; hidden: boolean; color?: string; steps?: number; permissions: Permission.Ruleset }`
 - `Command.Info`: `{ name: string; description?: string }`
+- `Form.Answer`: `Record<string, Form.Value>`
+- `Integration.AttemptEncoded`: `{ attemptID: string; url: string; instructions: string; mode: "auto" | "code"; paste?: true; time: { created, expires } }`
 - `Integration.AttemptStatus`: `{ status: "pending"; time: { created, expires } } | { status: "complete"; time: { created, expires } } | { status: "failed"; message: string; time: { created, expires } } | { status: "expired"; time: { created, expires } }`
+- `Integration.CommandAttempt`: `{ attemptID: string; time: { created, expires } }`
 - `Integration.CommandAttemptStatus`: `{ status: "pending"; message?: string; time: { created, expires } } | { status: "complete"; time: { created, expires } } | { status: "failed"; message: string; time: { created, expires } } | { status: "expired"; time: { created, expires } }`
 - `Integration.Info`: `{ id: string; name: string; metadata?: Record<string, unknown>; methods: Integration.Method[]; connections: Connection.Info[] }`
 - `Location.PublicRef`: `{ directory: string }`
+- `Mcp.LocalConfigEncoded`: `{ type: "local"; command: string[]; cwd?: string; environment?: Record<string, string>; disabled?: boolean; codemode?: boolean; timeout?: { startup, catalog, execution }; protocol?: "legacy" | "auto" | "2026-07-28"; pool?: boolean }`
+- `Mcp.RemoteConfigEncoded`: `{ type: "remote"; url: string; headers?: Record<string, string>; oauth?: Mcp.OAuthConfigEncoded | false; disabled?: boolean; codemode?: boolean; timeout?: { startup, catalog, execution }; protocol?: "legacy" | "auto" | "2026-07-28"; pool?: boolean }`
 - `Mcp.ResourceCatalog`: `{ resources: Mcp.Resource[]; templates: Mcp.ResourceTemplate[] }`
 - `Mcp.Server`: `{ name: string; status: Mcp.Status.Connected | Mcp.Status.Pending | Mcp.Status.Disabled | Mcp.Status.Failed | Mcp.Status.NeedsAuth; title?: string; integrationID?: string }`
 - `Plugin.GuiBundle`: `{ code: string; revision: string; options: Record<string, unknown> }`
 - `Plugin.Info`: `{ id?: string; source: Plugin.Source; features: Plugin.Features; state: Plugin.State }`
+- `PtyTicket.ConnectToken`: `{ ticket: string; expires_in: number }`
 - `Rpc.Input`: `{ input?: unknown }`
 - `Rpc.Output`: `{ output?: unknown }`
 - `Skill.Info`: `{ id: string; name: string; description?: string; autoinvoke?: boolean; path: string; content: string }`
 - `WebSearch.Provider`: `{ id: string; name: string }`
+- `WebSearch.ResponseEncoded`: `{ providerID: string; results: WebSearch.Result[] }`

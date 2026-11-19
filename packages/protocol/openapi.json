@@ -17429,6 +17429,9 @@
               "full_codemode": {
                 "type": "boolean"
               },
+              "opencode_api": {
+                "type": "boolean"
+              },
               "schedules": {
                 "type": "boolean"
               },

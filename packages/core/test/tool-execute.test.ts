@@ -615,9 +615,8 @@ describe("fetch permissions", () => {
 })
 
 describe("Code Mode opencode:// fetch", () => {
-  test("dispatches opencode:///api/... through CodeModeApi, defaults location header, and checks opencode permission", async () => {
+  test("sends opencode:///api/... to CodeModeApi with the session's directory unless the call names one", async () => {
     const received: Array<{ method: string; url: string; directory: string | null; body: string }> = []
-    const asked: Array<Permission.AssertInput> = []
     const services = codeModeServices("/workspace/demo", undefined, undefined, {
       fetch: (request) =>
         Effect.promise(async () => {
@@ -627,15 +626,11 @@ describe("Code Mode opencode:// fetch", () => {
             directory: request.headers.get("x-opencode-directory"),
             body: await request.text(),
           })
-          return new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          })
+          return Response.json({ ok: true })
         }),
     })
-    const permission = permissionService({ assert: (input) => Effect.sync(() => void asked.push(input)) })
     const result = await Effect.runPromise(
-      createCodeMode(new Map(), permission, services).execute(
+      createCodeMode(new Map(), allowAll, services).execute(
         {
           code: `const a = await (await fetch("opencode:///api/vcs/status")).json()
             const b = await (await fetch("opencode:///api/session", {
@@ -671,22 +666,19 @@ describe("Code Mode opencode:// fetch", () => {
         body: "",
       },
     ])
-    expect(asked.map((item) => ({ action: item.action, resources: item.resources }))).toEqual([
-      { action: "opencode", resources: ["GET /api/vcs/status"] },
-      { action: "opencode", resources: ["POST /api/session"] },
-      { action: "opencode", resources: ["GET /api/vcs/status"] },
-    ])
   })
 
-  test("rejects opencode:// when CodeModeApi is unavailable, when URI has host/traversal, and on blocked or self-escalation routes", async () => {
-    const dispatched: Array<string> = []
+  test("rejects an opencode:// URL with a host, and fails when no API is available", async () => {
     const services = codeModeServices("/workspace/demo", undefined, undefined, {
-      fetch: (request) =>
-        Effect.sync(() => {
-          dispatched.push(`${request.method} ${new URL(request.url).pathname}`)
-          return new Response("ok")
-        }),
+      fetch: () => Effect.die("never dispatched"),
     })
+    const host = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, services).execute(
+        { code: `try { await fetch("opencode://api/session") } catch (e) { return e.message }` },
+        context,
+      ),
+    )
+    expect(host.output.output).toContain("omit the host")
 
     const unavailable = await Effect.runPromise(
       createCodeMode(new Map()).execute(
@@ -695,63 +687,6 @@ describe("Code Mode opencode:// fetch", () => {
       ),
     )
     expect(unavailable.output.output).toContain("opencode:// URLs are unavailable")
-
-    const cases = [
-      `fetch("opencode://api/session")`,
-      `fetch("opencode:///api/session/%2e%2e/credential")`,
-      `fetch("opencode:///api//credential")`,
-      `fetch("opencode:///api/credential")`,
-      `fetch("opencode:///api/fs/list")`,
-      `fetch("opencode:///api/shell", { method: "POST", body: "{}" })`,
-      `fetch("opencode:///api/experimental/config", { method: "PATCH", body: "{}" })`,
-      `fetch("opencode:///api/session/${context.sessionID}/permission/per_1/reply", { method: "POST", body: "{}" })`,
-      `fetch("opencode:///api/permission/saved/ps_1", { method: "PATCH", body: "{}" })`,
-      `fetch("opencode:///api/session/${context.sessionID}/form/frm_1/reply", { method: "POST", body: "{}" })`,
-      `fetch("opencode:///api/session/${context.sessionID}/agent", { method: "POST", body: JSON.stringify({ agent: "build" }) })`,
-      `fetch("opencode:///api/session", { method: "POST", body: JSON.stringify({ permissions: [] }) })`,
-      `fetch("opencode:///api/session/${context.sessionID}", { method: "PATCH", body: JSON.stringify({ permissions: [] }) })`,
-    ]
-    const blocked = await Effect.runPromise(
-      createCodeMode(new Map(), allowAll, services).execute(
-        {
-          code: `const results = await Promise.allSettled([${cases.join(",")}]); return results.map((r) => r.status)`,
-        },
-        context,
-      ),
-    )
-    expect(JSON.parse(blocked.output.output)).toEqual(cases.map(() => "rejected"))
-    expect(dispatched).toEqual([])
-
-    const allowed = await Effect.runPromise(
-      createCodeMode(new Map(), allowAll, services).execute(
-        {
-          code: `await fetch("opencode:///api/shell")
-            await fetch("opencode:///api/shell/sh_1", { method: "DELETE" })
-            return "ok"`,
-        },
-        context,
-      ),
-    )
-    expect(allowed.output.output).toBe("ok")
-    expect(dispatched).toEqual(["GET /api/shell", "DELETE /api/shell/sh_1"])
-  })
-
-  test("surfaces user rejection feedback for opencode:// permission denials", async () => {
-    const services = codeModeServices("/workspace/demo", undefined, undefined, {
-      fetch: () => Effect.die("should not dispatch"),
-    })
-    const corrected = permissionService({
-      assert: () => Effect.fail(new Permission.CorrectedError({ feedback: "do not delete sessions" })),
-    })
-    const result = await Effect.runPromise(
-      createCodeMode(new Map(), corrected, services).execute(
-        {
-          code: `try { await fetch("opencode:///api/session/ses_1", { method: "DELETE" }) } catch (e) { return e.message }`,
-        },
-        context,
-      ),
-    )
-    expect(result.output.output).toBe("The user rejected calling DELETE /api/session/ses_1: do not delete sessions")
   })
 })
 

@@ -9,7 +9,7 @@ List sessions. Retrieve sessions in the requested order. Items keep that order a
 
 ## `POST /api/session`
 Create session. Create a session at the requested location. A parentID creates a linked child session at its parent's location.
-- Body: `{ id?: string | null; parentID?: string | null; title?: string | null; agent?: string | null; model?: Model.Ref | null; location?: Location.PublicRef | null; metadata?: Session.Metadata | null }`
+- Body: `{ id?: string | null; parentID?: string | null; title?: string | null; agent?: string | null; model?: Model.Ref | null; location?: Location.PublicRef | null; metadata?: Session.Metadata | null; permissions?: Permission.Ruleset | null }`
 - Returns: 200 `{ data: Session.Info }`
 
 ## `GET /api/experimental/session/stats`
@@ -37,7 +37,7 @@ Get session. Retrieve a session by ID.
 
 ## `PATCH /api/session/{sessionID}`
 Update session. Update mutable session properties.
-- Body: `{ title?: string | null; metadata?: Session.Metadata | null; archived?: boolean | null }`
+- Body: `{ title?: string | null; metadata?: Session.Metadata | null; permissions?: Permission.Ruleset | null; archived?: boolean | null }`
 - Returns: 204 No Content
 
 ## `DELETE /api/session/{sessionID}`
@@ -83,6 +83,11 @@ Activate skill. Activate a skill for a session by appending a skill message and 
 Add synthetic message. Durably admit synthetic session input and schedule execution unless resume is false.
 - Body: `{ id?: string | null; text: string; description?: string | null; metadata?: Record<string, unknown>; delivery?: "steer" | "queue" | null; resume?: boolean | null }`
 - Returns: 200 `{ data: Session.Inbox.Synthetic }`
+
+## `POST /api/session/{sessionID}/shell`
+Run shell command. Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after.
+- Body: `{ id?: string | null; command: string }`
+- Returns: 204 No Content
 
 ## `POST /api/session/{sessionID}/compact`
 Compact session. Durably admit a session compaction request. Steers by default: it runs at the next step boundary instead of waiting behind queued prompts.
@@ -177,6 +182,16 @@ Create session form. Create a form for a session.
 Get session form. Retrieve a form and its current state for a session.
 - Returns: 200 `{ data: Form.Detail }`
 
+## `DELETE /api/session/{sessionID}/form/{formID}`
+Cancel form. Cancel a pending form, optionally telling the asker why it was not answered.
+- Query: `message?: string`
+- Returns: 204 No Content
+
+## `POST /api/session/{sessionID}/form/{formID}/reply`
+Reply to form. Submit an answer to a pending form.
+- Body: `Form.Reply`
+- Returns: 204 No Content
+
 ## `PUT /api/session/{sessionID}/environment`
 Set session environment. Replace the process environment used by local shell commands for this session.
 - Body: `{ variables: Record<string, string> }`
@@ -205,6 +220,15 @@ List saved permissions. Retrieve saved permissions, optionally filtered by proje
 - Query: `projectID?: string`
 - Returns: 200 `{ data: PermissionSaved.Info[] }`
 
+## `PATCH /api/permission/saved/{id}`
+Update saved permission. Change the action or resource of a saved permission. Fails with a conflict when the project already has a saved permission with the same action and resource.
+- Body: `{ action?: string | null; resource?: string | null }`
+- Returns: 200 `{ data: PermissionSaved.Info }`
+
+## `DELETE /api/permission/saved/{id}`
+Remove saved permission. Remove a saved permission by ID.
+- Returns: 204 No Content
+
 ## `GET /api/session/{sessionID}/permission`
 List session permission requests. Retrieve pending permission requests owned by a session.
 - Returns: 200 `{ data: Permission.Request[] }`
@@ -218,16 +242,23 @@ Create permission request. Evaluate and, when approval is required, create a per
 Get permission request. Retrieve a pending permission request owned by a session.
 - Returns: 200 `{ data: Permission.Request }`
 
+## `POST /api/session/{sessionID}/permission/{requestID}/reply`
+Reply to pending permission request. Respond to a pending permission request owned by a session.
+- Body: `{ decision: "once" | "always" | "reject"; message?: string | null }`
+- Returns: 204 No Content
+
 ## Types
 
 - `FileDiff.Info`: `{ file: string; patch: string; additions: number; deletions: number; status: "added" | "deleted" | "modified"; more?: true }`
 - `Form.CreatePayload`: `{ id?: string | null; title: string; metadata?: Form.Metadata; fields: Form.Fields }`
 - `Form.Detail`: `{ id: string; sessionID: string; title: string; metadata?: Form.Metadata; fields: Form.Fields; state: Form.State }`
 - `Form.Info`: `{ id: string; sessionID: string; title: string; metadata?: Form.Metadata; fields: Form.Fields }`
+- `Form.Reply`: `{ answer: Form.Answer }`
 - `InstructionEntry.Info`: `{ key: string; value: unknown }`
 - `Location.PublicRef`: `{ directory: string }`
 - `Model.Ref`: `{ id: string; providerID: string; variant?: string }`
 - `Permission.Request`: `{ id: string; sessionID: string; action: string; resources: string[]; save?: string[]; metadata?: Record<string, unknown>; source?: Permission.Source; message?: string }`
+- `Permission.Ruleset`: `Permission.Rule[]`
 - `Permission.Source`: `{ type: "tool"; messageID: string; id: string }`
 - `PermissionSaved.Info`: `{ id: string; projectID: string; action: string; resource: string; time: { created, updated } }`
 - `Prompt.AgentAttachment`: `{ name: string; mention?: Prompt.Mention }`
