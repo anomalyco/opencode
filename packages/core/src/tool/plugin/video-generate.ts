@@ -110,7 +110,7 @@ export const track = Effect.fnUntraced(function* (input: {
   readonly videos: VideoGeneration.Interface
   readonly blobs: BlobStore.Interface
   readonly fs: FSUtil.Interface
-  readonly environment: Environment.Interface
+  readonly files: Environment.Files
   readonly scope: Scope.Scope
   readonly notificationID: SessionMessage.ID
   readonly sessionID: SessionSchema.ID
@@ -126,10 +126,10 @@ export const track = Effect.fnUntraced(function* (input: {
       Effect.gen(function* () {
         const file = videoPath(input.path, index)
         const content = yield* input.blobs.read(blob.id)
-        yield* input.environment.files.write(file, new Uint8Array())
+        yield* input.files.write(file, new Uint8Array())
         yield* input.fs
           .stream(content.path, { chunkSize: CHUNK })
-          .pipe(Stream.runForEach((chunk) => input.environment.files.append(file, chunk)))
+          .pipe(Stream.runForEach((chunk) => input.files.append(file, chunk)))
         return file
       }),
     )
@@ -240,14 +240,14 @@ export const Plugin = {
           })
         : yield* Effect.gen(function* () {
             const target = yield* access.authorizeRead(value, context)
-            const info = yield* environment.files
+            const info = yield* target.environment.files
               .stat(target.absolute)
               .pipe(
                 Effect.catchTag("Environment.NotFound", () => new ToolFailure({ message: `File not found: ${value}` })),
               )
             if (info.size > MAX_INPUT_BYTES)
               return yield* new ToolFailure({ message: `${value} is larger than 100 MiB.` })
-            const bytes = (yield* environment.files.read(target.absolute)).bytes
+            const bytes = (yield* target.environment.files.read(target.absolute)).bytes
             const mime = Media.detectMediaType(bytes)
             if (mime === undefined)
               return yield* new ToolFailure({ message: `${value} is not a supported image, video or audio file.` })
@@ -354,7 +354,7 @@ export const Plugin = {
                 videos,
                 blobs,
                 fs,
-                environment,
+                files: target?.environment.files ?? environment.files,
                 scope,
                 notificationID: SessionMessage.ID.create(),
                 sessionID: context.sessionID,
