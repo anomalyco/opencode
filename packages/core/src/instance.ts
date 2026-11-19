@@ -1,6 +1,7 @@
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "./agent.js"
 import { App } from "./app.js"
+import { CodeModeApi } from "./codemode/api.js"
 import { Artifact } from "./artifact.js"
 import { AISDK } from "./aisdk.js"
 import { Model } from "./model.js"
@@ -62,6 +63,7 @@ export { Service, node, type Interface } from "./instance/service.js"
 
 const nodes = [
   App.node,
+  CodeModeApi.node,
   Location.node,
   LocationLifecycle.node,
   Environment.node,

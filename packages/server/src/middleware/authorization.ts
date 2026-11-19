@@ -6,9 +6,14 @@ import { PTY_CONNECT_PATH, PTY_CONNECT_TICKET_QUERY } from "@opencode/protocol/g
 import { PERSISTENT_PTY_CONNECT_PATH } from "@opencode/protocol/groups/persistent-pty"
 import { MCP_CLIENT_PATH } from "@opencode/protocol/groups/mcp"
 import { PAIRING_CONNECT_PATH } from "@opencode/protocol/groups/server"
-import { Effect, Layer, Redacted } from "effect"
+import { Context, Effect, Layer, Redacted } from "effect"
 import { Base64 } from "effect/encoding"
 import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
+
+/** Marks an in-process request dispatched by the server itself (such as Code Mode `opencode://`), bypassing HTTP auth. */
+export const InternalRequest = Context.Reference<boolean>("@opencode/Server/InternalRequest", {
+  defaultValue: () => false,
+})
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const WWW_AUTHENTICATE = 'Basic realm="Secure Area"'
@@ -78,6 +83,7 @@ export const authorizationLayer = Layer.effect(
     if (!ServerAuth.required(config)) return Authorization.of((effect) => effect)
     return Authorization.of((effect) =>
       Effect.gen(function* () {
+        if (yield* InternalRequest) return yield* effect
         const request = yield* HttpServerRequest.HttpServerRequest
         const route = yield* HttpRouter.RouteContext
         // Ticketed PTY and client MCP connects (browsers cannot set headers on WebSocket upgrades) and pairing links

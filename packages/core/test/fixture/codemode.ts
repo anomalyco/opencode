@@ -1,3 +1,4 @@
+import { CodeModeApi } from "@opencode/core/codemode/api"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
@@ -19,13 +20,22 @@ export const codeModeServices = (
   directory: string,
   permission: Partial<Permission.Interface> = { assert: () => Effect.void },
   formatter: Formatter.Interface["file"] = () => Effect.succeed(false),
+  api?: CodeModeApi.Interface,
 ) =>
   Effect.runSync(
     CodeModeTool.services.pipe(
       Effect.provide(
         AppNodeBuilder.build(
-          LayerNode.group([Environment.node, FileAccess.node, FileMutation.node, FileWrite.node, Location.node]),
+          LayerNode.group([
+            CodeModeApi.node,
+            Environment.node,
+            FileAccess.node,
+            FileMutation.node,
+            FileWrite.node,
+            Location.node,
+          ]),
           [
+            ...(api ? [CodeModeApi.node.replace(Layer.succeed(CodeModeApi.Service, api))] : []),
             Environment.node.replace(hostEnvironmentLayer),
             Location.node.replace(
               Layer.succeed(

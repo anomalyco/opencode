@@ -2,8 +2,10 @@ export * as CodeModeFetch from "./fetch.js"
 
 import { Extension } from "@opencode/codemode"
 import { isRecord } from "@opencode/util/record"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
+import { Location } from "../location.js"
 import { Permission } from "../permission.js"
+import { CodeModeApi } from "./api.js"
 import { CodeModeExecution } from "./execution.js"
 
 const TIMEOUT_MS = 30_000
@@ -25,6 +27,7 @@ const fetch = (input: string | URL, init: Init = {}) =>
     // Rules match the URL, so `https://user@evil.com` would slip past a rule for `https://evil.com/*`.
     if (parsed?.username || parsed?.password)
       return yield* Effect.fail(new TypeError("fetch cannot be used with credentials in the URL."))
+    if (parsed?.protocol === "opencode:") return yield* fetchOpencode(url, init)
     const execution = yield* CodeModeExecution.Service
     const permission = yield* Permission.Service
     const source = { type: "tool" as const, messageID: execution.messageID, id: execution.id }
@@ -83,6 +86,52 @@ const fetch = (input: string | URL, init: Init = {}) =>
 
 export const MAX_REDIRECTS = 20
 const redirectStatuses = new Set([301, 302, 303, 307, 308])
+
+const fetchOpencode = (url: string, init: Init) =>
+  Effect.gen(function* () {
+    const parsed = yield* CodeModeApi.parseUri(url)
+    const api = yield* Effect.serviceOption(CodeModeApi.Service)
+    if (Option.isNone(api))
+      return yield* Effect.fail(new Error("opencode:// URLs are unavailable in this environment."))
+    const execution = yield* CodeModeExecution.Service
+    const permission = yield* Permission.Service
+    const method = (init.method ?? "GET").toUpperCase()
+    yield* CodeModeApi.checkRequest({
+      method,
+      pathname: parsed.pathname,
+      body: init.body,
+      sessionID: execution.sessionID,
+    })
+    const source = { type: "tool" as const, messageID: execution.messageID, id: execution.id }
+    yield* permission
+      .assert({
+        action: "opencode",
+        resources: [`${method} ${parsed.pathname}`],
+        save: ["*"],
+        metadata: display([parsed.canonical, init]),
+        sessionID: execution.sessionID,
+        agent: execution.agent,
+        source,
+      })
+      .pipe(
+        Effect.catchTag("Permission.CorrectedError", (error) =>
+          Effect.fail(new Error(`The user rejected calling ${method} ${parsed.pathname}: ${error.feedback}`)),
+        ),
+      )
+    const headers = new Headers(init.headers)
+    const location = yield* Effect.serviceOption(Location.Service)
+    const query = new URLSearchParams(parsed.search)
+    if (Option.isSome(location) && !headers.has("x-opencode-directory") && !query.has("location[directory]"))
+      headers.set("x-opencode-directory", encodeURIComponent(location.value.directory))
+    const request = new Request(`http://opencode.local${parsed.pathname}${parsed.search}`, {
+      method,
+      headers,
+      body: method === "GET" || method === "HEAD" ? undefined : init.body,
+      signal: execution.signal,
+    })
+    const response = yield* api.value.fetch(request)
+    return new Extension.StreamingResponse(response, false)
+  })
 
 // The request a browser sends after a redirect: 303, and 301/302 after a POST, become a GET without a body, and
 // credentials are not sent to another origin.

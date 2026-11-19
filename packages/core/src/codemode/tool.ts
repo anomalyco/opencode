@@ -21,6 +21,7 @@ import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
+import { CodeModeApi } from "./api.js"
 import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
@@ -74,13 +75,13 @@ class Run extends Context.Service<
   }
 >()("@opencode/CodeModeTool/Run") {}
 
-/** The session's Location and file services, which a run with the experimental `path` and `Bun` globals acts through. */
-export type Services = Location.Service | CodeModeBun.Services
+/** The session's Location, file, and OpenCode API services, used by `path`, `Bun`, and `opencode://` fetch. */
+export type Services = Location.Service | CodeModeBun.Services | CodeModeApi.Service
 
 /** Those services alone, so a run they are given to keeps its own scope and the rest of its context. */
 export const services = Effect.map(
   Effect.context<Services>(),
-  Context.pick(Location.Service, FileAccess.Service, FileMutation.Service, FileWrite.Service),
+  Context.pick(Location.Service, FileAccess.Service, FileMutation.Service, FileWrite.Service, CodeModeApi.Service),
 )
 
 export type Inventory = {

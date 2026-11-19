@@ -10,9 +10,11 @@ import { Skill } from "../skill.js"
 import { Config } from "../config.js"
 import os from "os"
 import opencodeContent from "./skill/opencode.md" with { type: "text" }
+import { opencodeApiFiles } from "./skill/opencode/api.js"
 import reportContent from "./skill/report.md" with { type: "text" }
 
 export const OpencodeContent = opencodeContent
+export const OpencodeApiFiles = opencodeApiFiles
 export const ReportContent = reportContent
 
 export const OpencodeDescription =
@@ -23,8 +25,9 @@ const REPORT_DESCRIPTION =
 export const Plugin = define({
   id: "opencode.skill",
   effect: Effect.fn(function* (ctx) {
+    const skills = yield* Skill.Service
     const reportContent = yield* reportContentWithDiagnostics(ctx.app)
-    yield* ctx.skill.transform((editor) => {
+    yield* skills.transform((editor) => {
       editor.add(
         Skill.Info.make({
           id: Skill.ID.make("opencode"),
@@ -33,6 +36,7 @@ export const Plugin = define({
           path: AbsolutePath.make("skill://opencode/SKILL.md"),
           content: OpencodeContent,
         }),
+        opencodeApiFiles,
       )
       editor.add(
         Skill.Info.make({

@@ -5,6 +5,7 @@ import { Permission } from "../permission.js"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
+import { CodeModeApi } from "../codemode/api.js"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { CodeModeTool } from "../codemode/tool.js"
 import { Database } from "../database/database.js"
@@ -245,6 +246,7 @@ export const node = makeLocationNode({
   layer,
   deps: [
     Agent.node,
+    CodeModeApi.node,
     Model.node,
     Database.node,
     FileAccess.node,

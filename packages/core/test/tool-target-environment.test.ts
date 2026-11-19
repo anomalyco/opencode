@@ -2,6 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { CodeModeApi } from "@opencode/core/codemode/api"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -169,7 +170,14 @@ describe("Code Mode Bun", () => {
       }).pipe(
         Effect.provide(
           AppNodeBuilder.build(
-            LayerNode.group([FileAccess.node, FileMutation.node, FileWrite.node, Location.node, Permission.node]),
+            LayerNode.group([
+              CodeModeApi.node,
+              FileAccess.node,
+              FileMutation.node,
+              FileWrite.node,
+              Location.node,
+              Permission.node,
+            ]),
             [
               ...other.replacements,
               Formatter.node.replace(Layer.mock(Formatter.Service, { file: () => Effect.succeed(false) })),
