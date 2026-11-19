@@ -12,6 +12,31 @@ import {
 } from "./desktop-native"
 
 describe("desktop native translations", () => {
+  test.each([
+    ["hr", "Instaliraj CLI...", "Forum za podršku", "CLI je instaliran", "Zadani projekt"],
+    ["hu", "CLI telepítése...", "Támogatási fórum", "CLI telepítve", "Alapértelmezett projekt"],
+    ["is", "Setja upp CLI...", "Aðstoðarspjallborð", "CLI uppsett", "Sjálfgefið verkefni"],
+    ["lt", "Įdiegti CLI...", "Pagalbos forumas", "CLI įdiegtas", "Numatytasis projektas"],
+  ] as const)(
+    "keeps %s native labels attached to their actions",
+    async (locale, install, support, installed, project) => {
+      const { dict } = await import(`./${locale}`)
+      const bundle = createDesktopNativeBundle(locale, (key) => dict[key] ?? DESKTOP_NATIVE_ENGLISH[key])
+
+      expect(bundle.messages["desktop.menu.app"]).toBe("OpenCode")
+      expect(bundle.messages["desktop.menu.installCli"]).toBe(install)
+      expect(bundle.messages["desktop.menu.supportForum"]).toBe(support)
+      expect(bundle.messages["desktop.cli.installed.title"]).toBe(installed)
+      expect(bundle.messages["desktop.onboarding.defaultProject"]).toBe(project)
+      expect(bundle.messages["desktop.picker.error.sizeLimit"]).toContain("{{limit}}")
+      expect(bundle.messages["desktop.microphoneUsage"]).toBe(DESKTOP_NATIVE_ENGLISH["desktop.microphoneUsage"])
+      expect(bundle.messages["desktop.contextMenu.spellcheck"]).toBe(
+        DESKTOP_NATIVE_ENGLISH["desktop.contextMenu.spellcheck"],
+      )
+      expect(parseDesktopNativeBundle(bundle)).toEqual(bundle)
+    },
+  )
+
   test("accepts the exact typed bundle", () => {
     const bundle = createDesktopNativeBundle("en", (key) => DESKTOP_NATIVE_ENGLISH[key])
     expect(parseDesktopNativeBundle(bundle)).toEqual(bundle)
