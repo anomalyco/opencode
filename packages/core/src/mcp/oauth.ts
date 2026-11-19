@@ -416,6 +416,92 @@ const exchange = (input: {
           : error,
   })
 
+/**
+ * Handles one OAuth callback request on the loopback listener.
+ *
+ * The previous ordering checked `error` before `state` and called `Deferred.fail`
+ * on any error, permanently settling the Deferred. When an authorization server
+ * replays a single-use consent URL (e.g. Ory Network via Safari link preview), the
+ * error callback arrives first with the correct `state`, fails the Deferred, and
+ * the browser's later valid `code` callback is rejected with 409.
+ *
+ * State is now validated first. An error callback with the correct state ends the
+ * browser's view with an error page but deliberately does not settle the Deferred,
+ * so a subsequent valid `code` callback can still complete the login.
+ */
+export const handleOauthCallback = (input: {
+  readonly url: URL
+  readonly expectedState: string
+  readonly code: Deferred.Deferred<
+    { code: string; iss: string | undefined; host?: string; response?: ServerResponse },
+    Error
+  >
+  readonly fields: { readonly server: string; readonly methodID: string; readonly oauthAttemptID: string }
+  readonly runFork: (effect: Effect.Effect<void, never>) => void
+  readonly provider: string
+  readonly host?: string
+  readonly response: ServerResponse
+}): void => {
+  const { url, expectedState, code, fields, runFork, provider, host, response } = input
+  const fail = (reason: string, failure: string) => {
+    runFork(Effect.logWarning("mcp oauth callback rejected", { ...fields, reason: failure }))
+    Effect.runSync(Deferred.fail(code, new Error(reason)))
+    response.writeHead(400, { "Content-Type": "text/html" }).end(OauthCallbackPage.error(reason, { provider }))
+  }
+  const errorPage = (detail: string) => {
+    response.writeHead(400, { "Content-Type": "text/html" }).end(OauthCallbackPage.error(detail, { provider }))
+  }
+
+  const errorParam = url.searchParams.get("error_description") ?? url.searchParams.get("error")
+  const returned = url.searchParams.get("state")
+  const value = url.searchParams.get("code")
+
+  // Browsers can reach the callback without any OAuth parameters
+  // (preflights, prefetches, reloads). Only a redirect from the
+  // authorization server may end the login, so keep waiting for it.
+  if (returned === null && !value && !errorParam) {
+    errorPage("Missing authorization code")
+    return
+  }
+
+  // Validate state first: a wrong state is forged or from a different
+  // authorization attempt, so end this login. A correct state means the
+  // callback is from our authorization server, even if it carries an
+  // error — replayed consent URLs can arrive before the valid code.
+  if (returned !== expectedState) {
+    return fail("OAuth state mismatch", "state_mismatch")
+  }
+
+  // An error callback with the correct state (e.g. a replayed single-use
+  // consent URL) ends the browser's view but must not end the login:
+  // the valid code callback may still arrive. Keep waiting for it.
+  if (errorParam) {
+    errorPage(errorParam)
+    return
+  }
+
+  // No error, state matches: we need the authorization code.
+  if (!value) {
+    return fail("Missing authorization code", "missing_code")
+  }
+
+  // The page waits for the token exchange so the browser never reports
+  // success for a rejected code. A second callback is a 409.
+  const settled = Effect.runSync(
+    Deferred.succeed(code, {
+      code: value,
+      iss: url.searchParams.get("iss") ?? undefined,
+      host,
+      response,
+    }),
+  )
+  if (settled) {
+    response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider }))
+  } else {
+    response.writeHead(409).end("OAuth callback already received")
+  }
+}
+
 export const authorize = (input: {
   readonly name: string
   readonly config: typeof ConfigMCP.Remote.Type
@@ -454,39 +540,16 @@ export const authorize = (input: {
         response.writeHead(404).end("Not found")
         return
       }
-      const fail = (reason: string, failure: string) => {
-        runFork(Effect.logWarning("mcp oauth callback rejected", { ...fields, reason: failure }))
-        Effect.runSync(Deferred.fail(code, new Error(reason)))
-        response
-          .writeHead(400, { "Content-Type": "text/html" })
-          .end(OauthCallbackPage.error(reason, { provider: input.name }))
-      }
-      const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
-      if (error) return fail(error, "authorization_error")
-      const returned = url.searchParams.get("state")
-      const value = url.searchParams.get("code")
-      // Browsers can reach the callback without any OAuth parameters (preflights, prefetches, reloads). Only a
-      // redirect from the authorization server may end the login, so keep waiting for it.
-      if (returned === null && !value) {
-        response
-          .writeHead(400, { "Content-Type": "text/html" })
-          .end(OauthCallbackPage.error("Missing authorization code", { provider: input.name }))
-        return
-      }
-      if (returned !== state) return fail("OAuth state mismatch", "state_mismatch")
-      if (!value) return fail("Missing authorization code", "missing_code")
-      // The page waits for the token exchange so the browser never reports success for a rejected code.
-      if (
-        !Effect.runSync(
-          Deferred.succeed(code, {
-            code: value,
-            iss: url.searchParams.get("iss") ?? undefined,
-            host: request.headers.host,
-            response,
-          }),
-        )
-      )
-        response.writeHead(409).end("OAuth callback already received")
+      handleOauthCallback({
+        url,
+        expectedState: state,
+        code,
+        fields,
+        runFork,
+        provider: input.name,
+        host: request.headers.host ?? undefined,
+        response,
+      })
     })
 
     // callback_port, else the port pinned by redirect_uri, else ephemeral; a mismatch strands the browser.
