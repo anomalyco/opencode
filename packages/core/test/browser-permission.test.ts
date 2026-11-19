@@ -701,31 +701,29 @@ it.live("an agent denied the browser sees the browser tools in an attached sessi
   }),
 )
 
-// A removed name is answered with what to call instead only where the namespace is listed: in an attached session,
-// whatever its agent's rules. In a session no desktop is attached to it must read exactly as any other name does, or
-// the sentence tells a caller that sees no browser that one exists and what it has.
-it.live("a removed browser tool names its replacement where the browser is listed, and is one more unknown tool where it is not", () =>
+// A removed name is answered with what to call instead wherever the browser namespace is registered: in an attached
+// session, whatever its agent's rules, and in a session no desktop is attached to, where the namespace has no tools.
+it.live("a removed browser tool names its replacement in attached and unattached sessions", () =>
   Effect.gen(function* () {
     const attempt = (name: string) =>
       `try { await tools.browser.${name}({}); return "called" } catch (error) { return String(error?.message ?? error) }`
-
-    // What a name gets in a namespace that never existed: "Unknown tool", and at most a tool the caller can see.
-    const absent = (selection: SessionContext.Selection) =>
-      Effect.gen(function* () {
-        for (const name of ["preview", "click"]) {
-          const answer = yield* codeMode(selection, attempt(name))
-          expect(answer).toMatchObject({ toolCalls: [] })
-          expect(answer.output).toStartWith(`Unknown tool 'browser.${name}'.`)
-          expect(answer.output).not.toMatch(/removed|browser\.(tabs|navigate)/)
-        }
-
-        expect(yield* codeMode(selection, 'return Object.keys(tools).includes("browser")')).toMatchObject({ output: "false" })
-      })
 
     const removed = {
       output: expect.stringMatching(/^browser\.preview was removed: call browser\.tabs\.open/),
       toolCalls: [],
     }
+
+    // An empty browser namespace: no tools, a removed name still answered with its replacement, any other name unknown.
+    const empty = (selection: SessionContext.Selection) =>
+      Effect.gen(function* () {
+        expect(yield* codeMode(selection, attempt("preview"))).toMatchObject(removed)
+        const click = yield* codeMode(selection, attempt("click"))
+        expect(click).toMatchObject({ toolCalls: [] })
+        expect(click.output).toStartWith("Unknown tool 'browser.click'.")
+        expect(click.output).not.toMatch(/browser\.(tabs|navigate)/)
+
+        expect(yield* codeMode(selection, 'return Object.keys(tools).includes("browser")')).toMatchObject({ output: "true" })
+      })
 
     const browser = yield* setup({ agents: { reviewer: { mode: "primary", permissions: [rule("*", "deny")] } } })
     const allowed = yield* browser.listing()
@@ -739,12 +737,12 @@ it.live("a removed browser tool names its replacement where the browser is liste
     expect(yield* codeMode((yield* browser.listing()).selection, attempt("preview"))).toMatchObject(removed)
 
     // A session no desktop is attached to, for an allowed agent and for a denied one: the deny every agent gets until
-    // an attachment's grant hides the tools, and the namespace with them.
+    // an attachment's grant hides the tools, but the namespace stays.
     for (const agent of ["build", "reviewer"]) {
       const lone = yield* sessions.create({ location: browser.ref, agent: Agent.ID.make(agent) })
       const none = yield* browser.listing(lone.id)
       expect(none.catalog).toEqual([])
-      yield* absent(none.selection)
+      yield* empty(none.selection)
     }
   }),
 )

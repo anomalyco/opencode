@@ -38,11 +38,7 @@ const ExecuteCall = Schema.Struct({
   tool: Schema.String,
   status: Schema.Literals(["running", "completed", "error"]),
   input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
-  /** The failure message, bounded; kept even when the program catches the error. */
-  error: Schema.optionalKey(Schema.String),
 })
-
-const MAX_ERROR_CHARS = 2_000
 
 type ExecuteCall = typeof ExecuteCall.Type
 
@@ -238,11 +234,7 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
     if (index === undefined) return Effect.void
     return record((items) => {
       const next = [...items]
-      next[index] = {
-        ...items[index],
-        status: result.status === "success" ? "completed" : "error",
-        ...(result.status === "failure" ? { error: failureMessage(result.error) } : {}),
-      }
+      next[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
       return next
     })
   }
@@ -265,12 +257,6 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
     },
     "extension.after": settle,
   } satisfies CodeMode.Hooks
-}
-
-// Hooks see the error as thrown inside the runtime; anything without a message is stringified.
-function failureMessage(error: unknown) {
-  const message = error instanceof globalThis.Error ? error.message : String(error)
-  return message.length > MAX_ERROR_CHARS ? `${message.slice(0, MAX_ERROR_CHARS)}…` : message
 }
 
 const isPinned = (registration: Info) => {
@@ -368,6 +354,7 @@ export const check = (
 function inventoryTools(inventory: Inventory) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
+  for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
     const child = definition(registration, true)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
@@ -379,14 +366,6 @@ function inventoryTools(inventory: Inventory) {
       output: child.outputSchema ?? { type: ["string", "null"] },
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
-  }
-  // A namespace is there for the tools under it. With none this caller may use, it is absent as they are: its name,
-  // and what it says of a tool it once had, would tell a caller denied the namespace that it exists and what it holds.
-  for (const namespace of inventory.namespaces?.values() ?? []) {
-    const node = namespace.name
-      .split(".")
-      .reduce<ToolNode | undefined>((parent, name) => parent?.children.get(name), root)
-    if (node) node.namespace = namespace
   }
   return renderTools(root)
 }
