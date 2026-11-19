@@ -39,9 +39,10 @@ bun run --cwd packages/cli-rs cargo build --bin opencode-native
 Run cargo this way. `bun run cargo` first installs OpenTUI's native library, and cargo reads `.cargo/config.toml`
 only inside `packages/cli-rs`.
 
-The client pins `packages/rust` of [`anomalyco/opentui`](https://github.com/anomalyco/opentui) by release `tag` in
-`Cargo.toml`. That checkout has no native library, and the bindings accept only the `opentui.h` they were generated
-from. `script/opentui-native.ts` (`bun run opentui:native`) installs the release's
+The client pins `packages/rust` of [`anomalyco/opentui`](https://github.com/anomalyco/opentui) to a release, as the
+crates.io packages `anomalyco-opentui` and `anomalyco-opentui-sys` (library names `opentui` and `opentui_sys`) at
+an exact `version` in `Cargo.toml`; the release tag is `v<version>`. The crate has no native library, and the
+bindings accept only the `opentui.h` they were generated from. `script/opentui-native.ts` (`bun run opentui:native`) installs the release's
 `opentui-native-<tag>-<platform>.zip` into `.opentui/<tag>/host`, checked against the script's sha256 table and the
 release's header hash, with the zip's licence files under `licenses/`. Zips are cached in
 `$XDG_CACHE_HOME/opencode/opentui-native`. A plain `cargo` run that finds the directory empty fails with the command
@@ -49,8 +50,8 @@ to run. `opentui:native --target <triple>` installs another target's library and
 `OPENTUI_LIB_DIR`.
 
 To move to another release, add its rows to the table in `script/opentui-native.ts` (from
-`gh release view <tag> -R anomalyco/opentui --json assets`), change the `tag` and the directory in
-`.cargo/config.toml`, and commit them with `Cargo.lock`. A pin between releases (a `rev`) has no zip: build its
+`gh release view <tag> -R anomalyco/opentui --json assets`), change the `version` and the directory in
+`.cargo/config.toml`, and commit them with `Cargo.lock`. A pin between releases (a git `rev`) has no zip: build its
 library from OpenTUI's source and set `OPENTUI_LIB_DIR`. Changes to OpenTUI's Rust crates are pull requests to
 `anomalyco/opentui`.
 
@@ -68,7 +69,7 @@ On Linux and macOS the library links statically with its own libc++, so neither 
 LTO for a smaller, faster binary in `target/dist/`; its link takes about 10 minutes.
 
 **Editor.** rust-analyzer finds no project when you open the repository root. Open `packages/cli-rs`, or in VS Code
-set `{ "rust-analyzer.linkedProjects": ["packages/cli-rs/Cargo.toml"] }`. Its `cargo check` fails in `opentui-sys`
+set `{ "rust-analyzer.linkedProjects": ["packages/cli-rs/Cargo.toml"] }`. Its `cargo check` fails in `anomalyco-opentui-sys`
 until you run `bun run --cwd packages/cli-rs opentui:native` once.
 
 ## Run

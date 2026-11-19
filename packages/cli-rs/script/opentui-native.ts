@@ -5,12 +5,13 @@
 // control: a re-pin adds the release's rows from `gh release view <tag> -R anomalyco/opentui --json assets`.
 //
 // Usage: bun run script/opentui-native.ts [--target <rust-target>] [--dest <dir>] [--quiet]
-//   The tag comes from the `opentui` dependency in Cargo.toml (`tag = "vX.Y.Z"`). Without `--target` it installs the
+//   The tag is `v` and the exact crates.io version of the `opentui` dependency in Cargo.toml
+//   (`version = "=X.Y.Z"`). Without `--target` it installs the
 //   host's library into the directory `.cargo/config.toml` names (`.opentui/<tag>/host`); with `--target` into
 //   `.opentui/<tag>/<target>`, unless `--dest` names another. It prints the directory, for `OPENTUI_LIB_DIR`.
 //   Downloaded zips are kept in `$XDG_CACHE_HOME/opencode/opentui-native`, so a new worktree needs no network.
 //   `--quiet` is the check `bun run cargo` runs first: silent when the directory is current, when `OPENTUI_LIB_DIR`
-//   is set in the shell, or when the pin is no release (a `rev` or `path`, which brings its own directory).
+//   is set in the shell, or when the pin is no release (a `git` or `path` spec, which brings its own directory).
 //
 // Needs only Bun: the zip is read here, so it runs the same on Linux, macOS and Windows.
 import { createHash } from "node:crypto"
@@ -22,18 +23,18 @@ import { unzip } from "./zip"
 // The OpenTUI releases the client can pin: the commit the tag names, the FNV-1a 64 of its `opentui.h`, and the sha256
 // of `opentui-native-<tag>-<platform>.zip` for each platform.
 const releases: Record<string, { commit: string; header: string; zips: Record<string, string> }> = {
-  "v0.9.3": {
-    commit: "3dc895b5be6a0878d3f8db7be51ac417dfdd5306",
+  "v0.9.4": {
+    commit: "ff939592dc7bd102a4665bf340c4960b868b306b",
     header: "0x99dd2d0018a6caa3",
     zips: {
-      "darwin-arm64": "8c54453b71fa995cdc10db5aec897e2eff5eafe497497d7450d040f68c159932",
-      "darwin-x64": "d62d9ddd436507e5e2b5047de2b3f311ca786b182ef8a5a2ae0dc99b48b2121c",
-      "linux-arm64": "746f493900d2cccb20cea71c5535d9c4d6db01abf11a7f7acc7cbd88d075ed33",
-      "linux-arm64-musl": "ac92c2b0bbcf42a775e54e186fe4e280bac259ce0f8bc43f44592e056e67f8d4",
-      "linux-x64": "8cd14a3a53ce8731f0cfc1d483972e266aaa8bf3b5a6e1308a81264bd228d105",
-      "linux-x64-musl": "70a7be9993804d9668cbd0166b11e544d15d71461c1a1691fc6b976f490ec3a7",
-      "windows-arm64": "4d7d0968230101bda3facf59154bf41b3ffd1bcf9a578bb2b99e87982305024d",
-      "windows-x64": "ab3115e9fcf596bf26f2b9e0792893b17d0644613212b91b08d60892f19719d4",
+      "darwin-arm64": "05c5deb946e4db36377a9fcbadd19d5dc3c33a7ce9b7a28e41d3781f23f4f6e2",
+      "darwin-x64": "cf2d657555b0f6b347605588224e06c5ac2ee3f4dcd7bc358986bbb15bad555c",
+      "linux-arm64": "d96744770c05a717381109a8c0c91e1497b0e107101b6024dee5a8f7a9e10f08",
+      "linux-arm64-musl": "137c33d358985b1dabb91196c81c04ff06efd86bf281d91628d98c4753e82429",
+      "linux-x64": "e6a963555eba731acc08d12b00b1e44457997ae1c2702e5f31580e49322d567e",
+      "linux-x64-musl": "beb205dc0127756193a0cf0718c11a33035003173ca4c4b541479b281eb5a4d7",
+      "windows-arm64": "227dbb0ab426bc6a5ba81da2baa2df36ce9125d9b011eb4342a5ebd9548629fb",
+      "windows-x64": "4d326f70d0938362ad7b82ad4bc9b885f0a4e4b2a0b0b730a4d9be7e9ad7ad94",
     },
   },
 }
@@ -56,12 +57,13 @@ const quiet = args.includes("--quiet")
 const option = (name: string) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
 
 if (quiet && process.env.OPENTUI_LIB_DIR) process.exit(0)
-const pinned = (await Bun.file(path.join(root, "Cargo.toml")).text()).match(/^opentui = \{[^}]*\btag = "([^"]+)"/m)?.[1]
-if (!pinned && quiet) process.exit(0)
-const tag = must(
-  pinned,
-  "the opentui dependency in Cargo.toml names no release tag; build the library for its rev or path",
-)
+const dependency = (await Bun.file(path.join(root, "Cargo.toml")).text()).match(/^opentui = \{[^}]*\}/m)?.[0] ?? ""
+const version = /\b(git|path) = /.test(dependency) ? undefined : dependency.match(/\bversion = "=([^"]+)"/)?.[1]
+if (!version && quiet) process.exit(0)
+const tag = `v${must(
+  version,
+  "the opentui dependency in Cargo.toml pins no crates.io release (`version = \"=X.Y.Z\"`); build the library for its rev or path",
+)}`
 const release = must(releases[tag], `no sha256 table for ${tag}; add its rows to script/opentui-native.ts`)
 const target = option("--target") ?? host()
 const spec = must(targets[target], `no OpenTUI release zip for ${target}; it has ${Object.keys(targets).join(", ")}`)
