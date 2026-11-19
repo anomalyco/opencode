@@ -1229,6 +1229,8 @@ impl Vm {
         }
     }
 
+    // Inlined in the dispatch loop as without a collector (see `Vm::new_object`).
+    #[cfg_attr(feature = "gc-incremental", inline)]
     pub fn type_of(&self, v: &Value) -> &'static str {
         match v {
             Value::Undef | Value::Uninit => "undefined",

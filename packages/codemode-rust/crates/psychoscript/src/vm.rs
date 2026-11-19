@@ -16,10 +16,16 @@ use crate::{DiagnosticKind, Limits};
 
 pub type Res = Result<Value, Value>;
 
+/// The run's objects: a plain vector, or one with a collector's write barrier.
+#[cfg(feature = "gc-incremental")]
+pub use crate::gc_incremental::Heap;
+#[cfg(not(feature = "gc-incremental"))]
+pub type Heap = Vec<Obj>;
+
 pub type NativeFn = fn(&mut Vm, Value, &[Value], Id) -> Res;
 
 pub const MAX_DEPTH: usize = 10_000;
-const MAX_OBJECTS: usize = 2_000_000;
+pub(crate) const MAX_OBJECTS: usize = 2_000_000;
 pub(crate) const MAX_STRINGS: usize = 4_000_000;
 const MAX_NATIVE_DEPTH: usize = 400;
 pub(crate) const FUEL: i32 = 20_000;
@@ -222,7 +228,7 @@ pub struct Realm {
 }
 
 pub struct Vm {
-    pub heap: Vec<Obj>,
+    pub heap: Heap,
     pub cells: Vec<Slot>,
     pub atoms: Strings,
     pub stack: Vec<Slot>,
@@ -265,9 +271,9 @@ pub struct Vm {
     /// Address near the bottom of the native stack this run started on, and how much of it calls may use.
     pub stack_base: usize,
     pub stack_budget: usize,
-    arg_pool: Vec<Vec<Value>>,
+    pub(crate) arg_pool: Vec<Vec<Value>>,
     /// The parts of a `Concat` instruction, kept between them so joining allocates no list.
-    concat_parts: Vec<StrId>,
+    pub(crate) concat_parts: Vec<StrId>,
     pub char_strs: Vec<StrId>,
     pub rng: u64,
     /// A suspend (or a round trip) asks the run to stop at its next safe point.
@@ -301,6 +307,8 @@ pub struct Vm {
     /// The answers a rerun takes in order, and what the meter was when it started.
     pub(crate) replay: VecDeque<Value>,
     pub(crate) replay_meter: Option<crate::conversion::Meter>,
+    #[cfg(feature = "gc-incremental")]
+    pub(crate) gc: crate::gc_incremental::Gc,
 }
 
 impl Vm {
@@ -334,7 +342,7 @@ impl Vm {
             .map(|d| d.as_nanos() as u64)
             .unwrap_or(0x9e3779b97f4a7c15);
         Vm {
-            heap: Vec::with_capacity(1024),
+            heap: Heap::with_capacity(1024),
             cells: Vec::new(),
             atoms,
             stack: Vec::with_capacity(1024),
@@ -386,6 +394,8 @@ impl Vm {
             convert_req: None,
             replay: VecDeque::new(),
             replay_meter: None,
+            #[cfg(feature = "gc-incremental")]
+            gc: crate::gc_incremental::Gc::new(),
         }
     }
 
@@ -411,11 +421,41 @@ impl Vm {
 
     #[inline]
     pub fn alloc(&mut self, obj: Obj) -> Id {
+        #[cfg(feature = "gc-incremental")]
+        if self.heap.len() >= self.gc.obj_limit {
+            return self.gc_alloc(obj);
+        }
+        #[cfg(not(feature = "gc-incremental"))]
         if self.heap.len() >= MAX_OBJECTS {
             self.out_of_memory();
         }
         self.heap.push(obj);
         (self.heap.len() - 1) as Id
+    }
+
+    #[inline(always)]
+    fn new_cell(&mut self) -> u64 {
+        #[cfg(feature = "gc-incremental")]
+        if self.cells.len() >= self.gc.cell_limit {
+            return self.gc_new_cell();
+        }
+        self.cells.push(Slot::UNINIT);
+        self.cells.len() as u64 - 1
+    }
+
+    /// A safe point with `suspend_wanted` set; with a collector, whether it alone wanted the stop (`gc_point`).
+    #[cfg(not(feature = "gc-incremental"))]
+    #[inline(always)]
+    fn gc_point(&mut self) -> bool {
+        false
+    }
+
+    /// Asks the run to stop at its next safe point.
+    #[inline(always)]
+    fn want_suspend(&mut self) {
+        self.suspend_wanted = true;
+        #[cfg(feature = "gc-incremental")]
+        self.gc.disown_suspend();
     }
 
     /// Runs keep everything they allocate until they end, so a runaway allocation loop is stopped here; the run
@@ -433,11 +473,15 @@ impl Vm {
         }
     }
 
+    // Kept out of the dispatch loop as without a collector, where its smaller `alloc` would otherwise inline it.
+    #[cfg_attr(feature = "gc-incremental", inline(never))]
     pub fn new_object(&mut self) -> Id {
         let proto = self.realm.object_proto;
         self.alloc(Obj::new(Some(proto), Kind::Ordinary))
     }
 
+    // Kept out of the dispatch loop as without a collector, where its smaller `alloc` would otherwise inline it.
+    #[cfg_attr(feature = "gc-incremental", inline(never))]
     pub fn new_array(&mut self, items: Vec<Value>) -> Value {
         let proto = self.realm.array_proto;
         Value::Obj(self.alloc(Obj::new(Some(proto), Kind::Array(items))))
@@ -451,6 +495,8 @@ impl Vm {
     }
 
     /// The concatenation of strings, appending in place to the first one's buffer when it can.
+    // Kept out of the dispatch loop as without a collector, where its smaller `alloc` would otherwise inline it.
+    #[cfg_attr(feature = "gc-incremental", inline(never))]
     pub fn concat_strs(&mut self, parts: &[StrId]) -> Value {
         if self.atoms.bufs.len() >= MAX_STRINGS {
             self.out_of_memory();
@@ -600,6 +646,10 @@ impl Vm {
             if !replaying {
                 self.handover();
             }
+        }
+        #[cfg(feature = "gc-incremental")]
+        if self.atoms.gc.wanted {
+            self.gc_poll();
         }
         let mut r = Ok(());
         if check && !replaying && self.host.meter.fuel <= 0 {
@@ -781,8 +831,8 @@ impl Vm {
         }
         if self.json_walks == u32::MAX {
             self.json_walks = 0;
-            for o in &mut self.heap {
-                o.visit = 0;
+            for i in 0..self.heap.len() {
+                self.heap[i].visit = 0;
             }
         }
         self.json_walks += 1;
@@ -886,7 +936,7 @@ impl Vm {
     fn checkpoint(&mut self) {
         if self.roundtrip_every > 0 {
             self.host.meter.fuel = self.roundtrip_every as i32;
-            self.suspend_wanted = true;
+            self.want_suspend();
         }
         // A long stretch of compute stops to move to a worker thread: see `offload`.
         if let Some(o) = &mut self.host.offload
@@ -894,10 +944,10 @@ impl Vm {
         {
             o.at = None;
             o.due = true;
-            self.suspend_wanted = true;
+            self.want_suspend();
         }
         if self.host.shared.requested() {
-            self.suspend_wanted = true;
+            self.want_suspend();
         }
     }
 
@@ -2801,8 +2851,7 @@ impl Vm {
                         self.stack.push(v);
                     }
                     Op::NewCell(i) => {
-                        self.cells.push(Slot::UNINIT);
-                        let c = self.cells.len() as u64 - 1;
+                        let c = self.new_cell();
                         self.stack[base + i as usize] = Slot(c);
                     }
                     Op::GetCell(i) => {
@@ -2821,6 +2870,10 @@ impl Vm {
                     Op::SetCell(i) => {
                         let v = self.stack.pop().unwrap_or_default();
                         let c = self.stack[base + i as usize].0 as usize;
+                        #[cfg(feature = "gc-incremental")]
+                        if self.heap.marking {
+                            self.gc_shade(v);
+                        }
                         if let Some(cell) = self.cells.get_mut(c) {
                             *cell = v;
                         }
@@ -2841,6 +2894,10 @@ impl Vm {
                     Op::SetUpval(i) => {
                         let v = self.stack.pop().unwrap_or_default();
                         let c = self.frames[fi].upvals[i as usize];
+                        #[cfg(feature = "gc-incremental")]
+                        if self.heap.marking {
+                            self.gc_shade(v);
+                        }
                         self.cells[c as usize] = v;
                     }
                     Op::GetGlobal(g) => {
@@ -3381,7 +3438,7 @@ impl Vm {
                     Op::Jump(t) => {
                         if (t as usize) < pc {
                             tri!(self.tick());
-                            if self.suspend_wanted && resumable {
+                            if self.suspend_wanted && resumable && !self.gc_point() {
                                 self.frames[fi].pc = t as usize;
                                 self.suspended = true;
                                 return Ok(Exit::Suspend);
@@ -3432,7 +3489,7 @@ impl Vm {
                         if self.truthy(&v) {
                             if (t as usize) < pc {
                                 tri!(self.tick());
-                                if self.suspend_wanted && resumable {
+                                if self.suspend_wanted && resumable && !self.gc_point() {
                                     self.frames[fi].pc = t as usize;
                                     self.suspended = true;
                                     return Ok(Exit::Suspend);
@@ -4018,7 +4075,7 @@ impl Vm {
             if self.suspended {
                 return Ok(());
             }
-            if self.suspend_wanted || self.host.shared.requested() {
+            if (self.suspend_wanted && !self.gc_point()) || self.host.shared.requested() {
                 self.suspended = true;
                 return Ok(());
             }

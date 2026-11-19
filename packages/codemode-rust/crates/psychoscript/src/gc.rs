@@ -23,10 +23,17 @@ pub struct HeapStats {
 impl Vm {
     /// Live slots now: objects, cells, strings. A collector that reuses slots subtracts its free ones.
     pub fn heap_counts(&self) -> (u64, u64, u64) {
+        #[cfg(feature = "gc-incremental")]
+        let (objects, cells, strings) = {
+            let (o, c) = self.gc.free_counts();
+            (o, c, self.atoms.gc.free.len())
+        };
+        #[cfg(not(feature = "gc-incremental"))]
+        let (objects, cells, strings) = (0, 0, 0);
         (
-            self.heap.len() as u64,
-            self.cells.len() as u64,
-            self.atoms.bufs.len() as u64,
+            (self.heap.len() - objects) as u64,
+            (self.cells.len() - cells) as u64,
+            (self.atoms.bufs.len() - strings) as u64,
         )
     }
 

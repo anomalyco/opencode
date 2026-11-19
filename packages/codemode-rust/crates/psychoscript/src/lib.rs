@@ -19,6 +19,8 @@ mod diagnostic;
 mod exec;
 #[cfg(feature = "gc-stats")]
 mod gc;
+#[cfg(feature = "gc-incremental")]
+mod gc_incremental;
 mod host;
 mod host_function;
 mod iteration;
