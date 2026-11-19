@@ -1,11 +1,8 @@
-// OT2065 (parity/deviations/OT2065-lost-mouse-release.md): a drag over the prompt text whose release never comes,
-// then a new press, drag and release over "text". TS treats the new gesture as part of the old one: it selects and
-// copies nothing, and `Z` goes where the first drag left the cursor. Rust ends the old drag at the press, selects
-// and copies "text", and `Z` replaces it.
+// A drag over the prompt text whose release never comes, then a new press, drag and release over "text". The press
+// ends the old drag, the new gesture selects and copies "text", and `Z` replaces it (OpenTUI #2065, on both sides
+// since 0.9.4).
 import { definePty } from "../../pty/run"
 import { home, homeMasks, move, press, release } from "./home"
-
-const deviation = { file: "OT2065-lost-mouse-release", lines: 5 }
 
 export default definePty({
   args: [],
@@ -19,8 +16,8 @@ export default definePty({
     { keys: move(19, 17) + move(21, 17), settle: 300, checkpoint: "held" },
     { keys: press(27, 17), settle: 50 },
     { keys: move(29, 17) + move(30, 17), settle: 50 },
-    { keys: release(30, 17), settle: 500, checkpoint: "released", deviation },
-    { keys: "Z", settle: 400, checkpoint: "typed", deviation },
+    { keys: release(30, 17), settle: 500, checkpoint: "released" },
+    { keys: "Z", settle: 400, checkpoint: "typed" },
   ],
   cursor: true,
   osc: [],

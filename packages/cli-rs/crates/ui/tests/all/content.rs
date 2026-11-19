@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use opencode_parity::{Fixture, app, compare, fixtures_dir};
+use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_ui::theme::{Catalog, TerminalColors, Theme, ThemeMode, from_hex, generate_system};
 use opencode_ui::{code, diff, markdown};
 use opentui::native::Capture;
@@ -81,17 +81,10 @@ fn paste_chip_text_is_the_page_color_on_a_transparent_page() {
 /// Compares a capture with `parity/fixtures/<name>.json`, every cell.
 #[track_caller]
 fn assert_parity(capture: &Capture, name: &str) {
-    assert_parity_within(capture, name, &[]);
-}
-
-/// As [`assert_parity`], allowing the cells `deviation` allows.
-#[track_caller]
-fn assert_parity_within(capture: &Capture, name: &str, deviation: &[app::Deviation]) {
-    assert!(deviation.iter().all(|entry| app::deviation_exists(&entry.file)), "{name}: a deviation file is missing");
     let expected = Fixture::load(fixtures_dir().join(format!("{name}.json"))).unwrap();
     let actual = Fixture::from_capture(capture);
     let comparison = compare(&expected, &actual);
-    if !comparison.is_equal() && !app::allows(deviation, &comparison) {
+    if !comparison.is_equal() {
         let path = std::env::temp_dir().join("opencode-parity").join(format!("{name}.json"));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, actual.to_json()).unwrap();
@@ -145,9 +138,7 @@ fn raw_markdown_matches_typescript() {
 fn markdown_table_matches_typescript() {
     let corpus: serde_json::Value =
         serde_json::from_str(include_str!("../../../../parity/fixtures/U.4c/corpus.json")).unwrap();
-    let deviation = app::Deviation { file: "OT2112-table-alignment".into(), cells: 14, style_only: false };
-    let capture = markdown_app(corpus["table"].as_str().unwrap(), true).render();
-    assert_parity_within(&capture, "U.4c/markdown-table", &[deviation]);
+    assert_parity(&markdown_app(corpus["table"].as_str().unwrap(), true).render(), "U.4c/markdown-table");
 }
 
 #[test]

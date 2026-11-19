@@ -1,5 +1,5 @@
-// OT2079 (parity/deviations/OT2079-strikethrough.md): mini replays an answer and its reasoning that both contain
-// `~~gone~~`. Both clients hide the tildes; Rust strikes the text through, TS draws it plain.
+// Mini replays an answer and its reasoning that both contain `~~gone~~`: the tildes hide and the text is struck
+// through (OpenTUI #2079, on both sides since 0.9.4).
 import { definePty } from "../../pty/run"
 import { assistant, config, server, statusMask, user } from "../M.1/fixture"
 
@@ -28,7 +28,6 @@ export default definePty({
       timeout: 30_000,
       checkpoint: "replayed",
       attributes: true,
-      deviation: { file: "OT2079-strikethrough", lines: 2 },
     },
     { keys: "\x03", settle: 200 },
     { keys: "\x03", settle: 400 },

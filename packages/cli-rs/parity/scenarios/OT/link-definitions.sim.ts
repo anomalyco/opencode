@@ -1,6 +1,5 @@
-// OT2049 (parity/deviations/OT2049-link-reference-definitions.md): a reply with reference links, a table, and the
-// link reference definitions at its end. TS draws the definition lines as text and resolves the links in the table
-// only; Rust hides the definitions, as CommonMark does, and resolves every link.
+// A reply with reference links, a table, and the link reference definitions at its end: the definitions hide and
+// every link resolves, as CommonMark says (OpenTUI #2049, on both sides since 0.9.4).
 import { defineSim } from "../../sim/scenario"
 
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
@@ -33,18 +32,6 @@ export default defineSim({
     { type: "Link the cafes" },
     { until: "Link the cafes" },
     { enter: true },
-    {
-      checkpoint: "done",
-      until: "first.",
-      masks: [duration],
-      deviation: [
-        // The two definition rows, and the turn row they move up.
-        { file: "OT2049-link-reference-definitions", cells: 224 },
-        // ` (https://example.com/cafes)` after the paragraph's link.
-        { file: "OT2049-link-reference-definitions", cells: 34 },
-        // The space before each table link's ` (url)` suffix.
-        { file: "OT2049-link-reference-definitions", cells: 2, styleOnly: true },
-      ],
-    },
+    { checkpoint: "done", until: "first.", masks: [duration] },
   ],
 })

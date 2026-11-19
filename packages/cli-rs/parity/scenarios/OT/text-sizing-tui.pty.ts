@@ -1,11 +1,7 @@
-// OT2056 (parity/deviations/OT2056-text-sizing-probe.md): the TUI starts under a shell's output in a terminal that
-// draws OSC 66 as kitty does. TS probes text sizing at the top of the main screen before it enters the alternate
-// screen, so after exit the start of the first two shell rows is overwritten. Rust probes on the alternate screen,
-// whose first frame repaints the probe's cells, and the shell rows come back whole.
+// The TUI starts under a shell's output in a terminal that draws OSC 66 as kitty does. After exit the shell rows come
+// back whole: no text sizing probe overwrites them (OpenTUI #2056, on both sides since 0.9.4).
 import { definePty } from "../../pty/run"
 import { home, homeMasks } from "./home"
-
-const deviation = { file: "OT2056-text-sizing-probe", lines: 2 }
 
 export default definePty({
   args: [],
@@ -17,7 +13,7 @@ export default definePty({
   steps: [
     { until: { screen: "█▀▀█" }, settle: 500, timeout: 30_000, checkpoint: "home" },
     // One Ctrl+C on the empty prompt exits; a second press could land once the terminal is restored, as a SIGINT.
-    { keys: "\x03", until: { exit: true }, settle: 800, checkpoint: "exit", deviation },
+    { keys: "\x03", until: { exit: true }, settle: 800, checkpoint: "exit" },
   ],
   exits: true,
   masks: homeMasks,

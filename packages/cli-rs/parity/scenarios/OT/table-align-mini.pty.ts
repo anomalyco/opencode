@@ -1,7 +1,5 @@
-// OT2112 (parity/deviations/OT2112-table-alignment.md): mini replays the packing list of `table-align.sim.ts`, alone,
-// as borderless columns. TS left-aligns every column; Rust right-aligns `Qty` and centres `Weight` and `Packed`, on the
-// body rows (each header is its column's widest cell, so that row is equal). `M.1/table-gap` checks the rows around a
-// table.
+// Mini replays the packing list of `table-align.sim.ts`, alone, as borderless columns: `Qty` right-aligned, `Weight`
+// and `Packed` centred (OpenTUI #2112, on both sides since 0.9.4). `M.1/table-gap` checks the rows around a table.
 import { definePty } from "../../pty/run"
 import { assistant, config, server, statusMask, user } from "../M.1/fixture"
 
@@ -22,13 +20,7 @@ export default definePty({
   server: server({ messages }),
   setup: (root) => config(root),
   steps: [
-    {
-      until: { screen: "Headlamp" },
-      settle: 800,
-      timeout: 30_000,
-      checkpoint: "replayed",
-      deviation: { file: "OT2112-table-alignment", lines: 3 },
-    },
+    { until: { screen: "Headlamp" }, settle: 800, timeout: 30_000, checkpoint: "replayed" },
     { keys: "\x03", settle: 200 },
     { keys: "\x03", settle: 400 },
   ],

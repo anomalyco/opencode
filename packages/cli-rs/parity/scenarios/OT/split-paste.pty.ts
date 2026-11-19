@@ -1,6 +1,6 @@
-// OT2046 (parity/deviations/OT2046-split-paste.md): a bracketed paste whose start marker arrives in two reads,
-// 300 ms apart. TS types the rest of the marker and the text as keys; Rust waits for the rest of the marker and
-// inserts the paste whole, on two rows, so the prompt grows by one.
+// A bracketed paste whose start marker arrives in two reads, 300 ms apart. The client waits for the rest of the
+// marker and inserts the paste whole, on two rows, so the prompt grows by one (OpenTUI #2046, on both sides since
+// 0.9.4).
 import { definePty } from "../../pty/run"
 import { home, homeMasks } from "./home"
 
@@ -13,12 +13,7 @@ export default definePty({
     { until: { screen: "█▀▀█" }, settle: 500, timeout: 30_000 },
     { keys: "hi ", until: { screen: "hi" }, settle: 200, checkpoint: "typed" },
     { keys: "\x1b[20", settle: 300 },
-    {
-      keys: "0~one\rtwo\x1b[201~",
-      settle: 800,
-      checkpoint: "pasted",
-      deviation: { file: "OT2046-split-paste", lines: 5 },
-    },
+    { keys: "0~one\rtwo\x1b[201~", settle: 800, checkpoint: "pasted" },
   ],
   masks: homeMasks,
 })
