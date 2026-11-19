@@ -83,6 +83,20 @@ describe("modelTools", () => {
       })
   })
 
+  test("hides glob, grep, and webfetch for every model when fullCodeMode is on", () => {
+    for (const model of [
+      makeModel("openai", "gpt-5"),
+      makeModel("anthropic", "claude-sonnet-4-5"),
+      makeModel("deepseek", "deepseek-reasoner"),
+      makeModel("zhipu", "glm-5.3"),
+      makeModel("google", "gemini-4-neon"),
+      undefined,
+    ]) {
+      const { hidden } = policy(model)
+      for (const name of ["glob", "grep", "webfetch"]) expect(hidden).toContain(name)
+    }
+  })
+
   test("needs no demotion when fullCodeMode is off while still applying patch and websearch rules", () => {
     expect(policy(makeModel("openai", "gpt-5"), true, false)).toEqual({ direct: [], hidden: ["edit", "write"] })
     expect(policy(makeModel("claude-agent", "opus"), false, false)).toEqual({
@@ -94,15 +108,15 @@ describe("modelTools", () => {
   test("keeps non-strong and absent models direct when fullCodeMode is on, hiding websearch when unavailable", () => {
     expect(policy(makeModel("deepseek", "deepseek-reasoner"))).toEqual({
       direct: ["edit", "read", "shell", "websearch", "write"],
-      hidden: ["patch"],
+      hidden: ["glob", "grep", "patch", "webfetch"],
     })
     expect(policy(undefined, true, true)).toEqual({
       direct: ["edit", "patch", "read", "shell", "websearch", "write"],
-      hidden: [],
+      hidden: ["glob", "grep", "webfetch"],
     })
     expect(policy(undefined, false, true)).toEqual({
       direct: ["edit", "patch", "read", "shell", "write"],
-      hidden: ["websearch"],
+      hidden: ["glob", "grep", "webfetch", "websearch"],
     })
   })
 })
@@ -267,13 +281,19 @@ describe("SessionContext.select model tool policy", () => {
         const directInstructions = (yield* readInitial(gptDirect.instructions)).text
         expect(directInstructions).toContain("Alpha docs")
         expect(directInstructions).not.toContain("through `execute`")
+        // Without `execute`, as for the explore agent, the search and fetch tools stay direct.
+        for (const name of ["glob", "grep", "webfetch"]) expect(names(gptDirect)).toContain(name)
+        const deepseekDirect = yield* select("deepseek", "deepseek-reasoner", [
+          { action: "execute", resource: "*", effect: "deny" },
+        ])
+        for (const name of ["glob", "grep", "webfetch"]) expect(names(deepseekDirect)).toContain(name)
 
         const claude = yield* select("anthropic", "claude-sonnet-4-5")
         expect(names(claude)).toEqual(["execute"])
         expect(paths(claude).join(",")).toBe("alpha.search,edit,opencode.session_move,read,shell,websearch,write")
 
         const deepseek = yield* select("deepseek", "deepseek-reasoner")
-        expect(names(deepseek).join(",")).toBe("edit,glob,grep,read,shell,webfetch,websearch,write,execute")
+        expect(names(deepseek).join(",")).toBe("edit,read,shell,websearch,write,execute")
         expect(paths(deepseek)).toEqual(["alpha.search", "opencode.session_move"])
 
         yield* websearch.select(false)

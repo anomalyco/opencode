@@ -186,6 +186,8 @@ const formatOperand = (c: Code, op: number, a: number, bx: number, sbx: number):
       return JSON.stringify(c.consts[bx])
     case Op.DEFINE_FIELD:
       return a === 0 ? JSON.stringify(c.consts[bx]) : "(computed)"
+    case Op.DEFINE_ACCESSOR:
+      return `${(a & 2) === 0 ? "get" : "set"} ${(a & 1) === 0 ? JSON.stringify(c.consts[bx]) : "(computed)"}`
     case Op.CHECK_BASE:
       return a === CheckBaseKind.READ
         ? ".read"

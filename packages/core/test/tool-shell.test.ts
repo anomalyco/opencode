@@ -146,6 +146,7 @@ const shellPluginSupervisor = makeLocationNode({
     Permission.node,
     Session.node,
     Job.node,
+    Location.node,
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,
@@ -1310,6 +1311,7 @@ describe("ShellTool", () => {
             Permission.node,
             Session.node,
             Job.node,
+            Location.node,
             Shell.node,
             Shell.daemonNode,
             ShellSelect.node,
@@ -2289,6 +2291,42 @@ describe("ShellTool stopped", () => {
             // Already stopped, as when the user stops the step while the call waits for permission.
             cancel: Effect.void,
           })
+          expect(result.error?.message).toContain("Command interrupted by the user before it started.")
+          expect(yield* shell.list()).toEqual([])
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "started")).exists())).toBe(false)
+        }),
+      )
+    }),
+  )
+
+  // Resolving a working directory can be slow (an external one in a cold remote workspace); here it never finishes.
+  const resolving = Deferred.makeUnsafe<void>()
+  const stuckResolveIt = testEffect(
+    AppNodeBuilder.build(nodes, [
+      ...replacements,
+      PluginSupervisor.node.replace(shellPluginSupervisor),
+      FileAccess.node.replace(
+        Layer.mock(FileAccess.Service, {
+          resolve: () => Deferred.succeed(resolving, undefined).pipe(Effect.andThen(Effect.never)),
+        }),
+      ),
+    ]).pipe(Layer.provide(noFlagOverrides)),
+  )
+
+  stuckResolveIt.live("ends a call the user stopped while its working directory resolved, without starting it", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const cancel = yield* Deferred.make<void>()
+          const fiber = yield* executeTool(registry, {
+            ...call({ command: "echo started > started" }, "call-stop-resolving"),
+            cancel: Deferred.await(cancel),
+          }).pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Deferred.await(resolving)
+          yield* Deferred.succeed(cancel, undefined)
+          const result = yield* Fiber.join(fiber)
           expect(result.error?.message).toContain("Command interrupted by the user before it started.")
           expect(yield* shell.list()).toEqual([])
           expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "started")).exists())).toBe(false)

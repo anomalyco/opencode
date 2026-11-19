@@ -1,5 +1,15 @@
 import { type Method, methods } from "../runtime/native.js"
-import { entries, get, Arr, HostNamespace, Obj, type Value } from "../runtime/objects.js"
+import {
+  accessorLabel,
+  get,
+  Arr,
+  HostNamespace,
+  isProgramAccessor,
+  lookup,
+  Obj,
+  shownEntries,
+  type Value,
+} from "../runtime/objects.js"
 import { containsOpaqueReference } from "../runtime/references.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 
@@ -77,17 +87,24 @@ const consoleTableRows = (
     return data.items.map((item, index) => ({ index: String(index), values: consoleTableValues(item, columns) }))
   }
   if (data instanceof Obj) {
-    return entries(data).map(([index, item]) => ({ index, values: consoleTableValues(item, columns) }))
+    return shownEntries(data).map(([index, item]) => ({ index, values: consoleTableValues(item, columns) }))
   }
   return [{ index: "0", values: { Value: data } }]
 }
 
 const consoleTableValues = (value: Value, columns: ReadonlyArray<string> | undefined): Record<string, Value> => {
   if (value instanceof Obj && !(value instanceof Arr)) {
-    if (columns !== undefined) return Object.fromEntries(columns.map((column) => [column, get(value, column)]))
-    return Object.fromEntries(entries(value))
+    if (columns !== undefined)
+      return Object.fromEntries(columns.map((column) => [column, shownProperty(value, column)]))
+    return Object.fromEntries(shownEntries(value))
   }
   return { Value: value }
+}
+
+// A column of a table row, as display shows it: a program accessor (own or inherited) by its label.
+const shownProperty = (value: Obj, column: string): Value => {
+  const slot = lookup(value, column)
+  return slot !== undefined && isProgramAccessor(slot) ? accessorLabel(slot) : get(value, column)
 }
 
 const formatConsoleTableCell = (value: Value): string => {

@@ -18,7 +18,7 @@ import {
   type Value,
 } from "../runtime/objects.js"
 import { containsOpaqueReference, typeofValue } from "../runtime/references.js"
-import { isSupportedCallback, requireCallback, withPrimitives } from "../runtime/callback.js"
+import { isSupportedCallback, requireCallback, withPrimitives, withReads } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 import { matchToValue, withHostRegex } from "./regexp.js"
 import { coerce } from "./value.js"
@@ -85,7 +85,12 @@ const replaceWithCallback = <R>(
   )
   const last = matches.at(-1)
   const rest = value.slice(last === undefined ? 0 : last.offset + last.match.length)
-  return new Invoke(ctx.prelude.fn("replaceWith"), undefined, [new Arr(builtins.Array, pieces), rest, callback], undefined)
+  return new Invoke(
+    ctx.prelude.fn("replaceWith"),
+    undefined,
+    [new Arr(builtins.Array, pieces), rest, callback],
+    undefined,
+  )
 }
 
 type Match = { readonly match: string; readonly offset: number; readonly args: Array<Value> }
@@ -108,27 +113,28 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "raw",
       1,
-      (_, args) => {
-        const template = args[0]
-        const raw = template instanceof Obj ? get(template, "raw") : undefined
-        if (!(raw instanceof Obj)) throw typeError("String.raw expects a template object with a raw array.")
-        const count = Math.max(0, coerceToInteger(get(raw, "length")))
-        checkArrayLength(count)
-        // Each literal is followed by its substitution, except the last literal, or when substitutions run out.
-        const parts = Array.from({ length: count }, (_, index) =>
-          index + 1 < count && index + 1 < args.length ? [get(raw, index), args[index + 1]] : [get(raw, index)],
-        ).flat()
-        return withPrimitives(
-          "string",
-          parts,
-          (strings) => {
-            const output = strings.map(coerceToString).join("")
-            checkStringLength(output.length)
-            return output
-          },
-          true,
-        )
-      },
+      (_, args) =>
+        withReads(() => {
+          const template = args[0]
+          const raw = template instanceof Obj ? get(template, "raw") : undefined
+          if (!(raw instanceof Obj)) throw typeError("String.raw expects a template object with a raw array.")
+          const count = Math.max(0, coerceToInteger(get(raw, "length")))
+          checkArrayLength(count)
+          // Each literal is followed by its substitution, except the last literal, or when substitutions run out.
+          const parts = Array.from({ length: count }, (_, index) =>
+            index + 1 < count && index + 1 < args.length ? [get(raw, index), args[index + 1]] : [get(raw, index)],
+          ).flat()
+          return withPrimitives(
+            "string",
+            parts,
+            (strings) => {
+              const output = strings.map(coerceToString).join("")
+              checkStringLength(output.length)
+              return output
+            },
+            true,
+          )
+        }),
     ],
   ])
 

@@ -2008,8 +2008,8 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(dialog.locator('[data-provider-id="linear"]')).toHaveCount(0)
   await expect(dialog.getByText("MCP", { exact: true })).toHaveCount(0)
   const container = page.locator('[data-slot="dialog-container"]')
-  await expect(container).toHaveCSS("width", "480px")
-  await expect(container).toHaveCSS("max-height", "368px")
+  await expect(container).toHaveCSS("width", "680px")
+  await expect(container).toHaveCSS("max-height", "600px")
   const picker = await container.boundingBox()
   await openai.click()
 
