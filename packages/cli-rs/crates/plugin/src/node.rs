@@ -820,7 +820,7 @@ pub fn lines_widget(app: &App, theme: &Theme, lines: &[Line], fg: Option<&abi::C
     }
     let width = lines
         .iter()
-        .map(|line| line.iter().map(|span| unicode_width::UnicodeWidthStr::width(span.text.as_str())).sum::<usize>())
+        .map(|line| crate::facts::measure(app, &line.iter().map(|span| span.text.as_str()).collect::<String>()).cells)
         .max()
         .unwrap_or(0);
     let fg = color(theme, fg);
