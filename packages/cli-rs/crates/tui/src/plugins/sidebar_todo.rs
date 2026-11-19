@@ -2,10 +2,11 @@
 
 use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageAssistantToolState};
 use opencode_plugin::abi::v2::{Node, Place, Surface};
-use opencode_plugin::abi::{self, Changed, Click, Command, Layout, Placement, Span};
+use opencode_plugin::abi::{self, Changed, Command, Layout, Placement, Span};
 use opencode_plugin::slot;
 use opencode_ui::tool_info::{Todo, TodoStatus, parse_todos, todo_marker};
 
+use super::sidebar_mcp::{section, unfolded};
 use super::{hidden, kept};
 use crate::prelude::*;
 
@@ -19,7 +20,7 @@ const ROOT: &str = "todo";
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("view");
     setup.command(Command::new(FOLD), |host, _| {
-        host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!open(host)))]));
+        host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!unfolded(host)))]));
     });
     let last: RefCell<Option<Last>> = RefCell::default();
     let surface = Surface::new("todo", Place::Slot(Placement::append(slot::SIDEBAR_CONTENT)), move |cx| {
@@ -40,14 +41,10 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         if list.is_empty() {
             return hidden(ROOT);
         }
-        view(&list, open(cx.read)).with_id(ROOT)
+        view(&list, unfolded(cx.read)).with_id(ROOT)
     });
     setup.surface(surface);
     Ok(())
-}
-
-fn open(read: &dyn abi::Read) -> bool {
-    read.storage_get("view").and_then(|value| value.get("open")?.as_bool()).unwrap_or(true)
 }
 
 /// What the section last read for its session: the revert boundary and the input of the `todowrite` call it found.
@@ -105,26 +102,13 @@ fn writes_todos(message: &SessionMessageInfo) -> bool {
 
 fn view(list: &[Todo], open: bool) -> Node {
     let foldable = list.len() > 2;
-    let mut header = Vec::new();
-    if foldable {
-        header.push(Node::text([Span::new(if open { "▼" } else { "▶" }).fg("text.base")]));
-    }
     let mut title = vec![Span::new("Todo").fg("text.base").bold()];
     if foldable && !open {
         let remaining =
             list.iter().filter(|item| matches!(item.status, TodoStatus::Pending | TodoStatus::InProgress)).count();
         title.push(Span::new(format!(" ({remaining} remaining)")).fg("text.muted"));
     }
-    header.push(Node::text(title));
-    let mut header = Node::row(header).gap(1);
-    if foldable {
-        header = header.on_click(Click::command(FOLD).on_down());
-    }
-    let mut children = vec![header];
-    if !foldable || open {
-        children.extend(list.iter().map(item));
-    }
-    Node::column(children)
+    section(FOLD, foldable, open, title, list.iter().map(item))
 }
 
 fn item(todo: &Todo) -> Node {
