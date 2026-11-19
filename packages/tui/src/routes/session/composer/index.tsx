@@ -6,6 +6,7 @@ import { SplitBorder } from "../../../ui/border"
 import { Keymap } from "../../../context/keymap"
 import { SubagentsTab } from "./subagents-tab"
 import { ShellTab } from "./shell-tab"
+import { ScriptsTab } from "./scripts-tab"
 import { TerminalsTab } from "./terminals-tab"
 import { ComposerContext, type ComposerTab } from "./context"
 
@@ -127,6 +128,7 @@ export function Composer(props: ComposerProps) {
             </box>
             <SubagentsTab sessionID={props.sessionID} />
             <ShellTab sessionID={props.sessionID} />
+            <ScriptsTab sessionID={props.sessionID} />
             <Show when={props.terminals}>
               <TerminalsTab sessionID={props.sessionID} visibleTerminalID={props.visibleTerminalID} />
             </Show>

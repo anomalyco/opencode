@@ -350,6 +350,7 @@ export function Session(props: {
         data.session.sync(sessionID, { children: true }),
         data.session.permission.sync(sessionID).catch(() => undefined),
         data.session.form.sync(sessionID).catch(() => undefined),
+        data.job.sync(sessionID).catch(() => undefined),
       ])
       const info = data.session.get(sessionID)
       if (!info) {
@@ -1406,7 +1407,7 @@ export function Session(props: {
       id: "session.child.first",
       group: "Session",
       run: (tab?: string) => {
-        if (tab === "shell" || tab === "subagents") setComposer({ open: true, tab })
+        if (tab === "shell" || tab === "subagents" || tab === "scripts") setComposer({ open: true, tab })
         else if (composer.open || session()?.parentID) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
         dialog.clear()

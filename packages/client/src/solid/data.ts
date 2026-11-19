@@ -11,6 +11,7 @@ import type {
   FormInfo,
   SessionFormReplyInput,
   IntegrationInfo,
+  JobInfo,
   LocationRef,
   LocationGetOutput,
   McpResource,
@@ -144,6 +145,8 @@ type Store = {
     permission: Record<string, PermissionSavedInfo[]>
   }
   location: Record<string, LocationData>
+  // Running background jobs keyed by job id, for the session trees that synced them. Settled jobs are removed.
+  job: Record<string, JobInfo>
 }
 
 export function locationKey(location: LocationRef) {
@@ -347,6 +350,7 @@ export function createData(config: CreateDataInput) {
       permission: {},
     },
     location: {},
+    job: {},
   })
 
   const [defaultLocation, setDefaultLocation] = createSignal<LocationRef>({ directory: config.directory })
@@ -359,6 +363,8 @@ export function createData(config: CreateDataInput) {
   const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
+  // Session trees whose running jobs were listed, so a reconnect lists them again.
+  const jobTrees = new Set<string>()
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -776,6 +782,17 @@ export function createData(config: CreateDataInput) {
         )
         refresh(() => result.location.vcs.sync())
         refresh(() => result.project.sync())
+        jobTrees.forEach((sessionID) => refresh(() => result.job.sync(sessionID)))
+        return
+      }
+      case "experimental.job.updated": {
+        const info = event.data.info
+        if (info.status === "running") setStore("job", info.id, info)
+        else if (store.job[info.id])
+          setStore(
+            "job",
+            produce((draft) => void delete draft[info.id]),
+          )
         return
       }
       case "project.updated":
@@ -1536,6 +1553,18 @@ export function createData(config: CreateDataInput) {
     }
   })
 
+  // Whether a session is the ancestor or one of its descendants, by the parents in loaded session info.
+  function withinTree(sessionID: string, ancestorID: string) {
+    const seen = new Set<string>()
+    let current: string | undefined = sessionID
+    while (current && !seen.has(current)) {
+      if (current === ancestorID) return true
+      seen.add(current)
+      current = store.session.info[current]?.parentID
+    }
+    return false
+  }
+
   const result = {
     on: config.event.on,
     listen: config.event.listen,
@@ -2118,6 +2147,31 @@ export function createData(config: CreateDataInput) {
       },
       sync: shells.sync,
       invalidate: shells.invalidate,
+    },
+    job: {
+      // Running jobs owned by the session or any session below it.
+      list(sessionID: string) {
+        return Object.values(store.job).filter((job) => withinTree(job.sessionID, sessionID))
+      },
+      sync(sessionID: string) {
+        jobTrees.add(sessionID)
+        return sync.run(`job:${sessionID}`, async () => {
+          const list = await api().experimental.job.list({ sessionID, descendants: true, status: "running" })
+          const ids = new Set(list.map((job) => job.id))
+          setStore(
+            "job",
+            produce((draft) => {
+              Object.values(draft).forEach((job) => {
+                if (!ids.has(job.id) && withinTree(job.sessionID, sessionID)) delete draft[job.id]
+              })
+              list.forEach((job) => (draft[job.id] = job))
+            }),
+          )
+        })
+      },
+      invalidate(sessionID: string) {
+        sync.invalidate(`job:${sessionID}`)
+      },
     },
     location: {
       info(ref?: LocationRef) {
