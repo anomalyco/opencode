@@ -174,8 +174,8 @@ fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
     assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
 }
 
-#[test]
-fn the_loader_reloads_a_rebuilt_library() {
+/// The sample built into a plugins directory `dir`, which a fresh loader loaded into a fresh registry.
+fn loaded_sample() -> (opencode_util::temp::TempDir, std::path::PathBuf, Rc<TestHost>, Registry, Loader) {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     let dir = config.join("plugins").join("sample");
@@ -186,6 +186,12 @@ fn the_loader_reloads_a_rebuilt_library() {
     let loader =
         Loader::new(Rc::new(Native) as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::<Configured>::new());
     assert!(loader.reconcile(&dynamic(&host), &registry));
+    (root, dir, host, registry, loader)
+}
+
+#[test]
+fn the_loader_reloads_a_rebuilt_library() {
+    let (_root, dir, host, registry, loader) = loaded_sample();
     let screen = markdown(&host, &registry, "```sample\nhi\n```\n");
     assert!(screen.contains("SAMPLE v1 HI"), "{screen}");
     fs::write(dir.join(entry_file()), build("v2")).unwrap();
@@ -197,16 +203,7 @@ fn the_loader_reloads_a_rebuilt_library() {
 
 #[test]
 fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
-    let root = opencode_util::temp::tempdir().unwrap();
-    let config = root.path().join("config");
-    let dir = config.join("plugins").join("sample");
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join(entry_file()), build("")).unwrap();
-    let host = host();
-    let registry = Registry::define(Vec::new(), []);
-    let loader =
-        Loader::new(Rc::new(Native) as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::<Configured>::new());
-    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let (_root, dir, host, registry, loader) = loaded_sample();
     fs::write(dir.join(entry_file()), build("setup-fails")).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let target = dir.to_string_lossy().into_owned();
@@ -226,16 +223,7 @@ fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
 
 #[test]
 fn a_failed_rebuild_of_a_panicked_plugin_shows_its_own_error() {
-    let root = opencode_util::temp::tempdir().unwrap();
-    let config = root.path().join("config");
-    let dir = config.join("plugins").join("sample");
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join(entry_file()), build("")).unwrap();
-    let host = host();
-    let registry = Registry::define(Vec::new(), []);
-    let loader =
-        Loader::new(Rc::new(Native) as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::<Configured>::new());
-    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let (_root, dir, host, registry, loader) = loaded_sample();
     host.keymap().dispatch("sample.panic", None);
     host.app.advance(Duration::from_millis(1));
     fs::write(dir.join(entry_file()), build("major-3")).unwrap();
