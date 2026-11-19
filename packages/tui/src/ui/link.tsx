@@ -1,6 +1,9 @@
-import type { JSX } from "solid-js"
+import { createMemo, For, type JSX } from "solid-js"
 import type { CliRenderer, MouseEvent, RGBA } from "@opentui/core"
 import { openUrl } from "@opencode/util/open"
+import { linkSegments, type LinkSegment } from "@opencode/util/link-segments"
+
+export { linkSegments, type LinkSegment }
 
 export interface LinkProps {
   href: string
@@ -30,6 +33,33 @@ export function Link(props: LinkProps) {
     >
       <a href={props.href}>{displayText}</a>
     </text>
+  )
+}
+
+export interface LinkedTextProps {
+  text: string
+  linkFg?: RGBA | string
+  underline?: boolean
+}
+
+/**
+ * Renders plain text with detected URLs as clickable OpenTUI hyperlinks.
+ */
+export function LinkedText(props: LinkedTextProps) {
+  const segments = createMemo(() => linkSegments(props.text))
+
+  return (
+    <For each={segments()}>
+      {(segment) =>
+        segment.href ? (
+          <a href={segment.href} style={{ fg: props.linkFg, underline: props.underline ?? true }}>
+            {segment.text}
+          </a>
+        ) : (
+          <span>{segment.text}</span>
+        )
+      }
+    </For>
   )
 }
 
