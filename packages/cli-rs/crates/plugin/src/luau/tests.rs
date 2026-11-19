@@ -1829,7 +1829,7 @@ fn a_reused_input_list_holds_only_the_running_calls_items() {
     assert_eq!(shown(&["d", "e"], &[("d", "4")], true), "d,e d,e 2 d/4 1 local");
 }
 
-/// A host that reads nothing and does nothing, for the call measures.
+/// A host that reads nothing, does nothing, and takes every fetch without answering it.
 struct Nop;
 
 impl abi::Read for Nop {
@@ -1850,7 +1850,7 @@ impl abi::Host for Nop {
     fn open_route(&self, _: &str) {}
     fn navigate(&self, _: abi::Route) {}
     fn try_fetch(&self, _: abi::Fetch) -> Result<abi::RequestId, String> {
-        Err("no server".to_owned())
+        Ok(abi::RequestId(1))
     }
     fn dialog(&self, _: abi::Dialog) {}
     fn copy(&self, _: &str, _: Option<abi::Action>) {}
@@ -2666,33 +2666,6 @@ fn a_plugin_parks_at_most_256_tasks() {
     assert!(error.contains("host:fetch: more than 256 tasks of the plugin wait"), "{error}");
 }
 
-/// A host that takes every fetch and answers none.
-struct Taking;
-
-impl abi::Read for Taking {
-    fn theme_mode(&self) -> abi::ThemeMode {
-        abi::ThemeMode::Dark
-    }
-
-    fn color(&self, _: &str) -> Option<abi::Rgba> {
-        None
-    }
-}
-
-impl abi::Host for Taking {
-    fn storage_set(&self, _: &str, _: serde_json::Value) {}
-    fn dispatch(&self, _: &str, _: Option<&str>) {}
-    fn toast(&self, _: abi::Toast) {}
-    fn attention(&self, _: abi::Attention) {}
-    fn open_route(&self, _: &str) {}
-    fn navigate(&self, _: abi::Route) {}
-    fn try_fetch(&self, _: abi::Fetch) -> Result<abi::RequestId, String> {
-        Ok(abi::RequestId(1))
-    }
-    fn dialog(&self, _: abi::Dialog) {}
-    fn copy(&self, _: &str, _: Option<abi::Action>) {}
-}
-
 #[test]
 fn a_key_handler_that_waits_takes_its_key() {
     let init = r#"
@@ -2713,8 +2686,8 @@ fn a_key_handler_that_waits_takes_its_key() {
     let key = |bind: &str| -> abi::interact::Event {
         serde_json::from_value(serde_json::json!({ "type": "key", "key": "x", "bind": bind })).unwrap()
     };
-    assert_eq!(handler(&Taking, &key("wait")), abi::interact::Handled::Consume);
-    assert_eq!(handler(&Taking, &key("pass")), abi::interact::Handled::Pass);
+    assert_eq!(handler(&Nop, &key("wait")), abi::interact::Handled::Consume);
+    assert_eq!(handler(&Nop, &key("pass")), abi::interact::Handled::Pass);
 }
 
 #[test]
