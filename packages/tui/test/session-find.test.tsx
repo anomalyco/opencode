@@ -179,6 +179,20 @@ test("Find highlights prompts and markdown, moves between matches, and clears on
         return span.text.toLowerCase() === "needle" && before && !before.bg.equals(span.bg) ? [span.text] : []
       }),
     )
+  // Which visible match is current, by the line it is on: the one painted unlike the others.
+  const currentOn = () => {
+    const spans = app.captureSpans().lines.flatMap((line) => {
+      const text = line.spans
+        .map((span) => span.text)
+        .join("")
+        .replace(/^[┃\s]+/, "")
+        .trim()
+      const span = line.spans.find((item) => item.text.toLowerCase() === "needle")
+      // The Find field's own query is not a match.
+      return span && text !== "needle" ? [{ text, bg: span.bg }] : []
+    })
+    return spans.filter((item) => spans.filter((other) => other.bg.equals(item.bg)).length === 1).map((item) => item.text)
+  }
 
   app.mockInput.pressKey("x", { ctrl: true })
   app.mockInput.pressKey("f")
@@ -195,9 +209,21 @@ test("Find highlights prompts and markdown, moves between matches, and clears on
   await app.waitForFrame((frame) => frame.includes("Find · 1 of 5") && frame.includes("Where is the needle?"))
   await app.waitFor(() => painted().length === 4)
   expect(painted()).toEqual(["needle", "Needle", "needle", "needle"])
+  await app.waitFor(() => currentOn().length === 1)
+  expect(currentOn()).toEqual(["Where is the needle?"])
 
   app.mockInput.pressEnter()
   await app.waitForFrame((frame) => frame.includes("Find · 2 of 5"))
+  await app.waitFor(() => currentOn()[0] === "The Needle is in the code:")
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Find · 3 of 5"))
+  await app.waitFor(() => currentOn()[0] === "const needle = 1")
+  // The cell's text also appears in the code block above it.
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Find · 4 of 5"))
+  await app.waitFor(() => currentOn().length === 1 && currentOn()[0]!.includes("hay"))
+  app.mockInput.pressArrow("up")
+  app.mockInput.pressArrow("up")
   app.mockInput.pressArrow("up")
   app.mockInput.pressArrow("up")
   await app.waitForFrame((frame) => frame.includes("Find · 5 of 5") && frame.includes("Last needle here"))
