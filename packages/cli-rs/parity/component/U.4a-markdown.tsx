@@ -16,7 +16,6 @@ function TextPart(props: { text: string }) {
         syntaxStyle={syntax()}
         content={props.text.trim()}
         streaming={false}
-        internalBlockMode="top-level"
         tableOptions={{ style: "grid", cellPaddingX: 1 }}
         conceal={true}
         fg={theme.markdown.text}
