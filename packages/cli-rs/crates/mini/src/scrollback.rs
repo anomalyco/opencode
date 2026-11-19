@@ -385,6 +385,8 @@ struct Active {
     committed_rows: u32,
     pending_spacer_rows: u32,
     rendered: bool,
+    /// Mono: Markdown task boxes render as text ([`mono_tasks`]).
+    mono: bool,
 }
 
 impl Active {
@@ -409,7 +411,7 @@ impl Active {
                 if content.is_empty() {
                     return Ok(None);
                 }
-                markdown.set_markdown(content);
+                markdown.set_markdown(if self.mono { mono_tasks(content) } else { content.to_owned() });
                 markdown.streaming(!done);
                 self.surface.render()?;
                 (self.surface.height(), !done)
@@ -703,6 +705,7 @@ impl Writer {
             committed_rows: 0,
             pending_spacer_rows: if rows > 0 { rows } else { u32::from(self.rendered.is_none() && self.wrote) },
             rendered: false,
+            mono: self.mono,
         })
     }
 
@@ -773,7 +776,7 @@ pub fn entry_content(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, b
         }
         Body::Markdown(content) | Body::Code { content, .. } => {
             let markdown = entry_markdown(app, theme, commit, body, false);
-            markdown.set_markdown(content.clone());
+            markdown.set_markdown(if mono { mono_tasks(content) } else { content.clone() });
             markdown.as_any()
         }
         Body::Structured(snapshot) => tools::structured_widget(app, snapshot, theme, mono),
@@ -967,6 +970,71 @@ fn list_item(line: &str) -> bool {
     line[marker..].chars().next().is_none_or(|c| c == ' ' || c == '\t' || c == '\n')
 }
 
+/// Mono's task boxes as text. Core draws a task item's box as `☐` or `☑`, and TS's mono maps those to `[ ]` and
+/// `[x]` before layout. OpenTUI's Rust Markdown has no hook for list markers, so mono escapes each task item's box
+/// outside fences and the item's text starts with it: the row reads `- [ ] item` as in TS. A wrapped item's next rows
+/// start under the box rather than after it (M06).
+fn mono_tasks(content: &str) -> String {
+    let mut fence: Option<&str> = None;
+    let mut out = String::with_capacity(content.len());
+    for line in content.split_inclusive('\n') {
+        let marker = ["```", "~~~"].into_iter().find(|marker| line.trim_start().starts_with(marker));
+        match (fence, marker) {
+            (None, Some(marker)) => fence = Some(marker),
+            (Some(open), Some(marker)) if open == marker => fence = None,
+            _ => {}
+        }
+        match task_box(line).filter(|_| fence.is_none()) {
+            Some(at) => {
+                let checked = line.as_bytes()[at + 1] != b' ';
+                out.push_str(&line[..at]);
+                out.push_str(if checked { "\\[x]" } else { "\\[ ]" });
+                out.push_str(&line[at + 3..]);
+            }
+            None => out.push_str(line),
+        }
+    }
+    out
+}
+
+/// Where a list item's task box starts: after quote markers and list markers, `[ ]`, `[x]` or `[X]`, then a space or
+/// a tab and more text (the engine's `detectTask`).
+fn task_box(line: &str) -> Option<usize> {
+    let bytes = line.as_bytes();
+    let blank = |at: usize| bytes.get(at).is_some_and(|&b| b == b' ' || b == b'\t');
+    let mut at = 0;
+    let mut item = false;
+    loop {
+        while blank(at) {
+            at += 1;
+        }
+        let rest = &line[at..];
+        let marker = if rest.starts_with('>') {
+            // A quote in an item holds a paragraph, not the item's box.
+            item = false;
+            1
+        } else if rest.starts_with(['-', '+', '*']) && blank(at + 1) {
+            item = true;
+            1
+        } else {
+            let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+            if !(1..=9).contains(&digits) || !rest[digits..].starts_with(['.', ')']) || !blank(at + digits + 1) {
+                break;
+            }
+            item = true;
+            digits + 1
+        };
+        at += marker;
+    }
+    let task = item
+        && bytes.get(at) == Some(&b'[')
+        && matches!(bytes.get(at + 1), Some(b' ' | b'x' | b'X'))
+        && bytes.get(at + 2) == Some(&b']')
+        && blank(at + 3)
+        && !line[at + 3..].trim().is_empty();
+    task.then_some(at)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1114,6 +1182,7 @@ mod tests {
                 committed_rows: 0,
                 pending_spacer_rows: 0,
                 rendered: false,
+                mono: false,
             }
         };
         // The rows a terminal shows after the snapshots: a snapshot that does not start on a new line continues the
@@ -1201,6 +1270,28 @@ mod tests {
             let rows: Vec<String> = app.render().text().lines().map(|row| row.trim_end().to_owned()).collect();
             assert_eq!(rows, ["a  bb", "1   2"], "mono {mono}");
         }
+    }
+
+    /// Mono task boxes, against TS's mono scrollback for the same reply at 24 columns. TS's wrapped item continues at
+    /// column 6, after its box; Rust's under the box, at column 2 (M06).
+    #[test]
+    fn mono_task_boxes_read_as_in_ts() {
+        let reply = "Todo:\n\n- [ ] open\n- [x] done\n- [X] upper\n- [ ] a long item that wraps past the width\n\
+                     1. [x] first\n\n> - [ ] quoted\n\n```\n- [ ] fenced\n```\n\n- not [ ] a box\n- [ ]\n- [x]tight";
+        let ts = "Todo:\n\n- [ ] open\n- [x] done\n- [x] upper\n- [ ] a long item that\n      wraps past the\n      width\n\n\
+                  1. [x] first\n\n| - [ ] quoted\n\n- [ ] fenced\n\n- not [ ] a box\n- [ ]\n- [x]tight";
+        let theme = crate::theme::mono(opentui::theme::ThemeMode::Dark);
+        let commit = assistant("", Phase::Final);
+        let app = opentui::testing::TestApp::new(24, 24);
+        let body = Body::Markdown(reply.into());
+        app.app().root().add(&entry_content(app.app(), &theme, true, &commit, &body));
+        // The quote bar is mono_snapshot's to map, when the rows are written.
+        let text = app.render().text().replace('│', "|");
+        let rows: Vec<String> = text.lines().map(|row| row.trim_end().to_owned()).collect();
+        let expected = ts.replace("      wraps past the\n      width", "  wraps past the width");
+        assert_eq!(rows[..expected.lines().count()].join("\n"), expected);
+        assert_eq!(mono_tasks("- [ ] a\n"), "- \\[ ] a\n");
+        assert_eq!(mono_tasks(reply).matches('\\').count(), 6);
     }
 
     #[test]
