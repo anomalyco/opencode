@@ -14,6 +14,8 @@ import { tmpdir } from "./fixture/fixture"
 import { createAppFixture } from "./fixture/app"
 import { waitForHighlightedFrame } from "./fixture/frame"
 import type { PluginInfo } from "@opencode/client"
+import { resolveThemeDocument } from "@opencode/theme/tui"
+import { getOpenCodeTheme } from "../src/theme"
 
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
   await using state = await tmpdir()
@@ -642,7 +644,7 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
               time: { created: 1 },
               status: "completed",
               reason: "manual",
-              summary: "```latex\ny^2\n```",
+              summary: "```latex\ny^2\n```\n\n| Tool | Use |\n| --- | --- |\n| grep | SUMMARY_CELL |",
               recent: "msg_markdown",
             },
           ],
@@ -679,7 +681,7 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
       sessionID: session.id,
       assistantMessageID: "msg_markdown",
       ordinal: 0,
-      text: `${initial} final\n\`\`\`\n\nMARKDOWN_END`,
+      text: `${initial} final\n\`\`\`\n\n| Tool | Use |\n| --- | --- |\n| read | TEXT_CELL |\n\nMARKDOWN_END`,
     },
   })
   setup.events.emit({
@@ -708,6 +710,18 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
   expect(frame).not.toContain("x^2")
   expect(frame).not.toContain("y^2")
   expect(frame).not.toContain("```")
+  expect(frame).toContain("SUMMARY_CELL")
+  expect(frame).toContain("TEXT_CELL")
+
+  const corners = setup
+    .captureSpans()
+    .lines.flatMap((line) => line.spans)
+    .filter((span) => span.text.includes("\u250c"))
+  expect(corners).toHaveLength(2)
+  const border = resolveThemeDocument(getOpenCodeTheme(), "dark").border.base.toInts()
+  for (const span of corners) {
+    expect(span.fg.toInts()).toEqual(border)
+  }
 })
 
 test("keeps assistant footer metrics current after prepend, same-length refresh, and revert", async () => {

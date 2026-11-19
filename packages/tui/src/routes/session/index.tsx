@@ -2239,7 +2239,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             streaming={true}
             internalBlockMode="top-level"
             content={content()}
-            tableOptions={{ style: "grid", cellPaddingX: 1 }}
+            tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
             conceal={ctx.markdownMode() === "rendered"}
             fg={theme.markdown.text}
             bg={theme.background.base}
