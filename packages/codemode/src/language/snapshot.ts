@@ -330,7 +330,10 @@ function restoreFrame(frame: Frame): void {
     frame.mode !== Mode.CONSTRUCT &&
     frame.mode !== Mode.PROGRAM &&
     frame.mode !== Mode.BOUNDARY_OUT
-  if (!settles && frame.target !== undefined) invalid("a frame that settles nothing has a target.")
+  // A derived constructor's frame holds its new target until `super()` binds `this`.
+  const newTarget =
+    frame.mode === Mode.CONSTRUCT && frame.target instanceof Fn && frame.target.klass !== undefined
+  if (!settles && frame.target !== undefined && !newTarget) invalid("a frame that settles nothing has a target.")
   if (frame.mode === Mode.REDO) {
     const target = frame.target
     if (!(target instanceof Arr) || !Number.isSafeInteger(target.items[0]) || (target.items[0] as number) < 0)

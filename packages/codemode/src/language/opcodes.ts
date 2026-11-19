@@ -166,8 +166,6 @@ export const Op = {
   // `SUPER_BIND` makes the instance on top the derived constructor's `this` (local `bx`, a cell when `a` is 1):
   // `[instance] -> [instance]`. Once only.
   SUPER_BIND: 94,
-  // `CTOR_RETURN` applies a derived constructor's return rules to the value on top, reading `this` like SUPER_BIND.
-  CTOR_RETURN: 95,
   // `super.x`: `[home, this] -> [value]` (`[this, value]` when bit 0 keeps the receiver), keyed by constant `bx`, or
   // by a key on top when bit 1 is set (`[home, this, key]`).
   GET_SUPER: 96,

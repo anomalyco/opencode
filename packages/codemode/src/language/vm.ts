@@ -1414,7 +1414,6 @@ export class Vm {
           }
           case 93: // Op.SUPER_CALL
           case 94: // Op.SUPER_BIND
-          case 95: // Op.CTOR_RETURN
           case 96: // Op.GET_SUPER
           case 97: {
             // Op.PUT_SUPER
@@ -1723,18 +1722,7 @@ export class Vm {
     if (a === 1) (regs[bx] as Cell).v = instance
     else regs[bx] = instance
     frame.thisValue = instance
-  }
-
-  // A derived constructor returns an object, or `undefined` for its `this`, which `super()` must have bound.
-  private execCtorReturn(frame: Frame, a: number, bx: number, pc: number): void {
-    const v = frame.regs[frame.sp - 1]
-    if (v instanceof Obj) return
-    if (v !== undefined) {
-      throw typeError("Derived constructors may only return object or undefined", frame.code.siteAt(pc))
-    }
-    const self = this.thisBinding(frame, a, bx)
-    if (self === HOLE) throw referenceError(THIS_BEFORE_SUPER, frame.code.siteAt(pc))
-    frame.regs[frame.sp - 1] = self
+    frame.target = undefined
   }
 
   // `super.x` / `super[key]`: reads from the home object's prototype with `this` as the receiver.
@@ -2010,6 +1998,14 @@ export class Vm {
     }
     if (frame.mode === Mode.CONSTRUCT) {
       frames.pop()
+      // A derived constructor's return rules apply once it has returned, so its own handlers cannot catch them.
+      const unbound = !(v instanceof Obj) && frame.fn!.klass!.derived && (v !== undefined || frame.target !== undefined)
+      if (unbound) {
+        const site = frame.code.siteAt(pc)
+        this.release(frame)
+        if (v !== undefined) throw typeError("Derived constructors may only return object or undefined", site)
+        throw referenceError(THIS_BEFORE_SUPER, site)
+      }
       const made = v instanceof Obj ? v : frame.thisValue
       this.release(frame)
       const caller = frames[frames.length - 1]!
@@ -2088,7 +2084,8 @@ export class Vm {
     if (this.depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", site ?? this.currentSite())
     const proto = get(newTarget, "prototype")
     const self = ctor.klass!.derived ? newTarget : new Obj(proto instanceof Obj ? proto : this.ctx.builtins.Object)
-    this.pushFn(ctor, self, args, site ?? callerFrame.origin, Mode.CONSTRUCT)
+    // A derived constructor's frame holds its new target until `super()` binds `this`.
+    this.pushFn(ctor, self, args, site ?? callerFrame.origin, Mode.CONSTRUCT, ctor.klass!.derived ? newTarget : undefined)
     this.fuel--
     return 1
   }
@@ -3481,9 +3478,6 @@ export class Vm {
       }
       case Op.SUPER_BIND:
         this.execSuperBind(frame, a, bx, pc)
-        return pc + 1
-      case Op.CTOR_RETURN:
-        this.execCtorReturn(frame, a, bx, pc)
         return pc + 1
       case Op.GET_SUPER: {
         const r = this.execGetSuper(frame, a, bx, pc)

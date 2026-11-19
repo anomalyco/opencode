@@ -211,7 +211,6 @@ export const verifyCode = (c: Code): Array<string> => {
         next(a === 255 ? 0 : 1 - a)
         break
       case Op.SUPER_BIND:
-      case Op.CTOR_RETURN:
         next(0)
         break
       case Op.GET_SUPER:

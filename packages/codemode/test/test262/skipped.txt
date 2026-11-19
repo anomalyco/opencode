@@ -2775,14 +2775,8 @@ language/statements/class/subclass/class-definition-null-proto-this.js  # TypeEr
 language/statements/class/subclass/class-definition-parent-proto-null.js  # TypeError: Class extends value a function is not a constructor or null.
 language/statements/class/subclass/default-constructor-2.js  # TypeError: new f(...) is not supported; call f(...) without new instead.
 language/statements/class/subclass/derived-class-return-override-catch-finally-arrow.js  # UnsupportedSyntax: SyntaxError: super() inside an arrow function is not supported. Call super() dire
-language/statements/class/subclass/derived-class-return-override-catch-finally.js  # ReferenceError: Must call super constructor in derived class before accessing '…' or returning from 
-language/statements/class/subclass/derived-class-return-override-catch-super-arrow.js  # Expected a TypeError but got a SyntaxError
-language/statements/class/subclass/derived-class-return-override-catch-super.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/class/subclass/derived-class-return-override-catch.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/class/subclass/derived-class-return-override-finally-super-arrow.js  # UnsupportedSyntax: SyntaxError: super() inside an arrow function is not supported. Call super() dire
-language/statements/class/subclass/derived-class-return-override-finally-super.js  # ReferenceError: Must call super constructor in derived class before accessing '…' or returning from 
 language/statements/class/subclass/derived-class-return-override-for-of-arrow.js  # ReferenceError: Must call super constructor in derived class before accessing '…' or returning from 
-language/statements/class/subclass/derived-class-return-override-for-of.js  # Expected a Test262Error but got a TypeError
 language/statements/class/subclass/superclass-bound-function.js  # TypeError: Class extends value a function is not a constructor or null.
 language/statements/class/subclass/superclass-prototype-setter-constructor.js  # TypeError: Class extends value a function is not a constructor or null.
 language/statements/class/subclass/superclass-prototype-setter-method-override.js  # TypeError: Class extends value a function is not a constructor or null.

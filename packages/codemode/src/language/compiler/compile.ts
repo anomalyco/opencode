@@ -264,7 +264,7 @@ const compileFunctionBody = (
     return true
   }
 
-  // A derived constructor's `this` binding: SUPER_BIND and CTOR_RETURN read and write it in place.
+  // A derived constructor's `this` binding: SUPER_BIND writes it in place.
   const thisOperand = (): [number, number] => [fnInfo.thisDecl!.captured ? 1 : 0, fnInfo.thisDecl!.slot]
 
   // `super.x` parses inside object methods but is not supported. Code after the error is unreachable, so it emits nothing.
@@ -1618,7 +1618,6 @@ const compileFunctionBody = (
         compileExpression(stmt.argument)
         if (isAsync && (fnInfo.flags & CodeFlags.GENERATOR) !== 0) builder.emit(Op.AWAIT, 0, 0, idx(stmt), 0)
       } else builder.emit(Op.PUSH_UNDEF, 0, 0, idx(stmt), 1)
-      if ((fnInfo.flags & CodeFlags.DERIVED) !== 0) builder.emit(Op.CTOR_RETURN, ...thisOperand(), idx(stmt), 0)
       exitPlan("return", null, stmt)
     },
     ThrowStatement: (stmt) => {
@@ -1759,7 +1758,6 @@ const compileFunctionBody = (
     } else if (body.type === "BlockStatement") {
       for (const s of body.body) compileStatement(s)
       builder.emit(Op.PUSH_UNDEF, 0, 0, idx(body), 1)
-      if ((fnInfo.flags & CodeFlags.DERIVED) !== 0) builder.emit(Op.CTOR_RETURN, ...thisOperand(), idx(body), 0)
     } else compileExpression(body)
     builder.emit(Op.RETURN, 0, 0, idx(body), -1)
   }
