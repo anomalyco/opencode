@@ -2,6 +2,8 @@ export * as RemoteCli from "./remote-cli"
 
 import { Effect, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
+import { NpmConfig } from "@opencode/util/npm-config"
+import { homedir } from "node:os"
 
 export class Failure extends Schema.TaggedError<Failure>()("RemoteCliFailure", {
   code: Schema.Literals(["platform", "version", "install"]),
@@ -72,14 +74,14 @@ fi
 printf 'OPENCODE_REMOTE_TARGET=%s\\n' "$target"
 `
 
-export function archiveUrl(target: string, version: string) {
+export function archivePath(target: string, version: string) {
   if (!/^(linux|darwin)-(x64-baseline|arm64)(-musl)?$/.test(target))
     throw new Failure({ code: "platform", detail: target })
 
-  return `https://registry.npmjs.org/@opencode/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
+  return `/@opencode/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
 }
 
-type Source = { type: "download"; url: string } | { type: "archive" } | { type: "installer"; binary?: string }
+type Source = { type: "download"; path: string } | { type: "archive" } | { type: "installer"; binary?: string }
 
 export function installScript(input: { version: string; directory?: string; source: Source }) {
   const version = requireVersion(input.version)
@@ -108,7 +110,9 @@ mv "$stage/package/bin/opencode" "$destination"
 function stageBinary(source: Exclude<Source, { type: "installer" }>) {
   if (source.type === "archive") return 'cat > "$stage/archive.tgz"\ntar -xzf "$stage/archive.tgz" -C "$stage"'
 
-  return `url=${quote(source.url)}
+  // The download runs on the remote host, so it uses that host's registry config.
+  return `registry="\${NPM_CONFIG_REGISTRY:-\${npm_config_registry:-https://registry.npmjs.org}}"
+url="\${registry%/}"${quote(source.path)}
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL --connect-timeout 15 --max-time 180 "$url" -o "$stage/archive.tgz"
 else
@@ -125,12 +129,13 @@ const Beta = Schema.Struct({ version: Schema.String.check(Schema.isPattern(/^0\.
 
 export const latestBeta = Effect.fn("RemoteCli.latestBeta")(function* () {
   const http = yield* HttpClient.HttpClient
+  const url = `${yield* NpmConfig.registry(homedir())}/@opencode%2fcli/beta`
 
-  const metadata = yield* http.get("https://registry.npmjs.org/@opencode%2fcli/beta").pipe(
+  const metadata = yield* http.get(url).pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.flatMap(HttpClientResponse.schemaBodyJson(Beta)),
     Effect.timeout("30 seconds"),
-    Effect.mapError(() => new Failure({ code: "install", detail: "https://registry.npmjs.org/@opencode%2fcli/beta" })),
+    Effect.mapError(() => new Failure({ code: "install", detail: url })),
   )
 
   return metadata.version
