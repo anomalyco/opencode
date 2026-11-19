@@ -159,6 +159,7 @@ impl State {
         self.pending.remove(id);
         self.permission.remove(id);
         self.forms.remove(&id.0);
+        self.remove_job_tree(id);
         let roots: Vec<SessionID> =
             self.family.iter().filter(|(_, family)| family.contains(id)).map(|(root, _)| root.clone()).collect();
         for root in &roots {

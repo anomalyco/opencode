@@ -36,6 +36,8 @@ pub(crate) enum Follow {
     Settle(String, Catalog, Location),
     /// The web search providers of a location.
     Websearch(Location),
+    /// The running jobs of a synced tree (already invalidated).
+    Jobs(SessionID),
 }
 
 impl Data {
@@ -91,6 +93,7 @@ impl Data {
             Follow::Catalogs(catalogs, location) => self.refresh_catalogs(catalogs, location),
             Follow::Settle(key, catalog, location) => self.settle(key, catalog, location),
             Follow::Websearch(location) => self.refresh(move |data| data.websearch_refresh(Some(&location))),
+            Follow::Jobs(root) => self.refresh(move |data| data.job_sync(&root)),
         }
     }
 
@@ -184,7 +187,8 @@ impl State {
                 self.connected = true;
                 let token = self.token();
                 self.active_updates = Some((token, Default::default()));
-                return vec![Follow::Active(token), Follow::Rehydrate];
+                let jobs = self.job_roots().into_iter().map(Follow::Jobs);
+                return [Follow::Active(token), Follow::Rehydrate].into_iter().chain(jobs).collect();
             }
             V2Event::SessionCreated(event) => return self.on_session_created(&event.data),
             V2Event::SessionDeleted(event) => self.mark_deleted(&event.data.session_id),
@@ -314,6 +318,7 @@ impl State {
                 let location = event.location.as_ref().map(Location::from);
                 self.remove_form(&event.data.session_id, &event.data.id, location.as_ref());
             }
+            V2Event::ExperimentalJobUpdated(event) => self.on_job_updated(&event.data.info),
             _ => return self.on_catalog_event(event),
         }
         Vec::new()

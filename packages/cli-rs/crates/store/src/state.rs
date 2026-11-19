@@ -12,7 +12,7 @@ use futures_util::future::{BoxFuture, Shared};
 use indexmap::IndexMap;
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    PermissionRequest, Project, ProjectID, SessionID, SessionInboxCompaction, SessionInboxInfo, SessionInfo,
+    JobInfo, PermissionRequest, Project, ProjectID, SessionID, SessionInboxCompaction, SessionInboxInfo, SessionInfo,
     SessionMessageID,
 };
 use opencode_util::lock;
@@ -120,6 +120,14 @@ pub struct State {
     pub(crate) form_reads: HashMap<crate::forms::Read, Overlay<Form>>,
     /// The head read in flight per transcript, with what overtook it.
     pub(crate) head_reads: HashMap<SessionID, crate::messages::HeadRead>,
+    /// Running background jobs by ID, of the trees synced and of job events since (`store.job`).
+    pub(crate) jobs: IndexMap<String, JobInfo>,
+    /// The job IDs the server listed for each synced tree root, plus those events added for owners in the tree
+    /// (`store.jobTree`). Loaded session info only reaches direct children, so parents alone would drop a
+    /// grandchild's jobs.
+    pub(crate) job_trees: HashMap<SessionID, HashSet<String>>,
+    /// The job read in flight per tree root, with the job events that overtook it.
+    pub(crate) job_reads: HashMap<SessionID, Overlay<JobInfo>>,
     /// The `durable.seq` of the event being applied, for the rows it creates.
     pub(crate) event_seq: Option<i64>,
 }

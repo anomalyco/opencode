@@ -5,6 +5,7 @@ pub mod connection;
 pub mod environment;
 pub mod forms;
 pub mod inbox;
+pub mod jobs;
 pub mod location;
 pub mod messages;
 pub mod permissions;
