@@ -541,8 +541,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   size="small"
                   class="me-3 gap-1.5 px-1.5"
                   onClick={() => {
-                    props.controller.dispatch({ type: "mode.normal" })
+                    // Before the mode change unmounts this button, so focus keeps its ring state.
                     props.controller.restoreFocus()
+                    props.controller.dispatch({ type: "mode.normal" })
                   }}
                 >
                   {i18n.t("ui.promptInput.exitShell")}
@@ -1639,8 +1640,8 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
             class="h-11 rounded-lg px-3 text-[15px] leading-5"
             onMouseDown={keep}
             onClick={() => {
-              props.controller.dispatch({ type: "mode.normal" })
               props.controller.restoreFocus()
+              props.controller.dispatch({ type: "mode.normal" })
             }}
           >
             {i18n.t("ui.promptInput.exitShell")}

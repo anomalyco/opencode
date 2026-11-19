@@ -2,7 +2,7 @@ import { Predicate } from "effect"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { unwrap } from "solid-js/store"
 import { useFilteredList } from "@opencode/ui/hooks"
-import { focusField } from "@opencode/ui/context/field-focus"
+import { focusField, handOffFocus, handoffRing } from "@opencode/ui/context/field-focus"
 import { abort } from "@opencode/util/abort"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
 import type { Upload } from "../attachments/uploads"
@@ -204,7 +204,9 @@ export function createComposerEditor(input: {
           },
         }),
         editor: () => editor,
-        focusEditor: () => editor?.focus(),
+        focusEditor: () => {
+          if (editor) handOffFocus(editor)
+        },
         addPart,
         setDraggingType: (type) => dispatch({ type: type ? "drag.enter" : "drag.leave" }),
       })
@@ -563,7 +565,7 @@ export function createComposerEditor(input: {
 
   const restoreFocus = (cursor = draft.state.cursor ?? promptLength(draft.state.prompt), visible?: boolean) => {
     cancelFocus()
-    focusRequest = { cursor, visible }
+    focusRequest = { cursor, visible: visible ?? handoffRing(editor) }
     focusFrame = requestAnimationFrame(flushFocus)
   }
 
