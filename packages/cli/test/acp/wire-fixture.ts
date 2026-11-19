@@ -31,7 +31,7 @@ import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { BunRequest } from "bun"
 import { createTwoFilesPatch } from "diff"
 import { Duration, Effect, Exit, Logger, Option, Schema, Scope } from "effect"
-import { FetchHttpClient } from "effect/http"
+import { NodeHttpClient } from "@effect/platform-node"
 import { ACP } from "../../src/acp/agent"
 import { ACPTurn } from "../../src/acp/turn"
 
@@ -460,7 +460,7 @@ export async function startWire(options: WireOptions = {}) {
   const agentScope = Scope.makeUnsafe()
   const agentConnection = await Effect.runPromise(
     OpenCode.make({ baseUrl: server.url }).pipe(
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(NodeHttpClient.layerNodeHttp),
       Effect.flatMap((client) => ACP.connect(client, ndJsonStream(agentToClient.writable, clientToAgent.readable))),
       Scope.provide(agentScope),
       (effect) =>

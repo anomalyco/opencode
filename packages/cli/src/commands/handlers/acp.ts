@@ -3,7 +3,8 @@ import { OpenCode } from "@opencode/client/effect"
 import { Service } from "@opencode/client/effect/service"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { Effect, Option } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+import { HttpClient, HttpClientRequest } from "effect/http"
+import { NodeHttpClient } from "@effect/platform-node"
 import { Writable } from "node:stream"
 import { ACP } from "../../acp/agent"
 import { Commands } from "../commands"
@@ -30,7 +31,7 @@ export default Runtime.handler(
           Effect.map(HttpClient.mapRequest(HttpClientRequest.setHeaders(Service.headers(endpoint) ?? {}))),
         ),
       ),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(NodeHttpClient.layerNodeHttp),
     )
     const connection = yield* ACP.connect(client, ndJsonStream(Writable.toWeb(process.stdout), Bun.stdin.stream()))
     const failure = yield* Effect.raceFirst(
