@@ -1,5 +1,6 @@
 // Plugin-event benchmark, reference side: the conformance reducer handling a `git.status` command event.
-// Counterpart of `psychoscript-bench --plugin`. Prints one JSON line per source: median, min and mean µs per execute.
+// Counterpart of `psychoscript-bench --plugin`. Prints one JSON line per source: median, min and mean µs per execute,
+// from the source and from the program `runtime.compile` made of it once (`compiled_*`).
 // Usage: bun bench/ref/plugin.ts [--runs N] <source>...
 import { reference, toolsGlobal } from "../../conformance/reference.ts"
 
@@ -17,10 +18,8 @@ const flag = process.argv.indexOf("--runs")
 const runs = flag === -1 ? 2000 : Number(process.argv[flag + 1])
 const sources = process.argv.slice(2).filter((arg, i, all) => arg !== "--runs" && all[i - 1] !== "--runs")
 
-for (const source of sources) {
-  const code = await Bun.file(source).text()
-  const execute = () => Effect.runPromise(runtime.execute(code, { bindings }))
-  // Warm-up, as many runs as are measured; the first also checks the result.
+// Warm-up, as many runs as are measured, the first checking the result; then the median, min and mean µs of the runs.
+const timed = async (source: string, execute: () => Promise<{ ok: boolean; value?: unknown }>) => {
   const warm = await execute()
   if (warm.ok !== true || JSON.stringify(warm.value) !== expected)
     throw new Error(`${source}: unexpected outcome ${JSON.stringify(warm)}`)
@@ -32,14 +31,25 @@ for (const source of sources) {
     times.push((performance.now() - start) * 1000)
   }
   const sorted = [...times].sort((a, b) => a - b)
-  const mean = times.reduce((a, b) => a + b, 0) / runs
+  return { median: sorted[Math.floor(runs / 2)], min: sorted[0], mean: times.reduce((a, b) => a + b, 0) / runs }
+}
+
+for (const source of sources) {
+  const code = await Bun.file(source).text()
+  const compiled = runtime.compile(code)
+  if (!compiled.ok) throw new Error(`${source}: ${compiled.error.message}`)
+  const fromSource = await timed(source, () => Effect.runPromise(runtime.execute(code, { bindings })))
+  const fromCompiled = await timed(source, () => Effect.runPromise(runtime.execute(compiled.compiled, { bindings })))
   console.log(
     JSON.stringify({
       source,
       bytes: Buffer.byteLength(code),
-      median_us: sorted[Math.floor(runs / 2)],
-      min_us: sorted[0],
-      mean_us: mean,
+      median_us: fromSource.median,
+      min_us: fromSource.min,
+      mean_us: fromSource.mean,
+      compiled_median_us: fromCompiled.median,
+      compiled_min_us: fromCompiled.min,
+      compiled_mean_us: fromCompiled.mean,
     }),
   )
 }

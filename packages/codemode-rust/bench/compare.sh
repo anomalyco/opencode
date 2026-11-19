@@ -85,12 +85,14 @@ done
 
 # (f) Plugin event: the conformance reducer handling a git.status command, PLUGIN_RUNS warm-up then PLUGIN_RUNS timed.
 echo "(f) plugin event" >&2
-PLUGIN_SOURCES=(bench/plugin/reducer.js bench/plugin/reducer-padded.js)
+PLUGIN_SOURCES=(bench/plugin/reducer.js bench/plugin/reducer-padded.js bench/plugin/reducer-100k.js)
 bun bench/ref/plugin.ts --runs "$PLUGIN_RUNS" "${PLUGIN_SOURCES[@]}" >"$TMP/ref-plugin.txt" || echo "reference plugin failed" >&2
 [ -x "$BENCH" ] && "$BENCH" --plugin --runs "$PLUGIN_RUNS" "${PLUGIN_SOURCES[@]}" >"$TMP/rust-plugin.txt" 2>/dev/null ||
   echo "Rust plugin failed" >&2
 TABLE_F="| Source | Bytes | Reference median µs | Reference min µs | Reference mean µs | Rust median µs | Rust min µs | Rust mean µs | Median speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|"
+TABLE_F_COMPILED="| Source | Bytes | Reference from source µs | Reference compiled µs | Rust from source µs | Rust compiled µs | Compiled median speedup |
+|---|---:|---:|---:|---:|---:|---:|"
 for source in "${PLUGIN_SOURCES[@]}"; do
   ref_line=$(grep -F "\"source\":\"$source\"" "$TMP/ref-plugin.txt" || true)
   rust_line=$(grep -F "\"source\":\"$source\"" "$TMP/rust-plugin.txt" 2>/dev/null || true)
@@ -98,6 +100,9 @@ for source in "${PLUGIN_SOURCES[@]}"; do
   r_med=$(field "$ref_line" median_us) s_med=$(field "$rust_line" median_us)
   TABLE_F+="
 | \`$source\` | $(bytes "$source") | $(fmt "$r_med") | $(fmt "$(field "$ref_line" min_us)") | $(fmt "$(field "$ref_line" mean_us)") | $(fmt "$s_med") | $(fmt "$(field "$rust_line" min_us)") | $(fmt "$(field "$rust_line" mean_us)") | $(ratio "$r_med" "$s_med" '%.1fx') |"
+  rc_med=$(field "$ref_line" compiled_median_us) sc_med=$(field "$rust_line" compiled_median_us)
+  TABLE_F_COMPILED+="
+| \`$source\` | $(bytes "$source") | $(fmt "$r_med") | $(fmt "$rc_med") | $(fmt "$s_med") | $(fmt "$sc_med") | $(ratio "$rc_med" "$sc_med" '%.1fx') |"
 done
 
 # (b) Cold start: process start to a printed result for `return 1`, median of COLD_RUNS processes. Without bash 5's
@@ -217,9 +222,15 @@ $TABLE_E
 
 The conformance reducer (\`plugin-reducer-*\`) handling \`{ type: "command", name: "git.status" }\` with the async
 \`tools.git.status\` host function, through \`execute\` once per event. \`reducer.js\` is its command path;
-\`reducer-padded.js\` is the whole reducer with eleven more command handlers before the matching one.
+\`reducer-padded.js\` is the whole reducer with eleven more command handlers before the matching one, and
+\`reducer-100k.js\` the same with 408 more, about 100 KB.
 
 $TABLE_F
+
+The same events run from the program \`runtime.compile\` made of the source once, so a run neither parses nor compiles
+(medians only):
+
+$TABLE_F_COMPILED
 
 ## Commands
 
@@ -242,8 +253,8 @@ stat -c %s "\$(readlink -f "\$(command -v bun)")"
 bun bench/ref/variants.ts --iterations $ITERATIONS <slug>...
 target/release/psychoscript-bench --cases bench/variants --filter <slug> --iterations $ITERATIONS --json
 # (f)
-bun bench/ref/plugin.ts --runs $PLUGIN_RUNS bench/plugin/reducer.js bench/plugin/reducer-padded.js
-target/release/psychoscript-bench --plugin --runs $PLUGIN_RUNS bench/plugin/reducer.js bench/plugin/reducer-padded.js
+bun bench/ref/plugin.ts --runs $PLUGIN_RUNS bench/plugin/reducer.js bench/plugin/reducer-padded.js bench/plugin/reducer-100k.js
+target/release/psychoscript-bench --plugin --runs $PLUGIN_RUNS bench/plugin/reducer.js bench/plugin/reducer-padded.js bench/plugin/reducer-100k.js
 \`\`\`
 EOF
 echo "wrote $OUT" >&2

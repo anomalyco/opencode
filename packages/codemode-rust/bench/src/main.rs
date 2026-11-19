@@ -4,7 +4,8 @@
 //! `--iterations 0` runs only the warm-up, for one-shot measurements such as peak RSS.
 //!
 //! `psychoscript-bench --plugin [--runs N] SOURCE...` is the plugin-event benchmark instead: the conformance
-//! reducer handling a `git.status` command, N warm-up runs then N timed runs, as JSON lines of µs per execute.
+//! reducer handling a `git.status` command, N warm-up runs then N timed runs, as JSON lines of µs per execute: from
+//! the source, and from the program `Runtime::compile` made of it once (`compiled_*`).
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -122,28 +123,56 @@ fn plugin(mut args: impl Iterator<Item = String>) {
         json!({ "state": { "runs": 3 }, "slots": { "statusbar": { "text": "main *" } } });
     for source in sources {
         let code = std::fs::read_to_string(&source).unwrap_or_else(|e| panic!("{source}: {e}"));
-        match runtime.execute_with(&code, &options).result {
-            Ok(value) if value == expected => {}
-            other => panic!("{source}: unexpected outcome {other:?}"),
-        }
-        for _ in 1..runs {
-            let _ = runtime.execute_with(&code, &options);
-        }
-        let times: Vec<f64> = (0..runs)
-            .map(|_| {
-                let start = Instant::now();
-                let _ = runtime.execute_with(&code, &options);
-                start.elapsed().as_secs_f64() * 1e6
-            })
-            .collect();
-        let mut sorted = times.clone();
-        sorted.sort_by(f64::total_cmp);
-        let mean = times.iter().sum::<f64>() / runs.max(1) as f64;
+        let compiled = runtime
+            .compile(&code)
+            .unwrap_or_else(|d| panic!("{source}: {d:?}"));
+        let from_source = timed(runs, &source, &expected, || {
+            runtime.execute_with(&code, &options)
+        });
+        let from_compiled = timed(runs, &source, &expected, || {
+            runtime.execute_with(&compiled, &options)
+        });
         println!(
             "{}",
-            json!({ "source": source, "bytes": code.len(), "median_us": sorted[runs / 2], "min_us": sorted[0], "mean_us": mean })
+            json!({
+                "source": source,
+                "bytes": code.len(),
+                "median_us": from_source.0,
+                "min_us": from_source.1,
+                "mean_us": from_source.2,
+                "compiled_median_us": from_compiled.0,
+                "compiled_min_us": from_compiled.1,
+                "compiled_mean_us": from_compiled.2,
+            })
         );
     }
+}
+
+/// `runs` warm-up runs, the first checking the result, then the median, min and mean µs of `runs` timed ones.
+fn timed(
+    runs: usize,
+    source: &str,
+    expected: &Json,
+    mut execute: impl FnMut() -> psychoscript::Outcome,
+) -> (f64, f64, f64) {
+    match execute().result {
+        Ok(value) if value == *expected => {}
+        other => panic!("{source}: unexpected outcome {other:?}"),
+    }
+    for _ in 1..runs {
+        let _ = execute();
+    }
+    let times: Vec<f64> = (0..runs)
+        .map(|_| {
+            let start = Instant::now();
+            let _ = execute();
+            start.elapsed().as_secs_f64() * 1e6
+        })
+        .collect();
+    let mut sorted = times.clone();
+    sorted.sort_by(f64::total_cmp);
+    let mean = times.iter().sum::<f64>() / runs.max(1) as f64;
+    (sorted[runs / 2], sorted[0], mean)
 }
 
 /// Polls a future to its end on this thread, parking until it is woken.
