@@ -107,13 +107,12 @@ type FinishResult = {
   cancel?: Effect.Effect<void>
   scope?: Scope.Closeable
   generation?: Scope.Closeable
-  recovery?: Recovery
+  listed?: JobSchema.Info
 }
 
 type BackgroundResult = {
   info?: Info
   backgrounded?: Deferred.Deferred<Info>
-  recovery?: Recovery
 }
 
 type StartResult = { info: Info } | { info: Info; job: Active }
@@ -256,10 +255,9 @@ export const make = Effect.gen(function* () {
   const bus = Option.getOrUndefined(yield* Effect.serviceOption(Bus.Service))
 
   // Clients follow listed jobs through this instead of polling the list.
-  const updated = (info: Info | undefined, recovery: Recovery | undefined) =>
-    bus && info && recovery
-      ? bus.publish(JobSchema.Event.Updated, { info: JobList.item(info, recovery) }).pipe(Effect.asVoid)
-      : Effect.void
+  const updated = (listed: JobSchema.Info | undefined) =>
+    bus && listed ? bus.publish(JobSchema.Event.Updated, { info: listed }).pipe(Effect.asVoid) : Effect.void
+  const listed = (info: Info, recovery: Recovery | undefined) => (recovery ? JobList.item(info, recovery) : undefined)
 
   const consume = (id: string, generation: Scope.Closeable) =>
     SynchronizedRef.update(state.jobs, (jobs) => {
@@ -356,7 +354,7 @@ export const make = Effect.gen(function* () {
       }),
     )
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
-    if (result.done) yield* updated(result.info, active.recovery)
+    if (result.done && result.info) yield* updated(listed(result.info, active.recovery))
     if (result.scope) {
       yield* Scope.close(result.scope, Exit.void).pipe(Effect.forkIn(state.scope, { startImmediately: true }))
     }
@@ -417,7 +415,7 @@ export const make = Effect.gen(function* () {
             return [{ info: snapshot(job), job }, new Map(jobs).set(input.id, job)]
           }),
         )
-        if ("job" in result && result.job.isBackgrounded) yield* updated(result.info, result.job.recovery)
+        if ("job" in result && result.job.isBackgrounded) yield* updated(listed(result.info, result.job.recovery))
         if ("job" in result)
           yield* restore(input.run).pipe(
             Effect.exit,
@@ -507,6 +505,7 @@ export const make = Effect.gen(function* () {
   })
 
   const background: Interface["background"] = Effect.fn("Job.background")(function* (id) {
+    let moved: JobSchema.Info | undefined
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [BackgroundResult, Map<string, Active>]> {
@@ -515,29 +514,23 @@ export const make = Effect.gen(function* () {
         if (!job || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
         if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
         const next = yield* markBackground(job)
-        return [
-          { info: snapshot(next), backgrounded: job.backgrounded, recovery: job.recovery },
-          new Map(jobs).set(id, next),
-        ]
+        moved = listed(next.info, next.recovery)
+        return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]
       }),
     )
-    if (result.info && result.backgrounded) {
-      yield* Deferred.succeed(result.backgrounded, result.info)
-      yield* updated(result.info, result.recovery)
-    }
+    if (result.info && result.backgrounded) yield* Deferred.succeed(result.backgrounded, result.info)
+    yield* updated(moved)
     return result.info
   })
 
   const backgroundAll: Interface["backgroundAll"] = Effect.fn("Job.backgroundAll")(function* (input) {
+    const moved: (JobSchema.Info | undefined)[] = []
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<
-        readonly [
-          (Required<Omit<BackgroundResult, "recovery">> & Pick<BackgroundResult, "recovery">)[],
-          Map<string, Active>,
-        ]
+        readonly [Required<BackgroundResult>[], Map<string, Active>]
       > {
-        const results: (Required<Omit<BackgroundResult, "recovery">> & Pick<BackgroundResult, "recovery">)[] = []
+        const results: Required<BackgroundResult>[] = []
         const next = new Map(jobs)
         for (const [id, job] of jobs) {
           if (job.info.status !== "running") continue
@@ -545,17 +538,15 @@ export const make = Effect.gen(function* () {
           if (input.type !== undefined && job.info.type !== input.type) continue
           if (!job.blockingSessions.has(input.sessionID)) continue
           const updated = yield* markBackground(job)
-          results.push({ info: snapshot(updated), backgrounded: job.backgrounded, recovery: job.recovery })
+          results.push({ info: snapshot(updated), backgrounded: job.backgrounded })
+          moved.push(listed(updated.info, updated.recovery))
           next.set(id, updated)
         }
         return [results, next]
       }),
     )
-    yield* Effect.forEach(
-      result,
-      (item) => Deferred.succeed(item.backgrounded, item.info).pipe(Effect.andThen(updated(item.info, item.recovery))),
-      { discard: true },
-    )
+    yield* Effect.forEach(result, (item) => Deferred.succeed(item.backgrounded, item.info), { discard: true })
+    yield* Effect.forEach(moved, updated, { discard: true })
     return result.map((item) => item.info)
   })
 
@@ -586,7 +577,7 @@ export const make = Effect.gen(function* () {
             scope: job.scope,
             generation: job.scope,
             cancel: job.cancel,
-            recovery: job.recovery,
+            listed: listed(next.info, job.recovery),
           },
           new Map(jobs).set(id, next),
         ]
@@ -594,7 +585,7 @@ export const make = Effect.gen(function* () {
     )
     if (result.cancel) yield* result.cancel
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
-    if (result.done) yield* updated(result.info, result.recovery)
+    if (result.done) yield* updated(result.listed)
     if (result.scope) yield* Scope.close(result.scope, Exit.void)
     if (result.generation) yield* consume(id, result.generation)
     return result.info
