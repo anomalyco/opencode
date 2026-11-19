@@ -7,8 +7,8 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
-import { fileManagerApp } from "@/home/projects/file-manager"
-import { useRevealProject } from "@/home/projects/reveal"
+import { fileManagerApp } from "@/shell/projects/file-manager"
+import { useRevealProject } from "@/shell/projects/reveal"
 import { pathKey } from "@/workspaces/path-key"
 
 export const ProjectOptions: Component<{

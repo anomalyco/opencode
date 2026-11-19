@@ -28,7 +28,7 @@ import {
   selectServerVersion,
   type ServerHealth,
 } from "@/runtime/server/health-machine"
-import { ProjectMenuItems } from "./menu"
+import { ProjectMenuItems } from "@/shell/projects/menu"
 import { CollapsedSidebarToggleSpace } from "@/shell/sidebar-toggle"
 import "./view.css"
 

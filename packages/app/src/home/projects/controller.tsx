@@ -1,17 +1,14 @@
-import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { useServerActionsController } from "@/servers/registry/controller"
 import { useSettingsCommand } from "@/settings/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
-import { isServerFailed } from "@/runtime/server/health-machine"
-import { homeProjectDirectories } from "@/shell/layout/helpers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createResource } from "solid-js"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { HomeController } from "../model"
-import { createProjectActions } from "./actions"
+import { createProjectActions } from "@/shell/projects/actions"
 
 export const HomeServersSchema = Schema.Struct({
   collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
@@ -19,8 +16,6 @@ export const HomeServersSchema = Schema.Struct({
 
 export function createHomeProjectsController(home: HomeController) {
   const platform = usePlatform()
-
-  const pickDirectory = useDirectoryPicker()
 
   const language = useLanguage()
 
@@ -37,15 +32,6 @@ export function createHomeProjectsController(home: HomeController) {
     (promise) => promise.then(() => _state),
     { initialValue: _state },
   )
-
-  function choose(conn: ServerConnection.Any) {
-    pickDirectory({
-      server: conn,
-      title: language.t("command.project.open"),
-      multiple: true,
-      onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
-    })
-  }
 
   return {
     copy: {
@@ -89,12 +75,7 @@ export function createHomeProjectsController(home: HomeController) {
       edit: actions.edit,
       hasUnread: actions.hasUnread,
       clearNotifications: actions.clearNotifications,
-      choose: (conn: ServerConnection.Any) => {
-        if (actions.authenticate(conn, (next) => choose(next))) return
-
-        if (isServerFailed(home.server.health(conn))) return
-        choose(conn)
-      },
+      choose: (conn: ServerConnection.Any) => actions.choose(conn, home.project.add),
       hide: actions.hide,
       canReveal: actions.canReveal,
       reveal: actions.reveal,

@@ -5,13 +5,12 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { fileManagerApp } from "./file-manager"
-import type { ProjectBrowserTarget } from "./browse"
 
 export function ProjectMenuItems(props: {
   server: ServerConnection.Any
   project: LocalProject
   unread: boolean
-  onViewHistory?: (target: ProjectBrowserTarget) => void
+  onViewHistory?: (target: { server: ServerConnection.Key; directory: string }) => void
   canImportSession: boolean
   importingSession?: boolean
   canRevealProject: (server: ServerConnection.Any) => boolean

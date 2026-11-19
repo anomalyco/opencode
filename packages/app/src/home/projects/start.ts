@@ -9,7 +9,7 @@ import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import { tabProjectDirectory } from "@/shell/tabs/project-sessions"
 import { pathKey } from "@/workspaces/path-key"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
-import { createProjectActions } from "./actions"
+import { createProjectActions } from "@/shell/projects/actions"
 
 type StartTarget =
   | { type: "loading"; connection?: ServerConnection.Any; project?: undefined }
