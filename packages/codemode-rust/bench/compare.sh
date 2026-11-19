@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Measures PsychoScript against the reference CodeMode and writes bench/RESULTS.md.
+# Measures PsychoScript against the reference's language layer (`Runtime.make` from `src/language/` of the CodeMode
+# package) and writes bench/RESULTS.md. Both sides run the programs with the same host global, the `tools` namespace
+# of conformance/reference.ts and conformance/reference.rs.
 # Usage: bash bench/compare.sh. The reference CodeMode package is ../codemode relative to this workspace; set
 # CODEMODE_REF to another package directory to override it.
 # Needs bun, cargo, jq, strip and /usr/bin/time; runs on Linux and macOS. Rust columns read "n/a" while the core cannot
@@ -9,7 +11,7 @@ set -uo pipefail
 [ -n "${CODEMODE_REF:-}" ] && CODEMODE_REF=$(cd "$CODEMODE_REF" && pwd)
 cd "$(dirname "$0")/.."
 REF_PKG=${CODEMODE_REF:-../codemode}
-[ -f "$REF_PKG/script/bench.ts" ] || { echo "reference CodeMode package not found at $REF_PKG" >&2; exit 1; }
+[ -f "$REF_PKG/src/language/index.ts" ] || { echo "reference CodeMode package not found at $REF_PKG" >&2; exit 1; }
 ITERATIONS=${ITERATIONS:-11}
 COLD_RUNS=${COLD_RUNS:-20}
 PLUGIN_RUNS=${PLUGIN_RUNS:-2000}
@@ -34,9 +36,9 @@ cargo build --release --locked -p psychoscript-bench --bin psychoscript-bench --
 
 # (a) Per-case median and min.
 echo "(a) reference bench" >&2
-(cd "$REF_PKG" && bun run script/bench.ts --iterations "$ITERATIONS") >"$TMP/ref-bench.txt"
-ref_field() { # name, field (1 = median, 2 = min)
-  grep -F "$1 " "$TMP/ref-bench.txt" | sed -E 's/.* ([0-9.]+) ms  \(min ([0-9.]+) ms\).*/\1 \2/' | cut -d' ' -f"$2"
+bun bench/ref/bench.ts --iterations "$ITERATIONS" "${SLUGS[@]}" >"$TMP/ref-bench.txt" || echo "reference bench failed" >&2
+ref_field() { # slug, field (median_ms or min_ms)
+  grep -F "\"slug\":\"$1\"" "$TMP/ref-bench.txt" | jq -r ".$2 // empty"
 }
 TABLE_A="| Case | Reference median ms | Reference min ms | Rust median ms | Rust min ms | Median speedup |
 |---|---:|---:|---:|---:|---:|"
@@ -47,12 +49,12 @@ for i in "${!SLUGS[@]}"; do
   if [ -x "$BENCH" ] && "$BENCH" --filter "$slug" --iterations "$ITERATIONS" --json >"$TMP/rust-$slug.json" 2>/dev/null; then
     rm_med=$(jq '.[0].median_ms' "$TMP/rust-$slug.json") rm_min=$(jq '.[0].min_ms' "$TMP/rust-$slug.json")
   fi
-  r_med=$(ref_field "$name" 1) r_min=$(ref_field "$name" 2)
+  r_med=$(ref_field "$slug" median_ms) r_min=$(ref_field "$slug" min_ms)
   speedup=n/a
-  [ -n "$rm_med" ] && speedup=$(awk -v r="$r_med" -v s="$rm_med" 'BEGIN { printf "%.1fx", r / s }')
+  [ -n "$rm_med" ] && [ -n "$r_med" ] && speedup=$(awk -v r="$r_med" -v s="$rm_med" 'BEGIN { printf "%.1fx", r / s }')
   [ "$slug" = tool-fan-out ] && name+=" ¹"
   TABLE_A+="
-| $name | $r_med | $r_min | $(fmt "$rm_med") | $(fmt "$rm_min") | $speedup |"
+| $name | $(fmt "$r_med") | $(fmt "$r_min") | $(fmt "$rm_med") | $(fmt "$rm_min") | $speedup |"
 done
 
 # (e) Perturbed variants: each program and an equivalent, differently written one, on both sides in this run.
@@ -188,9 +190,8 @@ mins and means are shown for spread, never compared.
 
 $TABLE_A
 
-¹ Both sides validate: the reference \`echo\` tool decodes its input and output through Effect Schema
-(\`{ id: number }\` in, \`number\` out), and the Rust tools (\`tools()\` in \`bench/src/main.rs\`) validate the same JSON
-Schemas those Effect Schemas render to.
+¹ \`tools.echo\` is an async host function in a \`Host.namespace\` on both sides (\`conformance/reference.ts\` and
+\`conformance/reference.rs\`); neither validates its input or output.
 
 ## (b) Cold start: process start to the result of \`return 1\`
 
@@ -214,10 +215,9 @@ $TABLE_E
 
 ## (f) Plugin event: µs per execute, $PLUGIN_RUNS runs after $PLUGIN_RUNS warm-up runs
 
-The conformance reducer (\`plugin-reducer-*\`) handling \`{ type: "command", name: "git.status" }\` with a \`git.status\`
-tool, through \`execute\` once per event. \`reducer.js\` is its command path; \`reducer-padded.js\` is the whole reducer
-with eleven more command handlers before the matching one. The reference's \`git.status\` decodes through Effect Schema,
-and the Rust one validates the same JSON Schemas those render to, as in (a).
+The conformance reducer (\`plugin-reducer-*\`) handling \`{ type: "command", name: "git.status" }\` with the async
+\`tools.git.status\` host function, through \`execute\` once per event. \`reducer.js\` is its command path;
+\`reducer-padded.js\` is the whole reducer with eleven more command handlers before the matching one.
 
 $TABLE_F
 
@@ -227,7 +227,7 @@ $TABLE_F
 bash bench/compare.sh  # reference at ../codemode, or CODEMODE_REF=<codemode package dir>
 cargo build --release --locked -p psychoscript-bench --bin psychoscript-bench --example embed
 # (a)
-(cd ../codemode && bun run script/bench.ts --iterations $ITERATIONS)
+bun bench/ref/bench.ts --iterations $ITERATIONS <slug>...
 target/release/psychoscript-bench --filter <slug> --iterations $ITERATIONS --json
 # (b) $COLD_RUNS timed runs each after one untimed run, wall time from bash \$EPOCHREALTIME (perl's clock without it)
 bun bench/ref/embed.ts
