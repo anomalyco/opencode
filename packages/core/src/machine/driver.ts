@@ -20,11 +20,15 @@ export class Unknown extends Schema.TaggedError<Unknown>()("Machine.Unknown", { 
   }
 }
 
-export class WorkerRestarted extends Schema.TaggedError<WorkerRestarted>()("Machine.WorkerRestarted", {
+/** The worker no longer has a process: it restarted, or it forgot the process. */
+export class ProcessLost extends Schema.TaggedError<ProcessLost>()("Machine.ProcessLost", {
   machine: Environment.ID,
+  restarted: Schema.Boolean,
 }) {
   override get message() {
-    return `${this.machine}'s worker restarted, the process was lost`
+    return this.restarted
+      ? `${this.machine}'s worker restarted, the process was lost`
+      : `${this.machine}'s worker no longer has the process`
   }
 }
 
@@ -109,12 +113,13 @@ export const make = (id: Environment.ID): Interface => {
           current.send({ type: "attach", id: processID, from: process.delivered })
           continue
         }
-        // A start the same worker does not list never reached it, so a retry is safe. A new worker lost everything.
+        // A start the same worker does not list never reached it, so a retry is safe. A new worker lost everything, and
+        // the same one may have forgotten a process it ran.
         gone(
           processID,
           process,
           Deferred.isDoneUnsafe(process.started)
-            ? new WorkerRestarted({ machine: id })
+            ? new ProcessLost({ machine: id, restarted: process.instance !== current.instance })
             : process.instance === current.instance
               ? new NotSent({ machine: id })
               : new Unknown({ machine: id }),
@@ -143,8 +148,10 @@ export const make = (id: Environment.ID): Interface => {
         Deferred.doneUnsafe(process.started, Effect.succeed(message.pid))
         return
       case "failed":
-        // A refused start never ran. Once started, a failed attach or kill changes nothing the handle reports.
-        if (!Deferred.isDoneUnsafe(process.started)) gone(message.id, process, new Error(message.message))
+        // A refused start never ran, and a refused attach means the worker no longer has the process. A refused kill
+        // changes nothing: the exit still arrives through the attach, or the attach is refused too.
+        if (message.request === "start") gone(message.id, process, new Error(message.message))
+        if (message.request === "attach") gone(message.id, process, new ProcessLost({ machine: id, restarted: false }))
         return
       case "output": {
         // A chunk past what was delivered follows a lost one; the exit's byte count attaches again from the gap.
@@ -158,6 +165,7 @@ export const make = (id: Environment.ID): Interface => {
         if (message.bytes > process.delivered)
           return current.send({ type: "attach", id: message.id, from: process.delivered })
         processes.delete(message.id)
+        current.send({ type: "release", id: message.id })
         Deferred.doneUnsafe(process.exited, Effect.succeed(message))
         Queue.endUnsafe(process.output)
     }

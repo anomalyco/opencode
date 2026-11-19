@@ -49,6 +49,8 @@ export const makeWorker = (machine: Machine.Interface) =>
     const drops: Array<{ readonly direction: Direction; readonly type: string }> = []
     let instance = crypto.randomUUID()
     let table = new Map<string, Process>()
+    /** Processes the next hello still lists, then forgets before the home can attach. */
+    const forgetting = new Set<string>()
     let link: Link | undefined
 
     const dropped = (direction: Direction, type: string) => {
@@ -74,7 +76,7 @@ export const makeWorker = (machine: Machine.Interface) =>
     }
 
     const start = (message: Extract<Machine.ToWorker, { type: "start" }>) => {
-      if (table.has(message.id)) return emit({ type: "failed", id: message.id, message: "exists" })
+      if (table.has(message.id)) return emit({ type: "failed", id: message.id, request: "start", message: "exists" })
       const process: Process = {
         output: new Uint8Array(),
         sent: 0,
@@ -158,11 +160,17 @@ export const makeWorker = (machine: Machine.Interface) =>
             ),
           ),
         )
+      if (message.type === "release") {
+        table.delete(message.id)
+        return
+      }
       const process = table.get(message.id)
-      if (!process) return emit({ type: "failed", id: message.id, message: "unknown process" })
+      if (!process) return emit({ type: "failed", id: message.id, request: message.type, message: "unknown process" })
+      if (message.type === "kill" && process.ended)
+        return emit({ type: "failed", id: message.id, request: "kill", message: "already exited" })
       if (message.type === "attach") process.sent = message.from
       if (message.type === "kill" && !process.run.traps.has(message.signal))
-        process.ended ??= { code: null, signal: message.signal }
+        process.ended = { code: null, signal: message.signal }
       flush(process)
     }
 
@@ -200,6 +208,8 @@ export const makeWorker = (machine: Machine.Interface) =>
           ...(process.ended ? { state: "exited" as const, ...process.ended } : { state: "running" as const }),
         })),
       }
+      forgetting.forEach((processID) => table.delete(processID))
+      forgetting.clear()
       // Live before the machine sees the hello, so what it sends while handling the hello is answered.
       link = current
       current.fiber = yield* Effect.forkIn(
@@ -233,6 +243,10 @@ export const makeWorker = (machine: Machine.Interface) =>
         table = new Map()
         yield* dial
       }),
+      /** Forgets a process, as a worker may once it has run a while. */
+      forget: (processID: string) => table.delete(processID),
+      /** Forgets a process after listing it in the next hello, before the home can attach to it. */
+      forgetAfterHello: (processID: string) => forgetting.add(processID),
       /** Drops the next message of `type` heading to `direction`. */
       drop: (direction: Direction, type: string) => drops.push({ direction, type }),
     }

@@ -39,7 +39,12 @@ export const FromWorker = Schema.Union([
   Hello,
   Schema.Struct({ type: Schema.Literal("started"), id: Schema.String, pid: Schema.Number }),
   /** A start, attach or kill that could not be done. */
-  Schema.Struct({ type: Schema.Literal("failed"), id: Schema.String, message: Schema.String }),
+  Schema.Struct({
+    type: Schema.Literal("failed"),
+    id: Schema.String,
+    request: Schema.Literals(["start", "attach", "kill"]),
+    message: Schema.String,
+  }),
   /** `offset` is the position of the first byte of `data` in the process's merged stdout and stderr. */
   Schema.Struct({ type: Schema.Literal("output"), id: Schema.String, offset: Schema.Number, data: Bytes }),
   Schema.Struct({ ...exit, code: Schema.Number }),
@@ -97,6 +102,8 @@ export const ToWorker = Schema.Union([
   /** Sends output from byte `from` on, then the exit once every byte is sent. Replaces an earlier attach. */
   Schema.Struct({ type: Schema.Literal("attach"), id: Schema.String, from: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("kill"), id: Schema.String, signal: Signal }),
+  /** Sent once the home has the process's exit: the worker may forget the process and its output. */
+  Schema.Struct({ type: Schema.Literal("release"), id: Schema.String }),
   FileCall,
 ])
 export type ToWorker = typeof ToWorker.Type

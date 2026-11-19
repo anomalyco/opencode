@@ -186,15 +186,71 @@ describe("machine driver", () => {
     }),
   )
 
-  it.effect("fails a running process with WorkerRestarted when the worker restarts", () =>
+  it.effect("fails a running process as lost when the worker restarts", () =>
     Effect.gen(function* () {
       const { worker, environment } = yield* connected
       const handle = yield* environment.spawner.spawn(command)
       yield* worker.runs[0].print("partial")
       yield* worker.restart
-      expect(cause(yield* handle.exitCode.pipe(Effect.flip))).toBeInstanceOf(Machine.WorkerRestarted)
-      expect(cause(yield* Stream.runDrain(handle.all).pipe(Effect.flip))).toBeInstanceOf(Machine.WorkerRestarted)
+      const lost = yield* handle.exitCode.pipe(Effect.flip)
+      expect(cause(lost)).toBeInstanceOf(Machine.ProcessLost)
+      expect(lost.message).toContain("gpu's worker restarted, the process was lost")
+      expect(cause(yield* Stream.runDrain(handle.all).pipe(Effect.flip))).toBeInstanceOf(Machine.ProcessLost)
       expect(count(worker.received, "start")).toBe(1)
+    }),
+  )
+
+  it.effect("releases a process once its exit is accepted, and only then", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const finished = yield* environment.spawner.spawn(command)
+      yield* environment.spawner.spawn(command)
+      yield* worker.runs[0].exit(0)
+      yield* finished.exitCode
+      const released = worker.received.flatMap((message) => (message.type === "release" ? [message.id] : []))
+      expect(released).toEqual([worker.runs[0].id])
+    }),
+  )
+
+  it.effect("fails a process the same worker forgot before reconnecting, without saying it restarted", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const handle = yield* environment.spawner.spawn(command)
+      yield* worker.cut
+      worker.forget(worker.runs[0].id)
+      yield* worker.restore
+      const lost = yield* handle.exitCode.pipe(Effect.flip)
+      expect(cause(lost)).toBeInstanceOf(Machine.ProcessLost)
+      expect(lost.message).toContain("gpu's worker no longer has the process")
+      expect(lost.message).not.toContain("restarted")
+    }),
+  )
+
+  it.effect("fails a process at once when the worker refuses to attach to it", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const handle = yield* environment.spawner.spawn(command)
+      yield* worker.cut
+      worker.forgetAfterHello(worker.runs[0].id)
+      yield* worker.restore
+      expect(cause(yield* handle.exitCode.pipe(Effect.flip))).toBeInstanceOf(Machine.ProcessLost)
+      expect(cause(yield* Stream.runDrain(handle.all).pipe(Effect.flip))).toBeInstanceOf(Machine.ProcessLost)
+    }),
+  )
+
+  it.effect("ignores a refused kill of a process that already exited", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const handle = yield* environment.spawner.spawn(command)
+      worker.drop("home", "exit")
+      yield* worker.runs[0].exit(3)
+      const killing = yield* Effect.forkChild(handle.kill(), { startImmediately: true })
+      yield* Effect.yieldNow
+      expect(worker.received.filter((message) => message.type === "kill")).toHaveLength(1)
+      yield* worker.cut
+      yield* worker.restore
+      yield* Fiber.join(killing)
+      expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(3))
     }),
   )
 
@@ -338,11 +394,16 @@ describe("machine wire", () => {
     Effect.sync(() => {
       const output: Machine.FromWorker = { type: "output", id: "p1", offset: 0, data: bytes("hi") }
       const write: Machine.ToWorker = { type: "fs", req: 7, call: "write", path: "/a", bytes: bytes("hi") }
+      const failed: Machine.FromWorker = { type: "failed", id: "p1", request: "attach", message: "unknown process" }
+      const release: Machine.ToWorker = { type: "release", id: "p1" }
       const json = JSON.parse(JSON.stringify(Schema.encodeSync(Machine.FromWorker)(output)))
       expect(json).toEqual({ type: "output", id: "p1", offset: 0, data: "aGk=" })
       expect(Schema.decodeUnknownSync(Machine.FromWorker)(json)).toEqual(output)
       expect(Schema.encodeSync(Machine.ToWorker)(write)).toEqual({ ...write, bytes: "aGk=" })
       expect(Schema.decodeUnknownSync(Machine.ToWorker)({ ...write, bytes: "aGk=" })).toEqual(write)
+      expect(Schema.decodeUnknownSync(Machine.FromWorker)(JSON.parse(JSON.stringify(failed)))).toEqual(failed)
+      expect(Schema.decodeUnknownSync(Machine.ToWorker)(JSON.parse(JSON.stringify(release)))).toEqual(release)
+      expect(() => Schema.decodeUnknownSync(Machine.FromWorker)({ ...failed, request: "release" })).toThrow()
     }),
   )
 })
