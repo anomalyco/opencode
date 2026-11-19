@@ -129,6 +129,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               })
               .pipe(
                 Effect.catchTag("Session.NotFoundError", missingSession),
+                Effect.catchTag("Session.MessageNotFoundError", missingMessage),
                 Effect.catchTag(
                   "SessionTransfer.ImportConflictError",
                   (error) =>
