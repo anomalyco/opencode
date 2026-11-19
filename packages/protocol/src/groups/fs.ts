@@ -3,7 +3,7 @@ import { Location } from "@opencode/schema/location"
 import { PositiveInt } from "@opencode/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
-import { FileNotFoundError, ServiceUnavailableError } from "../errors.js"
+import { FileNotFoundError, ForbiddenError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const ListQuery = Schema.Struct({
@@ -53,7 +53,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
     HttpApiEndpoint.get("fs.list", "/api/fs/list", {
       query: ListQuery,
       success: Location.response(Schema.Array(FileSystem.Entry)),
-      error: FileNotFoundError,
+      error: [FileNotFoundError, ForbiddenError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
