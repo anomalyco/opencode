@@ -58,14 +58,16 @@ let readDefect: unknown
 let readBytes: Uint8Array | undefined
 let readFailure: Environment.WrongKind | undefined
 let memory = Environment.makeFiles(Environment.makeMemoryDriver())
+// The memory driver keys paths with path.posix, so a Windows path reaches it as one flat name.
+const slash = (value: string) => value.replaceAll("\\", "/")
 // Stands in for the environment the read tool resolves each target into, so a test can seed
 // entries, count reads, and fail or defect a read the way the real filesystem would.
 const files: Environment.Files = {
   read: (path, range) => {
-    if (range !== undefined && range.offset === 0 && range.length > 0) readCalls.push(AbsolutePath.make(path))
+    readCalls.push(AbsolutePath.make(path))
     if (readDefect !== undefined) return Effect.die(readDefect)
     if (readFailure !== undefined) return Effect.fail(readFailure)
-    if (readBytes === undefined) return memory.read(path, range)
+    if (readBytes === undefined) return memory.read(slash(path), range)
     return Effect.succeed({
       info: { type: "file" as const, size: readBytes.length, mtimeMs: 0 },
       bytes: range === undefined ? readBytes.slice() : readBytes.slice(range.offset, range.offset + range.length),
@@ -73,21 +75,22 @@ const files: Environment.Files = {
   },
   list: (path) => {
     listCalls.push(AbsolutePath.make(path))
-    return memory.list(path)
+    return memory.list(slash(path))
   },
-  write: (path, bytes) => memory.write(path, bytes),
-  stat: (path) => memory.stat(path),
-  remove: (path) => memory.remove(path),
-  move: (from, to) => memory.move(from, to),
-  mkdir: (path) => memory.mkdir(path),
-  append: (path, bytes) => memory.append(path, bytes),
+  write: (path, bytes) => memory.write(slash(path), bytes),
+  stat: (path) => memory.stat(slash(path)),
+  remove: (path) => memory.remove(slash(path)),
+  move: (from, to) => memory.move(slash(from), slash(to)),
+  mkdir: (path) => memory.mkdir(slash(path)),
+  append: (path, bytes) => memory.append(slash(path), bytes),
 }
 const environment = Layer.succeed(
   Environment.Service,
   Environment.Service.of({ files, spawner: Environment.makeMemoryDriver().spawner }),
 )
 const seed = (file: string, content: string | Uint8Array = "x\n") =>
-  memory.write(AbsolutePath.make(file), typeof content === "string" ? encoder.encode(content) : content)
+  files.write(AbsolutePath.make(file), typeof content === "string" ? encoder.encode(content) : content)
+const readPaths = () => [...new Set(readCalls)]
 let allow = true
 let deniedResource: string | undefined
 const permission = permissionLayer({
@@ -209,7 +212,7 @@ describe("ReadTool", () => {
       expect(execution.metadata).toEqual({ truncated: false })
       expect(execution.content).toEqual([{ type: "text", text: "Read file README.md, lines 1-1\n1: hello" }])
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
-      expect(readCalls).toEqual([AbsolutePath.make(path.join(process.cwd(), "README.md"))])
+      expect(readPaths()).toEqual([AbsolutePath.make(path.join(process.cwd(), "README.md"))])
       expect(listCalls).toEqual([])
     }),
   )
@@ -246,7 +249,7 @@ describe("ReadTool", () => {
         error: { message: "Limit must be a positive integer" },
       })
       expect(assertions).toEqual([])
-      expect(readCalls).toEqual([])
+      expect(readPaths()).toEqual([])
     }),
   )
 
@@ -271,7 +274,7 @@ describe("ReadTool", () => {
         },
         { sessionID, action: "read", resources: [external.replaceAll("\\", "/")], save: ["*"] },
       ])
-      expect(readCalls).toEqual([AbsolutePath.make(external)])
+      expect(readPaths()).toEqual([AbsolutePath.make(external)])
     }),
   )
 
@@ -298,7 +301,7 @@ describe("ReadTool", () => {
         { type: "text", text: "Image read successfully" },
         { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png", name: "pixel.png" },
       ])
-      expect(readCalls).toEqual([AbsolutePath.make(path.join(process.cwd(), "pixel.png"))])
+      expect(readPaths()).toEqual([AbsolutePath.make(path.join(process.cwd(), "pixel.png"))])
 
       const settled = yield* executeTool(registry, {
         sessionID,
@@ -686,7 +689,7 @@ describe("ReadTool", () => {
           },
         }),
       ).toEqual({ status: "error", error: { type: "unknown", message: "Cannot read binary file: archive.dat" } })
-      expect(readCalls).toEqual([AbsolutePath.make(path.join(process.cwd(), "archive.dat"))])
+      expect(readPaths()).toEqual([AbsolutePath.make(path.join(process.cwd(), "archive.dat"))])
     }),
   )
 
@@ -715,7 +718,7 @@ describe("ReadTool", () => {
         call: { type: "tool-call", id: "call-defect", name: "read", input: { path: "README.md" } },
       }).pipe(Effect.exit)
       expect(Result.getOrThrow(Exit.findDefect(exit))).toBe(readDefect)
-      expect(readCalls).toEqual([AbsolutePath.make(path.join(process.cwd(), "README.md"))])
+      expect(readPaths()).toEqual([AbsolutePath.make(path.join(process.cwd(), "README.md"))])
     }),
   )
 
@@ -731,20 +734,23 @@ describe("ReadTool", () => {
           call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
         }),
       ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: read" } })
-      expect(readCalls).toEqual([])
+      expect(readPaths()).toEqual([])
     }),
   )
 
   it.effect("returns missing paths as model-visible tool failures", () =>
     Effect.gen(function* () {
-      for (const name of [
-        "__missing_read_target__.txt.bak",
-        "copy___missing_read_target__.txt",
-        "old___missing_read_target__.txt",
-        "other___missing_read_target__.txt",
-        "unrelated.txt",
-      ])
-        yield* seed(path.join(process.cwd(), name))
+      yield* Effect.forEach(
+        [
+          "__missing_read_target__.txt.bak",
+          "copy___missing_read_target__.txt",
+          "old___missing_read_target__.txt",
+          "other___missing_read_target__.txt",
+          "unrelated.txt",
+        ],
+        (name) => seed(path.join(process.cwd(), name)),
+        { discard: true },
+      )
       const registry = yield* Tool.Service
 
       expect(
@@ -761,14 +767,14 @@ describe("ReadTool", () => {
         },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: [missingPath], save: ["*"] }])
-      expect(readCalls).toEqual([AbsolutePath.make(missingAbsolutePath)])
+      expect(readPaths()).toEqual([AbsolutePath.make(missingAbsolutePath)])
     }),
   )
 
   it.effect("names the first missing folder and its nearest existing parent", () =>
     Effect.gen(function* () {
       const requested = "__missing_read_folder__/src/file.ts"
-      yield* memory.mkdir(AbsolutePath.make(path.join(process.cwd(), "__missing_read_folder__-old")))
+      yield* files.mkdir(AbsolutePath.make(path.join(process.cwd(), "__missing_read_folder__-old")))
       const registry = yield* Tool.Service
 
       expect(
@@ -848,12 +854,15 @@ describe("ReadTool", () => {
         }).pipe(Effect.map((result) => result.error?.message))
 
       // Listed worst first: a typo, a containing name, the same stem, and the same name in another case.
-      for (const name of ["confix.ts", "config.test.ts", "config.json", "Config.ts"])
-        yield* seed(path.join(process.cwd(), name))
+      yield* Effect.forEach(
+        ["confix.ts", "config.test.ts", "config.json", "Config.ts"],
+        (name) => seed(path.join(process.cwd(), name)),
+        { discard: true },
+      )
       expect(yield* read()).toBe(
         "File not found: config.ts\n\nDid you mean one of these?\nConfig.ts\nconfig.json\nconfig.test.ts",
       )
-      yield* memory.remove(AbsolutePath.make(path.join(process.cwd(), "Config.ts")))
+      yield* files.remove(AbsolutePath.make(path.join(process.cwd(), "Config.ts")))
       expect(yield* read()).toBe(
         "File not found: config.ts\n\nDid you mean one of these?\nconfig.json\nconfig.test.ts\nconfix.ts",
       )
@@ -913,7 +922,7 @@ describe("ReadTool", () => {
         { action: "read", resources: [requested] },
         { action: "read", resources: [recovered] },
       ])
-      expect(readCalls).toEqual([AbsolutePath.make(requestedAbsolute), AbsolutePath.make(recoveredAbsolute)])
+      expect(readPaths()).toEqual([AbsolutePath.make(requestedAbsolute), AbsolutePath.make(recoveredAbsolute)])
       expect(listCalls).toEqual([AbsolutePath.make(process.cwd())])
     }),
   )
@@ -938,7 +947,7 @@ describe("ReadTool", () => {
         { action: "read", resources: [requested.replaceAll("\\", "/")] },
         { action: "read", resources: [recovered.replaceAll("\\", "/")] },
       ])
-      expect(readCalls).toEqual([AbsolutePath.make(requested), AbsolutePath.make(recovered)])
+      expect(readPaths()).toEqual([AbsolutePath.make(requested), AbsolutePath.make(recovered)])
     }),
   )
 
@@ -961,7 +970,7 @@ describe("ReadTool", () => {
         { action: "read", resources: [path.basename(requested)] },
         { action: "read", resources: [path.basename(recovered)] },
       ])
-      expect(readCalls).toEqual([AbsolutePath.make(requested)])
+      expect(readPaths()).toEqual([AbsolutePath.make(requested)])
     }),
   )
 
@@ -980,7 +989,7 @@ describe("ReadTool", () => {
         }),
       ).toMatchObject({ status: "error", error: { message: `File not found: ${requested}` } })
       expect(assertions).toHaveLength(1)
-      expect(readCalls).toHaveLength(1)
+      expect(readPaths()).toHaveLength(1)
     }),
   )
 
@@ -988,7 +997,7 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const requested = "report final"
       const recovered = "report\u00a0final"
-      yield* memory.mkdir(AbsolutePath.make(path.join(process.cwd(), recovered)))
+      yield* files.mkdir(AbsolutePath.make(path.join(process.cwd(), recovered)))
       const registry = yield* Tool.Service
 
       expect(
@@ -999,16 +1008,16 @@ describe("ReadTool", () => {
         }),
       ).toMatchObject({ status: "error", error: { message: `File not found: ${requested}` } })
       expect(assertions).toHaveLength(1)
-      expect(readCalls).toHaveLength(1)
+      expect(readPaths()).toHaveLength(1)
     }),
   )
 
   it.effect("lists a bounded directory page through read", () =>
     Effect.gen(function* () {
       const source = path.join(process.cwd(), "src")
-      yield* memory.mkdir(AbsolutePath.make(path.join(source, "assets")))
-      yield* memory.mkdir(AbsolutePath.make(path.join(source, "components")))
-      for (const name of ["index.ts", "z1.ts", "z2.ts"]) yield* seed(path.join(source, name))
+      yield* files.mkdir(AbsolutePath.make(path.join(source, "assets")))
+      yield* files.mkdir(AbsolutePath.make(path.join(source, "components")))
+      yield* Effect.forEach(["index.ts", "z1.ts", "z2.ts"], (name) => seed(path.join(source, name)), { discard: true })
       const registry = yield* Tool.Service
 
       const result = yield* executeTool(registry, {
@@ -1021,26 +1030,29 @@ describe("ReadTool", () => {
           input: { path: "src", offset: 2, limit: 2 },
         },
       })
+      const components = `components${path.sep}`
       expect(result).toMatchObject({
         status: "completed",
-        output: { type: "directory", entries: ["components/", "index.ts"], next: 4 },
+        output: { type: "directory", entries: [components, "index.ts"], next: 4 },
       })
       if (result.status !== "completed") return
       expect(result.metadata).toEqual({ truncated: true })
       expect(result.content).toEqual([
         {
           type: "text",
-          text: "Read directory src, entries 2-3\ncomponents/\nindex.ts\n[Output truncated. Continue reading with offset: 4]",
+          text: `Read directory src, entries 2-3\n${components}\nindex.ts\n[Output truncated. Continue reading with offset: 4]`,
         },
       ])
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["src"], save: ["*"] }])
-      expect(readCalls).toEqual([AbsolutePath.make(path.join(process.cwd(), "src"))])
+      expect(readPaths()).toEqual([AbsolutePath.make(path.join(process.cwd(), "src"))])
     }),
   )
 
   it.effect("normalizes a zero directory offset in the model heading", () =>
     Effect.gen(function* () {
-      for (const name of ["index.ts", "zzz.ts"]) yield* seed(path.join(process.cwd(), "src", name))
+      yield* Effect.forEach(["index.ts", "zzz.ts"], (name) => seed(path.join(process.cwd(), "src", name)), {
+        discard: true,
+      })
       const registry = yield* Tool.Service
 
       const result = yield* executeTool(registry, {
@@ -1061,7 +1073,7 @@ describe("ReadTool", () => {
           text: "Read directory src, entries 1-1\nindex.ts\n[Output truncated. Continue reading with offset: 2]",
         },
       ])
-      expect(readCalls).toEqual([AbsolutePath.make(path.join(process.cwd(), "src"))])
+      expect(readPaths()).toEqual([AbsolutePath.make(path.join(process.cwd(), "src"))])
     }),
   )
 
@@ -1077,7 +1089,7 @@ describe("ReadTool", () => {
           call: { type: "tool-call", id: "call-read-directory-denied", name: "read", input: { path: "src" } },
         }),
       ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: read" } })
-      expect(readCalls).toEqual([])
+      expect(readPaths()).toEqual([])
     }),
   )
 
@@ -1108,7 +1120,7 @@ describe("ReadTool", () => {
           text: "Read file large.txt, lines 2-2\n2: hello\n[Output truncated. Continue reading with offset: 3]",
         },
       ])
-      expect(readCalls).toEqual([AbsolutePath.make(path.join(process.cwd(), "large.txt"))])
+      expect(readPaths()).toEqual([AbsolutePath.make(path.join(process.cwd(), "large.txt"))])
     }),
   )
 
@@ -1133,13 +1145,13 @@ describe("ReadTool", () => {
           text: "Read file log.txt, lines 9-10\n9: nine\n10: ten\n[Output truncated. Continue reading with offset: 11]",
         },
       ])
-      expect(readCalls).toEqual([AbsolutePath.make(path.join(process.cwd(), "log.txt"))])
+      expect(readPaths()).toEqual([AbsolutePath.make(path.join(process.cwd(), "log.txt"))])
     }),
   )
 
   it.effect("returns the negative directory offset error to the model", () =>
     Effect.gen(function* () {
-      yield* memory.mkdir(AbsolutePath.make(path.join(process.cwd(), "src")))
+      yield* files.mkdir(AbsolutePath.make(path.join(process.cwd(), "src")))
       const registry = yield* Tool.Service
 
       expect(
@@ -1246,7 +1258,7 @@ describe("ReadTool", () => {
             { sessionID, action: "skill", resources: ["guide"], save: ["guide"] },
             { sessionID, action: "read", resources: ["skill://guide/missing.md"], save: ["*"] },
           ])
-          expect(readCalls).toEqual([])
+          expect(readPaths()).toEqual([])
 
           const pdf = yield* executeTool(registry, {
             sessionID,
