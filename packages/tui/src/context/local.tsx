@@ -126,11 +126,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(id: string) {
+          // Custom colors apply to hidden agents too; only the palette rotation is visible-scoped.
+          const custom = (data.location.agent.list(location.ref) ?? []).find((agent) => agent.id === id)?.color
+          if (custom) return RGBA.fromHex(custom)
           const index = visibleAgents().findIndex((agent) => agent.id === id)
           if (index === -1) return colors()[0]
-          const agent = visibleAgents()[index]
-
-          if (agent?.color) return RGBA.fromHex(agent.color)
           return colors()[index % colors().length]
         },
       }
