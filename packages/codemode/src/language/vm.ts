@@ -3,6 +3,7 @@ import type { Diagnostic } from "./runtime/model.js"
 import { conversions } from "./runtime/callback.js"
 import { locate, materialize } from "./runtime/errors.js"
 import type { Interpreter } from "./runtime/interpreter.js"
+import { type Builtins, isErrorType } from "./runtime/intrinsics.js"
 import { checkArrayLength, checkStringLength } from "./runtime/limits.js"
 import {
   AsyncIteratorSymbol,
@@ -1675,7 +1676,7 @@ export class Vm {
       regs[sp] = proto
       return sp + 1
     }
-    const parent = classParent(regs[sp - 2] as Value, frame.code.siteAt(pc))
+    const parent = classParent(regs[sp - 2] as Value, frame.code.siteAt(pc), this.ctx.builtins)
     const proto = new Obj(get(parent, "prototype") as Obj)
     ctor.proto = parent
     ctor.klass = new ClassInfo(true)
@@ -1695,6 +1696,9 @@ export class Vm {
     frame.sp = sp
     frame.pc = pc
     const parent = frame.fn!.proto
+    if (isErrorConstructor(parent, this.ctx.builtins)) {
+      return this.execConstruct(frame, parent, args, callSiteOf(frame, pc), regs[bx] as Fn)
+    }
     if (!(parent instanceof Fn) || parent.klass === undefined) {
       throw typeError(`Super constructor ${describeValue(parent)} of anonymous class is not a constructor`, frame.code.siteAt(pc))
     }
@@ -2735,15 +2739,21 @@ export class Vm {
     throw notAFunction(callNode?.callee, site ?? this.currentSite())
   }
 
-  private execConstruct(callerFrame: Frame, ctor: Builtin, args: Array<Value>, site: AstNode | undefined): number {
+  private execConstruct(
+    callerFrame: Frame,
+    ctor: Builtin,
+    args: Array<Value>,
+    site: AstNode | undefined,
+    newTarget: Builtin | Fn = ctor,
+  ): number {
     conversions.count = 0
     let res: NativeResult
     try {
-      res = ctor.construct!(args, ctor, site ?? this.currentSite())
+      res = ctor.construct!(args, newTarget, site ?? this.currentSite())
     } catch (err) {
       throw locate(err, site ?? this.currentSite())
     }
-    return this.settleNativeResult(callerFrame, res, ctor, ctor, args, true, site, callerFrame.pc)
+    return this.settleNativeResult(callerFrame, res, ctor, newTarget, args, true, site, callerFrame.pc)
   }
 
   private settleNativeResult(
@@ -3502,10 +3512,11 @@ export class Vm {
 const THIS_BEFORE_SUPER =
   "Must call super constructor in derived class before accessing 'this' or returning from derived constructor"
 
-// What a class may extend: another class. Error types come next; other built-ins and `null` are refused.
-const classParent = (parent: Value, site: AstNode | undefined): Fn => {
+// What a class may extend: another class or an error constructor. Other built-ins and `null` are refused.
+const classParent = (parent: Value, site: AstNode | undefined, builtins: Builtins): Fn | Builtin => {
   if (parent === null) throw typeError("Classes extending null are not supported.", site)
   if (parent instanceof Fn && parent.klass !== undefined) return parent
+  if (isErrorConstructor(parent, builtins)) return parent
   if (parent instanceof Builtin && parent.construct !== undefined) {
     throw typeError(
       `Extending the built-in ${String(peek(parent, "name"))} is not supported. Only classes and Error types can be extended.`,
@@ -3513,6 +3524,12 @@ const classParent = (parent: Value, site: AstNode | undefined): Fn => {
     )
   }
   throw typeError(`Class extends value ${describeValue(parent)} is not a constructor or null.`, site)
+}
+
+const isErrorConstructor = (value: Value, builtins: Builtins): value is Builtin => {
+  if (!(value instanceof Builtin)) return false
+  const name = peek(value, "name")
+  return typeof name === "string" && isErrorType(name) && peek(builtins[name], "constructor") === value
 }
 
 // The object `super.x` reads from: the home object's prototype.

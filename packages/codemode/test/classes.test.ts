@@ -466,6 +466,16 @@ describe("suspended inside a class", () => {
       [410],
       "m",
     ],
+    [
+      "custom error's constructor after super()",
+      `class Base extends Error { name = "Base" }
+       class NotFound extends Base { constructor(n) { super("missing", { cause: n }); this.code = pick(slow(n)) } }
+       try { throw new NotFound(21) } catch (e) {
+         return [e instanceof NotFound, e instanceof Error, e.name, e.message, e.cause, e.code, String(e)]
+       }`,
+      [true, true, "Base", "missing", 21, 42, "Base: missing"],
+      "NotFound",
+    ],
   ] as const) {
     test(`a host call parked in a ${name}, resumed in a fresh runtime`, async () => {
       const suspended = await suspendParked(code)
@@ -654,5 +664,56 @@ describe("class inheritance", () => {
     expect(failure(`class A extends 1 {}`)[1]).toBe("Class extends value a number is not a constructor or null.")
     expect(failure(`function f() {}; class A extends f {}`)[0]).toBe("TypeError")
     expect(failure(`const o = { m() { return super.x } }; o.m()`)[0]).toBe("SyntaxError")
+  })
+})
+
+describe("classes extending Error", () => {
+  test("every error type can be subclassed", () => {
+    for (const name of ["Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "EvalError", "URIError"]) {
+      expect(
+        value(`
+          class E extends ${name} {}
+          const e = new E("m")
+          return [e instanceof E, e instanceof ${name}, e instanceof Error, e.message, e.name, String(e),
+            Object.prototype.toString.call(e), Error.isError(e), Object.getPrototypeOf(e) === E.prototype]`),
+      ).toEqual([true, true, true, "m", name, `${name}: m`, "[object Error]", true, true])
+    }
+    expect(
+      value(`
+        class A extends AggregateError {}
+        const a = new A([1, 2], "agg")
+        return [a.errors, a.message, a.name, a instanceof A, a instanceof AggregateError]`),
+    ).toEqual([[1, 2], "agg", "AggregateError", true, true])
+  })
+
+  test("multi-level, cause, and name from a field or a getter", () => {
+    expect(
+      value(`
+        class A extends TypeError { name = "NotFound" }
+        class B extends A { constructor(m, cause) { super(m, { cause }); this.code = 404 } }
+        class G extends RangeError { get name() { return "Got" } }
+        const b = new B("x", "why")
+        return [b instanceof A, b instanceof TypeError, b.name, b.toString(), b.code, b.cause, b.hasOwnProperty("cause"),
+          new A("y").hasOwnProperty("cause"), String(new G("z")), new B().message]`),
+    ).toEqual([true, true, "NotFound", "NotFound: x", 404, "why", true, false, "Got: z", ""])
+  })
+
+  test("caught, uncaught, returned, logged and stringified like plain errors", () => {
+    expect(value(`class E extends Error {}; try { throw new E("m") } catch (e) { return [e instanceof E, e.message] }`)).toEqual([
+      true,
+      "m",
+    ])
+    const uncaught = run(`class E extends TypeError { name = "NotFound" }; throw new E("gone")`)
+    const plain = run(`throw new TypeError("gone")`)
+    expect(uncaught.ok).toBe(false)
+    if (uncaught.ok || plain.ok) return
+    expect(uncaught.error.kind).toBe(plain.error.kind)
+    expect(uncaught.error.message).toBe("NotFound: gone")
+    expect(value(`class E extends Error { name = "E" }; return new E("x")`)).toEqual({ name: "E", message: "x" })
+    expect(value(`return new Error("x")`)).toEqual({ name: "Error", message: "x" })
+    expect(
+      value(`class E extends Error {}; return [JSON.stringify(new E("x")), JSON.stringify(new Error("x"))]`),
+    ).toEqual(['{"name":"Error","message":"x"}', '{"name":"Error","message":"x"}'])
+    expect(runProgram(`class E extends Error { name = "E" }; console.log(new E("hi"))`)).toMatchObject({ logs: ["E: hi"] })
   })
 })
