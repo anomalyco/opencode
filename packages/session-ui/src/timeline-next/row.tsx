@@ -306,6 +306,10 @@ export function createNextTimelineRowRenderer(input: {
       : undefined
   }
 
+  const latestCopyTurn = createMemo(() =>
+    Array.from(input.projection.assistantMessagesByParent().keys()).findLast((id) => !!copyContentID(id)),
+  )
+
   const padding = () => input.padding?.() ?? "px-4 md:px-6"
 
   const indexGroupContents = (refs: PartRef[]) => {
@@ -579,6 +583,7 @@ export function createNextTimelineRowRenderer(input: {
                 content={content()}
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
+                keepCopyVisible={latestCopyTurn() === row().userMessageID}
                 turnDurationMs={duration(row().userMessageID)}
                 turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}
@@ -648,6 +653,19 @@ export function createNextTimelineRowRenderer(input: {
       return {
         label: i18n.t(outcomeNoticeKey(outcome), { actor }),
         data: message.description,
+        outcome,
+        icon: outcomeNoticeIcon(outcome),
+      }
+    }
+
+    if (source === "codemode") {
+      const state = message.metadata?.state
+      const outcome: Outcome = state === "error" || state === "cancelled" ? state : "completed"
+      const jobID = message.metadata?.jobID
+
+      return {
+        label: i18n.t(outcomeNoticeKey(outcome), { actor: "Script" }),
+        data: Predicate.isString(jobID) ? jobID : undefined,
         outcome,
         icon: outcomeNoticeIcon(outcome),
       }

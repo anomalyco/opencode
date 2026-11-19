@@ -251,7 +251,7 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("removes the generic key method", () =>
+  it.effect("removes the generic key method and reads COPILOT_GITHUB_TOKEN instead of GITHUB_TOKEN", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       yield* integrations.transform((editor) => {
@@ -266,7 +266,7 @@ describe("GithubCopilotPlugin", () => {
       })
       yield* addPlugin()
       expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.methods).toEqual([
-        { type: "env", names: ["GITHUB_TOKEN"] },
+        { type: "env", names: ["COPILOT_GITHUB_TOKEN"] },
         {
           id: Integration.MethodID.make("device"),
           type: "oauth",

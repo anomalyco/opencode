@@ -47,6 +47,7 @@ export function formatBody(
     if (item.kind === "codemode") return `- Code Mode script (${item.jobID}${location})`
     if (item.kind === "shell") return `- shell (${item.shellID}${location}): ${clean(item.command)}`
     if (item.kind === "image") return `- image (${item.model}${location}): ${item.path}`
+    if (item.kind === "video") return `- video (${item.path}${location})`
     return `- subagent (${item.agent}, sessionID: ${item.childSessionID}): ${clean(item.description)}`
   })
   return `${body}${STILL_RUNNING}${lines.join("\n")}`

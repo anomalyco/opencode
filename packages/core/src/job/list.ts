@@ -66,6 +66,16 @@ function toItem(input: {
       description: recovery.description,
     }
   }
+  if (recovery.kind === "video")
+    return {
+      kind: "video",
+      id: input.id,
+      sessionID: recovery.sessionID,
+      status: input.status,
+      ...(title !== undefined ? { title } : {}),
+      time,
+      path: recovery.path,
+    }
   return {
     kind: "image",
     id: input.id,

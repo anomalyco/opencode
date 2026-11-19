@@ -1138,6 +1138,7 @@ export function AssistantTextContent(props: {
   text: string
   message: SessionMessageAssistant
   showCopy: boolean
+  keepCopyVisible?: boolean
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
   /** The finished turn's web searches and fetches, shown as a chip in its footer. */
@@ -1232,7 +1233,11 @@ export function AssistantTextContent(props: {
 
   function copyFooter() {
     return (
-      <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+      <div
+        data-slot="text-part-copy-wrapper"
+        data-keep-copy-visible={props.keepCopyVisible ? "" : undefined}
+        data-interrupted={interrupted() ? "" : undefined}
+      >
         <MessageActionButton
           copied={copy.copied()}
           size="small"

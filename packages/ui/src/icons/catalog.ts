@@ -390,6 +390,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M10.5 2.5V6.5L11.3571 8.5M10.5 2.5H5.5M10.5 2.5H12.5M5.5 2.5V6.5L4.21429 9.5M5.5 2.5H3.5M4.21429 9.5L2.5 13.5H13.5L11.3571 8.5M4.21429 9.5L11.3571 8.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
   },
+  "sessions-stack": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M3.5 3.5H12.5M1.5 5.5V12.5H14.5V5.5H12.5H3.5H1.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
+  },
   "grid-plus": {
     viewBox: "0 0 16 16",
     body: `<path d="M13.9948 11.668H9.32812M11.6641 9.33203V13.9987M6.66667 9.33203V13.9987H2V9.33203H6.66667ZM6.66667 2V6.66667H2V2H6.66667ZM13.9948 2V6.66667H9.32812V2H13.9948Z" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/>`,

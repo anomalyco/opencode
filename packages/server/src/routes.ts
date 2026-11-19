@@ -90,9 +90,9 @@ const applicationServiceNodes = [
   LocationActivity.node,
   SessionRestart.node,
   Automation.node,
-  // Its hourly cleanup belongs to the server.
+  // Read by the blob route.
   BlobStore.node,
-  // Its polling fibers belong to the server, not to the request that started them.
+  // Started with the server, so its leader election and polling resume jobs even before anyone calls the video API.
   VideoGeneration.node,
   Workspace.node,
   FileWatch.node,

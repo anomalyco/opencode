@@ -3,6 +3,7 @@ import type { Route, CompactionOperations } from "../route/client.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
 import {
+  mergeTransport,
   ProviderID,
   ToolDefinition,
   type ModelID,
@@ -109,11 +110,10 @@ export const configure = (input: Config = {}) => {
       id,
       capabilities: { promptCacheKey: true },
     })
-  const deployment = MediaRoute.deployment(input, auth(input))
-  const media = {
-    ...deployment,
-    http: { ...deployment.http, query: { ...deployment.http?.query, ...input.queryParams } },
-  }
+  const media = MediaRoute.deployment(
+    { ...mergeTransport(input, { http: { query: input.queryParams } }), baseURL: input.baseURL },
+    auth(input),
+  )
   // The ChatGPT backend (ChatGPT sign-in) rejects multipart image edits with "Unsupported content type".
   const imageInput = media.baseURL?.startsWith("https://chatgpt.com/") ? "json-edits" : undefined
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -123,16 +123,14 @@ export const configure = (input: Config = {}) => {
   const decisionRoute = OpenAIDecisions.route.with({
     endpoint: { baseURL: media.baseURL },
     auth: media.auth,
-    headers: media.headers,
-    http: media.http,
+    ...media.transport,
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<OpenAIDecisionOptionsInput>({ id: modelID, providerOptions })
   const embeddingRoute = OpenAIEmbeddings.route.with({
     endpoint: { baseURL: media.baseURL },
     auth: media.auth,
-    headers: media.headers,
-    http: media.http,
+    ...media.transport,
   })
   const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     embeddingRoute.model<OpenAIEmbeddingOptionsInput>({ id: modelID, providerOptions })

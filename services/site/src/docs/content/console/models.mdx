@@ -79,6 +79,7 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Claude Sonnet 4.5           | claude-sonnet-4-5           | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
 | Claude Haiku 5.5            | claude-haiku-5-5            | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
 | Claude Haiku 4.5            | claude-haiku-4-5            | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Gemini 4 Neon               | gemini-4-neon               | `https://opencode.ai/inference/google/v1beta/models/gemini-4-neon`                          | `@ai-sdk/google`            |
 | Gemini 4 Carbon             | gemini-4-carbon             | `https://opencode.ai/inference/google/v1beta/models/gemini-4-carbon`                        | `@ai-sdk/google`            |
 | Gemini 4 Argon              | gemini-4-argon              | `https://opencode.ai/inference/google/v1beta/models/gemini-4-argon`                         | `@ai-sdk/google`            |
 | Gemini 4 Hydrogen           | gemini-4-hydrogen           | `https://opencode.ai/inference/google/v1beta/models/gemini-4-hydrogen`                      | `@ai-sdk/google`            |
@@ -106,9 +107,6 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | MiniMax M2.5                | minimax-m2.5                | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | GLM 5.3 Flash               | glm-5.3-flash               | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | GLM 5.3                     | glm-5.3                     | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
-| GLM 5.2                     | glm-5.2                     | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
-| GLM 5.1                     | glm-5.1                     | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
-| GLM 5                       | glm-5                       | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Kimi K2.5                   | kimi-k2.5                   | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Kimi K2.6                   | kimi-k2.6                   | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code              | kimi-k2.7-code              | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
@@ -122,6 +120,7 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Nano Banana 2.1             | gemini-nano-banana-2.1      | `https://opencode.ai/inference/google/v1beta/models/gemini-nano-banana-2.1:generateContent` | `@ai-sdk/google`            |
 | Grok Imagine Image 2.0      | grok-imagine-image-2.0      | `https://opencode.ai/inference/xai/v1/images/generations`                                   | `@ai-sdk/xai`               |
 | Big Pickle                  | big-pickle                  | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Tidepool Alpha Free         | tidepool-alpha-free         | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Iceman Free                 | iceman-free                 | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Inkling 2 Small Free        | inkling-2-small-free        | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | DeepSeek V4.1 Flash Free    | deepseek-v4.1-flash-free    | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
@@ -152,6 +151,9 @@ Fetch the full list of available models and their metadata from the models endpo
 ```bash
 curl https://opencode.ai/inference/v1/models
 ```
+
+See the [model list API](/console/api/models) for every field in the response, and for the Console list that also
+includes the providers your workspace connected.
 
 ### Jev
 
@@ -256,6 +258,7 @@ noted.
 | Model                               | Input           | Output            | Cached Read      | Cached Write |
 | ----------------------------------- | --------------- | ----------------- | ---------------- | ------------ |
 | Big Pickle                          | Free            | Free              | Free             | -            |
+| Tidepool Alpha Free                 | Free            | Free              | Free             | -            |
 | Iceman Free                         | Free            | Free              | Free             | -            |
 | Inkling 2 Small Free                | Free            | Free              | Free             | -            |
 | DeepSeek V4.1 Flash Free            | Free            | Free              | Free             | -            |
@@ -276,9 +279,6 @@ noted.
 | MiniMax M2.5                        | $0.30           | $1.20             | $0.06            | -            |
 | GLM 5.3 Flash                       | $0.15           | $0.50             | $0.03            | -            |
 | GLM 5.3                             | $1.40           | $4.40             | $0.26            | -            |
-| GLM 5.2                             | $1.40           | $4.40             | $0.26            | -            |
-| GLM 5.1                             | $1.40           | $4.40             | $0.26            | -            |
-| GLM 5                               | $1.00           | $3.20             | $0.20            | -            |
 | Kimi K2.7 Code                      | $0.95           | $4.00             | $0.19            | -            |
 | Kimi K3                             | $3.00           | $15.00            | $0.30            | $3.00        |
 | Kimi K2.6                           | $0.95           | $4.00             | $0.16            | -            |
@@ -307,6 +307,7 @@ noted.
 | Claude Haiku 5.5 (≤ 100K tokens)    | $0.10           | $0.50             | $0.01            | $0.125       |
 | Claude Haiku 5.5 (> 100K tokens)    | $0.50           | $2.50             | $0.05            | $0.625       |
 | Claude Haiku 4.5                    | $1.00           | $5.00             | $0.10            | $1.25        |
+| Gemini 4 Neon                       | $3.00           | $15.00            | $0.15            | -            |
 | Gemini 4 Carbon (50% off)           | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10  | -            |
 | Gemini 4 Argon (50% off)            | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10  | -            |
 | Gemini 4 Hydrogen                   | $1.50           | $7.50             | $0.075           | -            |
@@ -393,6 +394,7 @@ models to generate session titles.
 - Nemotron 3.5 Lightning Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3.5 Super VL Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
+- Tidepool Alpha Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Iceman Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Inkling 2 Small Free is free on OpenCode for a limited time. Its provider retains your data and may use it for model training; see [Privacy](#privacy). It's not available in the European Union, Iceland, Liechtenstein, Norway, Cuba, Iran, North Korea, Russia, Ukraine, or Venezuela.
 - Beam Free is free on OpenCode for a limited time. Its provider does not use your data for model training and retains it for 30 days for safety reasons. It's not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
@@ -414,6 +416,8 @@ To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free
 
 | Model                   | Deprecation date  |
 | ----------------------- | ----------------- |
+| GLM 5.2                 | November 19, 2026 |
+| GLM 5.1                 | November 19, 2026 |
 | GLM-5.3-Flash Free      | November 18, 2026 |
 | Gemini 3.1 Pro          | November 17, 2026 |
 | Gemini 3 Flash          | November 17, 2026 |
@@ -445,6 +449,7 @@ To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free
 All our models are hosted in the US and EU. Our providers follow a zero-retention policy and do not use your data for model training, with the following exceptions:
 
 - Big Pickle: During its free period, collected data may be used to improve the model.
+- Tidepool Alpha Free: During its free period, collected data is retained and used to improve the model.
 - Iceman Free: During its free period, collected data is retained and used to improve the model.
 - Inkling 2 Small Free: During its free period, collected data is retained and may be used to monitor the model's real-world performance and for model training. See Thinking Machines' [Terms of Service](https://thinkingmachines.ai/legal/tml-free-research-api-tier-terms-of-service.pdf) and [Privacy Notice](https://thinkingmachines.ai/legal/tml-free-research-api-tier-privacy-notice.pdf).
 - Flint 40B Free: During its free period, collected data may be used to improve the model. Data is retained for 30 days.

@@ -64,9 +64,11 @@ export function resolve(input: {
   return Record.map(ConfigFlag.registry, (_, key): State => {
     const optInOnly = ConfigFlag.optInOnly.has(key)
     const old = names.find((name) => ConfigFlag.aliases[name] === key)
-    const override = env.get(key) ?? (old === undefined ? undefined : env.get(old)) ?? (all && !optInOnly ? true : undefined)
-    const configured =
-      experimental?.[key] ?? (old === undefined ? undefined : experimental?.[old]) ?? (allFlags && !optInOnly ? true : undefined)
+    const override =
+      env.get(key) ?? (old === undefined ? undefined : env.get(old)) ?? (all && !optInOnly ? true : undefined)
+    const value = experimental?.[key] ?? (old === undefined ? undefined : experimental?.[old])
+    // A flag that takes settings is on when given them.
+    const configured = typeof value === "object" ? true : (value ?? (allFlags && !optInOnly ? true : undefined))
     const [enabled, source]: [boolean, State["source"]] =
       override !== undefined
         ? [override, "env"]
@@ -101,11 +103,7 @@ export const testLayer = (
 ) =>
   Layer.fresh(layer).pipe(
     Layer.provideMerge(
-      Layer.mergeAll(
-        App.layer(options?.app),
-        Config.testLayer(entries),
-        Layer.succeed(Overrides, options?.overrides),
-      ),
+      Layer.mergeAll(App.layer(options?.app), Config.testLayer(entries), Layer.succeed(Overrides, options?.overrides)),
     ),
   )
 
