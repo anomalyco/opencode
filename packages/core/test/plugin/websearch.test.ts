@@ -145,6 +145,40 @@ describe("built-in web search providers", () => {
     }),
   )
 
+  it.effect("skips server notifications streamed before the MCP response", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        [
+          { jsonrpc: "2.0", method: "notifications/progress", params: { progressToken: 1, progress: 1 } },
+          { jsonrpc: "2.0", method: "notifications/message", params: { level: "info", data: "Searching" } },
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            result: {
+              content: [
+                { type: "text", text: "Title: Effect\nURL: https://effect.website\nHighlights:\nEffect documentation" },
+              ],
+            },
+          },
+        ]
+          .map((message) => `event: message\ndata: ${JSON.stringify(message)}\n\n`)
+          .join(""),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchExa.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("exa") })).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("exa"),
+          results: [{ url: "https://effect.website", title: "Effect", content: "Effect documentation", time: {} }],
+        }),
+      )
+    }),
+  )
+
   it.effect("registers Parallel and keeps its credential in the authorization header", () =>
     Effect.gen(function* () {
       resetWebSearchFixture(
