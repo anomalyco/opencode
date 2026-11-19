@@ -88,6 +88,40 @@ export function directoryAutocompleteMatches(directory: string, query: string) {
   return value.toLowerCase().startsWith(query.toLowerCase())
 }
 
+/** True when a mention query names an explicit filesystem path instead of a fuzzy project search. */
+export function explicitPathQuery(query: string) {
+  return /^(?:~[/\\]|~$|[/\\]|\.\.?$|\.\.?[/\\])/.test(query)
+}
+
+/**
+ * Completes files and directories for an explicit path query (`/abs`, `~/`, `./`, `../`).
+ * Unlike directoryAutocomplete, directory values carry no trailing separator so callers can
+ * expand them progressively, and the listed directory itself is never offered.
+ */
+export async function pathAutocomplete(
+  file: Pick<OpenCodeClient["file"], "list">,
+  location: { directory: string },
+  query: string,
+  home: string,
+) {
+  const search = directoryAutocompleteSearch(query, location.directory, home)
+  const directory = path.resolve(search.directory)
+  const result = await file.list({ location, path: directory })
+  return result.data
+    .map((item) => ({
+      absolute: path.resolve(result.location.directory, item.path),
+      isDirectory: item.type === "directory",
+    }))
+    .filter((item) => item.absolute !== directory)
+    .filter((item) => directoryAutocompleteMatches(path.basename(item.absolute), search.query))
+    .map((item) => ({
+      value: search.prefix + path.basename(item.absolute).replace(/^[\\/]+/, ""),
+      absolute: item.absolute,
+      isDirectory: item.isDirectory,
+    }))
+    .sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.value.localeCompare(b.value))
+}
+
 export function directoryRecentValue(directory: string, home: string) {
   const relative = path.relative(home, directory)
   if (!relative) return "~"

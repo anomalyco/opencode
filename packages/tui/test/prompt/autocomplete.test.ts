@@ -9,6 +9,8 @@ import {
   directoryAutocompleteResultValue,
   directoryAutocompleteSearch,
   directoryRecentValue,
+  explicitPathQuery,
+  pathAutocomplete,
   slashArgumentAutocomplete,
 } from "../../src/prompt/directory-completion"
 
@@ -73,6 +75,73 @@ describe("directoryAutocomplete", () => {
       { location, path: path.resolve("/project/sibling") },
       { location, path: "/project/sibling" },
     ])
+  })
+})
+
+describe("pathAutocomplete", () => {
+  const listing = (directory: string, data: { path: string; type: "file" | "directory" }[]) => {
+    const calls: unknown[] = []
+    const file = {
+      list: async (input: unknown) => {
+        calls.push(input)
+        return { location: { directory }, data }
+      },
+    } as Parameters<typeof pathAutocomplete>[0]
+    return { file, calls }
+  }
+
+  test("lists files and directories for an absolute query, directories first", async () => {
+    const location = { directory: "/project/current" }
+    const { file, calls } = listing("/project/current", [
+      { path: "./", type: "directory" },
+      { path: "../../../etc/adduser.conf", type: "file" },
+      { path: "../../../etc/nginx.conf", type: "file" },
+      { path: "../../../etc/nginx/", type: "directory" },
+    ])
+    expect(await pathAutocomplete(file, location, "/etc/ngi", "/home/user")).toEqual([
+      { value: "/etc/nginx", absolute: "/etc/nginx", isDirectory: true },
+      { value: "/etc/nginx.conf", absolute: "/etc/nginx.conf", isDirectory: false },
+    ])
+    expect(calls).toEqual([{ location, path: "/etc" }])
+  })
+
+  test("omits the listed directory itself and keeps the typed home prefix", async () => {
+    const location = { directory: "/home/user/project" }
+    const { file } = listing("/home/user/project", [
+      { path: "../notes/", type: "directory" },
+      { path: "../notes/todo.md", type: "file" },
+    ])
+    expect(await pathAutocomplete(file, location, "~/notes/", "/home/user")).toEqual([
+      { value: "~/notes/todo.md", absolute: "/home/user/notes/todo.md", isDirectory: false },
+    ])
+  })
+
+  test("sorts directories before files for a bare tilde query and hides dot entries", async () => {
+    const location = { directory: "/home/user/project" }
+    const { file } = listing("/home/user/project", [
+      { path: "../notes.md", type: "file" },
+      { path: "../work/", type: "directory" },
+      { path: "../Downloads/", type: "directory" },
+      { path: "../.cache/", type: "directory" },
+    ])
+    expect(await pathAutocomplete(file, location, "~", "/home/user")).toEqual([
+      { value: "~/Downloads", absolute: "/home/user/Downloads", isDirectory: true },
+      { value: "~/work", absolute: "/home/user/work", isDirectory: true },
+      { value: "~/notes.md", absolute: "/home/user/notes.md", isDirectory: false },
+    ])
+  })
+})
+
+describe("explicitPathQuery", () => {
+  test.each(["/", "/etc/nginx", "~", "~/notes", "./src", "../shared", "..", "."])(
+    "treats %j as an explicit path",
+    (query) => {
+      expect(explicitPathQuery(query)).toBe(true)
+    },
+  )
+
+  test.each(["notes", "src/foo", "~user/x", "a/b.c"])("treats %j as a fuzzy search", (query) => {
+    expect(explicitPathQuery(query)).toBe(false)
   })
 })
 

@@ -42,7 +42,12 @@ import { Skill } from "@opencode/schema/skill"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
 import { moveSelection, reconcileSelectionWindow, revealSelectionOffset } from "../../ui/select-controller"
-import { directoryAutocomplete, slashArgumentAutocomplete } from "../../prompt/directory-completion"
+import {
+  directoryAutocomplete,
+  explicitPathQuery,
+  pathAutocomplete,
+  slashArgumentAutocomplete,
+} from "../../prompt/directory-completion"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
@@ -367,6 +372,36 @@ export function Autocomplete(props: {
           resolved: true,
         }
       }
+      if (input.visible === "reference" && explicitPathQuery(base)) {
+        const entries = await pathAutocomplete(
+          client.api.file,
+          { ...requestLocation, directory: requestLocation.directory ?? paths.cwd },
+          base,
+          paths.home,
+        ).catch(() => undefined)
+        if (!entries)
+          return info.value?.mode === input.visible
+            ? { ...info.value, failed: true }
+            : { options: [], failed: true, mode: input.visible, query: input.query, resolved: false }
+        return {
+          options: entries.map((item) => ({
+            display: Locale.truncateMiddle(item.isDirectory ? item.value + "/" : item.value, width),
+            value: item.value,
+            isDirectory: item.isDirectory,
+            path: item.value,
+            absolute: item.absolute,
+            onSelect: () => {
+              insertDirectory("@" + item.value + (item.isDirectory ? "/" : ""))
+              if (item.isDirectory) return
+              setDismissedValue(props.input().plainText)
+            },
+          })),
+          failed: false,
+          mode: input.visible,
+          query: input.query,
+          resolved: true,
+        }
+      }
       const result = await client.api.file.find({ query: base, limit: 20, location: requestLocation }).then(
         (result) => result,
         () => undefined,
@@ -543,6 +578,10 @@ export function Autocomplete(props: {
     if (store.visible === "reference" && referenceMatchValue) {
       return referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
     }
+
+    // Explicit filesystem paths complete against the real directory listing only;
+    // mixing in agents, skills, and reference aliases just adds noise.
+    if (store.visible === "reference" && searchValue && explicitPathQuery(searchValue)) return fileSearch.options
 
     // Files come from fff already fuzzy ranked and filtered
     // it shouldn't be additionally sorted by fuzzysort as it will loose the results
