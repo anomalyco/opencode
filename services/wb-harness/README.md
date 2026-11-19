@@ -124,6 +124,22 @@ Copy `opencode.json` into your project (or merge it), start the harness, then ru
 `--model wildberries/wb-agent`. The provider is registered as an OpenAI-compatible endpoint at
 `http://127.0.0.1:3001/v1`.
 
+The config uses the v2 schema: `providers` (plural) and a package specifier prefixed with `aisdk:`.
+A plain `@ai-sdk/openai-compatible` value (or the v1 `provider` key) leaves the package empty and OpenCode
+fails with `Unsupported package for wildberries/wb-agent`.
+
+```json
+{
+  "providers": {
+    "wildberries": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": { "baseURL": "http://127.0.0.1:3001/v1", "apiKey": "wb-harness" },
+      "models": { "wb-agent": { "name": "Wildberries agent", "capabilities": { "tools": true } } }
+    }
+  }
+}
+```
+
 ## Endpoints
 
 | Method | Path | Description |
