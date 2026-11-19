@@ -98,7 +98,15 @@ export default Runtime.handler(
     if (removal) {
       progress.start(`Running ${removal.command.join(" ")}...`)
       yield* removal.run.pipe(
-        Effect.tap(() => Effect.sync(() => progress.stop("Package removed"))),
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            progress.stop("Package removed")
+            if (result.retainedDirectory)
+              log.warn(
+                `Retained executables may remain in ${result.retainedDirectory}; remove them after all OpenCode processes exit.`,
+              )
+          }),
+        ),
         Effect.catch((error) =>
           Effect.sync(() => {
             progress.stop("Package manager uninstall failed", 1)
