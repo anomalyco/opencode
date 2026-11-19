@@ -310,7 +310,8 @@ A global can also be an object of functions, such as `fs`. Every function reacha
 global, so calls fire the `extension` hooks with their path as the name (`fs.readFile`, `fs.promises.readFile`).
 
 Programs load globals the way Node code loads modules. `import` and `require` take a global by its Node module name,
-with or without `node:`; `fs/promises`, `url`, `util`, and `buffer` resolve to the globals that provide them. There are
+with or without `node:`; `fs/promises`, `url`, `util`, and `buffer` resolve to the globals that provide them, and an
+extension can add its own names (`modules: { bun: "Bun" }` makes `import { file } from "bun"` load `Bun`). There are
 no packages, so anything else throws.
 
 ```js

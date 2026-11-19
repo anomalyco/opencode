@@ -582,15 +582,6 @@
     justify-content: flex-start;
     gap: 4px;
 
-    /* The copy control stays visible; only the metadata waits for hover or focus. Keeping the metadata
-       in flow means the copy control does not move. */
-    [data-slot="text-part-meta"] {
-      @media (hover: hover) {
-        opacity: 0;
-        pointer-events: none;
-      }
-    }
-
     [data-component="tooltip-v2-trigger"] {
       display: inline-flex;
       flex: none;
@@ -661,10 +652,14 @@
     transition: none;
   }
 
-  &:hover [data-slot="text-part-copy-wrapper"] [data-slot="text-part-meta"],
-  &:focus-within [data-slot="text-part-copy-wrapper"] [data-slot="text-part-meta"] {
-    opacity: 1;
-    pointer-events: auto;
+  @media (hover: hover) {
+    &:not(:hover, :focus-within) {
+      [data-slot="text-part-copy-wrapper"]:not([data-keep-copy-visible]),
+      [data-slot="text-part-copy-wrapper"][data-keep-copy-visible] [data-slot="text-part-meta"] {
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
   }
 }
 

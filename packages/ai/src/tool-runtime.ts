@@ -35,9 +35,7 @@ export const dispatch = (tools: ReadonlyArray<Tool>, call: ToolCallPart): Effect
 
   return decodeAndExecute(tool, call).pipe(
     Effect.map((value) => result(call, value)),
-    Effect.catchTag("Tool.Error", (failure) =>
-      Effect.succeed(result(call, { type: "error", value: failure.message })),
-    ),
+    Effect.catchTag("Tool.Error", (failure) => Effect.succeed(result(call, { type: "error", value: failure.message }))),
   )
 }
 

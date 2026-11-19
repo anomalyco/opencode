@@ -18,9 +18,29 @@ const aliases: Record<string, (global: (name: string) => Value) => Value> = {
 /** `node:fs` names the same module as `fs`. */
 export const moduleName = (specifier: string) => (specifier.startsWith("node:") ? specifier.slice(5) : specifier)
 
-export const resolveModule = (specifier: string, global: (name: string) => Value): Value => {
+// Node's core modules, fixed here so every host gives the same answer (Bun's `isBuiltin` also claims `ws` and `undici`).
+const core = new Set(
+  "assert async_hooks buffer child_process cluster console constants crypto dgram diagnostics_channel dns domain events fs http http2 https inspector module net os path perf_hooks process punycode querystring readline repl stream string_decoder sys timers tls trace_events tty url util v8 vm wasi worker_threads zlib".split(
+    " ",
+  ),
+)
+
+/** Whether a specifier names a module a runtime provides, as Node's and Bun's own modules are, rather than a package. */
+export const isRuntimeModule = (specifier: string) =>
+  specifier.startsWith("node:") ||
+  specifier === "bun" ||
+  specifier.startsWith("bun:") ||
+  core.has(specifier.split("/")[0]!)
+
+/** `hosted` names the global a host's own module names load (`{ bun: "Bun" }`). */
+export const resolveModule = (
+  specifier: string,
+  global: (name: string) => Value,
+  hosted: Readonly<Record<string, string>> = {},
+): Value => {
   const name = moduleName(specifier)
-  return global(name) ?? aliases[name]?.(global)
+  const named = Object.hasOwn(hosted, name) ? hosted[name] : undefined
+  return global(name) ?? (named === undefined ? undefined : global(named)) ?? aliases[name]?.(global)
 }
 
 function pick(global: (name: string) => Value, names: ReadonlyArray<string>): Value {

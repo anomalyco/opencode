@@ -26,6 +26,7 @@ const generate = makeLocationNode({
         start: () => Effect.succeed({ id: "provider_1" }),
         status: () => Effect.succeed({ status: "completed" }),
         result: () => Effect.succeed([{ mime: "video/mp4", stream: Stream.make(video) }]),
+        cancel: () => Effect.void,
       },
     }),
   ),
@@ -79,12 +80,12 @@ it.live("generates a video in the background and serves its blob with Range and 
       ),
       (body: { data: Record<string, unknown> }) => body.data.status !== "running",
     )
-    const blob = `${data.id}_0`
     expect(completed.data).toEqual({
       id: data.id,
       status: "completed",
-      blobs: [{ id: blob, mime: "video/mp4", bytes: 20, expiresAt: expect.any(Number) }],
+      blobs: [{ id: expect.stringMatching(/^blob_/), mime: "video/mp4", bytes: 20 }],
     })
+    const blob = (completed.data.blobs as { id: string }[])[0].id
     const route = `${base}/blob/${blob}`
 
     const full = yield* call(route)
@@ -112,7 +113,7 @@ it.live("generates a video in the background and serves its blob with Range and 
     expect(cached.status).toBe(304)
     expect((yield* Effect.promise(() => cached.arrayBuffer())).byteLength).toBe(0)
 
-    // A restarted server reads the finished job back from its blobs.
+    // A restarted server reads the finished job back from its record.
     const restarted = yield* serve(dir, true)
     const reread = yield* Effect.promise(() => restarted(new Request(`${base}/generate/video/${data.id}`)))
     expect(((yield* Effect.promise(() => reread.json())) as { data: unknown }).data).toEqual(completed.data)
@@ -124,8 +125,10 @@ it.live("generates a video in the background and serves its blob with Range and 
 
     expect((yield* call(`${base}/generate/video/${unknown}`)).status).toBe(404)
     // An ID that isn't one never reaches the disk.
-    expect((yield* call(`${base}/blob/video_..%2F..%2Fsecret`)).status).toBe(400)
+    expect((yield* call(`${base}/blob/blob_..%2F..%2Fsecret`)).status).toBe(400)
   }).pipe(Effect.scoped),
+  // The first status check runs at the next 5-second check.
+  15_000,
 )
 
 it.live("rejects video routes while experimental.video_generate is off", () =>

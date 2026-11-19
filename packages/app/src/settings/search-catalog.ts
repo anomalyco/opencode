@@ -134,6 +134,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
+    label: "settings.experimental.row.tabGroups.title",
+    target: "settings-tab-groups",
+    description: "settings.experimental.row.tabGroups.description",
+    keywords: "tab groups server project colors drag organize search sessions",
+  },
+  {
+    tab: "experimental",
     label: "settings.experimental.row.sidebarOrganize.title",
     target: "settings-sidebar-organize",
     description: "settings.experimental.row.sidebarOrganize.description",

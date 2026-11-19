@@ -15,15 +15,30 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   }),
   all_flags: Schema.Boolean.pipe(optional).annotate({
     description:
-      "Enable all flags except opt-in-only flags on any build channel, like OPENCODE_FLAGS=all. Per-flag config settings take precedence over all_flags; false leaves the build defaults in effect.",
+      "Turn every feature flag on regardless of the build channel, like OPENCODE_FLAGS=all; explicit per-flag settings still win, and false is not a kill switch.",
   }),
-  ...Record.map(ConfigFlag.registry, (description, key) =>
+  todo: Schema.Boolean.pipe(optional).annotate({
+    description: "Enable the experimental todowrite tool. Defaults to false.",
+  }),
+  ...Record.map(ConfigFlag.registry, (description) =>
     Schema.Boolean.pipe(optional).annotate({
-      description: ConfigFlag.optInOnly.has(key)
-        ? description
-        : `${description} Defaults to on in local and dev builds and off in releases.`,
+      description: `${description} Defaults to on in local and dev builds and off in releases.`,
     }),
   ),
+  // The flag also takes settings; an object turns it on.
+  video_generate: Schema.Union([
+    Schema.Boolean,
+    Schema.Struct({
+      model: ConfigModel.Selection.pipe(optional).annotate({
+        description:
+          "Default model for the experimental_video_generate tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
+      }),
+    }),
+  ])
+    .pipe(optional)
+    .annotate({
+      description: `${ConfigFlag.registry.video_generate} Defaults to on in local and dev builds and off in releases. An object turns it on and sets the tool's options.`,
+    }),
   schedules: Schema.Boolean.pipe(optional).annotate({
     description: "Deprecated: use experimental.automations.",
   }),

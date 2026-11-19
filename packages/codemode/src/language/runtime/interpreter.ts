@@ -4,7 +4,7 @@ import { globals } from "./globals.js"
 import type { Builtins } from "./intrinsics.js"
 import { IntrinsicNames } from "./intrinsic-names.js"
 import { type AstNode, type Binding, PendingThrow } from "./model.js"
-import { moduleName, resolveModule } from "./modules.js"
+import { isRuntimeModule, moduleName, resolveModule } from "./modules.js"
 import { define, entries, type HostNamespace, makingIntrinsics, nativeRule, Obj, type Value } from "./objects.js"
 import type { HostResult } from "../host.js"
 import { Prelude } from "../prelude/prelude.js"
@@ -37,11 +37,14 @@ export class Interpreter<R> {
   /** The global bindings: the intrinsics, the host's globals, and the program's bindings. */
   readonly globalScope: Map<string, Binding>
   private readonly modules = new Map<string, Value>()
+  private readonly moduleGlobals: Readonly<Record<string, string>>
   private readonly namespaces = new Map<string, Obj>()
 
   constructor(options: {
     readonly builtins: Builtins
     readonly logs?: Array<string>
+    /** Module names that load a global, beyond its own name; see `Runtime.Options`. */
+    readonly modules?: Readonly<Record<string, string>> | undefined
     /** The host's globals (extensions, a test harness): made again, the same way, when a saved run is restored. */
     readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
     /** Data bound for this program, part of its saved state; host globals of the same name win. */
@@ -49,6 +52,7 @@ export class Interpreter<R> {
   }) {
     this.builtins = options.builtins
     this.logs = options.logs ?? []
+    this.moduleGlobals = options.modules ?? {}
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     this.globalScope = new Map<string, Binding>([["this", { value: undefined }]])
     // Everything made from here to the host globals is an intrinsic, with a static id (see `IntrinsicNames`).
@@ -83,13 +87,8 @@ export class Interpreter<R> {
     const name = moduleName(specifier)
     const cached = this.modules.get(name)
     if (cached !== undefined) return cached
-    const module = resolveModule(name, (global) => this.globalScope.get(global)?.value)
-    if (module === undefined)
-      throw new PendingThrow(
-        "Error",
-        `Cannot import "${specifier}": it isn't available here, where packages and files can't be loaded. Use the provided globals.`,
-        site,
-      )
+    const module = resolveModule(name, (global) => this.globalScope.get(global)?.value, this.moduleGlobals)
+    if (module === undefined) throw new PendingThrow("Error", cannotImport(specifier), site)
     this.modules.set(name, module)
     return module
   }
@@ -130,4 +129,12 @@ export class Interpreter<R> {
   node(id: NodeId): AstNode | undefined {
     return this.sources.get(id.source)?.node(id)
   }
+}
+
+/** Why `specifier` can't be loaded, split so the error names the kind of import that failed. */
+function cannotImport(specifier: string): string {
+  if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("file:"))
+    return `Cannot import "${specifier}": local files can't be imported.`
+  if (isRuntimeModule(specifier)) return `Cannot import "${specifier}": this runtime doesn't provide it.`
+  return `Cannot import "${specifier}": packages can't be installed here.`
 }

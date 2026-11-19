@@ -265,6 +265,8 @@ export function make<
           ),
         ),
       }),
+      // A later extension's module name wins over an earlier one's.
+      modules: Object.assign({}, ...picked.map((extension) => extension.modules ?? {})),
       limits: { timeoutMs: limits.timeoutMs, maxOutputBytes: limits.maxOutputBytes },
       // Arguments cross as JSON would carry them: functions are left out and promises are awaited.
       translate: { functions: "drop", promises: "await" },
