@@ -325,7 +325,7 @@ const themeContext = createSimpleContext({
       currentTokens: tokens,
       currentSyntax,
       get selected() {
-        return store.active
+        return alias(store.active)
       },
       all: available,
       has,
@@ -340,8 +340,9 @@ const themeContext = createSimpleContext({
         pin(requested, persist)
         return true
       },
-      set(theme: string) {
-        if (!has(theme)) return false
+      set(requested: string) {
+        if (!has(requested)) return false
+        const theme = alias(requested)
         setStore("active", theme)
         if (theme === "system") refreshPalette()
         void configState
