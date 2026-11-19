@@ -4,7 +4,14 @@ import { Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 
-const EVENT_TYPES = new Set(["agent.updated", "provider.updated", "model.updated", "command.updated", "config.updated"])
+const EVENT_TYPES = new Set([
+  "agent.updated",
+  "provider.updated",
+  "model.updated",
+  "command.updated",
+  "config.updated",
+  "session.deleted",
+])
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
