@@ -128,6 +128,44 @@ esac
             .filter(|line| line != "GET /api/info")
             .collect()
     }
+
+    // Waits for a second startup attempt a `service start` left to end. A start slower than the pool's spawn delay
+    // starts one; it exits once the registered service answers, but one still starting when that service stops binds
+    // the port and registers in its place.
+    fn settle(&self) {
+        let Some(registration) = self.registration() else { return };
+        let registered = pid(&registration);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        while self.serving().into_iter().any(|service| service != registered) {
+            assert!(std::time::Instant::now() < deadline, "a second startup attempt is still running");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+
+    // PIDs of this sandbox's `serve --service` processes: the environment of the TypeScript service names its home,
+    // and only a `bun` process can be one (`/proc` exists on Linux; elsewhere none are seen).
+    fn serving(&self) -> Vec<u64> {
+        let home = format!("HOME={}", self.path("home").display());
+        std::fs::read_dir("/proc")
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|entry| {
+                let pid = entry.file_name().to_str()?.parse::<u64>().ok()?;
+                let comm = std::fs::read_to_string(entry.path().join("comm")).ok()?;
+                (comm.trim_end() == "bun").then_some(pid)
+            })
+            .filter(|pid| {
+                let environ = std::fs::read(format!("/proc/{pid}/environ")).unwrap_or_default();
+                environ.split(|byte| *byte == 0).any(|item| item == home.as_bytes())
+            })
+            .filter(|pid| {
+                let cmdline = std::fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+                let args: Vec<&[u8]> = cmdline.split(|byte| *byte == 0).filter(|arg| !arg.is_empty()).collect();
+                args.windows(2).any(|pair| pair[0] == b"serve" && pair[1] == b"--service")
+            })
+            .collect()
+    }
 }
 
 impl Drop for Sandbox {
@@ -312,6 +350,8 @@ fn interop_with_a_typescript_service() {
     let url = format!("http://127.0.0.1:{port}\n");
 
     assert_eq!(ts(&["service", "start"]), url);
+    // The TypeScript start is the one that may have left a second attempt; now the service is the only one.
+    sandbox.settle();
     let started = pid(&sandbox.registration().unwrap());
     assert_eq!(rs(&["service", "status"]), url);
     assert_eq!(rs(&["service", "stop"]), "");
