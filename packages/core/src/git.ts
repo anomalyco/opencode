@@ -1146,8 +1146,11 @@ const layer = Layer.effect(
                 input.files,
                 ([file, tree]) =>
                   Effect.gen(function* () {
-                    if (!(yield* hasEntry(input.repository, tree, file)))
+                    if (!(yield* hasEntry(input.repository, tree, file))) {
+                      const isIgnored = yield* ignored({ repository: input.repository, paths: [file] })
+                      if (isIgnored.has(file)) return
                       return yield* removePath(input.repository, file)
+                    }
                     yield* withTemporaryIndex(input.repository, (index) =>
                       repositoryOperation(
                         "restore",
@@ -1188,11 +1191,16 @@ const layer = Layer.effect(
                   { discard: true },
                 ),
               )
-            yield* Effect.forEach(
-              plan.flatMap((item) => item.absent),
-              (file) => removePath(input.repository, file),
-              { concurrency: 16, discard: true },
-            )
+            const allAbsent = plan.flatMap((item) => item.absent)
+            if (allAbsent.length) {
+              const ignoredSet = yield* ignored({ repository: input.repository, paths: allAbsent })
+              const filesToRemove = allAbsent.filter((file) => !ignoredSet.has(file))
+              yield* Effect.forEach(
+                filesToRemove,
+                (file) => removePath(input.repository, file),
+                { concurrency: 16, discard: true },
+              )
+            }
           }),
         ),
     )

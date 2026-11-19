@@ -450,6 +450,39 @@ describe("Snapshot", () => {
       ),
     { timeout: 15_000 },
   )
+
+  testEffect(Layer.empty).live("does not delete ignored files when restoring a tree where they were absent", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const project = path.join(tmp.path, "project")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(project)
+          await fs.writeFile(path.join(project, ".gitignore"), ".env\n")
+          await initGit(project, true)
+        })
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          const before = yield* snapshot.capture()
+          if (!before) throw new globalThis.Error("capture failed")
+
+          yield* Effect.promise(async () => {
+            await fs.writeFile(path.join(project, ".env"), "SECRET=1\n")
+          })
+          const after = yield* snapshot.capture()
+          if (!after) throw new globalThis.Error("capture failed")
+
+          yield* snapshot.restore({
+            files: new Map([
+              [RelativePath.make(".env"), before],
+            ]),
+          })
+
+          expect(yield* exists(path.join(project, ".env"))).toBe(true)
+          expect(yield* read(path.join(project, ".env"))).toBe("SECRET=1\n")
+        }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+      }),
+    ),
+  )
 })
 
 function snapshotLayer(data: string, directory: string) {
