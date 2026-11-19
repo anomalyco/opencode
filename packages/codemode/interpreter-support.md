@@ -514,8 +514,7 @@ reject }` object.
 - [x] `toLocaleString`, `toLocaleDateString`, and `toLocaleTimeString` format through the host's
       `Intl.DateTimeFormat`, honoring the locale and options (`timeZone`, `dateStyle`, `weekday`, `hour12`, ...). Without
       a locale they format as `en-US`, Bun's default; without a `timeZone`, in the host's local timezone, like `getHours`
-      and `toDateString`. A locale list longer than 100 entries, or a tag longer than 256 characters, throws a
-      `RangeError` before reaching the host.
+      and `toDateString`.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
 - [x] Date setters, construction, and `Date.UTC` coerce object arguments through their own `valueOf`/`toString` in
       argument order and surface their throws; only the first seven components are converted.

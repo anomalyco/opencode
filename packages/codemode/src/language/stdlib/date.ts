@@ -3,7 +3,6 @@ import { rangeError, typeError } from "../runtime/model.js"
 import { Arr, DateObj, Obj, coerceToNumber, get, has, coerceToString, type Value } from "../runtime/objects.js"
 import { withPrimitives, withReads } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
-import { checkLocaleCount, checkLocaleTag } from "../runtime/limits.js"
 
 const constructDate = (args: Array<Value>, proto: Obj) => {
   if (args.length === 0) return new DateObj(proto, Date.now())
@@ -48,15 +47,10 @@ const dateTimeOptions = [
   "timeStyle",
 ]
 
-const arrayTags = (locales: Arr) => {
-  checkLocaleCount(locales.items.length)
-  return locales.items.filter(() => true)
-}
-
 const arrayLikeTags = (locales: Obj) => {
   const length = get(locales, "length")
   const count = length instanceof Obj ? 0 : Math.max(0, Math.floor(coerceToNumber(length)) || 0)
-  checkLocaleCount(count)
+  if (count > 1000) throw rangeError("Too many locales.")
   return Array.from({ length: count }, (_, index) => index)
     .filter((index) => has(locales, String(index)))
     .map((index) => get(locales, String(index)))
@@ -165,7 +159,7 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
               locales === undefined
                 ? ["en-US"]
                 : locales instanceof Arr
-                  ? arrayTags(locales)
+                  ? locales.items.filter(() => true)
                   : locales instanceof Obj
                     ? arrayLikeTags(locales)
                     : [locales]
@@ -186,15 +180,13 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
                 ),
               ],
               [...tags, ...entries.map((entry) => entry[1])],
-              (primitives) => {
-                for (const tag of primitives.slice(0, tags.length)) checkLocaleTag(tag)
-                return new Date(time)[name](
+              (primitives) =>
+                new Date(time)[name](
                   (locales instanceof Obj ? primitives.slice(0, tags.length) : primitives[0]) as Intl.LocalesArgument,
                   options instanceof Obj
                     ? Object.fromEntries(entries.map((entry, at) => [entry[0], primitives[tags.length + at]]))
                     : (options as Intl.DateTimeFormatOptions | undefined),
-                )
-              },
+                ),
             )
           })
         },

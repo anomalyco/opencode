@@ -1685,43 +1685,6 @@ describe("toLocaleString", () => {
     ).toEqual(["22", 1])
   })
 
-  test("dates cap their locale list before reading it, and each tag's length", async () => {
-    expect(
-      await value(`
-      const d = new Date(Date.UTC(2024, 0, 15))
-      const attempt = (f) => { try { return f() } catch (e) { return [e.name, e.message] } }
-      const tags = (n) => Array.from({ length: n }, (_, i) => "de-x-t" + i)
-      let reads = 0
-      const counted = { length: 101, get 0() { reads++; return "en" } }
-      const long = "de-x-" + "abcdefg-".repeat(32).slice(0, 251)
-      const utc = { timeZone: "UTC" }
-      return [
-        attempt(() => d.toLocaleDateString(tags(100), utc)),
-        attempt(() => d.toLocaleDateString(Object.assign({ length: 100 }, tags(100)), utc)),
-        attempt(() => d.toLocaleDateString(tags(101), utc)),
-        attempt(() => d.toLocaleDateString(counted, utc)),
-        reads,
-        attempt(() => d.toLocaleString({ length: 2 ** 32 })),
-        attempt(() => d.toLocaleTimeString(new Array(101))),
-        attempt(() => d.toLocaleDateString(long, utc)),
-        attempt(() => d.toLocaleDateString(long + "h", utc)),
-        attempt(() => d.toLocaleDateString(["en", { toString: () => long + "h" }], utc)),
-      ]
-    `),
-    ).toEqual([
-      "15.1.2024",
-      "15.1.2024",
-      ["RangeError", "Too many locales: at most 100 are supported"],
-      ["RangeError", "Too many locales: at most 100 are supported"],
-      0,
-      ["RangeError", "Too many locales: at most 100 are supported"],
-      ["RangeError", "Too many locales: at most 100 are supported"],
-      "15.1.2024",
-      ["RangeError", "Locale tag is too long: at most 256 characters are supported"],
-      ["RangeError", "Locale tag is too long: at most 256 characters are supported"],
-    ])
-  })
-
   test("invalid date options throw like Intl", async () => {
     expect(
       await value(`
