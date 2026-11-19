@@ -170,19 +170,20 @@ export const Plugin = {
                 // A cwd on a paired machine brings its instructions with it in a later change.
                 if (result.target.environment.id !== environment.id) return
                 const resolved = yield* fs.resolve(result.target.absolute)
-                const root = yield* fs.resolve(workingDirectory.absolute)
-                // The Location and its ancestors are already supplied by initial instructions,
-                // even when an upward walk from elsewhere in the project cannot reach root.
+                // Walk the path the reader asked for, not the link target: a symlinked file or directory inside
+                // the working directory must not discover instructions from the tree it points into.
                 const discovered = yield* fs.up({
                   targets: InstructionDiscovery.filenames(discovery),
-                  start: result.content.type === "directory" ? resolved : dirname(resolved),
-                  stop: root,
+                  start: result.content.type === "directory" ? result.target.absolute : dirname(result.target.absolute),
+                  stop: workingDirectory.absolute,
                   type: "file",
                 })
                 const candidates = (yield* Effect.forEach(
-                  InstructionDiscovery.preferAgents(discovered),
+                  InstructionDiscovery.preferAgents(discovered).filter(
+                    (file) => !FSUtil.contains(dirname(file), workingDirectory.absolute),
+                  ),
                   fs.resolve,
-                )).filter((file) => !FSUtil.contains(dirname(file), root) && file !== resolved)
+                )).filter((file) => file !== resolved)
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
               }).pipe(
