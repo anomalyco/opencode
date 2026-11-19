@@ -9,6 +9,17 @@ describe("pairing link", () => {
     })
   })
 
+  test("keeps a server's path prefix in front of /auth/connect", () => {
+    expect(pairingLink("https://example.com/opencode/auth/connect/abc")).toEqual({
+      urls: ["https://example.com/opencode"],
+      code: "abc",
+    })
+    expect(pairingLink("https://example.com/tools/opencode/auth/connect/abc")).toEqual({
+      urls: ["https://example.com/tools/opencode"],
+      code: "abc",
+    })
+  })
+
   test("reads every server address from opencode pair QR codes", () => {
     expect(
       pairingLink(
@@ -32,6 +43,7 @@ describe("pairing link", () => {
 
   test("rejects other URLs", () => {
     expect(pairingLink("http://192.168.1.2:49374/auth/connect/")).toBeUndefined()
+    expect(pairingLink("https://example.com/opencode/auth/connect/")).toBeUndefined()
     expect(pairingLink("http://192.168.1.2:49374/auth/connect/abc/extra")).toBeUndefined()
     expect(pairingLink("http://192.168.1.2:49374/connect#abc")).toBeUndefined()
     expect(pairingLink("opencode-ios://auth/connect/abc")).toBeUndefined()
@@ -52,6 +64,9 @@ describe("pairing link", () => {
     expect(bareServerAddress("localhost")).toBe("http://localhost")
     expect(bareServerAddress("devbox:4096")).toBe("http://devbox:4096")
     expect(bareServerAddress("[::1]:4096")).toBe("http://[::1]:4096")
+    expect(bareServerAddress("https://opencode.example.com/opencode/")).toBe("https://opencode.example.com/opencode")
+    expect(bareServerAddress("https://example.com/tools/opencode")).toBe("https://example.com/tools/opencode")
+    expect(bareServerAddress("https://example.com/opencode/auth/connect/")).toBeUndefined()
     expect(bareServerAddress("abc_DEF-123")).toBeUndefined()
     expect(bareServerAddress("http://192.168.1.2:4096/auth/connect/")).toBeUndefined()
     expect(bareServerAddress("http://192.168.1.2:4096/auth/connect/…")).toBeUndefined()
