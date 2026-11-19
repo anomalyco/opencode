@@ -73,7 +73,7 @@ const permission = permissionLayer({
 })
 
 const formatter = Layer.mock(Formatter.Service, {
-  file: (target) => formatFile(target),
+  file: (target) => formatFile(target.absolute),
 })
 
 const reset = () => {
