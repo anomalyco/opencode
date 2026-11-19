@@ -1,22 +1,14 @@
 // Server-driven events (T10, T11): `tui.toast.show` and `tui.command.execute` for the current location, one
 // for another location that is ignored, `tui.session.select` opens a session, and `session.deleted` of the open
 // session goes home with a toast.
-import { assistant, defineApp, session, user } from "../../lib/app"
+import { assistant, defineApp, HOME_PLACEHOLDER, session, user } from "../../lib/app"
 
 const here = { directory: "/tmp/opencode/packages/tui" }
 const event = (id: string, type: string, data: unknown, location: unknown = here) => ({
   event: { id, created: 3, type, location, data },
 })
 // The home prompt's placeholder row: its example is random.
-const prompt = [
-  {
-    x: 16,
-    y: 16,
-    width: 84,
-    height: 1,
-    reason: "the placeholder example: random in TS and Rust",
-  },
-]
+const prompt = [HOME_PLACEHOLDER]
 
 export default defineApp({
   // With tabs on, the tab strip (E.12) handles `session.deleted` first and goes home without the toast.

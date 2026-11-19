@@ -1,6 +1,6 @@
 // A plugin in a slot (P.1): a test plugin appends a line to home.footer, under the footer built-in. TS loads it
 // from parity/plugins/slot as a local plugin; Rust registers its twin when OPENCODE_PARITY_PLUGIN is `slot`.
-import { defineApp } from "../../lib/app"
+import { defineApp, HOME_PLACEHOLDER } from "../../lib/app"
 
 export default defineApp({
   config: { plugins: ["./plugins/slot"] },
@@ -9,15 +9,7 @@ export default defineApp({
     {
       checkpoint: "home",
       until: "slot plugin: home.footer",
-      masks: [
-        {
-          x: 16,
-          y: 16,
-          width: 84,
-          height: 1,
-          reason: "the placeholder example: random in TS and Rust",
-        },
-      ],
+      masks: [HOME_PLACEHOLDER],
     },
   ],
 })

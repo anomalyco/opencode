@@ -1,5 +1,6 @@
 // MS1 end to end: a new session from home, one prompt, a streamed reply with one shell call that asks for
 // permission, the permission allowed with a click, and the final reply.
+import { HOME_PLACEHOLDER } from "../../lib/app"
 import { defineSim } from "../../sim/scenario"
 
 export default defineSim({
@@ -26,15 +27,7 @@ export default defineSim({
     {
       checkpoint: "home",
       until: "Simulated Model",
-      masks: [
-        {
-          x: 16,
-          y: 16,
-          width: 84,
-          height: 1,
-          reason: "the placeholder example: random in TS and Rust",
-        },
-      ],
+      masks: [HOME_PLACEHOLDER],
     },
     { type: "Say hello" },
     { until: "Say hello" },

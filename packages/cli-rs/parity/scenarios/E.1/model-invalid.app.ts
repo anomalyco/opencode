@@ -1,16 +1,8 @@
 // `--model` without a provider (T27): a warning toast on the home.
-import { defineApp } from "../../lib/app"
+import { defineApp, HOME_PLACEHOLDER } from "../../lib/app"
 
 // The home prompt's placeholder row: its example is random.
-const prompt = [
-  {
-    x: 16,
-    y: 16,
-    width: 84,
-    height: 1,
-    reason: "the placeholder example: random in TS and Rust",
-  },
-]
+const prompt = [HOME_PLACEHOLDER]
 
 export default defineApp({
   args: { model: "gpt-5" },

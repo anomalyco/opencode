@@ -2,7 +2,7 @@
 // service, whose stats endpoint crashes it): the range, the token total in large digits, the activity calendar,
 // and the streak, active days, and sessions. Escape goes back home. The range runs from noon to noon UTC, so
 // its local dates are the same in UTC and in Central European time.
-import { defineApp } from "../../lib/app"
+import { defineApp, HOME_PLACEHOLDER } from "../../lib/app"
 
 const day = 86_400_000
 const from = Date.UTC(2026, 0, 1, 12)
@@ -41,15 +41,7 @@ export default defineApp({
     {
       checkpoint: "home",
       until: "/tmp/opencode/packages/tui:main",
-      masks: [
-        {
-          x: 16,
-          y: 16,
-          width: 84,
-          height: 1,
-          reason: "the placeholder example: random in TS and Rust",
-        },
-      ],
+      masks: [HOME_PLACEHOLDER],
     },
     { type: "/stats" },
     { keys: ["enter"] },

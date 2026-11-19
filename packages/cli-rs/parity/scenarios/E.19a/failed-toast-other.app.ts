@@ -1,17 +1,9 @@
 // A failed execution of a session that is not open shows the error toast with an "Open" action (F09, the plugin
 // toast's `sessionID`), here on home.
-import { defineApp } from "../../lib/app"
+import { defineApp, HOME_PLACEHOLDER } from "../../lib/app"
 
 // As in `E.1/mcp-toast.app.ts`: the home prompt and footer rows other steps own.
-const masks = [
-  {
-    x: 16,
-    y: 16,
-    width: 84,
-    height: 1,
-    reason: "the placeholder example: random in TS and Rust",
-  },
-]
+const masks = [HOME_PLACEHOLDER]
 
 export default defineApp({
   config: { experimental: { "new-designs": true } },

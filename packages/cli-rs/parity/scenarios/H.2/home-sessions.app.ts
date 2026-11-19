@@ -1,14 +1,5 @@
 // Home with two sessions, the session list, and opening the newest session from it (T01, DLG14).
-import { assistant, defineApp, session, user } from "../../lib/app"
-
-// To the end of the row: the placeholders differ in length.
-const placeholder = {
-  x: 16,
-  y: 16,
-  width: 84,
-  height: 1,
-  reason: "the placeholder example: random in TS and Rust",
-}
+import { assistant, defineApp, HOME_PLACEHOLDER, session, user } from "../../lib/app"
 
 export default defineApp({
   routes: [
@@ -33,7 +24,7 @@ export default defineApp({
     {
       checkpoint: "home",
       until: "Ask anything",
-      masks: [placeholder],
+      masks: [HOME_PLACEHOLDER],
     },
     { keys: ["ctrl+x", "l"] },
     {
