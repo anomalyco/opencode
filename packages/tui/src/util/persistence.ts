@@ -26,8 +26,17 @@ export async function writeJsonAtomic(filePath: string, value: unknown) {
     await rm(temporary, { force: true }).catch(() => undefined)
     throw error
   })
-  await rename(temporary, filePath).catch(async (error) => {
+  await replace(temporary, filePath).catch(async (error) => {
     await rm(temporary, { force: true }).catch(() => undefined)
     throw error
+  })
+}
+
+// Windows refuses to rename onto a file that is open, as it briefly is while another TUI reloads it.
+async function replace(source: string, target: string, attempt = 0): Promise<void> {
+  return rename(source, target).catch(async (error) => {
+    if (attempt >= 20 || !["EPERM", "EACCES", "EBUSY"].includes(error?.code)) throw error
+    await Bun.sleep(10)
+    return replace(source, target, attempt + 1)
   })
 }

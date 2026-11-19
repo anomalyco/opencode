@@ -1547,6 +1547,8 @@ export function Session(props: {
                 }}
                 stickyScroll={!navigationMessage() && !navigationSlack()}
                 stickyStart="bottom"
+                // Rows never grow or shrink, so a change to one row lays out only that row.
+                contentOptions={{ layoutMode: "list" }}
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
@@ -2235,9 +2237,8 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
           <markdown
             ref={useSessionLinks()}
             syntaxStyle={syntax()}
-            renderNode={plugins.markdown()}
-            streaming={true}
-            internalBlockMode="top-level"
+            renderBlock={plugins.markdown()}
+            streaming={status() === "running"}
             content={content()}
             tableOptions={{ style: "grid", cellPaddingX: 1 }}
             conceal={ctx.markdownMode() === "rendered"}
@@ -3260,7 +3261,7 @@ function Read(props: ToolProps) {
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.text.muted}>
+            <text fg={theme.text.muted}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>
           </box>
@@ -3455,7 +3456,7 @@ function Execute(props: ToolProps) {
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
-              <text paddingLeft={3} fg={theme.text.feedback.error.base}>
+              <text fg={theme.text.feedback.error.base}>
                 {index() === 0 ? "↳ " : "  "}
                 {line}
               </text>

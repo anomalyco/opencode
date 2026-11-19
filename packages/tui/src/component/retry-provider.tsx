@@ -28,7 +28,7 @@ export class RetryProviderRenderable extends TextNodeRenderable {
   private painted = false
   private disposed = false
   private elapsed: number | undefined
-  private fresh = false
+  private stopTick: (() => void) | undefined
   private source = ""
   private target = ""
   private displayed = ""
@@ -106,13 +106,9 @@ export class RetryProviderRenderable extends TextNodeRenderable {
     if (this.elapsed !== undefined && this.elapsed < FADE) return
     this.source = this.displayed
     this.fromOpacity = this.opacity
-    const start = this.elapsed === undefined
     this.elapsed = 0
-    this.fresh = true
-    if (start) {
-      this.ctx.setFrameCallback(this.tick)
-      this.ctx.requestLive()
-    }
+    // The shared clock's first tick measures from now, so idle time before the transition never counts.
+    this.stopTick ??= this.ctx.onAnimationTick(60, this.tick)
   }
 
   set enabled(value: boolean) {
@@ -121,7 +117,7 @@ export class RetryProviderRenderable extends TextNodeRenderable {
     if (!value) this.finish()
   }
 
-  private tick = async (delta: number) => {
+  private tick = (delta: number) => {
     if (this.elapsed === undefined) return
     if (!this.onScreen()) {
       this.finish()
@@ -129,9 +125,7 @@ export class RetryProviderRenderable extends TextNodeRenderable {
       if (this.current?.running) this.ctx.on("frame", this.markPainted)
       return
     }
-    // Ignore time the renderer spent idle before this transition started.
-    this.elapsed += this.fresh ? 0 : delta
-    this.fresh = false
+    this.elapsed += delta
     if (this.elapsed >= DURATION) return this.finish()
     if (this.elapsed < FADE) {
       return this.show(this.source, this.fromOpacity * (1 - smootherstep(this.elapsed / FADE)))
@@ -153,10 +147,8 @@ export class RetryProviderRenderable extends TextNodeRenderable {
   }
 
   private stop() {
-    if (this.elapsed !== undefined) {
-      this.ctx.removeFrameCallback(this.tick)
-      this.ctx.dropLive()
-    }
+    this.stopTick?.()
+    this.stopTick = undefined
     this.elapsed = undefined
   }
 

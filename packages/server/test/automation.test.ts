@@ -212,6 +212,9 @@ it.live(
         ).rejects.toMatchObject({ _tag: "ForbiddenError" })
       })
     }).pipe(Effect.scoped),
+  // Boots three Locations (enabled, enabled again on reload, ask) as one of the suite's first server boots, which
+  // still pay the cold Location load on Windows CI (see artifact.test.ts).
+  30_000,
 )
 
 it.live("runs due automations in standalone ServerProcess.start without lifecycle", () =>

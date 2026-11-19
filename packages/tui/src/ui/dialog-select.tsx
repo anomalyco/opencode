@@ -944,7 +944,6 @@ function DialogSelectRow(props: {
         attributes={props.active && !newDesigns() ? TextAttributes.BOLD : undefined}
         overflow="hidden"
         wrapMode="none"
-        paddingLeft={3}
       >
         {props.titleView ??
           (props.truncateTitle === false
