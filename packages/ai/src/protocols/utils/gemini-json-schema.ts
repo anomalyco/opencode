@@ -16,6 +16,64 @@ export const VALUES = new Set(["const", "default", "enum", "examples", "dependen
 export const mapValues = (record: Record<string, unknown>, map: (value: unknown, key: string) => unknown) =>
   Object.fromEntries(Object.entries(record).map(([key, value]) => [key, map(value, key)]))
 
+/** JSON Schema type name for a scalar value. Returns undefined for non-scalars. */
+const jsonType = (value: unknown): string | undefined => {
+  if (typeof value === "string") return "string"
+  if (typeof value === "number") return Number.isInteger(value) ? "integer" : "number"
+  if (typeof value === "boolean") return "boolean"
+  if (typeof value === "object" && value !== null) return "object"
+  return undefined
+}
+
+/** Groups enum values by their inferred JSON Schema type. */
+const enumTypes = (values: ReadonlyArray<unknown>): Map<string, Array<unknown>> => {
+  const groups = new Map<string, Array<unknown>>()
+  for (const value of values) {
+    const type = jsonType(value)
+    if (type === undefined) continue
+    const group = groups.get(type)
+    if (group === undefined) groups.set(type, [value])
+    else group.push(value)
+  }
+  return groups
+}
+
+/** When a schema node has `enum` or `const` but no `type`, infer `type` from the values.
+ *
+ * Gemini requires a `type` on every property. OpenCode's sanitizer previously preserved
+ * `enum`/`const` unchanged, so enum-only schemas from MCP servers (e.g. browse's
+ * `settings` tool with `enum`-only properties) failed every Gemini request with HTTP 400.
+ *
+ *   single-type enum   -> add `type` to match
+ *   mixed-type enum    -> split into `anyOf` with one typed variant per type
+ *   const              -> add `type` inferred from the const value
+ *
+ * Existing `type` is never overridden.
+ */
+const inferType = (schema: Record<string, unknown>): Record<string, unknown> => {
+  if (schema.type !== undefined) return schema
+  const enumValues = schema.enum
+  if (Array.isArray(enumValues) && enumValues.length > 0) {
+    const groups = enumTypes(enumValues)
+    if (groups.size === 1) {
+      const [type] = groups.keys()
+      return { ...schema, type }
+    }
+    if (groups.size > 1) {
+      const { enum: _enum, ...rest } = schema
+      return {
+        ...rest,
+        anyOf: [...groups.entries()].map(([type, values]) => ({ type, enum: values })),
+      }
+    }
+  }
+  if (schema.const !== undefined) {
+    const type = jsonType(schema.const)
+    if (type !== undefined) return { ...schema, type }
+  }
+  return schema
+}
+
 const normalizeNode = (schema: unknown): unknown => {
   if (Array.isArray(schema)) return schema.map(normalizeNode)
   if (!isRecord(schema)) return schema
@@ -42,6 +100,20 @@ const normalizeNode = (schema: unknown): unknown => {
   )
 }
 
+/** Normalize every node in the schema: infer missing `type` from `enum`/`const` values. */
+const normalizeAll = (schema: unknown): unknown => {
+  const normalized = normalizeNode(schema)
+  if (!isRecord(normalized)) return normalized
+  const withInferredType = inferType(normalized)
+  return Object.fromEntries(
+    Object.entries(withInferredType).flatMap(([key, value]) => {
+      if (VALUES.has(key)) return [[key, value]]
+      if (SCHEMA_MAPS.has(key) && isRecord(value)) return [[key, mapValues(value, normalizeAll)]]
+      return [[key, normalizeAll(value)]]
+    }),
+  )
+}
+
 // Gemini accepts a recursive `$ref` only when the loop passes through an optional property or
 // potentially empty array `items`. Replace other self-references with an unconstrained schema.
 const cutLoops = (schema: unknown, target: string, safe: boolean): unknown => {
@@ -60,7 +132,7 @@ const cutLoops = (schema: unknown, target: string, safe: boolean): unknown => {
 }
 
 export const normalize = (schema: JsonSchema): JsonSchema => {
-  const normalized = normalizeNode(schema)
+  const normalized = normalizeAll(schema)
   if (!isRecord(normalized)) return {}
   const result = cutLoops(
     mapValues(normalized, (value, key) =>

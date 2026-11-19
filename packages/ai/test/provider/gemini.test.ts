@@ -964,6 +964,16 @@ describe("Gemini route", () => {
         },
         $defs: { Item: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } },
       }
+      // `kind: { const }` and `mode: { enum }` without `type` are invalid for Gemini;
+      // the sanitizer infers the missing `type` from the values.
+      const expectedSchema = {
+        ...inputSchema,
+        properties: {
+          ...inputSchema.properties,
+          kind: { type: "string", const: "fixed" },
+          mode: { type: "string", enum: ["fast", "safe"] },
+        },
+      }
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -972,7 +982,7 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(inputSchema)
+      expect(prepared.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(expectedSchema)
     }),
   )
 
