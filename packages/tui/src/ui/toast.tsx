@@ -220,3 +220,8 @@ export function useToast() {
   }
   return value
 }
+
+// Providers mounted above the ToastProvider in the tree, such as LocationProvider, use this.
+export function useToastOptional() {
+  return useContext(ctx)
+}
