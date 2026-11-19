@@ -359,6 +359,36 @@ describe("SessionInstructions", () => {
     }),
   )
 
+  it.live("does not follow a directory symlink out of the Location when discovering AGENTS.md", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const dir = location.directory
+      // The skill store lives outside the Location, and `.agents/skills` links to it.
+      const store = yield* Effect.promise(() => fs.mkdtemp(path.join(path.dirname(dir), "store-")))
+      yield* mkdir(path.resolve(store, "proj", "skills", "s"))
+      yield* writeAgents(path.resolve(store, "AGENTS.md"), "store-instructions")
+      yield* writeAgents(path.resolve(store, "proj", "AGENTS.md"), "root-instructions")
+      yield* Effect.promise(() => fs.writeFile(path.resolve(store, "proj", "skills", "s", "SKILL.md"), "skill"))
+      yield* mkdir(path.resolve(dir, ".agents"))
+      yield* Effect.promise(() =>
+        fs.symlink(
+          path.resolve(store, "proj", "skills"),
+          path.resolve(dir, ".agents", "skills"),
+          process.platform === "win32" ? "junction" : "dir",
+        ),
+      )
+
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
+
+      // Walking up the link target would leave the Location and reach the store's AGENTS.md files.
+      yield* executeTool(registry, readCall(sessionID, "call-skill", ".agents/skills/s/SKILL.md"))
+
+      expect((yield* synthetics(sessionID)).map((message) => message.text)).toEqual([])
+    }),
+  )
+
   test("toLLMMessages does not forward synthetic metadata to the provider", () => {
     const created = DateTime.makeUnsafe(0)
     const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
