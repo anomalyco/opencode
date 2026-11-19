@@ -77,6 +77,41 @@ const flush = async () => {
   await Promise.resolve()
 }
 
+test("explicit retries recover metadata without remounting the route or duplicating requests", async () => {
+  await createRoot(async (dispose) => {
+    try {
+      const fixture = createFixture()
+
+      const current = createSessionResolution(
+        () => "ses_retry",
+        () => fixture.sessions,
+      )
+
+      fixture.fail("ses_retry", new Error("first failure"))
+      await flush()
+      expect(current().status).toBe("error")
+      expect(fixture.resolves).toEqual(["ses_retry"])
+
+      current.retry()
+      current.retry()
+      expect(current().status).toBe("resolving")
+      expect(fixture.resolves).toEqual(["ses_retry", "ses_retry"])
+      fixture.fail("ses_retry", new Error("second failure"))
+      await flush()
+      expect(current().status).toBe("error")
+      expect(fixture.resolves).toHaveLength(2)
+
+      current.retry()
+      fixture.settle("ses_retry")
+      await flush()
+      expect(resolved(current())).toEqual(sessionOf("ses_retry"))
+      expect(fixture.resolves).toEqual(["ses_retry", "ses_retry", "ses_retry"])
+    } finally {
+      dispose()
+    }
+  })
+})
+
 test("refreshes the current session on reconnect while keeping cached content visible", async () => {
   await createRoot(async (dispose) => {
     const fixture = createFixture({ ses_a: sessionOf("ses_a") })

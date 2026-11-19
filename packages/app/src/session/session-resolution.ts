@@ -137,5 +137,12 @@ export function createSessionResolution<T, P = never>(
     }),
   )
 
-  return state
+  return Object.assign(state, {
+    retry: () => {
+      const current = untrack(state)
+
+      if (current.status === "idle") return
+      dispatch({ type: "retry.requested", target: current.target })
+    },
+  })
 }

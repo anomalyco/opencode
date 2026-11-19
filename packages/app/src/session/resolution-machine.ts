@@ -53,6 +53,7 @@ export type SessionResolutionEvent<T, Scope, P = never> =
     }
   | { readonly type: "cache.changed"; readonly target: SessionTarget<Scope>; readonly session: T | undefined }
   | { readonly type: "connected"; readonly target: SessionTarget<Scope>; readonly refresh: boolean }
+  | { readonly type: "retry.requested"; readonly target: SessionTarget<Scope> }
   | {
       readonly type: "sync.settled"
       readonly target: SessionTarget<Scope>
@@ -126,6 +127,10 @@ export function transitionSessionResolution<T, Scope, P = never>(
   if (event.type === "cache.changed") return cacheChanged(state, event.session)
 
   if (event.type === "connected") return reconnected(state, event.refresh)
+
+  if (event.type === "retry.requested") {
+    return state.status === "error" ? reconnected(state, true) : unchanged(state)
+  }
 
   // Only the sync started for the current attempt answers a target that is still resolving, or that timed out
   // waiting for it: once the cache holds the session it is authoritative, and a deleted session is evicted from it.
