@@ -153,6 +153,7 @@ export const Op = {
   // method on top as a hidden property of the prototype, or of the constructor when a bit 0 is set: `[ctor, proto, fn]
   // -> [ctor, proto]`, keyed by constant `bx`.
   CLASS: 89,
+  // DEFINE_METHOD's `a`: 1 static, 2 computed (`[.., key, fn]`), 4 getter, 8 setter (non-enumerable accessors).
   DEFINE_METHOD: 90,
   // `SET_FIELDS` makes the field-initializer function on top the class's: `[ctor, proto, fn] -> [ctor, proto]`.
   // `INIT_FIELDS` runs field initializers: a 0 calls the running constructor's with its `this`, `[] -> [result]`;

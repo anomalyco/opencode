@@ -699,10 +699,31 @@ const compileFunctionBody = (
     const ctor = analysis.classConstructors.get(node)!
     builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(ctor)!.index, idx(node), 1)
     builder.emit(Op.CLASS, 0, 0, idx(node), 1)
+    // Member keys are evaluated once, in order; a computed field's key is kept in its hidden binding.
     for (const member of node.body.body) {
+      if (member.type === "PropertyDefinition") {
+        const key = analysis.fieldKeys.get(member)
+        if (!key) continue
+        compileExpression(member.key as Expression)
+        builder.emit(Op.TO_KEY, 0, 0, idx(member.key), 0)
+        emitStoreDecl(scope.decls.get(key.name)!, true, member)
+        continue
+      }
       if (member.type !== "MethodDefinition" || member.kind === "constructor") continue
+      if (member.computed) {
+        compileExpression(member.key as Expression)
+        builder.emit(Op.TO_KEY, 0, 0, idx(member.key), 0)
+      }
+      const kind = member.kind === "get" ? 4 : member.kind === "set" ? 8 : 0
+      const flags = (member.static ? 1 : 0) | (member.computed ? 2 : 0) | kind
       builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(member.value)!.index, idx(member), 1)
-      builder.emit(Op.DEFINE_METHOD, member.static ? 1 : 0, builder.constant(keyName(member.key)), idx(member), -1)
+      builder.emit(
+        Op.DEFINE_METHOD,
+        flags,
+        member.computed ? 0 : builder.constant(keyName(member.key)),
+        idx(member),
+        member.computed ? -2 : -1,
+      )
     }
     const fieldInits = analysis.classFieldInits.get(node)
     if (fieldInits?.instance) {
@@ -1658,6 +1679,15 @@ const compileFunctionBody = (
       // The body is `this` and then each initializer: define the fields on `this` in order.
       compileExpression(((body as BlockStatement).body[0] as ExpressionStatement).expression)
       for (const field of fields) {
+        const key = analysis.fieldKeys.get(field)
+        if (key) {
+          compileExpression(key)
+          if (field.value) compileExpression(field.value)
+          else builder.emit(Op.PUSH_UNDEF, 0, 0, idx(field), 1)
+          if (field.value && isAnonymousFunction(field.value)) builder.emit(Op.SET_NAME, 1, 0, idx(field.value), 0)
+          builder.emit(Op.DEFINE_FIELD, 1, 0, idx(field), -2)
+          continue
+        }
         const name = keyName(field.key)
         if (field.value) compileNamedExpression(field.value, name)
         else builder.emit(Op.PUSH_UNDEF, 0, 0, idx(field), 1)

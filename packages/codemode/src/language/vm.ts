@@ -1663,11 +1663,25 @@ export class Vm {
     sp: number,
   ): number {
     const fn = regs[--sp] as Fn
+    const key = (a & 2) !== 0 ? (regs[--sp] as PropertyKey) : (consts[bx] as string)
     const home = regs[(a & 1) !== 0 ? sp - 2 : sp - 1] as Obj
-    const key = consts[bx] as string
+    const name =
+      typeof key === "symbol"
+        ? key === IteratorSymbol
+          ? "[Symbol.iterator]"
+          : key === AsyncIteratorSymbol
+            ? "[Symbol.asyncIterator]"
+            : `[${key.description ?? ""}]`
+        : String(key)
     fn.home = home
-    define(fn, "name", key, readonly)
-    define(home, key, fn, hidden)
+    if ((a & 12) === 0) {
+      define(fn, "name", name, readonly)
+      define(home, key, fn, hidden)
+      return sp
+    }
+    const half = (a & 4) !== 0 ? "get" : "set"
+    define(fn, "name", `${half} ${name}`, readonly)
+    defineAccessorHalf(home, key, half, fn, false)
     return sp
   }
 

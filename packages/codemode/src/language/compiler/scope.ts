@@ -87,22 +87,20 @@ export type ScopeAnalysis = {
   readonly classFieldInits: ReadonlyMap<ClassNode, { instance?: FunctionExpression; static?: FunctionExpression }>
   /** The fields a synthetic field-initializer function defines, in order. */
   readonly fieldInitMembers: ReadonlyMap<FunctionNode, ReadonlyArray<PropertyDefinition>>
+  /** A computed field's key, evaluated once at class definition into a hidden class-scope binding read by this name. */
+  readonly fieldKeys: ReadonlyMap<PropertyDefinition, Identifier>
 }
 
 export type ClassNode = ClassDeclaration | ClassExpression
 
-/** The class elements phase 1 compiles: plain-named methods and the constructor. Anything else is refused. */
+/** The class elements compiled so far: methods, accessors and fields with plain or computed names. Anything else is refused. */
 export const supportedClassMember = (member: ClassNode["body"]["body"][number]): boolean =>
-  (member.type === "PropertyDefinition" && !member.computed && plainKey(member.key)) ||
-  (member.type === "MethodDefinition" &&
-    !member.computed &&
-    (member.key.type === "Identifier" || (member.key.type === "Literal" && typeof member.key.value === "string")) &&
-    (member.kind === "method" || member.kind === "constructor") &&
-    !member.value.async &&
-    !member.value.generator)
+  (member.type === "PropertyDefinition" || member.type === "MethodDefinition") &&
+  (member.computed || plainKey(member.key))
 
 const plainKey = (key: Expression | PrivateIdentifier): boolean =>
-  key.type === "Identifier" || (key.type === "Literal" && typeof key.value === "string")
+  key.type === "Identifier" ||
+  (key.type === "Literal" && (typeof key.value === "string" || typeof key.value === "number"))
 
 /**
  * Pass 1: walks the AST to build lexical/var scopes, assign pre-order function indices,
@@ -115,6 +113,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   const classConstructors = new Map<ClassNode, FunctionExpression>()
   const classFieldInits = new Map<ClassNode, { instance?: FunctionExpression; static?: FunctionExpression }>()
   const fieldInitMembers = new Map<FunctionNode, ReadonlyArray<PropertyDefinition>>()
+  const fieldKeys = new Map<PropertyDefinition, Identifier>()
   const unresolved: Array<{ readonly node: AnyNode; readonly name: string; readonly scope: Scope; fnIndex: number }> =
     []
 
@@ -526,6 +525,14 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
     classConstructors.set(node, ctor)
     const ctorInfo = visitFunction(ctor, classScope, fnInfo.index, node.id?.name ?? "")
     ctorInfo.flags |= CodeFlags.CLASS_CONSTRUCTOR
+    for (const m of node.body.body) {
+      if ((m.type !== "MethodDefinition" && m.type !== "PropertyDefinition") || !m.computed) continue
+      visitExpression(m.key as Expression, classScope, fnInfo)
+      if (m.type !== "PropertyDefinition") continue
+      const name = `%key${fieldKeys.size}`
+      addDecl(classScope, fnInfo, name, "const", false)
+      fieldKeys.set(m, { type: "Identifier", name, start: m.key.start, end: m.key.end } as Identifier)
+    }
     for (const m of methods) {
       if (m.kind === "constructor") continue
       visitFunction(m.value, classScope, fnInfo.index).flags |= CodeFlags.METHOD
@@ -567,7 +574,10 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
         type: "BlockStatement",
         body: [
           statement({ type: "ThisExpression", ...at } as Expression),
-          ...fields.flatMap((f) => (f.value ? [statement(f.value)] : [])),
+          ...fields.flatMap((f) => [
+            ...(fieldKeys.has(f) ? [statement(fieldKeys.get(f)!)] : []),
+            ...(f.value ? [statement(f.value)] : []),
+          ]),
         ],
         ...at,
       },
@@ -650,6 +660,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
     classConstructors,
     classFieldInits,
     fieldInitMembers,
+    fieldKeys,
   }
 }
 

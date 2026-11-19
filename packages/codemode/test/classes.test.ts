@@ -119,9 +119,8 @@ describe("base classes", () => {
     for (const code of [
       "class A extends Object {}",
       "class A { #x = 1 }",
-      "class A { [k] = 1 }",
-      "class A { get x() { return 1 } }",
-      "class A { [k]() {} }",
+      "class A { #m() {} }",
+      "class A { static {} }",
     ]) {
       const result = runProgram(code)
       expect(result.ok).toBe(false)
@@ -298,6 +297,102 @@ describe("class fields", () => {
   })
 })
 
+describe("accessors, computed names and method kinds", () => {
+  test("instance and static getters and setters, not enumerable", () => {
+    expect(
+      value(`
+        class Temp {
+          constructor() { this._c = 0 }
+          get f() { return this._c * 9 / 5 + 32 }
+          set f(v) { this._c = (v - 32) * 5 / 9 }
+          static get unit() { return "C:" + this.name }
+          static set unit(v) { Temp.last = v }
+        }
+        const t = new Temp()
+        t.f = 212
+        Temp.unit = "K"
+        const d = Object.getOwnPropertyDescriptor(Temp.prototype, "f")
+        const keys = []
+        for (const k in t) keys.push(k)
+        return [t._c, t.f, Temp.unit, Temp.last, Object.keys(Temp.prototype), keys, d.enumerable,
+          d.get.name, d.set.name, typeof Object.getOwnPropertyDescriptor(Temp, "unit").get]`),
+    ).toEqual([100, 212, "C:Temp", "K", [], ["_c"], false, "get f", "set f", "function"])
+  })
+
+  test("an inherited getter and setter see the instance as this", () => {
+    expect(
+      value(`
+        class A { get double() { return this.n * 2 } set double(v) { this.n = v / 2 } }
+        const a = new A()
+        a.double = 10
+        const child = Object.create(a)
+        child.double = 40
+        return [a.n, a.double, child.n, child.double, Object.keys(child)]`),
+    ).toEqual([5, 10, 20, 40, ["n"]])
+  })
+
+  test("computed and symbol names, evaluated once in order", () => {
+    expect(
+      value(`
+        const log = []
+        const k = (name) => { log.push(name); return name }
+        const sym = Symbol.asyncIterator
+        class A {
+          [k("m")]() { return "m" }
+          static [k("s")]() { return "s" }
+          get [k("g")]() { return "g" }
+          [k("f")] = log.length;
+          [sym]() { return "sym" }
+          [1 + 1] = "two"
+        }
+        log.push("defined")
+        const a = new A(), b = new A()
+        return [log, a.m(), A.s(), a.g, a.f, b.f, a[sym](), a[2], A.prototype.m.name, A.prototype[sym].name, Object.keys(a)]`),
+    ).toEqual([["m", "s", "g", "f", "defined"], "m", "s", "g", 5, 5, "sym", "two", "m", "[Symbol.asyncIterator]", ["2", "f"]])
+  })
+
+  test("an iterable class via *[Symbol.iterator], with for...of and spread", () => {
+    expect(
+      value(`
+        class Range {
+          constructor(n) { this.n = n }
+          *[Symbol.iterator]() { for (let i = 0; i < this.n; i++) yield i }
+          static *count() { yield "a"; yield "b" }
+          *items() { yield* this }
+        }
+        const r = new Range(3)
+        const seen = []
+        for (const x of r) seen.push(x)
+        return [seen, [...r], [...Range.count()], [...r.items()], Range.prototype[Symbol.iterator].name]`),
+    ).toEqual([[0, 1, 2], [0, 1, 2], ["a", "b"], [0, 1, 2], "[Symbol.iterator]"])
+  })
+
+  test("async methods with await", async () => {
+    expect(
+      await value(`
+        class Loader {
+          async load(n) { const v = await Promise.resolve(n); return v + 1 }
+          static async make() { return (await new Loader().load(1)) * 10 }
+        }
+        return [await new Loader().load(4), await Loader.make()]`),
+    ).toEqual([5, 20])
+  })
+
+  test("an async generator method with for await", async () => {
+    expect(
+      await value(`
+        class Feed {
+          async *stream() { for (const x of [1, 2, 3]) yield await Promise.resolve(x * 2) }
+          async *[Symbol.asyncIterator]() { yield "x" }
+        }
+        const out = []
+        for await (const v of new Feed().stream()) out.push(v)
+        for await (const v of new Feed()) out.push(v)
+        return out`),
+    ).toEqual([2, 4, 6, "x"])
+  })
+})
+
 describe("suspended inside a class", () => {
   for (const [name, code, expected, frame] of [
     [
@@ -330,6 +425,29 @@ describe("suspended inside a class", () => {
        return [a.m(20), a instanceof A]`,
       [41, true],
       "m",
+    ],
+    [
+      "getter",
+      `class A { constructor() { this.n = 20 } get v() { return pick(slow(this.n)) + 1 } }
+       return [new A().v, Object.keys(A.prototype)]`,
+      [41, []],
+      "get v",
+    ],
+    [
+      "async method",
+      `class A { async load(n) { const v = await pick(slow(n)); return v + 1 } }
+       return [await new A().load(21)]`,
+      [43],
+      "load",
+    ],
+    [
+      "generator method",
+      `class A { *items() { yield 1; yield pick(slow(21)); yield 3 } }
+       const out = []
+       for (const x of new A().items()) out.push(x)
+       return out`,
+      [1, 42, 3],
+      "items",
     ],
   ] as const) {
     test(`a host call parked in a ${name}, resumed in a fresh runtime`, async () => {

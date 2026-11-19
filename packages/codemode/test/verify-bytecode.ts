@@ -208,6 +208,8 @@ export const verifyCode = (c: Code): Array<string> => {
         next(1)
         break
       case Op.DEFINE_METHOD:
+        next((a & 2) === 0 ? -1 : -2)
+        break
       case Op.SET_FIELDS:
         next(-1)
         break
