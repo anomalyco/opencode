@@ -202,7 +202,7 @@ impl Lock {
             drop(stop);
             let _ = handle.join();
         }
-        let raw = fs::read_to_string(self.dir.join("meta.json")).map_err(|err| {
+        let raw = retry_busy(|| fs::read_to_string(self.dir.join("meta.json"))).map_err(|err| {
             if gone(&err) {
                 return Error::Compromised("Refusing to release: lock is compromised (metadata missing).");
             }
@@ -245,7 +245,7 @@ fn age(meta: &fs::Metadata) -> Duration {
 }
 
 fn stat(path: &Path) -> io::Result<Option<fs::Metadata>> {
-    match fs::metadata(path) {
+    match retry_busy(|| fs::metadata(path)) {
         Ok(meta) => Ok(Some(meta)),
         Err(err) if gone(&err) => Ok(None),
         Err(err) => Err(err),
@@ -256,12 +256,38 @@ fn gone(err: &io::Error) -> bool {
     matches!(err.kind(), io::ErrorKind::NotFound | io::ErrorKind::NotADirectory)
 }
 
+/// Whether Windows answers for a path another owner is opening or deleting, where Unix would say what the path is:
+/// a lock directory a releasing owner marks for deletion rather than removes at once, and the heartbeat or metadata a
+/// contender is opening as that happens. The path answers `ERROR_ACCESS_DENIED` ("Access is denied") until the handle
+/// that deletes it closes, so the operation is worth trying again rather than reporting an error.
+fn busy(err: &io::Error) -> bool {
+    cfg!(windows) && err.kind() == io::ErrorKind::PermissionDenied
+}
+
+/// How many times an operation on a lock path is tried past the first when Windows reports it busy, and how long each
+/// wait lasts: the read a contender makes lasts an instant, and a release deletes the directory at once.
+const BUSY_TRIES: u32 = 50;
+const BUSY_WAIT: Duration = Duration::from_millis(10);
+
+/// Runs `f`, again while Windows reports the path busy, [`BUSY_TRIES`] times at most.
+fn retry_busy<T>(mut f: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    for _ in 0..BUSY_TRIES {
+        match f() {
+            Err(err) if busy(&err) => thread::sleep(BUSY_WAIT),
+            result => return result,
+        }
+    }
+    f()
+}
+
 fn mkdir(path: &Path) -> io::Result<()> {
-    #[cfg_attr(not(unix), allow(unused_mut))]
-    let mut builder = fs::DirBuilder::new();
-    #[cfg(unix)]
-    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
-    builder.create(path)
+    retry_busy(|| {
+        #[cfg_attr(not(unix), allow(unused_mut))]
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        builder.create(path)
+    })
 }
 
 // `utimes` on a file, as the TypeScript heartbeat does. Windows sets times only through a handle with write
@@ -271,12 +297,12 @@ fn touch(path: &Path, time: SystemTime) -> io::Result<()> {
 }
 
 fn create_new(path: &Path, body: &[u8]) -> io::Result<()> {
-    fs::OpenOptions::new().write(true).create_new(true).open(path)?.write_all(body)
+    retry_busy(|| fs::OpenOptions::new().write(true).create_new(true).open(path))?.write_all(body)
 }
 
 // `rm -rf`: a missing path is fine.
 fn remove(path: &Path) -> io::Result<()> {
-    match fs::remove_dir_all(path) {
+    match retry_busy(|| fs::remove_dir_all(path)) {
         Err(err) if gone(&err) => Ok(()),
         other => other,
     }
@@ -387,5 +413,53 @@ mod tests {
         let dir = opencode_util::temp::tempdir().unwrap();
         assert_eq!(with_lock(dir.path(), "k", &quick(), || 7).unwrap(), 7);
         assert!(fs::read_dir(dir.path()).unwrap().next().is_none());
+    }
+
+    // A contender's staleness read races a release that marks the lock directory for deletion, which answers "Access is
+    // denied" on Windows until the delete completes (preview 44552774481). Every acquire and release succeeds,
+    // whichever interleaving it takes.
+    #[test]
+    fn contenders_acquire_and_release_a_shared_lock() {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let options = Options { timeout: Duration::from_secs(60), ..quick() };
+        let threads: Vec<_> = (0..4)
+            .map(|_| {
+                let dir = dir.path().to_path_buf();
+                let options = options.clone();
+                thread::spawn(move || {
+                    for _ in 0..10 {
+                        with_lock(&dir, "k", &options, || ()).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        assert!(fs::read_dir(dir.path()).unwrap().next().is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_busy_path_is_tried_again_until_it_is_free() {
+        let mut calls = 0;
+        let result = retry_busy(|| {
+            calls += 1;
+            (calls < 3).then_some(()).ok_or_else(|| io::Error::from_raw_os_error(5))
+        });
+        assert!(result.is_ok());
+        assert_eq!(calls, 3);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_path_that_stays_busy_fails_after_the_bound() {
+        let mut calls = 0;
+        let result = retry_busy(|| {
+            calls += 1;
+            Err::<(), _>(io::Error::from_raw_os_error(5))
+        });
+        assert_eq!(result.unwrap_err().raw_os_error(), Some(5));
+        assert_eq!(calls, BUSY_TRIES + 1);
     }
 }
