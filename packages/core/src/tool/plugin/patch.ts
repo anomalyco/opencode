@@ -162,7 +162,10 @@ export const Plugin = {
                   const original =
                     previous ??
                     (yield* Effect.gen(function* () {
-                      const content = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
+                      const content = yield* FileMutation.readEditableText(
+                        target.environment.files,
+                        target.absolute,
+                      ).pipe(
                         Effect.mapError(
                           (error) =>
                             new ToolFailure({
