@@ -212,6 +212,51 @@ describe("machine driver", () => {
     }),
   )
 
+  it.effect("sends a lost release again on the next connection", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const handle = yield* environment.spawner.spawn(command)
+      worker.drop("worker", "release")
+      yield* worker.runs[0].exit(0)
+      yield* handle.exitCode
+      yield* worker.cut
+      yield* worker.restore
+      // A worker still listing it would be told again on this connection.
+      yield* worker.cut
+      yield* worker.restore
+      const released = worker.received.flatMap((message) => (message.type === "release" ? [message.id] : []))
+      expect(released).toEqual([worker.runs[0].id])
+    }),
+  )
+
+  it.effect("leaves an untracked process that is still running alone", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const scope = yield* Scope.make()
+      yield* environment.spawner.spawn(command).pipe(Scope.provide(scope))
+      yield* worker.cut
+      yield* Scope.close(scope, Exit.void)
+      yield* worker.restore
+      expect(worker.received.map((message) => message.type)).toEqual(["start"])
+    }),
+  )
+
+  it.effect("releases a process whose output is still being delivered only after its exit", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const handle = yield* environment.spawner.spawn(command)
+      const run = worker.runs[0]
+      yield* run.print("a")
+      yield* worker.cut
+      yield* run.print("b")
+      yield* run.exit(0)
+      yield* worker.restore
+      expect(yield* text(handle.all)).toBe("ab")
+      expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+      expect(worker.received.map((message) => message.type)).toEqual(["start", "attach", "release"])
+    }),
+  )
+
   it.effect("fails a process the same worker forgot before reconnecting, without saying it restarted", () =>
     Effect.gen(function* () {
       const { worker, environment } = yield* connected

@@ -105,6 +105,9 @@ export const make = (id: Environment.ID): Interface => {
         calls: new Map(),
       }
       const listed = new Map(connection.hello.processes.map((entry) => [entry.id, entry]))
+      // A release is safe to repeat, so one lost with an earlier connection is sent again. Running ones are left alone.
+      for (const entry of connection.hello.processes)
+        if (entry.state === "exited" && !processes.has(entry.id)) current.send({ type: "release", id: entry.id })
       for (const [processID, process] of processes) {
         const entry = listed.get(processID)
         if (entry && process.instance === current.instance) {
