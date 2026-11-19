@@ -1416,6 +1416,7 @@ export class Vm {
           case 93: // Op.SUPER_CALL
           case 94: // Op.SUPER_BIND
           case 96: // Op.GET_SUPER
+          case 98: // Op.SET_HOME
           case 97: {
             // Op.PUT_SUPER
             frame.pc = pc
@@ -3497,6 +3498,9 @@ export class Vm {
       }
       case Op.PUT_SUPER:
         return this.execPutSuper(frame, a, bx, pc) ? -1 : pc + 1
+      case Op.SET_HOME:
+        ;(regs[sp - 1] as Fn).home = regs[sp - 1 - a] as Obj
+        return pc + 1
       case Op.DEFINE_METHOD:
         frame.sp = this.execDefineMethod(regs, consts, a, bx, sp)
         return pc + 1

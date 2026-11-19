@@ -213,6 +213,9 @@ export const verifyCode = (c: Code): Array<string> => {
       case Op.SUPER_BIND:
         next(0)
         break
+      case Op.SET_HOME:
+        next(0)
+        break
       case Op.GET_SUPER:
         next(((a & 1) === 0 ? -1 : 0) - ((a & 2) === 0 ? 0 : 1))
         break

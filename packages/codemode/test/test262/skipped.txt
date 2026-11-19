@@ -2573,10 +2573,6 @@ language/expressions/object/dstr/meth-ary-init-iter-get-err-array-prototype.js  
 language/expressions/object/dstr/meth-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/object/dstr/meth-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/expressions/object/method-definition/generator-super-prop-body.js  # UnsupportedSyntax: SyntaxError: '…' is only supported in class methods.
-language/expressions/object/method-definition/generator-super-prop-param.js  # UnsupportedSyntax: SyntaxError: '…' is only supported in class methods.
-language/expressions/object/method-definition/name-super-prop-body.js  # UnsupportedSyntax: SyntaxError: '…' is only supported in class methods.
-language/expressions/object/method-definition/name-super-prop-param.js  # UnsupportedSyntax: SyntaxError: '…' is only supported in class methods.
 language/expressions/optional-chaining/optional-call-preserves-this.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/expressions/postfix-decrement/S11.3.2_A2.1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/expressions/postfix-decrement/S11.3.2_A3_T5.js  # TypeError: '…' requires a data value.
@@ -2610,14 +2606,8 @@ language/expressions/super/call-expr-value.js  # TypeError: Class extends value 
 language/expressions/super/call-poisoned-underscore-proto.js  # TypeError: Extending the built-in Array is not supported. Only classes and Error types can be extend
 language/expressions/super/prop-dot-cls-null-proto.js  # TypeError: Classes extending null are not supported.
 language/expressions/super/prop-dot-cls-this-uninit.js  # TypeError: Extending the built-in Object is not supported. Only classes and Error types can be exten
-language/expressions/super/prop-dot-obj-ref-strict.js  # UnsupportedSyntax: SyntaxError: '…' is only supported in class methods.
 language/expressions/super/prop-expr-cls-null-proto.js  # TypeError: Classes extending null are not supported.
 language/expressions/super/prop-expr-cls-this-uninit.js  # TypeError: Extending the built-in Object is not supported. Only classes and Error types can be exten
-language/expressions/super/prop-expr-obj-err.js  # Expected SameValue(«SyntaxError: '…' is only supported in class methods.», «Test262Error: ») to be t
-language/expressions/super/prop-expr-obj-key-err.js  # Expected SameValue(«SyntaxError: '…' is only supported in class methods.», «Test262Error: ») to be t
-language/expressions/super/prop-expr-obj-ref-strict.js  # UnsupportedSyntax: SyntaxError: '…' is only supported in class methods.
-language/expressions/super/prop-expr-obj-unresolvable.js  # Expected SameValue(«SyntaxError», «ReferenceError») to be true
-language/expressions/super/prop-poisoned-underscore-proto.js  # UnsupportedSyntax: SyntaxError: '…' is only supported in class methods.
 language/expressions/tagged-template/constructor-invocation.js  # TypeError: The called value is not a constructor: only classes can be constructed with new. Use a cl
 language/expressions/tagged-template/template-object-frozen-strict.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/this/11.1.1-1.js  # Expected SameValue(«undefined», «undefined») to be false

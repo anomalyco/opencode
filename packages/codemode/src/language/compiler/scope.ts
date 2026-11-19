@@ -498,6 +498,8 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
           else {
             if (prop.computed) visit(prop.key)
             visit(prop.value)
+            // Object literal methods and accessors have the object as their home, for `super`.
+            if (prop.method || prop.kind !== "init") nodeToFunction.get(prop.value as FunctionExpression)!.flags |= CodeFlags.METHOD
           }
         }
         break
@@ -657,7 +659,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   for (const item of unresolved)
     if (item.node.type !== "ThisExpression") refs.set(item.node as Identifier, resolve(item))
   for (const item of unresolved) if (item.node.type === "ThisExpression") thisRefs.set(item.node, resolve(item))
-  // `super` reads the home object of the method it is in, through arrows; object literal methods have none.
+  // `super` reads the home object of the method it is in, through arrows.
   const superRefs = new Map<AnyNode, { home: ResolvedRef; self: ResolvedRef }>()
   for (const item of supers) {
     let owner = functions[item.fnIndex]!

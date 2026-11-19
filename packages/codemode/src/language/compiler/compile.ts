@@ -1119,6 +1119,12 @@ const compileFunctionBody = (
     return true
   }
 
+  // Only methods that use `super` need their home object.
+  const emitSetHome = (fn: Expression, depth: number): void => {
+    if (analysis.nodeToFunction.get(fn as FunctionExpression)?.homeDecl === undefined) return
+    builder.emit(Op.SET_HOME, depth, 0, idx(fn), 0)
+  }
+
   const compileObjectExpression = (node: ObjectExpression): void => {
     builder.emit(Op.NEW_OBJECT, 0, 0, idx(node), 1)
     for (const prop of node.properties) {
@@ -1132,12 +1138,14 @@ const compileFunctionBody = (
           builder.emit(Op.TO_KEY, 0, 0, idx(prop.key), 0)
           compileExpression(prop.value as Expression)
           builder.emit(Op.SET_NAME, setter === 0 ? 2 : 3, 0, idx(prop.value), 0)
+          emitSetHome(prop.value as Expression, 2)
           builder.emit(Op.DEFINE_ACCESSOR, 1 | setter, 0, idx(prop), -2)
         } else {
           const bigint = prop.key.type === "Literal" && typeof prop.key.value === "bigint"
           if (bigint) emitThrowError({ type: "TypeError", message: "BigInt literals are not supported." }, prop.key)
           const name = bigint ? "" : keyName(prop.key)
           compileNamedExpression(prop.value as Expression, `${prop.kind} ${name}`)
+          emitSetHome(prop.value as Expression, 1)
           builder.emit(Op.DEFINE_ACCESSOR, setter, builder.constant(name), idx(prop), -1)
         }
       } else if (prop.computed) {
@@ -1145,12 +1153,14 @@ const compileFunctionBody = (
         builder.emit(Op.TO_KEY, 0, 0, idx(prop.key), 0)
         compileExpression(prop.value as Expression)
         if (isAnonymousFunction(prop.value as Expression)) builder.emit(Op.SET_NAME, 1, 0, idx(prop.value), 0)
+        if (prop.method) emitSetHome(prop.value as Expression, 2)
         builder.emit(Op.DEFINE_FIELD, 1, 0, idx(prop), -2)
       } else {
         const bigint = prop.key.type === "Literal" && typeof prop.key.value === "bigint"
         if (bigint) emitThrowError({ type: "TypeError", message: "BigInt literals are not supported." }, prop.key)
         const name = bigint ? "" : keyName(prop.key)
         compileNamedExpression(prop.value as Expression, name)
+        if (prop.method) emitSetHome(prop.value as Expression, 1)
         builder.emit(Op.DEFINE_FIELD, 0, builder.constant(name), idx(prop), -1)
       }
     }

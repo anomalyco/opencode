@@ -258,6 +258,19 @@ describe("class inheritance", () => {
     expect(value(`const C = class { static n = this.name }; return C.n`)).toBe("C")
   })
 
+  test("super in object literal methods and accessors", () => {
+    expect(
+      value(`
+        const o = {
+          n: 1,
+          has(k) { return super.hasOwnProperty.call(this, k) },
+          get g() { return super.toString === Object.prototype.toString },
+          ["k"]() { return (() => super.hasOwnProperty("n"))() },
+        }
+        return [o.has("n"), o.has("x"), o.g, o.k()]`),
+    ).toEqual([true, false, true, true])
+  })
+
   test("arrows capture super and this", () => {
     expect(
       value(`
@@ -344,7 +357,6 @@ describe("class inheritance", () => {
     }
     expect(failure(`class A extends 1 {}`)[1]).toBe("Class extends value a number is not a constructor or null.")
     expect(failure(`function f() {}; class A extends f {}`)[0]).toBe("TypeError")
-    expect(failure(`const o = { m() { return super.x } }; o.m()`)[0]).toBe("SyntaxError")
   })
 })
 
@@ -465,10 +477,6 @@ describe("unsupported features", () => {
 
   test("decorators", async () => {
     expect(await message("class A { @dec m() {} }")).toStartWith("SyntaxError: Decorators are not supported.")
-  })
-
-  test("super in an object method", async () => {
-    expect(await message("const o = { m() { return super.x } }\nreturn o.m()")).toStartWith("SyntaxError: 'super' is only supported in class methods.")
   })
 
   test("extends null", async () => {

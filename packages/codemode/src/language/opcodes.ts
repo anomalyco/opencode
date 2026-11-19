@@ -172,6 +172,8 @@ export const Op = {
   GET_SUPER: 96,
   // `super.x = v`: `[home, this, v] -> [v]`, or `[home, this, key, v] -> [v]` when bit 1 is set.
   PUT_SUPER: 97,
+  // An object literal method that uses `super` gets the object at depth `a` as its home: `[o, .., fn]` unchanged.
+  SET_HOME: 98,
 } as const
 
 export type OpCode = (typeof Op)[keyof typeof Op]
