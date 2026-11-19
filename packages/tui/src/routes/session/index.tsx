@@ -1547,6 +1547,8 @@ export function Session(props: {
                 }}
                 stickyScroll={!navigationMessage() && !navigationSlack()}
                 stickyStart="bottom"
+                // Rows never grow or shrink, so a change to one row lays out only that row.
+                contentOptions={{ layoutMode: "list" }}
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
@@ -2114,16 +2116,23 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const [hover, setHover] = createSignal(false)
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
-  const completion = () => source() === "subagent" || source() === "shell"
+  const completion = () => source() === "subagent" || source() === "shell" || source() === "codemode"
   const childID = () => (source() === "subagent" ? stringValue(metadata()?.childID) : undefined)
   const state = () => stringValue(metadata()?.state)
-  const actor = () => (source() === "shell" ? "Shell" : Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent"))
+  const actor = () => {
+    if (source() === "shell") return "Shell"
+    if (source() === "codemode") return "Script"
+    return Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent")
+  }
   const text = () => {
     if (props.message.type === "system") return props.message.description ?? "Instructions updated"
     if (props.message.type === "synthetic") return props.message.description ?? ""
     return ""
   }
-  const description = () => (source() === "shell" ? text().replace(/\s+/g, " ").trim() : text())
+  const description = () => {
+    if (source() === "codemode") return stringValue(metadata()?.jobID) ?? ""
+    return source() === "shell" ? text().replace(/\s+/g, " ").trim() : text()
+  }
   const status = () => {
     if (state() === "completed") return "finished"
     if (state() === "error") return "failed"
@@ -2228,9 +2237,8 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
           <markdown
             ref={useSessionLinks()}
             syntaxStyle={syntax()}
-            renderNode={plugins.markdown()}
-            streaming={true}
-            internalBlockMode="top-level"
+            renderBlock={plugins.markdown()}
+            streaming={status() === "running"}
             content={content()}
             tableOptions={{ style: "grid", cellPaddingX: 1 }}
             conceal={ctx.markdownMode() === "rendered"}
@@ -3253,7 +3261,7 @@ function Read(props: ToolProps) {
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.text.muted}>
+            <text fg={theme.text.muted}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>
           </box>
@@ -3448,7 +3456,7 @@ function Execute(props: ToolProps) {
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
-              <text paddingLeft={3} fg={theme.text.feedback.error.base}>
+              <text fg={theme.text.feedback.error.base}>
                 {index() === 0 ? "↳ " : "  "}
                 {line}
               </text>

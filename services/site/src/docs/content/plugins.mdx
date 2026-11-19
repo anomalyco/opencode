@@ -107,6 +107,9 @@ opencode plugin remove opencode-acme-plugin@1.2.0
 pass a configured package target to check or update only that package. Local plugins and exact package revisions are
 skipped.
 
+A package written as `name@latest` updates itself: OpenCode checks it on startup and every 24 hours, installs a newer
+version, and reloads it. If the new version fails to load, the previous one keeps running and stays installed.
+
 Package installation accepts npm names with versions, tags, or ranges, plus npm-compatible Git package specifications.
 Git repositories can use hosted shortcuts, HTTPS, or SSH, including private repositories available through your existing
 Git credentials.

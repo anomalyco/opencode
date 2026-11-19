@@ -10,7 +10,8 @@ const integrationID = Integration.ID.make("openai")
 const methodIDs = new Set(["chatgpt-browser", "chatgpt-headless", "chatgpt-token-sharing"])
 
 // The backend accepts each model's full input window, but larger requests use more of the ChatGPT plan. OpenAI's
-// default windows for ChatGPT plans are 272k, and 500k for gpt-6.1-sol; later models are assumed to keep 500k.
+// default windows for ChatGPT plans are 272k, and 500k from gpt-6.1 on; later models are assumed to keep 500k. Astra
+// models stay at 272k in every version.
 const legacyInput = 272_000
 const currentInput = 500_000
 
@@ -44,6 +45,7 @@ export const OpenAIContextCapsPlugin = define({
 function cap(apiID: string) {
   const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
   if (!match) return currentInput
+  if (apiID.includes("-astra")) return legacyInput
   const major = Number(match[1])
   const minor = Number(match[2] ?? 0)
   return major > 6 || (major === 6 && minor >= 1) ? currentInput : legacyInput

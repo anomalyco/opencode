@@ -11,9 +11,15 @@ import {
   Throw,
 } from "../runtime/model.js"
 import {
+  accessorFunction,
+  accessorHalf,
   Arguments,
   Arr,
   BoundFn,
+  Callable,
+  type Getter,
+  isProgramAccessor,
+  type Setter,
   Bytes,
   changed,
   DateObj,
@@ -37,7 +43,7 @@ import {
   WeakMapObj,
   WeakSetObj,
 } from "../runtime/objects.js"
-import { Convert, Interruption, Invoke } from "../runtime/signals.js"
+import { Convert, Interruption, Invoke, Prefetch } from "../runtime/signals.js"
 import { deleted, OrderedTable } from "../runtime/table.js"
 import { AsyncFromSyncIterator } from "../generators.js"
 import { HostCall, Resolving } from "../scheduler.js"
@@ -315,6 +321,7 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
   { name: "Throw", ctor: Throw, fields: ["value"] },
   { name: "PendingThrow", ctor: PendingThrow, fields: ["type", "message", "kind", "suggestions", "node", "value"] },
   { name: "Convert", ctor: Convert, fields: ["hints", "values", "ordinal", "coerce"] },
+  { name: "Prefetch", ctor: Prefetch, fields: ["reads"] },
   { name: "Invoke", ctor: Invoke, fields: ["callable", "thisValue", "args", "site"] },
   { name: "HostNamespace", ctor: HostNamespace, fields: ["root", "path"] },
   { name: "Lost", ctor: Lost, fields: ["description"] },
@@ -571,7 +578,7 @@ class Encoder {
       for (const key of Object.keys(object)) {
         if (fields.includes(key) || spec.skip?.includes(key) || (spec.constants !== undefined && key in spec.constants))
           continue
-        if (spec.obj && (objFields.includes(key) || key === "tag")) continue
+        if (spec.obj && (objFields.includes(key) || key === "tag" || key === "hasProgramAccessors")) continue
         throw new SnapshotError(`Codec gap: ${spec.name}.${key} is not saved.`)
       }
     }
@@ -588,9 +595,24 @@ class Encoder {
           this.value(slot.value),
           (slot.writable ? 1 : 0) | (slot.enumerable ? 2 : 0) | (slot.configurable ? 4 : 0),
         )
-      } else props.push(null, 8 | (slot.enumerable ? 2 : 0) | (slot.configurable ? 4 : 0))
+      } else {
+        props.push(
+          [this.accessorHalf(slot.get, key), this.accessorHalf(slot.set, key)],
+          8 | (slot.enumerable ? 2 : 0) | (slot.configurable ? 4 : 0),
+        )
+      }
     }
     return { f: values, p: object.proto === null ? null : this.value(object.proto), x: object.extensible, o: props }
+  }
+
+  // An accessor half: a program function as itself, a native one as its companion (a named intrinsic).
+  private accessorHalf(half: Getter | Setter | Callable | undefined, key: string | symbol): Encoded {
+    const fn = accessorFunction(half)
+    if (half !== undefined && fn === undefined) {
+      this.lose(`the native accessor ${String(key)}`)
+      return this.value(undefined)
+    }
+    return this.value(fn)
   }
 
   private error(error: Error): Record {
@@ -919,7 +941,7 @@ class Decoder {
     return root
   }
 
-  // An object's prototype, extensibility, and properties. A named object's accessors stay the ones it was made with.
+  // An object's prototype, extensibility, and properties. A native accessor half comes back as its companion's closure.
   private fillObj(target: Obj, record: { readonly [field: string]: unknown }): void {
     const proto = record.p === null ? null : this.value(record.p)
     if (proto !== null && !(proto instanceof Obj)) invalid("a prototype is not an object.")
@@ -934,10 +956,19 @@ class Decoder {
       const enumerable = (flags & 2) !== 0
       const configurable = (flags & 4) !== 0
       if ((flags & 8) !== 0) {
-        const original = target.props?.get(key as string | symbol)
-        if (original === undefined || "value" in original) invalid(`the accessor ${String(key)} has no original.`)
-        const accessor = original as Extract<Slot, { get: unknown }>
-        props.set(key as string | symbol, { get: accessor.get, set: accessor.set, enumerable, configurable })
+        const halves = list(entries[at + 1], "an accessor's halves")
+        if (halves.length !== 2) invalid(`the accessor ${String(key)} does not have two halves.`)
+        const half = (data: unknown) => {
+          const fn = this.value(data)
+          if (fn !== undefined && !(fn instanceof Callable)) invalid(`the accessor ${String(key)} is not a function.`)
+          return accessorHalf(fn as Callable | undefined)
+        }
+        props.set(key as string | symbol, {
+          get: half(halves[0]) as Getter | Callable | undefined,
+          set: half(halves[1]) as Setter | Callable | undefined,
+          enumerable,
+          configurable,
+        })
         continue
       }
       props.set(key as string | symbol, {
@@ -952,9 +983,11 @@ class Decoder {
       proto: Obj | null
       extensible: boolean
       intrinsic: number
+      hasProgramAccessors: boolean
     }
     writable.intrinsic ??= 0
     writable.props = props
+    writable.hasProgramAccessors = [...props.values()].some(isProgramAccessor)
     writable.extensible = record.x as boolean
     writable.proto = proto as Obj | null
   }

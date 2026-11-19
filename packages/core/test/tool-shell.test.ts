@@ -146,6 +146,7 @@ const shellPluginSupervisor = makeLocationNode({
     Permission.node,
     Session.node,
     Job.node,
+    Location.node,
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,
@@ -177,13 +178,16 @@ const replacements = [
   ...daemonReplacements,
   PersistentPty.node.replace(disabledPersistentPtyLayer),
 ] satisfies LayerNode.Replacements
-const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
+const noFlagOverrides = Layer.succeed(Flag.Overrides, undefined)
+const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements).pipe(Layer.provide(noFlagOverrides)))
 const shellLayer = AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)])
-const it = testEffect(shellLayer)
+const it = testEffect(shellLayer.pipe(Layer.provideMerge(noFlagOverrides)))
 const codeModeIt = testEffect(shellLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 // On the real process daemon (when its binary is compatible; otherwise this falls back to spawning).
 const daemonIt = testEffect(
-  AppNodeBuilder.build(nodes, [...daemonReplacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
+  AppNodeBuilder.build(nodes, [...daemonReplacements, PluginSupervisor.node.replace(shellPluginSupervisor)]).pipe(
+    Layer.provide(noFlagOverrides),
+  ),
 )
 const parity = {
   live: (name: string, body: Parameters<typeof it.live>[1], options?: Parameters<typeof it.live>[2]) => {
@@ -213,7 +217,7 @@ const fakeDaemonIt = testEffect(
         deps: [Bus.node, Global.node],
       }),
     ),
-  ]),
+  ]).pipe(Layer.provide(noFlagOverrides)),
 )
 const permissionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, PermissionSaved.node]), [
@@ -222,7 +226,7 @@ const permissionIt = testEffect(
     PluginSupervisor.node.replace(shellPluginSupervisor),
     PersistentPty.node.replace(disabledPersistentPtyLayer),
     offlineModels,
-  ]),
+  ]).pipe(Layer.provide(noFlagOverrides)),
 )
 
 const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
@@ -1307,6 +1311,7 @@ describe("ShellTool", () => {
             Permission.node,
             Session.node,
             Job.node,
+            Location.node,
             Shell.node,
             Shell.daemonNode,
             ShellSelect.node,
@@ -2294,6 +2299,42 @@ describe("ShellTool stopped", () => {
     }),
   )
 
+  // Resolving a working directory can be slow (an external one in a cold remote workspace); here it never finishes.
+  const resolving = Deferred.makeUnsafe<void>()
+  const stuckResolveIt = testEffect(
+    AppNodeBuilder.build(nodes, [
+      ...replacements,
+      PluginSupervisor.node.replace(shellPluginSupervisor),
+      FileAccess.node.replace(
+        Layer.mock(FileAccess.Service, {
+          resolve: () => Deferred.succeed(resolving, undefined).pipe(Effect.andThen(Effect.never)),
+        }),
+      ),
+    ]).pipe(Layer.provide(noFlagOverrides)),
+  )
+
+  stuckResolveIt.live("ends a call the user stopped while its working directory resolved, without starting it", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const cancel = yield* Deferred.make<void>()
+          const fiber = yield* executeTool(registry, {
+            ...call({ command: "echo started > started" }, "call-stop-resolving"),
+            cancel: Deferred.await(cancel),
+          }).pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Deferred.await(resolving)
+          yield* Deferred.succeed(cancel, undefined)
+          const result = yield* Fiber.join(fiber)
+          expect(result.error?.message).toContain("Command interrupted by the user before it started.")
+          expect(yield* shell.list()).toEqual([])
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "started")).exists())).toBe(false)
+        }),
+      )
+    }),
+  )
+
   parity.live("says once that a stopped command wrote nothing", () =>
     withTempDir((tmp) => {
       reset()
@@ -2302,7 +2343,8 @@ describe("ShellTool stopped", () => {
           const shell = yield* Shell.Service
           const { shellID, result } = yield* stopCall(registry, idleCommand, "call-silent", "cancel", false)
           const info = yield* shell.get(shellID)
-          expect(result?.error?.message).toBe(
+          // The call settles after a bounded wait for the kill, which a loaded Windows runner can outlast.
+          expect(result?.error?.message?.replace("; it is still being stopped", "")).toBe(
             `[no output; output file: ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}).`,
           )
         }),

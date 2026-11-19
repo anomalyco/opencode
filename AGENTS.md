@@ -182,7 +182,7 @@ const table = sqliteTable("session", {
 
 - When you open a PR, decide whether the change needs a flag: new user-visible behavior, risky core changes, and anything not ready to release get one; fixes, refactors, docs and tests do not.
 - Gate risky behavior, or behavior that lands over several PRs, with a key and a description in `packages/schema/src/config/flag.ts`, and read it with `Flag.enabled("<key>")` from `@opencode/core/flag`.
-- Flags default to on in local and dev builds and off in releases, except `optInOnly` flags (such as `full_codemode`), which require an explicit `OPENCODE_FLAGS=<key>` or `experimental.<key>: true` in every build.
+- Flags default to on in local and dev builds and off in releases, except `optInOnly` flags (such as `todo`), which require an explicit `OPENCODE_FLAGS=<key>` or `experimental.<key>: true` in every build.
 - Say in the PR body which flag guards the change. The reserved switches `OPENCODE_FLAGS=all` and `experimental.all_flags: true` skip opt-in-only flags; use `all,-<key>` or `experimental.<key>: false` to opt out within the respective source.
 - Ship a feature by deleting its flag and the checks that read it.
 

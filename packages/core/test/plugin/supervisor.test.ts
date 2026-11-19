@@ -50,6 +50,9 @@ const sourceLayer = Layer.succeed(
   }),
 )
 
+// Package checks report `available`; updates are recorded instead of installed.
+const packages = { available: false, updated: [] as string[] }
+
 const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
@@ -75,15 +78,21 @@ const instances = Layer.effect(
                 }),
               ),
             resolve: (name) => Effect.succeed({ directory: "", name }),
-            check: () => Effect.succeed(false),
+            check: () => Effect.succeed(packages.available),
             update: (pkg) =>
-              Effect.fail(
-                new Npm.InstallFailedError({
-                  add: [pkg],
-                  dir: "",
-                  cause: new Error(`Unexpected Npm.update(${pkg})`),
-                }),
-              ),
+              packages.available
+                ? Effect.sync(() => {
+                    packages.updated.push(pkg)
+                    return { directory: "", name: pkg }
+                  })
+                : Effect.fail(
+                    new Npm.InstallFailedError({
+                      add: [pkg],
+                      dir: "",
+                      cause: new Error(`Unexpected Npm.update(${pkg})`),
+                    }),
+                  ),
+            reject: () => Effect.succeed(false),
             which: () => Effect.undefined,
           }),
         ),
@@ -189,6 +198,32 @@ describe("PluginSupervisor", () => {
         Effect.scoped,
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
       )
+    }),
+  )
+
+  it.effect("updates only packages written as name@latest when a newer version is out", () =>
+    Effect.gen(function* () {
+      source.operations = ["latest-plugin@latest", "plain-plugin", "ranged-plugin@^1.0.0", "next-plugin@next"].map(
+        (target) => ({ type: "add" as const, target, options: {} }),
+      )
+      packages.available = true
+      packages.updated = []
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        yield* Plugin.Service
+        yield* advance(() => packages.updated.length > 0)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        Effect.ensuring(
+          Effect.sync(() => {
+            source.operations = []
+            packages.available = false
+          }),
+        ),
+      )
+      expect(packages.updated).toEqual(["latest-plugin@latest"])
     }),
   )
 

@@ -1,4 +1,4 @@
-import { isSupportedCallback, requireCallback } from "../runtime/callback.js"
+import { isSupportedCallback, requireCallback, withReads } from "../runtime/callback.js"
 import type { Builtins } from "../runtime/intrinsics.js"
 import { SORT_RUN, sorted, type SortInto } from "../stdlib/array.js"
 import { finishBytes } from "../stdlib/bytes.js"
@@ -6,7 +6,7 @@ import { weakKey } from "../stdlib/collections.js"
 import { buildPairs } from "../stdlib/url.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 import { checkArrayLength } from "../runtime/limits.js"
-import { invalidData, IteratorSymbol, PendingThrow } from "../runtime/model.js"
+import { AsyncIteratorSymbol, invalidData, IteratorSymbol, PendingThrow } from "../runtime/model.js"
 import { native, receiver } from "../runtime/native.js"
 import {
   Arr,
@@ -18,6 +18,8 @@ import {
   hasPrototype,
   keys,
   getOwn,
+  own,
+  ownKeys,
   IteratorObj,
   positionIterator,
   coerceToNumber,
@@ -74,23 +76,52 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
     /** Whether `for...of` can iterate `value`. */
     $IsIterable: [
       1,
-      ([value]) => {
-        if (builtinCursor(builtins, value) !== undefined) return true
-        if (!(value instanceof Obj)) return false
-        const method = get(value, IteratorSymbol)
-        return method !== undefined && method !== null
-      },
+      ([value]) =>
+        withReads(() => {
+          if (builtinCursor(builtins, value) !== undefined) return true
+          if (!(value instanceof Obj)) return false
+          const method = get(value, IteratorSymbol)
+          return method !== undefined && method !== null
+        }),
     ],
     $Describe: [1, ([value]) => describeValue(value)],
     $Inherits: [2, ([value, proto]) => hasPrototype(value, proto as Obj)],
     /** An object's own enumerable string keys. */
     $Keys: [1, ([value]) => new Arr(builtins.Array, keys(value as Obj))],
+    /**
+     * An object's own keys as the copying built-ins visit them: strings and the iterator symbols, or only strings, less
+     * `excluded` (canonical keys). Each is checked for enumerability when it is visited (`$IsEnumerableOwn`).
+     */
+    $OwnKeys: [
+      3,
+      ([value, strings, excluded]) => {
+        const skip = excluded instanceof Arr ? new Set(excluded.items) : undefined
+        return new Arr(
+          builtins.Array,
+          ownKeys(value as Obj).filter(
+            (key) =>
+              (typeof key === "string" ||
+                (strings !== true && (key === IteratorSymbol || key === AsyncIteratorSymbol))) &&
+              skip?.has(key) !== true,
+          ),
+        )
+      },
+    ],
+    $IsEnumerableOwn: [2, ([value, key]) => own(value as Obj, key as string)?.enumerable === true],
     /** Defines an own data property, enumerable or hidden, and returns the object. */
     $Define: [
       4,
       ([target, key, value, enumerable]) => {
         define(target as Obj, key as string, value, enumerable === true ? data : hidden)
         return target
+      },
+    ],
+    /** Writes an element of a prelude-made array without going through the prototype chain. */
+    $ArraySet: [
+      3,
+      ([array, index, value]) => {
+        ;(array as Arr).items[index as number] = value
+        return value
       },
     ],
     $SumPrecise: [1, ([numbers]) => Math.sumPrecise((numbers as Arr).items as Array<number>)],
@@ -107,7 +138,7 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
     $Pairs: [
       4,
       ([kind, proto, value, label]) =>
-        buildPairs({ kind: kind as "Headers", proto: proto as Obj }, value, String(label)),
+        withReads(() => buildPairs({ kind: kind as "Headers", proto: proto as Obj }, value, String(label))),
     ],
     $IsCallable: [1, ([value]) => isSupportedCallback(value)],
     /**
@@ -121,11 +152,14 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
           ? positionIterator(builtins, value, "values")
           : value instanceof IteratorObj
             ? value
-            : new IteratorObj(builtins.Iterator, {
-                iterator: requireIteratorObject(value, "An iterator"),
-                next: get(value as Obj, "next"),
-                asynchronous: false,
-              }),
+            : withReads(
+                () =>
+                  new IteratorObj(builtins.Iterator, {
+                    iterator: requireIteratorObject(value, "An iterator"),
+                    next: get(value as Obj, "next"),
+                    asynchronous: false,
+                  }),
+              ),
     ],
     /** A sort's result written where it goes (see `sortWith`): the defined values in order, then `undefs` undefined. */
     $Sorted: [

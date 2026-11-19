@@ -347,14 +347,26 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) =>
       pluralForm(key, pluralCategory(intl(), count), { ...params, count })
 
-    // "2 subagents · 1 shell", or one group alone, as the iOS app's background-work capsule reads.
-    const activitySummary = (counts: { subagents: number; shells: number }) => {
-      const subagents = counts.subagents ? plural("session.activity.subagents", counts.subagents) : undefined
-      const shells = counts.shells ? plural("session.activity.shells", counts.shells) : undefined
+    // "2 subagents · 1 script · 1 shell", or one group alone, as the iOS app's background-work capsule reads.
+    const activityGroups = (counts: { subagents: number; scripts?: number; shells: number }) =>
+      [
+        counts.subagents ? plural("session.activity.subagents", counts.subagents) : undefined,
+        counts.scripts ? plural("session.activity.scripts", counts.scripts) : undefined,
+        counts.shells ? plural("session.activity.shells", counts.shells) : undefined,
+      ].filter((group) => group !== undefined)
 
-      if (subagents && shells) return t("session.activity.summary", { subagents, shells })
+    const activitySummary = (counts: { subagents: number; scripts?: number; shells: number }) =>
+      activityGroups(counts).reduceRight(
+        (rest, group) => (rest ? t("session.activity.summary", { subagents: group, shells: rest }) : group),
+        "",
+      )
 
-      return subagents ?? shells ?? ""
+    // "Background work · 1 shell": an idle subagent whose tree still runs work.
+    const activityBackground = (counts: { subagents: number; scripts: number; shells: number }) => {
+      const work = activitySummary(counts)
+      const label = t("session.activity.background")
+
+      return work ? t("session.activity.summary", { subagents: label, shells: work }) : label
     }
 
     const tDynamic = <Key extends Extract<keyof Dictionary, string>>(
@@ -374,16 +386,14 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     }
 
     const activitySummaryRich = (
-      counts: { subagents: number; shells: number },
+      counts: { subagents: number; scripts?: number; shells: number },
       render: (label: string) => JSX.Element,
-    ) => {
-      if (!counts.subagents || !counts.shells) return render(activitySummary(counts))
-
-      return rich("session.activity.summary", {
-        subagents: render(activitySummary({ subagents: counts.subagents, shells: 0 })),
-        shells: render(activitySummary({ subagents: 0, shells: counts.shells })),
-      })
-    }
+    ): JSX.Element =>
+      activityGroups(counts).reduceRight<JSX.Element | undefined>(
+        (rest, group) =>
+          rest ? rich("session.activity.summary", { subagents: render(group), shells: rest }) : render(group),
+        undefined,
+      ) ?? render("")
 
     const list = (items: readonly JSX.Element[]) => localizedListParts(intl(), items)
 
@@ -433,6 +443,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       pluralForm,
       activitySummary,
       activitySummaryRich,
+      activityBackground,
       rich,
       list,
       setLocale(next: Locale) {

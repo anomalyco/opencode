@@ -69,6 +69,7 @@ const pluginSupervisor = makeLocationNode({
     FileAccess.node,
     Flag.node,
     Job.node,
+    Location.node,
     Model.node,
     Permission.node,
     PluginHooks.node,
@@ -95,6 +96,7 @@ const nodes = LayerNode.group([
 const modelLayer = Layer.succeed(
   SessionRunnerModel.Service,
   SessionRunnerModel.Service.of({
+    select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
     resolve: (_session, _available, request) =>
       Effect.succeed(
         SessionRunnerModel.resolved(

@@ -13,6 +13,7 @@ import { Environment } from "../../environment/index.js"
 import { Flag } from "../../flag.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
+import { Location } from "../../location.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
@@ -300,8 +301,8 @@ export const Plugin = {
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Context) {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
-    const environment = yield* Environment.Service
     const access = yield* FileAccess.Service
+    const location = yield* Location.Service
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
@@ -311,8 +312,16 @@ export const Plugin = {
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
 
-    const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
-      const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
+    const prepare = Effect.fn("ShellTool.prepare")(function* (
+      invocation: ShellCreateBefore,
+      context: Tool.Context,
+      requested: { readonly cwd: string; readonly target: FileAccess.Target },
+    ) {
+      // Resolved before the hooks ran; only a hook that moved the working directory needs it resolved again.
+      const target =
+        invocation.cwd === requested.cwd
+          ? requested.target
+          : yield* access.resolve({ path: invocation.cwd, kind: "directory" })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
       const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
@@ -331,7 +340,7 @@ export const Plugin = {
           ...Permission.invocation(context),
         })
       // Approval can outlive the directory, so validate immediately before spawning.
-      const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
+      const workdir = yield* Environment.typeFollowing(target.environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () =>
           Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
         ),
@@ -373,21 +382,27 @@ export const Plugin = {
     })
 
     yield* ctx.tool
-      .transform((editor) => {
-        const codeMode = flags.resolve(loaded.entries).full_codemode.enabled
+      .transform((editor) =>
         editor.add({
           name,
-          // With full_codemode, shell is called as `tools.shell` inside `execute` instead of as a direct tool, and is
-          // pinned so the Code Mode catalog always lists it, however many other tools there are.
-          options: codeMode ? { codemode: true, pinned: true } : { codemode: false },
-          description: description(undefined, codeMode),
-          input: codeMode ? CodeModeInput : Input,
+          // With full_codemode, shell is allowed in Code Mode and pinned so the catalog always lists it.
+          options: flags.resolve(loaded.entries).full_codemode.enabled
+            ? {
+                codemode: {
+                  pinned: true,
+                  description: description(undefined, true),
+                  input: CodeModeInput,
+                },
+              }
+            : { codemode: false },
+          description: description(),
+          input: Input,
           output: StructuredOutput,
           execute: (input, context) => {
             // Code Mode input has no background parameter.
             const background = "background" in input && input.background === true
             // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
-            const foreground = input.timeout || (codeMode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
+            const foreground = input.timeout || (context.codemode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
             const timeout = background ? (input.timeout ?? 0) : foreground
             let finalTimeout = timeout
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
@@ -403,11 +418,25 @@ export const Plugin = {
                       Effect.forkChild({ startImmediately: true }),
                     )
                   : undefined
+                // Raced against the slow work that precedes the command, so a stop then ends the call at once.
+                const stoppedBeforeStart = Deferred.await(stopped).pipe(
+                  Effect.andThen(
+                    Effect.fail(new ToolFailure({ message: "Command interrupted by the user before it started." })),
+                  ),
+                )
                 return yield* Effect.gen(function* () {
+                  // The same default `Shell.create` gives the hooks, so `prepare` can tell whether one moved it.
+                  const cwd = input.workdir ?? location.directory
+                  const target = yield* restore(
+                    Effect.raceFirst(access.resolve({ path: cwd, kind: "directory" }), stoppedBeforeStart),
+                  )
                   const info = yield* shell.create(
                     {
                       command: input.command,
-                      cwd: input.workdir,
+                      cwd,
+                      // The environment a command runs in is settled from the requested working directory, before
+                      // hooks run. A hook may move the directory; today that cannot change the environment.
+                      environment: target.environment,
                       timeout,
                       shell: yield* compatibleShell,
                       metadata: { sessionID: context.sessionID },
@@ -426,16 +455,7 @@ export const Plugin = {
                         invocation.env.OPENCODE_SESSION_ID = context.sessionID
                         // Asking for permission can take a while; a stop then ends the call before any command starts.
                         finalTimeout = yield* restore(
-                          Effect.raceFirst(
-                            prepare(invocation, context),
-                            Deferred.await(stopped).pipe(
-                              Effect.andThen(
-                                Effect.fail(
-                                  new ToolFailure({ message: "Command interrupted by the user before it started." }),
-                                ),
-                              ),
-                            ),
-                          ),
+                          Effect.raceFirst(prepare(invocation, context, { cwd, target }), stoppedBeforeStart),
                         )
                         // A foreground timeout moves the command to the background instead of stopping it.
                         if (!background) invocation.timeout = 0
@@ -514,8 +534,8 @@ export const Plugin = {
               Effect.mapError(toolFailure(`Unable to execute command: ${input.command}`)),
             )
           },
-        })
-      })
+        }),
+      )
       .pipe(Effect.orDie)
 
     const hook = (event: SessionHooks["context"]) =>

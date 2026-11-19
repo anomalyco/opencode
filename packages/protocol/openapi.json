@@ -10355,6 +10355,7 @@
                     "shell.created",
                     "shell.exited",
                     "shell.deleted",
+                    "experimental.job.updated",
                     "form.created",
                     "form.replied",
                     "form.cancelled",
@@ -10466,6 +10467,7 @@
                           "shell.created",
                           "shell.exited",
                           "shell.deleted",
+                          "experimental.job.updated",
                           "form.created",
                           "form.replied",
                           "form.cancelled",
@@ -13746,6 +13748,50 @@
         },
         "description": "List active and unconsumed background jobs, optionally filtered by owning session, descendants, or kind. Experimental: may change without compatibility guarantees.",
         "summary": "List background jobs"
+      }
+    },
+    "/api/experimental/job/{id}/cancel": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.job.cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel a running background job, interrupting the work it started. Cancelling a job that already finished does nothing. Experimental: may change without compatibility guarantees.",
+        "summary": "Cancel background job"
       }
     },
     "/api/shell": {
@@ -17335,7 +17381,44 @@
                 "type": "boolean"
               },
               "video_generate": {
-                "type": "boolean"
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string",
+                                "pattern": "^[^/#]+$"
+                              },
+                              "model": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              }
+                            },
+                            "required": ["providerID", "model"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
               },
               "console_watches": {
                 "type": "boolean"
@@ -19913,7 +19996,7 @@
       "Generate.VideoErrorReason": {
         "type": "string",
         "enum": ["failed", "cancelled", "expired", "unknown"],
-        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time, or the server stopped while submitting the job"
+        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time"
       },
       "Generate.VideoID": {
         "type": "string",
@@ -20879,13 +20962,16 @@
             "$ref": "#/components/schemas/Job.Image"
           },
           {
+            "$ref": "#/components/schemas/Job.Video"
+          },
+          {
             "$ref": "#/components/schemas/Job.CodeMode"
           }
         ]
       },
       "Job.Kind": {
         "type": "string",
-        "enum": ["shell", "subagent", "image", "codemode"]
+        "enum": ["shell", "subagent", "image", "video", "codemode"]
       },
       "Job.Shell": {
         "type": "object",
@@ -20970,6 +21056,35 @@
           }
         },
         "required": ["started"],
+        "additionalProperties": false
+      },
+      "Job.Video": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["video"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "path"],
         "additionalProperties": false
       },
       "Location.PublicInfo": {
@@ -26035,6 +26150,9 @@
             "$ref": "#/components/schemas/shell.deleted"
           },
           {
+            "$ref": "#/components/schemas/experimental.job.updated"
+          },
+          {
             "$ref": "#/components/schemas/form.created"
           },
           {
@@ -26808,6 +26926,39 @@
               }
             },
             "required": ["integrationID", "credentialID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.job.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.job.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/Job.Info"
+              }
+            },
+            "required": ["info"],
             "additionalProperties": false
           }
         },

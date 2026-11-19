@@ -65,7 +65,9 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     const videoCreate = Effect.fn("server.generate.video.create")(
       function* (request: { readonly payload: VideoRequest }) {
         yield* videoEnabled
-        return { data: yield* videos.start(request.payload).pipe(Effect.mapError(generateError)) }
+        return {
+          data: yield* videos.start(Generate.videoInput(request.payload)).pipe(Effect.mapError(generateError)),
+        }
       },
       Effect.provide(services),
       locationErrors,

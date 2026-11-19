@@ -110,7 +110,7 @@ const call = (input: typeof WriteTool.Input.Type, id = "call-write") => ({
   call: { type: "tool-call" as const, id, name: "write", input },
 })
 
-const it = testEffect(Layer.empty)
+const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
 
 describe("WriteTool", () => {
   it.live("registers and creates a relative file through FileMutation once", () =>

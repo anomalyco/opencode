@@ -1,6 +1,11 @@
 .manage-models-search {
   flex-shrink: 0;
-  padding: 0 6px 8px;
+  padding: 0 8px 8px;
+}
+
+/* Reaches the dialog edges past the 8px inset, as in the integrations dialog. */
+.manage-models-search.search-dialog-search::after {
+  margin-inline: -8px;
 }
 
 .settings-manage-models-dialog .settings-panel.settings-models {

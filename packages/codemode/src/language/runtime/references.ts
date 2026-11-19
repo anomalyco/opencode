@@ -1,10 +1,22 @@
 import { invalidData } from "./model.js"
-import { Callable, getOwn, HostNamespace, isRuntimeReference, Obj, Opaque, ownKeys, type Value } from "./objects.js"
+import {
+  Callable,
+  getOwn,
+  HostNamespace,
+  isProgramAccessor,
+  isRuntimeReference,
+  Obj,
+  Opaque,
+  own,
+  ownKeys,
+  type Value,
+} from "./objects.js"
 
 /** Interpreter machinery that is never data, unlike a Date or Map, which cross some boundaries as copies. */
 export const isOpaque = (value: Value): boolean => value instanceof Opaque || value instanceof HostNamespace
 
-// Depth-first search over a value tree. `match` stops the walk; `skip` prunes a subtree without matching it.
+// Depth-first search over a value tree. `match` stops the walk; `skip` prunes a subtree without matching it. A
+// structural check, so it never runs program code: program accessors are left out.
 const find = (
   value: Value,
   match: (current: Value) => boolean,
@@ -22,11 +34,10 @@ const find = (
     if (match(current)) return true
     if (!(current instanceof Obj) || skip(current) || seen.has(current)) continue
     seen.add(current)
-    pending.push(
-      ownKeys(current)
-        .map((key) => getOwn(current, key))
-        .values(),
-    )
+    const keys = current.hasProgramAccessors
+      ? ownKeys(current).filter((key) => !isProgramAccessor(own(current, key)!))
+      : ownKeys(current)
+    pending.push(keys.map((key) => getOwn(current, key)).values())
   }
   return false
 }
@@ -45,10 +56,13 @@ export const rejectCircularInsertion = (
   label: string,
   seen = new Set<object>(),
 ): void => {
-  if (find(value, (current) => current === container, isRuntimeReference, seen)) {
-    throw invalidData(`${label} contains a circular value.`)
-  }
+  if (hasCircularReference(container, value, seen)) throw circularValue(label)
 }
+
+export const hasCircularReference = (container: Obj, value: Value, seen = new Set<object>()): boolean =>
+  find(value, (current) => current === container, isRuntimeReference, seen)
+
+export const circularValue = (label: string) => invalidData(`${label} contains a circular value.`)
 
 export const describeValue = (value: Value): string => {
   if (value === null || value === undefined) return String(value)

@@ -145,6 +145,9 @@ export const Op = {
 
   // Program (1)
   END_PROGRAM: 87,
+
+  // Literals, added later: `get x() {}` / `set x(v) {}` (a bit 0: computed key; bit 1: setter)
+  DEFINE_ACCESSOR: 88,
 } as const
 
 export type OpCode = (typeof Op)[keyof typeof Op]

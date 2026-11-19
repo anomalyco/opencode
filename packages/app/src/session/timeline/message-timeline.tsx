@@ -40,8 +40,7 @@ import {
 import { SessionHeaderSpacer } from "@/session/header/session-header"
 import { SessionHeaderGap } from "@/session/header/drag-area"
 import { SessionWorkingIndicator } from "@/session/header/session-working-indicator"
-
-type BlockingTask = { type: "shell"; partID: string; id?: string; label?: string; started: number }
+import type { BlockingTask } from "@/session/requests/background"
 
 type SessionBackground = {
   blocking: Accessor<BlockingTask[]>

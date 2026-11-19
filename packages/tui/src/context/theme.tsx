@@ -189,6 +189,18 @@ const themeContext = createSimpleContext({
     let probing = false
     let queued = false
     let disposed = false
+    // OpenTUI emits palette for each query result and again for a reply that arrives after its query ended.
+    const handlePalette = (colors: TerminalColors) => {
+      if (disposed || !usablePalette(colors)) return
+      palette = colors
+      const mode = store.lock ?? terminalMode(colors) ?? store.mode
+      if (store.mode !== mode) setStore("mode", mode)
+      applyPalette()
+      void cache?.[1]((draft) => {
+        draft.colors = colors
+      }).catch(() => {})
+    }
+    renderer.on(CliRenderEvents.PALETTE, handlePalette)
     function refreshPalette() {
       if (store.active !== "system") return
       queued = true
@@ -201,16 +213,7 @@ const themeContext = createSimpleContext({
       renderer.clearPaletteCache()
       void renderer
         .getPalette({ size: 16 })
-        .then((colors) => {
-          if (disposed || !usablePalette(colors)) return
-          palette = colors
-          const mode = store.lock ?? terminalMode(colors) ?? store.mode
-          if (store.mode !== mode) setStore("mode", mode)
-          applyPalette()
-          void cache?.[1]((draft) => {
-            draft.colors = colors
-          }).catch(() => {})
-        })
+        .then(handlePalette)
         .catch(() => {})
         .finally(() => {
           probing = false
@@ -282,6 +285,7 @@ const themeContext = createSimpleContext({
     onCleanup(() => {
       disposed = true
       renderer.off(CliRenderEvents.THEME_MODE, handleMode)
+      renderer.off(CliRenderEvents.PALETTE, handlePalette)
       renderer.removeInputHandler(handleThemeNotification)
       unsubscribeRefresh?.()
       for (const timeout of themeRefreshTimeouts) clearTimeout(timeout)
