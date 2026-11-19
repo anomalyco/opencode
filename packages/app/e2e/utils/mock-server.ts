@@ -947,6 +947,8 @@ function mockHandlers(
           Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
         // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
         usageLimits: () => Effect.succeed({ location: location(config), data: null }),
+        // No scenario runs background jobs.
+        jobList: () => Effect.succeed([]),
         worktreeList: () =>
           Effect.sync(() => {
             if (config.worktrees) return resolve(config.worktrees)

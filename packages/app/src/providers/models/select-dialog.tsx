@@ -16,6 +16,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
+import type { PromptModel } from "@/composer/schema"
 import { isFreeModel } from "@/providers/models/models"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { popularProviders } from "@/providers/catalog/providers"
@@ -101,7 +102,7 @@ const sortModelGroups = (a: { category: string; items: ModelItem[] }, b: { categ
 const ModelList: Component<{
   mobile?: boolean
   open?: boolean
-  provider?: string
+  integration?: string
   onSelect: () => void
   model?: ModelState
 }> = (props) => {
@@ -110,7 +111,7 @@ const ModelList: Component<{
 
   const controller = createModelSelectorController({
     model: props.model,
-    provider: () => props.provider,
+    integration: () => props.integration,
     onSelect: props.onSelect,
   })
 
@@ -308,7 +309,7 @@ type ModelSelectorTrigger = (props: ModelSelectorTriggerProps) => JSX.Element
 
 // Phones pick models from a drawer; wider screens use DialogSelectModel.
 export function ModelSelectorDrawer(props: {
-  provider?: string
+  integration?: string
   model?: ModelState
   trigger: ModelSelectorTrigger
   onClose?: () => void
@@ -318,7 +319,7 @@ export function ModelSelectorDrawer(props: {
 
   const controller = createModelSelectorController({
     model: props.model,
-    provider: () => props.provider,
+    integration: () => props.integration,
     onSelect: () => props.onClose?.(),
   })
 
@@ -339,7 +340,7 @@ export function ModelSelectorDrawer(props: {
       trigger={props.trigger}
       onManage={manage}
       model={props.model}
-      provider={props.provider}
+      integration={props.integration}
       onConnect={connect}
       chatgptPlan={chatgptPlan()}
       onClose={() => props.onClose?.()}
@@ -350,7 +351,7 @@ export function ModelSelectorDrawer(props: {
 function ModelDrawer(props: {
   trigger: ModelSelectorTrigger
   model?: ModelState
-  provider?: string
+  integration?: string
   chatgptPlan?: boolean
   onClose: () => void
   onManage: () => void
@@ -426,7 +427,7 @@ function ModelDrawer(props: {
                   mobile
                   open={selectDrawerOpen(drawer())}
                   model={props.model}
-                  provider={props.provider}
+                  integration={props.integration}
                   onSelect={() => dispatch({ type: "action.selected", action: "select" })}
                 />
               </div>
@@ -472,21 +473,29 @@ function ModelDrawer(props: {
 }
 
 function createModelSelectorController(input: {
-  provider: () => string | undefined
+  /** Only the providers of one integration: Console's catalog and workspace providers, or a single provider. */
+  integration: () => string | undefined
   model?: ModelState
+  onChoose?: (selection: PromptModel) => void
   onSelect: () => void
 }) {
   const model = input.model ?? useLocal().model
+
+  const owned = (item: ModelItem) => {
+    const integration = input.integration()
+
+    return !integration || item.provider.id === integration || item.provider.integrationID === integration
+  }
 
   const allModels = createMemo(() =>
     model
       .list()
       .filter((item) => model.visible({ modelID: item.id, providerID: item.provider.id }))
-      .filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
+      .filter(owned),
   )
 
   return {
-    all: () => model.list().filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
+    all: () => model.list().filter(owned),
     models: (search: string) => {
       const query = search.trim()
 
@@ -511,17 +520,21 @@ function createModelSelectorController(input: {
       return value ? modelKey(value) : undefined
     },
     select: (item: ModelItem, variant?: string | null) => {
+      if (input.onChoose) {
+        input.onChoose({ providerID: item.provider.id, modelID: item.id, variant })
+        input.onSelect()
+
+        return
+      }
+
       model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
 
       if (variant !== undefined) model.variant.set(variant ?? undefined)
       input.onSelect()
     },
     variant: (item: ModelItem) => model.variant.current({ providerID: item.provider.id, modelID: item.id }),
-    favorites: () => model.favorite.list().filter((item) => !input.provider() || item.provider.id === input.provider()),
-    recent: () =>
-      model
-        .recent()
-        .flatMap((item) => (item && (!input.provider() || item.provider.id === input.provider()) ? [item] : [])),
+    favorites: () => model.favorite.list().filter(owned),
+    recent: () => model.recent().flatMap((item) => (item && owned(item) ? [item] : [])),
     toggleFavorite: (item: ModelItem) => model.favorite.toggle({ providerID: item.provider.id, modelID: item.id }),
   }
 }
@@ -627,13 +640,19 @@ function ChatgptPlanFooter() {
   )
 }
 
-export function DialogSelectModel(props: { provider?: string; model?: ModelState }) {
+export function DialogSelectModel(props: {
+  integration?: string
+  model?: ModelState
+  /** Takes the chosen model instead of the model state, as when there is no composer to apply it to. */
+  onChoose?: (selection: PromptModel) => void
+}) {
   const dialog = useDialog()
   const language = useLanguage()
 
   const controller = createModelSelectorController({
     model: props.model,
-    provider: () => props.provider,
+    integration: () => props.integration,
+    onChoose: props.onChoose,
     onSelect: () => dialog.close(),
   })
 
@@ -654,7 +673,8 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   const groups = createMemo((): ModelGroup[] => {
     const providers = controller.groups(controller.models(query.search))
 
-    if (query.search.trim()) return providers
+    // Filtered to one integration, the list is only its models.
+    if (query.search.trim() || props.integration) return providers
 
     return withSections({
       groups: providers,

@@ -256,14 +256,15 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
   await expect(view.editor).toHaveCount(0)
   await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
 
-  // Subscribe -> Go API key -> Continue switches the model in the current session without opening a new draft tab.
+  // Subscribe -> Go API key -> the model picker, on Go's first model, switches the model in the current session
+  // without opening a new draft tab.
   await upsell.getByRole("button", { name: "Subscribe", exact: true }).click()
   const connect = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
   await connect.getByPlaceholder("API key").fill("sk-go-test")
   await connect.getByRole("button", { name: "Continue", exact: true }).click()
-  const connected = page.getByRole("dialog", { name: "Connected to OpenCode Go" })
-  await expect(connected.getByRole("radio", { name: "GLM-5 Go", exact: true })).toHaveAttribute("aria-checked", "true")
-  await connected.getByRole("button", { name: "Continue", exact: true }).click()
+  const picker = page.getByRole("dialog", { name: "Select model", exact: true })
+  await expect(picker.locator('[data-option-key="opencode-go:glm-5-go"]')).toHaveAttribute("data-active", "")
+  await page.keyboard.press("Enter")
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expectPath(page, sessionHref(sessionID))
   await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(1)
@@ -447,6 +448,68 @@ for (const action of ["tray", "picker"] as const) {
     await expect(view.editor).toHaveText("Refactor the parser")
   })
 }
+
+test("connecting an integration opens the model picker on all of its providers", async ({ page }) => {
+  const state = { authorized: false }
+
+  const view = await openSession(page, {
+    name: "ConnectPicker",
+    sessions: [{ id: "ses_connect_picker", agent: "build", model: { id: "claude", providerID: "anthropic" } }],
+    provider: () => ({
+      all: [
+        {
+          id: "anthropic",
+          name: "Anthropic",
+          models: { claude: { id: "claude", name: "Claude", cost: { input: 1 } } },
+        },
+        ...(state.authorized
+          ? [
+              // One integration can own several providers, as a Console workspace does.
+              {
+                id: "acme",
+                integrationID: "acme",
+                name: "Acme",
+                models: { one: { id: "one", name: "Acme One", cost: { input: 1 } } },
+              },
+              {
+                id: "acme-extra",
+                integrationID: "acme",
+                name: "Acme Extra",
+                models: { two: { id: "two", name: "Acme Two", cost: { input: 1 } } },
+              },
+            ]
+          : []),
+      ],
+      connected: state.authorized ? ["anthropic", "acme", "acme-extra"] : ["anthropic"],
+      default: { providerID: "anthropic", modelID: "claude" },
+    }),
+    integrations: () => [
+      {
+        id: "acme",
+        name: "Acme",
+        methods: [{ type: "key" }],
+        connections: state.authorized ? [{ type: "credential", id: "cred_acme", label: "Key", method: "key" }] : [],
+      },
+    ],
+    onConnectKey: (input) => {
+      if (input.integrationID === "acme") state.authorized = true
+    },
+  })
+
+  await expect(view.editor).toBeVisible()
+  await page.locator('[data-action="composer-model"]').click()
+  const picker = page.getByRole("dialog", { name: "Select model", exact: true })
+  await picker.getByRole("button", { name: "Connect an integration", exact: true }).click()
+  await page.locator('[data-provider-id="acme"]').click()
+  await page.getByPlaceholder("API key").fill("sk-acme")
+  await page.getByRole("button", { name: "Continue", exact: true }).click()
+
+  await expect(picker.locator("[data-option-key]")).toHaveText([/Acme One/, /Acme Two/])
+  await expect(picker.locator('[data-option-key="acme:one"]')).toHaveAttribute("data-active", "")
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.locator('[data-action="composer-model"]')).toContainText("Acme One")
+})
 
 test("ChatGPT's usage limit opens the ChatGPT usage dialog", async ({ page }) => {
   await page.clock.setFixedTime(T0)

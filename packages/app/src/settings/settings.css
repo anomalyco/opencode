@@ -1712,10 +1712,6 @@
   }
 }
 
-.provider-model-groups--dialog {
-  padding-block: 2px;
-}
-
 :root[data-motion="reduce"] {
   .settings-models-group-chevron svg,
   .provider-model-group-chevron {

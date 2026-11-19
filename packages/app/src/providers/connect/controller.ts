@@ -1,21 +1,18 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
-import { consoleCatalogLoaded, consoleProviderGroup } from "@/providers/catalog/console"
+import { consoleCatalogLoaded } from "@/providers/catalog/console"
 import { createConsoleCatalogSettler } from "@/providers/catalog/console-settle"
 import { useIntegrations } from "@/providers/catalog/integrations"
 import { useProviders } from "@/providers/catalog/providers"
-import type { ModelSelection } from "@/providers/models/selection"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { formatServerError } from "@/runtime/server/errors"
-import { ServerConnection } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
 import { showToast } from "@/shell/notifications/toast"
-import { useTabs } from "@/shell/tabs/tabs"
 import {
   CLAUDE_AGENT_INTEGRATION,
   CONSOLE_INTEGRATION,
@@ -36,7 +33,8 @@ export function createProviderDialogController(options: {
   /** The caller's selected provider; the dialog follows it and writes its own selection back. */
   selected: () => string | undefined
   onSelect: (provider: string | undefined) => void
-  selection?: ModelSelection
+  /** A connection with models continues to the model picker, which replaces this dialog. */
+  onModels: (provider: string, chatgptWelcome: boolean) => void
   onConnected?: (provider: string) => void
 }) {
   const language = useLanguage()
@@ -44,7 +42,6 @@ export function createProviderDialogController(options: {
   const serverSDK = useServerSDK()
   const data = useData()
   const global = useGlobal()
-  const tabs = useTabs()
   const dialog = useDialog()
   const directory = () => options.directory
   const location = options.directory ? { directory: options.directory } : undefined
@@ -105,23 +102,7 @@ export function createProviderDialogController(options: {
     )
   })
 
-  const connectionGroups = createMemo(() => {
-    const models = connectionModels()
-
-    return connectionProviders()
-      .map((item) => ({ provider: item, models: models.filter((model) => model.providerID === item.id) }))
-      .filter((group) => group.models.length > 0)
-  })
-
-  const managedProviders = createMemo(() =>
-    provider() === CONSOLE_INTEGRATION ? consoleProviderGroup(connectionProviders()) : undefined,
-  )
-
-  const firstModel = () => {
-    const model = connectionGroups()[0]?.models[0]
-
-    return model ? modelKey(model) : undefined
-  }
+  const hasModels = () => connectionModels().length > 0
 
   const settler = createConsoleCatalogSettler({
     isLoaded: () => consoleCatalogLoaded(connectionProviders()),
@@ -228,7 +209,7 @@ export function createProviderDialogController(options: {
             session: effect.session,
             check: effect.check,
             hasProblem: accountsOf(CLAUDE_AGENT_INTEGRATION).problem,
-            firstModel: firstModel(),
+            hasModels: hasModels(),
           }),
         )
 
@@ -260,16 +241,7 @@ export function createProviderDialogController(options: {
     }
 
     if (effect.type === "dialog.close") return dialog.close()
-
-    if (options.selection) return options.selection.set(effect.selection)
-    void tabs.newDraft(
-      {
-        server: ServerConnection.key(serverSDK.server),
-        directory: options.directory ?? data.location.default().directory,
-      },
-      undefined,
-      effect.selection,
-    )
+    options.onModels(effect.provider, effect.chatgptWelcome)
   }
 
   const runConnect = (input: Extract<ProviderDialogEffect, { type: "connect.effect" }>) => {
@@ -277,7 +249,7 @@ export function createProviderDialogController(options: {
     const integrationID = input.provider
     const isConsole = integrationID === CONSOLE_INTEGRATION
 
-    const result = (event: ProviderConnectEvent, catalog?: { pending: boolean; firstModel: string | undefined }) =>
+    const result = (event: ProviderConnectEvent, catalog?: { pending: boolean; hasModels: boolean }) =>
       dispatch({ type: "connect.result", session: input.session, provider: integrationID, event, catalog })
 
     if (effect.type === "load") {
@@ -545,15 +517,12 @@ export function createProviderDialogController(options: {
   const refresh = async (
     effect: Extract<ProviderConnectEffect, { type: "refresh" }>,
     integrationID: string,
-    result: (event: ProviderConnectEvent, catalog?: { pending: boolean; firstModel: string | undefined }) => void,
+    result: (event: ProviderConnectEvent, catalog?: { pending: boolean; hasModels: boolean }) => void,
   ) => {
     const refreshed = await sync()
 
     if (integrationID !== CONSOLE_INTEGRATION)
-      return result(
-        { type: "refresh.succeeded", attempt: effect.attempt },
-        { pending: false, firstModel: firstModel() },
-      )
+      return result({ type: "refresh.succeeded", attempt: effect.attempt }, { pending: false, hasModels: hasModels() })
 
     if (!refreshed)
       return result({
@@ -568,7 +537,7 @@ export function createProviderDialogController(options: {
     if (outcome === "cancelled") return
     result(
       { type: "refresh.succeeded", attempt: effect.attempt },
-      { pending: outcome === "timed-out", firstModel: firstModel() },
+      { pending: outcome === "timed-out", hasModels: hasModels() },
     )
   }
 
@@ -608,12 +577,9 @@ export function createProviderDialogController(options: {
   })
 
   createEffect(
-    on(
-      [claudePhase, () => !!claudeProblem(), () => connectionGroups().length > 0],
-      ([phase, hasProblem, hasModels]) => {
-        if (phase) dispatch({ type: "claude.status.changed", hasProblem, hasModels })
-      },
-    ),
+    on([claudePhase, () => !!claudeProblem(), hasModels], ([phase, hasProblem, hasModels]) => {
+      if (phase) dispatch({ type: "claude.status.changed", hasProblem, hasModels })
+    }),
   )
 
   onCleanup(() => dispatch({ type: "disposed" }))
@@ -622,9 +588,6 @@ export function createProviderDialogController(options: {
     view,
     dispatch,
     providerName,
-    connectionModels,
-    connectionGroups,
-    managedProviders,
     claudeProblem,
     // Sorted by name so rows stay put when the server moves the active account first.
     accounts: () => {
@@ -668,5 +631,3 @@ export function createProviderDialogController(options: {
     },
   }
 }
-
-export const modelKey = (model: { providerID: string; id: string }) => `${model.providerID}:${model.id}`
