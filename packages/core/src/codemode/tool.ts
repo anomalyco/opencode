@@ -163,6 +163,7 @@ export const create = (
                   const executed = yield* executeTool(name, tool, input, {
                     ...context,
                     id,
+                    codemode: true,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.
@@ -258,12 +259,14 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
   } satisfies CodeMode.Hooks
 }
 
+const isPinned = (registration: Info) => {
+  const codemode = registration.options?.codemode
+  const pinned = typeof codemode === "object" && codemode !== null ? codemode.pinned : undefined
+  return (pinned ?? registration.options?.pinned) === true
+}
+
 export const catalog = (inventory: Inventory) => {
-  const pinned = new Set(
-    Array.from(inventory.tools.values())
-      .filter((registration) => registration.options?.pinned === true)
-      .map(qualifiedName),
-  )
+  const pinned = new Set(Array.from(inventory.tools.values()).filter(isPinned).map(qualifiedName))
   const root: CatalogNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const tool of runtime(inventory).catalog)
@@ -353,7 +356,7 @@ function inventoryTools(inventory: Inventory) {
   const root: ToolNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
-    const child = definition(registration)
+    const child = definition(registration, true)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,

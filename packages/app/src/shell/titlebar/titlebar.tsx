@@ -23,7 +23,6 @@ import { createPinnedLeading, PinMenuItems, PinnedArea, PinsProvider, usePins } 
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { SidebarCustomized, type SidebarStripGrouping } from "@/shell/titlebar/sidebar-customized"
-import { SidebarOrganized } from "@/shell/titlebar/sidebar-organized"
 import { RecentSessions } from "@/shell/titlebar/recent-sessions"
 import { createNavigationSwitch } from "@/shell/tabs/navigation-switch"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -256,8 +255,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             createEffect(() => {
               if (
                 settings.appearance.tabLayout() === "vertical" &&
-                (settings.general.sidebarOrganize() === "projects" ||
-                  settings.general.sidebarOrganize() === "customize") &&
+                settings.general.sidebarOrganize() === "customize" &&
                 !mobile()
               )
                 return
@@ -1015,9 +1013,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       <Match when={prototype()}>{pinnedVerticalStrip()}</Match>
                                       <Match when={settings.appearance.tabLayout() === "inbox"}>
                                         <SidebarInbox />
-                                      </Match>
-                                      <Match when={settings.general.sidebarOrganize() === "projects"}>
-                                        <SidebarOrganized currentTab={currentTab()}>{verticalTabStrip}</SidebarOrganized>
                                       </Match>
                                       <Match when={settings.general.sidebarOrganize() === "customize"}>
                                         <SidebarCustomized currentTab={currentTab()} onNewSession={openNewTab}>

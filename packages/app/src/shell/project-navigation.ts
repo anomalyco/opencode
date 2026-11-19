@@ -15,8 +15,7 @@ export function useProjectNavigation() {
     // The navigation prototype keeps Home in the sidebar.
     if (mobile() || settings.appearance.tabLayout() !== "vertical" || settings.appearance.navigationPrototype())
       return false
-    const mode = settings.general.sidebarOrganize()
 
-    return mode === "projects" || mode === "customize"
+    return settings.general.sidebarOrganize() === "customize"
   }
 }

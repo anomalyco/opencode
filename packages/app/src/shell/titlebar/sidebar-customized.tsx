@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { createMemo, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useQueries } from "@tanstack/solid-query"
 import type { SessionInfo } from "@opencode/client/promise"
@@ -20,8 +20,7 @@ import { ProjectIcon } from "@/shell/layout/project-icon"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
 import { tabKey, useTabs, type SessionTab, type Tab } from "@/shell/tabs/tabs"
 import { ProjectSessionRow } from "./project-session-row"
-import { createSidebarActivityListener } from "./sidebar-organized"
-import { mergeSidebarSessions } from "./sidebar-sessions"
+import { isSidebarSessionActivity, mergeSidebarSessions } from "./sidebar-sessions"
 import type { TabStripLeading, TabStripSection } from "./tab-strip"
 import { SidebarViewMenu } from "./sidebar-view-menu"
 import {
@@ -503,7 +502,6 @@ export function SidebarCustomized(props: {
 
       result().groups.forEach((parent) => {
         if (parent.collapsed) return
-
         ;(parent.children ?? [parent]).forEach((group) => {
           if (group.collapsed) return
 
@@ -542,6 +540,7 @@ export function SidebarCustomized(props: {
   }
 
   function GroupHeader(headerProps: { groupKey: string }) {
+
     return (
       <Show when={groupByKey().get(headerProps.groupKey)}>{(group) => <GroupHeaderView group={group()} />}</Show>
     )
@@ -713,4 +712,35 @@ export function SidebarCustomized(props: {
       </div>
     </div>
   )
+}
+
+/** Tracks session activity on every server, and keeps a preview tab once its session does something. */
+function createSidebarActivityListener() {
+  const tabs = useTabs()
+
+  const global = useGlobal()
+
+  // Keep a preview tab once its session shows activity. Ordering comes from the shared data layer, so this listener
+  // only decides when a preview has become worth keeping.
+  createEffect(() => {
+    global.servers.list().forEach((conn) => {
+      const server = ServerConnection.key(conn)
+      const ctx = global.serverCtx(server)
+
+      if (!ctx) return
+      onCleanup(
+        ctx.data.listen(({ details }) => {
+          if (!isSidebarSessionActivity(details)) return
+          const sessionID = details.data.sessionID
+          const preview = tabs.preview()
+
+          if (
+            preview?.server === server &&
+            (preview.sessionId === sessionID || preview.sessionId === ctx.data.session.root(sessionID))
+          )
+            tabs.keepPreview()
+        }),
+      )
+    })
+  })
 }

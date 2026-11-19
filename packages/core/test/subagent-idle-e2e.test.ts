@@ -95,6 +95,7 @@ const nodes = LayerNode.group([
 const modelLayer = Layer.succeed(
   SessionRunnerModel.Service,
   SessionRunnerModel.Service.of({
+    select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
     resolve: (_session, _available, request) =>
       Effect.succeed(
         SessionRunnerModel.resolved(

@@ -131,7 +131,7 @@ export const VideoRequest = Schema.Struct({
 export const VideoErrorReason = Schema.Literals(["failed", "cancelled", "expired", "unknown"]).annotate({
   identifier: "Generate.VideoErrorReason",
   description:
-    "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time, or the server stopped while submitting the job",
+    "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time",
 })
 export type VideoErrorReason = typeof VideoErrorReason.Type
 
