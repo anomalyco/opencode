@@ -1518,34 +1518,10 @@ built-ins/Date/prototype/toString/negative-year.js  # Date.prototype.toString se
 built-ins/Error/prototype/stack/setter-receiver-is-prototype.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/Error/prototype/toString/called-as-function.js  # TypeError: Object.defineProperty called on non-object
 built-ins/Error/prototype/toString/tostring-message-throws-toprimitive.js  # ToPrimitive(msg) called by ToString(msg) throws TypeError Expected a TypeError to be thrown but no e
-built-ins/Function/15.3.5-1gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5-2gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-1gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-21gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-22gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-23gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-24gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-25gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-26gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-27gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-28gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-29gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-3gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-48gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-50gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-52gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-54gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/15.3.5.4_2-5gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
 built-ins/Function/S10.1.1_A1_T3.js  # TypeError: The called value is not a constructor: only classes can be constructed with new. Use a cl
 built-ins/Function/internals/Construct/derived-return-val.js  # TypeError: Extending the built-in Object is not supported. Only classes and Error types can be exten
 built-ins/Function/internals/Construct/derived-this-uninitialized.js  # TypeError: Extending the built-in Object is not supported. Only classes and Error types can be exten
 built-ins/Function/prototype/bind/15.3.4.5-2-6.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
-built-ins/Function/prototype/bind/15.3.4.5-20-2.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/prototype/bind/15.3.4.5-20-3.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/prototype/bind/15.3.4.5-21-2.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/prototype/bind/15.3.4.5-21-3.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Function/prototype/bind/S15.3.4.5_A1.js  # baz() throws a TypeError exception Expected a TypeError to be thrown but no exception was thrown at 
-built-ins/Function/prototype/bind/S15.3.4.5_A2.js  # baz() throws a TypeError exception Expected a TypeError to be thrown but no exception was thrown at 
 built-ins/GeneratorFunction/has-instance.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/GeneratorFunction/instance-construct-throws.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/GeneratorFunction/instance-restricted-properties.js  # TypeError: The Function constructor is not supported; write the function inline.
@@ -2394,7 +2370,6 @@ language/expressions/addition/S11.6.1_A2.2_T3.js  # TypeError: Binary operators 
 language/expressions/addition/S11.6.1_A3.2_T1.2.js  # TypeError: Binary operators require data values.
 language/expressions/array/11.1.4_4-5-1.js  # TypeError: Array elements share their attributes; only writable, enumerable and configurable equal t
 language/expressions/array/11.1.4_5-6-1.js  # TypeError: Array elements share their attributes; only writable, enumerable and configurable equal t
-language/expressions/arrow-function/ArrowFunction_restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/arrow-function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/arrow-function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
@@ -2470,7 +2445,6 @@ language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-iter-val-array-prot
 language/expressions/class/dstr/meth-static-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/class/dstr/meth-static-dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/class/elements/fields-run-once-on-double-super.js  # Expected a ReferenceError but got a SyntaxError
-language/expressions/class/restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/class/scope-name-lex-open-heritage.js  # TypeError: Class extends value a function is not a constructor or null.
 language/expressions/class/subclass-builtins/subclass-Array.js  # TypeError: Extending the built-in Array is not supported. Only classes and Error types can be extend
 language/expressions/class/subclass-builtins/subclass-Boolean.js  # TypeError: Class extends value a function is not a constructor or null.
@@ -2681,7 +2655,6 @@ language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-iter-val-array-pr
 language/statements/async-generator/yield-return-then-getter-ticks.js  # Actual ["start", "tick 1", "tick 2", "get then"] and expected ["start", "tick 1", "get then", "tick 
 language/statements/async-generator/yield-star-async-from-sync-iterator-inaccessible.js  # TypeError: Object.getPrototypeOf cannot convert undefined to an object.
 language/statements/async-generator/yield-star-return-then-getter-ticks.js  # Actual ["start", "tick 1", "tick 2", "get then", "tick 3", "get return"] and expected ["start", "tic
-language/statements/class/definition/methods-restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/class/definition/prototype-getter.js  # TypeError: Class extends value a function is not a constructor or null.
 language/statements/class/definition/side-effects-in-property-define.js  # TypeError: Object assignment result contains a circular value.
 language/statements/class/definition/this-access-restriction.js  # TypeError: Extending the built-in Object is not supported. Only classes and Error types can be exten
@@ -2710,7 +2683,6 @@ language/statements/class/dstr/meth-static-ary-ptrn-elem-id-iter-val-array-proto
 language/statements/class/dstr/meth-static-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/class/dstr/meth-static-dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/class/poisoned-underscore-proto.js  # TypeError: Extending the built-in Array is not supported. Only classes and Error types can be extend
-language/statements/class/restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/class/scope-name-lex-open-heritage.js  # TypeError: Class extends value a function is not a constructor or null.
 language/statements/class/strict-mode/arguments-callee.js  # TypeError: Class extends value a function is not a constructor or null.
 language/statements/class/subclass-builtins/subclass-Array.js  # TypeError: Extending the built-in Array is not supported. Only classes and Error types can be extend
@@ -2814,10 +2786,7 @@ language/statements/for/dstr/let-ary-ptrn-elem-id-iter-val-array-prototype.js  #
 language/statements/for/dstr/var-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError but got a ReferenceError
 language/statements/for/dstr/var-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/function/13.2-1-s.js  # TypeError: foo is not a constructor: only classes can be constructed with new. Use a class, or call 
-language/statements/function/13.2-19-b-3gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/function/13.2-2-s.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/function/13.2-3-s.js  # TypeError: foo is not a constructor: only classes can be constructed with new. Use a class, or call 
-language/statements/function/13.2-4-s.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/function/S13.2.2_A10.js  # #1: var obj = new FACTORY() does not lead to throwing exception. Actual: Exception is TypeError: FAC
 language/statements/function/S13.2.2_A12.js  # #1: var obj = new FACTORY() does not lead to throwing exception. Actual: Exception is TypeError: FAC
 language/statements/function/S13.2.2_A15_T1.js  # TypeError: __FACTORY is not a constructor: only classes can be constructed with new. Use a class, or
@@ -2856,7 +2825,6 @@ language/statements/generators/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js
 language/statements/generators/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/generators/prototype-relation-to-function.js  # Expected SameValue(«object», «») to be true
-language/statements/generators/restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/labeled/value-await-non-module.js  # SyntaxError: Unexpected token. Code must be plain JavaScript written as a program body.
 language/statements/let/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/let/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
