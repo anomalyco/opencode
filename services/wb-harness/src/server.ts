@@ -12,6 +12,8 @@ export type HarnessState = {
     text: string
     tools: string[]
     scenario?: string
+    state?: string
+    fallback?: boolean
   }
 }
 
@@ -66,7 +68,10 @@ export function createHarness(config: WBConfig, state: HarnessState) {
           at: new Date().toISOString(),
           source: "openai",
           text: payload.messages.at(-1)?.content ?? "",
-          tools: extractTools(result),
+          tools: result.meta?.tools ?? extractTools(result),
+          scenario: result.meta?.scenario,
+          state: result.meta?.state,
+          fallback: result.meta?.fallback,
         }
         return withCors(result)
       }
