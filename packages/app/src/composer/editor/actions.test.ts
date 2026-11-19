@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createStore } from "solid-js/store"
+import { createStore, unwrap } from "solid-js/store"
 import { Skill } from "@opencode/schema/skill"
 import type { ComposerPersistedState } from "../types"
 import { createComposerEditorActions } from "./actions"
@@ -123,7 +123,7 @@ describe("Composer store", () => {
       },
       { start: 0, end: 0 },
     )
-    expect(prompt.state.prompt).toMatchObject([
+    expect(unwrap(prompt.state.prompt)).toMatchObject([
       { type: "skill", id: "show-me", content: "@show-me", start: 0, end: 8 },
       { type: "text", content: " ", start: 8, end: 9 },
       { type: "file", path: "one", content: "@one", start: 9, end: 13 },

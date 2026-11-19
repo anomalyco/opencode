@@ -1,4 +1,5 @@
 import { describe, expect, jest, test } from "bun:test"
+import { unwrap } from "solid-js/store"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageHandoff } from "@/session/handoff"
 import { Skill } from "@opencode/schema/skill"
@@ -376,7 +377,7 @@ describe("Composer submission", () => {
     expect(await pending).toBe(false)
     expect(errors).toHaveLength(1)
     expect(state.current()).toEqual([{ type: "text", content: "Keep this draft", start: 0, end: 15 }])
-    expect(state.context.items()).toMatchObject([
+    expect(unwrap(state.context.items())).toMatchObject([
       { key: "quote:c=selected", text: "Selected passage", comment: "Latest comment" },
     ])
     expect(calls.filter((call) => call === "send")).toHaveLength(2)
@@ -927,7 +928,7 @@ describe("Composer submission", () => {
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toEqual(prompt)
     // In the order it was sent, so the resend's request matches the first.
-    expect(state.context.items()).toMatchObject([
+    expect(unwrap(state.context.items())).toMatchObject([
       { type: "file", path: "notes.md", description: "the failing version" },
       note,
     ])
@@ -967,8 +968,10 @@ describe("Composer submission", () => {
     ).submit(new Event("submit"))
     await failed.promise
 
-    expect(promoted.current()).toMatchObject([{ type: "text", content: "first prompt" }])
-    expect(promoted.context.items()).toMatchObject([{ type: "file", path: "src/app.ts", comment: "Keep this comment" }])
+    expect(unwrap(promoted.current())).toMatchObject([{ type: "text", content: "first prompt" }])
+    expect(unwrap(promoted.context.items())).toMatchObject([
+      { type: "file", path: "src/app.ts", comment: "Keep this comment" },
+    ])
     expect(promoted.mode.current()).toBe("shell")
   })
 
@@ -1009,7 +1012,9 @@ describe("Composer submission", () => {
     await failed.promise
 
     expect(text(promoted)).toBe("first prompt\n\nfollow-up")
-    expect(promoted.context.items()).toMatchObject([{ key, type: "quote", text: "quoted passage" }])
+    expect(unwrap(promoted.context.items())).toMatchObject([
+      { key, type: "quote", text: "quoted passage" },
+    ])
     expect(promoted.quoteSource.state.sources[key]).toEqual(source)
     // A recovered follow-up changes the payload, so it is not a retry of the failed admission.
     expect(promoted.retry.current()).toBeUndefined()
