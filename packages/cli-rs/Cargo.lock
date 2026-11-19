@@ -583,8 +583,8 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "luau0-src"
-version = "0.24.1+luau747.sk.f4a862cc"
-source = "git+https://github.com/simonklee/luau-src-rs?rev=52ad5bc61beb587386e3a1802847aad1d4bb0664#52ad5bc61beb587386e3a1802847aad1d4bb0664"
+version = "0.24.1+luau747.sk.55536aec"
+source = "git+https://github.com/simonklee/luau-src-rs?rev=553892c79eac79091232f87218d6a94d97779f7b#553892c79eac79091232f87218d6a94d97779f7b"
 dependencies = [
  "cc",
 ]
