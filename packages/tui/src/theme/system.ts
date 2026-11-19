@@ -1,4 +1,6 @@
 import { RGBA, type TerminalColors } from "@opentui/core"
+import { watch } from "fs"
+import { homedir } from "os"
 import { ansiToRgba, tint } from "./color"
 
 export function terminalMode(colors: TerminalColors): "dark" | "light" | undefined {
@@ -6,6 +8,127 @@ export function terminalMode(colors: TerminalColors): "dark" | "light" | undefin
   if (!bg) return
   const { r, g, b } = RGBA.fromHex(bg)
   return 0.299 * r + 0.587 * g + 0.114 * b > 0.5 ? "light" : "dark"
+}
+
+export async function systemAppearance(): Promise<"dark" | "light" | undefined> {
+  if (process.platform !== "darwin") return
+  let proc: Bun.Subprocess
+  try {
+    proc = Bun.spawn(["/usr/bin/defaults", "read", "-g", "AppleInterfaceStyle"], {
+      stdout: "ignore",
+      stderr: "ignore",
+    })
+  } catch {
+    return
+  }
+  const code = await proc.exited
+  if (code === 0) return "dark"
+  if (code === 1) return "light"
+  return
+}
+
+// Events and ticks go to stderr through NSFileHandle (a raw write, never
+// buffered) — console.log would sit in stdout's pipe buffer forever, and JXA
+// has no console.error. The tick writes through the same pipe, so an orphaned
+// helper dies on its next tick.
+const APPEARANCE_OBSERVER = `
+ObjC.import('Foundation')
+const stderr = $.NSFileHandle.fileHandleWithStandardError
+function emit(line) {
+  stderr.writeData($.NSString.stringWithString(line + "\\n").dataUsingEncoding(4))
+}
+ObjC.registerSubclass({
+  name: 'ThemeObserver',
+  methods: {
+    'onChange:': {
+      types: ['void', ['id']],
+      implementation: function () {
+        emit('changed')
+      },
+    },
+  },
+})
+const observer = $.ThemeObserver.alloc.init
+$.NSDistributedNotificationCenter.defaultCenter.addObserverSelectorNameObject(
+  observer,
+  'onChange:',
+  'AppleInterfaceThemeChangedNotification',
+  undefined,
+)
+while (true) {
+  $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(5))
+  emit('tick')
+}
+`
+
+function observeAppearanceNotifications(onEvent: () => void, onExit: () => void): () => void {
+  let stopped = false
+  let proc: Bun.Subprocess
+  try {
+    proc = Bun.spawn(["/usr/bin/osascript", "-l", "JavaScript", "-e", APPEARANCE_OBSERVER], {
+      stdout: "ignore",
+      stderr: "pipe",
+    })
+  } catch {
+    onExit()
+    return () => {}
+  }
+  void (async () => {
+    let buffer = ""
+    for await (const chunk of proc.stderr as ReadableStream<Uint8Array>) {
+      buffer += new TextDecoder().decode(chunk)
+      const lines = buffer.split("\n")
+      buffer = lines.pop() ?? ""
+      for (const line of lines) if (line.trim() === "changed") onEvent()
+    }
+    if (!stopped) onExit()
+  })()
+  return () => {
+    stopped = true
+    proc.kill()
+  }
+}
+
+function watchPreferencesFile(onEvent: () => void): () => void {
+  try {
+    const watcher = watch(homedir() + "/Library/Preferences", (_event, file) => {
+      if (file === ".GlobalPreferences.plist") onEvent()
+    })
+    return () => watcher.close()
+  } catch {
+    return () => {}
+  }
+}
+
+// The first read seeds the current appearance; only later changes are reported.
+export function watchSystemAppearance(onChange: (mode: "dark" | "light") => void): () => void {
+  if (process.platform !== "darwin") return () => {}
+
+  let current: "dark" | "light" | undefined
+  let pending: ReturnType<typeof setTimeout> | undefined
+  const read = async () => {
+    const mode = await systemAppearance()
+    if (!mode || mode === current) return
+    const changed = current !== undefined
+    current = mode
+    if (changed) onChange(mode)
+  }
+  const scheduleRead = () => {
+    clearTimeout(pending)
+    pending = setTimeout(() => void read(), 250)
+  }
+  void read()
+
+  let stopFallback: (() => void) | undefined
+  const stopObserver = observeAppearanceNotifications(scheduleRead, () => {
+    stopFallback = watchPreferencesFile(scheduleRead)
+  })
+
+  return () => {
+    clearTimeout(pending)
+    stopObserver()
+    stopFallback?.()
+  }
 }
 
 export function generateSystem(colors: TerminalColors, mode: "dark" | "light") {
