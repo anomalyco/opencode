@@ -7,6 +7,42 @@ const configuration = (provider: string, message: string) =>
   expect.objectContaining({ _tag: "ProviderConfiguration", provider, message })
 
 describe("provider package entrypoints", () => {
+  // Loaders that only have a package name and a model ID, like OpenCode's models.dev catalog, call `model`.
+  test("every provider entrypoint exports model(modelID, settings)", async () => {
+    const manifest = await Bun.file(new URL("../package.json", import.meta.url)).json()
+    const entrypoints = Object.keys(manifest.exports)
+      .filter((key) => key.startsWith("./providers/"))
+      .map((key) => `@opencode/ai${key.slice(1)}`)
+    const modules = await Promise.all(entrypoints.map(async (entrypoint) => [entrypoint, await import(entrypoint)]))
+
+    expect(entrypoints.length).toBeGreaterThan(100)
+    expect(
+      modules.filter(([, module]) => typeof module.model !== "function").map(([entrypoint]) => entrypoint),
+    ).toEqual([])
+  })
+
+  test("serves speech and transcription from separate entrypoints of the same provider", async () => {
+    const modules = await Promise.all([
+      import("@opencode/ai/providers/elevenlabs"),
+      import("@opencode/ai/providers/elevenlabs/speech"),
+      import("@opencode/ai/providers/elevenlabs/transcription"),
+      import("@opencode/ai/providers/deepgram"),
+      import("@opencode/ai/providers/deepgram/speech"),
+      import("@opencode/ai/providers/deepgram/transcription"),
+    ])
+    const selected = modules.map((module) => module.model("fixture", { apiKey: "fixture", encoding: "mp3" }))
+
+    expect(selected.map((model) => model.route.id)).toEqual([
+      "elevenlabs-speech",
+      "elevenlabs-speech",
+      "elevenlabs-transcription",
+      "deepgram-transcription",
+      "deepgram-speech",
+      "deepgram-transcription",
+    ])
+    expect(selected.map((model) => model.providerOptions)).toEqual(Array(6).fill({ encoding: "mp3" }))
+  })
+
   test("maps Alibaba API entrypoints onto explicit regional routes", async () => {
     const modules = await Promise.all([
       import("@opencode/ai/providers/alibaba"),

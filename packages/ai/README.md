@@ -1712,7 +1712,7 @@ The former `OpenAICompatible.baseten`, `.cerebras`, `.deepinfra`, `.deepseek`, `
 
 ### Provider entrypoints
 
-Provider modules are available through dedicated exports from `@opencode/ai`. Each LLM entrypoint exports `model(modelID, settings)`, where `settings` contains provider configuration plus common `headers` and `body` overlays.
+Provider modules are available through dedicated exports from `@opencode/ai`. Each provider entrypoint exports `model(modelID, settings)`, where `settings` contains provider configuration plus common `headers` and `body` overlays. A package that serves one kind of model returns that kind, such as `@opencode/ai/providers/byteplus` for video; one that serves several returns its main kind and exposes the others under a subpath, such as `@opencode/ai/providers/elevenlabs/transcription`.
 
 ```ts
 import { model } from "@opencode/ai/providers/openai/responses"

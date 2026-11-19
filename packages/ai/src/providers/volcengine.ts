@@ -37,3 +37,5 @@ export const videoModel = (modelID: string, settings?: Settings) => {
   return configure(input).video(modelID, input.providerOptions)
 }
 export const video = provider.video
+
+export const model = videoModel

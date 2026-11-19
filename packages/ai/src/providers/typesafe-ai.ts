@@ -42,4 +42,6 @@ export const decisionModel = (modelID: string, settings?: Settings) => {
   return configure(input).decision(modelID, input.providerOptions)
 }
 
+export const model = decisionModel
+
 export * as TypeSafeAI from "./typesafe-ai.js"
