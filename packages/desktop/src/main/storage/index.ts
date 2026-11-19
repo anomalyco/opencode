@@ -25,6 +25,9 @@ export const layer = Layer.effect(
       runFork(Effect.logError("storage flush failed", { error })),
     )
 
+    if (storage.moved)
+      yield* Effect.logWarning("drafts.sqlite was the OpenCode CLI database; moved it aside", { to: storage.moved })
+
     yield* importLegacyStores(storage.db, userData).pipe(
       Effect.tap((result) =>
         result.removed.length === 0
@@ -65,6 +68,7 @@ export function make(filename: string, onError?: (error: unknown) => void) {
 
   return {
     db: database.db,
+    moved: database.moved,
     state,
     drafts,
     flush() {

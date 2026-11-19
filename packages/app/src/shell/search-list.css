@@ -138,7 +138,7 @@
 .mcp-dialog-name {
   color: var(--v2-text-text-base);
   font-size: 13px;
-  font-weight: 530;
+  font-weight: 440;
   line-height: var(--line-height-compact);
   letter-spacing: -0.04px;
 }
@@ -226,13 +226,6 @@
 }
 
 .fork-dialog [data-slot="search-list-search"] {
-  padding: 6px 6px 9px;
-
-  &::after {
-    bottom: 0;
-    border-color: var(--v2-border-border-muted);
-  }
-
   [data-slot="text-input-v2-value"] {
     gap: 8px;
   }
@@ -244,15 +237,14 @@
 
 .fork-dialog-section {
   display: flex;
-  min-height: 28px;
   flex-shrink: 0;
   align-items: center;
-  padding: 4px 14px;
-  color: var(--v2-text-text-muted);
-  font-size: 13px;
+  padding: 10px 14px 2px;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
   font-weight: 440;
-  line-height: var(--line-height-compact);
-  letter-spacing: -0.04px;
+  line-height: 18px;
+  letter-spacing: 0.05px;
 
   [data-slot="dialog-description"] {
     margin: 0;
@@ -266,12 +258,14 @@
 }
 
 .fork-dialog [data-slot="search-list-row"] {
-  height: 28px;
+  height: 32px;
   gap: 12px;
-  padding-inline: 8px;
+  padding-inline: 8px 6px;
 }
 
 .fork-dialog .search-list-trailing {
+  font-size: 11px;
+  letter-spacing: 0.05px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -328,7 +322,7 @@
   &::after {
     height: 1px;
     margin-inline: -6px;
-    background: var(--v2-border-border-muted);
+    background: var(--v2-border-border-base);
     content: "";
     transform: scaleY(0.5);
   }
@@ -351,6 +345,6 @@
   flex-shrink: 0;
   height: 1px;
   margin: 4px -6px 6px;
-  background: var(--v2-border-border-muted);
+  background: var(--v2-border-border-base);
   transform: scaleY(0.5);
 }

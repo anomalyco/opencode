@@ -15,4 +15,13 @@ export default {
   "settings.wrapLines.title": "Ajustar líneas",
   "settings.wrapLines.description":
     "Ajustar las líneas largas en los diffs móviles en vez de desplazarse horizontalmente",
+  "menu.count.one": "{{count}} archivo modificado",
+  "menu.count.other": "{{count}} archivos modificados",
+  "folder.more": "{{count}} · hay más sin mostrar",
+  "folder.failed": "No se pudieron cargar los cambios",
+  "command.open": "Abrir revisión",
+  "load.failed": "No se pudieron cargar los cambios",
+  "load.timeout": "El servidor tardó demasiado en responder",
+  offline: "No se puede acceder a este servidor",
+  "menu.count.many": "{{count}} archivos modificados",
 }

@@ -298,14 +298,14 @@ describe("MiniMax Video / H3 status, result and cancel", () => {
               ),
             ),
       )
-      expect(statuses.map((value) => value.status)).toEqual([
-        "queued",
-        "running",
-        "completed",
-        "failed",
-        "cancelled",
-        "running",
-        "running",
+      expect(statuses).toEqual([
+        { status: "running" },
+        { status: "running" },
+        { status: "completed" },
+        { status: "error", reason: "failed" },
+        { status: "error", reason: "cancelled" },
+        { status: "running" },
+        { status: "running" },
       ])
       expect(calls[0].url).toBe("https://minimax.test/v2/query/video_generation/task_1")
     }),
@@ -436,13 +436,13 @@ describe("MiniMax Video / Hailuo status, result and cancel", () => {
               ),
             ),
       )
-      expect(statuses.map((value) => value.status)).toEqual([
-        "queued",
-        "queued",
-        "running",
-        "completed",
-        "failed",
-        "running",
+      expect(statuses).toEqual([
+        { status: "running" },
+        { status: "running" },
+        { status: "running" },
+        { status: "completed" },
+        { status: "error", reason: "failed" },
+        { status: "running" },
       ])
       expect(calls[0].url).toBe("https://minimax.test/v1/query/video_generation?task_id=task_1")
     }),

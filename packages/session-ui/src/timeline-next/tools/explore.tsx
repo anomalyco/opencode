@@ -71,7 +71,7 @@ export function WebFetchTool(props: ToolProps) {
     <BasicTool
       {...props}
       hideDetails
-      icon="window-cursor"
+      icon="select-element"
       trigger={
         <div data-slot="basic-tool-tool-info-structured">
           <div data-slot="basic-tool-tool-info-main">
@@ -105,7 +105,7 @@ export function WebSearchTool(props: ToolProps) {
   return (
     <BasicTool
       {...props}
-      icon="window-cursor"
+      icon="select-element"
       hasContent={urls(props.output).length > 0}
       trigger={{
         title: i18n.t("ui.tool.searchWeb"),

@@ -648,6 +648,41 @@ describe("CodeMode schema flexibility", () => {
     expect(Object.hasOwn(received, "q")).toBe(false)
   })
 
+  test("tool arguments leave functions out and await promises, as JSON did", async () => {
+    const observed: Array<unknown> = []
+    const show = Tool.make({
+      description: "Show raw input",
+      input: { type: "object" },
+      execute: (input) =>
+        Effect.sync(() => {
+          observed.push(input)
+          return "ok"
+        }),
+    })
+    const runtime = CodeMode.make({ tools: { shop: { show } } })
+    for (const code of [
+      `await tools.shop.show({ q: "x", format(v) { return v } })`,
+      `await tools.shop.show({ n: Promise.resolve(5) })`,
+      // A toJSON method is a function too: left out, not run.
+      `await tools.shop.show({ item: "book", price: { cents: 1999, toJSON() { return "$19.99" } } })`,
+      `await tools.shop.show({ later: (async () => { await null; return [1, () => 2] })() })`,
+    ]) {
+      const result = await Effect.runPromise(runtime.execute(code))
+      expect(result.ok).toBe(true)
+    }
+    expect(observed).toStrictEqual([
+      { q: "x" },
+      { n: 5 },
+      { item: "book", price: { cents: 1999 } },
+      { later: [1, null] },
+    ])
+    const rejected = await Effect.runPromise(
+      runtime.execute(`await tools.shop.show({ n: Promise.reject(new Error("no price")) })`),
+    )
+    expect(rejected.ok ? undefined : rejected.error.message).toContain("no price")
+    expect(observed).toHaveLength(4)
+  })
+
   test("dropping undefined values lets optionalKey schemas accept conditional arguments", async () => {
     const observed: Array<unknown> = []
     const find = Tool.make({

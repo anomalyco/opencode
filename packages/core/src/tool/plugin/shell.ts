@@ -7,7 +7,10 @@ import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Shell as ShellSchema } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
 import { Clock, Deferred, Effect, Fiber, Option, Schema, Struct } from "effect"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
+import { Flag } from "../../flag.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
@@ -23,6 +26,7 @@ import { toolFailure } from "../runtime.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
+const CODE_MODE_TIMEOUT_MS = 10 * 60 * 1_000
 // How long a call the user interrupted waits for its stopped command to exit before settling with the output so far.
 const INTERRUPT_WAIT = "500 millis"
 
@@ -36,7 +40,7 @@ const OS =
       : process.platform === "linux"
         ? "Linux"
         : process.platform
-const description = (shell?: string) =>
+const description = (shell?: string, codeMode = false) =>
   [
     "Execute a shell command and return its output.",
     ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
@@ -45,9 +49,15 @@ const description = (shell?: string) =>
     "When output is large, the full result is saved to a file and a truncated preview is returned.",
     "Rely on automatic truncation unless filtering the output is more useful.",
     "Commands still running after their timeout move to the background.",
-    "Background commands return immediately, and you will be notified when they complete.",
+    // Code Mode has no background parameter.
+    ...(codeMode ? [] : ["Background commands return immediately, and you will be notified when they complete."]),
     "The current session ID is available in the OPENCODE_SESSION_ID environment variable.",
   ].join(" ")
+
+const timeoutInput = (foreground: number) =>
+  Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Optional timeout in milliseconds (default ${foreground}). When it expires, a foreground command moves to the background and a background command is stopped.`,
+  })
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
@@ -55,23 +65,39 @@ export const Input = Schema.Struct({
     description:
       "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead.",
   }),
-  timeout: Schema.optionalKey(NonNegativeInt).annotate({
-    description: `Optional timeout in milliseconds (default ${DEFAULT_TIMEOUT_MS}). When it expires, a foreground command moves to the background and a background command is stopped.`,
-  }),
+  timeout: timeoutInput(DEFAULT_TIMEOUT_MS),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
   }),
 })
 
+const CodeModeInput = Schema.Struct({
+  ...Struct.omit(Input.fields, ["background"]),
+  timeout: timeoutInput(CODE_MODE_TIMEOUT_MS),
+})
+
 const StructuredOutput = Schema.Struct({
-  output: Schema.String,
-  exitCode: Schema.NullOr(Schema.Number),
-  wallTimeSeconds: Schema.Number,
-  outputPath: Schema.optionalKey(Schema.String),
-  signal: Schema.optionalKey(Schema.String),
-  shellID: Schema.optionalKey(Schema.String),
-  pid: Schema.optionalKey(NonNegativeInt),
+  shellID: Schema.optionalKey(Schema.String).annotate({
+    description:
+      "Present only while the command is still running in the background. You will be notified when it exits. A result without shellID is final.",
+  }),
+  exitCode: Schema.NullOr(Schema.Number).annotate({
+    description:
+      "The exit code once the command has exited: 0 means success. null while it is still running, or when a signal ended it.",
+  }),
+  signal: Schema.optionalKey(Schema.String).annotate({ description: "The signal that ended the command, if any" }),
+  output: Schema.String.annotate({
+    description:
+      "Combined stdout and stderr as one string; there are no separate stdout or stderr fields. While shellID is present it is a notice instead, and the output streams to outputPath.",
+  }),
+  outputPath: Schema.optionalKey(Schema.String).annotate({
+    description: "File with the full output, when output was truncated or the command is running in the background",
+  }),
+  pid: Schema.optionalKey(NonNegativeInt).annotate({
+    description: "Process ID while the command is running in the background",
+  }),
+  wallTimeSeconds: Schema.Number.annotate({ description: "Seconds since the command started" }),
 })
 
 type Output = ReturnType<typeof ShellResult.output> & {
@@ -274,12 +300,15 @@ export const Plugin = {
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Context) {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
-    const environment = yield* Environment.Service
     const access = yield* FileAccess.Service
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
+    const config = yield* Config.Service
+    // Internal plugins are not re-run on config changes, so reload the tool transform instead.
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
@@ -301,7 +330,7 @@ export const Plugin = {
           ...Permission.invocation(context),
         })
       // Approval can outlive the directory, so validate immediately before spawning.
-      const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
+      const workdir = yield* Environment.typeFollowing(target.environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () =>
           Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
         ),
@@ -346,14 +375,25 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false },
+          // With full_codemode, shell is allowed in Code Mode and pinned so the catalog always lists it.
+          options: flags.resolve(loaded.entries).full_codemode.enabled
+            ? {
+                codemode: {
+                  pinned: true,
+                  description: description(undefined, true),
+                  input: CodeModeInput,
+                },
+              }
+            : { codemode: false },
           description: description(),
           input: Input,
           output: StructuredOutput,
           execute: (input, context) => {
+            // Code Mode input has no background parameter.
+            const background = "background" in input && input.background === true
             // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
-            const foreground = input.timeout || DEFAULT_TIMEOUT_MS
-            const timeout = input.background === true ? (input.timeout ?? 0) : foreground
+            const foreground = input.timeout || (context.codemode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
+            const timeout = background ? (input.timeout ?? 0) : foreground
             let finalTimeout = timeout
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
             return Effect.uninterruptibleMask((restore) =>
@@ -376,7 +416,7 @@ export const Plugin = {
                       timeout,
                       shell: yield* compatibleShell,
                       metadata: { sessionID: context.sessionID },
-                      waited: input.background !== true,
+                      waited: !background,
                       toolCall: {
                         sessionID: context.sessionID,
                         assistantMessageID: context.messageID,
@@ -403,7 +443,7 @@ export const Plugin = {
                           ),
                         )
                         // A foreground timeout moves the command to the background instead of stopping it.
-                        if (input.background !== true) invocation.timeout = 0
+                        if (!background) invocation.timeout = 0
                       }),
                   )
                   yield* context.progress({ shellID: info.id })
@@ -416,7 +456,7 @@ export const Plugin = {
                   // Stopped while the command was starting: stop it now.
                   if (yield* Deferred.isDone(stopped)) return yield* cancelled(info, job.id)
 
-                  if (input.background === true) {
+                  if (background) {
                     yield* jobs.background(job.id)
                     yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                     return backgroundResult(info, yield* Clock.currentTimeMillis)
@@ -473,7 +513,7 @@ export const Plugin = {
               // Shell spans, including the job that waits for a backgrounded command, name the call that started them.
               Effect.annotateSpans({
                 "gen_ai.tool.call.id": context.id,
-                ...(input.background === true ? { "opencode.shell.background": true } : {}),
+                ...(background ? { "opencode.shell.background": true } : {}),
               }),
               Effect.map((output) => toolResult(output, finalTimeout)),
               Effect.mapError(toolFailure(`Unable to execute command: ${input.command}`)),

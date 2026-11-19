@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "38d91e9b-602d-48e7-9785-e9cb22ad5525",
-  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
+  "id": "384fb1c4-ea92-4ede-921b-12553639961c",
+  "prevIds": ["38d91e9b-602d-48e7-9785-e9cb22ad5525", "ab8fea18-0d95-48a1-b631-c112235dc492"],
   "ddl": [
     {
       "name": "mcp_trusted_host",
@@ -18,6 +18,10 @@
     },
     {
       "name": "control_account",
+      "entityType": "tables"
+    },
+    {
+      "name": "automation",
       "entityType": "tables"
     },
     {
@@ -50,10 +54,6 @@
     },
     {
       "name": "project",
-      "entityType": "tables"
-    },
-    {
-      "name": "schedule",
       "entityType": "tables"
     },
     {
@@ -369,6 +369,226 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "control_account"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "directory",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "trigger",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "tz",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "action",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'active'",
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "next_due_at",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "run_count",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "failures",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_run_at",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_message_id",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_outcome",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_output",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "retry_at",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "event_position",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "automation"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "automation"
     },
     {
       "type": "text",
@@ -959,216 +1179,6 @@
       "name": "commands",
       "entityType": "columns",
       "table": "project"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "session_id",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "name",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "action",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "check",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "when",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "tz",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "'active'",
-      "generated": null,
-      "name": "status",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "next_due_at",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "ends_at",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "remaining_runs",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "0",
-      "generated": null,
-      "name": "run_count",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "0",
-      "generated": null,
-      "name": "checks",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "0",
-      "generated": null,
-      "name": "failures",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "last_fired_at",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "last_message_id",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "last_outcome",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "retry_at",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "state",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_created",
-      "entityType": "columns",
-      "table": "schedule"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_updated",
-      "entityType": "columns",
-      "table": "schedule"
     },
     {
       "type": "text",
@@ -2152,17 +2162,6 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_schedule_session_id_session_v2_id_fk",
-      "entityType": "fks",
-      "table": "schedule"
-    },
-    {
-      "columns": ["session_id"],
-      "tableTo": "session_v2",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "nameExplicit": false,
       "name": "fk_blob_ref_session_id_session_v2_id_fk",
       "entityType": "fks",
       "table": "blob_ref"
@@ -2332,6 +2331,13 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
+      "name": "automation_pk",
+      "table": "automation",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
       "name": "credential_pk",
       "table": "credential",
       "entityType": "pks"
@@ -2376,13 +2382,6 @@
       "nameExplicit": false,
       "name": "project_pk",
       "table": "project",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "schedule_pk",
-      "table": "schedule",
       "entityType": "pks"
     },
     {
@@ -2433,6 +2432,48 @@
       "name": "workspace_pk",
       "table": "workspace",
       "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "automation_project_idx",
+      "entityType": "indexes",
+      "table": "automation"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "automation_session_idx",
+      "entityType": "indexes",
+      "table": "automation"
+    },
+    {
+      "columns": [
+        {
+          "value": "next_due_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"automation\".\"status\" = 'active'",
+      "origin": "manual",
+      "name": "automation_active_idx",
+      "entityType": "indexes",
+      "table": "automation"
     },
     {
       "columns": [
@@ -2537,34 +2578,6 @@
       "name": "permission_project_action_resource_idx",
       "entityType": "indexes",
       "table": "permission"
-    },
-    {
-      "columns": [
-        {
-          "value": "session_id",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "origin": "manual",
-      "name": "schedule_session_idx",
-      "entityType": "indexes",
-      "table": "schedule"
-    },
-    {
-      "columns": [
-        {
-          "value": "next_due_at",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": "\"schedule\".\"status\" = 'active' and \"schedule\".\"next_due_at\" is not null",
-      "origin": "manual",
-      "name": "schedule_due_idx",
-      "entityType": "indexes",
-      "table": "schedule"
     },
     {
       "columns": [

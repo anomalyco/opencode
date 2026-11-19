@@ -38,4 +38,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Tambah server",
   "menu.delete": "Hapus",
+  "error.unavailable": "SSH tidak tersedia",
 }

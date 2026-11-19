@@ -5,6 +5,7 @@ import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Provider } from "@opencode/core/provider"
@@ -259,5 +260,34 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
       { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
     ])
     expect((yield* run("worktree_list", {})).worktrees).not.toContainEqual({ directory, strategy: "git" })
+  }),
+)
+
+it.effect("adapts the worktree session_move hint to execute, direct tools, or neither", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const hooks = yield* PluginHooks.Service
+    yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
+    const model = Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("alpha") })
+    const trigger = (tools: Record<string, { description: string; input: Record<string, never> }>) =>
+      hooks
+        .trigger("session", "context", {
+          sessionID: Session.ID.make("ses_opencode_hint"),
+          agent: toolIdentity.agent,
+          model,
+          system: [],
+          messages: [],
+          tools,
+          options: {},
+        })
+        .pipe(Effect.map((event) => event.system.map((part) => part.text)))
+
+    expect(yield* trigger({ execute: { description: "execute", input: {} } })).toEqual([
+      "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
+    ])
+    expect(yield* trigger({ opencode_session_move: { description: "move", input: {} } })).toEqual([
+      "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider calling `opencode_session_move` to make the worktree the session's working directory.",
+    ])
+    expect(yield* trigger({ read: { description: "read", input: {} } })).toEqual([])
   }),
 )

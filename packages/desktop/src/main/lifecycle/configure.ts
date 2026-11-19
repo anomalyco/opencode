@@ -44,7 +44,15 @@ export function configureApplication() {
     app.commandLine.appendSwitch("enable-precise-memory-info")
 
   const testRoot = createTestRoot()
-  app.setPath("userData", testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), APP_ID))
+  const customUserData = debugBuild(build) && !testRoot ? process.env.OPENCODE_DESKTOP_USER_DATA : undefined
+  app.setPath(
+    "userData",
+    customUserData ?? (testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), APP_ID)),
+  )
+
+  if (customUserData) {
+    app.setPath("sessionData", path.join(customUserData, "session"))
+  }
 
   if (testRoot) {
     app.setPath("sessionData", path.join(testRoot, "session"))

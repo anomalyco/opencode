@@ -181,14 +181,16 @@ starts a pipe process: any command without a terminal. Both return
   `"SIGTERM"`, when a signal ended the process (on Windows, when the daemon
   signalled it); `exit_code` is then null. `signal` is left out when there is
   none.
-- On Unix an exited pipe process stays listed, as a zombie, until `terminate`.
-  The zombie keeps its PID and process group ID reserved, so killing the group
-  can never reach an unrelated process. On Windows the process object and job
-  handle stay open until `terminate`, so the PID is not reused either.
-  `terminate` kills the whole tree (SIGKILL on Unix; the job on Windows),
-  reaps it and removes the process; it never waits on a descendant that left
-  the process group or job and still holds the pipe. The daemon never deletes
-  output files.
+- A successful command may leave background processes running untracked.
+  On Unix a non-zero exit code sends SIGTERM to the process group before the
+  waiter reaps the leader, then SIGKILL after three seconds if the group
+  survives. A signal death has no numeric exit code and does not trigger this
+  cleanup. On Windows a non-zero exit terminates the job immediately. The
+  waiter clears kill-on-close and releases the job and process handles at exit.
+- The finished record (including exit status, output path and metadata) stays
+  listed until `terminate`. Its PID is historical metadata. `terminate` kills
+  a running tree and removes its record; after exit it only removes the record.
+  The daemon never deletes output files.
 
 ### Line count
 
@@ -225,9 +227,8 @@ process group and the child, as a real signal. **On Windows every signal is a
 hard kill** of the job: there is no console, so SIGTERM and SIGINT cannot be
 caught, and the exit reports the signal that was sent, not a platform exit
 code. Unlike `terminate`, `signal` keeps the process: `wait` then gets a normal
-`Exited` with `signal`. Signalling an exited process is allowed and reaches
-whatever is left of its group or job (an empty group is not an error); after
-`terminate` the process is gone and `signal` fails.
+`Exited` with `signal`. Signalling an exited process returns `Ok` without
+sending a signal; after `terminate` the record is gone and `signal` fails.
 
 If an outer job refuses the child (`ERROR_ACCESS_DENIED`, for example a job
 with UI restrictions), the daemon runs the command anyway without a job, logs
@@ -256,7 +257,7 @@ connected owner; the superseded connection can no longer prepare handoffs or
 stop the daemon, and its disconnect does not affect the new owner. The playground holds ownership until it exits; other CLI commands
 only observe or operate an existing daemon and never start one.
 
-Protocol v8 uses four-byte big-endian framing with bounded UTF-8 JSON control
+Protocol v9 uses four-byte big-endian framing with bounded UTF-8 JSON control
 frames and tagged raw binary output frames. Requests (`op`): `ping`, `own`,
 `prepare_handoff`, `create_pty`, `create_pipe`, `list`, `get`, `wait`,
 `signal`, `set_metadata`, `write`, `resize`, `control` (atomic interaction
@@ -271,7 +272,7 @@ connection, once the token has been checked. Clients can therefore probe for
 a request.
 
 `Pong` and the registration carry `features` (required), the daemon's additive
-capabilities. Protocol 8 needs none, so the list is empty. Later additive
+capabilities. Protocol 9 needs none, so the list is empty. Later additive
 changes, such as a new request or field older clients can ignore, extend
 `features` and keep the protocol version. Only breaking changes bump
 `PROTOCOL_VERSION`, which clients reject on mismatch.
@@ -310,3 +311,8 @@ the database. It starts the daemon only when the first terminal or pipe
 process is created.
 Only an explicit restart handoff descriptor lets a replacement server reuse
 the previous daemon's runtime directory and claim its ownership.
+
+On upgrade to protocol 9, OpenCode discovers protocol-8 daemons under its
+runtime root and in its inherited handoff directory. It authenticates each
+live instance and requests shutdown. This one-time replacement ends its
+running commands and persistent terminals. A new daemon still starts lazily.
