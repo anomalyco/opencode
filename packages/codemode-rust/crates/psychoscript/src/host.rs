@@ -1413,7 +1413,7 @@ fn to_host(
         }
         Kind::Map(m) | Kind::Set(m) => {
             let is_map = matches!(vm.heap[id as usize].kind, Kind::Map(_));
-            let entries: Vec<(Value, Value)> = m.entries.iter().flatten().copied().collect();
+            let entries: Vec<(Value, Value)> = m.iter().copied().collect();
             if is_map {
                 let mut out = Vec::with_capacity(entries.len());
                 for (k, val) in &entries {

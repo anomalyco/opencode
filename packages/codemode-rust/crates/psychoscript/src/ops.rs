@@ -1589,7 +1589,7 @@ impl Vm {
                 }
                 Kind::Array(items) => return Ok(without_holes(items)),
                 Kind::Set(m) => {
-                    return Ok(m.entries.iter().flatten().map(|(k, _)| *k).collect());
+                    return Ok(m.iter().map(|(k, _)| *k).collect());
                 }
                 Kind::Generator(GenState::Suspended(_)) => return self.collect_generator(*id),
                 _ => {}
@@ -2155,25 +2155,15 @@ impl Vm {
                 }))
             }
             Kind::MapIter { target, pos, kind } if direct => {
-                let (target, mut pos, kind) = (*target, *pos as usize, *kind);
-                let (entry, is_set) = match &self.heap[target as usize].kind {
-                    Kind::Map(m) | Kind::Set(m) => {
-                        while pos < m.entries.len() && m.entries[pos].is_none() {
-                            pos += 1;
-                        }
-                        (
-                            m.entries.get(pos).cloned().flatten(),
-                            matches!(self.heap[target as usize].kind, Kind::Set(_)),
-                        )
-                    }
-                    _ => (None, false),
+                let (target, mut at, kind) = (*target, *pos, *kind);
+                let target = &self.heap[target as usize].kind;
+                let is_set = matches!(target, Kind::Set(_));
+                let entry = match target {
+                    Kind::Map(m) | Kind::Set(m) => m.next_entry(&mut at),
+                    _ => None,
                 };
                 if let Kind::MapIter { pos: p, .. } = &mut self.heap[id as usize].kind {
-                    *p = if entry.is_some() {
-                        (pos + 1) as u32
-                    } else {
-                        u32::MAX
-                    };
+                    *p = if entry.is_some() { at } else { u64::MAX };
                 }
                 let Some((k, v)) = entry else { return Ok(None) };
                 let v = if is_set { k } else { v };

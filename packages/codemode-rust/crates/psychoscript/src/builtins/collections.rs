@@ -274,28 +274,19 @@ pub(crate) fn map_for_each_step(
     use crate::native::{Input, Step};
     let this = fr.this_slot(vm);
     let id = this.obj().unwrap_or(0);
-    let mut i = fr.index(vm, 2);
+    // The logical position to continue from (see `OrderedMap`), exact in a slot up to 2^53.
+    let mut at = fr.index(vm, 2) as u64;
     match input {
         Input::Returned(_) => fuel::step(vm),
         Input::Threw(e) => return Err(e),
         Input::Start | Input::Finished(_) => {}
     }
     let is_set = matches!(vm.heap[id as usize].kind, Kind::Set(_));
-    loop {
-        let entry = {
-            let m = table(vm, id);
-            if i >= m.entries.len() {
-                break;
-            }
-            m.entries[i]
-        };
-        i += 1;
-        if let Some((k, v)) = entry {
-            fr.set_index(vm, 2, i);
-            let v = if is_set { k } else { v };
-            let (f, this_arg) = (fr.slot(vm, 0), fr.slot(vm, 1));
-            return fr.call_slots(vm, f, this_arg, [Slot::pack(v), Slot::pack(k), this]);
-        }
+    if let Some((k, v)) = table(vm, id).next_entry(&mut at) {
+        fr.set_index(vm, 2, at as usize);
+        let v = if is_set { k } else { v };
+        let (f, this_arg) = (fr.slot(vm, 0), fr.slot(vm, 1));
+        return fr.call_slots(vm, f, this_arg, [Slot::pack(v), Slot::pack(k), this]);
     }
     vm.bytecode_builtin();
     Ok(Step::Done(Value::Undef))

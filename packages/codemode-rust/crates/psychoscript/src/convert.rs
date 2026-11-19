@@ -94,7 +94,7 @@ fn to_json_inner(
                     Json::Array(out)
                 }
                 Kind::Set(m) => {
-                    let items: Vec<Value> = m.entries.iter().flatten().map(|(k, _)| *k).collect();
+                    let items: Vec<Value> = m.iter().map(|(k, _)| *k).collect();
                     let mut out = Vec::with_capacity(items.len());
                     for (i, item) in items.iter().enumerate() {
                         out.push(
@@ -1531,8 +1531,7 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
                 }
                 Kind::Map(m) | Kind::Set(m) => {
                     let is_set = matches!(vm.heap[id as usize].kind, Kind::Set(_));
-                    let entries: Vec<(Value, Value)> =
-                        m.entries.iter().flatten().cloned().collect();
+                    let entries: Vec<(Value, Value)> = m.iter().cloned().collect();
                     let _ = write!(
                         out,
                         "{}({}) [",

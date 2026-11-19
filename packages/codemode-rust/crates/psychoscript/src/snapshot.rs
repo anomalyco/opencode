@@ -848,16 +848,13 @@ fn iter_kind(k: IterKind) -> u8 {
     }
 }
 
+/// The live entries with their logical positions, which iterators and native frames hold.
 fn map(m: &OrderedMap) -> J {
-    J::Array(
-        m.entries
-            .iter()
-            .map(|e| match e {
-                Some((k, v)) => json!([val(k), val(v)]),
-                None => J::Null,
-            })
-            .collect(),
-    )
+    let entries: Vec<J> = m
+        .positioned()
+        .map(|(p, k, v)| json!([p, val(&k), val(&v)]))
+        .collect();
+    json!([m.end(), entries])
 }
 
 fn reaction(r: &Reaction) -> J {
@@ -1498,25 +1495,19 @@ impl Dec<'_> {
     fn map(&self, vm: &mut Vm, j: &J) -> R<Box<OrderedMap>> {
         let mut entries = Vec::new();
         let mut keys = Vec::new();
-        for e in j
+        for e in at(j, 1)?
             .as_array()
             .ok_or_else(|| invalid("a map is not a list."))?
         {
-            match e {
-                J::Null => {
-                    entries.push(None);
-                    keys.push(None);
-                }
-                e => {
-                    let k = self.val(at(e, 0)?)?;
-                    let v = self.val(at(e, 1)?)?;
-                    let key = vm.map_key(&k);
-                    keys.push(Some(key));
-                    entries.push(Some((vm.map_entry_key(key, k), v)));
-                }
-            }
+            let k = self.val(at(e, 1)?)?;
+            let v = self.val(at(e, 2)?)?;
+            let key = vm.map_key(&k);
+            keys.push(key);
+            entries.push((uint(at(e, 0)?)?, vm.map_entry_key(key, k), v));
         }
-        Ok(Box::new(OrderedMap::restore(entries, keys)))
+        OrderedMap::restore(uint(at(j, 0)?)?, entries, keys)
+            .map(Box::new)
+            .ok_or_else(|| invalid("a map's positions are out of order."))
     }
 
     fn iter_kind(j: &J) -> R<IterKind> {
@@ -1683,12 +1674,23 @@ impl Dec<'_> {
             "gen" => Kind::Generator(self.gen_state(vm, f(1)?)?),
             "ai" | "mi" | "xi" => {
                 let target = self.id(f(1)?)?;
-                let pos = u32_(f(2)?)?;
                 let kind = Self::iter_kind(f(3)?)?;
                 match tag.as_str() {
-                    "ai" => Kind::ArrayIter { target, pos, kind },
-                    "mi" => Kind::MapIter { target, pos, kind },
-                    _ => Kind::ExoticIter { target, pos, kind },
+                    "ai" => Kind::ArrayIter {
+                        target,
+                        pos: u32_(f(2)?)?,
+                        kind,
+                    },
+                    "mi" => Kind::MapIter {
+                        target,
+                        pos: uint(f(2)?)?,
+                        kind,
+                    },
+                    _ => Kind::ExoticIter {
+                        target,
+                        pos: u32_(f(2)?)?,
+                        kind,
+                    },
                 }
             }
             "si" => {

@@ -208,34 +208,117 @@ impl std::hash::Hash for MapKey {
     }
 }
 
-/// Insertion-ordered hash map with tombstones, so iterators stay valid across deletes.
+/// Insertion-ordered hash map. Each entry has a logical position, numbered in insertion order and never reused, and
+/// iterators hold logical positions, so they stay valid across deletes, inserts, `clear()` and compaction.
+/// A delete leaves a tombstone (`None`); once tombstones outnumber live entries they are dropped.
 #[derive(Default)]
 pub struct OrderedMap {
-    pub entries: Vec<Option<(Value, Value)>>,
+    entries: Vec<Option<(Value, Value)>>,
+    /// While `sparse` is `None`, entry `i` is at logical position `base + i`.
+    base: u64,
+    sparse: Option<Sparse>,
+    /// Key to slot in `entries`, plus `shift` (wrapping), so dropping entries off the front leaves it as it is.
     index: FxHashMap<MapKey, u32>,
+    shift: u32,
     pub live: usize,
 }
 
+/// The logical positions of a map whose compaction left gaps between them.
+struct Sparse {
+    /// One per entry, increasing.
+    positions: Vec<u64>,
+    /// The position the next inserted entry gets.
+    next: u64,
+}
+
 impl OrderedMap {
-    /// A map with these entries, tombstones (`None`) included, as a snapshot saved it.
-    pub fn restore(entries: Vec<Option<(Value, Value)>>, keys: Vec<Option<MapKey>>) -> Self {
-        let mut index = FxHashMap::default();
-        let mut live = 0;
-        for (i, k) in keys.into_iter().enumerate() {
-            if let Some(k) = k {
-                index.insert(k, i as u32);
-                live += 1;
-            }
+    /// A map with these live entries at these logical positions and the position the next insert gets, as a
+    /// snapshot saved it, or `None` if the positions don't increase below `end`.
+    pub fn restore(end: u64, entries: Vec<(u64, Value, Value)>, keys: Vec<MapKey>) -> Option<Self> {
+        if !entries.windows(2).all(|w| w[0].0 < w[1].0)
+            || entries.last().is_some_and(|e| e.0 >= end)
+        {
+            return None;
         }
-        OrderedMap {
-            entries,
-            index,
-            live,
+        let positions = entries.iter().map(|e| e.0).collect();
+        let mut map = OrderedMap {
+            index: keys.into_iter().zip(0..).collect(),
+            live: entries.len(),
+            entries: entries.into_iter().map(|e| Some((e.1, e.2))).collect(),
+            ..OrderedMap::default()
+        };
+        map.place(positions, end);
+        Some(map)
+    }
+
+    /// The storage, deleted entries included, for tracing it a range at a time. A delete may compact it; the collector
+    /// traces a map whole before any write to it, so a range never shifts under it.
+    pub fn slots(&self) -> &[Option<(Value, Value)>] {
+        &self.entries
+    }
+
+    /// The live entries in insertion order.
+    pub fn iter(&self) -> impl Iterator<Item = &(Value, Value)> {
+        self.entries.iter().flatten()
+    }
+
+    /// The live entries in insertion order, with their logical positions.
+    pub fn positioned(&self) -> impl Iterator<Item = (u64, Value, Value)> + '_ {
+        self.entries
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| e.map(|(k, v)| (self.position(i), k, v)))
+    }
+
+    /// The logical position the next inserted entry gets.
+    pub fn end(&self) -> u64 {
+        match &self.sparse {
+            Some(s) => s.next,
+            None => self.base + self.entries.len() as u64,
+        }
+    }
+
+    /// The first live entry at logical position `*at` or after; moves `*at` just past it.
+    #[inline(always)]
+    pub fn next_entry(&self, at: &mut u64) -> Option<(Value, Value)> {
+        // An iterator's next entry is usually the one right after its last.
+        if self.sparse.is_none()
+            && let Some(&Some(e)) = at
+                .checked_sub(self.base)
+                .and_then(|i| self.entries.get(usize::try_from(i).ok()?))
+        {
+            *at += 1;
+            return Some(e);
+        }
+        self.seek(at)
+    }
+
+    /// Out of line, so iterators inline only the common case of `next_entry`.
+    #[inline(never)]
+    fn seek(&self, at: &mut u64) -> Option<(Value, Value)> {
+        let mut i = match &self.sparse {
+            Some(s) => s.positions.partition_point(|&q| q < *at),
+            None => usize::try_from(at.saturating_sub(self.base)).unwrap_or(usize::MAX),
+        };
+        while let Some(e) = self.entries.get(i) {
+            if let Some(e) = *e {
+                *at = self.position(i) + 1;
+                return Some(e);
+            }
+            i += 1;
+        }
+        None
+    }
+
+    fn position(&self, i: usize) -> u64 {
+        match &self.sparse {
+            Some(s) => s.positions[i],
+            None => self.base + i as u64,
         }
     }
 
     pub fn get(&self, key: MapKey) -> Option<Value> {
-        let i = *self.index.get(&key)?;
+        let i = self.index.get(&key)?.wrapping_sub(self.shift);
         self.entries[i as usize].as_ref().map(|e| e.1)
     }
 
@@ -244,10 +327,10 @@ impl OrderedMap {
     }
 
     pub fn set(&mut self, key: MapKey, k: Value, v: Value) {
-        let next = self.entries.len() as u32;
+        let next = (self.entries.len() as u32).wrapping_add(self.shift);
         match self.index.entry(key) {
             std::collections::hash_map::Entry::Occupied(i) => {
-                if let Some(e) = &mut self.entries[*i.get() as usize] {
+                if let Some(e) = &mut self.entries[i.get().wrapping_sub(self.shift) as usize] {
                     e.1 = v;
                 }
             }
@@ -259,26 +342,95 @@ impl OrderedMap {
                     k
                 };
                 self.entries.push(Some((k, v)));
+                if let Some(s) = &mut self.sparse {
+                    s.positions.push(s.next);
+                    s.next += 1;
+                }
                 self.live += 1;
             }
         }
     }
 
     pub fn delete(&mut self, key: MapKey) -> bool {
-        match self.index.remove(&key) {
-            Some(i) => {
-                self.entries[i as usize] = None;
-                self.live -= 1;
-                true
-            }
-            None => false,
+        let Some(i) = self.index.remove(&key) else {
+            return false;
+        };
+        self.entries[i.wrapping_sub(self.shift) as usize] = None;
+        self.live -= 1;
+        if self.entries.len() - self.live > self.live.max(32) {
+            self.compact();
         }
+        true
     }
 
+    /// Entries added after a `clear()` follow every position handed out before it, so iterators continue with them.
     pub fn clear(&mut self) {
-        self.entries.fill(None);
+        let end = self.end();
+        self.entries.clear();
         self.index.clear();
         self.live = 0;
+        self.place(Vec::new(), end);
+    }
+
+    /// Drops the tombstones, keeping each survivor's logical position: those in front alone if few are left behind
+    /// them, which moves the rest down without touching the index.
+    #[inline(never)]
+    fn compact(&mut self) {
+        let end = self.end();
+        let front = self.entries.iter().take_while(|e| e.is_none()).count();
+        if self.entries.len() - self.live - front <= self.live.max(32) / 2 {
+            self.entries.drain(..front);
+            self.shift = self.shift.wrapping_add(front as u32);
+            match self.sparse.take() {
+                Some(mut s) => {
+                    s.positions.drain(..front);
+                    self.place(s.positions, end);
+                }
+                None => self.base += front as u64,
+            }
+            return;
+        }
+        let old = self.sparse.take();
+        let mut slots = vec![0; self.entries.len()];
+        let mut positions = Vec::with_capacity(self.live);
+        let mut kept = 0;
+        for i in 0..self.entries.len() {
+            slots[i] = kept as u32;
+            if let Some(e) = self.entries[i] {
+                self.entries[kept] = Some(e);
+                positions.push(match &old {
+                    Some(old) => old.positions[i],
+                    None => self.base + i as u64,
+                });
+                kept += 1;
+            }
+        }
+        self.entries.truncate(kept);
+        for i in self.index.values_mut() {
+            *i = slots[i.wrapping_sub(self.shift) as usize];
+        }
+        self.shift = 0;
+        self.place(positions, end);
+    }
+
+    /// Gives the entries these increasing logical positions, below `end`, the position the next insert gets.
+    fn place(&mut self, positions: Vec<u64>, end: u64) {
+        match positions.first() {
+            None => {
+                self.base = end;
+                self.sparse = None;
+            }
+            Some(&first) if first + positions.len() as u64 == end => {
+                self.base = first;
+                self.sparse = None;
+            }
+            Some(_) => {
+                self.sparse = Some(Sparse {
+                    positions,
+                    next: end,
+                })
+            }
+        }
     }
 }
 
@@ -348,7 +500,8 @@ pub enum Kind {
     },
     MapIter {
         target: Id,
-        pos: u32,
+        /// The logical position to continue from (see `OrderedMap`), `u64::MAX` once done.
+        pos: u64,
         kind: IterKind,
     },
     StrIter {
@@ -449,6 +602,147 @@ impl Obj {
             Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => true,
             Kind::Namespace(n) => !n.is_root(),
             _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key(n: u64) -> (MapKey, Value) {
+        (MapKey::Num((n as f64).to_bits()), Value::Num(n as f64))
+    }
+
+    fn num(v: Value) -> f64 {
+        match v {
+            Value::Num(n) => n,
+            _ => unreachable!(),
+        }
+    }
+
+    fn keys(m: &OrderedMap) -> Vec<f64> {
+        m.iter().map(|(k, _)| num(*k)).collect()
+    }
+
+    /// A small deterministic generator.
+    fn lcg(state: &mut u64) -> u64 {
+        *state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        *state >> 33
+    }
+
+    fn assert_bounded(m: &OrderedMap) {
+        assert!(
+            m.entries.len() <= m.live + m.live.max(32),
+            "{} slots for {} entries",
+            m.entries.len(),
+            m.live
+        );
+    }
+
+    #[test]
+    fn churn_around_two_thousand_entries_stays_within_twice_the_live_ones() {
+        // A Map deleting random keys, and a Set deleting its oldest: 400k operations each around 2,000 entries.
+        let (mut map, mut set) = (OrderedMap::default(), OrderedMap::default());
+        let (mut live, mut order) = (Vec::new(), std::collections::VecDeque::new());
+        let mut rng = 7;
+        for n in 0..200_000u64 {
+            let (k, v) = key(n);
+            map.set(k, v, v);
+            set.set(k, v, Value::Undef);
+            live.push(n);
+            order.push_back(n);
+            if live.len() > 2000 {
+                let gone = live.swap_remove(lcg(&mut rng) as usize % live.len());
+                assert!(map.delete(key(gone).0));
+                assert!(set.delete(key(order.pop_front().unwrap()).0));
+            }
+            assert_bounded(&map);
+            assert_bounded(&set);
+        }
+        live.sort_unstable();
+        let mut got = keys(&map);
+        got.sort_by(f64::total_cmp);
+        assert_eq!(got, live.iter().map(|&n| n as f64).collect::<Vec<_>>());
+        assert_eq!(
+            keys(&set),
+            order.iter().map(|&n| n as f64).collect::<Vec<_>>()
+        );
+        assert_eq!(map.get(key(199_999).0).map(num), Some(199_999.0));
+    }
+
+    #[test]
+    fn a_permanent_first_key_with_churn_behind_it_stays_bounded() {
+        let mut m = OrderedMap::default();
+        let (k, v) = key(u64::MAX >> 12);
+        m.set(k, v, v);
+        for n in 0..400_000u64 {
+            let (k, v) = key(n);
+            m.set(k, v, v);
+            if n >= 2000 {
+                assert!(m.delete(key(n - 2000).0));
+            }
+            assert_bounded(&m);
+        }
+        assert!(m.sparse.is_some());
+        let got = keys(&m);
+        assert_eq!(got[0], (u64::MAX >> 12) as f64);
+        assert_eq!(
+            got[1..],
+            (398_000..400_000).map(|n| n as f64).collect::<Vec<_>>()[..]
+        );
+        let mut at = 0;
+        assert_eq!(m.next_entry(&mut at).map(|e| num(e.0)), Some(num(v)));
+        assert_eq!(m.get(key(399_999).0).map(num), Some(399_999.0));
+    }
+
+    /// Cursors over a compacting map step exactly as over a list that only ever gains tombstones.
+    #[test]
+    fn cursors_follow_logical_positions_through_compaction_and_clear() {
+        let mut m = OrderedMap::default();
+        let mut model: Vec<Option<u64>> = Vec::new();
+        let mut slot = std::collections::HashMap::new();
+        let mut live = Vec::new();
+        let mut cursors = [(0u64, 0usize); 4];
+        let mut rng = 11;
+        let mut next = 0;
+        for round in 0..200_000 {
+            match lcg(&mut rng) % 100 {
+                0..45 => {
+                    let (k, v) = key(next);
+                    m.set(k, v, v);
+                    slot.insert(next, model.len());
+                    model.push(Some(next));
+                    live.push(next);
+                    next += 1;
+                }
+                45..90 if !live.is_empty() => {
+                    let gone = live.swap_remove(lcg(&mut rng) as usize % live.len());
+                    assert!(m.delete(key(gone).0));
+                    model[slot.remove(&gone).unwrap()] = None;
+                }
+                90 if round % 7 == 0 => {
+                    m.clear();
+                    model.iter_mut().for_each(|e| *e = None);
+                    slot.clear();
+                    live.clear();
+                }
+                _ => {
+                    let (at, i) = &mut cursors[lcg(&mut rng) as usize % 4];
+                    while *i < model.len() && model[*i].is_none() {
+                        *i += 1;
+                    }
+                    let want = model.get(*i).copied().flatten();
+                    if want.is_some() {
+                        *i += 1;
+                    }
+                    let got = m.next_entry(at).map(|e| num(e.0));
+                    assert_eq!(got, want.map(|n| n as f64));
+                }
+            }
+            assert_bounded(&m);
         }
     }
 }

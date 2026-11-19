@@ -239,7 +239,7 @@ impl FastWalk {
                     _ => Some(Vec::new()),
                 }
             }
-            Kind::Set(m) => Some(m.entries.iter().flatten().map(|(k, _)| *k).collect()),
+            Kind::Set(m) => Some(m.iter().map(|(k, _)| *k).collect()),
             _ => None,
         };
         if let Some(items) = items {
@@ -695,9 +695,7 @@ fn run(vm: &mut Vm, c: &mut Cross, mut act: Act, mut root_awaited: bool) -> Resu
                     let target = match val {
                         Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Set(_)) => {
                             let items = match &vm.heap[id as usize].kind {
-                                Kind::Set(m) => {
-                                    m.entries.iter().flatten().map(|(k, _)| *k).collect()
-                                }
+                                Kind::Set(m) => m.iter().map(|(k, _)| *k).collect(),
                                 _ => Vec::new(),
                             };
                             vm.new_array(items)

@@ -1230,7 +1230,7 @@ fn clone_value(vm: &mut Vm, v: &Value, memo: &mut Vec<(Id, Id)>) -> Res {
             let copy = vm.alloc(Obj::new(Some(proto), kind));
             remember(vm, memo, copy);
             let entries: Vec<(Value, Value)> = match &vm.heap[id as usize].kind {
-                Kind::Map(m) | Kind::Set(m) => m.entries.iter().flatten().copied().collect(),
+                Kind::Map(m) | Kind::Set(m) => m.iter().copied().collect(),
                 _ => Vec::new(),
             };
             for (k, val) in entries {

@@ -336,12 +336,7 @@ fn new_set(vm: &mut Vm, entries: Vec<Value>) -> Id {
 }
 
 fn live_values(vm: &mut Vm, id: Id) -> Vec<Value> {
-    table(vm, id)
-        .entries
-        .iter()
-        .flatten()
-        .map(|e| e.0)
-        .collect()
+    table(vm, id).iter().map(|e| e.0).collect()
 }
 
 fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
@@ -516,18 +511,9 @@ fn set_method_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> 
         } else {
             target
         };
-        let mut i = fr.index(vm, SM_AT);
-        loop {
-            let entry = {
-                let m = table(vm, walk);
-                if i >= m.entries.len() {
-                    break;
-                }
-                m.entries[i]
-            };
-            i += 1;
-            let Some((item, _)) = entry else { continue };
-            fr.set_index(vm, SM_AT, i);
+        let mut at = fr.index(vm, SM_AT) as u64;
+        if let Some((item, _)) = table(vm, walk).next_entry(&mut at) {
+            fr.set_index(vm, SM_AT, at as usize);
             fr.set(vm, SM_ITEM, item);
             let (has, other) = (fr.slot(vm, SM_HAS), fr.slot(vm, SM_OTHER));
             return fr.call_slots(vm, has, other, [Slot::pack(item)]);
@@ -580,17 +566,9 @@ fn ask_builtin(
     } else {
         target
     };
-    let mut i = 0;
-    loop {
-        let entry = {
-            let m = table(vm, walk);
-            if i >= m.entries.len() {
-                break;
-            }
-            m.entries[i]
-        };
-        i += 1;
-        let Some((item, _)) = entry else { continue };
+    // A logical position (see `OrderedMap`): `difference` deletes from the Set it walks, which may compact it.
+    let mut at = 0;
+    while let Some((item, _)) = table(vm, walk).next_entry(&mut at) {
         let r = vm.call_counted(&has, other, &[item])?;
         let found = vm.truthy(&r);
         if answer(vm, name, result, item, found) {

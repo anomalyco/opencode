@@ -201,7 +201,7 @@ pub fn bulk(o: &Obj, from: usize, to: usize, visit: &mut impl FnMut(Ref)) {
         Kind::Array(items) | Kind::Arguments(items) => t.vals(range(items, from, to)),
         Kind::ListIter { items, .. } => t.vals(range(items, from, to)),
         Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => {
-            for (k, v) in range(&m.entries, from, to).iter().flatten() {
+            for (k, v) in range(m.slots(), from, to).iter().flatten() {
                 t.val(k);
                 t.val(v);
             }
@@ -216,7 +216,7 @@ pub fn bulk_len(o: &Obj) -> usize {
         + match &o.kind {
             Kind::Array(items) | Kind::Arguments(items) => items.len(),
             Kind::ListIter { items, .. } => items.len(),
-            Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => m.entries.len(),
+            Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => m.slots().len(),
             _ => 0,
         }
 }
