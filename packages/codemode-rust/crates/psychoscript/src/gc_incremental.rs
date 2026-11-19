@@ -13,8 +13,8 @@
 //!   the sweep depending on whether the sweep has passed its slot. Cells and strings made after the cycle started are
 //!   beyond the sweep's end, so they survive without a colour.
 //! - Barriers: writing to an object while marking re-greys it if it was black (`Heap`'s `IndexMut`, a backward
-//!   barrier); storing to a cell while marking shades the value (`Vm::gc_shade`). The stack, frames and the other
-//!   roots have no barrier: the atomic end of marking scans them again.
+//!   barrier), for the atomic end of marking to trace; storing to a cell while marking shades the value
+//!   (`Vm::gc_shade`). The stack, frames and the other roots have no barrier: the atomic end scans them again.
 //! - Stack slots hold a cell as its raw index, which reads as a tiny number, so the stack is scanned conservatively for
 //!   cells: a slot whose bits are a valid cell index keeps that cell. Zero keeps cell 0.
 //! - What a fresh runtime makes (objects, strings and cells below `snapshot_base`) and every atom are permanent.
@@ -26,7 +26,7 @@
 use std::ops::{Deref, Index, IndexMut};
 use std::slice::SliceIndex;
 
-use crate::object::{Kind, Obj};
+use crate::object::{Kind, Obj, OrderedMap};
 use crate::reach::Visit;
 use crate::strings::{NO_GROW, StrBuf, StrId, Strings};
 use crate::value::{Id, Slot, Value};
@@ -36,9 +36,12 @@ const WHITE: u8 = 0;
 const GREY: u8 = 1;
 const BLACK: u8 = 2;
 const FREE: u8 = 3;
+/// An atom's string: never freed, so no cycle marks it again.
+const PERM: u8 = 4;
 
-/// Slots in use (objects, cells and strings) at which the first cycle starts. A reducer event stays far below it.
-const FIRST: usize = 256 * 1024;
+/// Slots in use (objects, cells and strings) at which the first cycle starts. A reducer event stays far below it, and
+/// of the benchmark programs only the JSON round trip reaches it.
+const FIRST: usize = 64 * 1024;
 /// The least room a cycle leaves before the next one starts, so a small heap does not collect all the time.
 const FLOOR: usize = 64 * 1024;
 /// Allocations between steps.
@@ -88,6 +91,9 @@ pub struct Heap {
 struct Marks {
     color: Vec<u8>,
     grey: Vec<Id>,
+    /// Objects the barrier re-greyed, traced at the atomic end of marking only, as Lua's `grayagain`: an object the
+    /// program keeps writing to would otherwise be traced again at every step, and marking might never end.
+    again: Vec<Id>,
 }
 
 impl Heap {
@@ -110,7 +116,7 @@ impl Heap {
         let m = &mut self.marks;
         if m.color.get(i) == Some(&BLACK) {
             m.color[i] = GREY;
-            m.grey.push(i as Id);
+            m.again.push(i as Id);
         }
     }
 }
@@ -212,6 +218,11 @@ pub struct StrGc {
     /// The VM should look at the debt or the threshold.
     pub(crate) wanted: bool,
     sweep: (usize, usize),
+    /// Atoms before this one have permanent strings; `atom_at` is how far this cycle got, and `atom_skip` the first
+    /// atom whose string is too new to colour yet.
+    atoms_done: usize,
+    atom_at: usize,
+    atom_skip: Option<usize>,
     /// Per shared buffer as of the cycle's start: whether a live string points into it.
     grow_live: Vec<bool>,
     /// Retired short-string buffers: their surviving strings are copied out at the sweep.
@@ -228,6 +239,9 @@ impl StrGc {
             debt: 0,
             wanted: false,
             sweep: (0, 0),
+            atoms_done: 0,
+            atom_at: 0,
+            atom_skip: None,
             grow_live: Vec::new(),
             retired: Vec::new(),
             grow_free: Vec::new(),
@@ -295,6 +309,8 @@ impl Strings {
         gc.phase = Phase::Mark;
         self.gc_limit = 0;
         gc.color.resize(self.bufs.len(), WHITE);
+        gc.atom_at = gc.atoms_done;
+        gc.atom_skip = None;
         gc.grow_live.clear();
         gc.grow_live.resize(self.grow.len(), false);
         gc.retired.resize(self.grow.len(), false);
@@ -308,6 +324,34 @@ impl Strings {
             self.arena = NO_GROW;
             self.gc.retired[g as usize] = true;
         }
+    }
+
+    /// Makes the strings of atoms made since the last cycle permanent, with text of their own so they need no shared
+    /// buffer, up to `max` work units; returns the work done. Each atom costs this once rather than once per cycle.
+    fn perm_atoms(&mut self, max: usize) -> usize {
+        let end = self.counts().1;
+        let mut work = 0;
+        while self.gc.atom_at < end && work < max {
+            let a = self.gc.atom_at;
+            self.gc.atom_at += 1;
+            work += 1;
+            let id = self.atom_str(a as u32) as usize;
+            match self.gc.color.get(id) {
+                // Made during this cycle, so it survives it; the next cycle colours it.
+                None => {
+                    self.gc.atom_skip.get_or_insert(a);
+                }
+                Some(&PERM) => {}
+                Some(_) => {
+                    self.gc.color[id] = PERM;
+                    if self.bufs[id].grow != NO_GROW {
+                        self.own_text(id);
+                        work += FREE_WORK;
+                    }
+                }
+            }
+        }
+        work
     }
 
     /// Drops every shared buffer no live string points into, except the short strings' current one.
@@ -356,6 +400,7 @@ struct Marker<'v> {
     vm: &'v Vm,
     color: Vec<u8>,
     grey: Vec<Id>,
+    again: Vec<Id>,
     cells: Vec<u8>,
     strs: Vec<u8>,
     grow_live: Vec<bool>,
@@ -397,6 +442,15 @@ impl Visit for Marker<'_> {
             *k = BLACK;
             let v = self.vm.cells[c as usize].get();
             self.val(&v);
+        }
+    }
+
+    fn map(&mut self, m: &OrderedMap) {
+        // Deleted entries stay as tombstones, which cost a step time too.
+        self.work += m.entries.len() - m.live;
+        for (k, v) in m.entries.iter().flatten() {
+            self.val(k);
+            self.val(v);
         }
     }
 
@@ -660,21 +714,27 @@ impl Vm {
     }
 
     fn gc_mark(&mut self, budget: usize) {
+        let spent = self.atoms.perm_atoms(budget / 2);
+        // The atoms made since the last cycle go first, so few are left for the atomic end.
+        let atoms_left = self.atoms.gc.atom_at < self.atoms.counts().1;
         let done = self.with_marker(|m| {
-            if !m.propagate(budget) {
+            m.work = spent;
+            if !m.propagate(budget) || atoms_left {
                 return false;
             }
-            // Atomic: the roots again, which have no barrier, and every atom, which is permanent.
+            // Atomic: what the barrier recorded, and the roots again, which have no barrier.
+            let again = std::mem::take(&mut m.again);
+            m.grey.extend(again);
             m.roots();
-            let vm = m.vm;
-            for a in 0..vm.atoms.counts().1 {
-                m.str(vm.atoms.atom_str(a as u32));
-            }
             m.propagate(usize::MAX)
         });
         if !done {
             return;
         }
+        // Atoms made since the last step, which nothing may reach but the interner.
+        self.atoms.perm_atoms(usize::MAX);
+        let gc = &mut self.atoms.gc;
+        gc.atoms_done = gc.atom_skip.unwrap_or(gc.atom_at);
         self.heap.marking = false;
         self.gc.phase = Phase::Sweep;
         self.atoms.gc.phase = Phase::Sweep;
@@ -688,6 +748,7 @@ impl Vm {
     fn with_marker<R>(&mut self, f: impl FnOnce(&mut Marker) -> R) -> R {
         let color = std::mem::take(&mut self.heap.marks.color);
         let grey = std::mem::take(&mut self.heap.marks.grey);
+        let again = std::mem::take(&mut self.heap.marks.again);
         let cells = std::mem::take(&mut self.gc.cell_color);
         let strs = std::mem::take(&mut self.atoms.gc.color);
         let grow_live = std::mem::take(&mut self.atoms.gc.grow_live);
@@ -695,6 +756,7 @@ impl Vm {
             vm: self,
             color,
             grey,
+            again,
             cells,
             strs,
             grow_live,
@@ -704,6 +766,7 @@ impl Vm {
         let Marker {
             color,
             grey,
+            again,
             cells,
             strs,
             grow_live,
@@ -711,6 +774,7 @@ impl Vm {
         } = m;
         self.heap.marks.color = color;
         self.heap.marks.grey = grey;
+        self.heap.marks.again = again;
         self.gc.cell_color = cells;
         self.atoms.gc.color = strs;
         self.atoms.gc.grow_live = grow_live;
