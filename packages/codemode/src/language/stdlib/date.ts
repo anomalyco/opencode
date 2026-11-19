@@ -1,8 +1,9 @@
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../runtime/native.js"
-import { rangeError } from "../runtime/model.js"
-import { DateObj, Obj, coerceToNumber, coerceToString, type Value } from "../runtime/objects.js"
-import { withPrimitives } from "../runtime/callback.js"
+import { rangeError, typeError } from "../runtime/model.js"
+import { Arr, DateObj, Obj, coerceToNumber, get, has, coerceToString, type Value } from "../runtime/objects.js"
+import { withPrimitives, withReads } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
+import { checkArrayLength } from "../runtime/limits.js"
 
 const constructDate = (args: Array<Value>, proto: Obj) => {
   if (args.length === 0) return new DateObj(proto, Date.now())
@@ -22,6 +23,39 @@ const constructDate = (args: Array<Value>, proto: Obj) => {
 // ToNumber on each value in turn, so a symbol throws before any later value's conversion runs program code.
 const toNumbers = (values: Array<Value>, body: (numbers: Array<number>) => Value) =>
   withPrimitives("number", values, (primitives) => body(primitives.map(coerceToNumber)), true)
+
+// The options Intl.DateTimeFormat reads.
+const dateTimeOptions = [
+  "localeMatcher",
+  "calendar",
+  "numberingSystem",
+  "hour12",
+  "hourCycle",
+  "timeZone",
+  "weekday",
+  "era",
+  "year",
+  "month",
+  "day",
+  "dayPeriod",
+  "hour",
+  "minute",
+  "second",
+  "fractionalSecondDigits",
+  "timeZoneName",
+  "formatMatcher",
+  "dateStyle",
+  "timeStyle",
+]
+
+const arrayLikeTags = (locales: Obj) => {
+  const length = get(locales, "length")
+  const count = length instanceof Obj ? 0 : Math.max(0, Math.floor(coerceToNumber(length)) || 0)
+  checkArrayLength(count)
+  return Array.from({ length: count }, (_, index) => index)
+    .filter((index) => has(locales, String(index)))
+    .map((index) => get(locales, String(index)))
+}
 
 type Getter = keyof {
   [K in keyof Date as Date[K] extends () => number ? K : never]: never
@@ -115,7 +149,48 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
       (name): Method => [
         name,
         0,
-        (thisValue) => new Date(self(thisValue, name).time)[name]("en-US", { timeZone: "UTC" }),
+        (thisValue, args) => {
+          const time = self(thisValue, name).time
+          const [locales, options] = args
+          if (locales === null || options === null) throw typeError("Cannot convert undefined or null to object.")
+          return withReads(() => {
+            // Bun's default locale is en-US whatever the environment says; pinning it keeps output off the host's.
+            // A non-array object is array-like to Intl, so its elements are the tags.
+            const tags =
+              locales === undefined
+                ? ["en-US"]
+                : locales instanceof Arr
+                  ? locales.items.filter(() => true)
+                  : locales instanceof Obj
+                    ? arrayLikeTags(locales)
+                    : [locales]
+            const entries =
+              options instanceof Obj
+                ? dateTimeOptions.flatMap((key) => {
+                    const value = get(options, key)
+                    if (value === undefined) return []
+                    return [[key, key === "hour12" ? Boolean(value) : value] as const]
+                  })
+                : []
+            // The host's Intl formats; program objects among the arguments are converted first, as Intl's ToString would.
+            return withPrimitives(
+              [
+                ...tags.map(() => "string" as const),
+                ...entries.map((entry) =>
+                  entry[0] === "fractionalSecondDigits" ? ("number" as const) : ("string" as const),
+                ),
+              ],
+              [...tags, ...entries.map((entry) => entry[1])],
+              (primitives) =>
+                new Date(time)[name](
+                  (locales instanceof Obj ? primitives.slice(0, tags.length) : primitives[0]) as Intl.LocalesArgument,
+                  options instanceof Obj
+                    ? Object.fromEntries(entries.map((entry, at) => [entry[0], primitives[tags.length + at]]))
+                    : (options as Intl.DateTimeFormatOptions | undefined),
+                ),
+            )
+          })
+        },
       ],
     ),
     ...getters.map((name): Method => [name, 0, (thisValue) => new Date(self(thisValue, name).time)[name]()]),
