@@ -26,7 +26,6 @@ mod integrations;
 mod mcp;
 mod messages;
 mod models;
-mod more_tools;
 mod navigate;
 mod permission;
 mod plugin_approval;
