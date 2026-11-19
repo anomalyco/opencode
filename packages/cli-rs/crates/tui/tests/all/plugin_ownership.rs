@@ -475,16 +475,19 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         close();
     }
     turns(h, 3);
-    // Give the mount focus before dispatching its layer's printable key.
+    // The mount shows the plugin's tree (its scroll), and has the focus before its layer's printable key comes. Over the
+    // pipe a dialog's first tree comes on the JS host's time, which a racing row's hold does not stop: a key before it
+    // waits for the dialog's field, and then goes to the composer once the row closed the dialog.
     if !matches!(row.origin, Origin::Setup | Origin::MountBegin) {
         let mounts = || opencode_plugin::behave::mounts(h.app.app(), probe.id(), "probe");
         let typing = || row.origin == Origin::Input && opencode_plugin::Host::composer_focused(&*h.tui);
         let ready = h.app.wait_until(support::WAIT, || {
             probe.turn();
-            mounts().len() == 1 && !typing()
+            let mounts = mounts();
+            mounts.len() == 1 && !mounts[0].offsets.is_empty() && !typing()
         });
         if !ready {
-            return Err(format!("{carrier:?} {row:?}: the mount never began, or never took the focus"));
+            return Err(format!("{carrier:?} {row:?}: the mount never showed its tree, or never took the focus"));
         }
     }
     trigger(h, row, &close);
