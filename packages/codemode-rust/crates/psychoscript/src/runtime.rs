@@ -171,7 +171,7 @@ impl Setup {
     pub(crate) fn globals_for(&self, run: &Run) -> crate::host::Globals {
         match &self.globals {
             Some(globals) => globals(run).into(),
-            None => std::rc::Rc::from([]),
+            None => std::sync::Arc::from([]),
         }
     }
 }

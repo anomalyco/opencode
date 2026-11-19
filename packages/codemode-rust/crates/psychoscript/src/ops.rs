@@ -1687,7 +1687,7 @@ impl<'rt> Vm<'rt> {
             Value::Obj(id) => {
                 if let Kind::Arguments(_) = self.heap[*id as usize].kind {
                     // Like the reference: the values of its enumerable own keys when iteration starts.
-                    let items: std::rc::Rc<[Value]> =
+                    let items: std::sync::Arc<[Value]> =
                         self.own_entries(*id).into_iter().map(|(_, v)| v).collect();
                     let it = Kind::ListIter { items, pos: 0 };
                     return Ok(Value::Obj(self.alloc(Obj::new(Some(proto), it))));

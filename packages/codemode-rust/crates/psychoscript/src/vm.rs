@@ -1,7 +1,7 @@
 //! The stack machine: frames, calls, exceptions, suspension and the run loop.
 
 use std::collections::VecDeque;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use rustc_hash::FxHashMap;
@@ -62,10 +62,10 @@ pub enum Resume {
 }
 
 pub struct Frame {
-    pub func: Rc<FuncProto>,
+    pub func: Arc<FuncProto>,
     pub pc: usize,
     pub base: usize,
-    pub upvals: Rc<[u32]>,
+    pub upvals: Arc<[u32]>,
     /// Where this frame's exception handlers start in `Vm::handlers`.
     pub hbase: u32,
     /// Arguments beyond the declared parameters, kept for rest parameters and `arguments`.
@@ -243,7 +243,7 @@ pub struct Vm<'rt> {
     templates: Vec<TemplateSite>,
     /// Each tagged template site's strings array, once made.
     template_objs: Vec<Option<Id>>,
-    pub protos: Vec<Rc<FuncProto>>,
+    pub protos: Vec<Arc<FuncProto>>,
     pub jobs: VecDeque<Job>,
     pub inbox: VecDeque<(Id, crate::host::Settlement)>,
     pub coroutines: Vec<Coroutine>,
@@ -289,8 +289,8 @@ pub struct Vm<'rt> {
     pub(crate) json_walk: u32,
     json_walks: u32,
     /// The code of every native frame (see `native.rs`).
-    pub(crate) native_proto: Rc<FuncProto>,
-    no_upvals: Rc<[u32]>,
+    pub(crate) native_proto: Arc<FuncProto>,
+    no_upvals: Arc<[u32]>,
     /// Set by a built-in that pushed a native frame instead of returning its result (`enter_native`).
     pub(crate) entered: bool,
     /// Set while a built-in called from bytecode or a convert frame's rerun runs: a conversion that calls the
@@ -379,8 +379,8 @@ impl<'rt> Vm<'rt> {
             resumable_run: false,
             snapshot_base: crate::snapshot::Base::default(),
             resumed: false,
-            native_proto: Rc::new(crate::native::proto()),
-            no_upvals: Rc::from([]),
+            native_proto: Arc::new(crate::native::proto()),
+            no_upvals: Arc::from([]),
             entered: false,
             convert_ok: false,
             convert_req: None,
@@ -1140,7 +1140,7 @@ impl<'rt> Vm<'rt> {
         match self.spare_frames.pop() {
             // Reuse a retired frame in place; one that ran a native frame keeps the shared code and no upvalues.
             Some(mut f) => {
-                if !Rc::ptr_eq(&f.func, &self.native_proto) {
+                if !Arc::ptr_eq(&f.func, &self.native_proto) {
                     f.func = self.native_proto.clone();
                 }
                 if !f.upvals.is_empty() {
@@ -2499,7 +2499,7 @@ impl<'rt> Vm<'rt> {
     fn make_closure(&mut self, idx: u32) -> Value {
         let proto = self.protos[idx as usize].clone();
         let f = self.frames.last().expect("frame");
-        let upvals: Rc<[u32]> = proto
+        let upvals: Arc<[u32]> = proto
             .captures
             .iter()
             .map(|c| match c {

@@ -1,6 +1,6 @@
 //! Parses with oxc, resolves bindings with oxc_semantic, rejects syntax outside the subset, and emits bytecode.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
@@ -133,7 +133,7 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
     c.compute_captured();
     c.compile_program(program)?;
     Ok(Program {
-        protos: c.protos.into_iter().map(Rc::new).collect(),
+        protos: c.protos.into_iter().map(Arc::new).collect(),
         consts: c.consts,
         globals: c.globals,
         templates: c.templates,

@@ -1,7 +1,6 @@
 //! The VM's side of host work: the run's host globals (see [`crate::host_function`]) and modules, the host calls a run
 //! has in flight and how they settle. Arguments cross out and results cross in as copies.
 
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
@@ -274,7 +273,7 @@ impl SuspendWatch for Unwatched {
 }
 
 /// The host globals a run gets, made by the runtime's `globals(run)` when it starts or resumes.
-pub type Globals = Rc<[(String, HostValue)]>;
+pub type Globals = Arc<[(String, HostValue)]>;
 
 /// The host state of one run.
 pub struct RunHost<'rt> {
@@ -411,7 +410,7 @@ impl<'rt> RunHost<'rt> {
     /// A run with no host globals, for what the snapshot's tables need.
     pub(crate) fn bare() -> Self {
         Self::new(
-            Rc::from([]),
+            Arc::from([]),
             &[],
             Translate::default(),
             Run::new(None, Data::Null),

@@ -3,7 +3,7 @@
 //! `$DONOTEVALUATE` are host functions; `assert` itself is program code the runner prepends.
 
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::builtins::arg;
 use crate::object::{Closure, Kind, Obj};
@@ -84,7 +84,7 @@ fn run_here(code: &str, timeout_ms: u64) -> Run {
         Some(fp),
         Kind::Closure(Box::new(Closure {
             proto,
-            upvals: Rc::from(Vec::new()),
+            upvals: Arc::from(Vec::new()),
             this: Value::Undef,
         })),
     )));

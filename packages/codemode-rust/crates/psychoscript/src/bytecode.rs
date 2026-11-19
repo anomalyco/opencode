@@ -1,6 +1,6 @@
 //! Bytecode: a compact stack-machine instruction set and compiled function prototypes.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::object::Atom;
 
@@ -305,7 +305,7 @@ pub enum Site {
 }
 
 pub struct Program {
-    pub protos: Vec<Rc<FuncProto>>,
+    pub protos: Vec<Arc<FuncProto>>,
     pub consts: Vec<crate::value::Value>,
     /// Global names referenced by `GetGlobal`, by slot.
     pub globals: Vec<Atom>,

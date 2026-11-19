@@ -593,3 +593,9 @@ fn roundtrip() -> bool {
 
 const ROUNDTRIP_TICKS: u32 = 64;
 const ROUNDTRIP_MAX: u32 = 1 << 16;
+
+// A run's state may move to another thread between steps.
+const _: () = {
+    const fn send<T: Send>() {}
+    send::<Running<'static>>()
+};

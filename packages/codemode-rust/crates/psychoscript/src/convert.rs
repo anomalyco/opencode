@@ -784,7 +784,7 @@ fn stringify_walk(
                     let buf = fr.get(vm, J_OUT).as_obj();
                     let text = match buf.map(|b| &mut vm.heap[b as usize].kind) {
                         Some(Kind::Bytes(b)) => {
-                            let mut bytes = std::mem::take(&mut *b.buf.borrow_mut());
+                            let mut bytes = std::mem::take(&mut *b.bytes());
                             b.len = 0;
                             bytes.extend_from_slice(out.as_bytes());
                             // Only whole strings were written to it.
@@ -884,7 +884,7 @@ fn flush(vm: &mut Vm, fr: crate::native::Frame, out: &mut String) {
         }
     };
     if let Kind::Bytes(b) = &mut vm.heap[buf as usize].kind {
-        b.buf.borrow_mut().extend_from_slice(out.as_bytes());
+        b.bytes().extend_from_slice(out.as_bytes());
         b.len += out.len();
     }
     out.clear();

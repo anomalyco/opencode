@@ -1,7 +1,6 @@
 //! Uint8Array, TextEncoder, TextDecoder, atob and btoa.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use super::{arg, describe_value, fuel, incompatible};
 use crate::native::{FOR_OF_SLOTS, Flow, ForOf, Frame, Input, Step};
@@ -12,7 +11,7 @@ use crate::vm::{Res, Vm};
 
 /// A Uint8Array: a view of `len` bytes at `start` in a buffer that subarrays share.
 pub struct Bytes {
-    pub buf: Rc<RefCell<Vec<u8>>>,
+    pub buf: Arc<Mutex<Vec<u8>>>,
     pub start: usize,
     pub len: usize,
     /// A Node Buffer: text conversions default to UTF-8.
@@ -23,21 +22,26 @@ impl Bytes {
     pub fn new(data: Vec<u8>, buffer: bool) -> Bytes {
         let len = data.len();
         Bytes {
-            buf: Rc::new(RefCell::new(data)),
+            buf: Arc::new(Mutex::new(data)),
             start: 0,
             len,
             buffer,
         }
     }
 
+    /// The shared buffer. Only the run that owns it touches it, so the lock is never contended.
+    pub fn bytes(&self) -> MutexGuard<'_, Vec<u8>> {
+        self.buf.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
     pub fn to_vec(&self) -> Vec<u8> {
-        let b = self.buf.borrow();
+        let b = self.bytes();
         b[self.start..self.start + self.len].to_vec()
     }
 
     pub fn get(&self, i: usize) -> Option<u8> {
         if i < self.len {
-            self.buf.borrow().get(self.start + i).copied()
+            self.bytes().get(self.start + i).copied()
         } else {
             None
         }
@@ -45,7 +49,7 @@ impl Bytes {
 
     pub fn put(&self, i: usize, v: u8) {
         if i < self.len
-            && let Some(slot) = self.buf.borrow_mut().get_mut(self.start + i)
+            && let Some(slot) = self.bytes().get_mut(self.start + i)
         {
             *slot = v;
         }

@@ -10,10 +10,9 @@
 //! - **Host calls in flight** are saved by kind: an idempotent call as queued, to run again with the same key; a
 //!   started durable call with its data, to wait on again. Any other one in flight refuses the suspend.
 
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::OnceLock;
 
 use rustc_hash::FxHashMap;
@@ -322,7 +321,7 @@ struct Enc<'v, 'rt> {
     vm: &'v Vm<'rt>,
     natives: &'static Natives,
     protos: FxHashMap<usize, usize>,
-    buffers: Vec<Rc<RefCell<Vec<u8>>>>,
+    buffers: Vec<Arc<std::sync::Mutex<Vec<u8>>>>,
 }
 
 /// Why a suspend was refused: the calls that block it, or a state that can't be saved.
@@ -359,7 +358,7 @@ pub fn capture(vm: &Vm, c: &Capture) -> Result<Snapshot, Refusal> {
             .protos
             .iter()
             .enumerate()
-            .map(|(i, p)| (Rc::as_ptr(p) as usize, i))
+            .map(|(i, p)| (Arc::as_ptr(p) as usize, i))
             .collect(),
         buffers: Vec::new(),
     };
@@ -433,7 +432,7 @@ impl Enc<'_, '_> {
             "cells": vm.cells[base.cells.min(vm.cells.len())..].iter().map(slot).collect::<Vec<_>>(),
             "changed": changed,
             "heap": rest,
-            "buffers": self.buffers.iter().map(|b| J::from(bytes_hex(&b.borrow()))).collect::<Vec<_>>(),
+            "buffers": self.buffers.iter().map(|b| J::from(bytes_hex(&b.lock().unwrap_or_else(std::sync::PoisonError::into_inner)))).collect::<Vec<_>>(),
             "stack": vm.stack.iter().map(slot).collect::<Vec<_>>(),
             "frames": vm.frames.iter().map(|f| self.frame(f)).collect::<R<Vec<_>>>()?,
             "handlers": vm.handlers_ref().iter().map(handler).collect::<Vec<_>>(),
@@ -614,7 +613,7 @@ impl Enc<'_, '_> {
             Kind::RegExp(r) => json!(["re", r.source, r.flags, num(r.last_index)]),
             Kind::Date(t) => json!(["d", num(*t)]),
             Kind::Bytes(b) => {
-                let i = match self.buffers.iter().position(|x| Rc::ptr_eq(x, &b.buf)) {
+                let i = match self.buffers.iter().position(|x| Arc::ptr_eq(x, &b.buf)) {
                     Some(i) => i,
                     None => {
                         self.buffers.push(b.buf.clone());
@@ -679,9 +678,9 @@ impl Enc<'_, '_> {
         })
     }
 
-    fn proto(&self, p: &Rc<crate::bytecode::FuncProto>) -> R<usize> {
+    fn proto(&self, p: &Arc<crate::bytecode::FuncProto>) -> R<usize> {
         self.protos
-            .get(&(Rc::as_ptr(p) as usize))
+            .get(&(Arc::as_ptr(p) as usize))
             .copied()
             .ok_or_else(|| {
                 SnapshotError::new("The run can't be suspended: a function is not this run's code.")
@@ -1248,7 +1247,7 @@ struct Dec<'p> {
     heap_len: usize,
     bufs_len: usize,
     protos: usize,
-    buffers: Vec<Rc<RefCell<Vec<u8>>>>,
+    buffers: Vec<Arc<std::sync::Mutex<Vec<u8>>>>,
     _p: std::marker::PhantomData<&'p ()>,
 }
 
@@ -1741,7 +1740,12 @@ impl Dec<'_> {
                     return Err(invalid("a byte array's buffer is missing."));
                 };
                 let (start, len) = (usize_(f(2)?)?, usize_(f(3)?)?);
-                if start + len > buf.borrow().len() {
+                if start + len
+                    > buf
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .len()
+                {
                     return Err(invalid("a byte array's view is out of range."));
                 }
                 Kind::Bytes(Box::new(crate::builtins::bytes::Bytes {
@@ -1956,7 +1960,7 @@ pub fn restore(vm: &mut Vm, snapshot: &Snapshot, program_hash: &str) -> R<()> {
     let changed = field_list(st, "changed")?;
     let mut buffers = Vec::new();
     for b in field_list(st, "buffers")? {
-        buffers.push(Rc::new(RefCell::new(hex_bytes(&string(b)?)?)));
+        buffers.push(Arc::new(std::sync::Mutex::new(hex_bytes(&string(b)?)?)));
     }
     let dec = Dec {
         natives: natives(),

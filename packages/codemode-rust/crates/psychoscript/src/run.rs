@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::panic::AssertUnwindSafe;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::compiler;
 use crate::convert;
@@ -190,7 +190,7 @@ pub fn call_main(vm: &mut Vm) {
         Some(fp),
         Kind::Closure(Box::new(Closure {
             proto,
-            upvals: Rc::from(Vec::new()),
+            upvals: Arc::from(Vec::new()),
             this: Value::Undef,
         })),
     )));

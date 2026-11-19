@@ -13,7 +13,6 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll, Waker};
@@ -97,7 +96,7 @@ impl fmt::Debug for StreamingResponse {
 }
 
 /// The getter of a host accessor: an own, read-only, non-enumerable property whose value the host answers live.
-pub type Getter = Rc<dyn Fn() -> Value>;
+pub type Getter = Arc<dyn Fn() -> Value + Send + Sync>;
 
 /// An object with host accessors, such as a streaming response and its body. Deleting an accessor leaves an
 /// ordinary object behind.
@@ -547,17 +546,17 @@ pub(crate) fn surface(response: &StreamingResponse, epoch: &Epoch) -> Surface {
     let Some(stream) = response.body.clone() else {
         return Surface {
             methods,
-            body_used: Rc::new(|| Value::Bool(false)),
+            body_used: Arc::new(|| Value::Bool(false)),
             body: None,
         };
     };
     let body_used = {
         let (stream, epoch) = (stream.clone(), epoch.clone());
-        Rc::new(move || Value::Bool(observed(&stream, &epoch).disturbed)) as Getter
+        Arc::new(move || Value::Bool(observed(&stream, &epoch).disturbed)) as Getter
     };
     let is_locked = {
         let (stream, epoch) = (stream.clone(), epoch.clone());
-        Rc::new(move || Value::Bool(observed(&stream, &epoch).reader.is_some())) as Getter
+        Arc::new(move || Value::Bool(observed(&stream, &epoch).reader.is_some())) as Getter
     };
     let cancel = {
         let (stream, epoch) = (stream.clone(), epoch.clone());
