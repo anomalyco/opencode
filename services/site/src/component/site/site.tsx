@@ -158,7 +158,7 @@ const speculationRules = JSON.stringify({
   ],
 })
 
-// The tooltips match status.opencode.ai's headlines. The label is only "Normal" or "Status".
+// The tooltips match opencode.ai/status's headlines. The label is only "Normal" or "Status".
 const statusHeadline = {
   operational: "site.status.operationalHeadline",
   degraded: "site.status.degradedHeadline",
@@ -1135,7 +1135,7 @@ export function Site(props: {
     const current = () => bars()[bars().length - 1]
     return (
       <a
-        href="https://status.opencode.ai"
+        href="https://opencode.ai/status"
         target="_blank"
         rel="noopener"
         data-component="status"
