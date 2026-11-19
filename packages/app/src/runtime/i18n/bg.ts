@@ -1160,7 +1160,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} shell процеса",
   "session.activity.scripts.one": "{{count}} скрипт",
   "session.activity.scripts.other": "{{count}} скрипта",
-  "session.activity.background": "Работа във фонов режим",
   "session.activity.shell.back": "Назад към фоновата работа",
   "session.activity.shell.stop": "Спиране",
   "session.activity.shell.stopping": "Спиране…",

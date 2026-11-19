@@ -623,7 +623,8 @@ export const dict = {
   "tips.browse.description": "Let OpenCode work in your browser with your tabs, logins, and extensions.",
   "tips.browse.install": "Install",
   "tips.hex.title": "Use your voice",
-  "tips.hex.description": "Hex lets you hold a key and speak your prompts. It runs on your computer and works in any app.",
+  "tips.hex.description":
+    "Hex lets you hold a key and speak your prompts. It runs on your computer and works in any app.",
   "tips.hex.install": "Install Hex",
   "home.workspaceTip": "Start next session in a new workspace to keep changes isolated",
 
@@ -702,7 +703,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} shells",
   "session.activity.scripts.one": "{{count}} script",
   "session.activity.scripts.other": "{{count}} scripts",
-  "session.activity.background": "Background work",
   "session.activity.shell.back": "Back to background work",
   "session.activity.shell.stop": "Stop",
   "session.activity.shell.stopping": "Stopping…",
@@ -897,8 +897,7 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.tabGroups.title": "Tab groups",
-  "settings.experimental.row.tabGroups.description":
-    "Group session tabs in side tabs with inline session search",
+  "settings.experimental.row.tabGroups.description": "Group session tabs in side tabs with inline session search",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
   "settings.experimental.row.sidebarOrganize.description":
     "Choose how to organize sessions in side tabs. On desktop, Customize replaces Home with Settings in the sidebar.",
@@ -1220,6 +1219,8 @@ export const dict = {
   "settings.general.row.showCustomAgents.title": "Show agent",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
+  "settings.general.row.sharedSidePanel.title": "Keep side panel open across sessions",
+  "settings.general.row.sharedSidePanel.description": "Opening or closing it in one session applies to all",
   "settings.general.row.followUpBehavior.title": "Follow-up behavior",
   "settings.general.row.followUpBehavior.description":
     "Choose whether to queue follow-ups or steer the current turn. Use {{keybind}} to switch.",

@@ -19,6 +19,8 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
   }
 }
 
+const BLOCK_TIMEOUT = "2 minutes"
+
 type Execute = (context: Tool.Context) => Effect.Effect<Tool.NormalizedResult, Tool.Error>
 type Run = (context: Tool.Context, execute: Execute) => ReturnType<Execute>
 
@@ -78,7 +80,7 @@ export const make = Effect.fnUntraced(function* (
             return body
           }),
         })
-        const blocked = yield* restore(jobs.block({ id, sessionID }).pipe(Effect.timeoutOption("10 seconds"))).pipe(
+        const blocked = yield* restore(jobs.block({ id, sessionID }).pipe(Effect.timeoutOption(BLOCK_TIMEOUT))).pipe(
           Effect.onInterrupt(() => jobs.cancel(id)),
         )
         if (Option.isSome(blocked) && blocked.value?.type === "finished") return yield* Deferred.await(result)

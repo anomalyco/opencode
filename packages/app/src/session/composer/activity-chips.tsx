@@ -26,8 +26,6 @@ export type SessionActivityItem = {
   | {
       type: "subagent"
       sessionID: string
-      // Set while the subagent is idle and only work it started still runs.
-      idle?: { subagents: number; scripts: number; shells: number }
       // Running jobs in its tree, which its Stop cancels.
       jobs?: readonly string[]
     }
@@ -218,6 +216,7 @@ export function SessionActivityChips(props: {
           <Menu.Portal>
             <Menu.Content
               data-slot="session-activity-panel"
+              data-focus-scope
               data-view={view().shell ? "shell" : "list"}
               aria-label={label()}
               ref={content}
@@ -239,13 +238,6 @@ export function SessionActivityChips(props: {
                           </span>
                           <span dir="auto" class="min-w-0 flex-1 truncate text-v2-text-text-muted">
                             {item.label}
-                            <Show when={item.type === "subagent" && item.idle}>
-                              {(idle) => (
-                                <span data-slot="session-activity-sublabel" class="block truncate text-[11px]">
-                                  {language.activityBackground(idle())}
-                                </span>
-                              )}
-                            </Show>
                           </span>
                           {end(item)}
                         </Menu.Item>

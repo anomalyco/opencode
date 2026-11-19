@@ -1173,7 +1173,6 @@ export const dict = {
   "session.activity.subagents.other": "{{count}} subagenti",
   "session.activity.shells.one": "{{count}} shell",
   "session.activity.shells.other": "{{count}} shell",
-  "session.activity.background": "Lavoro in background",
   "session.activity.shell.back": "Torna alle attività in background",
   "session.activity.shell.stop": "Interrompi",
   "session.activity.shell.stopping": "Interruzione…",

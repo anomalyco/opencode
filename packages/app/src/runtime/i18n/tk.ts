@@ -1143,7 +1143,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} shell",
   "session.activity.scripts.one": "{{count}} skript",
   "session.activity.scripts.other": "{{count}} skript",
-  "session.activity.background": "Fon işi",
   "session.activity.shell.back": "Fon işlerine dolan",
   "session.activity.shell.stop": "Duruz",
   "session.activity.shell.stopping": "Duruzylýar…",

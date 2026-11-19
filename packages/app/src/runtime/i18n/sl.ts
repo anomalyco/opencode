@@ -1184,7 +1184,6 @@ export const dict = {
   "session.activity.scripts.two": "{{count}} skripti",
   "session.activity.scripts.few": "{{count}} skripte",
   "session.activity.scripts.other": "{{count}} skript",
-  "session.activity.background": "Delo v ozadju",
   "session.activity.shell.back": "Nazaj na delo v ozadju",
   "session.activity.shell.stop": "Ustavi",
   "session.activity.shell.stopping": "Ustavljanje …",

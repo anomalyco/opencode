@@ -1137,7 +1137,6 @@ export const dict = {
   "session.activity.shells.other": "សែល {{count}}",
   "session.activity.scripts.one": "ស្គ្រីប {{count}}",
   "session.activity.scripts.other": "ស្គ្រីប {{count}}",
-  "session.activity.background": "ការងារផ្ទៃខាងក្រោយ",
   "session.activity.shell.back": "ត្រឡប់ទៅការងារផ្ទៃខាងក្រោយ",
   "session.activity.shell.stop": "ឈប់",
   "session.activity.shell.stopping": "កំពុងឈប់…",

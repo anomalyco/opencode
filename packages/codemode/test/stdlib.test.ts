@@ -1070,6 +1070,14 @@ describe("Uint8Array", () => {
     expect((await error(`Uint8Array.from(/x/)`)).message).toContain("received a RegExp")
   })
 
+  test("BYTES_PER_ELEMENT is a read-only 1 on Uint8Array, Buffer and their instances", async () => {
+    expect(
+      await value(`const d = Object.getOwnPropertyDescriptor(Uint8Array, "BYTES_PER_ELEMENT")
+        return [Uint8Array.BYTES_PER_ELEMENT, new Uint8Array(1).BYTES_PER_ELEMENT, Buffer.BYTES_PER_ELEMENT,
+          Buffer.alloc(1).BYTES_PER_ELEMENT, 4 * Uint8Array.BYTES_PER_ELEMENT, d.writable, d.enumerable, Object.keys(Uint8Array)]`),
+    ).toEqual([1, 1, 1, 1, 4, false, false, []])
+  })
+
   test("index reads and writes clamp to a byte and ignore out-of-range writes, like JS", async () => {
     expect(
       await value(`
@@ -1659,7 +1667,7 @@ describe("stdlib integration", () => {
     const shadowed = await error(`const Date = 5; return new Date()`)
     expect(shadowed.message).toStartWith("TypeError: Date is not a constructor.")
     const fn = await error(`const f = () => 1; return new f()`)
-    expect(fn.message).toStartWith("TypeError: f cannot be constructed")
+    expect(fn.message).toStartWith("TypeError: f is not a constructor: only classes")
   })
 
   test("Object.is uses SameValue semantics", async () => {

@@ -1147,7 +1147,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} shell",
   "session.activity.scripts.one": "{{count}} script",
   "session.activity.scripts.other": "{{count}} script",
-  "session.activity.background": "Công việc nền",
   "session.activity.shell.back": "Quay lại tác vụ nền",
   "session.activity.shell.stop": "Dừng",
   "session.activity.shell.stopping": "Đang dừng…",

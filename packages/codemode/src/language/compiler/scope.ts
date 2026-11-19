@@ -3,13 +3,17 @@ import type {
   ArrowFunctionExpression,
   BlockStatement,
   CatchClause,
+  ClassDeclaration,
+  ClassExpression,
   Expression,
   FunctionDeclaration,
   FunctionExpression,
   Identifier,
   ModuleDeclaration,
   Pattern,
+  PrivateIdentifier,
   Program,
+  PropertyDefinition,
   Statement,
   VariableDeclaration,
 } from "acorn"
@@ -18,7 +22,7 @@ import { CodeFlags } from "../opcodes.js"
 
 type FunctionNode = Program | FunctionDeclaration | FunctionExpression | ArrowFunctionExpression
 
-type DeclKind = "var" | "let" | "const" | "function" | "param" | "catch" | "import" | "self" | "this" | "arguments"
+type DeclKind = "var" | "let" | "const" | "function" | "param" | "catch" | "import" | "self" | "this" | "arguments" | "home" | "newTarget"
 
 export type Decl = {
   readonly name: string
@@ -61,6 +65,10 @@ export type FunctionInfo = {
   readonly upvalues: Array<UpvalueInfo>
   readonly upvalueMap: Map<Decl, number>
   thisDecl: Decl | undefined
+  /** A method's home object (`super`), when it or an arrow in it uses `super`. */
+  homeDecl: Decl | undefined
+  /** A derived constructor's new target, which `super()` passes on. */
+  newTargetDecl: Decl | undefined
   argumentsDecl: Decl | undefined
   locals: number
   readonly localNames: Array<string>
@@ -77,7 +85,28 @@ export type ScopeAnalysis = {
   readonly scopeOfNode: ReadonlyMap<AnyNode, Scope>
   readonly refs: ReadonlyMap<Identifier, ResolvedRef>
   readonly thisRefs: ReadonlyMap<AnyNode, ResolvedRef>
+  /** Each `super` of a `super.x`: its home object and `this`. Missing when it is outside a class method. */
+  readonly superRefs: ReadonlyMap<AnyNode, { readonly home: ResolvedRef; readonly self: ResolvedRef }>
+  /** Each class's constructor: its own, or a synthetic empty one when it has none. */
+  readonly classConstructors: ReadonlyMap<ClassNode, FunctionExpression>
+  /** Each class's synthetic field-initializer functions, when it has instance or static fields. */
+  readonly classFieldInits: ReadonlyMap<ClassNode, { instance?: FunctionExpression; static?: FunctionExpression }>
+  /** The fields a synthetic field-initializer function defines, in order. */
+  readonly fieldInitMembers: ReadonlyMap<FunctionNode, ReadonlyArray<PropertyDefinition>>
+  /** A computed field's key, evaluated once at class definition into a hidden class-scope binding read by this name. */
+  readonly fieldKeys: ReadonlyMap<PropertyDefinition, Identifier>
 }
+
+export type ClassNode = ClassDeclaration | ClassExpression
+
+/** The class elements compiled so far: methods, accessors and fields with plain or computed names. Anything else is refused. */
+export const supportedClassMember = (member: ClassNode["body"]["body"][number]): boolean =>
+  (member.type === "PropertyDefinition" || member.type === "MethodDefinition") &&
+  (member.computed || plainKey(member.key))
+
+const plainKey = (key: Expression | PrivateIdentifier): boolean =>
+  key.type === "Identifier" ||
+  (key.type === "Literal" && (typeof key.value === "string" || typeof key.value === "number"))
 
 /**
  * Pass 1: walks the AST to build lexical/var scopes, assign pre-order function indices,
@@ -87,6 +116,11 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   const functions: Array<FunctionInfo> = []
   const nodeToFunction = new Map<FunctionNode, FunctionInfo>()
   const scopeOfNode = new Map<AnyNode, Scope>()
+  const classConstructors = new Map<ClassNode, FunctionExpression>()
+  const classFieldInits = new Map<ClassNode, { instance?: FunctionExpression; static?: FunctionExpression }>()
+  const fieldInitMembers = new Map<FunctionNode, ReadonlyArray<PropertyDefinition>>()
+  const fieldKeys = new Map<PropertyDefinition, Identifier>()
+  const supers: Array<{ readonly node: AnyNode; readonly scope: Scope; readonly fnIndex: number }> = []
   const unresolved: Array<{ readonly node: AnyNode; readonly name: string; readonly scope: Scope; fnIndex: number }> =
     []
 
@@ -110,7 +144,12 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
     }
   }
 
-  const visitFunction = (node: FunctionNode, parentScope: Scope | undefined, parentFnIndex: number): FunctionInfo => {
+  const visitFunction = (
+    node: FunctionNode,
+    parentScope: Scope | undefined,
+    parentFnIndex: number,
+    className?: string,
+  ): FunctionInfo => {
     const index = functions.length
     const isProgram = node.type === "Program"
     const isArrow = node.type === "ArrowFunctionExpression"
@@ -134,7 +173,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
       index,
       node,
       parentIndex: parentFnIndex,
-      name: isProgram ? "<program>" : isArrow ? "" : (node.id?.name ?? ""),
+      name: isProgram ? "<program>" : isArrow ? "" : (className ?? node.id?.name ?? ""),
       flags,
       length: lengthEnd === -1 ? params.length : lengthEnd,
       params,
@@ -145,6 +184,8 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
       upvalues: [],
       upvalueMap: new Map(),
       thisDecl: undefined,
+      homeDecl: undefined,
+      newTargetDecl: undefined,
       argumentsDecl: undefined,
       locals: 0,
       localNames: [],
@@ -196,6 +237,8 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
       }
     }
     for (const stmt of stmts) if (stmt.type === "VariableDeclaration") declareLexical(stmt, lexicalScope, fnInfo)
+    for (const stmt of stmts)
+      if (stmt.type === "ClassDeclaration" && stmt.id) addDecl(lexicalScope, fnInfo, stmt.id.name, "let", true)
     for (const stmt of stmts) {
       if (stmt.type !== "FunctionDeclaration" || !stmt.id || (internal && isProgram)) continue
       const decl = addDecl(lexicalScope, fnInfo, stmt.id.name, "function", true)
@@ -332,6 +375,9 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
         if (stmt.handler) visitCatchClause(stmt.handler, scope, varScope, fnInfo)
         if (stmt.finalizer) visitBlock(stmt.finalizer, new Scope(scope), varScope, fnInfo)
         break
+      case "ClassDeclaration":
+        visitClass(stmt, scope, fnInfo)
+        break
       case "FunctionDeclaration": {
         const childFn = visitFunction(stmt, scope, fnInfo.index)
         const hoisted = scope.hoistedFunctions.find((h) => h.node === stmt)
@@ -400,6 +446,9 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
       case "ArrowFunctionExpression":
         visitFunction(expr, scope, fnInfo.index)
         break
+      case "ClassExpression":
+        visitClass(expr, scope, fnInfo)
+        break
       case "BinaryExpression":
       case "LogicalExpression":
         visit(expr.left)
@@ -434,6 +483,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
         break
       case "MemberExpression":
         if (expr.object.type !== "Super") visit(expr.object)
+        else supers.push({ node: expr.object, scope, fnIndex: fnInfo.index })
         if (expr.computed) visit(expr.property)
         break
       case "ChainExpression":
@@ -448,6 +498,8 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
           else {
             if (prop.computed) visit(prop.key)
             visit(prop.value)
+            // Object literal methods and accessors have the object as their home, for `super`.
+            if (prop.method || prop.kind !== "init") nodeToFunction.get(prop.value as FunctionExpression)!.flags |= CodeFlags.METHOD
           }
         }
         break
@@ -460,6 +512,118 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
         if (expr.options) visit(expr.options)
         break
     }
+  }
+
+  // The class body sees its own name as an immutable binding; the constructor and methods are functions in it.
+  function visitClass(node: ClassNode, scope: Scope, fnInfo: FunctionInfo): void {
+    if (!node.body.body.every(supportedClassMember)) return
+    const classScope = new Scope(scope)
+    scopeOfNode.set(node, classScope)
+    if (node.id) addDecl(classScope, fnInfo, node.id.name, "const", false)
+    if (node.superClass) visitExpression(node.superClass, classScope, fnInfo)
+    const methods = node.body.body.filter((m) => m.type === "MethodDefinition")
+    const ctor = methods.find((m) => m.kind === "constructor")?.value ?? defaultConstructor(node)
+    classConstructors.set(node, ctor)
+    const ctorInfo = visitFunction(ctor, classScope, fnInfo.index, node.id?.name ?? "")
+    ctorInfo.flags |= CodeFlags.CLASS_CONSTRUCTOR | CodeFlags.METHOD
+    if (node.superClass) {
+      // `this` starts uninitialized: `super()` binds it, and the return rules read it.
+      ctorInfo.flags |= CodeFlags.DERIVED
+      ctorInfo.thisDecl!.used = true
+      ctorInfo.newTargetDecl = addDecl(ctorInfo.paramScope, ctorInfo, "%newTarget", "newTarget", false)
+      ctorInfo.newTargetDecl.used = true
+    }
+    for (const m of node.body.body) {
+      if ((m.type !== "MethodDefinition" && m.type !== "PropertyDefinition") || !m.computed) continue
+      visitExpression(m.key as Expression, classScope, fnInfo)
+      if (m.type !== "PropertyDefinition") continue
+      const name = `%key${fieldKeys.size}`
+      addDecl(classScope, fnInfo, name, "const", false)
+      fieldKeys.set(m, { type: "Identifier", name, start: m.key.start, end: m.key.end } as Identifier)
+    }
+    for (const m of methods) {
+      if (m.kind === "constructor") continue
+      visitFunction(m.value, classScope, fnInfo.index).flags |= CodeFlags.METHOD
+    }
+    const fields = node.body.body.filter((m) => m.type === "PropertyDefinition")
+    const instance = fieldInit(
+      node,
+      classScope,
+      fnInfo,
+      "<instance_members_initializer>",
+      fields.filter((f) => !f.static),
+    )
+    const statics = fieldInit(
+      node,
+      classScope,
+      fnInfo,
+      "<static_initializer>",
+      fields.filter((f) => f.static),
+    )
+    if (instance || statics) classFieldInits.set(node, { instance, static: statics })
+  }
+
+  // `constructor() {}`, or `constructor(...args) { super(...args) }` for a derived class.
+  function defaultConstructor(node: ClassNode): FunctionExpression {
+    const at = { start: node.start, end: node.end }
+    const args = { type: "Identifier", name: "args", ...at }
+    const superCall = {
+      type: "ExpressionStatement",
+      expression: {
+        type: "CallExpression",
+        callee: { type: "Super", ...at },
+        arguments: [{ type: "SpreadElement", argument: args, ...at }],
+        optional: false,
+        ...at,
+      },
+      ...at,
+    }
+    return {
+      type: "FunctionExpression",
+      id: null,
+      params: node.superClass ? [{ type: "RestElement", argument: { ...args }, ...at }] : [],
+      body: { type: "BlockStatement", body: node.superClass ? [superCall] : [], ...at },
+      generator: false,
+      expression: false,
+      async: false,
+      ...at,
+    } as FunctionExpression
+  }
+
+  // A synthetic method whose body is `this` and the field initializers: the compiler defines each field on `this`.
+  function fieldInit(
+    node: ClassNode,
+    classScope: Scope,
+    fnInfo: FunctionInfo,
+    name: string,
+    fields: Array<PropertyDefinition>,
+  ): FunctionExpression | undefined {
+    if (fields.length === 0) return undefined
+    const at = { start: node.start, end: node.end }
+    const statement = (expression: Expression) => ({ type: "ExpressionStatement", expression, ...at })
+    const fn = {
+      type: "FunctionExpression",
+      id: null,
+      params: [],
+      body: {
+        type: "BlockStatement",
+        body: [
+          statement({ type: "ThisExpression", ...at } as Expression),
+          ...fields.flatMap((f) => [
+            ...(fieldKeys.has(f) ? [statement(fieldKeys.get(f)!)] : []),
+            ...(f.value ? [statement(f.value)] : []),
+          ]),
+        ],
+        ...at,
+      },
+      generator: false,
+      expression: false,
+      async: false,
+      ...at,
+    } as FunctionExpression
+    fieldInitMembers.set(fn, fields)
+    visitFunction(fn, classScope, fnInfo.index, name).flags |= CodeFlags.METHOD | CodeFlags.FIELD_INIT
+    return fn
   }
 
   visitFunction(source.program, undefined, -1)
@@ -495,6 +659,18 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   for (const item of unresolved)
     if (item.node.type !== "ThisExpression") refs.set(item.node as Identifier, resolve(item))
   for (const item of unresolved) if (item.node.type === "ThisExpression") thisRefs.set(item.node, resolve(item))
+  // `super` reads the home object of the method it is in, through arrows.
+  const superRefs = new Map<AnyNode, { home: ResolvedRef; self: ResolvedRef }>()
+  for (const item of supers) {
+    let owner = functions[item.fnIndex]!
+    while (owner.node.type === "ArrowFunctionExpression") owner = functions[owner.parentIndex]!
+    if ((owner.flags & CodeFlags.METHOD) === 0) continue
+    owner.homeDecl ??= addDecl(owner.paramScope, owner, "%home", "home", false)
+    superRefs.set(item.node, {
+      home: resolve({ ...item, name: "%home" }),
+      self: resolve({ ...item, name: "this" }),
+    })
+  }
 
   // Assign dense local slots per function. A call copies its arguments into the leading slots, so with simple
   // parameters each position gets a slot; an earlier duplicate name (`function f(a, a)`) gets a dummy one.
@@ -522,7 +698,18 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   // Patch `from === 0` upvalue indices now that parent local slots are assigned
   for (const fnInfo of functions) for (const u of fnInfo.upvalues) if (u.from === 0) u.index = u.decl.slot
 
-  return { functions, nodeToFunction, scopeOfNode, refs, thisRefs }
+  return {
+    functions,
+    nodeToFunction,
+    scopeOfNode,
+    refs,
+    thisRefs,
+    superRefs,
+    classConstructors,
+    classFieldInits,
+    fieldInitMembers,
+    fieldKeys,
+  }
 }
 
 const collectPatternNames = (pattern: Pattern, out: Array<string> = []): Array<string> => {

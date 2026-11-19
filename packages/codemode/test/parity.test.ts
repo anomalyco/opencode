@@ -419,7 +419,7 @@ describe("Error values and instanceof", () => {
       true,
     ])
     expect(await value(`try { tools + 1 } catch (e) { return e.name }`)).toBe("TypeError")
-    expect(await value(`try { class A {} } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
+    expect(await value(`try { class A { #x } } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
       "SyntaxError",
       true,
     ])

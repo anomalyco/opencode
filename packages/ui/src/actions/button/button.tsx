@@ -32,6 +32,7 @@ export function Button(props: ButtonProps) {
       type="button"
       disabled={split.disabled}
       data-disabled={split.disabled ? "" : undefined}
+      aria-busy={split.variant === "loading" ? "true" : undefined}
       {...rest}
       data-component="button-v2"
       data-size={split.size || "normal"}

@@ -37,6 +37,48 @@ test("review toggle shows its tooltip with the side panel open or closed", async
   await expect(tooltip).toBeVisible()
 })
 
+test("review rings stay visible on the mode trigger, file tree, and diff", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewModeFocus",
+    vcsDiff: [fileDiff("alpha.ts"), fileDiff("beta.ts")],
+  })
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+
+  const panel = page.getByRole("complementary", { name: "Review and files" })
+
+  await openReviewLauncher(panel)
+
+  const tree = panel.getByRole("button", { name: "Toggle file tree", exact: true })
+
+  const mode = panel.getByRole("button", { name: "Git changes", exact: true })
+
+  await expect(mode).toBeVisible()
+  await tree.press("Tab")
+  await expect(mode).toBeFocused()
+  await expect(mode).toHaveCSS("outline-offset", "-2px")
+
+  const alpha = panel.getByRole("treeitem", { name: "alpha.ts", exact: true })
+
+  const beta = panel.getByRole("treeitem", { name: "beta.ts", exact: true })
+
+  await alpha.press("ArrowDown")
+  await expect(beta).toHaveCSS("outline-style", "solid")
+  await expect(beta).toHaveCSS("outline-offset", "-2px")
+
+  await tree.click()
+  await expect(tree).toHaveAttribute("aria-expanded", "false")
+  await tree.press("Tab")
+  await expect(mode).toBeFocused()
+  await expect(mode).toHaveCSS("outline-offset", "-2px")
+
+  const diff = panel.locator('[data-component="file"][data-mode="diff"]')
+
+  await diff.press("Shift+Tab")
+  await page.keyboard.press("Tab")
+  await expect(diff).toBeFocused()
+  await expect.poll(() => diff.evaluate((element) => getComputedStyle(element, "::after").outlineOffset)).toBe("-2px")
+})
+
 for (const view of ["desktop", "mobile"] as const) {
   test(`offers Git initialization for a project without VCS (${view})`, async ({ page }) => {
     if (view === "mobile") await page.setViewportSize({ width: 390, height: 844 })

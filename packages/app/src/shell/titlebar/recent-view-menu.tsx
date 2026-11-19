@@ -34,6 +34,7 @@ export function RecentViewMenu(props: {
         variant="ghost-muted"
         size="small"
         data-slot="recent-view-trigger"
+        class="focus-visible:-outline-offset-2"
         aria-label={language.t("sidebar.recent.view.options")}
         icon={<Icon name="sliders" />}
       />
