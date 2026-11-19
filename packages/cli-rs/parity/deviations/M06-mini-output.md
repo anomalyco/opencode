@@ -14,15 +14,6 @@
   separators they started with until mini restarts. The setting is saved either way.
 - Reason: the prompt and footer views take mono at construction; rebuilding them mid-session is a larger change.
 
-## A wrapped mono task item continues under its box
-
-- TypeScript: in mono, a Markdown task item's box is part of its list marker (`- [ ] `), so the item's wrapped rows
-  start after the box, at column 6.
-- Rust: the box is the first text of the item (`- ` then `[ ] item`), so the wrapped rows start under the box, at
-  column 2. A one-row item reads the same.
-- Reason: OpenTUI's Rust Markdown draws the box as `☐`/`☑` in its list marker and has no hook to change marker text,
-  so mono escapes the box in the source (`mono_tasks`). Ends with a list marker hook in OpenTUI's Rust `Markdown`.
-
 ## The work spinner row of the settings panel has no icon
 
 - TypeScript: the "Work spinner" row shows the selected spinner animating.
