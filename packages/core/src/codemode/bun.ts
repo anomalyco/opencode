@@ -13,6 +13,7 @@ import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
 import { Permission } from "../permission.js"
 import { fileDiff } from "../tool/plugin/file-diff.js"
+import { CodeModeDiffs } from "./diffs.js"
 import { CodeModeExecution } from "./execution.js"
 
 /** The session's file services, which the `Bun` global reads and writes through. */
@@ -182,7 +183,9 @@ const remove = (handle: Handle) =>
       if (info.type === "directory")
         return yield* new Environment.WrongKind({ path: handle.target.absolute, actual: info.type })
       yield* host.fileWrite.authorize(handle.target, host.context)
+      const before = yield* CodeModeDiffs.read(handle.target.environment.files, handle.target.absolute)
       yield* handle.target.environment.files.remove(handle.target.absolute)
+      yield* CodeModeDiffs.record(handle.target, before, undefined)
     }).pipe(host.fileMutation.withLock([handle.target])),
   )
 
@@ -236,9 +239,17 @@ const put = (
             ? fileDiff(target.resource, before, after, type === undefined ? "added" : "modified")
             : undefined,
         )
+        // The run's own record of the file reads it whole: the request above may show only an append.
+        const previous =
+          type === undefined ? undefined : yield* CodeModeDiffs.read(target.environment.files, target.absolute)
         yield* options.append
           ? host.fileMutation.append({ target, content: bytes })
           : host.fileMutation.write({ target, content: bytes })
+        yield* CodeModeDiffs.record(
+          target,
+          previous,
+          options.diff ? yield* CodeModeDiffs.read(target.environment.files, target.absolute) : { binary: true },
+        )
         return bytes.byteLength
       }).pipe(host.fileMutation.withLock([target]))
     }),

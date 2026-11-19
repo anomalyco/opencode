@@ -24,14 +24,7 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
-import {
-  BoxRenderable,
-  ScrollBoxRenderable,
-  addDefaultParsers,
-  TextAttributes,
-  RGBA,
-  MouseEvent,
-} from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import {
   mediaHashFromUri,
@@ -1286,7 +1279,9 @@ export function Session(props: {
       },
       run: () => {
         const lastAssistantMessage = messagesBeforeRevert().findLast(
-          (msg) => msg.type === "assistant" || (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
+          (msg) =>
+            msg.type === "assistant" ||
+            (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
         )
         if (!lastAssistantMessage) {
           toast.show({ message: "No assistant messages found", variant: "error" })
@@ -1594,9 +1589,7 @@ export function Session(props: {
                   onMouseOut={() => setLatestHovered(false)}
                   onMouseUp={toBottom}
                 >
-                  <text
-                    fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
-                  >
+                  <text fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}>
                     Jump to latest ↓
                   </text>
                 </box>
@@ -1642,12 +1635,7 @@ export function Session(props: {
                     }}
                   </Show>
                 </Match>
-                <Match
-                  when={
-                    session() &&
-                    currentLocation.error?.location.directory === session()!.location.directory
-                  }
-                >
+                <Match when={session() && currentLocation.error?.location.directory === session()!.location.directory}>
                   <SessionLocationMissing
                     directory={session()!.location.directory}
                     projectID={session()!.projectID}
@@ -2951,9 +2939,7 @@ function BlockTool(props: BlockToolProps) {
               <Show
                 when={props.spinner}
                 fallback={
-                  <text
-                    fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}
-                  >
+                  <text fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}>
                     {title()}
                   </text>
                 }
@@ -3153,11 +3139,7 @@ function ShellDisplay(props: {
           <Show
             when={isRunning()}
             fallback={
-              <text
-                fg={theme.text.base}
-                wrapMode={expanded() ? "word" : "char"}
-                maxHeight={expanded() ? undefined : 2}
-              >
+              <text fg={theme.text.base} wrapMode={expanded() ? "word" : "char"} maxHeight={expanded() ? undefined : 2}>
                 {limitedInput()}
               </text>
             }
@@ -3258,15 +3240,15 @@ function Read(props: ToolProps) {
         Read {pathFormatter.format(stringValue(props.input.path))}
         <Show when={props.input.offset !== undefined || props.input.limit !== undefined}>
           :{finiteNumber(props.input.offset) || 1}-
-          {props.input.limit ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1 : ""}
+          {props.input.limit
+            ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1
+            : ""}
         </Show>
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
-            <text fg={theme.text.muted}>
-              ↳ Loaded {pathFormatter.format(filepath)}
-            </text>
+            <text fg={theme.text.muted}>↳ Loaded {pathFormatter.format(filepath)}</text>
           </box>
         )}
       </For>
@@ -3430,6 +3412,14 @@ function Execute(props: ToolProps) {
   const dialog = useDialog()
   const isLoading = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
   const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
+  // Past the size cap a script's file keeps its counts without a patch.
+  const files = createMemo(() =>
+    parseApplyPatchFiles(
+      Array.isArray(props.metadata.files)
+        ? props.metadata.files.map((file) => ({ patch: "", ...recordValue(file) }))
+        : [],
+    ),
+  )
   const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
@@ -3465,6 +3455,11 @@ function Execute(props: ToolProps) {
               </text>
             )}
           </For>
+        </box>
+      </Show>
+      <Show when={files().length > 0}>
+        <box marginTop={1}>
+          <PatchedFiles files={files()} part={props.part} />
         </box>
       </Show>
     </>
@@ -3538,7 +3533,6 @@ function Edit(props: ToolProps) {
 function ApplyPatch(props: ToolProps) {
   const ctx = use()
   const theme = useTheme()
-  const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
   const targets = createMemo(() => {
@@ -3556,60 +3550,10 @@ function ApplyPatch(props: ToolProps) {
       return type && resource ? [{ type, resource }] : []
     })
   })
-  const view = createMemo(() => {
-    if (ctx.config.diffs?.view === "unified") return "unified"
-    if (ctx.config.diffs?.view === "split") return "split"
-    return ctx.width > 120 ? "split" : "unified"
-  })
-
   return (
     <Switch>
       <Match when={files().length > 0}>
-        <box flexDirection="column" gap={1}>
-          <For each={files()}>
-            {(file) => (
-              <BlockTool
-                path={{
-                  label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
-                  value: pathFormatter.format(file.relativePath),
-                }}
-                part={props.part}
-              >
-                <Show
-                  when={file.type !== "delete"}
-                  fallback={
-                    <text fg={theme.diff.text.removed}>
-                      -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
-                    </text>
-                  }
-                >
-                  <box paddingLeft={1} paddingRight={1}>
-                    <PatchDiff
-                      diff={file.patch}
-                      hunkFg={theme.diff.text.hunkHeader}
-                      view={view()}
-                      filetype={filetype(file.relativePath)}
-                      syntaxStyle={syntax()}
-                      showLineNumbers={true}
-                      width="100%"
-                      wrapMode={ctx.diffWrapMode()}
-                      fg={theme.text.base}
-                      addedBg={theme.diff.background.added}
-                      removedBg={theme.diff.background.removed}
-                      contextBg={theme.diff.background.context}
-                      addedSignColor={theme.diff.highlight.added}
-                      removedSignColor={theme.diff.highlight.removed}
-                      lineNumberFg={theme.diff.lineNumber.text}
-                      lineNumberBg={theme.diff.background.context}
-                      addedLineNumberBg={theme.diff.lineNumber.background.added}
-                      removedLineNumberBg={theme.diff.lineNumber.background.removed}
-                    />
-                  </box>
-                </Show>
-              </BlockTool>
-            )}
-          </For>
-        </box>
+        <PatchedFiles files={files()} part={props.part} />
       </Match>
       <Match when={applied().length > 0}>
         <box flexDirection="column" gap={1}>
@@ -3790,6 +3734,73 @@ function formatSessionTranscript(
     return [`## Assistant\n\n${content.join("\n\n")}`]
   })
   return `# ${withTimestampedFallback(session)}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
+}
+
+// Files a patch, or a Code Mode script, changed: one block per file with its diff, or its counts when the diff is
+// missing (a deleted file, or one past a script's size cap).
+function PatchedFiles(props: { files: ReturnType<typeof parseApplyPatchFiles>; part: ToolProps["part"] }) {
+  const ctx = use()
+  const theme = useTheme()
+  const { currentSyntax: syntax } = useThemes()
+  const pathFormatter = usePathFormatter()
+  const view = createMemo(() => {
+    if (ctx.config.diffs?.view === "unified") return "unified"
+    if (ctx.config.diffs?.view === "split") return "split"
+    return ctx.width > 120 ? "split" : "unified"
+  })
+
+  return (
+    <box flexDirection="column" gap={1}>
+      <For each={props.files}>
+        {(file) => (
+          <BlockTool
+            path={{
+              label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
+              value: pathFormatter.format(file.relativePath),
+            }}
+            part={props.part}
+          >
+            <Show
+              when={file.type !== "delete" && file.patch}
+              fallback={
+                <text>
+                  <Show when={file.additions > 0}>
+                    <span style={{ fg: theme.diff.text.added }}>+{file.additions} </span>
+                  </Show>
+                  <span style={{ fg: theme.diff.text.removed }}>
+                    -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
+                  </span>
+                </text>
+              }
+            >
+              <box paddingLeft={1} paddingRight={1}>
+                <PatchDiff
+                  diff={file.patch}
+                  hunkFg={theme.diff.text.hunkHeader}
+                  view={view()}
+                  filetype={filetype(file.relativePath)}
+                  syntaxStyle={syntax()}
+                  showLineNumbers={true}
+                  width="100%"
+                  wrapMode={ctx.diffWrapMode()}
+                  fg={theme.text.base}
+                  addedBg={theme.diff.background.added}
+                  removedBg={theme.diff.background.removed}
+                  contextBg={theme.diff.background.context}
+                  addedSignColor={theme.diff.highlight.added}
+                  removedSignColor={theme.diff.highlight.removed}
+                  lineNumberFg={theme.diff.lineNumber.text}
+                  lineNumberBg={theme.diff.background.context}
+                  addedLineNumberBg={theme.diff.lineNumber.background.added}
+                  removedLineNumberBg={theme.diff.lineNumber.background.removed}
+                />
+              </box>
+            </Show>
+          </BlockTool>
+        )}
+      </For>
+    </box>
+  )
 }
 
 export function parseApplyPatchFiles(value: unknown) {

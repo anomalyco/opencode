@@ -23,6 +23,7 @@ import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
+import { CodeModeDiffs } from "./diffs.js"
 import { CodeModeExecution } from "./execution.js"
 import { CodeModeFetch } from "./fetch.js"
 import { CodeModePath } from "./path.js"
@@ -122,6 +123,8 @@ export const create = (
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
         const lock = Semaphore.makeUnsafe(1)
+        // The files the program changes, shown under the call when it finishes in the foreground.
+        const diffs = CodeModeDiffs.make()
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
         const scope = yield* Effect.scope
@@ -159,7 +162,7 @@ export const create = (
                   const id = CallID.make(`call_${Identifier.ascending()}`)
                   yield* permission.nested(id, context.id).pipe(Scope.provide(scope))
                   // The program sees the same failure text the model gets for a direct call.
-                  const executed = yield* executeTool(name, tool, input, {
+                  const call = executeTool(name, tool, input, {
                     ...context,
                     id,
                     codemode: true,
@@ -170,6 +173,9 @@ export const create = (
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
+                  const executed = yield* services
+                    ? CodeModeDiffs.around(diffs, Context.get(services, FileAccess.Service), tool.name, input, call)
+                    : call
                   const content = resultContent(executed)
                   const outputFileParts = outputFiles(content)
                   if (outputFileParts.length > 0)
@@ -185,6 +191,7 @@ export const create = (
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
             Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
             Effect.provideService(Permission.Service, permission),
+            Effect.provideService(CodeModeDiffs.Service, diffs),
             (program) => (services ? Effect.provideContext(program, services) : program),
           )
         const toolCalls = yield* Ref.get(calls)
@@ -207,9 +214,11 @@ export const create = (
             ...(file.name === undefined ? {} : { name: file.name }),
           })),
         ]
+        const changed = diffs.files()
         const metadata: Metadata = {
           toolCalls: value.toolCalls,
           ...(value.error ? { error: true } : {}),
+          ...(changed.length > 0 ? { files: changed } : {}),
         }
         return {
           output: value,
