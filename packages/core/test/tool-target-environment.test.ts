@@ -76,9 +76,10 @@ describe("file tools", () => {
       const file = path.join(tmp.path, "notes.txt")
       const driver = Environment.makeMemoryDriver()
       const environment: Environment.Interface = { files: Environment.makeFiles(driver), spawner: driver.spawner }
+      const assertions: Permission.AssertInput[] = []
       const replacements = [
         Environment.node.replace(hostEnvironmentLayer),
-        Permission.node.replace(permissionLayer({ assert: () => Effect.void })),
+        Permission.node.replace(permissionLayer({ assert: (input) => Effect.sync(() => void assertions.push(input)) })),
         Location.node.replace(
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) }))),
         ),
@@ -111,18 +112,27 @@ describe("file tools", () => {
           status: "completed",
           output: "Created file successfully: notes.txt",
         })
+        expect(assertions).toMatchObject([
+          { action: "edit", metadata: { files: [{ status: "added", patch: expect.stringContaining("+one") }] } },
+        ])
         expect(yield* execute(registry, "read", { path: "notes.txt" })).toMatchObject({
           status: "completed",
           output: { type: "text", content: "one\n" },
         })
         expect(
           yield* execute(registry, "edit", { path: "notes.txt", oldString: "one", newString: "two" }),
-        ).toMatchObject({ status: "completed" })
+        ).toMatchObject({
+          status: "completed",
+          metadata: { files: [{ patch: expect.stringContaining("-one\n+two") }] },
+        })
         expect(
           yield* execute(registry, "patch", {
             patchText: "*** Begin Patch\n*** Update File: notes.txt\n@@\n-two\n+three\n*** End Patch",
           }),
-        ).toMatchObject({ status: "completed" })
+        ).toMatchObject({
+          status: "completed",
+          metadata: { files: [{ patch: expect.stringContaining("-two\n+three") }] },
+        })
 
         expect(new TextDecoder().decode((yield* environment.files.read(file)).bytes)).toBe("three\n")
         expect(yield* Effect.promise(() => fs.readdir(tmp.path))).toEqual(["notes.txt"])
