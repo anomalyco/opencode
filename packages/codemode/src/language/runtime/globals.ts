@@ -1,4 +1,4 @@
-import { Arr, BoundFn, Callable, coerceToInteger, get, Obj, type Value } from "./objects.js"
+import { Arr, BoundFn, Callable, coerceToInteger, defineAccessor, get, Obj, type Value } from "./objects.js"
 import { withReads } from "./callback.js"
 import { arrayGlobal } from "../stdlib/array.js"
 import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
@@ -62,6 +62,13 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
         }),
     ],
   ])
+  // AddRestrictedFunctionProperties: strict functions have no caller or arguments of their own.
+  // Each half gets its own function: the intrinsics name a native accessor half by the function it wraps.
+  const restricted = (): never => {
+    throw typeError("'caller' and 'arguments' are restricted function properties and cannot be accessed in this context.")
+  }
+  for (const key of ["caller", "arguments"])
+    defineAccessor(ctx.builtins.Function, key, () => restricted(), () => restricted())
   return constructor(ctx.builtins, ctx.builtins.Function, {
     name: "Function",
     length: 1,

@@ -278,6 +278,7 @@ export const execResume = (frame: Frame, bx: number, pc: number, sp: number): nu
 const synchronous = (frame: Frame): boolean =>
   frame.mode === Mode.CALLER ||
   frame.mode === Mode.REDO ||
+  frame.mode === Mode.CONSTRUCT ||
   (frame.mode === Mode.GENERATOR && !(frame.target as GeneratorObj).asynchronous)
 
 export const execAwait = (vm: Vm, frame: Frame, a: number, pc: number, sp: number): void => {
