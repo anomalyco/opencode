@@ -3,7 +3,7 @@ import { coerceToInteger, coerceToNumber, get, type NativeResult, Obj, type Valu
 import { typeError } from "../runtime/model.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 import { withPrimitives, withReads } from "../runtime/callback.js"
-import { checkArrayLength } from "../runtime/limits.js"
+import { checkLocaleCount, checkLocaleTag } from "../runtime/limits.js"
 import { coerce } from "./value.js"
 
 // Intl.NumberFormat's options, each with the hint its value converts by.
@@ -39,16 +39,16 @@ const numberFormatOptions = [
 const toLocaleString = (value: number, locales: Value, options: Value): NativeResult =>
   withReads(() => {
     const length = locales instanceof Obj ? coerceToInteger(get(locales, "length")) : 0
-    checkArrayLength(length)
+    checkLocaleCount(length)
     const list = Array.from({ length }, (_, index) => get(locales as Obj, index))
     const read = options instanceof Obj ? numberFormatOptions : []
     return withPrimitives(
       [...list.map(() => "string" as const), ...read.map(([, hint]) => hint)],
       [...list, ...read.map(([name]) => get(options as Obj, name))],
       (primitives) => {
-        const canonical = Intl.getCanonicalLocales(
-          (locales instanceof Obj ? primitives.slice(0, length) : locales) as string | Array<string>,
-        )
+        const hostLocales = locales instanceof Obj ? primitives.slice(0, length) : locales
+        for (const tag of Array.isArray(hostLocales) ? hostLocales : [hostLocales]) checkLocaleTag(tag)
+        const canonical = Intl.getCanonicalLocales(hostLocales as string | Array<string>)
         return value.toLocaleString(
           canonical.length === 0 ? "en-US" : canonical,
           (options instanceof Obj
