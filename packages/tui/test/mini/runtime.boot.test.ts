@@ -46,6 +46,7 @@ describe("run runtime boot", () => {
       footer: "show",
       splash: "show",
       work_spinner: "block-soft-slide",
+      shell: "",
       mono: false,
     })
     expect(
@@ -69,6 +70,7 @@ describe("run runtime boot", () => {
       footer: "hide",
       splash: "hide",
       work_spinner: "block-low-comet",
+      shell: "",
       mono: true,
     })
   })
