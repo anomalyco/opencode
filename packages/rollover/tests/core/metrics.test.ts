@@ -7,7 +7,7 @@ describe("metrics", () => {
       "llm_call", "extraction_started", "extraction_completed", "extraction_failed",
       "consolidation_started", "consolidation_completed", "consolidation_failed",
       "swap", "swap_deferred", "cutoff_missing", "render_truncated", "rollover_error",
-      "gate_classified", "gate_scheduled", "gate_coalesced", "gate_fallback",
+      "ledger_enriched",
     ] as const
     expect(METRIC_EVENTS).toEqual(expected)
   })

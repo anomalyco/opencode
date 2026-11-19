@@ -1,5 +1,5 @@
 /** Mechanical projection render — v2 deterministic swap (see docs/2026-11-19-deterministic-swap-design.md). Pure functions, no LLM. */
-import type { NMessage, LedgerRecord, LedgerLine, RolloverConfig } from "./types"
+import type { NMessage, LedgerLine, RolloverConfig } from "./types"
 import { activeRecords } from "./ledger"
 import { estimateTokens } from "./tokens"
 import { packLedgerSections, rolloverShell, ROLLOVER_SHELL_CLOSE } from "./packer"

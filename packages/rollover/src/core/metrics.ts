@@ -14,10 +14,7 @@ export const METRIC_EVENTS = [
   "cutoff_missing",
   "render_truncated",
   "rollover_error",
-  "gate_classified",
-  "gate_scheduled",
-  "gate_coalesced",
-  "gate_fallback",
+  "ledger_enriched",
 ] as const
 
 export type MetricEventName = (typeof METRIC_EVENTS)[number]

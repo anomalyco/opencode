@@ -74,7 +74,7 @@ describe("decideSwap", () => {
 
   test("below threshold → none, markDecided true", () => {
     const msgs = [msg("a1", "assistant"), realUser("u2")]
-    const d = decideSwap({ msgs, st: baseState(), thresholdValue: 100000, extractionCaughtUp: true, toolsOpen: false, contextTokens: 50000 })
+    const d = decideSwap({ msgs, st: baseState(), thresholdValue: 100000, toolsOpen: false, contextTokens: 50000 })
     expect(d).toEqual({ action: "none", markDecided: true, userMessageId: "u2" })
   })
 
