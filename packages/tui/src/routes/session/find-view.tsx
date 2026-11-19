@@ -8,17 +8,22 @@ import {
   type TextChunk,
   type TextRenderable,
 } from "@opentui/core"
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js"
+import { useTerminalDimensions } from "@opentui/solid"
+import { createEffect, createMemo, For, on, onCleanup, Show, untrack } from "solid-js"
 import { useCursorStyle } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { useTheme } from "../../context/theme"
-import { SplitBorder } from "../../ui/border"
+import { EmptyBorder, SplitBorder } from "../../ui/border"
+import { useDialog } from "../../ui/dialog"
 import { displayRanges, findRanges, paintChunks, type FindPart } from "./find"
 import { use } from "./render-context"
 
 export const FIND_MODE = "find"
 
-/** One-line Find bar above the composer, like the web app's: incremental, with a match counter. */
+/**
+ * Takes the prompt's place while Find is open, in the prompt's shape: the query on the input row and
+ * the keys where the agent and model go. Incremental, with a match counter.
+ */
 export function FindBar(props: {
   query: string
   index: number
@@ -28,15 +33,16 @@ export function FindBar(props: {
   onMove: (delta: 1 | -1) => void
   onClose: () => void
 }) {
-  const ctx = use()
   const theme = useTheme()
   const cursorStyle = useCursorStyle()
+  const dimensions = useTerminalDimensions()
+  const dialog = useDialog()
   const keymap = Keymap.use()
-  const [focused, setFocused] = createSignal(false)
+  const active = () => dialog.stack.length === 0
+  const background = createMemo(() => theme.decrease(theme.background.raised.base))
   let input: InputRenderable | undefined
 
-  // Claims Enter, arrows and Escape only while the field has focus, so the prompt keeps its keys.
-  onCleanup(keymap.mode.push(FIND_MODE, focused))
+  onCleanup(keymap.mode.push(FIND_MODE, active))
   Keymap.createLayer(() => ({
     mode: FIND_MODE,
     commands: [
@@ -46,63 +52,78 @@ export function FindBar(props: {
     ],
   }))
 
-  // Opening Find again refocuses the field.
+  // The field keeps focus while Find is open: opening it again or closing a dialog refocuses it.
   createEffect(
-    on(
-      () => props.focus,
-      () =>
-        setTimeout(() => {
-          if (input && !input.isDestroyed) input.focus()
-        }, 1),
-    ),
+    on([() => props.focus, active], () => {
+      if (!active()) return
+      setTimeout(() => {
+        if (input && !input.isDestroyed) input.focus()
+      }, 1)
+    }),
   )
 
   return (
-    <box
-      marginBottom={1}
-      border={["left"]}
-      borderColor={theme.border.base}
-      customBorderChars={SplitBorder.customBorderChars}
-    >
+    <box width="100%">
       <box
         width="100%"
-        paddingLeft={2}
-        paddingRight={2}
-        flexDirection="row"
-        gap={2}
-        backgroundColor={theme.background.raised.base}
+        border={["left"]}
+        borderColor={theme.border.base}
+        customBorderChars={{ ...SplitBorder.customBorderChars, bottomLeft: "╹" }}
       >
-        <input
-          ref={(element: InputRenderable) => {
-            input = element
-            element.on("focused", () => setFocused(true))
-            element.on("blurred", () => setFocused(false))
-          }}
+        <box
+          paddingLeft={dimensions().width < 44 ? 1 : 2}
+          paddingRight={dimensions().width < 44 ? 1 : 2}
+          paddingTop={1}
+          flexShrink={0}
+          backgroundColor={background()}
           flexGrow={1}
-          minWidth={10}
-          onInput={props.onInput}
-          placeholder="Find..."
-          placeholderColor={theme.text.muted}
-          backgroundColor={theme.background.raised.base}
-          focusedBackgroundColor={theme.background.raised.base}
-          textColor={theme.text.base}
-          focusedTextColor={theme.text.base}
-          cursorColor={theme.text.base}
-          cursorStyle={cursorStyle()}
-        />
-        <Show when={props.query}>
-          <text fg={theme.text.muted} flexShrink={0}>
-            {props.count ? props.index + 1 : 0}/{props.count}
-          </text>
-        </Show>
-        <Show when={ctx.width >= 80}>
-          <text fg={theme.text.muted} flexShrink={0} wrapMode="none">
-            <span style={{ fg: theme.text.base }}>enter</span> next{" "}
-            <span style={{ fg: theme.text.base }}>shift+enter</span> previous{" "}
-            <span style={{ fg: theme.text.base }}>esc</span> close
-          </text>
-        </Show>
+          width="100%"
+        >
+          <box flexDirection="row" gap={2}>
+            <input
+              ref={input}
+              flexGrow={1}
+              minWidth={10}
+              onInput={props.onInput}
+              placeholder="Find in session..."
+              placeholderColor={theme.text.muted}
+              backgroundColor="transparent"
+              focusedBackgroundColor="transparent"
+              textColor={theme.text.base}
+              focusedTextColor={theme.text.base}
+              cursorColor={theme.text.base}
+              cursorStyle={cursorStyle()}
+            />
+            <Show when={props.query}>
+              <text fg={theme.text.muted} flexShrink={0}>
+                {props.count ? props.index + 1 : 0}/{props.count}
+              </text>
+            </Show>
+          </box>
+          <box flexDirection="row" flexShrink={0} paddingTop={1}>
+            <text fg={theme.text.muted} wrapMode="none" truncate flexShrink={1} minWidth={0}>
+              <span style={{ fg: theme.text.base }}>enter</span> next{"  "}
+              <span style={{ fg: theme.text.base }}>shift+enter</span> previous{"  "}
+              <span style={{ fg: theme.text.base }}>esc</span> close
+            </text>
+          </box>
+        </box>
       </box>
+      <box
+        height={1}
+        border={["left"]}
+        borderColor={theme.border.base}
+        customBorderChars={{ ...EmptyBorder, vertical: background().a !== 0 ? "╹" : " " }}
+      >
+        <box
+          height={1}
+          border={["bottom"]}
+          borderColor={background()}
+          customBorderChars={{ ...EmptyBorder, horizontal: background().a !== 0 ? "▀" : " " }}
+        />
+      </box>
+      {/* Stands in for the prompt's footer row, so the transcript keeps its height. */}
+      <box height={1} />
     </box>
   )
 }

@@ -964,6 +964,7 @@ export function Session(props: {
     setFindSelected(next)
     revealFind(next)
   }
+  // The prompt refocuses itself once it is visible again.
   const closeFind = () => {
     findSeek = undefined
     batch(() => {
@@ -971,8 +972,13 @@ export function Session(props: {
       setFindQuery("")
       setFindSelected(undefined)
     })
-    prompt()?.focus()
   }
+  // Find lives in the prompt's place, so a permission, form or composer that replaces the prompt closes it.
+  createEffect(
+    on(prompt, (ref) => {
+      if (!ref && findOpen()) closeFind()
+    }),
+  )
 
   function toBottom() {
     clearMessageNavigation()
@@ -1160,7 +1166,7 @@ export function Session(props: {
       title: "Find in session",
       id: "session.find",
       group: "Session",
-      enabled: findEnabled(),
+      enabled: findEnabled() && !!prompt(),
       slash: { name: "find" },
       run: () => {
         dialog.clear()
@@ -1704,17 +1710,6 @@ export function Session(props: {
               <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>
                 <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
               </Show>
-              <Show when={findOpen()}>
-                <FindBar
-                  query={findQuery()}
-                  index={findIndex()}
-                  count={findList().length}
-                  focus={findFocus()}
-                  onInput={searchFind}
-                  onMove={moveFind}
-                  onClose={closeFind}
-                />
-              </Show>
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
@@ -1764,8 +1759,20 @@ export function Session(props: {
                   />
                 </Match>
                 <Match when={!disabled()}>
+                  <Show when={findOpen()}>
+                    <FindBar
+                      query={findQuery()}
+                      index={findIndex()}
+                      count={findList().length}
+                      focus={findFocus()}
+                      onInput={searchFind}
+                      onMove={moveFind}
+                      onClose={closeFind}
+                    />
+                  </Show>
+                  {/* Hidden rather than unmounted, so the draft, cursor and undo history survive Find. */}
                   <Prompt
-                    visible={true}
+                    visible={!findOpen()}
                     ref={bind}
                     muted={props.promptMuted}
                     onSubmit={() => {

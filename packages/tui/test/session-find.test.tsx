@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { InputRenderable, RGBA, type TextChunk } from "@opentui/core"
+import { InputRenderable, RGBA, TextareaRenderable, type TextChunk } from "@opentui/core"
 import type { SessionMessageInfo } from "@opencode/client"
 import {
   displayRanges,
@@ -182,8 +182,13 @@ test("Find highlights prompts and markdown, moves between matches, and clears on
 
   app.mockInput.pressKey("x", { ctrl: true })
   app.mockInput.pressKey("f")
+  // Find takes the prompt's place.
   await app.waitForFrame(
-    (frame) => frame.includes("Find...") && app.renderer.currentFocusedRenderable instanceof InputRenderable,
+    (frame) =>
+      frame.includes("Find in session...") &&
+      frame.includes("shift+enter previous") &&
+      !frame.includes("Demo Model") &&
+      app.renderer.currentFocusedRenderable instanceof InputRenderable,
   )
   await app.mockInput.typeText("needle")
   // The first match is the oldest, so the transcript scrolls up to it.
@@ -198,6 +203,11 @@ test("Find highlights prompts and markdown, moves between matches, and clears on
   await app.waitForFrame((frame) => frame.includes("4/4") && frame.includes("Last needle here"))
 
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("Find..."))
+  await app.waitForFrame((frame) => !frame.includes("shift+enter previous") && frame.includes("Demo Model"))
+  // The prompt comes back with focus.
+  await app.waitFor(() => {
+    const focused = app.renderer.currentFocusedRenderable
+    return focused instanceof TextareaRenderable && !(focused instanceof InputRenderable)
+  })
   await app.waitFor(() => painted().length === 0)
 })
