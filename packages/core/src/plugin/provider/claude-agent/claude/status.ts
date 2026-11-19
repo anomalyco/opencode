@@ -14,6 +14,8 @@ export type State =
 export interface Interface {
   readonly state: SubscriptionRef.SubscriptionRef<State>
   readonly refresh: () => Effect.Effect<void>
+  /** The state once checked: waits for a check already running, or runs one if none has finished yet. */
+  readonly settled: () => Effect.Effect<State>
   // What a chat's own process found when it started
   readonly report: (next: State) => Effect.Effect<void>
 }
@@ -25,8 +27,7 @@ export const make = Effect.fn("ClaudeStatus.make")(function* (
   const state = yield* SubscriptionRef.make<State>({ type: "checking" })
   const lock = yield* Semaphore.make(1)
 
-  // Serialized so a reconnect checks again after startup, rather than racing it with an older account snapshot.
-  const refresh = Effect.fn("ClaudeStatus.refresh")(function* () {
+  const check = Effect.fn("ClaudeStatus.check")(function* () {
     const executable = io.which()
     if (!executable) return yield* SubscriptionRef.set(state, { type: "missing" })
     const env = yield* connection()
@@ -42,9 +43,20 @@ export const make = Effect.fn("ClaudeStatus.make")(function* (
       ),
     )
     yield* SubscriptionRef.set(state, next)
-  }, lock.withPermit)
+  })
+
+  // Serialized so a reconnect checks again after startup, rather than racing it with an older account snapshot.
+  const refresh = () => lock.withPermit(check())
+
+  const settled = () =>
+    lock.withPermit(
+      Effect.gen(function* () {
+        if ((yield* SubscriptionRef.get(state)).type === "checking") yield* check()
+        return yield* SubscriptionRef.get(state)
+      }),
+    )
 
   const report = (next: State) => SubscriptionRef.set(state, next)
 
-  return { state, refresh, report } satisfies Interface
+  return { state, refresh, settled, report } satisfies Interface
 })

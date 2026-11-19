@@ -47,8 +47,13 @@ import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 import type { SessionMessage } from "./message.js"
 
-const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
-const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
+const IMAGE_BYTES = { trigger: 25 * 1024 * 1024, target: 15 * 1024 * 1024 } // 25 MiB, cut to 15 MiB
+// Claude Agent keeps the history, images included, in its own Claude Code session and sends only what is new. A cut
+// changes history that session already holds, so it branches before the first removed image and replays the rest,
+// rewriting the prompt cache. A larger budget makes that rare while staying under Anthropic's 128 MB request limit.
+// Bedrock, Vertex, Foundry and gateways take 20-32 MB, so Claude Agent's request hooks apply the default budget first
+// unless Claude Code talks to Anthropic's own API.
+const CLAUDE_AGENT_IMAGE_BYTES = { trigger: 96 * 1024 * 1024, target: 64 * 1024 * 1024 } // 96 MiB, cut to 64 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 // Used when the catalog has no output limit for the model.
@@ -222,7 +227,8 @@ export const unsupportedParts = (
   provider?: string,
 ) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
 
-export const boundImages = (messages: LLMRequest["messages"]) => {
+export const boundImages = (messages: LLMRequest["messages"], provider?: string) => {
+  const budget = provider === "claude-agent" ? CLAUDE_AGENT_IMAGE_BYTES : IMAGE_BYTES
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
   const sizes = messages.flatMap((message) =>
     message.content.flatMap((part) => {
@@ -240,8 +246,8 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
   let kept = 0
   for (const size of sizes) {
     kept += size
-    if (kept <= IMAGE_BYTES_TRIGGER) continue
-    while (kept > IMAGE_BYTES_TARGET) kept -= sizes[cut++]!
+    if (kept <= budget.trigger) continue
+    while (kept > budget.target) kept -= sizes[cut++]!
   }
   if (cut === 0) return messages
 
@@ -346,6 +352,7 @@ export const layer = Layer.effect(
             model.capabilities,
             model.model.provider,
           ),
+          model.model.provider,
         ),
         tools: Array.from(hooked, ([name, t]) => ({
           ...t,
