@@ -580,6 +580,11 @@ fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe(config);
     pipe.harness.tui.keymap.dispatch("v2probe.page", None);
+    // A route's first view waits for the page it replaces to go, and so comes after a settle: wait for the page.
+    pipe.until("the page drew", || {
+        let screen = pipe.harness.app.text();
+        screen.contains("╭─Page") && screen.contains("data n=3")
+    });
     // The page registers a command as it renders, which settles once the command it replaced retired.
     pipe.retired();
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
