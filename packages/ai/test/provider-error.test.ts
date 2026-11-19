@@ -36,6 +36,7 @@ describe("provider error classification", () => {
       }),
     ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
     expect(isContextOverflow("413 status code (no body)")).toBe(true)
+    expect(isContextOverflow("400 (no body)")).toBe(true)
   })
 
   test("classifies generic request size failures separately from context overflow", () => {
