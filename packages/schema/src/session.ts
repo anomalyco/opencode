@@ -50,6 +50,11 @@ export const Info = Schema.Struct({
     busy: DateTimeUtcFromMillis.pipe(optional),
     /** End of the most recent completed execution. */
     idle: DateTimeUtcFromMillis.pipe(optional),
+    /**
+     * Durable write-ahead claim of an in-flight turn. Set when an execution starts, cleared when it
+     * reaches a terminal transition; a shutdown interruption keeps it so the next start resumes that turn.
+     */
+    suspended: DateTimeUtcFromMillis.pipe(optional),
     viewed: DateTimeUtcFromMillis.pipe(optional),
     archived: DateTimeUtcFromMillis.pipe(optional),
   }),

@@ -23917,6 +23917,9 @@
               "idle": {
                 "type": "number"
               },
+              "suspended": {
+                "type": "number"
+              },
               "viewed": {
                 "type": "number"
               },
