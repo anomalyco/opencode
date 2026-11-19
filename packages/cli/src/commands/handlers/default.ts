@@ -15,12 +15,25 @@ import { Service } from "@opencode/client/effect/service"
 import { OpenCode } from "@opencode/client/promise"
 import { findSession } from "../../session-target"
 import { errorMessage } from "../../util/error"
+import { resolveStartDirectory } from "../../util/start-directory"
 
 export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     const requestedServer = Option.getOrUndefined(input.server)
-    if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
+    const launchedFrom = process.cwd()
+    const directory = requestedDirectory ?? resolveStartDirectory(launchedFrom)
+    if (directory !== launchedFrom) {
+      yield* Effect.try({
+        try: () => process.chdir(directory),
+        catch: (cause) => new Error(`Failed to change directory to ${directory}: ${errorMessage(cause)}`),
+      })
+      if (requestedDirectory === undefined) {
+        process.stderr.write(
+          `Warning: OpenCode started in ${launchedFrom} (elevated terminals start there); defaulting the project directory to ${directory}.\n`,
+        )
+      }
+    }
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
     const serviceStarts = yield* Queue.unbounded<{
