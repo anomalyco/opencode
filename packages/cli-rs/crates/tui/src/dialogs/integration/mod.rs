@@ -1101,17 +1101,8 @@ impl Oauth {
 
 fn link(cx: &DialogCx, url: &str, open: Option<Rc<dyn Fn()>>) -> Text {
     let text = Text::new(&cx.app, vec![url.fg(cx.theme.markdown.link).link(url.to_owned())]).wrap(WrapMode::Word);
-    // `Link`'s `onMouseUp`. The dialog panel stops a release before the app's link handler sees it.
     if let Some(open) = open {
-        let app = cx.app.clone();
-        text.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
-            let plain = [Modifiers::CTRL, Modifiers::ALT, Modifiers::SHIFT]
-                .into_iter()
-                .all(|modifier| !event.modifiers.contains(modifier));
-            if event.kind == MouseEventKind::Up(MouseButton::Left) && plain && app.selected_text().is_none() {
-                open();
-            }
-        });
+        crate::features::links::on_click(&cx.app, &text, move || open());
     }
     text
 }
