@@ -35,7 +35,7 @@ const numberFormatOptions = [
   ].map((name) => [name, "number"] as const),
 ]
 
-// The host's Intl.NumberFormat formats; without locales it stays en-US so output does not depend on the host.
+// The host's Intl.NumberFormat formats; with no locales it stays en-US so output does not depend on the host.
 const toLocaleString = (value: number, locales: Value, options: Value): NativeResult =>
   withReads(() => {
     const length = locales instanceof Obj ? coerceToInteger(get(locales, "length")) : 0
@@ -45,17 +45,17 @@ const toLocaleString = (value: number, locales: Value, options: Value): NativeRe
     return withPrimitives(
       [...list.map(() => "string" as const), ...read.map(([, hint]) => hint)],
       [...list, ...read.map(([name]) => get(options as Obj, name))],
-      (primitives) =>
-        value.toLocaleString(
-          (locales instanceof Obj
-            ? primitives.slice(0, length)
-            : locales === undefined
-              ? "en-US"
-              : locales) as Intl.LocalesArgument,
+      (primitives) => {
+        const canonical = Intl.getCanonicalLocales(
+          (locales instanceof Obj ? primitives.slice(0, length) : locales) as string | Array<string>,
+        )
+        return value.toLocaleString(
+          canonical.length === 0 ? "en-US" : canonical,
           (options instanceof Obj
             ? Object.fromEntries(read.map(([name], index) => [name, primitives[length + index]]))
             : options) as Intl.NumberFormatOptions,
-        ),
+        )
+      },
     )
   })
 
