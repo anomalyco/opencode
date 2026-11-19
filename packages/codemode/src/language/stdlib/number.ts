@@ -3,7 +3,7 @@ import { coerceToInteger, coerceToNumber, get, type NativeResult, Obj, type Valu
 import { typeError } from "../runtime/model.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 import { withPrimitives, withReads } from "../runtime/callback.js"
-import { checkLocaleCount, checkLocaleTag } from "../runtime/limits.js"
+import { checkArrayLength } from "../runtime/limits.js"
 import { coerce } from "./value.js"
 
 // Intl.NumberFormat's options, each with the hint its value converts by.
@@ -41,7 +41,7 @@ const toLocaleString = (value: number, locales: Value, options: Value): NativeRe
   if (locales === null || options === null) throw typeError("Cannot convert undefined or null to object.")
   return withReads(() => {
     const length = locales instanceof Obj ? Math.max(0, coerceToInteger(get(locales, "length"))) : 0
-    checkLocaleCount(length)
+    checkArrayLength(length)
     const list = Array.from({ length }, (_, index) => get(locales as Obj, index))
     const read = options instanceof Obj ? numberFormatOptions : []
     return withPrimitives(
@@ -51,7 +51,6 @@ const toLocaleString = (value: number, locales: Value, options: Value): NativeRe
         // Intl reads a primitive other than a string as an empty list. The host canonicalizes the tags itself; doing it
         // here too would canonicalize twice, which breaks some valid tags.
         const tags = locales instanceof Obj ? primitives.slice(0, length) : typeof locales === "string" ? [locales] : []
-        for (const tag of tags) checkLocaleTag(tag)
         return value.toLocaleString(
           (tags.length === 0 ? "en-US" : tags) as string | Array<string>,
           (options instanceof Obj

@@ -1748,39 +1748,6 @@ describe("toLocaleString", () => {
     ).toEqual(["123,450%", "1,235"])
   })
 
-  test("numbers cap their locale list before reading it, and each tag's length", async () => {
-    expect(
-      await value(`
-      const attempt = (f) => { try { return f() } catch (e) { return [e.name, e.message] } }
-      const tags = (n) => Array.from({ length: n }, (_, i) => "de-x-t" + i)
-      let reads = 0
-      const counted = { length: 101, get 0() { reads++; return "en" } }
-      const long = "de-x-" + "abcdefg-".repeat(32).slice(0, 251)
-      return [
-        attempt(() => (1234.5).toLocaleString(tags(100))),
-        attempt(() => (1234.5).toLocaleString(Object.assign({ length: 100 }, tags(100)))),
-        attempt(() => (1234.5).toLocaleString(tags(101))),
-        attempt(() => (1234.5).toLocaleString(counted)),
-        reads,
-        attempt(() => (1234.5).toLocaleString({ length: 2 ** 32 })),
-        attempt(() => (1234.5).toLocaleString(long)),
-        attempt(() => (1234.5).toLocaleString(long + "h")),
-        attempt(() => (1234.5).toLocaleString(["en", { toString: () => long + "h" }])),
-      ]
-    `),
-    ).toEqual([
-      "1.234,5",
-      "1.234,5",
-      ["RangeError", "Too many locales: at most 100 are supported"],
-      ["RangeError", "Too many locales: at most 100 are supported"],
-      0,
-      ["RangeError", "Too many locales: at most 100 are supported"],
-      "1.234,5",
-      ["RangeError", "Locale tag is too long: at most 256 characters are supported"],
-      ["RangeError", "Locale tag is too long: at most 256 characters are supported"],
-    ])
-  })
-
   test("arrays join each element's toLocaleString, skipping holes and nullish elements", async () => {
     expect(
       await value(`
