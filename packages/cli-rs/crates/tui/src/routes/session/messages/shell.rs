@@ -7,7 +7,7 @@ use opencode_api::generated::{
 };
 use opencode_store::Data;
 use opencode_ui::motion::Spinner;
-use opencode_ui::prompt_input::paste::strip_ansi;
+use opentui::input::strip_ansi_sequences;
 use opencode_util::text_boundary;
 use unicode_width::UnicodeWidthChar;
 
@@ -127,7 +127,7 @@ impl Output {
     /// Append the finished read and report whether another drain is pending.
     pub(crate) fn finish(&mut self, (chunks, cursor, skipped): Pages) -> bool {
         for chunk in chunks {
-            let next = strip_ansi(&format!("{}{chunk}", self.text));
+            let next = strip_ansi_sequences(&format!("{}{chunk}", self.text));
             let tail = text_boundary::tail(&next, LIMIT);
             self.text = if tail.len() < next.len() {
                 self.truncated = true;
@@ -315,11 +315,11 @@ impl Inner {
         let output = {
             let read = &self.read.borrow().output;
             match (&props.output, props.running) {
-                (Some(output), false) => strip_ansi(output.trim()),
+                (Some(output), false) => strip_ansi_sequences(output.trim()),
                 (output, _) => {
                     let current =
                         if read.text.is_empty() { output.as_deref().unwrap_or_default() } else { read.text.as_str() };
-                    let text = strip_ansi(current.trim());
+                    let text = strip_ansi_sequences(current.trim());
                     if read.truncated { format!("[earlier output omitted]\n{text}") } else { text }
                 }
             }
@@ -360,7 +360,7 @@ impl Inner {
         self.output.set_text(output);
         self.error.visible(props.error.is_some());
         if let Some(error) = &props.error {
-            self.error.set_text(strip_ansi(error));
+            self.error.set_text(strip_ansi_sequences(error));
         }
     }
 

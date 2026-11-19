@@ -2,7 +2,7 @@
 
 use opencode_api::generated::ShellID;
 use opencode_ui::motion::Spinner;
-use opencode_ui::prompt_input::paste::strip_ansi;
+use opentui::input::strip_ansi_sequences;
 
 use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path, paint_badge, status_badge};
 use crate::prelude::*;
@@ -321,7 +321,7 @@ impl Inner {
             return String::new();
         }
         if call.shell.is_none() {
-            return strip_ansi(call.output.as_deref().unwrap_or_default().trim());
+            return strip_ansi_sequences(call.output.as_deref().unwrap_or_default().trim());
         }
         if call.background && !expanded {
             return String::new();
@@ -329,12 +329,12 @@ impl Inner {
         if call.status == Status::Completed
             && let Some(output) = &call.output
         {
-            return strip_ansi(output.trim());
+            return strip_ansi_sequences(output.trim());
         }
         let loaded = self.output.borrow();
         let source =
             if loaded.text.is_empty() { call.output.as_deref().unwrap_or_default() } else { loaded.text.as_str() };
-        let text = strip_ansi(source.trim());
+        let text = strip_ansi_sequences(source.trim());
         if loaded.truncated {
             return format!("[earlier output omitted]\n{text}");
         }

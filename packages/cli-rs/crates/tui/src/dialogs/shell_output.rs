@@ -10,7 +10,7 @@ use opencode_store::Location;
 use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer, layout_view};
 use opentui::widget::ScrollEdge;
 
-use opencode_ui::prompt_input::paste::strip_ansi;
+use opentui::input::strip_ansi_sequences;
 use opencode_util::text_boundary;
 
 use crate::prelude::*;
@@ -268,7 +268,7 @@ impl Poll {
     /// The output without ANSI codes and with `\n` line ends.
     fn shown(&self) -> String {
         let output = self.output.borrow();
-        strip_ansi(output.as_deref().unwrap_or_default()).replace("\r\n", "\n").replace('\r', "\n")
+        strip_ansi_sequences(output.as_deref().unwrap_or_default()).replace("\r\n", "\n").replace('\r', "\n")
     }
 
     fn copy(self: &Rc<Self>, kind: Copied) {

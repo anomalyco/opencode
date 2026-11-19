@@ -4,7 +4,8 @@ use std::collections::VecDeque;
 
 use opencode_local::cli_config::PromptPaste;
 use opencode_ui::prompt_input;
-use opencode_ui::prompt_input::paste::{Content, content, strip_ansi};
+use opencode_ui::prompt_input::paste::{Content, content};
+use opentui::input::strip_ansi_sequences;
 use opentui::native::ClipboardOutcome;
 use serde_json::Map;
 
@@ -164,7 +165,7 @@ fn read_clipboard(app: &App, done: impl FnOnce(ClipboardOutcome) + 'static) {
 }
 
 fn paste_input_text(prompt: &Rc<Inner>, text: String, before: Before) {
-    let normalized = strip_ansi(&text).replace("\r\n", "\n").replace('\r', "\n");
+    let normalized = strip_ansi_sequences(&text).replace("\r\n", "\n").replace('\r', "\n");
     let pasted = normalized.trim().to_owned();
     let windows = cfg!(windows);
     if !attach::may_attach(&pasted, windows) {

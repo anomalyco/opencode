@@ -6,7 +6,7 @@ use opencode_ui::tool_info::tool_display_metadata;
 use opentui::syntax::SyntaxTheme;
 
 use opencode_ui::locale::duration;
-use opencode_ui::prompt_input::paste::strip_ansi;
+use opentui::input::strip_ansi_sequences;
 
 use crate::prelude::*;
 
@@ -201,9 +201,9 @@ impl Shown {
             .map(str::to_owned);
         let text = match state {
             SessionMessageAssistantToolState::Error(state) => {
-                Some(strip_ansi(&state.error.message)).filter(|text| !text.is_empty())
+                Some(strip_ansi_sequences(&state.error.message)).filter(|text| !text.is_empty())
             }
-            SessionMessageAssistantToolState::Completed(state) => Some(strip_ansi(
+            SessionMessageAssistantToolState::Completed(state) => Some(strip_ansi_sequences(
                 state
                     .content
                     .iter()
