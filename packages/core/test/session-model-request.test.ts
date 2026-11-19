@@ -219,6 +219,32 @@ describe("SessionModelRequest.boundImages", () => {
     expect(removed(boundImages([...history, ...Array.from({ length: 4 }, (_, i) => image(`${9 + i}.png`))]))).toBe(8)
   })
 
+  test("does not spend removals on remote images that carry no payload", () => {
+    const remote = (name: string) =>
+      Message.user({
+        type: "media",
+        media: Media.url(`https://example.com/${name}`, { mediaType: "image/png" }),
+        filename: name,
+      })
+    const inline = (name: string) =>
+      Message.user({
+        type: "media",
+        media: Media.base64("a".repeat(13 * 1024 * 1024), "image/png"),
+        filename: name,
+      })
+    const removed = (messages: ReturnType<typeof boundImages>) =>
+      messages.filter((message) => message.content[0]?.type === "text").length
+    const messages = [remote("a.png"), remote("b.png"), inline("c.png"), inline("d.png")]
+    const result = boundImages(messages)
+
+    // 26 MiB passes the trigger: one 13 MiB inline image brings it back under the target.
+    expect(removed(result)).toBe(1)
+    expect(result[0]).toBe(messages[0])
+    expect(result[1]).toBe(messages[1])
+    expect(result[2]?.content[0]).toMatchObject({ type: "text" })
+    expect(result[3]).toBe(messages[3])
+  })
+
   test("replaces images nested in tool results", () => {
     const image = "a".repeat(13 * 1024 * 1024)
     const result = boundImages([
