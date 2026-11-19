@@ -82,6 +82,7 @@ Release notes for OpenCode V2, newest first.
 #### Bug fixes
 
 - Recent sessions now keep stable recency ordering through list reloads, renames, and completed runs.
+- The browser pane re-measures its native page when a layout moves the pane without resizing it, instead of leaving the page drawn over the app.
 - Fixed browser panes not retrying after server plugins finish loading.
 - Fixed mention suggestions being recreated while typing.
 - Fixed SSH prompts failing to advance or close after connection.

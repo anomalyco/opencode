@@ -732,7 +732,10 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           </For>
           <p>Highlights: {store.highlights.map((item) => item.ref ?? "clear").join(",")}</p>
           <p>Highlight owners: {store.highlights.map((item) => item.sessionKey).join(",")}</p>
-          <div style={{ position: "relative", width: `${store.width}px`, height: "360px", border: "1px solid #555" }}>
+          <div
+            data-testid="pane-frame"
+            style={{ position: "relative", width: `${store.width}px`, height: "360px", border: "1px solid #555" }}
+          >
             <Show when={store.mounted}>
               <SessionBrowserPane tab={current} session={session()} screen={screen} model={model} />
             </Show>

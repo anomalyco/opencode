@@ -99,6 +99,8 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   let element: HTMLDivElement | undefined
   let frame: number | undefined
   let layout: string | undefined
+  // The box the last measure saw, which a move without a resize changes while everything else stays silent.
+  let measuredBox: string | undefined
   let until = 0
   // The embed the last layout went to; it hides when another one takes the box.
   let placed: string | undefined
@@ -278,6 +280,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
     if (!id) return hide()
     const rect = element.getBoundingClientRect()
+    measuredBox = boxKey(rect)
     const zoom = props.input.zoom()
     const left = Math.round(rect.left * zoom)
     const top = Math.round(rect.top * zoom)
@@ -414,6 +417,14 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     },
     { capture: true, passive: true },
   )
+  // A layout can still move the box without resizing it or its parent, and without a scroll: the native view then keeps
+  // painting at its old bounds, over the app. Compare the box on a slow tick so such a move is corrected.
+  const watched = setInterval(() => {
+    if (!element || !props.visible || !current().documentVisible) return
+    if (boxKey(element.getBoundingClientRect()) === measuredBox) return
+    measure()
+  }, 200)
+  onCleanup(() => clearInterval(watched))
   createEventListener(window, "resize", () => schedule(300))
   // A layout transition elsewhere, such as the chat column's width while the side pane opens, can
   // move the box without resizing it. Track it from when it actually runs, and settle on its end.
@@ -494,6 +505,9 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     </div>
   )
 }
+
+// The box a measurement compares, without the style work a full measure repeats.
+const boxKey = (rect: DOMRect) => `${rect.left}:${rect.top}:${rect.width}:${rect.height}`
 
 // The client box excludes the scrollbar track, including a left-side RTL scrollbar.
 function scrollClip(port: HTMLElement, rect: DOMRect, zoom: number) {
