@@ -27,8 +27,7 @@ Schema, `crates/plugin-abi/schema/v2.json`. A *carrier* runs a plugin against it
   into contract trees. [`F16-v2-compat-layer.md`](../parity/deviations/F16-v2-compat-layer.md) lists what does not
   map.
 - **The JS host and Luau are cargo features**, `ts` and `luau`, both on by default. `OPENCODE_PLUGIN_JS=0` and
-  `OPENCODE_PLUGIN_LUAU=0` turn them off at run time. x86_64 Windows (MSVC) builds no Luau, because OpenTUI's library
-  does not link beside it. A plugin of a missing carrier is listed as skipped.
+  `OPENCODE_PLUGIN_LUAU=0` turn them off at run time. A plugin of a missing carrier is listed as skipped.
 
 `setup` runs once for each activation. The same registrations on each language:
 

@@ -22,7 +22,7 @@ unicode-width.workspace = true
 opencode-api-types.workspace = true
 url.workspace = true
 ring.workspace = true
-
+mlua = { workspace = true, optional = true }
 
 [features]
 # Disable the JS host at runtime with `OPENCODE_PLUGIN_JS=0`.
@@ -30,10 +30,6 @@ default = ["ts", "luau"]
 ts = []
 # Disable Luau at runtime with `OPENCODE_PLUGIN_LUAU=0`.
 luau = ["dep:mlua"]
-
-# The Luau and OpenTUI native libraries cannot link together on x86_64 Windows MSVC.
-[target.'cfg(not(all(target_arch = "x86_64", target_os = "windows", target_env = "msvc")))'.dependencies]
-mlua = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 # Who owns the approvals file, and opening it without following a link.
