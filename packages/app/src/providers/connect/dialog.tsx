@@ -293,9 +293,10 @@ const METHOD_ICON = {
 // Go comes before Console here.
 const POPULAR = ["opencode-go", "opencode", "openai", "github-copilot", "anthropic", "google"]
 
-const PROVIDER_NOTES: Record<string, "dialog.provider.opencodeGo.tagline" | "dialog.provider.opencode.note"> = {
-  "opencode-go": "dialog.provider.opencodeGo.tagline",
-  opencode: "dialog.provider.opencode.note",
+const providerNote = (id: string) => {
+  if (id === "opencode-go") return "dialog.provider.opencodeGo.tagline" as const
+
+  if (id === "opencode") return "dialog.provider.opencode.note" as const
 }
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
@@ -449,7 +450,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                               {language.t("dialog.provider.environmentOnly")}
                             </span>
                           </Show>
-                          <Show when={!disabled(provider) && !account() && PROVIDER_NOTES[provider.id]}>
+                          <Show when={!disabled(provider) && !account() && providerNote(provider.id)}>
                             {(key) => (
                               <span class="min-w-0 shrink-[999] truncate font-[440] text-v2-text-text-muted">
                                 {language.t(key())}
