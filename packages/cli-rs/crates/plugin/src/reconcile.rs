@@ -9,7 +9,6 @@ use opencode_plugin_abi::v2::{ContentRef, DiffView, Node, Source};
 use opencode_plugin_abi::{self as abi};
 use opencode_ui::diff::Patch;
 use opencode_ui::theme::Theme;
-use opentui::input::{MouseButton, MouseEventKind};
 use opentui::prelude::*;
 use opentui::style::Color;
 use opentui::syntax::SyntaxTheme;
@@ -18,7 +17,7 @@ use crate::canvas::{Canvas, Drawer};
 use crate::image::Picture;
 use crate::limits::{self, Over};
 use crate::list::List;
-use crate::node::{Act, bordered, color, edges_of, lay_out, styled};
+use crate::node::{Act, bordered, clickable, color, lay_out, style_box, styled, wrap_mode};
 use crate::{Host, SlotMount};
 
 /// What reconciling did to widgets, counted since the thread started.
@@ -2186,49 +2185,19 @@ impl Pass<'_, '_> {
                 if !*visible {
                     view.visible(false);
                 }
-                if *gap > 0 {
-                    view.gap(*gap);
-                }
-                match padding_sides {
-                    Some(edges) => {
-                        for (edge, cells) in edges_of(edges) {
-                            view.padding_edge(edge, cells.max(0));
-                        }
-                    }
-                    None => {
-                        if padding.0 > 0 {
-                            view.padding_x(padding.0);
-                        }
-                        if padding.1 > 0 {
-                            view.padding_y(padding.1);
-                        }
-                    }
-                }
-                if let Some(border) = border {
-                    bordered(&view, theme, border);
-                }
-                if *wrap {
-                    view.flex_wrap(opentui::layout::Wrap::Wrap);
-                }
-                if *overflow == abi::Overflow::Hidden {
-                    view.overflow(opentui::layout::Overflow::Hidden);
-                }
-                match justify {
-                    abi::Justify::Start => {}
-                    abi::Justify::End => drop(view.justify(Justify::End)),
-                    abi::Justify::Center => drop(view.justify(Justify::Center)),
-                    abi::Justify::SpaceBetween => drop(view.justify(Justify::SpaceBetween)),
-                    abi::Justify::SpaceAround => drop(view.justify(Justify::SpaceAround)),
-                }
-                match align {
-                    abi::Align::Stretch => {}
-                    abi::Align::Start => drop(view.align_items(Align::Start)),
-                    abi::Align::Center => drop(view.align_items(Align::Center)),
-                    abi::Align::End => drop(view.align_items(Align::End)),
-                }
-                if let Some(bg) = color(theme, bg.as_ref()) {
-                    view.bg(bg);
-                }
+                style_box(
+                    &view,
+                    theme,
+                    *gap,
+                    *padding,
+                    padding_sides.as_ref(),
+                    border.as_deref(),
+                    *wrap,
+                    *overflow,
+                    *justify,
+                    *align,
+                    bg.as_ref(),
+                );
                 let wired = (!interact.is_none()).then(|| {
                     let hover = color(theme, interact.hover.as_ref());
                     let (base, paint): (_, fn(&View, Color)) =
@@ -2634,15 +2603,6 @@ fn shell(node: &Node) -> Node {
     }
 }
 
-/// OpenTUI's wrap of `wrap`.
-fn wrap_mode(wrap: abi::Wrap) -> WrapMode {
-    match wrap {
-        abi::Wrap::Word => WrapMode::Word,
-        abi::Wrap::Char => WrapMode::Char,
-        abi::Wrap::None => WrapMode::None,
-    }
-}
-
 /// How a node of the same kind and id changes.
 enum Change {
     Same,
@@ -2794,25 +2754,6 @@ fn paint_text(mounted: &Mounted, theme: &Theme) {
         }
         None => drop(text.fg(base)),
     }
-}
-
-/// Shows the hand over `widget` and runs the click in the cell it returns on the press or the release of the left
-/// button; writing the cell changes the click in place.
-fn clickable(widget: &impl Widget, click: abi::Click, act: &Act) -> Rc<RefCell<abi::Click>> {
-    let cell = Rc::new(RefCell::new(click));
-    let (held, act) = (cell.clone(), act.clone());
-    widget.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
-        let click = held.borrow().clone();
-        let hit = match event.kind {
-            MouseEventKind::Down(MouseButton::Left) => click.on == abi::Press::Down,
-            MouseEventKind::Up(MouseButton::Left) => click.on == abi::Press::Up,
-            _ => false,
-        };
-        if hit {
-            act(&click.action);
-        }
-    });
-    cell
 }
 
 /// A text's colors off and under the pointer, and whether the pointer is over it, which a text written in place
