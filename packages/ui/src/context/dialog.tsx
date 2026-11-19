@@ -241,8 +241,12 @@ function init(container: () => HTMLElement | undefined) {
   return {
     dispatch,
     active: () => selectTopDialog(machine()),
-    /** Stacked dialogs render under the owner of the dialog below, so they see the same context. */
-    base: () => layers().at(-1)?.owner,
+    /** Inherit an open dialog's context, never a layer kept only for its exit animation. */
+    base: () => {
+      const top = selectTopDialog(machine())
+
+      return layers().find((layer) => layer.attempt === top?.attempt)?.owner
+    },
     open: (mode: "show" | "push", request: DialogRequest, id: string | undefined, aborted: boolean) =>
       dispatch({ type: "open", mode, id: id ?? uuid(), aborted, focus: captureFocus(), request }),
     layers,
