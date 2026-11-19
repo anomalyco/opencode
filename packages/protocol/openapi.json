@@ -18021,6 +18021,15 @@
       "ConfigConsoleMemory.SettingsEncoded": {
         "type": "object",
         "properties": {
+          "url": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
           "decisions": {
             "anyOf": [
               {

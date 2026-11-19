@@ -10,7 +10,7 @@ import { ConfigConsoleMemory } from "@opencode/schema/config/console-memory"
 import type { DecisionAnswer, DecisionRequest } from "@opencode/schema/generate"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Model } from "@opencode/schema/model"
-import { Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Logger, Queue, References, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
@@ -169,6 +169,10 @@ function fakeConsole() {
     memory: true,
     /** The OpenCode config Console hands out, such as its MCP servers. */
     config: {} as Record<string, unknown>,
+    /** Each request's path and its `x-memory-key` header, the credential a configured memory endpoint takes. */
+    keys: new Array<{ path: string; key: string | null }>(),
+    /** Paths answered with a body that isn't JSON, as a broken endpoint would. */
+    malformed: new Set<string>(),
     hits: new Array<ReturnType<typeof hit>>(),
     injected: new Array<ReturnType<typeof injected>>(),
     /** An entry close enough to refuse a publish without `distinctFrom`. */
@@ -222,6 +226,9 @@ function fakeConsole() {
     port: 0,
     fetch: async (request) => {
       const url = new URL(request.url)
+      state.keys.push({ path: url.pathname, key: request.headers.get("x-memory-key") })
+      if (state.malformed.has(url.pathname))
+        return new Response("{ not json", { headers: { "content-type": "application/json" } })
       if (url.pathname.startsWith("/repos/") || url.pathname.startsWith("/repositories/")) {
         const authorization = request.headers.get("authorization")
         state.github.push({ path: url.pathname, authorization })
@@ -364,18 +371,20 @@ const withConsole = <A, E, R>(use: (console: ReturnType<typeof fakeConsole>) => 
   )
 
 /**
- * Signs in to the fake Console and starts the plugin, recording each synthetic message it admits. `servers` are the MCP
- * servers it lists.
+ * Signs in to the fake Console, unless `signedIn` is false, and starts the plugin, recording each synthetic message it
+ * admits. `servers` are the MCP servers it lists.
  */
 const start = Effect.fnUntraced(function* (
   console: ReturnType<typeof fakeConsole>,
   servers: ReadonlyArray<string> = [],
+  signedIn = true,
 ) {
   const credentials = yield* Credential.Service
-  yield* credentials.create({
-    integrationID: Integration.ID.make("opencode"),
-    value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: console.server.url.origin } }),
-  })
+  if (signedIn)
+    yield* credentials.create({
+      integrationID: Integration.ID.make("opencode"),
+      value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: console.server.url.origin } }),
+    })
   const real = yield* PluginHost.make(yield* Plugin.Service, "test")
   const synthetic = new Array<Synthetic>()
   // Compactions the test ends, heard alongside the host's own events.
@@ -611,6 +620,107 @@ describe("OpencodePlugin memory", () => {
           yield* eventually(memoryTools, (tools) => tools.length === 0)
         }),
       ),
+  )
+
+  it.effect(
+    "sends every memory request to the configured endpoint with its headers, with no Console sign-in, never logging them",
+    () =>
+      withConsole((endpoint) =>
+        Effect.gen(function* () {
+          const secret = "mem-secret-7f3a"
+          const logged = new Array<string>()
+          const logger = Logger.map(Logger.formatJson, (line) => {
+            logged.push(line)
+          })
+          const config = yield* Config.Test
+          yield* config.setEntries([
+            new Document({
+              type: "document",
+              info: new Info({
+                console_memory: new ConfigConsoleMemory.Settings({
+                  url: `${endpoint.server.url.origin}/`,
+                  headers: { "x-memory-key": secret },
+                }),
+              }),
+            }),
+          ])
+          // The task-start injection fails to decode in the background, and is logged.
+          endpoint.state.malformed.add("/api/memory/inject")
+          const failed = yield* Effect.gen(function* () {
+            const { host } = yield* start(endpoint, [], false)
+            const hooks = yield* PluginHooks.Service
+            expect(yield* memoryTools).toContain("search")
+            const session = yield* host.session.create({})
+            yield* prompt(session.id, "From now on we always deploy with wrangler")
+            yield* judged(session.id)
+            yield* hooks.trigger("session", "context", request(session.id, "Fix the deploy"))
+            const search = yield* memoryTool("search")
+            yield* search.execute({ query: "deploy" }, context(session.id))
+            // A request whose answer can't be read fails the tool without the request in it.
+            endpoint.state.malformed.add("/api/memory/search")
+            return yield* search.execute({ query: "deploy" }, context(session.id, "call_2")).pipe(Effect.flip)
+          }).pipe(Effect.provide(Logger.layer([logger])), Effect.provideService(References.MinimumLogLevel, "All"))
+
+          // Memory's config check, its reader's list, the injection and search all went to the endpoint, each with its header.
+          const paths = endpoint.state.keys.map((item) => item.path)
+          expect(paths).toEqual(
+            expect.arrayContaining([
+              "/api/v2/config",
+              "/api/memory/anchors",
+              "/api/memory/inject",
+              "/api/memory/search",
+            ]),
+          )
+          expect(endpoint.state.keys.every((item) => item.key === secret)).toBe(true)
+          // Decisions are OpenCode's to ask, with the user's own credentials, never the endpoint's.
+          expect(judge.asked.map((item) => item.model)).toContain("opencode/jev-1.13")
+          // The failure was logged, and neither it nor the tool's result shows the header.
+          expect(logged.some((line) => line.includes("memory injection failed"))).toBe(true)
+          expect(logged.join("\n")).not.toContain(secret)
+          expect(`${failed.message} ${String(failed.error)} ${JSON.stringify(failed)}`).not.toContain(secret)
+        }),
+      ),
+  )
+
+  it.effect("keeps memory on the Console for settings without an endpoint, and leaves it there when one is set", () =>
+    withConsole((endpoint) =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const config = yield* Config.Test
+          const settings = (url?: string) =>
+            config.setEntries([
+              new Document({
+                type: "document",
+                info: new Info({
+                  console_memory: new ConfigConsoleMemory.Settings(
+                    url === undefined ? {} : { url, headers: { "x-memory-key": "k" } },
+                  ),
+                }),
+              }),
+            ])
+          yield* settings()
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          const search = yield* memoryTool("search")
+          yield* search.execute({ query: "deploy" }, context(session.id))
+          expect(console.state.requests.some((item) => item.path === "/api/memory/search")).toBe(true)
+
+          // With an endpoint, memory moves there on the next config reload; the Console sees no more of it.
+          yield* settings(endpoint.server.url.origin)
+          yield* (yield* Bus.Service).publish(Event.Updated, {})
+          yield* eventually(
+            Effect.gen(function* () {
+              yield* (yield* memoryTool("search")).execute({ query: "deploy" }, context(session.id, "call_e"))
+              return endpoint.state.requests.some((item) => item.path === "/api/memory/search")
+            }).pipe(Effect.orElseSucceed(() => false)),
+            (moved) => moved,
+          )
+          const before = console.state.requests.filter((item) => item.path.startsWith("/api/memory")).length
+          yield* (yield* memoryTool("search")).execute({ query: "deploy" }, context(session.id, "call_f"))
+          expect(console.state.requests.filter((item) => item.path.startsWith("/api/memory")).length).toBe(before)
+        }),
+      ),
+    ),
   )
 
   it.effect("asks the decision model config names, and none when config turns decisions off", () =>

@@ -2573,7 +2573,11 @@ export type ConfigEntry =
         warming?: boolean | { prompt?: string; interval?: "auto" | (string & {}); duration?: string }
         console_memory?:
           | boolean
-          | { decisions?: false | string | { providerID: string; model: string; variant?: string } }
+          | {
+              url?: string
+              headers?: { [x: string]: string }
+              decisions?: false | string | { providerID: string; model: string; variant?: string }
+            }
         providers?: {
           [x: string]: {
             canonical?: ProviderID

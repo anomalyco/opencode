@@ -115,7 +115,7 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   console_memory: ConfigConsoleMemory.ConsoleMemory.pipe(optional).annotate({
     description:
-      "Use the OpenCode Console workspace's shared memory when the workspace offers it (default: true). false turns it off for this installation: no memory tools, delivered entries or session capture. An object keeps it on and sets how it runs, such as its decision model",
+      "Use the OpenCode Console workspace's shared memory when the workspace offers it (default: true). false turns it off for this installation: no memory tools, delivered entries or session capture. An object keeps it on and sets how it runs: url (and headers) sends every memory request to an endpoint of one's own instead, with no Console sign-in needed, and decisions names the decision model",
   }),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(optional),
   experimental: ConfigExperimental.Info.pipe(optional),

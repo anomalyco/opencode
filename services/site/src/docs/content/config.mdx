@@ -447,6 +447,27 @@ Without a decision model, memory takes the stricter reading. Only explicit team
 rules count as rules, no correction reminder is shown, and entries are
 delivered only above Console's own relevance bar.
 
+To use a memory endpoint of your own instead of the workspace's, give
+`console_memory` its URL, and headers if it needs a credential. Memory then
+works without a Console sign-in.
+
+```jsonc
+{
+  "console_memory": {
+    "url": "https://memory.example.com",
+    "headers": { "Authorization": "Bearer {env:MEMORY_TOKEN}" },
+  },
+}
+```
+
+- Every memory request goes to that endpoint, its config check, `/api/memory`
+  and evidence included.
+- The headers go only to that endpoint, take `{env:…}` and `{file:…}`, and are
+  never logged.
+- Decisions still go to the decision model above, with your own credentials for
+  its provider.
+- The settings switch is disabled while `console_memory` is an object.
+
 ### Skills
 
 Add directories or URLs that OpenCode should search for agent skills.

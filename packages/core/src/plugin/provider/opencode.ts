@@ -358,15 +358,52 @@ export const OpencodePlugin = define<
     })
     // The connection whose Console offers the workspace's memory, if any.
     let offered: ActiveConnection
-    // Memory connects to what the Console offers unless this installation's config says `console_memory: false`. One
-    // at a time: Console config changes and local config changes both lead here.
+    // Memory connects to what the Console offers unless this installation's config says `console_memory: false`, or to
+    // the endpoint it names, signed in to a Console or not. One at a time: Console config changes and local config
+    // changes both lead here.
     const remembering = Semaphore.makeUnsafe(1)
     const remember = remembering.withPermit(
       Effect.gen(function* () {
-        const off = Config.latest(yield* config.entries(), "console_memory") === false
-        yield* memory.sync(yield* member(off ? undefined : offered))
+        const setting = Config.latest(yield* config.entries(), "console_memory")
+        if (setting === false) return yield* memory.sync(undefined)
+        if (typeof setting === "object" && setting.url !== undefined)
+          return yield* memory.sync(
+            (yield* flags.enabled("console_memory")) ? yield* endpoint(setting.url, setting.headers ?? {}) : undefined,
+          )
+        yield* memory.sync(yield* member(offered))
       }).pipe(Effect.catch((cause) => Effect.logWarning("failed to connect the workspace's memory", { cause }))),
     )
+    /**
+     * The installation's own memory endpoint, when its config check offers memory as Console's does. Its headers are
+     * the endpoint's credential: they go out with its requests and nowhere else, never into a log.
+     */
+    const endpoint = (url: string, headers: Readonly<Record<string, string>>) =>
+      Effect.gen(function* () {
+        const server = url.replace(/\/+$/, "")
+        const offers = yield* HttpClient.withScope(http)
+          .execute(
+            HttpClientRequest.get(`${server}/api/v2/config`).pipe(
+              HttpClientRequest.acceptJson,
+              HttpClientRequest.setHeaders(headers),
+            ),
+          )
+          .pipe(
+            Effect.map((response) => response.headers[OpencodeMemory.header] !== undefined),
+            Effect.scoped,
+            Effect.timeout("10 seconds"),
+            Effect.orElseSucceed(() => false),
+          )
+        if (offers)
+          return {
+            key: `endpoint:${server}`,
+            server,
+            headers: Effect.succeed(headers),
+          } satisfies OpencodeWatches.Console
+        yield* Effect.logWarning("the configured memory endpoint doesn't offer memory", {
+          endpoint: URL.parse(server)?.origin ?? "not a URL",
+        })
+        return undefined
+      })
     // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
     // and stops when either no longer holds.
     const syncWatches = (connection: ActiveConnection) =>
