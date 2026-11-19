@@ -105,7 +105,11 @@ export const Plugin = {
                 ),
                 metadata: { count: result.entries.length, truncated: result.truncated },
               })),
-              Effect.mapError(toolFailure(`Unable to find files matching ${input.pattern}`)),
+              Effect.mapError((error) =>
+                error instanceof Ripgrep.InvalidGlobError
+                  ? new ToolFailure({ message: `Invalid glob in pattern ${error.message}` })
+                  : toolFailure(`Unable to find files matching ${input.pattern}`)(error),
+              ),
             ),
         }),
       )

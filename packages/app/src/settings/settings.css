@@ -579,10 +579,6 @@
   transform: scaleX(-1);
 }
 
-[data-component="dialog-v2"][data-variant="settings"] [data-slot="dialog-container"] {
-  background: var(--v2-background-bg-base);
-}
-
 [data-component="dialog-v2"][data-variant="settings"] [data-slot="dialog-body"] {
   padding: 0;
   overflow: hidden;
@@ -1555,9 +1551,36 @@
 }
 
 .settings-models-console-groups {
+  --console-rail-strip: 16px;
+  position: relative;
   margin-inline-start: 14px;
-  padding-inline-start: 16px;
-  border-inline-start: 0.5px solid var(--v2-border-border-base);
+  padding-inline-start: var(--console-rail-strip);
+}
+
+.settings-models-console-rail {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -4px;
+  width: calc(var(--console-rail-strip) + 4px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 4px;
+    width: 1px;
+    background-color: color-mix(in srgb, var(--v2-border-border-base) 50%, transparent);
+  }
+}
+
+@media (hover: hover) {
+  .settings-models-console-rail:not(:disabled):hover::before {
+    background-color: var(--v2-border-border-base);
+  }
 }
 
 .provider-model-group {
@@ -2164,17 +2187,8 @@
   }
 }
 
-[data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-container"] {
-  width: 480px;
-  max-width: calc(100vw - 32px);
-  height: auto;
-  border-radius: 8px;
-  align-items: stretch;
-}
-
 [data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-content"] {
   align-items: stretch;
-  width: 100%;
 }
 
 [data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-header"] {

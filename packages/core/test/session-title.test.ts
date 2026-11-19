@@ -634,6 +634,52 @@ it.effect("bounds regeneration context while preserving the original request and
   }),
 )
 
+it.effect("keeps the clipped regeneration context well formed", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_regenerate_emoji")
+    yield* insertSession(sessionID, "Original title")
+    // The leading x puts both cuts, the original request's head and the recent conversation's tail, inside an emoji.
+    yield* prompt(sessionID, `x${"😀".repeat(1_500)}`)
+    yield* prompt(sessionID, `x${"😀".repeat(5_000)}`)
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    const content = requests[0]?.messages[0]?.content[0]
+    expect(content?.type).toBe("text")
+    if (content?.type !== "text") return
+    expect(content.text.length).toBeLessThanOrEqual(8_000)
+    expect(content.text.length).toBeGreaterThan(7_900)
+    expect(content.text.isWellFormed()).toBe(true)
+  }),
+)
+
+for (const [prefix, stored] of [
+  [95, `${"a".repeat(95)}😀...`],
+  [96, `${"a".repeat(96)}...`],
+  [97, `${"a".repeat(97)}...`],
+] as const)
+  it.effect(`clips a long generated title without splitting an emoji after ${prefix} letters`, () =>
+    Effect.gen(function* () {
+      yield* enableTitleAgent
+      titleStream = () =>
+        Stream.make(
+          LLMEvent.textDelta({ id: "title", text: `${"a".repeat(prefix)}😀${"b".repeat(20)}` }),
+          LLMEvent.finish({ reason: { normalized: "stop" } }),
+        )
+      const sessionID = Session.ID.make(`ses_title_emoji_${prefix}`)
+      yield* insertSession(sessionID)
+      yield* prompt(sessionID, "Name this session")
+
+      const title = yield* SessionTitle.Service
+      yield* title.generate(sessionID)
+
+      const store = yield* SessionStore.Service
+      expect((yield* store.get(sessionID))?.title).toBe(stored)
+    }),
+  )
+
 it.effect("preserves the existing title when regeneration fails", () =>
   Effect.gen(function* () {
     yield* enableTitleAgent

@@ -1,11 +1,5 @@
-import { address, link, serverStory } from "./dialog.fixture"
-import type { ServerConnectEvent, ServerConnectField, ServerConnectTarget } from "./machine"
-
-const field = (field: ServerConnectField, value: string) => ({ type: "field.changed", field, value }) as const
-
-const password = { type: "method.changed", method: "password" } satisfies ServerConnectEvent
-
-const submit = { type: "submitted" } satisfies ServerConnectEvent
+import { address, field, link, password, serverStory, submit } from "./connect.fixture"
+import type { ServerConnectTarget } from "./machine"
 
 const edit = {
   kind: "edit",
@@ -61,6 +55,8 @@ export const CameraError = serverStory({ scanner: "denied" })
 export const InvalidQrCode = serverStory({ scanner: "invalid" })
 
 export const DecodeFailed = serverStory({ scanner: "decode" })
+
+export const ExpiredQrCode = serverStory({ scanner: "expired" })
 
 export const ScanTimedOut = serverStory({ scanner: "timeout" })
 

@@ -122,7 +122,7 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 - Why not Claude's own cost: it is a running total for the turn, so it cannot be split per response.
 - Claude Code reports usage for one model response several times while it streams, and again as a total for the turn. Adding these up would count the same response several times and make opencode compact too early. We keep the highest count for each response, and use the last response's input as the context size.
 - Each model's context size comes from Claude. Without it, opencode's 200k default applies.
-- The model list is refreshed whenever Claude reports it: on `/connect`, when the login changes, and each time a new Claude process starts. It is saved, with where the login's prices come from, so opencode can show models and costs at startup without running `claude`.
+- The model list is refreshed whenever Claude reports it: on `/connect`, when the login changes, and each time a new Claude process starts. A new process doesn't report context sizes, so a model it lists without a saved size triggers one full check. The list is saved, with where the login's prices come from, so opencode can show models and costs at startup without running `claude`.
 
 ### Titles, Summaries and Compaction
 

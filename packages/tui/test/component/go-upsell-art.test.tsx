@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test"
 /** @jsxImportSource @opentui/solid */
 import { OptimizedBuffer, RGBA } from "@opentui/core"
+import { setRendererCapabilities } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal, Show } from "solid-js"
 import "../../src/component/go-upsell-art"
@@ -38,6 +39,7 @@ test("the art stops every frame when hidden, closed, or still, and leaves nothin
   const setCell = spyOn(OptimizedBuffer.prototype, "setCell")
 
   try {
+    setRendererCapabilities(app.renderer, { rgb: false })
     await app.renderOnce()
     expect(app.renderer.liveRequestCount).toBe(1)
     // Each frame is one direct write into the art's own buffer, never a draw call per cell.

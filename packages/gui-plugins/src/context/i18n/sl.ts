@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Shranjena seja v {{filename}}",
   "export.failed.title": "Seje ni bilo mogoče izvoziti",
   "export.failed.description": "Pri izvozu seje je prišlo do napake",
+  "usage.toggle": "Preklopi kontekst seje",
 }

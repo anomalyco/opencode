@@ -129,19 +129,29 @@ describe("MiniMax Video / H3 start", () => {
     }),
   )
 
-  it.effect("leaves resolution, duration and ratio unset for MiniMax to require", () =>
+  it.effect("defaults a text-only ratio to 16:9 and leaves resolution and duration unset", () =>
     Effect.gen(function* () {
-      const requests = yield* sent([{ model: h3 }])
-      expect(requests[0].body).toEqual({ model: "MiniMax-H3-Lite", content: [{ type: "text", text: "test" }] })
+      const requests = yield* sent([{ model: h3 }, { model: h3, aspect: "auto" }])
+      expect(requests.map((request) => request.body)).toEqual([
+        { model: "MiniMax-H3-Lite", content: [{ type: "text", text: "test" }], ratio: "16:9" },
+        { model: "MiniMax-H3-Lite", content: [{ type: "text", text: "test" }], ratio: "16:9" },
+      ])
     }),
   )
 
-  it.effect("rejects silent output, which H3 can't produce, before sending", () =>
+  it.effect("sends nothing for sound, which neither API has a field for", () =>
     Effect.gen(function* () {
-      const error = yield* ai.video.start({ model: h3, prompt: "x", sound: false }).pipe(Effect.flip)
-      expect(error.reason._tag).toBe("UnsupportedOperation")
-      expect(error.message).toContain("always generates sound")
-    }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
+      const requests = yield* sent([
+        { model: h3, sound: false },
+        { model: h3, sound: true },
+        { model: hailuo, sound: true },
+      ])
+      expect(requests.map((request) => "generate_audio" in request.body || "sound" in request.body)).toEqual([
+        false,
+        false,
+        false,
+      ])
+    }),
   )
 
   it.effect("returns MiniMax's HTTP errors typed", () =>
@@ -242,7 +252,6 @@ describe("MiniMax Video / Hailuo start", () => {
       request: { references: [Media.url("https://example.test/v.mp3", { mediaType: "audio/mpeg" })] },
       tag: "UnsupportedOperation",
     },
-    { name: "sound", request: { sound: true }, tag: "UnsupportedOperation" },
     { name: "an aspect ratio", request: { aspect: "16:9" as const }, tag: "UnsupportedOperation" },
     { name: "a MiniMax file reference", request: { start: Media.ref("minimax", "file_1") }, tag: "InvalidRequest" },
   ]) {
@@ -292,14 +301,14 @@ describe("MiniMax Video / H3 status, result and cancel", () => {
               ),
             ),
       )
-      expect(statuses.map((value) => value.status)).toEqual([
-        "queued",
-        "running",
-        "completed",
-        "failed",
-        "cancelled",
-        "running",
-        "running",
+      expect(statuses).toEqual([
+        { status: "running" },
+        { status: "running" },
+        { status: "completed" },
+        { status: "error", reason: "failed" },
+        { status: "error", reason: "cancelled" },
+        { status: "running" },
+        { status: "running" },
       ])
       expect(calls[0].url).toBe("https://minimax.test/v2/query/video_generation/task_1")
     }),
@@ -430,13 +439,13 @@ describe("MiniMax Video / Hailuo status, result and cancel", () => {
               ),
             ),
       )
-      expect(statuses.map((value) => value.status)).toEqual([
-        "queued",
-        "queued",
-        "running",
-        "completed",
-        "failed",
-        "running",
+      expect(statuses).toEqual([
+        { status: "running" },
+        { status: "running" },
+        { status: "running" },
+        { status: "completed" },
+        { status: "error", reason: "failed" },
+        { status: "running" },
       ])
       expect(calls[0].url).toBe("https://minimax.test/v1/query/video_generation?task_id=task_1")
     }),

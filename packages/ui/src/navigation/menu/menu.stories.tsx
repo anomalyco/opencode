@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createSignal } from "solid-js"
 import { Menu } from "./menu"
 import { Button } from "@opencode/ui/button"
@@ -38,10 +37,12 @@ export default {
   },
 }
 
-export const Basic = {
-  render: () => (
+function FileMenu(props: { disabled?: boolean }) {
+  return (
     <Menu gutter={6}>
-      <Menu.Trigger as={Button}>Open menu</Menu.Trigger>
+      <Menu.Trigger as={Button} disabled={props.disabled}>
+        Open menu
+      </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content>
           <Menu.Item>New file</Menu.Item>
@@ -52,8 +53,12 @@ export const Basic = {
         </Menu.Content>
       </Menu.Portal>
     </Menu>
-  ),
+  )
 }
+
+export const Basic = { render: () => <FileMenu /> }
+
+export const DisabledTrigger = { render: () => <FileMenu disabled /> }
 
 export const ProgrammaticAndNonModal = {
   render: () => {
@@ -144,32 +149,34 @@ export const Rich = {
   ),
 }
 
-export const WithCheckbox = {
-  render: () => {
-    const [wrap, setWrap] = createSignal(true)
-    const [minimap, setMinimap] = createSignal(false)
-    const [ruler, setRuler] = createSignal(false)
+function ViewMenu(props: { initiallyOpen?: boolean }) {
+  const [wrap, setWrap] = createSignal(true)
+  const [minimap, setMinimap] = createSignal(false)
+  const [ruler, setRuler] = createSignal(false)
 
-    return (
-      <Menu gutter={6}>
-        <Menu.Trigger as={Button}>View</Menu.Trigger>
-        <Menu.Portal>
-          <Menu.Content style={{ "min-width": "200px" }}>
-            <Menu.CheckboxItem checked={wrap()} onChange={setWrap} shortcut="⌥ Z">
-              Word wrap
-            </Menu.CheckboxItem>
-            <Menu.CheckboxItem checked={minimap()} onChange={setMinimap}>
-              Minimap
-            </Menu.CheckboxItem>
-            <Menu.CheckboxItem checked={ruler()} onChange={setRuler} disabled>
-              Ruler
-            </Menu.CheckboxItem>
-          </Menu.Content>
-        </Menu.Portal>
-      </Menu>
-    )
-  },
+  return (
+    <Menu gutter={6} defaultOpen={props.initiallyOpen} modal={!props.initiallyOpen}>
+      <Menu.Trigger as={Button}>View</Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content style={{ "min-width": "200px" }}>
+          <Menu.CheckboxItem checked={wrap()} onChange={setWrap} shortcut="⌥ Z">
+            Word wrap
+          </Menu.CheckboxItem>
+          <Menu.CheckboxItem checked={minimap()} onChange={setMinimap}>
+            Minimap
+          </Menu.CheckboxItem>
+          <Menu.CheckboxItem checked={ruler()} onChange={setRuler} disabled>
+            Ruler
+          </Menu.CheckboxItem>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
+  )
 }
+
+export const WithCheckbox = { render: () => <ViewMenu /> }
+
+export const OpenWithCheckbox = { render: () => <ViewMenu initiallyOpen /> }
 
 export const WithRadio = {
   render: () => {
@@ -197,15 +204,15 @@ export const WithRadio = {
   },
 }
 
-export const WithSubmenu = {
-  render: () => (
-    <Menu gutter={6}>
+function RecentFilesMenu(props: { initiallyOpen?: boolean }) {
+  return (
+    <Menu gutter={6} defaultOpen={props.initiallyOpen} modal={!props.initiallyOpen}>
       <Menu.Trigger as={Button}>File</Menu.Trigger>
       <Menu.Portal>
         <Menu.Content style={{ "min-width": "200px" }}>
           <Menu.Item shortcut="⌘ N">New file</Menu.Item>
           <Menu.Item shortcut="⌘ O">Open file</Menu.Item>
-          <Menu.Sub gutter={0}>
+          <Menu.Sub gutter={0} defaultOpen={props.initiallyOpen}>
             <Menu.SubTrigger>Open recent</Menu.SubTrigger>
             <Menu.Portal>
               <Menu.SubContent>
@@ -223,8 +230,12 @@ export const WithSubmenu = {
         </Menu.Content>
       </Menu.Portal>
     </Menu>
-  ),
+  )
 }
+
+export const WithSubmenu = { render: () => <RecentFilesMenu /> }
+
+export const OpenSubmenu = { render: () => <RecentFilesMenu initiallyOpen /> }
 
 export const Context = {
   render: () => (

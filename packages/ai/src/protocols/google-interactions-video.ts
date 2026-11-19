@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
@@ -92,7 +91,7 @@ const STATUS = {
   incomplete: "completed",
   failed: "failed",
   cancelled: "cancelled",
-} as const satisfies Record<string, Status>
+} as const satisfies Record<string, MediaProtocol.State>
 
 // ---------------------------------------------------------------------------
 // 3. Failures
@@ -129,11 +128,6 @@ const task = (request: Request) => {
 const fromRequest = Effect.fn("GoogleInteractionsVideo.fromRequest")(function* (request: Request) {
   if (request.end !== undefined && request.start === undefined)
     return yield* route.unsupported("video.end", `${route.name} reads a lone image as the start frame; send start too`)
-  if (request.sound === false)
-    return yield* route.unsupported(
-      "video.sound",
-      `${route.name} always generates audio and has no option to turn it off`,
-    )
   const media = yield* Effect.forEach(
     [request.start, request.end, ...(request.references ?? [])].filter(
       (asset): asset is Media.Asset => asset !== undefined,
@@ -170,7 +164,7 @@ const fromRequest = Effect.fn("GoogleInteractionsVideo.fromRequest")(function* (
 
 const decodeStart = route.decodeStarted(Interaction, (value) => ({
   token: value.id,
-  snapshot: { id: value.id, status: MediaProtocol.status(STATUS, value.status) },
+  snapshot: { id: value.id, ...MediaProtocol.status(STATUS, value.status) },
 }))
 
 const decodeInteraction = route.decodeJson(Interaction)
@@ -180,7 +174,7 @@ const decodeStatus = Effect.fn("GoogleInteractionsVideo.decodeStatus")(function*
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeInteraction(response)
-  return { id: context.token, status: MediaProtocol.status(STATUS, output.value.status) }
+  return { id: context.token, ...MediaProtocol.status(STATUS, output.value.status) }
 })
 
 const decodeResult = Effect.fn("GoogleInteractionsVideo.decodeResult")(function* (
@@ -189,7 +183,7 @@ const decodeResult = Effect.fn("GoogleInteractionsVideo.decodeResult")(function*
 ) {
   const output = yield* decodeInteraction(response)
   const decoded = output.value
-  const status = MediaProtocol.status(STATUS, decoded.status)
+  const status = MediaProtocol.state(STATUS, decoded.status)
   if (status === "running") return yield* output.pending(context.token)
   const errors = decoded.errors ?? []
   const codes = errors.flatMap((error) => {

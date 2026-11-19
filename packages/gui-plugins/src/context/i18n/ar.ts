@@ -28,4 +28,5 @@ export default {
   "export.success.description": "تم حفظ الجلسة في ⁨{{filename}}⁩",
   "export.failed.title": "فشل تصدير الجلسة",
   "export.failed.description": "حدث خطأ أثناء تصدير الجلسة",
+  "usage.toggle": "تبديل سياق الجلسة",
 }

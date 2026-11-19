@@ -241,6 +241,27 @@ export function getStatsLabData(provider: string): Effect.Effect<StatsLabData | 
   })
 }
 
+// When each model's stats last changed, the same date its page reports as Last-Modified.
+export function getStatsModelUpdates() {
+  return Effect.tryPromise({
+    try: async () =>
+      Object.values(
+        normalizeStatRows(await listModelDaily()).reduce<
+          Record<string, { provider: string; model: string; updatedAt: number }>
+        >((result, row) => {
+          const key = modelKey(row.provider, row.model)
+          result[key] = {
+            provider: row.provider,
+            model: row.model,
+            updatedAt: Math.max(result[key]?.updatedAt ?? 0, row.updatedAt),
+          }
+          return result
+        }, {}),
+      ),
+    catch: (cause) => new StatsDataError(cause),
+  })
+}
+
 async function listModelDaily(): Promise<ModelStatMetric[]> {
   return (
     await queryRows(

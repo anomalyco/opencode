@@ -32,6 +32,15 @@ function toItem(input: {
     ...(input.completed !== undefined ? { completed: input.completed } : {}),
   }
   const recovery = input.recovery
+  if (recovery.kind === "codemode")
+    return {
+      kind: "codemode",
+      id: input.id,
+      sessionID: recovery.sessionID,
+      status: input.status,
+      time,
+      ...(title !== undefined ? { title } : {}),
+    }
   if (recovery.kind === "shell") {
     return {
       kind: "shell",
@@ -57,6 +66,16 @@ function toItem(input: {
       description: recovery.description,
     }
   }
+  if (recovery.kind === "video")
+    return {
+      kind: "video",
+      id: input.id,
+      sessionID: recovery.sessionID,
+      status: input.status,
+      ...(title !== undefined ? { title } : {}),
+      time,
+      path: recovery.path,
+    }
   return {
     kind: "image",
     id: input.id,

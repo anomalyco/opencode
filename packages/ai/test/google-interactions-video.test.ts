@@ -101,7 +101,9 @@ describe("ai.video.start / Google Interactions", () => {
         model,
         prompt: "Morph",
         start: Media.image(Media.fromDataUrl("data:image/png;base64,AQID")),
-        end: Media.image(Media.ref("google", "https://generativelanguage.googleapis.com/v1beta/files/last", "image/jpeg")),
+        end: Media.image(
+          Media.ref("google", "https://generativelanguage.googleapis.com/v1beta/files/last", "image/jpeg"),
+        ),
       })
       expect(body.input).toEqual([
         { type: "image", data: "AQID", mime_type: "image/png" },
@@ -147,9 +149,15 @@ describe("ai.video.start / Google Interactions", () => {
     }),
   )
 
+  it.effect("sends nothing for sound, since Omni always generates audio and has no field for it", () =>
+    Effect.gen(function* () {
+      const silent = yield* sent({ model, prompt: "x", sound: false })
+      expect(JSON.stringify(silent.body)).not.toContain("audio")
+    }),
+  )
+
   for (const rejected of [
     { name: "an end frame without a start frame", input: { end: "data:image/png;base64,AQID" }, operation: "end" },
-    { name: "silent video", input: { sound: false }, operation: "sound" },
   ])
     it.effect(`rejects ${rejected.name}, which Omni has no way to send, before sending`, () =>
       Effect.gen(function* () {
@@ -201,14 +209,14 @@ describe("ai.video.status / result / cancel / Google Interactions", () => {
             .status(model, id)
             .pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { id: "v1_abc", status }))))),
       )
-      expect(statuses.map((value) => value.status)).toEqual([
-        "running",
-        "completed",
-        "completed",
-        "failed",
-        "cancelled",
-        "running",
-        "running",
+      expect(statuses).toEqual([
+        { status: "running" },
+        { status: "completed" },
+        { status: "completed" },
+        { status: "error", reason: "failed" },
+        { status: "error", reason: "cancelled" },
+        { status: "running" },
+        { status: "running" },
       ])
     }),
   )

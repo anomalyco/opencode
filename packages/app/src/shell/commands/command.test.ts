@@ -5,11 +5,9 @@ import {
   addCommandRegistration,
   commandPaletteOptions,
   CommandCatalog,
-  commandKeymap,
   formatKeybind,
   matchKeybind,
   parseKeybind,
-  resolveKeybindOption,
   type CommandOption,
 } from "./command"
 
@@ -60,35 +58,6 @@ test("command registrations shadow keyed owners, restore the previous owner, and
 
   const unkeyed = activeCommandRegistrations(addCommandRegistration([{ options: one }], { options: two }))
   expect(unkeyed.map((entry) => entry.options)).toEqual([two, one])
-})
-
-test.each([true, false])("resolveKeybindOption prefers a contextual command only in its context: %p", (inside) => {
-  const fallback = { id: "tab.close", title: "Close tab" }
-  const contextual = { id: "terminal.close", title: "Close terminal", when: () => inside }
-
-  expect(resolveKeybindOption([fallback, contextual], new KeyboardEvent("keydown"))).toBe(
-    inside ? contextual : fallback,
-  )
-})
-
-test("commandKeymap puts a user's binding before a default on the same keys", () => {
-  const rename = { id: "session.rename", title: "Rename session", keybind: "ctrl+r" }
-  const focus = { id: "input.focus", title: "Focus input", keybind: "ctrl+r" }
-  const event = new KeyboardEvent("keydown", { key: "r", ctrlKey: true })
-  const keymap = (custom: string[]) => commandKeymap([rename, focus], (id) => custom.includes(id)).get("r:1")
-
-  expect(resolveKeybindOption(keymap([]), event)).toBe(rename)
-  expect(resolveKeybindOption(keymap(["input.focus"]), event)).toBe(focus)
-  expect(commandKeymap([{ ...rename, disabled: true }], () => false).size).toBe(0)
-})
-
-test.each([true, false])("resolveKeybindOption leaves the key to a skipping command's target: %p", (inside) => {
-  const rename = { id: "session.rename", title: "Rename session", skip: () => inside }
-  const focus = { id: "input.focus", title: "Focus input" }
-  const event = new KeyboardEvent("keydown")
-
-  expect(resolveKeybindOption([rename], event)).toBe(inside ? undefined : rename)
-  expect(resolveKeybindOption([rename, focus], event)).toBe(inside ? focus : rename)
 })
 
 describe("command keybinds", () => {

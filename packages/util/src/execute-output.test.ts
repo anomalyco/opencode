@@ -26,4 +26,11 @@ describe("execute output", () => {
     })
     expect(formatExecuteOutput("{not json")).toEqual({ json: undefined, rest: undefined, text: "{not json" })
   })
+
+  test("keeps output without a result line as it is", () => {
+    expect(formatExecuteOutput("Logs:\nhi").text).toBe("Logs:\nhi")
+    expect(formatExecuteOutput("Warnings:\n- [unhandled] boom\n\nLogs:\nhi").text).toBe(
+      "Warnings:\n- [unhandled] boom\n\nLogs:\nhi",
+    )
+  })
 })

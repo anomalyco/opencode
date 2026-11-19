@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} 명령이 {{timeout}}ms 후 시간 초과되었습니다",
   "error.failedPort": "포트를 가져오지 못했습니다",
   "menu.remove": "제거",
+  "error.busy": "{{distro}}이(가) 다른 작업을 수행 중입니다. 작업이 끝나면 다시 시도하세요.",
 }

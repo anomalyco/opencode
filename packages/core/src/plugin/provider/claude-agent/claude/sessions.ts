@@ -197,7 +197,7 @@ export function registry() {
       )
       const process = opened.process
       // A new process reports its version, login and models, which keeps the model list current without a separate check.
-      if (starting) yield* input.status.report({ type: "ready", probe: opened.probe })
+      if (starting) yield* input.status.report({ type: "ready", probe: opened.probe, fromChat: true })
       // Apply controls before sending input or releasing parked tool results.
       if (process.model !== request.model) {
         yield* attempt(() => process.session.setModel(request.model))

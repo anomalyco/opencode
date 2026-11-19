@@ -31,7 +31,9 @@ const POLL_RETRY_WEBSOCKET = Duration.minutes(10)
 export const WINDOW_LIMIT = 5
 export const PROMPT_LIMIT = 20
 // The stored wakes since the prompt and their times; a count stored before the window reads as none.
-const decodeWakes = Schema.decodeUnknownOption(Schema.Struct({ count: Schema.Number, at: Schema.Array(Schema.Number) }))
+const decodeWakes = Schema.decodeUnknownOption(
+  Schema.Struct({ count: Schema.Number, at: Schema.Array(Schema.Number), last: Schema.optional(Schema.Number) }),
+)
 const DELETED_RETENTION = Duration.hours(72)
 const namespace = "console_watch"
 
@@ -128,9 +130,10 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       return ids
     }
     const now = yield* Clock.currentTimeMillis
-    // The member's own words count from zero, as a prompt does.
+    // The member's own words count from zero, as a prompt does, and so does an update after 30 minutes without any.
     const own = events.some((event) => event.actor.self === true && !event.actor.bot)
-    const kept = own ? undefined : Option.getOrUndefined(decodeWakes(yield* ctx.storage.get(streakKey(sessionID))))
+    const stored = Option.getOrUndefined(decodeWakes(yield* ctx.storage.get(streakKey(sessionID))))
+    const kept = own || now - (stored?.last ?? now) >= Duration.toMillis(Duration.minutes(30)) ? undefined : stored
     const recent = (kept?.at ?? []).filter((at) => now - at < Duration.toMillis(Duration.minutes(10)))
     const count = kept?.count ?? 0
     // CI runs pace themselves, so their updates count toward 20 since the prompt but not the 10-minute window.
@@ -155,8 +158,13 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
         Effect.as(true),
         Effect.catchIf(Predicate.isTagged("Session.SyntheticConflictError"), () => Effect.succeed(false)),
       )
-    if (delivered && resume)
-      yield* ctx.storage.set(streakKey(sessionID), { count: count + 1, at: ci ? recent : [...recent, now] })
+    // A held update counts toward the 30 minutes too; a replay conflicts above and counts toward nothing.
+    if (delivered)
+      yield* ctx.storage.set(streakKey(sessionID), {
+        count: resume ? count + 1 : count,
+        at: ci || !resume ? recent : [...recent, now],
+        last: now,
+      })
     return ids
   })
 
@@ -282,7 +290,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
           ),
         }),
         output: Watch,
-        options: { namespace, codemode: true, pinned: true },
+        options: { namespace, codemode: { pinned: true } },
         execute: (input, context) =>
           Effect.gen(function* () {
             // A link or shorthand, or one event type of a server with its arguments; never both.
@@ -686,8 +694,8 @@ const actions = new Map<string, (target: string) => string>([
  * The member's own words read as theirs, so a reply from their phone steers the agent. Anyone else's, and anything a
  * bot wrote, are information for the task, never a source of new actions. So is a new message in a channel the session
  * posted in, the member's own included: it may be meant for anyone. A status change is only its target, status and
- * link. An MCP server's own event is its title, its link and its data, always as information. Only the body is free
- * text, fenced once.
+ * link. An MCP server's own event is its title, its link and its data, as information unless Console says the member
+ * made it. Only the body is free text, fenced once.
  */
 function describe(event: WatchEvent) {
   const url = line(event.url)
@@ -695,7 +703,10 @@ function describe(event: WatchEvent) {
   const action = actions.get(event.kind)
   const ownWords = event.actor.bot !== true && event.actor.self === true
   const body = event.body.trim() ? [fence(event.body)] : []
-  if (event.kind === "event") return [`${title(event)}${url ? ` (${url})` : ""}. ${notFromUser}`, ...body].join("\n")
+  if (event.kind === "event")
+    return [`${title(event)}${url ? ` (${url})` : ""}${ownWords ? ", from you:" : `. ${notFromUser}`}`, ...body].join(
+      "\n",
+    )
   if (event.kind === "channel_post")
     return [
       `${line(event.actor.login)}${event.actor.bot ? " (a bot)" : ""} posted in ${title(event)} (${url}) after your post (may be unrelated). ${notForYou}`,

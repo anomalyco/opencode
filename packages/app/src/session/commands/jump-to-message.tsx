@@ -16,6 +16,8 @@ export type JumpPrompt = { id: string; text: string; created: number }
 export function JumpToMessage(props: {
   prompts: JumpPrompt[]
   initialQuery?: string
+  query?: string
+  onQuery?: (value: string) => void
   status?: string
   opening?: boolean
   onJump: (prompt: JumpPrompt) => void
@@ -24,7 +26,14 @@ export function JumpToMessage(props: {
 }) {
   const language = useLanguage()
 
-  const [query, setQuery] = createSignal(props.initialQuery ?? "")
+  const [localQuery, setLocalQuery] = createSignal(props.initialQuery ?? "")
+
+  const query = () => props.query ?? localQuery()
+
+  const setQuery = (value: string) => {
+    if (props.query === undefined) setLocalQuery(value)
+    props.onQuery?.(value)
+  }
 
   const timestamp = createMemo(
     () =>
@@ -73,7 +82,7 @@ export function JumpToMessage(props: {
   let list!: SearchListHandle<ReturnType<typeof rows>[number]>
 
   return (
-    <Dialog class="command-palette command-palette-compact fork-dialog" fit>
+    <Dialog class="command-palette command-palette-compact fork-dialog" size="large" fit>
       <div class="sr-only">
         <DialogTitle>{language.t("dialog.jump.title")}</DialogTitle>
       </div>
@@ -103,7 +112,7 @@ export function JumpToMessage(props: {
                   autocapitalize="off"
                   autofocus
                   showClearButton={!props.opening && !!query()}
-                  clearIcon="circle-xmark"
+                  clearIcon="close"
                   clearLabel={language.t("common.clear")}
                   onClearClick={() => {
                     list.setActive(undefined)

@@ -1,5 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
-import { ProgressEvent, QueuedEvent, type AwaitOptions, type Status } from "./generation.js"
+import { ProgressEvent, type AwaitOptions, type Reason, type Status } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
@@ -47,7 +47,7 @@ export class ImageModel<Options extends ImageOptions = ImageOptions> extends Med
     return new ImageModel<Options>({
       id: input.id,
       provider: route.protocol.provider,
-      http: input.http,
+      transport: input.transport,
       providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as ImageRoute,
     })
@@ -113,6 +113,8 @@ export interface ImageJob {
 
 export interface ImageStatus {
   readonly status: Status
+  /** Set when `status` is `error`. */
+  readonly reason?: Reason
   /** 0..1, only when the provider reports progress. */
   readonly progress?: number
 }
@@ -142,16 +144,11 @@ export const ImageFinishEvent = Schema.Struct({
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "Image.Event.Finish" })
 
-const imageEventTagged = Schema.Union([
-  QueuedEvent,
-  ProgressEvent,
-  ImagePartialEvent,
-  ImageOutputEvent,
-  ImageFinishEvent,
-]).pipe(Schema.toTaggedUnion("type"))
+const imageEventTagged = Schema.Union([ProgressEvent, ImagePartialEvent, ImageOutputEvent, ImageFinishEvent]).pipe(
+  Schema.toTaggedUnion("type"),
+)
 export const ImageEvent = Object.assign(imageEventTagged, {
   is: {
-    generationQueued: imageEventTagged.guards["generation-queued"],
     generationProgress: imageEventTagged.guards["generation-progress"],
     imagePartial: imageEventTagged.guards["image-partial"],
     image: imageEventTagged.guards.image,

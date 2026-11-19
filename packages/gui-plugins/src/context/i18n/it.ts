@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Sessione salvata in {{filename}}",
   "export.failed.title": "Impossibile esportare la sessione",
   "export.failed.description": "Si è verificato un errore durante l’esportazione della sessione",
+  "usage.toggle": "Mostra o nascondi il contesto della sessione",
 }

@@ -284,7 +284,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: Queu
                   type="button"
                   class="rounded-sm"
                   variant="ghost-muted"
-                  icon={<Icon name="outline-undo" />}
+                  icon={<Icon name="reset" />}
                   disabled={props.queue.busy()}
                   aria-label={language.t("session.queue.undo")}
                   onClick={() => props.queue.undo(props.id)}
@@ -298,7 +298,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: Queu
                   type="button"
                   class="rounded-sm"
                   variant="ghost-muted"
-                  icon={<Icon name="outline-xmark" />}
+                  icon={<Icon name="close" />}
                   disabled={props.queue.busy()}
                   aria-label={language.t("session.queue.remove")}
                   onClick={() => void props.queue.remove(props.id)}

@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Session enregistrée dans {{filename}}",
   "export.failed.title": "Échec de l’exportation de la session",
   "export.failed.description": "Une erreur s’est produite lors de l’exportation de la session",
+  "usage.toggle": "Afficher ou masquer le contexte de la session",
 }

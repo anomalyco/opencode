@@ -1,5 +1,5 @@
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { For, Show, createEffect, createMemo, onCleanup, onMount, type JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, on, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { timelinePresets } from "../../timeline/detail"
 import { createNextTimelineProjection } from "../projection"
@@ -59,8 +59,37 @@ const statusLabels = {
   working: "Working",
 } as const
 
+const sessions = [...Object.keys(scenarios), ...exported.map((session) => session.name)]
+
+const presetIDs = timelinePresets.map((preset) => preset.id)
+
 export const Compare = {
-  render: () => {
+  args: {
+    session: sessions[0]!,
+    preset: defaultPreset,
+    view: defaultView,
+    theme: "dark",
+    width: 720,
+    turnDiffs: false,
+    mix: 50,
+  },
+  argTypes: {
+    session: { options: sessions },
+    preset: { options: presetIDs },
+    view: { options: views },
+    theme: { options: ["light", "dark"] },
+    width: { control: { type: "range", min: 480, max: 960, step: 240 } },
+    mix: { control: { type: "range", min: 0, max: 100, step: 1 } },
+  },
+  render: (args: {
+    session: string
+    preset: PresetID
+    view: View
+    theme: "light" | "dark"
+    width: number
+    turnDiffs: boolean
+    mix: number
+  }) => {
     const query = new URLSearchParams(location.search)
     // Without another build to compare, the page compares this build's two timelines.
     const other = query.get("base")
@@ -69,27 +98,44 @@ export const Compare = {
     const base = other ? `${other.replace(/\/$/, "")}/` : self
     const baseLabel = query.get("baseLabel") ?? (other ? "base" : "Current timeline")
     const headLabel = query.get("headLabel") ?? (other ? "head" : "New timeline")
-    const sessions = [...Object.keys(scenarios), ...exported.map((session) => session.name)]
-
-    const presetIDs = timelinePresets.map((preset) => preset.id)
     const number = (key: string) => (query.has(key) ? Number(query.get(key)) : undefined)
 
     const [state, setState] = createStore({
-      session: sessions.find((session) => session === query.get("session")) ?? sessions[0]!,
-      preset: presetIDs.find((preset) => preset === query.get("preset")) ?? defaultPreset,
+      session: sessions.find((session) => session === query.get("session")) ?? args.session,
+      preset: presetIDs.find((preset) => preset === query.get("preset")) ?? args.preset,
       next: query.get("next") !== "false",
       baseNext: query.get("baseNext") === "true",
       tick: number("step") ?? Number.MAX_SAFE_INTEGER,
       playing: false,
-      width: ([480, 720, 960] as const).find((width) => width === number("width")) ?? 720,
-      theme: query.get("theme") === "light" ? ("light" as const) : ("dark" as const),
-      turnDiffs: query.get("files") === "true",
-      view: views.find((view) => view === query.get("view")) ?? defaultView,
-      mix: 50,
+      width: ([480, 720, 960] as const).find((width) => width === number("width")) ?? args.width,
+      theme: (["light", "dark"] as const).find((theme) => theme === query.get("theme")) ?? args.theme,
+      turnDiffs: query.has("files") ? query.get("files") === "true" : args.turnDiffs,
+      view: views.find((view) => view === query.get("view")) ?? args.view,
+      mix: args.mix,
     })
+
+    // A standalone comparison may have opened at a bookmarked setting. Only subsequent inspector edits override it.
+    createEffect(
+      on(
+        () => args.session,
+        (session) => setState({ session, tick: Number.MAX_SAFE_INTEGER, playing: false }),
+        { defer: true },
+      ),
+    )
+
+    for (const key of ["preset", "view", "theme", "width", "turnDiffs", "mix"] as const) {
+      createEffect(
+        on(
+          () => args[key],
+          (value) => setState({ [key]: value }),
+          { defer: true },
+        ),
+      )
+    }
 
     // The address follows the controls, so a link opens where it was copied.
     createEffect(() => {
+      if (query.get("id") !== "timeline-compare--compare") return
       const address = new URLSearchParams(location.search)
       address.set("session", state.session)
       address.set("preset", state.preset)

@@ -31,7 +31,6 @@ import { useData } from "../context"
 import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
 import { SessionReadToolGroup, SessionUserMessage } from "../message/current-message"
-import { SessionCompactionMessage, SessionCompactionQueued } from "../message/message-content"
 import { taskAgentName } from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
@@ -48,12 +47,13 @@ import {
 } from "../timeline/steer-arrival-machine"
 import { Badge } from "@opencode/ui/badge"
 import { attached } from "../components/message-file"
+import { CompactionMessage, CompactionQueued } from "./compaction"
 import { unwrapErrorMessage } from "./errors"
-import { TimelineEventRow } from "./event-row"
+import { TimelineEventItem, TimelineEventRow } from "./event-row"
 import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
 import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
-import { contentOpens, diffOpens, goal as goalMessage, thoughtOpens, toolRule, userShellOpens } from "./rules"
+import { contentOpens, diffOpens, goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
 import { Separator } from "./separator"
 import { timelineGaps } from "./spacing"
 import { AssistantContent } from "./tools/assistant-content"
@@ -144,7 +144,9 @@ export function createNextTimelineRowRenderer(input: {
     const messages = input.projection.messageByID()
     const context = input.projection.userContextByID()
 
-    return userMessageRuns(input.projection.rows(), [...messages.values()], (id) => {
+    const boundaries = [...messages.values()].filter((message) => !movedInPlace(message))
+
+    return userMessageRuns(input.projection.rows(), boundaries, (id) => {
       const message = messages.get(id)
       const user = context.get(id)
 
@@ -304,6 +306,10 @@ export function createNextTimelineRowRenderer(input: {
       : undefined
   }
 
+  const latestCopyTurn = createMemo(() =>
+    Array.from(input.projection.assistantMessagesByParent().keys()).findLast((id) => !!copyContentID(id)),
+  )
+
   const padding = () => input.padding?.() ?? "px-4 md:px-6"
 
   const indexGroupContents = (refs: PartRef[]) => {
@@ -411,11 +417,11 @@ export function createNextTimelineRowRenderer(input: {
       )
     }
 
-    if (row().group.type === "events") {
+    if (row().group.type === "events" || row().group.type === "subagent") {
       const events = createMemo(() => {
         const group = row().group
 
-        if (group.type !== "events") return []
+        if (group.type !== "events" && group.type !== "subagent") return []
         const contents = indexGroupContents(group.refs)
 
         // A call starts the work; a notice under its message's own ID reports it back.
@@ -433,6 +439,18 @@ export function createNextTimelineRowRenderer(input: {
           return event ? [event] : []
         })
       })
+
+      if (row().group.type === "subagent") {
+        return (
+          <Show when={events()[0]}>
+            {(event) => (
+              <div data-component="timeline-subagent">
+                <TimelineEventItem event={event()} />
+              </div>
+            )}
+          </Show>
+        )
+      }
 
       return (
         <TimelineEventRow
@@ -565,6 +583,7 @@ export function createNextTimelineRowRenderer(input: {
                 content={content()}
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
+                keepCopyVisible={latestCopyTurn() === row().userMessageID}
                 turnDurationMs={duration(row().userMessageID)}
                 turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}
@@ -634,6 +653,19 @@ export function createNextTimelineRowRenderer(input: {
       return {
         label: i18n.t(outcomeNoticeKey(outcome), { actor }),
         data: message.description,
+        outcome,
+        icon: outcomeNoticeIcon(outcome),
+      }
+    }
+
+    if (source === "codemode") {
+      const state = message.metadata?.state
+      const outcome: Outcome = state === "error" || state === "cancelled" ? state : "completed"
+      const jobID = message.metadata?.jobID
+
+      return {
+        label: i18n.t(outcomeNoticeKey(outcome), { actor: "Script" }),
+        data: Predicate.isString(jobID) ? jobID : undefined,
         outcome,
         icon: outcomeNoticeIcon(outcome),
       }
@@ -816,7 +848,7 @@ export function createNextTimelineRowRenderer(input: {
           {(message) => (
             <div data-slot="session-turn-message-container" class={`w-full ${inset()}`}>
               <div data-slot="session-turn-compaction">
-                <SessionCompactionMessage message={message()} error={compactionError()} />
+                <CompactionMessage message={message()} error={compactionError()} />
               </div>
             </div>
           )}
@@ -925,11 +957,7 @@ export function createNextTimelineRowRenderer(input: {
       <Show when={message()}>
         {(message) => (
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <ShellMessage
-              message={message()}
-              open={input.disclosure.value(message().id) ?? userShellOpens(input.timelineDetail())}
-              onOpenChange={(open) => input.disclosure.set(message().id, open)}
-            />
+            <ShellMessage message={message()} />
           </div>
         )}
       </Show>
@@ -1174,7 +1202,7 @@ export function createNextTimelineRowRenderer(input: {
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <div data-slot="session-turn-compaction">
-              <SessionCompactionQueued />
+              <CompactionQueued />
             </div>
           </div>
         </Frame>
