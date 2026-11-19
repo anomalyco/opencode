@@ -26,7 +26,8 @@ reference export to its Rust counterpart.
 - `HostValue`, the values that cross, with `HostString` for strings: it keeps an unpaired surrogate, so a host sees
   and returns exactly what the program had, and converts to a Rust `String` lossily only when asked.
 - `Outcome`, a run's result: its value as `Data` (JSON whose strings are `HostString`s) and its logs as `HostString`s,
-  with `json()` and `log_lines()` for lossy `serde_json::Value` and `String` forms.
+  with `json()` and `log_lines()` for lossy `serde_json::Value` and `String` forms. Diagnostics, failures, namespace
+  paths, bindings, run metadata and durable data are lossless the same way.
 - `Run`, with its id and metadata.
 - `execute`, `execute_with` and `execute_async`; `program`; `Program::run`, `run_resumable` and `run_async`;
   `Suspender::suspend`; `resume` and `resume_bytes`.
@@ -46,7 +47,7 @@ recordings and fails on any difference.
 |---|---|---|---|
 | `conformance/cases/*.json` | `generate.ts` | `bench/tests/conformance.rs` (also in round-trip mode) | 383 programs |
 | `conformance/host.json` | `host.ts` | `tests/host_recording.rs` | 53 runs, 11 suspensions |
-| `conformance/boundary.json` | `boundary.ts` | `tests/boundary.rs` | 36 crossing programs, 38 runtime configurations, 4 results |
+| `conformance/boundary.json` | `boundary.ts` | `tests/boundary.rs` | 38 crossing programs, 38 runtime configurations, 10 results |
 | `conformance/streaming.json` | `streaming.ts` | `tests/streaming.rs` | 693 programs, 59 suspensions |
 
 - Each generator states, at its top, the host globals and runtime options it uses. The Rust replays define the same
@@ -69,9 +70,10 @@ peak RSS, binary size and perturbed variants; the table states the command and m
 
 - A saved state resumes only in the implementation and build that saved it: the snapshot formats differ, and
   TypeScript also resumes only on the build that saved a state.
-- Diagnostic messages are Rust strings, so an unpaired surrogate in an error's message or an uncaught value becomes
-  U+FFFD there; TypeScript keeps it. Host values, the result and the logs are lossless (`HostString`, `Data`), and
-  `boundary.json` records them.
+
+Strings with unpaired surrogates are not a difference: every string the API hands over that can hold program text is
+lossless (`HostString`, `Data`), from host values to the result, logs, diagnostics, namespace paths, bindings, run
+metadata and durable data, and `boundary.json` records them from TypeScript.
 
 ## Observations on the TypeScript language layer
 

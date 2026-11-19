@@ -56,11 +56,16 @@ The API is the Rust form of the reference's `Language` namespace:
 | `Diagnostic`, `DiagnosticKind`, `Json` | `Diagnostic`, `DiagnosticKind`, `Json` (`serde_json::Value`) |
 | a run's `Result` (`value`, `logs`, ...) | `Outcome`: `result` as `Data` (JSON whose strings are `HostString`s), `logs` as `HostString`s; `Outcome::json` and `Outcome::log_lines` give them lossily as `serde_json::Value` and `String` |
 | a JavaScript string crossing as a host value | `HostString`: lossless, including unpaired surrogates; `as_str`, `to_utf16`, `to_string_lossy` |
+| `Json` a host passes or keeps (bindings, `run.metadata`, a durable function's data) | `Data`, which keeps unpaired surrogates; it converts from and to `serde_json::Value` |
 
 Host work is a `Future` instead of an Effect: `Runtime::execute` drives a run on the calling thread, and
 `execute_async` and `Program::run_async` run on any executor. Values cross the boundary as copies (`HostValue`); a
 string crosses as a `HostString`, which keeps a string with an unpaired surrogate exactly, so a host sees and returns
-what the program had.
+what the program had. Every string the API hands over that can hold program text is one: values, object keys, error
+names and messages, RegExp sources, namespace paths, the result (`Data`), logs, diagnostics and failures, bindings,
+run metadata and durable data. URLs, URLSearchParams and Headers stay `String`s, as JavaScript keeps them well
+formed too; lossy accessors (`to_string_lossy`, `Data::to_json`, `Outcome::json`, `Outcome::log_lines`,
+`Diagnostic::message_lossy`) give Rust `String`s and `serde_json::Value`s when wanted.
 
 ## Parity
 
@@ -81,8 +86,6 @@ Its expectations are recorded from the reference's language layer, never written
 ### Known differences
 
 - A saved state resumes only in the implementation and build that saved it: the snapshot formats differ.
-- Diagnostic messages (`Diagnostic::message`) are Rust strings, so an unpaired surrogate in an error's message or an
-  uncaught value becomes U+FFFD there; the reference keeps it. Host values, the result and the logs keep it.
 
 ## Layout
 
