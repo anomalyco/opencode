@@ -910,6 +910,20 @@ const suspensions: Array<string> = [
   `async function f() { function* g() { yield hold({ query: wait({}).then(() => 'echo') }).items.length }
    return [...g()] } return await f()`,
   `const t = { toJSON: () => 9 }; const r = send({ t, n: [1, { w: wait({}) }], z: t }); return await r`,
+  // A response the run reaches only one way when it is suspended: its resume fails as long as the run can reach it.
+  // Only through the array a spread of a generator collects into, while the generator's frame is parked by `hold`.
+  `let box = { r: await fetch(${JSON.stringify(text)}) }
+   function* g() { let t = box.r; box = null; yield t; t = null; yield hold({ query: wait({}).then(() => 'echo') }).items.length }
+   const a = [...g()]; return [a.length, a[1]]`,
+  // The same, with the array dropped before the generator parks: nothing reaches the response.
+  `let box = { r: await fetch(${JSON.stringify(text)}) }
+   function* g() { let t = box.r; box = null; t = null; yield hold({ query: wait({}).then(() => 'echo') }).items.length }
+   const a = [...g()]; return a`,
+  // Only through a reaction on the promise of a host call in flight.
+  `let r = await fetch(${JSON.stringify(text)}); const p = wait({}).then(echo.bind(null, r)); r = null; return typeof (await p)`,
+  // Only through an iterator helper's mapper, which a parked frame calls.
+  `let r = await fetch(${JSON.stringify(text)}); const it = [1, 2].values().map(echo.bind(null, r)); r = null;
+   const w = wait({}); await w; return typeof it.next().value`,
 ]
 
 // Each family of built-ins that run in native frames keeps its own cases in conformance/frames/: expressions to run with
