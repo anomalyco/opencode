@@ -3,10 +3,8 @@
 //! allocating. Shared or sparse tables must not bypass the work budget. Unmarked empty tables decode as arrays; the
 //! object marker forces an object.
 //!
-//! Tables are walked with `lua_rawiterpeek`, which describes a slot's key and value where `lua_rawiter` pushes them. A
-//! string it describes is borrowed from the VM for the whole decode, which is sound because nothing a decode calls can
-//! run the collector: no call allocates an object but `lua_rawgetfield`'s interned name and the stack's growth, and
-//! neither steps the GC. So even a weak table keeps its slots, and their strings, until the decode returns.
+//! Tables are walked with `lua_rawiterpeek`, which describes a slot's key and value where `lua_rawiter` pushes them.
+//! The strings it describes are borrowed from the VM ([`Decode::decode`] says when that is sound).
 
 #![allow(unsafe_code)]
 
@@ -75,8 +73,8 @@ struct Peek {
     _atom: c_int,
     boolean: c_int,
     number: f64,
-    /// A string's bytes, `len` of them: valid while the string is reachable and the GC does not run (the module's
-    /// comment).
+    /// A string's bytes, `len` of them: valid while the string is reachable and the GC does not run
+    /// ([`Decode::decode`]).
     str: *const c_char,
     len: usize,
 }
@@ -109,7 +107,7 @@ impl Peek {
     /// A string's bytes.
     ///
     /// # Safety
-    /// This describes a string, which lives as long as `'a` (the module's comment).
+    /// This describes a string, which lives as long as `'a` ([`Decode::decode`]).
     unsafe fn bytes<'a>(&self) -> &'a [u8] {
         // SAFETY: as documented; `str` points at `len` bytes.
         unsafe { std::slice::from_raw_parts(self.str.cast::<u8>(), self.len) }
@@ -186,6 +184,36 @@ unsafe extern "C-unwind" fn enter(state: *mut ffi::lua_State) -> c_int {
     0
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Whether a decode is walking its value on this thread, and the GC steps made while one was ([`gc_steps`]).
+    static WALKING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static STEPS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// The GC steps VM `lua` makes while a decode in `run` walks its value, with the collector due at every check and
+/// stepping 1 KB at a time, so that a call in a walk that steps it is counted.
+#[cfg(test)]
+pub(crate) fn gc_steps(lua: &Lua, run: impl FnOnce()) -> u32 {
+    unsafe extern "C-unwind" fn count(_: *mut ffi::lua_State, gc: c_int) {
+        if gc >= 0 && WALKING.get() {
+            STEPS.set(STEPS.get() + 1);
+        }
+    }
+    STEPS.set(0);
+    // SAFETY: `exec_raw` runs this in protected mode; the callback only counts, and the GC calls take plain numbers.
+    let armed = unsafe {
+        lua.exec_raw::<()>((), |state| {
+            (*ffi::lua_callbacks(state)).interrupt = Some(count);
+            ffi::lua_gc(state, ffi::LUA_GCSETSTEPSIZE, 1);
+            ffi::lua_gc(state, ffi::LUA_GCRESTART, 0);
+        })
+    };
+    armed.expect("the count is armed");
+    run();
+    STEPS.get()
+}
+
 /// One decode, bounded as the host's limits are charged: what it makes lives on the Rust heap, outside the VM's cap
 /// and with no safepoint of the budget's.
 pub(crate) struct Decode {
@@ -219,7 +247,22 @@ impl Decode {
         // SAFETY: [`enter`] runs this in protected mode with `value` at slot 2 and room for the slots a C function
         // has, which each table checks for again as it goes deeper. The decode reads the stack, pops what it pushes,
         // and raises no Lua error of its own.
-        let mut read = |state| decoded = unsafe { self.top(state, 2) };
+        //
+        // Every string the decode reads (keys, values, `type`) is borrowed from the VM until the decode returns. That
+        // holds only while no call in it steps the GC, which may clear a weak table's slot and free its string. None of
+        // the calls it makes do (`lua_rawiterpeek`, `lua_rawiter`, `lua_rawget*`, `lua_checkstack`,
+        // `lua_getmetatable`, `lua_objlen` of a table, `lua_topointer`, `lua_tolstring` of a string), so keep it so:
+        // - no borrow outlives the decode: what `T` keeps is copied (`DeserializeOwned`);
+        // - a refusal is a Rust message: nothing pushes a Lua string, which steps the GC, while a borrow is live;
+        // - `Entry::get`, whose closure steps the GC, runs before the first walk.
+        // `luau::tests::a_decode_makes_no_gc_step` counts the steps.
+        let mut read = |state| {
+            #[cfg(test)]
+            WALKING.set(true);
+            decoded = unsafe { self.top(state, 2) };
+            #[cfg(test)]
+            WALKING.set(false);
+        };
         let mut read: &mut dyn FnMut(*mut ffi::lua_State) = &mut read;
         let ran = Entry::get(lua).and_then(|entry| entry.0.call::<()>((LightUserData((&raw mut read).cast()), value)));
         ran.map_err(|error| Refused::Value(error.to_string()))?;
