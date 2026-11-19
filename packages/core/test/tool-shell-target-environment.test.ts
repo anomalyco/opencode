@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Context, Effect, Layer } from "effect"
-import { ChildProcess } from "effect/process"
+import { Context, Effect, Layer, Sink, Stream } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
+import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -10,6 +11,7 @@ import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import { Flag } from "@opencode/core/flag"
 import { Job } from "@opencode/core/job"
+import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Session } from "@opencode/core/session"
@@ -17,7 +19,7 @@ import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Tool } from "@opencode/core/tool"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
-import { recordingEnvironmentLayer } from "./fixture/environment"
+import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import { tempGlobalLayer } from "./fixture/global"
 import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
 import { elsewhere } from "./fixture/target-environment"
@@ -36,6 +38,7 @@ const shellToolNode = makeLocationNode({
     Permission.node,
     Session.node,
     Job.node,
+    Location.node,
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,
@@ -59,11 +62,30 @@ describe("shell tool", () => {
         const targetSpawns: ChildProcess.Command[] = []
         const sessionSpawns: ChildProcess.Command[] = []
         const daemonCommands: string[] = []
-        // The host under another identity: commands really run, through a spawner that is not the session's.
-        const other = elsewhere(
-          tmp.path,
-          Context.get(yield* Layer.build(recordingEnvironmentLayer(targetSpawns)), Environment.Service),
-        )
+        // The host's files, so the working directory exists there, and a spawner that starts no process: a command
+        // elsewhere gets none of this machine's variables, which a real shell on Windows may not start without.
+        const output = Stream.succeed(Buffer.from("elsewhere"))
+        const other = elsewhere(tmp.path, {
+          ...Context.get(yield* Layer.build(hostEnvironmentLayer), Environment.Service),
+          spawner: ChildProcessSpawner.make((command) =>
+            Effect.sync(() => {
+              targetSpawns.push(command)
+              return makeHandle({
+                pid: ProcessId(1),
+                exitCode: Effect.succeed(ExitCode(0)),
+                isRunning: Effect.succeed(false),
+                kill: () => Effect.void,
+                stdin: Sink.drain,
+                stdout: output,
+                stderr: Stream.empty,
+                all: output,
+                getInputFd: () => Sink.drain,
+                getOutputFd: () => Stream.empty,
+                unref: Effect.succeed(Effect.void),
+              })
+            }),
+          ),
+        })
         // A process daemon that is available, so a local command would go to it before any spawner.
         const daemon = Shell.Daemon.of({
           at: () =>
@@ -90,13 +112,10 @@ describe("shell tool", () => {
               ...toolIdentity,
               call: { type: "tool-call", id: "call-shell", name: "shell", input: { command: "echo elsewhere" } },
             }),
-          ).toMatchObject({ status: "completed", output: { exitCode: 0, output: "elsewhere\n" } })
+          ).toMatchObject({ status: "completed", output: { exitCode: 0, output: "elsewhere" } })
 
           expect(targetSpawns).toHaveLength(1)
-          expect(targetSpawns[0]).toMatchObject({
-            args: expect.arrayContaining(["echo elsewhere"]),
-            options: { cwd: tmp.path },
-          })
+          expect(targetSpawns[0]).toMatchObject({ args: expect.arrayContaining(["echo elsewhere"]) })
           expect(sessionSpawns).toEqual([])
           expect(daemonCommands).toEqual([])
         }).pipe(

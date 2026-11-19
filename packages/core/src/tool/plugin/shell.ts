@@ -13,6 +13,7 @@ import { Environment } from "../../environment/index.js"
 import { Flag } from "../../flag.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
+import { Location } from "../../location.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
@@ -301,6 +302,7 @@ export const Plugin = {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
     const access = yield* FileAccess.Service
+    const location = yield* Location.Service
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
@@ -310,8 +312,16 @@ export const Plugin = {
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
 
-    const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
-      const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
+    const prepare = Effect.fn("ShellTool.prepare")(function* (
+      invocation: ShellCreateBefore,
+      context: Tool.Context,
+      requested: { readonly cwd: string; readonly target: FileAccess.Target },
+    ) {
+      // Resolved before the hooks ran; only a hook that moved the working directory needs it resolved again.
+      const target =
+        invocation.cwd === requested.cwd
+          ? requested.target
+          : yield* access.resolve({ path: invocation.cwd, kind: "directory" })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
       const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
@@ -409,14 +419,16 @@ export const Plugin = {
                     )
                   : undefined
                 return yield* Effect.gen(function* () {
+                  // The same default `Shell.create` gives the hooks, so `prepare` can tell whether one moved it.
+                  const cwd = input.workdir ?? location.directory
+                  const target = yield* restore(access.resolve({ path: cwd, kind: "directory" }))
                   const info = yield* shell.create(
                     {
                       command: input.command,
-                      cwd: input.workdir,
-                      // Where the command runs is settled before hooks see its variables; `prepare` resolves the
-                      // working directory again after them.
-                      environment: (yield* access.resolve({ path: input.workdir ?? ".", kind: "directory" }))
-                        .environment,
+                      cwd,
+                      // The environment a command runs in is settled from the requested working directory, before
+                      // hooks run. A hook may move the directory; today that cannot change the environment.
+                      environment: target.environment,
                       timeout,
                       shell: yield* compatibleShell,
                       metadata: { sessionID: context.sessionID },
@@ -436,7 +448,7 @@ export const Plugin = {
                         // Asking for permission can take a while; a stop then ends the call before any command starts.
                         finalTimeout = yield* restore(
                           Effect.raceFirst(
-                            prepare(invocation, context),
+                            prepare(invocation, context, { cwd, target }),
                             Deferred.await(stopped).pipe(
                               Effect.andThen(
                                 Effect.fail(
