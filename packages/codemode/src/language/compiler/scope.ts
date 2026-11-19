@@ -22,7 +22,7 @@ import { CodeFlags } from "../opcodes.js"
 
 type FunctionNode = Program | FunctionDeclaration | FunctionExpression | ArrowFunctionExpression
 
-type DeclKind = "var" | "let" | "const" | "function" | "param" | "catch" | "import" | "self" | "this" | "arguments"
+type DeclKind = "var" | "let" | "const" | "function" | "param" | "catch" | "import" | "self" | "this" | "arguments" | "home" | "newTarget"
 
 export type Decl = {
   readonly name: string
@@ -65,6 +65,10 @@ export type FunctionInfo = {
   readonly upvalues: Array<UpvalueInfo>
   readonly upvalueMap: Map<Decl, number>
   thisDecl: Decl | undefined
+  /** A method's home object (`super`), when it or an arrow in it uses `super`. */
+  homeDecl: Decl | undefined
+  /** A derived constructor's new target, which `super()` passes on. */
+  newTargetDecl: Decl | undefined
   argumentsDecl: Decl | undefined
   locals: number
   readonly localNames: Array<string>
@@ -81,6 +85,8 @@ export type ScopeAnalysis = {
   readonly scopeOfNode: ReadonlyMap<AnyNode, Scope>
   readonly refs: ReadonlyMap<Identifier, ResolvedRef>
   readonly thisRefs: ReadonlyMap<AnyNode, ResolvedRef>
+  /** Each `super` of a `super.x`: its home object and `this`. Missing when it is outside a class method. */
+  readonly superRefs: ReadonlyMap<AnyNode, { readonly home: ResolvedRef; readonly self: ResolvedRef }>
   /** Each class's constructor: its own, or a synthetic empty one when it has none. */
   readonly classConstructors: ReadonlyMap<ClassNode, FunctionExpression>
   /** Each class's synthetic field-initializer functions, when it has instance or static fields. */
@@ -114,6 +120,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   const classFieldInits = new Map<ClassNode, { instance?: FunctionExpression; static?: FunctionExpression }>()
   const fieldInitMembers = new Map<FunctionNode, ReadonlyArray<PropertyDefinition>>()
   const fieldKeys = new Map<PropertyDefinition, Identifier>()
+  const supers: Array<{ readonly node: AnyNode; readonly scope: Scope; readonly fnIndex: number }> = []
   const unresolved: Array<{ readonly node: AnyNode; readonly name: string; readonly scope: Scope; fnIndex: number }> =
     []
 
@@ -177,6 +184,8 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
       upvalues: [],
       upvalueMap: new Map(),
       thisDecl: undefined,
+      homeDecl: undefined,
+      newTargetDecl: undefined,
       argumentsDecl: undefined,
       locals: 0,
       localNames: [],
@@ -474,6 +483,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
         break
       case "MemberExpression":
         if (expr.object.type !== "Super") visit(expr.object)
+        else supers.push({ node: expr.object, scope, fnIndex: fnInfo.index })
         if (expr.computed) visit(expr.property)
         break
       case "ChainExpression":
@@ -504,27 +514,23 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
 
   // The class body sees its own name as an immutable binding; the constructor and methods are functions in it.
   function visitClass(node: ClassNode, scope: Scope, fnInfo: FunctionInfo): void {
-    if (node.superClass || !node.body.body.every(supportedClassMember)) return
+    if (!node.body.body.every(supportedClassMember)) return
     const classScope = new Scope(scope)
     scopeOfNode.set(node, classScope)
     if (node.id) addDecl(classScope, fnInfo, node.id.name, "const", false)
+    if (node.superClass) visitExpression(node.superClass, classScope, fnInfo)
     const methods = node.body.body.filter((m) => m.type === "MethodDefinition")
-    const ctor =
-      methods.find((m) => m.kind === "constructor")?.value ??
-      ({
-        type: "FunctionExpression",
-        id: null,
-        params: [],
-        body: { type: "BlockStatement", body: [], start: node.start, end: node.end },
-        generator: false,
-        expression: false,
-        async: false,
-        start: node.start,
-        end: node.end,
-      } as FunctionExpression)
+    const ctor = methods.find((m) => m.kind === "constructor")?.value ?? defaultConstructor(node)
     classConstructors.set(node, ctor)
     const ctorInfo = visitFunction(ctor, classScope, fnInfo.index, node.id?.name ?? "")
-    ctorInfo.flags |= CodeFlags.CLASS_CONSTRUCTOR
+    ctorInfo.flags |= CodeFlags.CLASS_CONSTRUCTOR | CodeFlags.METHOD
+    if (node.superClass) {
+      // `this` starts uninitialized: `super()` binds it, and the return rules read it.
+      ctorInfo.flags |= CodeFlags.DERIVED
+      ctorInfo.thisDecl!.used = true
+      ctorInfo.newTargetDecl = addDecl(ctorInfo.paramScope, ctorInfo, "%newTarget", "newTarget", false)
+      ctorInfo.newTargetDecl.used = true
+    }
     for (const m of node.body.body) {
       if ((m.type !== "MethodDefinition" && m.type !== "PropertyDefinition") || !m.computed) continue
       visitExpression(m.key as Expression, classScope, fnInfo)
@@ -553,6 +559,33 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
       fields.filter((f) => f.static),
     )
     if (instance || statics) classFieldInits.set(node, { instance, static: statics })
+  }
+
+  // `constructor() {}`, or `constructor(...args) { super(...args) }` for a derived class.
+  function defaultConstructor(node: ClassNode): FunctionExpression {
+    const at = { start: node.start, end: node.end }
+    const args = { type: "Identifier", name: "args", ...at }
+    const superCall = {
+      type: "ExpressionStatement",
+      expression: {
+        type: "CallExpression",
+        callee: { type: "Super", ...at },
+        arguments: [{ type: "SpreadElement", argument: args, ...at }],
+        optional: false,
+        ...at,
+      },
+      ...at,
+    }
+    return {
+      type: "FunctionExpression",
+      id: null,
+      params: node.superClass ? [{ type: "RestElement", argument: { ...args }, ...at }] : [],
+      body: { type: "BlockStatement", body: node.superClass ? [superCall] : [], ...at },
+      generator: false,
+      expression: false,
+      async: false,
+      ...at,
+    } as FunctionExpression
   }
 
   // A synthetic method whose body is `this` and the field initializers: the compiler defines each field on `this`.
@@ -624,6 +657,18 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   for (const item of unresolved)
     if (item.node.type !== "ThisExpression") refs.set(item.node as Identifier, resolve(item))
   for (const item of unresolved) if (item.node.type === "ThisExpression") thisRefs.set(item.node, resolve(item))
+  // `super` reads the home object of the method it is in, through arrows; object literal methods have none.
+  const superRefs = new Map<AnyNode, { home: ResolvedRef; self: ResolvedRef }>()
+  for (const item of supers) {
+    let owner = functions[item.fnIndex]!
+    while (owner.node.type === "ArrowFunctionExpression") owner = functions[owner.parentIndex]!
+    if ((owner.flags & CodeFlags.METHOD) === 0) continue
+    owner.homeDecl ??= addDecl(owner.paramScope, owner, "%home", "home", false)
+    superRefs.set(item.node, {
+      home: resolve({ ...item, name: "%home" }),
+      self: resolve({ ...item, name: "this" }),
+    })
+  }
 
   // Assign dense local slots per function. A call copies its arguments into the leading slots, so with simple
   // parameters each position gets a slot; an earlier duplicate name (`function f(a, a)`) gets a dummy one.
@@ -657,6 +702,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
     scopeOfNode,
     refs,
     thisRefs,
+    superRefs,
     classConstructors,
     classFieldInits,
     fieldInitMembers,

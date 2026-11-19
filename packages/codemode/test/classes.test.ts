@@ -117,7 +117,6 @@ describe("base classes", () => {
 
   test("unsupported class syntax still reports UnsupportedSyntax", () => {
     for (const code of [
-      "class A extends Object {}",
       "class A { #x = 1 }",
       "class A { #m() {} }",
       "class A { static {} }",
@@ -449,6 +448,24 @@ describe("suspended inside a class", () => {
       [1, 42, 3],
       "items",
     ],
+    [
+      "parent constructor reached through super()",
+      `class A { constructor(n) { this.v = pick(slow(n)) } }
+       class B extends A { w = this.v + 1; constructor(n) { super(n); this.x = this.w * 2 } }
+       class C extends B {}
+       const c = new C(21)
+       return [c.v, c.w, c.x, c instanceof A, c instanceof C, Object.keys(c)]`,
+      [42, 43, 86, true, true, ["v", "w", "x"]],
+      "A",
+    ],
+    [
+      "method called through super.method()",
+      `class A { m(n) { return this.base + pick(slow(n)) } }
+       class B extends A { constructor() { super(); this.base = 1 } m(n) { return super.m(n) * 10 } }
+       return [new B().m(20)]`,
+      [410],
+      "m",
+    ],
   ] as const) {
     test(`a host call parked in a ${name}, resumed in a fresh runtime`, async () => {
       const suspended = await suspendParked(code)
@@ -459,4 +476,183 @@ describe("suspended inside a class", () => {
       expect(resumed).toEqual(plain)
     }, 5000)
   }
+})
+
+const failure = (code: string) => {
+  const result = run(code)
+  if (result.ok) throw new Error(`expected a failure, got ${JSON.stringify(result.value)}`)
+  const [kind, message] = result.error.message.replace(/ \(line \d+, col \d+\)$/, "").split(/: (.*)/s)
+  return [kind, message]
+}
+
+describe("class inheritance", () => {
+  test("two and three levels: prototype and constructor chains, inherited methods", () => {
+    expect(
+      value(`
+        class A { constructor(x) { this.x = x } a() { return "a" + this.x } who() { return "A" } }
+        class B extends A { constructor(x, y) { super(x); this.y = y } b() { return "b" + this.y } who() { return "B" } }
+        class C extends B { constructor() { super(1, 2) } who() { return "C" } }
+        const c = new C()
+        return [
+          c.a(), c.b(), c.who(), c,
+          Object.getPrototypeOf(B.prototype) === A.prototype, Object.getPrototypeOf(C) === B, Object.getPrototypeOf(B) === A,
+          c.constructor === C, C.name,
+        ]`),
+    ).toEqual(["a1", "b2", "C", { x: 1, y: 2 }, true, true, true, true, "C"])
+  })
+
+  test("instanceof across the hierarchy", () => {
+    expect(
+      value(`
+        class A {}
+        class B extends A {}
+        class C extends B {}
+        const b = new B()
+        return [new C() instanceof A, new C() instanceof B, b instanceof C, b instanceof A, new A() instanceof B]`),
+    ).toEqual([true, true, false, true, false])
+  })
+
+  test("any expression evaluating to a class can be extended", () => {
+    expect(
+      value(`
+        const make = (tag) => class { tag() { return tag } }
+        class X extends make("t") {}
+        const Y = class extends (0, X) { get t() { return this.tag() } }
+        return [new X().tag(), new Y().t]`),
+    ).toEqual(["t", "t"])
+  })
+
+  test("super calls with arguments and spread, and the default derived constructor", () => {
+    expect(
+      value(`
+        class A { constructor(...args) { this.args = args } }
+        class B extends A { constructor(a, ...rest) { super(a * 10, ...rest) } }
+        class C extends A {}
+        return [new B(1, 2, 3).args, new C(4, 5).args, C.length]`),
+    ).toEqual([[10, 2, 3], [4, 5], 0])
+  })
+
+  test("super.method() and super.x in instance and static methods and accessors", () => {
+    expect(
+      value(`
+        class A {
+          m(n) { return "A.m" + n + this.tag }
+          get g() { return "A.g" + this.tag }
+          set s(v) { this.stored = "A:" + v }
+          static sm() { return "A.sm" + this.name }
+          static get sg() { return "A.sg" }
+        }
+        A.prototype.data = "proto-data"
+        class B extends A {
+          constructor() { super(); this.tag = "!" }
+          m(n) { return "B>" + super.m(n) }
+          get g() { return "B>" + super.g }
+          set s(v) { super.s = v + "+" }
+          d() { return super.data + super["m"](2) }
+          static sm() { return "B>" + super.sm() }
+          static get sg() { return "B>" + super.sg }
+        }
+        const b = new B()
+        b.s = "v"
+        return [b.m(1), b.g, b.stored, b.d(), B.sm(), B.sg]`),
+    ).toEqual(["B>A.m1!", "B>A.g!", "A:v+", "proto-data" + "A.m2!", "B>A.smB", "B>A.sg"])
+  })
+
+  test("super.x = v writes to this when there is no setter", () => {
+    expect(
+      value(`
+        class A {}
+        class B extends A { set(v) { super.x = v; return [this.x, Object.keys(this)] } }
+        return new B().set(3)`),
+    ).toEqual([3, ["x"]])
+  })
+
+  test("arrows capture super and this", () => {
+    expect(
+      value(`
+        class A { m() { return "A" + this.n } }
+        class B extends A {
+          constructor() { const early = () => this.n; super(); this.n = 1; this.early = early() }
+          m() { return [1, 2].map((i) => super.m() + i) }
+          f = () => super.m()
+        }
+        const b = new B()
+        return [b.m(), b.f(), b.early]`),
+    ).toEqual([["A11", "A12"], "A1", 1])
+  })
+
+  test("this before super() is a ReferenceError, also through an arrow", () => {
+    expect(failure(`class A {}; class B extends A { constructor() { this.x = 1; super() } }; new B()`)).toEqual([
+      "ReferenceError",
+      "Must call super constructor in derived class before accessing 'this' or returning from derived constructor",
+    ])
+    expect(failure(`class A {}; class B extends A { constructor() { const f = () => this; f(); super() } }; new B()`)[1]).toBe(
+      "Must call super constructor in derived class before accessing 'this' or returning from derived constructor",
+    )
+    expect(failure(`class A {}; class B extends A { constructor() {} }; new B()`)).toEqual([
+      "ReferenceError",
+      "Must call super constructor in derived class before accessing 'this' or returning from derived constructor",
+    ])
+  })
+
+  test("a second super() is a ReferenceError", () => {
+    expect(failure(`class A {}; class B extends A { constructor() { super(); super() } }; new B()`)).toEqual([
+      "ReferenceError",
+      "Super constructor may only be called once",
+    ])
+  })
+
+  test("derived fields initialize right after super() returns, after the parent's", () => {
+    expect(
+      value(`
+        const log = []
+        class A { a = log.push("A.field"); constructor() { log.push("A.ctor") } }
+        class B extends A {
+          b = log.push("B.field:" + this.a)
+          constructor() { log.push("B.before"); super(); log.push("B.after:" + this.b) }
+        }
+        class C extends B { c = log.push("C.field") }
+        new C()
+        return log`),
+    ).toEqual(["B.before", "A.field", "A.ctor", "B.field:2", "B.after:4", "C.field"])
+  })
+
+  test("derived constructor return rules", () => {
+    expect(
+      value(`
+        class A {}
+        class Obj extends A { constructor() { super(); return { other: true } } }
+        class NoSuper extends A { constructor() { return { early: true } } }
+        class Undef extends A { constructor() { super(); return undefined } }
+        class Parent { constructor() { return { replaced: 1 } } }
+        class Child extends Parent { constructor() { super(); this.mine = 2 } }
+        return [new Obj(), new NoSuper(), new Undef() instanceof A, new Child()]`),
+    ).toEqual([{ other: true }, { early: true }, true, { replaced: 1, mine: 2 }])
+    expect(failure(`class A {}; class B extends A { constructor() { super(); return 1 } }; new B()`)).toEqual([
+      "TypeError",
+      "Derived constructors may only return object or undefined",
+    ])
+  })
+
+  test("static inheritance", () => {
+    expect(
+      value(`
+        class A { static count = 1; static make() { return new this() } static get label() { return "L" + this.name } }
+        class B extends A {}
+        return [B.count, B.make() instanceof B, B.label, Object.keys(B), B.hasOwnProperty("count")]`),
+    ).toEqual([1, true, "LB", [], false])
+  })
+
+  test("refused heritages", () => {
+    expect(failure(`class A extends null {}`)).toEqual(["TypeError", "Classes extending null are not supported."])
+    for (const name of ["Array", "Map", "Set", "Promise", "RegExp", "Object", "Uint8Array"]) {
+      expect(failure(`class A extends ${name} {}`)).toEqual([
+        "TypeError",
+        `Extending the built-in ${name} is not supported. Only classes and Error types can be extended.`,
+      ])
+    }
+    expect(failure(`class A extends 1 {}`)[1]).toBe("Class extends value a number is not a constructor or null.")
+    expect(failure(`function f() {}; class A extends f {}`)[0]).toBe("TypeError")
+    expect(failure(`const o = { m() { return super.x } }; o.m()`)[0]).toBe("SyntaxError")
+  })
 })

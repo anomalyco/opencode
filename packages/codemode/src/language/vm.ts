@@ -1385,7 +1385,7 @@ export class Vm {
             pc++
             continue
           case 89: // Op.CLASS
-            sp = this.execClass(regs, sp)
+            sp = this.execClass(frame, (w >>> 8) & 0xff, pc, sp)
             pc++
             continue
           case 90: // Op.DEFINE_METHOD
@@ -1408,6 +1408,23 @@ export class Vm {
             sp = frame.sp
             pc++
             frame.pc = pc
+            continue
+          }
+          case 93: // Op.SUPER_CALL
+          case 94: // Op.SUPER_BIND
+          case 95: // Op.CTOR_RETURN
+          case 96: // Op.GET_SUPER
+          case 97: {
+            // Op.PUT_SUPER
+            frame.pc = pc
+            frame.sp = sp
+            const nextPc = this.execWide(frame, w & 0xff, (w >>> 8) & 0xff, w >>> 16, pc)
+            if (nextPc < 0) {
+              if (nextPc === -1) continue outer
+              return -2 - nextPc
+            }
+            sp = frame.sp
+            pc = nextPc
             continue
           }
           default:
@@ -1503,6 +1520,7 @@ export class Vm {
   private failTdz(frame: Frame, name: string, pc: number, sp: number): never {
     frame.pc = pc
     frame.sp = sp
+    if (name === "this") throw referenceError(THIS_BEFORE_SUPER, frame.code.siteAt(pc))
     throw referenceError(`Cannot access '${name}' before initialization.`, frame.code.siteAt(pc))
   }
 
@@ -1542,6 +1560,7 @@ export class Vm {
     if (kind === 1) return new Arr(this.ctx.builtins.Array, (frame.args ?? []).slice(bx))
     if (kind === 2) return frame.fn
     if (kind === 3) return frame.thisValue
+    if (kind === 5) return frame.fn!.home
     return frame.args?.[bx]
   }
 
@@ -1643,15 +1662,117 @@ export class Vm {
     return sp
   }
 
-  // A base class: the constructor on top gets its prototype, `[ctor] -> [ctor, proto]`.
-  private execClass(regs: Array<unknown>, sp: number): number {
+  // The constructor on top gets its prototype, `[ctor] -> [ctor, proto]`; with a parent (a 1), it inherits from it:
+  // `[parent, ctor] -> [ctor, proto]`.
+  private execClass(frame: Frame, a: number, pc: number, sp: number): number {
+    const regs = frame.regs
     const ctor = regs[sp - 1] as Fn
-    const proto = new Obj(this.ctx.builtins.Object)
-    ctor.klass = new ClassInfo(false)
+    if ((a & 1) === 0) {
+      const proto = new Obj(this.ctx.builtins.Object)
+      ctor.klass = new ClassInfo(false)
+      define(ctor, "prototype", proto, frozen)
+      define(proto, "constructor", ctor, hidden)
+      regs[sp] = proto
+      return sp + 1
+    }
+    const parent = classParent(regs[sp - 2] as Value, frame.code.siteAt(pc))
+    const proto = new Obj(get(parent, "prototype") as Obj)
+    ctor.proto = parent
+    ctor.klass = new ClassInfo(true)
     define(ctor, "prototype", proto, frozen)
     define(proto, "constructor", ctor, hidden)
-    regs[sp] = proto
-    return sp + 1
+    regs[sp - 2] = ctor
+    regs[sp - 1] = proto
+    return sp
+  }
+
+  // `super(...args)`: constructs the running constructor's parent for the new target in local `bx`.
+  private execSuperCall(frame: Frame, a: number, bx: number, pc: number): number {
+    const regs = frame.regs
+    let sp = frame.sp
+    const args = a === 255 ? [...(regs[--sp] as Arr).items] : (regs.slice(sp - a, sp) as Array<Value>)
+    if (a !== 255) sp -= a
+    frame.sp = sp
+    frame.pc = pc
+    const parent = frame.fn!.proto
+    if (!(parent instanceof Fn) || parent.klass === undefined) {
+      throw typeError(`Super constructor ${describeValue(parent)} of anonymous class is not a constructor`, frame.code.siteAt(pc))
+    }
+    return this.constructClass(frame, parent, args, callSiteOf(frame, pc), regs[bx] as Fn)
+  }
+
+  // A derived constructor's `this` binding (local `bx`, a cell when `a` is 1).
+  private thisBinding(frame: Frame, a: number, bx: number): unknown {
+    return a === 1 ? (frame.regs[bx] as Cell).v : frame.regs[bx]
+  }
+
+  // `super()` returned the instance on top: it becomes `this`, once.
+  private execSuperBind(frame: Frame, a: number, bx: number, pc: number): void {
+    const regs = frame.regs
+    if (this.thisBinding(frame, a, bx) !== HOLE) {
+      throw referenceError("Super constructor may only be called once", frame.code.siteAt(pc))
+    }
+    const instance = regs[frame.sp - 1] as Value
+    if (a === 1) (regs[bx] as Cell).v = instance
+    else regs[bx] = instance
+    frame.thisValue = instance
+  }
+
+  // A derived constructor returns an object, or `undefined` for its `this`, which `super()` must have bound.
+  private execCtorReturn(frame: Frame, a: number, bx: number, pc: number): void {
+    const v = frame.regs[frame.sp - 1]
+    if (v instanceof Obj) return
+    if (v !== undefined) {
+      throw typeError("Derived constructors may only return object or undefined", frame.code.siteAt(pc))
+    }
+    const self = this.thisBinding(frame, a, bx)
+    if (self === HOLE) throw referenceError(THIS_BEFORE_SUPER, frame.code.siteAt(pc))
+    frame.regs[frame.sp - 1] = self
+  }
+
+  // `super.x` / `super[key]`: reads from the home object's prototype with `this` as the receiver.
+  private execGetSuper(frame: Frame, a: number, bx: number, pc: number): number {
+    const regs = frame.regs
+    let sp = frame.sp
+    const key = (a & 2) !== 0 ? (regs[--sp] as PropertyKey) : (frame.code.consts[bx] as string)
+    const self = regs[--sp] as Value
+    const proto = superBase(regs[--sp] as Obj, frame.code.siteAt(pc))
+    const mode = a & 1
+    const v = this.readObjProp(proto, typeof key === "number" ? String(key) : key, self, frame.code, pc)
+    if (v instanceof GetterCall) return this.enterGetter(frame, v.getter, self, sp, mode, pc)
+    return writeRead(regs, sp, mode, self, v)
+  }
+
+  // `super.x = v`: a setter on the home object's prototype chain runs with `this`; otherwise `this` takes the write.
+  private execPutSuper(frame: Frame, a: number, bx: number, pc: number): boolean {
+    const regs = frame.regs
+    let sp = frame.sp
+    const v = regs[--sp] as Value
+    const key = (a & 2) !== 0 ? (regs[--sp] as PropertyKey) : (frame.code.consts[bx] as string)
+    const self = regs[--sp] as Value
+    const site = frame.code.siteAt(pc)
+    const proto = superBase(regs[--sp] as Obj, site)
+    frame.sp = sp
+    const slot = lookup(proto, key)
+    let setter: Callable | undefined
+    if (slot !== undefined && !("value" in slot)) {
+      if (slot.set === undefined) throw typeError(`Cannot set property ${String(key)}, which has only a getter.`, site)
+      if (typeof slot.set === "function") slot.set(self, v)
+      else setter = slot.set
+    } else {
+      if (!(self instanceof Obj)) throw typeError(`Cannot set property ${String(key)} of ${describeValue(self)}.`, site)
+      try {
+        setter = assignToReference(self, key, v, undefined)
+      } catch (err) {
+        throw locate(err, site)
+      }
+    }
+    if (setter !== undefined) {
+      this.pushInternalCall("$vmSet", [setter, self, v], callSiteOf(frame, pc))
+      return true
+    }
+    regs[frame.sp++] = v
+    return false
   }
 
   // `[ctor, proto, fn] -> [ctor, proto]`: a hidden method on the prototype, or on the constructor when static.
@@ -1946,12 +2067,19 @@ export class Vm {
     return this.execConstruct(frame, callee, [...argsArr.items], callSiteOf(frame, pc))
   }
 
-  // `new C(...)` on a base class: runs its constructor on a new instance of `C.prototype` (`Mode.CONSTRUCT`).
-  private constructClass(callerFrame: Frame, ctor: Fn, args: Array<Value>, site: AstNode | undefined): number {
+  // `new C(...)`, or `super(...)` for `newTarget`, runs C's constructor (`Mode.CONSTRUCT`): a base class's on a new
+  // instance of `newTarget.prototype`; a derived class's with `newTarget` as its `this` until `super()` binds one.
+  private constructClass(
+    callerFrame: Frame,
+    ctor: Fn,
+    args: Array<Value>,
+    site: AstNode | undefined,
+    newTarget: Fn = ctor,
+  ): number {
     if (this.depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", site ?? this.currentSite())
-    const proto = get(ctor, "prototype")
-    const instance = new Obj(proto instanceof Obj ? proto : this.ctx.builtins.Object)
-    this.pushFn(ctor, instance, args, site ?? callerFrame.origin, Mode.CONSTRUCT)
+    const proto = get(newTarget, "prototype")
+    const self = ctor.klass!.derived ? newTarget : new Obj(proto instanceof Obj ? proto : this.ctx.builtins.Object)
+    this.pushFn(ctor, self, args, site ?? callerFrame.origin, Mode.CONSTRUCT)
     this.fuel--
     return 1
   }
@@ -3328,8 +3456,28 @@ export class Vm {
         frame.sp = this.execDefineAccessor(regs, consts, a, bx, sp)
         return pc + 1
       case Op.CLASS:
-        frame.sp = this.execClass(regs, sp)
+        frame.sp = this.execClass(frame, a, pc, sp)
         return pc + 1
+      case Op.SUPER_CALL: {
+        const made = this.execSuperCall(frame, a, bx, pc)
+        if (made === 1) return -1
+        if (made === 2) return -4
+        return pc + 1
+      }
+      case Op.SUPER_BIND:
+        this.execSuperBind(frame, a, bx, pc)
+        return pc + 1
+      case Op.CTOR_RETURN:
+        this.execCtorReturn(frame, a, bx, pc)
+        return pc + 1
+      case Op.GET_SUPER: {
+        const r = this.execGetSuper(frame, a, bx, pc)
+        if (r < 0) return r === GETTER_ENTERED ? -1 : r === GETTER_FUEL ? -3 : -4
+        frame.sp = r
+        return pc + 1
+      }
+      case Op.PUT_SUPER:
+        return this.execPutSuper(frame, a, bx, pc) ? -1 : pc + 1
       case Op.DEFINE_METHOD:
         frame.sp = this.execDefineMethod(regs, consts, a, bx, sp)
         return pc + 1
@@ -3351,6 +3499,28 @@ export class Vm {
 
 // What `execGetProp` / `execGetElem` return in place of a stack pointer once they enter a frame (a getter, say): it runs
 // now (`continue outer`), the slice is over, or the job blocks on the host call the getter made.
+const THIS_BEFORE_SUPER =
+  "Must call super constructor in derived class before accessing 'this' or returning from derived constructor"
+
+// What a class may extend: another class. Error types come next; other built-ins and `null` are refused.
+const classParent = (parent: Value, site: AstNode | undefined): Fn => {
+  if (parent === null) throw typeError("Classes extending null are not supported.", site)
+  if (parent instanceof Fn && parent.klass !== undefined) return parent
+  if (parent instanceof Builtin && parent.construct !== undefined) {
+    throw typeError(
+      `Extending the built-in ${String(peek(parent, "name"))} is not supported. Only classes and Error types can be extended.`,
+      site,
+    )
+  }
+  throw typeError(`Class extends value ${describeValue(parent)} is not a constructor or null.`, site)
+}
+
+// The object `super.x` reads from: the home object's prototype.
+const superBase = (home: Obj, site: AstNode | undefined): Obj => {
+  if (home.proto === null) throw typeError("Cannot use 'super' here: the home object has no prototype.", site)
+  return home.proto
+}
+
 const GETTER_ENTERED = -1
 const GETTER_FUEL = -2
 const GETTER_BLOCKED = -3

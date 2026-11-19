@@ -205,7 +205,20 @@ export const verifyCode = (c: Code): Array<string> => {
         next((a & 1) === 0 ? -1 : -2)
         break
       case Op.CLASS:
-        next(1)
+        next((a & 1) === 0 ? 1 : 0)
+        break
+      case Op.SUPER_CALL:
+        next(a === 255 ? 0 : 1 - a)
+        break
+      case Op.SUPER_BIND:
+      case Op.CTOR_RETURN:
+        next(0)
+        break
+      case Op.GET_SUPER:
+        next(((a & 1) === 0 ? -1 : 0) - ((a & 2) === 0 ? 0 : 1))
+        break
+      case Op.PUT_SUPER:
+        next((a & 2) === 0 ? -2 : -3)
         break
       case Op.DEFINE_METHOD:
         next((a & 2) === 0 ? -1 : -2)

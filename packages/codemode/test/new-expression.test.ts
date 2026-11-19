@@ -71,12 +71,10 @@ describe("new on a non-constructible callee", () => {
     expect((await error(`return new Function("return 1")`)).message).not.toContain("not a constructor")
   })
 
-  test("class inheritance remains unsupported syntax", async () => {
+  test("extending a built-in other than errors is refused", async () => {
     const failure = await error(`class A extends Object {}; return new A()`)
-    expect(failure.kind).toBe("UnsupportedSyntax")
     expect(failure.message).toStartWith(
-      "SyntaxError: Syntax 'ClassHeritage' is not supported. This is a restricted JavaScript-like language. Supported: ",
+      "TypeError: Extending the built-in Object is not supported. Only classes and Error types can be extended.",
     )
-    expect(failure.message).toContain("Unsupported: classes, BigInt, and custom Symbols.")
   })
 })

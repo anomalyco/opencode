@@ -255,6 +255,18 @@ const compileFunctionBody = (
       node,
     )
 
+  // `super.x` in a class method: pushes its home object and `this`. False (after the error) outside class methods.
+  const emitSuperBase = (node: MemberExpression): boolean => {
+    const refs = analysis.superRefs.get(node.object)
+    if (!refs) return !unsupportedSuper(node)
+    emitLoadRef(refs.home, node.object)
+    emitLoadRef(refs.self, node.object)
+    return true
+  }
+
+  // A derived constructor's `this` binding: SUPER_BIND and CTOR_RETURN read and write it in place.
+  const thisOperand = (): [number, number] => [fnInfo.thisDecl!.captured ? 1 : 0, fnInfo.thisDecl!.slot]
+
   // `super.x` parses inside object methods but is not supported. Code after the error is unreachable, so it emits nothing.
   const unsupportedSuper = (node: MemberExpression): boolean => {
     if (node.object.type !== "Super") return false
@@ -290,7 +302,7 @@ const compileFunctionBody = (
 
   const emitScopePrologue = (scope: Scope, resetUncapturedLexicals: boolean): void => {
     for (const decl of scope.decls.values()) {
-      if (decl.kind === "this" || decl.kind === "arguments" || decl.kind === "param" || decl.kind === "self") continue
+      if (["this", "arguments", "param", "self", "home", "newTarget"].includes(decl.kind)) continue
       if (decl.captured) builder.emit(Op.NEW_CELL, 0, decl.slot)
       else if (resetUncapturedLexicals && (decl.kind === "let" || decl.kind === "const")) {
         builder.emit(Op.HOLE_LOCAL, 0, decl.slot)
@@ -692,13 +704,14 @@ const compileFunctionBody = (
 
   // Leaves the class constructor on the stack.
   const compileClass = (node: ClassNode): void => {
-    const unsupported = node.superClass ?? node.body.body.find((member) => !supportedClassMember(member))
+    const unsupported = node.body.body.find((member) => !supportedClassMember(member))
     if (unsupported) return emitUnsupported(classSyntaxName(unsupported), unsupported)
     const scope = analysis.scopeOfNode.get(node)!
     emitScopePrologue(scope, true)
+    if (node.superClass) compileExpression(node.superClass)
     const ctor = analysis.classConstructors.get(node)!
     builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(ctor)!.index, idx(node), 1)
-    builder.emit(Op.CLASS, 0, 0, idx(node), 1)
+    builder.emit(Op.CLASS, node.superClass ? 1 : 0, 0, idx(node.superClass ?? node), node.superClass ? 0 : 1)
     // Member keys are evaluated once, in order; a computed field's key is kept in its hidden binding.
     for (const member of node.body.body) {
       if (member.type === "PropertyDefinition") {
@@ -1319,6 +1332,17 @@ const compileFunctionBody = (
         left,
       )
     }
+    if (left.object.type === "Super" && op === "=" && analysis.superRefs.has(left.object)) {
+      emitSuperBase(left)
+      if (left.computed) {
+        compileExpression(left.property as Expression)
+        builder.emit(Op.TO_KEY, 0, 0, idx(left.property), 0)
+      }
+      compileExpression(node.right)
+      const k = left.computed ? 0 : builder.constant(propertyName(left))
+      builder.emit(Op.PUT_SUPER, left.computed ? 2 : 0, k, idx(left), left.computed ? -3 : -2)
+      return
+    }
     if (unsupportedSuper(left)) return
 
     const baseDepth = builder.depth
@@ -1364,6 +1388,17 @@ const compileFunctionBody = (
   }
 
   const compileMemberExpression = (node: MemberExpression, keepReceiver: boolean, chainShortCircuit?: Label): void => {
+    if (node.object.type === "Super") {
+      if (!emitSuperBase(node)) return
+      if (node.computed) {
+        compileExpression(node.property as Expression)
+        builder.emit(Op.TO_KEY, 0, 0, idx(node.property), 0)
+      }
+      const a = (keepReceiver ? 1 : 0) | (node.computed ? 2 : 0)
+      const k = node.computed ? 0 : builder.constant(propertyName(node))
+      builder.emit(Op.GET_SUPER, a, k, idx(node), (keepReceiver ? 0 : -1) - (node.computed ? 1 : 0))
+      return
+    }
     if (unsupportedSuper(node)) return
     compileExpression(node.object as Expression, chainShortCircuit)
     if (node.optional && chainShortCircuit) {
@@ -1383,7 +1418,7 @@ const compileFunctionBody = (
   }
 
   const compileCallExpression = (node: CallExpression, chainShortCircuit?: Label): void => {
-    if (node.callee.type === "Super") return emitUnsupported("Super", node.callee)
+    if (node.callee.type === "Super") return compileSuperCall(node)
     const args = node.arguments
     // Lower `$Call(fn, thisArg, ...args)` in internal/prelude code directly to `Op.CALL` (§5.1)
     if (
@@ -1418,6 +1453,22 @@ const compileFunctionBody = (
     else builder.emit(Op.CALL, args.length, 0, idx(node), -(args.length + 1))
     if (!chainShortCircuit && shortLabel) builder.mark(shortLabel)
   }
+
+  // `super(...)` in a derived constructor: constructs the parent for the new target, binds `this`, then the fields.
+  const compileSuperCall = (node: CallExpression): void => {
+    if ((fnInfo.flags & CodeFlags.DERIVED) === 0) return emitUnsupported("Super", node.callee)
+    const spread = emitArguments(node.arguments, node)
+    const n = node.arguments.length
+    builder.emit(Op.SUPER_CALL, spread ? 255 : n, fnInfo.newTargetDecl!.slot, idx(node), spread ? 0 : 1 - n)
+    const [captured, slot] = thisOperand()
+    builder.emit(Op.SUPER_BIND, captured, slot, idx(node), 0)
+    if (!hasInstanceFields(fnInfo.node)) return
+    builder.emit(Op.INIT_FIELDS, 0, 0, idx(node), 1)
+    builder.emit(Op.POP, 0, 0, idx(node), -1)
+  }
+
+  const hasInstanceFields = (ctor: AstNode): boolean =>
+    [...analysis.classConstructors].some(([c, fn]) => fn === ctor && analysis.classFieldInits.get(c)?.instance)
 
   const compileNewExpression = (node: NewExpression): void => {
     compileExpression(node.callee as Expression)
@@ -1559,6 +1610,7 @@ const compileFunctionBody = (
         compileExpression(stmt.argument)
         if (isAsync && (fnInfo.flags & CodeFlags.GENERATOR) !== 0) builder.emit(Op.AWAIT, 0, 0, idx(stmt), 0)
       } else builder.emit(Op.PUSH_UNDEF, 0, 0, idx(stmt), 1)
+      if ((fnInfo.flags & CodeFlags.DERIVED) !== 0) builder.emit(Op.CTOR_RETURN, ...thisOperand(), idx(stmt), 0)
       exitPlan("return", null, stmt)
     },
     ThrowStatement: (stmt) => {
@@ -1639,7 +1691,13 @@ const compileFunctionBody = (
     }
   } else {
     emitImplicit(fnInfo.selfScope?.decls.values().next().value, 2)
-    emitImplicit(fnInfo.thisDecl, 3)
+    if ((fnInfo.flags & CodeFlags.DERIVED) === 0) emitImplicit(fnInfo.thisDecl, 3)
+    else {
+      const decl = fnInfo.thisDecl!
+      builder.emit(decl.captured ? Op.NEW_CELL : Op.HOLE_LOCAL, 0, decl.slot)
+      emitImplicit(fnInfo.newTargetDecl, 3)
+    }
+    emitImplicit(fnInfo.homeDecl, 5)
     const simple = (fnInfo.flags & CodeFlags.SIMPLE_PARAMS) !== 0
     for (const decl of fnInfo.paramScope.decls.values()) {
       // A simple parameter's argument is already in its slot: it moves into the new cell.
@@ -1666,12 +1724,7 @@ const compileFunctionBody = (
 
     const body = fnInfo.node.body as BlockStatement | Expression
     const fields = analysis.fieldInitMembers.get(fnInfo.node)
-    if (
-      (fnInfo.flags & CodeFlags.CLASS_CONSTRUCTOR) !== 0 &&
-      [...analysis.classConstructors].some(
-        ([c, ctor]) => ctor === fnInfo.node && analysis.classFieldInits.get(c)?.instance,
-      )
-    ) {
+    if ((fnInfo.flags & (CodeFlags.CLASS_CONSTRUCTOR | CodeFlags.DERIVED)) === CodeFlags.CLASS_CONSTRUCTOR && hasInstanceFields(fnInfo.node)) {
       builder.emit(Op.INIT_FIELDS, 0, 0, idx(fnInfo.node), 1)
       builder.emit(Op.POP, 0, 0, idx(fnInfo.node), -1)
     }
@@ -1698,6 +1751,7 @@ const compileFunctionBody = (
     } else if (body.type === "BlockStatement") {
       for (const s of body.body) compileStatement(s)
       builder.emit(Op.PUSH_UNDEF, 0, 0, idx(body), 1)
+      if ((fnInfo.flags & CodeFlags.DERIVED) !== 0) builder.emit(Op.CTOR_RETURN, ...thisOperand(), idx(body), 0)
     } else compileExpression(body)
     builder.emit(Op.RETURN, 0, 0, idx(body), -1)
   }

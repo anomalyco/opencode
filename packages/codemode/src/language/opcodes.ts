@@ -160,6 +160,19 @@ export const Op = {
   // a 1 calls a static initializer with the constructor as `this`, `[ctor, fn] -> [result]`.
   SET_FIELDS: 91,
   INIT_FIELDS: 92,
+  // Inheritance. `SUPER_CALL` constructs the parent of the running constructor for its new target (local `bx`):
+  // `[...args] -> [instance]` with `a` args, or `[argsArr] -> [instance]` when `a` is 255.
+  SUPER_CALL: 93,
+  // `SUPER_BIND` makes the instance on top the derived constructor's `this` (local `bx`, a cell when `a` is 1):
+  // `[instance] -> [instance]`. Once only.
+  SUPER_BIND: 94,
+  // `CTOR_RETURN` applies a derived constructor's return rules to the value on top, reading `this` like SUPER_BIND.
+  CTOR_RETURN: 95,
+  // `super.x`: `[home, this] -> [value]` (`[this, value]` when bit 0 keeps the receiver), keyed by constant `bx`, or
+  // by a key on top when bit 1 is set (`[home, this, key]`).
+  GET_SUPER: 96,
+  // `super.x = v`: `[home, this, v] -> [v]`, or `[home, this, key, v] -> [v]` when bit 1 is set.
+  PUT_SUPER: 97,
 } as const
 
 export type OpCode = (typeof Op)[keyof typeof Op]
