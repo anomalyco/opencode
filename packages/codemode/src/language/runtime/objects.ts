@@ -9,7 +9,7 @@ import {
   Throw,
   typeError,
 } from "./model.js"
-import { type Convert, type GeneratorRequest, Invoke, type Push, type Resume } from "./signals.js"
+import { type Convert, type GeneratorRequest, Invoke, type Prefetch, type Push, type Resume } from "./signals.js"
 import type { Code } from "../code.js"
 import { type Cell, CodeFlags } from "../opcodes.js"
 import type { Reaction, Resolving } from "../scheduler.js"
@@ -26,25 +26,64 @@ export type Attributes = {
 export type Getter = (receiver: Value) => Value
 export type Setter = (receiver: Value, value: Value) => void
 
-/** One own property: a data slot or a native accessor pair. */
+/**
+ * One own property: a data slot, or an accessor whose halves are each a native closure (`typeof half === "function"`)
+ * or a program function (a `Callable`, which is never a JS function).
+ */
 export type Slot =
   | { value: Value; writable: boolean; enumerable: boolean; configurable: boolean }
-  | { get: Getter | undefined; set: Setter | undefined; enumerable: boolean; configurable: boolean }
+  | {
+      get: Getter | Callable | undefined
+      set: Setter | Callable | undefined
+      enumerable: boolean
+      configurable: boolean
+    }
+export type AccessorSlot = Extract<Slot, { get: unknown }>
+
+/** Whether an accessor half is a program function, which only program code can call. */
+export const isProgramHalf = (half: unknown): half is Callable => half !== undefined && typeof half !== "function"
+
+/** Whether a slot is an accessor with at least one program half. */
+export const isProgramAccessor = (slot: Slot): slot is AccessorSlot =>
+  !("value" in slot) && (isProgramHalf(slot.get) || isProgramHalf(slot.set))
 
 // The objects made while a runtime's intrinsics are being made, in creation order; see `makingIntrinsics`.
 let making: Array<Obj> | undefined
+// The `Function.prototype` of the intrinsics being made, for the companions of native accessors.
+let makingFunctions: Obj | undefined
+
+/**
+ * The program function that stands for each native accessor half (`Object.getOwnPropertyDescriptor(Map.prototype,
+ * "size").get`), made with the intrinsics so it is named like one, and the half each one stands for.
+ */
+const companions = new WeakMap<Getter | Setter, Native>()
+const companionHalves = new WeakMap<Native, Getter | Setter>()
+
+/** The function a program sees for an accessor half: the program function, or a native half's companion. */
+export const accessorFunction = (half: Getter | Setter | Callable | undefined): Callable | undefined =>
+  half === undefined || isProgramHalf(half) ? half : companions.get(half)
+
+/** The half to store for a function a program gives: a companion's native closure, so reads stay on the native path. */
+export const accessorHalf = (fn: Callable | undefined): Getter | Setter | Callable | undefined =>
+  fn instanceof Native ? (companionHalves.get(fn) ?? fn) : fn
 
 /**
  * Runs `make`, which makes a runtime's intrinsics, and returns every object made meanwhile, in creation order, after
  * `first` (the built-in prototypes, made before). An object's index in the list is its static intrinsic id.
  */
-export const makingIntrinsics = <A>(first: ReadonlyArray<Obj>, make: () => A): readonly [A, Array<Obj>] => {
+export const makingIntrinsics = <A>(
+  first: ReadonlyArray<Obj>,
+  functions: Obj,
+  make: () => A,
+): readonly [A, Array<Obj>] => {
   const made = [...first]
   making = made
+  makingFunctions = functions
   try {
     return [make(), made]
   } finally {
     making = undefined
+    makingFunctions = undefined
   }
 }
 
@@ -78,6 +117,8 @@ export class Obj {
    * once it changes (see `changed` and `IntrinsicNames`).
    */
   intrinsic = 0
+  /** Whether a program accessor was ever defined here: the bulk readers' cue to take their slow paths. */
+  hasProgramAccessors = false
   constructor(public proto: Obj | null) {
     if (making !== undefined) making.push(this)
   }
@@ -108,17 +149,37 @@ export class Obj {
 
   /** How `console.log` shows the value; `item` formats a child with cycle and depth tracking. */
   inspect(item: (value: Value) => string): string {
-    return `{${entries(this)
-      .map(([key, value]) => `${JSON.stringify(key)}:${item(value)}`)
+    if (!this.hasProgramAccessors) {
+      return `{${entries(this)
+        .map(([key, value]) => `${JSON.stringify(key)}:${item(value)}`)
+        .join(",")}}`
+    }
+    // Showing a value never runs program code, so a program accessor shows what it is, as Node does.
+    return `{${keys(this)
+      .map((key) => {
+        const slot = own(this, key)!
+        return `${JSON.stringify(key)}:${isProgramAccessor(slot) ? accessorLabel(slot) : item(getOwn(this, key))}`
+      })
       .join(",")}}`
   }
 
   /** A copy the host can hold; `item` converts a child. A `__proto__` key never reaches host code. */
   toHost(item: (value: Value) => unknown): unknown {
+    if (!this.hasProgramAccessors) {
+      return Object.fromEntries(
+        entries(this).flatMap(([key, value]) => {
+          if (key === "__proto__") return []
+          const copied = item(value)
+          return copied === OMITTED ? [] : [[key, copied]]
+        }),
+      )
+    }
+    // A getter's value crosses as data (read ahead by the call; see `HostCalls`), and a setter-only property is left out.
     return Object.fromEntries(
-      entries(this).flatMap(([key, value]) => {
-        if (key === "__proto__") return []
-        const copied = item(value)
+      keys(this).flatMap((key) => {
+        const slot = own(this, key)!
+        if (key === "__proto__" || (!("value" in slot) && slot.get === undefined)) return []
+        const copied = item(getOwn(this, key))
         return copied === OMITTED ? [] : [[key, copied]]
       }),
     )
@@ -171,8 +232,8 @@ export class ErrorObj extends Obj {
   failure?: PendingThrow
   /** Error.prototype.toString: "name: message", or just one when the other is empty. */
   override toString() {
-    const name = get(this, "name")
-    const message = get(this, "message")
+    const name = peek(this, "name")
+    const message = peek(this, "message")
     const shownName = typeof name === "string" ? name : "Error"
     const shownMessage = typeof message === "string" ? message : ""
     if (shownMessage === "") return shownName
@@ -231,6 +292,8 @@ export class Arguments extends Obj {
     define(this, "length", args.length, hidden)
   }
   override iterator(builtins: Builtins) {
+    // With program accessors, its own `[Symbol.iterator]` (the prelude's `argumentsValues`) reads it in program code.
+    if (this.hasProgramAccessors) return undefined
     return new Position(
       keys(this).map((key) => get(this, key)),
       "values",
@@ -244,7 +307,7 @@ export class Arguments extends Obj {
  * suspended generator to continue (`Resume`), a call it hands on (`Invoke`), or conversions to run before it runs again
  * (`Convert`). A native never runs program code itself.
  */
-export type NativeResult = Value | Push | Resume | Invoke | Convert
+export type NativeResult = Value | Push | Resume | Invoke | Convert | Prefetch
 /** `site` is the call running the built-in, where a failure it reports later (a rejection) is located. */
 export type NativeCall = (thisValue: Value, args: Array<Value>, site: AstNode | undefined) => NativeResult
 export type NativeConstruct = (args: Array<Value>, newTarget: Callable, site: AstNode | undefined) => NativeResult
@@ -319,8 +382,10 @@ export class BoundFn extends Builtin {
     readonly target: Callable,
     readonly boundThis: Value,
     readonly boundArgs: ReadonlyArray<Value>,
+    name: string,
+    length: number,
   ) {
-    super(proto, `bound ${coerceToString(get(target, "name"))}`, Math.max(0, target.length - boundArgs.length))
+    super(proto, `bound ${name}`, length)
   }
 
   invoke(_: Value, args: Array<Value>, site: AstNode | undefined): NativeResult {
@@ -775,14 +840,30 @@ export const own = (target: Obj, key: PropertyKey): Slot | undefined => {
   return target.props.get(typeof name === "number" ? String(name) : name)
 }
 
-const read = (slot: Slot, receiver: Value): Value =>
-  "value" in slot ? slot.value : slot.get === undefined ? undefined : slot.get(receiver)
+// A slot's value for `receiver`. A program getter can only run as program code: inside `withReads` its value comes from
+// the read-ahead table (or is recorded as missing); anywhere else reaching one is an error.
+const read = (slot: Slot, receiver: Value, key: PropertyKey): Value => {
+  if ("value" in slot) return slot.value
+  const getter = slot.get
+  if (getter === undefined) return undefined
+  if (typeof getter === "function") return getter(receiver)
+  return programRead(receiver, key)
+}
 
 export const hasOwn = (target: Obj, key: PropertyKey): boolean => own(target, key) !== undefined
 
 export const getOwn = (target: Obj, key: PropertyKey): Value => {
   const slot = own(target, key)
-  return slot === undefined ? undefined : read(slot, target)
+  return slot === undefined ? undefined : read(slot, target, key)
+}
+
+/** [[Get]]'s lookup: the slot `key` names on `target` or its prototype chain. */
+export const lookup = (target: Obj, key: PropertyKey): Slot | undefined => {
+  for (let current: Obj | null = target; current !== null; current = current.proto) {
+    const slot = own(current, key)
+    if (slot !== undefined) return slot
+  }
+  return undefined
 }
 
 /** [[Get]]: walks the prototype chain; accessors see `receiver`, which is the primitive for wrapper prototypes. */
@@ -792,9 +873,80 @@ export const get = (target: Obj, key: PropertyKey, receiver: Value = target): Va
     return target.items[key]
   for (let current: Obj | null = target; current !== null; current = current.proto) {
     const slot = own(current, key)
-    if (slot !== undefined) return read(slot, receiver)
+    if (slot !== undefined) return read(slot, receiver, key)
   }
   return undefined
+}
+
+/** A program getter a caller that runs program code calls itself, with the read's receiver as `this`. */
+export class GetterCall {
+  constructor(readonly getter: Callable) {}
+}
+
+/** [[Get]] for callers that can run program code (the VM's ops): the value, or the program getter to call. */
+export const access = (target: Obj, key: PropertyKey, receiver: Value = target): Value | GetterCall => {
+  if (typeof key === "number" && target instanceof Arr && key in target.items && parseArrayIndex(key) !== undefined)
+    return target.items[key]
+  const slot = lookup(target, key)
+  if (slot === undefined || "value" in slot) return slot?.value
+  const getter = slot.get
+  if (getter === undefined) return undefined
+  if (typeof getter === "function") return getter(receiver)
+  return new GetterCall(getter)
+}
+
+/**
+ * [[Get]] for display and diagnostics, which never run program code: a program getter reads as `undefined`.
+ */
+export const peek = (target: Obj, key: PropertyKey, receiver: Value = target): Value => {
+  const slot = lookup(target, key)
+  if (slot === undefined || "value" in slot) return slot?.value
+  const getter = slot.get
+  return typeof getter === "function" ? getter(receiver) : undefined
+}
+
+/** How display shows a program accessor in place of its value, in Node's words. */
+export const accessorLabel = (slot: AccessorSlot): string =>
+  slot.get !== undefined && slot.set !== undefined
+    ? "[Getter/Setter]"
+    : slot.get !== undefined
+      ? "[Getter]"
+      : "[Setter]"
+
+/**
+ * The program getters a built-in reads ahead (see `withReads` in callback.ts): while it runs again after the VM read
+ * them, `table` has their values by receiver and key (canonical), and `list` is the program array they came from
+ * (receiver, key, value, …). Inside `withReads` (`depth` > 0), a getter not in the table reads as `undefined` and is
+ * recorded in `missing` (receiver, key, …), once per pair.
+ */
+export const reads: {
+  table: Map<Value, Map<string | symbol, Value>> | undefined
+  list: Arr | undefined
+  depth: number
+  missing: Array<Value> | undefined
+} = { table: undefined, list: undefined, depth: 0, missing: undefined }
+
+/** When `check` is on (tests turn it on), a built-in reaching a program accessor it has no path for is a defect. */
+export const accessorRule = { check: false }
+
+const programRead = (receiver: Value, key: PropertyKey): Value => {
+  const name = canonical(key)
+  const known = reads.table?.get(receiver)
+  if (known !== undefined && known.has(name)) return known.get(name)
+  if (reads.depth === 0) return unreachableAccessor(name)
+  const missing = (reads.missing ??= [])
+  for (let at = 0; at < missing.length; at += 2)
+    if (missing[at] === receiver && missing[at + 1] === name) return undefined
+  missing.push(receiver, name)
+  return undefined
+}
+
+/** A built-in met a program getter or setter it cannot call: a TypeError, or a defect under `accessorRule.check`. */
+export const unreachableAccessor = (key: PropertyKey): never => {
+  if (accessorRule.check) throw new Error(`A built-in reached the program accessor ${String(key)} with no path for it.`)
+  throw typeError(
+    `A built-in cannot call the getter or setter '${String(key)}' here; read the property into a variable first.`,
+  )
 }
 
 export const has = (target: Obj, key: PropertyKey): boolean => {
@@ -834,8 +986,11 @@ const writeElement = (target: Indexed, name: string | number | symbol, value: Va
   return true
 }
 
-/** [[Set]]: an inherited setter or read-only property decides before an own data property is created. */
-export const set = (target: Obj, key: PropertyKey, value: Value): boolean => {
+/**
+ * [[Set]]: an inherited setter or read-only property decides before an own data property is created. A program setter
+ * is not called here: it is returned, for the caller to call with `target` as `this` and `[value]`.
+ */
+export const set = (target: Obj, key: PropertyKey, value: Value): boolean | Callable => {
   // Overwriting an array's present, writable element: no setter or read-only slot can decide first.
   if (typeof key === "number" && target instanceof Arr && target.elements.writable && key in target.items) {
     if (parseArrayIndex(key) !== undefined) {
@@ -849,8 +1004,10 @@ export const set = (target: Obj, key: PropertyKey, value: Value): boolean => {
     const slot = own(current, key)
     if (slot === undefined) continue
     if (!("value" in slot)) {
-      if (slot.set === undefined) return false
-      slot.set(target, value)
+      const setter = slot.set
+      if (setter === undefined) return false
+      if (typeof setter !== "function") return setter
+      setter(target, value)
       return true
     }
     if (!slot.writable) return false
@@ -887,9 +1044,53 @@ export const define = (target: Obj, key: PropertyKey, value: Value, attrs: Attri
   target.props.set(name, { value, ...attrs })
 }
 
+/** A built-in's native accessor. Made with the intrinsics, each half gets its companion program function. */
 export const defineAccessor = (target: Obj, key: PropertyKey, get: Getter | undefined, set?: Setter): void => {
   changed(target)
-  target.props.set(canonical(key), { get, set, enumerable: false, configurable: true })
+  const name = canonical(key)
+  target.props.set(name, { get, set, enumerable: false, configurable: true })
+  if (making === undefined) return
+  const label = typeof name === "symbol" ? `[${name.description}]` : name
+  if (get !== undefined) {
+    const getter = new Native(makingFunctions!, { name: `get ${label}`, call: (thisValue) => get(thisValue) })
+    companions.set(get, getter)
+    companionHalves.set(getter, get)
+  }
+  if (set !== undefined) {
+    const setter = new Native(makingFunctions!, {
+      name: `set ${label}`,
+      length: 1,
+      call: (thisValue, args) => {
+        set(thisValue, args[0])
+        return undefined
+      },
+    })
+    companions.set(set, setter)
+    companionHalves.set(setter, set)
+  }
+}
+
+/**
+ * An object literal's `get x() {}` or `set x(v) {}`: an existing accessor keeps its other half; a data property, or no
+ * property, becomes an accessor with only this half.
+ */
+export const defineAccessorHalf = (
+  target: Obj,
+  key: PropertyKey,
+  half: "get" | "set",
+  fn: Callable,
+  enumerable = true,
+): void => {
+  const name = canonical(key)
+  const current = target.props.get(name)
+  const slot: AccessorSlot =
+    current !== undefined && !("value" in current)
+      ? { get: current.get, set: current.set, enumerable, configurable: true }
+      : { get: undefined, set: undefined, enumerable, configurable: true }
+  slot[half] = fn
+  changed(target)
+  target.hasProgramAccessors = true
+  target.props.set(name, slot)
 }
 
 export const remove = (target: Obj, key: PropertyKey): boolean => {
@@ -941,6 +1142,15 @@ export const keys = (target: Obj): Array<string> =>
 /** Own enumerable string entries: `Object.entries` and serialization. */
 export const entries = (target: Obj): Array<[string, Value]> => keys(target).map((key) => [key, getOwn(target, key)])
 
+/** Own enumerable string entries for display, which runs no program code: a program accessor shows as its label. */
+export const shownEntries = (target: Obj): Array<[string, Value]> => {
+  if (!target.hasProgramAccessors) return entries(target)
+  return keys(target).map((key) => {
+    const slot = own(target, key)!
+    return [key, isProgramAccessor(slot) ? accessorLabel(slot) : getOwn(target, key)]
+  })
+}
+
 /** An iterator result `{ value, done }`, built directly since every iteration step makes one. */
 export const iteratorResult = (proto: Obj, value: Value, done: boolean): Obj => {
   const target = new Obj(proto)
@@ -955,9 +1165,13 @@ export const record = (proto: Obj, fields: Record<string, Value>): Obj => {
   return target
 }
 
-export const assign = (target: Obj, source: Obj, skip?: ReadonlySet<PropertyKey>): void => {
+/**
+ * CopyDataProperties for a source without program accessors (spread and rest): defines data on `target`, so no setter
+ * on its chain runs.
+ */
+export const copyDataProperties = (target: Obj, source: Obj, skip?: ReadonlySet<PropertyKey>): void => {
   for (const key of enumerableKeys(source)) {
     if (skip?.has(key)) continue
-    set(target, key, getOwn(source, key))
+    define(target, key, getOwn(source, key))
   }
 }

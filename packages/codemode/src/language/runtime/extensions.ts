@@ -12,7 +12,7 @@ import { AsyncIteratorSymbol, HostFailure, PendingThrow, rangeError, Throw, type
 import { native } from "./native.js"
 import {
   define,
-  defineAccessor,
+  defineAccessorHalf,
   get,
   has,
   hidden,
@@ -33,6 +33,8 @@ import {
   URLSearchParamsObj,
   coerceToString,
   type Value,
+  lookup,
+  type Slot,
 } from "./objects.js"
 import { describeValue, isOpaque, typeofValue } from "./references.js"
 import type { Translate } from "../runtime.js"
@@ -63,6 +65,8 @@ type Within = {
  * a program function whose calls cross the same way, a namespace becomes a path the program reads into, and a host
  * Promise or Effect becomes a program promise.
  */
+const setterOnly = (slot: Slot): boolean => !("value" in slot) && slot.get === undefined
+
 export const hostGlobals = <R>(
   ctx: Interpreter<R>,
   globals: Readonly<Record<string, unknown>>,
@@ -124,7 +128,7 @@ export const hostGlobals = <R>(
       const copied =
         name === "AggregateError" ? new AggregateError([], text) : new (hostErrors.get(name) ?? Error)(text)
       for (const key of new Set(["cause", ...keys(value)])) {
-        if (uncrossed.has(key) || !has(value, key)) continue
+        if (uncrossed.has(key) || !has(value, key) || setterOnly(lookup(value, key)!)) continue
         const item = crossing(() => next(get(value, key)))
         if (item === left || item === OMITTED) continue
         Object.defineProperty(copied, key, {
@@ -141,6 +145,10 @@ export const hostGlobals = <R>(
     seen.delete(value)
     return copied
   }
+
+  // A live response's state, read through a host function: the one kind of accessor made after the intrinsics.
+  const hostGetter = (name: string, read: () => boolean) =>
+    native(builtins, { runtime: "host", name: `get ${name}`, call: () => read() })
 
   const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>(), place: Place = {}): Value => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
@@ -184,7 +192,13 @@ export const hostGlobals = <R>(
         const body = response.body
         const stream = new Obj(builtins.Object)
         if (body) {
-          defineAccessor(stream, "locked", () => body.locked)
+          defineAccessorHalf(
+            stream,
+            "locked",
+            "get",
+            hostGetter("locked", () => body.locked),
+            false,
+          )
           define(
             stream,
             "cancel",
@@ -220,7 +234,13 @@ export const hostGlobals = <R>(
           define(result, key, next(response[key], `${label}.${key}`))
         define(result, "redirected", value.redirected)
         define(result, "body", body ? stream : null)
-        defineAccessor(result, "bodyUsed", () => response.bodyUsed)
+        defineAccessorHalf(
+          result,
+          "bodyUsed",
+          "get",
+          hostGetter("bodyUsed", () => response.bodyUsed),
+          false,
+        )
         for (const key of ["text", "json", "bytes", "arrayBuffer"] as const)
           define(
             result,

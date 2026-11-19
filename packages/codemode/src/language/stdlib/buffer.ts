@@ -1,4 +1,5 @@
 import { createErrorValue } from "../runtime/intrinsics.js"
+import { readsPending, withReads } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 import { Throw, typeError } from "../runtime/model.js"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../runtime/native.js"
@@ -149,7 +150,10 @@ export const bufferGlobal = <R>(ctx: Interpreter<R>) => {
     if (value instanceof Arr) return Uint8Array.from(value.items, coerceToNumber)
     if (value instanceof Obj) {
       const data = get(value, "data")
-      if (get(value, "type") === "Buffer" && data instanceof Arr) return Uint8Array.from(data.items, coerceToNumber)
+      const type = get(value, "type")
+      // `type` and `data` decide the path, so a getter among them is read before `length` could be.
+      if (readsPending()) return new Uint8Array()
+      if (type === "Buffer" && data instanceof Arr) return Uint8Array.from(data.items, coerceToNumber)
       const length = get(value, "length")
       if (typeof length === "number")
         return Uint8Array.from({ length }, (_, index) => coerceToNumber(get(value, String(index))))
@@ -171,12 +175,12 @@ export const bufferGlobal = <R>(ctx: Interpreter<R>) => {
   const buffer = constructor(builtins, proto, {
     name: "Buffer",
     length: 2,
-    call: (_, args) => wrap(bytesFrom(args[0], args[1], args[2])),
+    call: (_, args) => withReads(() => wrap(bytesFrom(args[0], args[1], args[2]))),
     construct: (args, newTarget) =>
-      new BufferObj(prototypeFrom(newTarget, proto), bytesFrom(args[0], args[1], args[2])),
+      withReads(() => new BufferObj(prototypeFrom(newTarget, proto), bytesFrom(args[0], args[1], args[2]))),
   })
   methods(builtins, buffer, [
-    ["from", 3, (_, args) => wrap(bytesFrom(args[0], args[1], args[2]))],
+    ["from", 3, (_, args) => withReads(() => wrap(bytesFrom(args[0], args[1], args[2])))],
     [
       "alloc",
       3,

@@ -415,6 +415,47 @@ function collectBytes(source, name, mapper, thisArg, into, offset) {
   return $Bytes(values, into, offset)
 }
 
+// An arguments object's [Symbol.iterator], as Array.prototype.values reads it: the length and each index, live.
+function* argumentsValues() {
+  let index = 0
+  while (index < this.length) {
+    yield this[index]
+    index++
+  }
+}
+
+// Object.entries and Object.values over an object with program getters: each key's enumerability is checked as it is
+// visited, so a getter that deletes or hides a later key is seen.
+function objectEntries(source, values) {
+  const keys = $OwnKeys(source, true, undefined)
+  const result = []
+  let index = 0
+  while (index < keys.length) {
+    const key = keys[index]
+    if ($IsEnumerableOwn(source, key)) result[result.length] = values ? source[key] : [key, source[key]]
+    index++
+  }
+  return result
+}
+
+// Object.assign when a source has program getters or the target's chain has program setters: Get from each source,
+// then Set on the target, key by key.
+function objectAssign(target, sources) {
+  let at = 0
+  while (at < sources.length) {
+    const source = sources[at]
+    const keys = $OwnKeys(source, false, undefined)
+    let index = 0
+    while (index < keys.length) {
+      const key = keys[index]
+      if ($IsEnumerableOwn(source, key)) target[key] = source[key]
+      index++
+    }
+    at++
+  }
+  return target
+}
+
 // Headers and URLSearchParams from iterable [name, value] pairs, read in full as strings before any is checked; from a
 // record of names to values when init is not iterable.
 function readPairs(init, label, kind, proto) {

@@ -66,6 +66,7 @@ export type Reaction =
 export type Job =
   | { readonly kind: "reaction"; readonly reaction: Reaction; readonly settled: Completion }
   | { readonly kind: "thenable"; readonly promise: PromiseObj; readonly thenable: Obj; readonly then: Value }
+  | { readonly kind: "thenable-get"; readonly promise: PromiseObj; readonly thenable: Obj }
 
 /**
  * How a host call runs, from its function's options (see `Host.Type`): `sync` and `sync-thenable` calls block the job

@@ -21,7 +21,8 @@ import {
 } from "../runtime/objects.js"
 import { primitivePrototype } from "../runtime/intrinsics.js"
 import { describeValue, rejectCircularInsertion } from "../runtime/references.js"
-import { invokeMethod } from "../runtime/callback.js"
+import { invokeMethod, withReads } from "../runtime/callback.js"
+import { Invoke } from "../runtime/signals.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 
 // ToObject for enumeration.
@@ -43,24 +44,42 @@ export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: V
   return new Obj(ctx.builtins.Object)
 }
 
-export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<Value>): Value => {
+export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<Value>): Value | Invoke => {
   const target = args[0]
   // JS would box a primitive target; wrappers and primitives cannot hold fields here.
   if (!(target instanceof Obj)) {
     throw typeError(`Object.assign expects a data object or array target, received ${describeValue(target)}.`)
   }
+  const sources = args
+    .slice(1)
+    .filter((source) => source !== null && source !== undefined)
+    .map((source) => enumerableSource(ctx, "Object.assign(...)", source))
+  // Program getters on a source or setters on the target's chain run in the prelude, Get then Set per key.
+  if (sources.some((from) => from.hasProgramAccessors) || accessorsOnChain(target)) {
+    return new Invoke(
+      ctx.prelude.fn("objectAssign"),
+      undefined,
+      [target, new Arr(ctx.builtins.Array, sources)],
+      undefined,
+    )
+  }
   const seen = new Set<object>()
-  for (const source of args.slice(1)) {
-    if (source === null || source === undefined) continue
-    const from = enumerableSource(ctx, "Object.assign(...)", source)
+  for (const from of sources) {
     for (const key of enumerableKeys(from)) {
       rejectCircularInsertion(target, getOwn(from, key), "Object.assign result", seen)
-      if (!set(target, key, getOwn(from, key))) {
+      if (set(target, key, getOwn(from, key)) !== true) {
         throw typeError(`Cannot assign to read only property '${String(key)}'.`)
       }
     }
   }
   return target
+}
+
+const accessorsOnChain = (target: Obj): boolean => {
+  for (let current: Obj | null = target; current !== null; current = current.proto) {
+    if (current.hasProgramAccessors) return true
+  }
+  return false
 }
 
 const classTag = (value: Value): string => {
@@ -136,20 +155,28 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "values",
       1,
-      (_, args) =>
-        new Arr(
+      (_, args) => {
+        const source = enumerableSource(ctx, "Object.values(...)", args[0])
+        if (source.hasProgramAccessors)
+          return new Invoke(ctx.prelude.fn("objectEntries"), undefined, [source, true], undefined)
+        return new Arr(
           builtins.Array,
-          entries(enumerableSource(ctx, "Object.values(...)", args[0])).map((entry) => entry[1]),
-        ),
+          entries(source).map((entry) => entry[1]),
+        )
+      },
     ],
     [
       "entries",
       1,
-      (_, args) =>
-        new Arr(
+      (_, args) => {
+        const source = enumerableSource(ctx, "Object.entries(...)", args[0])
+        if (source.hasProgramAccessors)
+          return new Invoke(ctx.prelude.fn("objectEntries"), undefined, [source, false], undefined)
+        return new Arr(
           builtins.Array,
-          entries(enumerableSource(ctx, "Object.entries(...)", args[0])).map((entry) => new Arr(builtins.Array, entry)),
-        ),
+          entries(source).map((entry) => new Arr(builtins.Array, entry)),
+        )
+      },
     ],
     ["hasOwn", 2, (_, args) => hasOwn(enumerableSource(ctx, "Object.hasOwn(...)", args[0]), propertyKey(args[1]))],
     ["is", 2, (_, args) => Object.is(args[0], args[1])],
@@ -210,7 +237,8 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "toLocaleString",
       0,
-      (thisValue) => invokeMethod(ctx.builtins, thisValue, "toString", "Object.prototype.toLocaleString"),
+      (thisValue) =>
+        withReads(() => invokeMethod(ctx.builtins, thisValue, "toString", "Object.prototype.toLocaleString")),
     ],
     [
       "valueOf",
