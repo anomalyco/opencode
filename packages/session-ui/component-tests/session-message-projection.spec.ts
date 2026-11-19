@@ -12,6 +12,11 @@ story("reveals turn speed with the response footer", async ({ mount, page }) => 
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   await expect(meta.locator('[data-slot="text-part-meta-item"]').last()).toHaveText("5m 2s")
   await expect(speed).toHaveText("·60.0 tok/s")
+  // The turn ends when its last step completes, 302 seconds after the prompt.
+  await expect(meta.locator('[data-slot="text-part-meta-time"] time')).toHaveAttribute(
+    "datetime",
+    "2025-01-01T00:05:02.000Z",
+  )
   await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
   await expect(footer).toHaveCSS("opacity", "1")
   await expect(speed).toBeVisible()
@@ -134,6 +139,42 @@ story.describe("message actions menu", () => {
         expect(Math.abs(box.y + 8 + lineHeight / 2 - trigger.y - trigger.height / 2)).toBeLessThan(1)
         expect(Math.abs(box.x + box.width - trigger.x - trigger.width - (trigger.y - box.y))).toBeLessThan(1)
       }
+    },
+  )
+
+  story("names the day again in the menu and the response footer once the date changes", async ({ mount, page }) => {
+    // The prompt is sent at midnight on 1 January 2025 and its turn finishes five minutes later; the page opens late that day.
+    await page.clock.install({ time: new Date("2025-01-01T23:59:30Z") })
+    const timeline = await mount("current-session-timeline-rows--response-speed")
+    const finished = timeline.locator('[data-slot="text-part-meta-time"] time')
+    await expect(finished).toHaveText("12:05 AM")
+
+    // Still open a minute after midnight, without a reload. Jump before opening the menu: a clock jump right after the
+    // menu closes takes seconds.
+    await page.clock.fastForward("01:00")
+    await expect(finished).toHaveText("Yesterday, 12:05 AM")
+    await timeline.getByText("Check the timeline performance.", { exact: true }).hover()
+    await timeline.getByRole("button", { name: "More actions", exact: true }).click()
+    await expect(page.getByRole("menu").locator("time")).toHaveText("Yesterday, 12:00 AM")
+  })
+
+  story(
+    "names the day again as soon as the page is shown or focused after the machine slept",
+    async ({ mount, page }) => {
+      await page.clock.install({ time: new Date("2025-01-01T23:59:30Z") })
+      const timeline = await mount("current-session-timeline-rows--response-speed")
+      const finished = timeline.locator('[data-slot="text-part-meta-time"] time')
+      await expect(finished).toHaveText("12:05 AM")
+
+      // Asleep: the date moves on while no timer fires.
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000)
+      await page.clock.setSystemTime(new Date("2025-01-02T09:00:00Z"))
+      await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+      await expect(finished).toHaveText("Yesterday, 12:05 AM")
+
+      await page.clock.setSystemTime(new Date("2025-01-03T09:00:00Z"))
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+      await expect(finished).toHaveText("Jan 1, 12:05 AM")
     },
   )
 

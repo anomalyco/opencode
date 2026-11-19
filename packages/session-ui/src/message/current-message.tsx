@@ -69,6 +69,7 @@ export function SessionAssistantContent(props: {
   keepCopyVisible?: boolean
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
+  turnCompletedAt?: number
   sources?: TurnSources
   onOpenSources?: () => void
   defaultOpen?: boolean
@@ -89,6 +90,7 @@ export function SessionAssistantContent(props: {
             keepCopyVisible={props.keepCopyVisible}
             turnDurationMs={props.turnDurationMs}
             turnTokensPerSecond={props.turnTokensPerSecond}
+            turnCompletedAt={props.turnCompletedAt}
             sources={props.sources}
             onOpenSources={props.onOpenSources}
           />
