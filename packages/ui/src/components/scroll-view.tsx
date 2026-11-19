@@ -30,7 +30,6 @@ import {
   selectThumbVisible,
   transitionScrollThumb,
   type ScrollAxis,
-  type ScrollThumbCapture,
   type ScrollThumbEvent,
   type ScrollThumbState,
 } from "./scroll-view-machine"
@@ -158,55 +157,6 @@ export function scrollOffsetFromThumbPointer(input: {
     input.reverse ?? false,
     input.scrollAdjustment ?? 0,
   )
-}
-
-export function scrollOffsetFromThumbDrag(input: {
-  pointer: number
-  trackStart: number
-  grabOffset: number
-  capture: ScrollThumbCapture
-  /** The vertical scroll adjustment as it stands when the move is handled, after any reconciliation. */
-  liveAdjustment: number
-  liveScrollSize: number
-  liveClientSize: number
-  reverse?: boolean
-}) {
-  return thumbDragOffset(
-    input.pointer - input.trackStart - input.grabOffset,
-    input.capture,
-    input.liveAdjustment,
-    input.liveScrollSize,
-    input.liveClientSize,
-    input.reverse ?? false,
-  )
-}
-
-// Scalar arguments plus the drag's capture, which is allocated once when the drag starts, so a
-// drag's `pointermove` builds no options object.
-function thumbDragOffset(
-  thumbOffset: number,
-  capture: ScrollThumbCapture,
-  liveAdjustment: number,
-  liveScrollSize: number,
-  liveClientSize: number,
-  reverse: boolean,
-) {
-  const captured = thumbScrollOffset(
-    thumbOffset,
-    capture.trackSize,
-    capture.scrollSize,
-    capture.thumbSize,
-    capture.clientSize,
-    reverse,
-    capture.adjustment,
-  )
-
-  // The captured offset is in the geometry the drag started in. Reconciliation since the grab (the
-  // timeline's flush) moved the adjustment into the native offset, so shift by the change and clamp
-  // to the range the viewport has now.
-  const shifted = captured + capture.adjustment - liveAdjustment
-
-  return Math.max(0, Math.min(shifted, Math.max(0, liveScrollSize - liveClientSize)))
 }
 
 // Scalar arguments, so a drag's `pointermove` builds no options object.
@@ -423,17 +373,6 @@ export function ScrollView(props: ScrollViewProps) {
     e.preventDefault()
     e.stopPropagation()
     const vertical = axis === "vertical"
-    const track = thumbMount() ?? viewportRef
-    // Capture the geometry the thumb is rendered with before prepareScroll reconciles it: the
-    // timeline's onBeforeScroll transfers the scroll adjustment into the native offset and zeroes
-    // it, so a drag that read the adjustment afterwards could not invert the rendering mapping.
-    const capture: ScrollThumbCapture = {
-      trackSize: vertical ? track.clientHeight : track.clientWidth,
-      scrollSize: vertical ? viewportRef.scrollHeight : viewportRef.scrollWidth,
-      thumbSize: vertical ? state.verticalThumbSize : state.horizontalThumbSize,
-      clientSize: vertical ? viewportRef.clientHeight : viewportRef.clientWidth,
-      adjustment: vertical ? (local.verticalScrollAdjustment ?? 0) : 0,
-    }
 
     prepareScroll()
     const rect = e.currentTarget.getBoundingClientRect()
@@ -444,7 +383,6 @@ export function ScrollView(props: ScrollViewProps) {
       pointerId: e.pointerId,
       grabOffset: vertical ? e.clientY - rect.top : e.clientX - rect.left,
       rtl: axis === "horizontal" && getComputedStyle(viewportRef).direction === "rtl",
-      capture,
     })
 
     if (e.isTrusted && selectDraggingAxis(untrack(thumbState)) === axis) e.currentTarget.setPointerCapture(e.pointerId)
@@ -459,14 +397,23 @@ export function ScrollView(props: ScrollViewProps) {
     const track = thumbMount() ?? viewportRef
     const rect = track.getBoundingClientRect()
 
-    const offset = thumbDragOffset(
-      (vertical ? e.clientY - rect.top : e.clientX - rect.left) - drag.grabOffset,
-      drag.capture,
-      vertical ? (local.verticalScrollAdjustment ?? 0) : 0,
-      vertical ? viewportRef.scrollHeight : viewportRef.scrollWidth,
-      vertical ? viewportRef.clientHeight : viewportRef.clientWidth,
-      drag.rtl,
-    )
+    // The drag inverts the mapping updateThumb draws from, reading the live geometry on every
+    // move (after prepareScroll reconciles it). Freezing the grab-time sizes would leave the
+    // thumb behind the pointer when content streams in mid-drag, and the flush already moved
+    // any adjustment into the native offset, so the live geometry is the mapping to invert.
+    // The adjustment shift applies to the unclamped value inside scrollOffsetFromThumbPointer,
+    // with one clamp against the live range, so the top of the track can still reach 0.
+    const offset = scrollOffsetFromThumbPointer({
+      pointer: vertical ? e.clientY : e.clientX,
+      viewportStart: vertical ? rect.top : rect.left,
+      grabOffset: drag.grabOffset,
+      clientSize: vertical ? track.clientHeight : track.clientWidth,
+      scrollSize: vertical ? viewportRef.scrollHeight : viewportRef.scrollWidth,
+      thumbSize: vertical ? state.verticalThumbSize : state.horizontalThumbSize,
+      scrollClientSize: vertical ? viewportRef.clientHeight : viewportRef.clientWidth,
+      reverse: drag.rtl,
+      scrollAdjustment: vertical ? (local.verticalScrollAdjustment ?? 0) : 0,
+    })
 
     if (vertical) {
       viewportRef.scrollTop = offset

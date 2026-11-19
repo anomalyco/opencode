@@ -30,7 +30,6 @@ const drag = (pointerId = 1): ScrollThumbEvent => ({
   pointerId,
   grabOffset: 4,
   rtl: false,
-  capture: { trackSize: 500, scrollSize: 1_700, thumbSize: 121, clientSize: 500, adjustment: 300 },
 })
 
 const overflowing = run(INITIAL_SCROLL_THUMB_STATE, overflowChanged(true, false)).state
@@ -59,10 +58,13 @@ describe("scroll view thumb machine", () => {
     })
   })
 
-  test("a drag carries the geometry captured when it started", () => {
+  test("a drag holds the pointer that started it", () => {
     expect(run(overflowing, drag()).state).toMatchObject({
       status: "dragging",
-      capture: { trackSize: 500, scrollSize: 1_700, thumbSize: 121, clientSize: 500, adjustment: 300 },
+      axis: "vertical",
+      pointerId: 1,
+      grabOffset: 4,
+      rtl: false,
     })
   })
 

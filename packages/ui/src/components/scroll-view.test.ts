@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import {
   canScrollKey,
   scrollKey,
-  scrollOffsetFromThumbDrag,
   scrollOffsetFromThumbPointer,
   scrollTopFromThumbPointer,
 } from "./scroll-view"
@@ -132,50 +131,65 @@ describe("scrollTopFromThumbPointer", () => {
   })
 })
 
-describe("scrollOffsetFromThumbDrag", () => {
-  // The geometry of a collapsed timeline at the grab: the native scroll height is 1700, but the
-  // thumb is rendered over 1700 + 300, because a 300px scroll adjustment is still applied to the
-  // rows above the viewport. The pointer is 195px into the track past the grab point:
-  // progress = (195 - 8) / (500 - 16 - 121) = 187/363 of the adjusted range (2000 - 500).
-  const capture = { trackSize: 500, scrollSize: 1_700, thumbSize: 121, clientSize: 500, adjustment: 300 }
-  const drag = { pointer: 200, trackStart: 0, grabOffset: 5, capture }
+describe("thumb drag reads live geometry on every move", () => {
+  // A drag inverts the mapping updateThumb draws from, so it reads the same live geometry:
+  // a collapsed timeline renders the thumb over 1700 + 300 (a 300px scroll adjustment still
+  // applied to the rows above the viewport), with a 125px thumb over the 2000px rendered
+  // height. The pointer is 195px into the track past the grab point:
+  // progress = (195 - 8) / (500 - 16 - 125) = 187/359 of the adjusted range (2000 - 500).
+  const drag = {
+    viewportStart: 0,
+    grabOffset: 5,
+    clientSize: 500,
+    scrollClientSize: 500,
+    thumbSize: 125,
+  }
 
   test("inverts the rendering mapping when the adjustment is still applied at move time", () => {
-    // onBeforeScroll left the geometry alone, so the write stays in the captured system:
-    // the adjusted offset (187/363 * 1500) minus the adjustment still in it.
+    // onBeforeScroll left the geometry alone, so the write is the adjusted offset
+    // (187/359 * 1500) minus the adjustment still in it.
     expect(
-      scrollOffsetFromThumbDrag({ ...drag, liveAdjustment: 300, liveScrollSize: 1_700, liveClientSize: 500 }),
-    ).toBeCloseTo((187 / 363) * 1500 - 300)
+      scrollOffsetFromThumbPointer({ ...drag, pointer: 200, scrollSize: 1_700, scrollAdjustment: 300 }),
+    ).toBeCloseTo((187 / 359) * 1500 - 300)
   })
 
-  test("shifts by the flushed adjustment when onBeforeScroll reconciled the geometry", () => {
+  test("matches the flushed geometry when onBeforeScroll reconciled it", () => {
     // The timeline's prepareNavigation flushes the adjustment into the native offset and zeroes
-    // it before the move is handled: the scroll height is whole again (2000) and the write is the
-    // adjusted offset itself.
+    // it before the move is handled: the scroll height is whole again (2000) and the write is
+    // the adjusted offset itself.
     expect(
-      scrollOffsetFromThumbDrag({ ...drag, liveAdjustment: 0, liveScrollSize: 2_000, liveClientSize: 500 }),
-    ).toBeCloseTo((187 / 363) * 1500)
+      scrollOffsetFromThumbPointer({ ...drag, pointer: 200, scrollSize: 2_000, scrollAdjustment: 0 }),
+    ).toBeCloseTo((187 / 359) * 1500)
   })
 
-  test("keeps the pointer mapping when the content resizes during the drag", () => {
-    // Rows above the viewport grew after the grab (the native height is 2600 now). The drag was
-    // captured against 2000 of content, so the same pointer position still maps to the same
-    // offset instead of slipping by the growth.
+  test("reaches the end of content that grew during the drag", () => {
+    // Rows streamed in after the grab (the native height is 2600 now, so the live thumb is
+    // 96px). The drag follows the live geometry, so the pointer at the bottom of the track
+    // reaches the live end (2100) instead of stopping at the grab-time end (1500).
     expect(
-      scrollOffsetFromThumbDrag({ ...drag, liveAdjustment: 0, liveScrollSize: 2_600, liveClientSize: 500 }),
-    ).toBeCloseTo((187 / 363) * 1500)
-  })
-
-  test("clamps the shifted offset to the range the viewport has now", () => {
-    // The content shrank below the captured range mid-drag; the write cannot pass its end.
-    expect(
-      scrollOffsetFromThumbDrag({
+      scrollOffsetFromThumbPointer({
         ...drag,
-        pointer: 10_000,
-        liveAdjustment: 0,
-        liveScrollSize: 1_200,
-        liveClientSize: 500,
+        pointer: 401,
+        scrollSize: 2_600,
+        scrollAdjustment: 0,
+        thumbSize: 96,
       }),
+    ).toBe(2_100)
+  })
+
+  test("reaches 0 at the top of the track with a positive adjustment", () => {
+    // The adjustment shift applies to the unclamped offset and the clamp happens once against
+    // the live range, so the top of the track reaches scrollTop 0 instead of stopping
+    // `adjustment` pixels short of it.
+    expect(
+      scrollOffsetFromThumbPointer({ ...drag, pointer: 13, scrollSize: 1_700, scrollAdjustment: 300 }),
+    ).toBe(0)
+  })
+
+  test("clamps the offset to the range the viewport has now", () => {
+    // The content shrank below the drag range mid-drag; the write cannot pass its end.
+    expect(
+      scrollOffsetFromThumbPointer({ ...drag, pointer: 10_000, scrollSize: 1_200, scrollAdjustment: 0 }),
     ).toBe(700)
   })
 })
