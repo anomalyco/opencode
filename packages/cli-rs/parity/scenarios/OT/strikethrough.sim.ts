@@ -1,5 +1,5 @@
-// OT2079 (parity/deviations/OT2079-strikethrough.md): a reply that contains `~~gone~~`. Both clients hide the
-// tildes and draw the text muted; Rust strikes it through, TS does not.
+// A reply that contains `~~gone~~`: the tildes hide and the text is muted and struck through (OpenTUI #2079, on both
+// sides since 0.9.4).
 import { defineSim } from "../../sim/scenario"
 
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
@@ -11,11 +11,6 @@ export default defineSim({
     { type: "Strike it" },
     { until: "Strike it" },
     { enter: true },
-    {
-      checkpoint: "done",
-      until: "Answer a",
-      masks: [duration],
-      deviation: [{ file: "OT2079-strikethrough", cells: 4 }],
-    },
+    { checkpoint: "done", until: "Answer a", masks: [duration] },
   ],
 })

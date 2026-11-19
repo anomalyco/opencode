@@ -1,12 +1,11 @@
-// OT2104 (parity/deviations/OT2104-chip-steps.md): two `[Image 1]` labels with the space between them deleted.
-// From the end of the second, Left: TS skips both labels, Rust only the second. From the line start, two Rights: TS
-// skips both, Rust only the first. A typed key shows where the cursor is.
+// Two `[Image 1]` labels with the space between them deleted. From the end of the second, Left skips only the second
+// label; from the line start, two Rights skip only the first (OpenTUI #2104, on both sides since 0.9.4). A typed key
+// shows where the cursor is.
 import { definePty } from "../../pty/run"
 import { home, homeMasks, paste } from "./home"
 
 // A 1x1 PNG.
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-const deviation = { file: "OT2104-chip-steps", lines: 2 }
 
 export default definePty({
   args: [],
@@ -32,13 +31,13 @@ export default definePty({
     { keys: "\x7f", settle: 400, checkpoint: "backspaced" },
     { keys: "\x1b[45;5u", settle: 400, checkpoint: "backspace-undone" },
     { keys: "\x1b[C", settle: 300, checkpoint: "right-from-joint" },
-    { keys: "\x1b[D", settle: 300, checkpoint: "left-pair", deviation: { ...deviation, lines: 1 } },
-    { keys: "X", settle: 400, checkpoint: "left-typed", deviation },
+    { keys: "\x1b[D", settle: 300, checkpoint: "left-pair" },
+    { keys: "X", settle: 400, checkpoint: "left-typed" },
     { keys: "\x7f", settle: 300 },
     { keys: "\x1b[H", settle: 300 },
     { keys: "\x1b[C", settle: 300 },
-    { keys: "\x1b[C", settle: 300, checkpoint: "right-pair", deviation: { ...deviation, lines: 1 } },
-    { keys: "Y", settle: 400, checkpoint: "right-typed", deviation },
+    { keys: "\x1b[C", settle: 300, checkpoint: "right-pair" },
+    { keys: "Y", settle: 400, checkpoint: "right-typed" },
   ],
   cursor: true,
   osc: [],

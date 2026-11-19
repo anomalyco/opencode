@@ -1,6 +1,5 @@
-// OT2049 (parity/deviations/OT2049-brackets-escapes.md): a reply with a bracketed label that is not a link and a
-// backslash escape. TS hides the brackets and keeps the backslash; Rust shows the brackets and drops the backslash,
-// as CommonMark does.
+// A reply with a bracketed label that is not a link and a backslash escape: the brackets show and the backslash
+// goes, as CommonMark says (OpenTUI #2049, on both sides since 0.9.4).
 import { defineSim } from "../../sim/scenario"
 
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
@@ -21,16 +20,6 @@ export default defineSim({
     { type: "Show the labels" },
     { until: "Show the labels" },
     { enter: true },
-    {
-      checkpoint: "done",
-      until: "prune",
-      masks: [duration],
-      deviation: [
-        // `[shell]`: the brackets, the link style, and the text they move.
-        { file: "OT2049-brackets-escapes", cells: 18 },
-        // The two backslashes of `\"prune\"` and the text they move.
-        { file: "OT2049-brackets-escapes", cells: 10 },
-      ],
-    },
+    { checkpoint: "done", until: "prune", masks: [duration] },
   ],
 })

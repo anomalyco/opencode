@@ -1,7 +1,5 @@
-// OT2112 (parity/deviations/OT2112-table-alignment.md): a reply with a packing list whose `Qty` column is
-// right-aligned (`---:`) and whose `Weight` and `Packed` columns are centred (`:---:`). TS left-aligns every column;
-// Rust aligns them as the delimiter row says. The characters of the left-aligned `Item` column and the borders are
-// equal.
+// A reply with a packing list whose `Qty` column is right-aligned (`---:`) and whose `Weight` and `Packed` columns are
+// centred (`:---:`): each column aligns as the delimiter row says (OpenTUI #2112, on both sides since 0.9.4).
 import { defineSim } from "../../sim/scenario"
 
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
@@ -25,11 +23,6 @@ export default defineSim({
     { type: "Pack" },
     { until: "Pack" },
     { enter: true },
-    {
-      checkpoint: "done",
-      until: "Done.",
-      masks: [duration],
-      deviation: [{ file: "OT2112-table-alignment", cells: 86 }],
-    },
+    { checkpoint: "done", until: "Done.", masks: [duration] },
   ],
 })
