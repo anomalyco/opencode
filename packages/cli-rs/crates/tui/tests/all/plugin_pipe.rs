@@ -2023,6 +2023,52 @@ fn a_new_version_that_ends_the_js_host_starts_it_once() {
 }
 
 #[test]
+fn a_save_behind_the_one_that_ended_the_js_host_starts_it_once() {
+    let Some(config) = config() else { return };
+    let (root, plugin, _log) = plugin_files("saved", "saved");
+    let (stalled, gate) = (root.path().join("stalled"), root.path().join("gate"));
+    let module = format!(
+        r#"import {{ existsSync, writeFileSync }} from "node:fs"
+const [STALLED, GATE] = {paths}
+export default {{ id: "example.saved", setup(api) {{
+  const carrier = api[Symbol.for("opencode.carrier")]
+  carrier.command({{ name: "saved.stall", title: "saved.stall" }}, () => setTimeout(() => {{
+    writeFileSync(STALLED, "")
+    while (!existsSync(GATE)) {{}}
+  }}, 0))
+}} }}
+"#,
+        paths = serde_json::json!([stalled, gate]),
+    );
+    std::fs::write(plugin.join("tui.ts"), module.clone()).unwrap();
+    let pipe = mount_server(root, config, support::empty());
+    pipe.active("example.saved");
+    let (h, scripts) = (&pipe.harness, pipe.scripts());
+    let started = pipe::crossed().started;
+    h.tui.keymap.dispatch("saved.stall", None);
+    until(h, "the JS host stalled", || stalled.exists());
+    // Two saves while the JS host reads nothing: each walk answers a new build, so two loads wait, one behind the
+    // other. Both would import the same files, whose first line ends the host.
+    for build in 0..2 {
+        std::fs::write(plugin.join("tui.ts"), format!("process.exit({build})\n{module}")).unwrap();
+        let sent = pipe::crossed().sent;
+        opencode_tui::plugins::host::reconcile(&h.tui);
+        walked(h, &scripts);
+        until(h, "the save was sent", || pipe::crossed().sent > sent);
+    }
+    std::fs::write(&gate, "").unwrap();
+    // The load that runs ends the host; the one behind it is not sent to the next, which would do the same again.
+    quietly(&pipe, "the save ended the JS host", || failed(&pipe, "example.saved").is_some());
+    pipe.settle();
+    assert_eq!(
+        pipe::crossed().started,
+        started + 1,
+        "a save behind the one that ended the JS host started the host again"
+    );
+    assert!(failed(&pipe, "example.saved").unwrap().contains("ended the JS host"));
+}
+
+#[test]
 fn a_moved_plugin_loads_from_its_new_directory() {
     let Some(config) = config() else { return };
     let pipe = open(&[("reloader", None)], config, (80, 30));

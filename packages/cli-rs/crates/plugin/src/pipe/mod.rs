@@ -2037,6 +2037,16 @@ impl Scripts {
         let mut waiting: Vec<(u64, Waiting)> = self.waiting.borrow_mut().drain().collect();
         waiting.sort_by_key(|(seq, _)| *seq);
         let ran = waiting.iter().find(|(seq, _)| started.contains(seq)).map(|(seq, _)| *seq);
+        // The target whose load ran: the code of its files ran on the host that ended. No load of it goes to the next
+        // host, not even a newer one whose build a later walk answered and which waited behind it: importing the same
+        // files again could do what ended the last host, and would end the next one too (a save that looked like two
+        // builds must not start three hosts).
+        let ran_target = ran.and_then(|seq| {
+            waiting.iter().find(|(known, _)| *known == seq).and_then(|(_, waiting)| match waiting {
+                Waiting::Load(target) => Some(target.clone()),
+                _ => None,
+            })
+        });
         match blame {
             Blame::Plugin(id) => {
                 if let Some(guest) = self.guest(&id) {
@@ -2096,7 +2106,7 @@ impl Scripts {
         let mut calls = Vec::new();
         for (seq, waiting) in waiting {
             match waiting {
-                Waiting::Load(target) if Some(seq) != ran => again.push(target),
+                Waiting::Load(target) if Some(seq) != ran && ran_target.as_ref() != Some(&target) => again.push(target),
                 Waiting::Call(call) if Some(seq) != ran => calls.push(call),
                 _ => {}
             }
