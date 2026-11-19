@@ -23,10 +23,9 @@ import { DialogSelectModel } from "@/providers/models/select-dialog"
 import { useData } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
+import { useLayout } from "@/shell/state/layout"
+import { uuid } from "@opencode/util/uuid"
 import { decode64 } from "@/runtime/persistence/base64"
-import { Persist, persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
-import { Schema } from "effect"
 import type { FormField, IntegrationInfo } from "@opencode/client/promise"
 import { createProviderDialogController } from "./controller"
 import { CONSOLE_INTEGRATION, type ProviderDialogBody } from "./dialog-machine"
@@ -34,7 +33,7 @@ import { connectMethods, selectProviderConnectView, type ProviderConnectMethod }
 import type { ProviderFormInput, ProviderFormView } from "./form-machine"
 import { ConsoleAuthorization } from "./console"
 import { StepActions, WaitingButton } from "./step-actions"
-import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
+import { useChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName } from "./remote"
 import { providerAccounts } from "@/settings/providers/accounts"
 import { AccountNameInput } from "@/settings/providers/account-name"
@@ -77,58 +76,46 @@ export const DialogConnectProvider: Component<{
   const dialog = useDialog()
   const params = useParams()
 
-  const [welcome, setWelcome, , welcomeReady] = persisted(
-    Persist.global("chatgpt-plan-welcome.v1"),
-    Persistence.struct({ seen: Schema.Boolean }),
-    { seen: false },
-  )
-
-  const showChatgptWelcome = () =>
-    void Promise.resolve(welcomeReady.promise).then(() => {
-      if (welcome.seen) return
-      setWelcome("seen", true)
-      void dialog.show(() => <DialogChatGPTPlanWelcome />)
-    })
+  const showChatgptWelcome = useChatGPTPlanWelcome()
 
   // A sign-in belongs to the Location where it began, even if the route changes underneath it.
   const directory = props.defaultLocation ? undefined : (props.directory ?? decode64(params.dir))
   const tabs = useTabs()
   const data = useData()
+  const layout = useLayout()
+
+  // Without a composer to apply a model to, a new draft opens on its model picker, filtered to the integration.
+  const openDraft = (integration: string, chatgptWelcome: boolean) => {
+    const draftID = uuid()
+    layout.draft.modelPicker.request(draftID, integration, chatgptWelcome)
+    dialog.close()
+    void tabs.newDraft({
+      draftID,
+      server: ServerConnection.key(sdk.server),
+      directory: directory ?? data.location.default().directory,
+    })
+  }
 
   const controller = createProviderDialogController({
     directory,
     standalone: !!props.standalone,
     selected: external.selected,
     onSelect: external.select,
-    // The picker, filtered to the integration, replaces this dialog. The ChatGPT welcome waits until it closes.
-    onModels: (integration, chatgptWelcome) =>
+    // From a composer, the picker filtered to the integration replaces this dialog, and the ChatGPT welcome waits
+    // until it closes. Without one, a new draft opens on that picker instead.
+    onModels: (integration, chatgptWelcome) => {
+      const selection = props.selection
+
+      if (!selection) return openDraft(integration, chatgptWelcome)
       void dialog.show(
-        () => (
-          <DialogSelectModel
-            model={props.selection}
-            integration={integration}
-            // Without a composer to apply it to, the chosen model starts a new session.
-            onChoose={
-              props.selection
-                ? undefined
-                : (selection) =>
-                    void tabs.newDraft(
-                      {
-                        server: ServerConnection.key(sdk.server),
-                        directory: directory ?? data.location.default().directory,
-                      },
-                      undefined,
-                      selection,
-                    )
-            }
-          />
-        ),
+        () => <DialogSelectModel model={selection} integration={integration} />,
         () => {
           props.onDone?.()
 
           if (chatgptWelcome) showChatgptWelcome()
         },
-      ),
+      )
+    },
     onConnected: (provider) => props.onConnected?.(provider),
   })
 

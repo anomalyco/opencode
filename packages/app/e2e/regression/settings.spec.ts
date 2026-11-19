@@ -1884,6 +1884,47 @@ test("providers: a rejected API key shows the server error and can be sent again
   expect(keys).toEqual([expect.objectContaining({ key: "sk-bad" })])
 })
 
+test("providers: connecting from Settings opens a new draft on the integration's model picker", async ({ page }) => {
+  const state = { authorized: false }
+
+  const { settings } = await open(page, {
+    provider: () => ({
+      all: state.authorized
+        ? [{ id: "openrouter", name: "OpenRouter", models: { router: { id: "router", name: "Router One" } } }]
+        : [],
+      connected: state.authorized ? ["openrouter"] : [],
+      default: {},
+    }),
+    integrations: () => [
+      {
+        id: "openrouter",
+        name: "OpenRouter",
+        methods: [{ type: "key" }],
+        connections: state.authorized ? [{ type: "credential", id: "cred_router", label: "Key", method: "key" }] : [],
+      },
+    ],
+    onConnectKey: () => {
+      state.authorized = true
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings
+    .locator(".settings-provider-row", { hasText: "OpenRouter" })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog", { name: "Connect OpenRouter", exact: true })
+  await dialog.getByPlaceholder("API key").fill("sk-router")
+  await dialog.getByRole("button", { name: "Continue", exact: true }).click()
+
+  const picker = page.getByRole("dialog", { name: "Select model", exact: true })
+  await expect(page).toHaveURL(/\/new-session\?draftId=/)
+  await expect(picker.locator("[data-option-key]")).toHaveText([/Router One/])
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.locator('[data-action="composer-model"]')).toContainText("Router One")
+})
+
 test("providers: Back during a pending API key request does not report the provider as connected", async ({ page }) => {
   const keys: string[] = []
 

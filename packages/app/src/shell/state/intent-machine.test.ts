@@ -74,6 +74,28 @@ describe("draft project search", () => {
   })
 })
 
+describe("draft model picker", () => {
+  test("only the draft opened after connecting takes the integration, and only once", () => {
+    const requested = replay([
+      {
+        type: "draft-models.requested",
+        draftID: "a",
+        integration: "opencode",
+        chatgptWelcome: true,
+        currentRoute: SETTINGS,
+      },
+      route(draft("a")),
+    ])
+
+    expect(selectNavigationIntent(requested, "draft-project-search", draft("a"))).toBeUndefined()
+    const intent = selectNavigationIntent(requested, "draft-model-picker", draft("a"))
+    expect(intent).toMatchObject({ integration: "opencode", chatgptWelcome: true })
+
+    const taken = replay([{ type: "navigation.taken", attempt: intent!.attempt }], requested)
+    expect(selectNavigationIntent(taken, "draft-model-picker", draft("a"))).toBeUndefined()
+  })
+})
+
 describe("home search focus", () => {
   test("a Home visit after a superseded or blocked shortcut does not take focus", () => {
     const requested = replay([{ type: "home-search.requested", currentRoute: ORIGIN }])

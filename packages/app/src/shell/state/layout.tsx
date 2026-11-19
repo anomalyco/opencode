@@ -33,6 +33,7 @@ import {
   selectPaneTarget,
   transitionLayoutIntent,
   type LayoutIntentEffect,
+  type NavigationIntentName,
   type LayoutIntentEvent,
 } from "./intent-machine"
 import {
@@ -282,13 +283,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     // Whether `target`, mounting now, has a pending intent of `kind`; taking it clears it.
-    const takeIntent = (kind: "home-search" | "draft-project-search", target: LayoutRoute) => {
+    const takeIntent = <K extends NavigationIntentName>(kind: K, target: LayoutRoute) => {
       const intent = selectNavigationIntent(untrack(intentState), kind, target)
 
-      if (!intent) return false
+      if (!intent) return
       dispatchIntent({ type: "navigation.taken", attempt: intent.attempt })
 
-      return true
+      return intent
     }
 
     const runIntentEffect = (effect: LayoutIntentEffect) => {
@@ -523,7 +524,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             dispatchIntent({ type: "home-search.requested", currentRoute: untrack(route) })
           },
           take() {
-            return takeIntent("home-search", { type: "home" })
+            return !!takeIntent("home-search", { type: "home" })
           },
         },
       },
@@ -534,7 +535,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             dispatchIntent({ type: "draft-search.requested", draftID, currentRoute: untrack(route) })
           },
           take(draftID: string) {
-            return takeIntent("draft-project-search", { type: "draft", draftID })
+            return !!takeIntent("draft-project-search", { type: "draft", draftID })
+          },
+        },
+        /** Connecting an integration with no composer to apply a model to opens a new draft on its model picker. */
+        modelPicker: {
+          request(draftID: string, integration: string, chatgptWelcome: boolean) {
+            dispatchIntent({
+              type: "draft-models.requested",
+              draftID,
+              integration,
+              chatgptWelcome,
+              currentRoute: untrack(route),
+            })
+          },
+          take(draftID: string) {
+            return takeIntent("draft-model-picker", { type: "draft", draftID })
           },
         },
       },

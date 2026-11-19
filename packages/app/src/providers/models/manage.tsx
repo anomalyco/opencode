@@ -6,7 +6,7 @@ import { TextInput } from "@opencode/ui/text-input"
 import { useFilteredList } from "@opencode/ui/hooks"
 import { createMemo, For, Show, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocal } from "@/providers/models/selection"
+import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { popularProviders } from "@/providers/catalog/providers"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -19,7 +19,8 @@ import "./manage.css"
 
 type ModelItem = ReturnType<ReturnType<typeof useLocal>["model"]["list"]>[number]
 
-export const DialogManageModels: Component = () => {
+/** `model` is the composer's selection, so a model chosen after connecting from here applies to it. */
+export const DialogManageModels: Component<{ model?: ModelSelection }> = (props) => {
   const local = useLocal()
   const language = useLanguage()
   const dialog = useDialog()
@@ -27,7 +28,7 @@ export const DialogManageModels: Component = () => {
   const directory = () => decode64(local.slug())
 
   const handleConnectProvider = () => {
-    void dialog.show(() => <DialogConnectProvider directory={directory()} />)
+    void dialog.show(() => <DialogConnectProvider directory={directory()} selection={props.model ?? local.model} />)
   }
 
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)

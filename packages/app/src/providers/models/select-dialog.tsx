@@ -16,7 +16,6 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
-import type { PromptModel } from "@/composer/schema"
 import { isFreeModel } from "@/providers/models/models"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { popularProviders } from "@/providers/catalog/providers"
@@ -327,7 +326,7 @@ export function ModelSelectorDrawer(props: {
 
   const manage = async () => {
     const { DialogManageModels } = await import("./manage")
-    void dialog.show(() => <DialogManageModels />)
+    void dialog.show(() => <DialogManageModels model={props.model} />)
   }
 
   const connect = async () => {
@@ -476,7 +475,6 @@ function createModelSelectorController(input: {
   /** Only the providers of one integration: Console's catalog and workspace providers, or a single provider. */
   integration: () => string | undefined
   model?: ModelState
-  onChoose?: (selection: PromptModel) => void
   onSelect: () => void
 }) {
   const model = input.model ?? useLocal().model
@@ -520,13 +518,6 @@ function createModelSelectorController(input: {
       return value ? modelKey(value) : undefined
     },
     select: (item: ModelItem, variant?: string | null) => {
-      if (input.onChoose) {
-        input.onChoose({ providerID: item.provider.id, modelID: item.id, variant })
-        input.onSelect()
-
-        return
-      }
-
       model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
 
       if (variant !== undefined) model.variant.set(variant ?? undefined)
@@ -640,19 +631,13 @@ function ChatgptPlanFooter() {
   )
 }
 
-export function DialogSelectModel(props: {
-  integration?: string
-  model?: ModelState
-  /** Takes the chosen model instead of the model state, as when there is no composer to apply it to. */
-  onChoose?: (selection: PromptModel) => void
-}) {
+export function DialogSelectModel(props: { integration?: string; model?: ModelState }) {
   const dialog = useDialog()
   const language = useLanguage()
 
   const controller = createModelSelectorController({
     model: props.model,
     integration: () => props.integration,
-    onChoose: props.onChoose,
     onSelect: () => dialog.close(),
   })
 
@@ -729,7 +714,7 @@ export function DialogSelectModel(props: {
 
   const manage = async () => {
     const { DialogManageModels } = await import("./manage")
-    void dialog.show(() => <DialogManageModels />)
+    void dialog.show(() => <DialogManageModels model={props.model} />)
   }
 
   const location = useWorkspaceLocation()

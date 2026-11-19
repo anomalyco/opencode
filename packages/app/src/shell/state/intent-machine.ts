@@ -8,19 +8,26 @@ export const NAVIGATION_INTENT_TIMEOUT_MS = 5_000
 export const PANE_TARGET_TTL_MS = 10_000
 
 /**
- * Work a shortcut leaves for the screen it opens: Home focuses its session search, a draft opens its project picker.
+ * Work a shortcut leaves for the screen it opens: Home focuses its session search, a draft opens its project picker,
+ * or a draft opened after connecting an integration opens its model picker on that integration.
  * It applies only on `target`, and is dropped once the route goes anywhere else.
  */
-export type NavigationIntent =
-  | { readonly kind: "none" }
-  | {
-      readonly kind: "home-search" | "draft-project-search"
-      readonly attempt: number
-      readonly target: LayoutRoute
-      /** The route the shortcut was pressed on, which shows until the navigation commits. */
-      readonly origin: LayoutRoute
-      readonly entered: boolean
-    }
+export type NavigationIntent = { readonly kind: "none" } | (PendingIntent & NavigationIntentKind)
+
+type PendingIntent = {
+  readonly attempt: number
+  readonly target: LayoutRoute
+  /** The route the shortcut was pressed on, which shows until the navigation commits. */
+  readonly origin: LayoutRoute
+  readonly entered: boolean
+}
+
+type NavigationIntentKind =
+  | { readonly kind: "home-search" }
+  | { readonly kind: "draft-project-search" }
+  | { readonly kind: "draft-model-picker"; readonly integration: string; readonly chatgptWelcome: boolean }
+
+export type NavigationIntentName = NavigationIntentKind["kind"]
 
 export type PaneTargetEntry = SessionPaneTarget & { readonly attempt: number }
 
@@ -36,6 +43,13 @@ export type LayoutIntentState =
 export type LayoutIntentEvent =
   | { readonly type: "home-search.requested"; readonly currentRoute: LayoutRoute }
   | { readonly type: "draft-search.requested"; readonly draftID: string; readonly currentRoute: LayoutRoute }
+  | {
+      readonly type: "draft-models.requested"
+      readonly draftID: string
+      readonly integration: string
+      readonly chatgptWelcome: boolean
+      readonly currentRoute: LayoutRoute
+    }
   | { readonly type: "navigation.taken"; readonly attempt: number }
   | { readonly type: "route.synced"; readonly route: LayoutRoute }
   | { readonly type: "navigation.expired"; readonly attempt: number }
@@ -90,7 +104,8 @@ export function transitionLayoutIntent(state: LayoutIntentState, event: LayoutIn
         effects: [...CLEAR_NAV, { type: "pane-timer.clear", sessions: Object.keys(state.paneTargets) }],
       }
     case "home-search.requested":
-    case "draft-search.requested": {
+    case "draft-search.requested":
+    case "draft-models.requested": {
       const attempt = state.nextAttempt
 
       const target: LayoutRoute =
@@ -102,13 +117,7 @@ export function transitionLayoutIntent(state: LayoutIntentState, event: LayoutIn
         state: {
           ...state,
           nextAttempt: attempt + 1,
-          navigation: {
-            kind: event.type === "home-search.requested" ? "home-search" : "draft-project-search",
-            attempt,
-            target,
-            origin: event.currentRoute,
-            entered,
-          },
+          navigation: { ...navigationKind(event), attempt, target, origin: event.currentRoute, entered },
         },
         effects: entered ? CLEAR_NAV : [{ type: "nav-timer.start", attempt, timeoutMs: NAVIGATION_INTENT_TIMEOUT_MS }],
       }
@@ -186,15 +195,18 @@ export const navigationPending = (state: LayoutIntentState) =>
   state.status === "active" && state.navigation.kind !== "none"
 
 /** The pending intent of `kind` that `target` may take, or undefined. */
-export function selectNavigationIntent(
+export function selectNavigationIntent<K extends NavigationIntentName>(
   state: LayoutIntentState,
-  kind: "home-search" | "draft-project-search",
+  kind: K,
   target: LayoutRoute,
 ) {
   if (state.status !== "active") return
   const navigation = state.navigation
 
-  if (navigation.kind !== kind || !sameRoute(navigation.target, target)) return
+  const matches = (item: NavigationIntent): item is PendingIntent & Extract<NavigationIntentKind, { kind: K }> =>
+    item.kind === kind
+
+  if (!matches(navigation) || !sameRoute(navigation.target, target)) return
 
   return navigation
 }
@@ -205,6 +217,20 @@ export function selectPaneTarget(state: LayoutIntentState, session: string) {
 
 function omit(targets: Readonly<Record<string, PaneTargetEntry>>, sessions: readonly string[]) {
   return Object.fromEntries(Object.entries(targets).filter(([key]) => !sessions.includes(key)))
+}
+
+function navigationKind(
+  event: Extract<
+    LayoutIntentEvent,
+    { type: "home-search.requested" | "draft-search.requested" | "draft-models.requested" }
+  >,
+): NavigationIntentKind {
+  if (event.type === "draft-models.requested")
+    return { kind: "draft-model-picker", integration: event.integration, chatgptWelcome: event.chatgptWelcome }
+
+  if (event.type === "home-search.requested") return { kind: "home-search" }
+
+  return { kind: "draft-project-search" }
 }
 
 function sameRoute(a: LayoutRoute, b: LayoutRoute) {

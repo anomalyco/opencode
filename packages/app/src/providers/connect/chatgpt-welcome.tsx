@@ -4,6 +4,27 @@ import { Dialog, DialogTitle } from "@opencode/ui/dialog"
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
+import { Persist, persisted } from "@/runtime/persistence/storage"
+import { Persistence } from "@/runtime/persistence/schema"
+import { Schema } from "effect"
+
+/** Shows the ChatGPT plan welcome once, the first time a ChatGPT plan sign-in finishes. */
+export function useChatGPTPlanWelcome() {
+  const dialog = useDialog()
+
+  const [welcome, setWelcome, , ready] = persisted(
+    Persist.global("chatgpt-plan-welcome.v1"),
+    Persistence.struct({ seen: Schema.Boolean }),
+    { seen: false },
+  )
+
+  return () =>
+    void Promise.resolve(ready.promise).then(() => {
+      if (welcome.seen) return
+      setWelcome("seen", true)
+      void dialog.show(() => <DialogChatGPTPlanWelcome />)
+    })
+}
 
 export function DialogChatGPTPlanWelcome() {
   const dialog = useDialog()

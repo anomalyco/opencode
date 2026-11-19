@@ -11,6 +11,9 @@ import { NewSessionView } from "./view"
 import { createNewSessionWorkspaceController } from "./workspace/controller"
 import { useNewSessionCommands } from "./commands"
 import { createDraftMcpControls } from "./mcp"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { DialogSelectModel } from "@/providers/models/select-dialog"
+import { useChatGPTPlanWelcome } from "@/providers/connect/chatgpt-welcome"
 
 /** The draft-only Session page. Submitting promotes the draft into a real Session. */
 export default function NewSessionPage(props: { draftId: string }) {
@@ -54,6 +57,8 @@ export default function NewSessionPage(props: { draftId: string }) {
   const model = createComposerModel(composer.adapter)
   useComposerCommands({ model: composer.model })
 
+  const dialog = useDialog()
+  const showChatgptWelcome = useChatGPTPlanWelcome()
   const project = createPromptProjectController({ controls: composer.project })
   const location = useNewSessionLocationDialog({ project, workspace, onDone: model.restoreFocus })
 
@@ -73,6 +78,19 @@ export default function NewSessionPage(props: { draftId: string }) {
   createEffect(
     on(composer.ready, (ready) => {
       if (!ready) return
+
+      // Connecting an integration outside a session opened this draft, on the integration's models.
+      const connected = layout.draft.modelPicker.take(props.draftId)
+
+      if (connected)
+        return void dialog.show(
+          () => <DialogSelectModel model={composer.model} integration={connected.integration} />,
+          () => {
+            model.restoreFocus()
+
+            if (connected.chatgptWelcome) showChatgptWelcome()
+          },
+        )
 
       // Search projects opened this draft; the picker returns focus to the composer when it closes.
       if (layout.draft.projectSearch.take(props.draftId)) location()

@@ -499,7 +499,12 @@ test("connecting an integration opens the model picker on all of its providers",
   await expect(view.editor).toBeVisible()
   await page.locator('[data-action="composer-model"]').click()
   const picker = page.getByRole("dialog", { name: "Select model", exact: true })
-  await picker.getByRole("button", { name: "Connect an integration", exact: true }).click()
+  // Through Manage models, which has to hand the composer's selection on to the connect dialog.
+  await picker.getByRole("button", { name: "Manage models", exact: true }).click()
+  await page
+    .getByRole("dialog", { name: "Manage models" })
+    .getByRole("button", { name: "Connect an integration" })
+    .click()
   await page.locator('[data-provider-id="acme"]').click()
   await page.getByPlaceholder("API key").fill("sk-acme")
   await page.getByRole("button", { name: "Continue", exact: true }).click()
@@ -509,6 +514,7 @@ test("connecting an integration opens the model picker on all of its providers",
   await page.keyboard.press("Enter")
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(page.locator('[data-action="composer-model"]')).toContainText("Acme One")
+  await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(1)
 })
 
 test("ChatGPT's usage limit opens the ChatGPT usage dialog", async ({ page }) => {
