@@ -56,8 +56,6 @@ const Hit = Schema.Struct({
   revision: Schema.Number,
   score: Schema.Number,
   status: Schema.optional(Schema.Literals(["live", "provisional"])),
-  /** With `explain`: whether the entry's recorded errors occurred in the session's. */
-  signals: Schema.optional(Schema.Struct({ error: Schema.optional(Schema.Struct({ errors: Schema.Number })) })),
 })
 const Injected = Schema.Struct({
   id: Schema.String,
@@ -690,42 +688,6 @@ export const make = Effect.fnUntraced(function* (
   const start = Effect.fnUntraced(function* () {
     const lease = yield* Scope.Scope
     const capturing = yield* flags.enabled("memory_capture")
-    const unverifiedAtFailure = yield* flags.enabled("memory_provisional_failure")
-    /**
-     * Experiment (memory_provisional_failure, off by default): the provisional gotcha whose recorded error occurred in
-     * a failing command's output, whole, at most one per failure. Provisional entries aren't injected otherwise; this
-     * one goes labelled unverified, so the benchmark can measure whether it helps.
-     */
-    const unverified = (sessionID: Session.ID, moment: OpencodeMemoryPolicy.Moment) =>
-      Effect.gen(function* () {
-        if (!unverifiedAtFailure || moment.type !== "failure") return []
-        const state = tracked(sessionID)
-        const source = yield* repository
-        const found = yield* call(Schema.Struct({ results: Schema.Array(Hit) }), "POST", "/api/memory/search", {
-          query: (state.task ?? moment.command).slice(0, 1000),
-          context: {
-            ...("repo" in source && source.repo ? { repo: source.repo } : {}),
-            errors: [moment.output.slice(-2000)],
-            commands: [moment.command.slice(0, 1000)],
-          },
-          kinds: ["gotcha"],
-          limit: 5,
-          sessionID,
-          explain: true,
-          ...(yield* reader),
-        }).pipe(Effect.timeout(policy.timeout))
-        const hit = found.results.find(
-          (item) =>
-            item.status === "provisional" && (item.signals?.error?.errors ?? 0) > 0 && !state.given.has(item.id),
-        )
-        if (hit === undefined) return []
-        const entry = yield* call(
-          Entry,
-          "GET",
-          `/api/memory/entries/${encodeURIComponent(hit.id)}?${new URLSearchParams({ sessionID })}`,
-        )
-        return [entry]
-      }).pipe(Effect.orElseSucceed(() => []))
     /**
      * Appends `event` to the session's event log, which only this plugin writes and nothing ever rewrites, and, when it
      * closes a work boundary, distils what happened since the last one in the background.
@@ -893,53 +855,18 @@ export const make = Effect.fnUntraced(function* (
       // without a message of its own. The command's result waits for Console at most the policy's timeout.
       return Effect.gen(function* () {
         yield* ran
-        const asked = yield* ask(event.sessionID, moment)
-        if (asked === undefined) return
-        const entries = asked
-        const extra = yield* unverified(event.sessionID, moment)
-        if (entries.length === 0 && extra.length === 0) return
+        const entries = yield* ask(event.sessionID, moment)
+        if (entries === undefined || entries.length === 0) return
         const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
         event.result = {
           ...event.result,
           content: [
             ...normalizeContent(event.result.content, event.result.output),
-            ...(entries.length === 0 ? [] : [{ type: "text" as const, text: `\n${policy.render(entries, moment)}` }]),
-            ...(extra.length === 0
-              ? []
-              : [
-                  {
-                    type: "text" as const,
-                    text: `\n${[
-                      '<workspace-memory-unverified for="failure">',
-                      "Unverified: a teammate's agent recorded this at a failure like yours, and nothing has confirmed it yet. Check it before relying on it.",
-                      ...extra.map(
-                        (entry) =>
-                          `## ${entry.id} r${entry.revision} ${entry.kind}: ${entry.title}\n${entry.body.trim()}`,
-                      ),
-                      "</workspace-memory-unverified>",
-                    ].join("\n")}`,
-                  },
-                ]),
+            { type: "text", text: `\n${policy.render(entries, moment)}` },
           ],
-          metadata: {
-            ...event.result.metadata,
-            memory: {
-              source: "console.memory",
-              moment: "failure",
-              entries: ids,
-              ...(extra.length === 0 ? {} : { unverified: extra.map((entry) => `${entry.id}@${entry.revision}`) }),
-            },
-          },
+          metadata: { ...event.result.metadata, memory: { source: "console.memory", moment: "failure", entries: ids } },
         }
         deliver(tracked(event.sessionID), entries)
-        extra.forEach((entry) =>
-          give(tracked(event.sessionID), {
-            id: entry.id,
-            revision: entry.revision,
-            title: entry.title,
-            text: entry.body,
-          }),
-        )
       })
     })
     // A compaction drops what was injected from the conversation, and the agent's view of entries with it.

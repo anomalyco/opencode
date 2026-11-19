@@ -20,8 +20,6 @@ export const registry = {
     "Give agents the OpenCode Console workspace's shared memory: tools to search, read, publish and update its entries, and relevant entries delivered when a task starts.",
   memory_capture:
     "Record every coding session's turns into a plugin-owned event log, distil candidate memory entries at work boundaries (a new task, a commit, a test that starts passing, a correction, a finished subtask, compaction) out of band, and send them to OpenCode Console as pending until outside evidence backs them.",
-  memory_provisional_failure:
-    "Experiment: at a failing command, also deliver provisional gotchas whose recorded error occurred in its output, labelled unverified. Off by default in every build; opt in with OPENCODE_FLAGS=memory_provisional_failure.",
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
   full_codemode:
@@ -29,7 +27,7 @@ export const registry = {
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
-export const optInOnly: ReadonlySet<Key> = new Set(["full_codemode", "memory_provisional_failure"])
+export const optInOnly: ReadonlySet<Key> = new Set(["full_codemode"])
 
 /** Earlier names of a flag, still read from `experimental.<name>` and `OPENCODE_FLAGS` when the new key is unset. */
 export const aliases = {
