@@ -4,6 +4,14 @@ const repo = "anomalyco/opencode"
 const days = 60
 const msg = `To stay organized issues are automatically closed after ${days} days of no activity. If the issue is still relevant please open a new one.`
 
+// The scheduled workflow also runs on forks, but a fork-scoped GITHUB_TOKEN cannot
+// write to the canonical repository this script maintains (#35666).
+const current = process.env.GITHUB_REPOSITORY
+if (current && current !== repo) {
+  console.log(`Skipping ${repo}-only maintenance in ${current}`)
+  process.exit(0)
+}
+
 const token = process.env.GITHUB_TOKEN
 if (!token) {
   console.error("GITHUB_TOKEN environment variable is required")

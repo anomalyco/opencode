@@ -60,6 +60,15 @@ if (values.execute && values["dry-run"]) {
   process.exit(1)
 }
 
+// The scheduled workflow also runs on forks, but a fork-scoped GITHUB_TOKEN cannot
+// write to the canonical repository this script maintains (#35666). An explicit
+// --repo still works for local runs against another repository.
+const current = process.env.GITHUB_REPOSITORY
+if (values.repo === defaultRepo && current && current !== defaultRepo) {
+  console.log(`Skipping ${defaultRepo}-only maintenance in ${current}`)
+  process.exit(0)
+}
+
 const token = await requireToken()
 const repo = requireRepo(values.repo)
 const threshold = requirePositiveInteger("threshold", values.threshold)
