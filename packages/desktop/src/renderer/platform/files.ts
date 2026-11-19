@@ -85,8 +85,8 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
         return
       }
 
-      const resolvedApp = app ? await api.resolveAppPath(app).catch(() => null) : null
-      await api.openPath(path, resolvedApp ?? undefined)
+      const resolvedApp = app ? await api.resolveAppPath(app) : null
+      await api.openPath(path, resolvedApp ?? app)
     },
     async revealPath(path: string) {
       return api.revealPath(path)
