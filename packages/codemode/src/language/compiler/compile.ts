@@ -12,6 +12,7 @@ import type {
   ConditionalExpression,
   DoWhileStatement,
   Expression,
+  ExpressionStatement,
   ForInStatement,
   ForOfStatement,
   ForStatement,
@@ -703,10 +704,21 @@ const compileFunctionBody = (
       builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(member.value)!.index, idx(member), 1)
       builder.emit(Op.DEFINE_METHOD, member.static ? 1 : 0, builder.constant(keyName(member.key)), idx(member), -1)
     }
+    const fieldInits = analysis.classFieldInits.get(node)
+    if (fieldInits?.instance) {
+      builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(fieldInits.instance)!.index, idx(node), 1)
+      builder.emit(Op.SET_FIELDS, 0, 0, idx(node), -1)
+    }
     builder.emit(Op.POP, 0, 0, idx(node), -1)
-    if (!node.id) return
+    if (node.id) {
+      builder.emit(Op.DUP, 0, 0, idx(node), 1)
+      emitStoreDecl(scope.decls.get(node.id.name)!, true, node)
+    }
+    if (!fieldInits?.static) return
     builder.emit(Op.DUP, 0, 0, idx(node), 1)
-    emitStoreDecl(scope.decls.get(node.id.name)!, true, node)
+    builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(fieldInits.static)!.index, idx(node), 1)
+    builder.emit(Op.INIT_FIELDS, 1, 0, idx(node), -1)
+    builder.emit(Op.POP, 0, 0, idx(node), -1)
   }
 
   const compileBlockStatement = (node: BlockStatement, labels?: Set<string>): void =>
@@ -1632,7 +1644,28 @@ const compileFunctionBody = (
     if ((fnInfo.flags & CodeFlags.GENERATOR) !== 0) builder.emit(Op.GENERATOR_START, 0, 0, idx(fnInfo.node), 0)
 
     const body = fnInfo.node.body as BlockStatement | Expression
-    if (body.type === "BlockStatement") {
+    const fields = analysis.fieldInitMembers.get(fnInfo.node)
+    if (
+      (fnInfo.flags & CodeFlags.CLASS_CONSTRUCTOR) !== 0 &&
+      [...analysis.classConstructors].some(
+        ([c, ctor]) => ctor === fnInfo.node && analysis.classFieldInits.get(c)?.instance,
+      )
+    ) {
+      builder.emit(Op.INIT_FIELDS, 0, 0, idx(fnInfo.node), 1)
+      builder.emit(Op.POP, 0, 0, idx(fnInfo.node), -1)
+    }
+    if (fields) {
+      // The body is `this` and then each initializer: define the fields on `this` in order.
+      compileExpression(((body as BlockStatement).body[0] as ExpressionStatement).expression)
+      for (const field of fields) {
+        const name = keyName(field.key)
+        if (field.value) compileNamedExpression(field.value, name)
+        else builder.emit(Op.PUSH_UNDEF, 0, 0, idx(field), 1)
+        builder.emit(Op.DEFINE_FIELD, 0, builder.constant(name), idx(field), -1)
+      }
+      builder.emit(Op.POP, 0, 0, idx(body), -1)
+      builder.emit(Op.PUSH_UNDEF, 0, 0, idx(body), 1)
+    } else if (body.type === "BlockStatement") {
       for (const s of body.body) compileStatement(s)
       builder.emit(Op.PUSH_UNDEF, 0, 0, idx(body), 1)
     } else compileExpression(body)
@@ -1648,7 +1681,7 @@ const classSyntaxName = (node: AstNode): string => {
   if (member.type === "StaticBlock") return "StaticBlock"
   if (member.type !== "MethodDefinition" && member.type !== "PropertyDefinition") return "ClassHeritage"
   if (member.key.type === "PrivateIdentifier") return "PrivateIdentifier"
-  if (member.type === "PropertyDefinition") return "PropertyDefinition"
+  if (member.type === "PropertyDefinition") return member.computed ? "ComputedClassMember" : "PropertyDefinition"
   if (member.kind === "get" || member.kind === "set") return `${member.kind === "get" ? "Getter" : "Setter"}`
   if (member.computed) return "ComputedClassMember"
   return member.value.async ? "AsyncMethod" : "GeneratorMethod"

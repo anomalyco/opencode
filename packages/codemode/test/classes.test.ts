@@ -41,10 +41,11 @@ describe("base classes", () => {
   })
 
   test("a constructor returning an object replaces the instance", () => {
-    expect(value(`class A { constructor() { return { other: true } } } class B { constructor() { this.a = 1; return 5 } } return [new A(), new B()]`)).toEqual([
-      { other: true },
-      { a: 1 },
-    ])
+    expect(
+      value(
+        `class A { constructor() { return { other: true } } } class B { constructor() { this.a = 1; return 5 } } return [new A(), new B()]`,
+      ),
+    ).toEqual([{ other: true }, { a: 1 }])
   })
 
   test("instance and static methods", () => {
@@ -87,7 +88,9 @@ describe("base classes", () => {
 
   test("instanceof", () => {
     expect(
-      value(`class A {} class B {} const a = new A(); return [a instanceof A, a instanceof B, a instanceof Object, Object.getPrototypeOf(a) === A.prototype]`),
+      value(
+        `class A {} class B {} const a = new A(); return [a instanceof A, a instanceof B, a instanceof Object, Object.getPrototypeOf(a) === A.prototype]`,
+      ),
     ).toEqual([true, false, true, true])
   })
 
@@ -113,7 +116,13 @@ describe("base classes", () => {
   })
 
   test("unsupported class syntax still reports UnsupportedSyntax", () => {
-    for (const code of ["class A extends Object {}", "class A { x = 1 }", "class A { get x() { return 1 } }", "class A { [k]() {} }"]) {
+    for (const code of [
+      "class A extends Object {}",
+      "class A { #x = 1 }",
+      "class A { [k] = 1 }",
+      "class A { get x() { return 1 } }",
+      "class A { [k]() {} }",
+    ]) {
       const result = runProgram(code)
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.error.kind).toBe("UnsupportedSyntax")
@@ -198,6 +207,97 @@ const suspendParked = async (code: string) => {
   throw new Error("the run never parked on $vmHostWait while `slow` was in flight")
 }
 
+describe("class fields", () => {
+  test("instance fields with and without initializers", () => {
+    expect(
+      value(`
+        class A { count = 0; x; name = "a" }
+        const a = new A()
+        return [a.count, a.x === undefined, "x" in a, a.hasOwnProperty("x"), a.name]`),
+    ).toEqual([0, true, true, true, "a"])
+  })
+
+  test("fields run in order before the constructor body, and without a constructor", () => {
+    expect(
+      value(`
+        const log = []
+        class A { a = log.push("a"); constructor() { log.push("ctor:" + this.b) } b = log.push("b") }
+        new A()
+        class B { c = log.push("c") }
+        new B()
+        new B()
+        return log`),
+    ).toEqual(["a", "b", "ctor:2", "c", "c"])
+  })
+
+  test("initializers see this, earlier fields and methods", () => {
+    expect(
+      value(`
+        class A {
+          base = 2
+          doubled = this.base * 2
+          viaMethod = this.twice(this.doubled)
+          arrow = () => this.base
+          fn = function () { return 1 }
+          twice(n) { return n * 2 }
+        }
+        const a = new A()
+        return [a.base, a.doubled, a.viaMethod, a.arrow(), a.fn.name, a.arrow.name]`),
+    ).toEqual([2, 4, 8, 2, "fn", "arrow"])
+  })
+
+  test("each instance gets fresh field values", () => {
+    expect(
+      value(`
+        class A { items = [] }
+        const a = new A(), b = new A()
+        a.items.push(1)
+        return [a.items, b.items]`),
+    ).toEqual([[1], []])
+  })
+
+  test("static fields, initialized in order after methods, may refer to the class", () => {
+    expect(
+      value(`
+        class A {
+          static max = 10
+          static double = A.max * 2
+          static viaMethod = this.helper()
+          static helper() { return A.max + 1 }
+          static self = this === A
+        }
+        return [A.max, A.double, A.viaMethod, A.self, Object.keys(A), "max" in new A()]`),
+    ).toEqual([10, 20, 11, true, ["max", "double", "viaMethod", "self"], false])
+  })
+
+  test("fields are enumerable own properties", () => {
+    expect(
+      value(`
+        class A { x = 1; y = "two"; m() {} }
+        const a = new A()
+        a.z = 3
+        return [Object.keys(a), JSON.stringify(a)]`),
+    ).toEqual([["x", "y", "z"], '{"x":1,"y":"two","z":3}'])
+  })
+
+  test("fields are defined, not assigned: a prototype setter is not called", () => {
+    expect(
+      value(`
+        const log = []
+        class A { x = 1 }
+        Object.defineProperty(A.prototype, "x", { set(v) { log.push(v) }, get() { return "getter" } })
+        const a = new A()
+        a.x = 2
+        return [a.x, log, Object.getOwnPropertyDescriptor(a, "x")]`),
+    ).toEqual([2, [], { value: 2, writable: true, enumerable: true, configurable: true }])
+  })
+
+  test("private fields are still unsupported", () => {
+    const result = run(`class A { #x = 1 }`)
+    expect(result.ok).toBe(false)
+  })
+})
+
 describe("suspended inside a class", () => {
   for (const [name, code, expected, frame] of [
     [
@@ -207,6 +307,21 @@ describe("suspended inside a class", () => {
        return [a.v, a.m(), a instanceof A, Object.keys(a)]`,
       [42, 43, true, ["v"]],
       "A",
+    ],
+    [
+      "field initializer",
+      `class A { static scale = 2; a = 1; v = pick(slow(this.a + 20)); w = this.v * A.scale; constructor() { this.after = this.w } }
+       const a = new A()
+       return [a.v, a.w, a.after, Object.keys(a)]`,
+      [42, 84, 84, ["a", "v", "w", "after"]],
+      "<instance_members_initializer>",
+    ],
+    [
+      "static field initializer",
+      `class A { static v = pick(slow(21)); static w = A.v + 1 }
+       return [A.v, A.w]`,
+      [42, 43],
+      "<static_initializer>",
     ],
     [
       "method",

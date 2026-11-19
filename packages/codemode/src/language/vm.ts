@@ -1392,6 +1392,24 @@ export class Vm {
             sp = this.execDefineMethod(regs, consts, (w >>> 8) & 0xff, w >>> 16, sp)
             pc++
             continue
+          case 91: // Op.SET_FIELDS
+            sp = this.execSetFields(regs, sp)
+            pc++
+            continue
+          case 92: {
+            // Op.INIT_FIELDS
+            frame.pc = pc
+            const called = this.execInitFields(frame, (w >>> 8) & 0xff, pc, sp)
+            if (called === 1) {
+              if (this.fuel <= 0) return 1
+              continue outer
+            }
+            if (called === 2) return 2
+            sp = frame.sp
+            pc++
+            frame.pc = pc
+            continue
+          }
           default:
             this.failOpcode(w & 0xff)
         }
@@ -1653,6 +1671,33 @@ export class Vm {
     return sp
   }
 
+  // `[ctor, proto, fn] -> [ctor, proto]`: `fn` defines the class's instance fields, with the prototype as its home.
+  private execSetFields(regs: Array<unknown>, sp: number): number {
+    const fn = regs[--sp] as Fn
+    fn.home = regs[sp - 1] as Obj
+    ;(regs[sp - 2] as Fn).klass!.fields = fn
+    return sp
+  }
+
+  // Calls a field initializer: the running constructor's on its `this` (a 0), or a static one on the class (a 1).
+  private execInitFields(frame: Frame, a: number, pc: number, sp: number): number {
+    const regs = frame.regs
+    if (a === 0) {
+      frame.sp = sp
+      const fields = frame.fn!.klass!.fields
+      if (fields === undefined) {
+        regs[frame.sp++] = undefined
+        return 0
+      }
+      return this.invokeCallable(frame, fields, frame.thisValue, [], callSiteOf(frame, pc), pc)
+    }
+    const fn = regs[--sp] as Fn
+    const target = regs[--sp] as Obj
+    fn.home = target
+    frame.sp = sp
+    return this.invokeCallable(frame, fn, target, [], callSiteOf(frame, pc), pc)
+  }
+
   // `{ ...src }` into `o` (at `sp - 1`, `src` popped): true when a source with program getters is copied in the prelude.
   private execCopyDataProps(frame: Frame, o: Obj, src: Value, pc: number, sp: number): boolean {
     if (src === null || src === undefined) return false
@@ -1857,7 +1902,10 @@ export class Vm {
     const regs = frame.regs
     if (n === 255) {
       const callee = regs[sp - 1] as Value
-      if (!(callee instanceof Fn && callee.klass !== undefined) && (!(callee instanceof Builtin) || callee.construct === undefined)) {
+      if (
+        !(callee instanceof Fn && callee.klass !== undefined) &&
+        (!(callee instanceof Builtin) || callee.construct === undefined)
+      ) {
         frame.pc = pc
         frame.sp = sp
         throw notConstructible(callee, fcode.siteAt(pc) as NewExpression)
@@ -3271,6 +3319,16 @@ export class Vm {
       case Op.DEFINE_METHOD:
         frame.sp = this.execDefineMethod(regs, consts, a, bx, sp)
         return pc + 1
+      case Op.SET_FIELDS:
+        frame.sp = this.execSetFields(regs, sp)
+        return pc + 1
+      case Op.INIT_FIELDS: {
+        const called = this.execInitFields(frame, a, pc, sp)
+        if (called === 1) return this.fuel <= 0 ? -3 : -1
+        if (called === 2) return -4
+        frame.pc = pc + 1
+        return pc + 1
+      }
       default:
         throw new Error(`Unexpected wide op ${op}`)
     }

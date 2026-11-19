@@ -208,7 +208,11 @@ export const verifyCode = (c: Code): Array<string> => {
         next(1)
         break
       case Op.DEFINE_METHOD:
+      case Op.SET_FIELDS:
         next(-1)
+        break
+      case Op.INIT_FIELDS:
+        next(a === 0 ? 1 : -1)
         break
       case Op.NEW_ARRAY:
       case Op.CONCAT:

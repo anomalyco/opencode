@@ -11,7 +11,9 @@ import type {
   Identifier,
   ModuleDeclaration,
   Pattern,
+  PrivateIdentifier,
   Program,
+  PropertyDefinition,
   Statement,
   VariableDeclaration,
 } from "acorn"
@@ -81,18 +83,26 @@ export type ScopeAnalysis = {
   readonly thisRefs: ReadonlyMap<AnyNode, ResolvedRef>
   /** Each class's constructor: its own, or a synthetic empty one when it has none. */
   readonly classConstructors: ReadonlyMap<ClassNode, FunctionExpression>
+  /** Each class's synthetic field-initializer functions, when it has instance or static fields. */
+  readonly classFieldInits: ReadonlyMap<ClassNode, { instance?: FunctionExpression; static?: FunctionExpression }>
+  /** The fields a synthetic field-initializer function defines, in order. */
+  readonly fieldInitMembers: ReadonlyMap<FunctionNode, ReadonlyArray<PropertyDefinition>>
 }
 
 export type ClassNode = ClassDeclaration | ClassExpression
 
 /** The class elements phase 1 compiles: plain-named methods and the constructor. Anything else is refused. */
 export const supportedClassMember = (member: ClassNode["body"]["body"][number]): boolean =>
-  member.type === "MethodDefinition" &&
-  !member.computed &&
-  (member.key.type === "Identifier" || (member.key.type === "Literal" && typeof member.key.value === "string")) &&
-  (member.kind === "method" || member.kind === "constructor") &&
-  !member.value.async &&
-  !member.value.generator
+  (member.type === "PropertyDefinition" && !member.computed && plainKey(member.key)) ||
+  (member.type === "MethodDefinition" &&
+    !member.computed &&
+    (member.key.type === "Identifier" || (member.key.type === "Literal" && typeof member.key.value === "string")) &&
+    (member.kind === "method" || member.kind === "constructor") &&
+    !member.value.async &&
+    !member.value.generator)
+
+const plainKey = (key: Expression | PrivateIdentifier): boolean =>
+  key.type === "Identifier" || (key.type === "Literal" && typeof key.value === "string")
 
 /**
  * Pass 1: walks the AST to build lexical/var scopes, assign pre-order function indices,
@@ -103,6 +113,8 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   const nodeToFunction = new Map<FunctionNode, FunctionInfo>()
   const scopeOfNode = new Map<AnyNode, Scope>()
   const classConstructors = new Map<ClassNode, FunctionExpression>()
+  const classFieldInits = new Map<ClassNode, { instance?: FunctionExpression; static?: FunctionExpression }>()
+  const fieldInitMembers = new Map<FunctionNode, ReadonlyArray<PropertyDefinition>>()
   const unresolved: Array<{ readonly node: AnyNode; readonly name: string; readonly scope: Scope; fnIndex: number }> =
     []
 
@@ -518,6 +530,55 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
       if (m.kind === "constructor") continue
       visitFunction(m.value, classScope, fnInfo.index).flags |= CodeFlags.METHOD
     }
+    const fields = node.body.body.filter((m) => m.type === "PropertyDefinition")
+    const instance = fieldInit(
+      node,
+      classScope,
+      fnInfo,
+      "<instance_members_initializer>",
+      fields.filter((f) => !f.static),
+    )
+    const statics = fieldInit(
+      node,
+      classScope,
+      fnInfo,
+      "<static_initializer>",
+      fields.filter((f) => f.static),
+    )
+    if (instance || statics) classFieldInits.set(node, { instance, static: statics })
+  }
+
+  // A synthetic method whose body is `this` and the field initializers: the compiler defines each field on `this`.
+  function fieldInit(
+    node: ClassNode,
+    classScope: Scope,
+    fnInfo: FunctionInfo,
+    name: string,
+    fields: Array<PropertyDefinition>,
+  ): FunctionExpression | undefined {
+    if (fields.length === 0) return undefined
+    const at = { start: node.start, end: node.end }
+    const statement = (expression: Expression) => ({ type: "ExpressionStatement", expression, ...at })
+    const fn = {
+      type: "FunctionExpression",
+      id: null,
+      params: [],
+      body: {
+        type: "BlockStatement",
+        body: [
+          statement({ type: "ThisExpression", ...at } as Expression),
+          ...fields.flatMap((f) => (f.value ? [statement(f.value)] : [])),
+        ],
+        ...at,
+      },
+      generator: false,
+      expression: false,
+      async: false,
+      ...at,
+    } as FunctionExpression
+    fieldInitMembers.set(fn, fields)
+    visitFunction(fn, classScope, fnInfo.index, name).flags |= CodeFlags.METHOD | CodeFlags.FIELD_INIT
+    return fn
   }
 
   visitFunction(source.program, undefined, -1)
@@ -580,7 +641,16 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   // Patch `from === 0` upvalue indices now that parent local slots are assigned
   for (const fnInfo of functions) for (const u of fnInfo.upvalues) if (u.from === 0) u.index = u.decl.slot
 
-  return { functions, nodeToFunction, scopeOfNode, refs, thisRefs, classConstructors }
+  return {
+    functions,
+    nodeToFunction,
+    scopeOfNode,
+    refs,
+    thisRefs,
+    classConstructors,
+    classFieldInits,
+    fieldInitMembers,
+  }
 }
 
 const collectPatternNames = (pattern: Pattern, out: Array<string> = []): Array<string> => {

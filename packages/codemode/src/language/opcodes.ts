@@ -154,6 +154,11 @@ export const Op = {
   // -> [ctor, proto]`, keyed by constant `bx`.
   CLASS: 89,
   DEFINE_METHOD: 90,
+  // `SET_FIELDS` makes the field-initializer function on top the class's: `[ctor, proto, fn] -> [ctor, proto]`.
+  // `INIT_FIELDS` runs field initializers: a 0 calls the running constructor's with its `this`, `[] -> [result]`;
+  // a 1 calls a static initializer with the constructor as `this`, `[ctor, fn] -> [result]`.
+  SET_FIELDS: 91,
+  INIT_FIELDS: 92,
 } as const
 
 export type OpCode = (typeof Op)[keyof typeof Op]
