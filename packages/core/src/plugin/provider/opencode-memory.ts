@@ -197,6 +197,8 @@ type Tracked = {
   readonly writer: { calls: number; inputTokens: number; outputTokens: number; costUSD: number; unpriced: number }
   /** The session took in outside input, so what it publishes is marked tainted and never promoted. */
   tainted?: boolean
+  /** The repository (`host/owner/name`) of each entry the session read, unless it holds anywhere (tagged general). */
+  readonly about: Map<string, string>
   task?: string
   /** A given entry the user's latest message may correct, for the next request to point out. */
   nudge?: { readonly entry: OpencodeMemoryPolicy.Given; readonly messageID: string }
@@ -238,6 +240,7 @@ export const make = Effect.fnUntraced(function* (
       from: 0,
       distillations: 0,
       writer: { calls: 0, inputTokens: 0, outputTokens: 0, costUSD: 0, unpriced: 0 },
+      about: new Map(),
     }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
@@ -438,6 +441,15 @@ export const make = Effect.fnUntraced(function* (
       if ((tool === "rewrite" || tool === "retire") && !state.shown.get(id)?.has(revision))
         return yield* new ToolFailure({
           message: `Nothing was sent: ${tool} acts on the whole of ${id}, so it starts from text you were shown, and this session hasn't been shown r${revision} whole${state.compactions > 0 ? " since the conversation was compacted" : ""}. Call ${namespace}.read with id "${id}", then call ${namespace}.${tool} again with the revision it shows.`,
+        })
+      // An entry about another repository holds or not there, which this checkout can't show: it isn't replaced or
+      // retired from here (an agent once retired another repository's procedure because this one didn't need it).
+      const about = state.about.get(id)
+      const source = yield* repository
+      const here = "repo" in source && source.repo ? repoName(source.repo) : undefined
+      if ((tool === "rewrite" || tool === "retire") && about && here && about.toLowerCase() !== here.toLowerCase())
+        return yield* new ToolFailure({
+          message: `Nothing was sent: ${id} is about ${about}, not this repository (${here}), and what holds there can't be checked from here. Leave it as it is; if it's wrong for this repository too, publish what holds here instead.`,
         })
       const fields = yield* shared(tool, change)
       yield* resolved(tool, Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
@@ -1013,14 +1025,11 @@ export const make = Effect.fnUntraced(function* (
               ),
             ),
             Effect.tap((entry) =>
-              Effect.sync(() =>
-                give(tracked(context.sessionID), {
-                  id: entry.id,
-                  revision: entry.revision,
-                  title: entry.title,
-                  text: entry.body,
-                }),
-              ),
+              Effect.sync(() => {
+                const state = tracked(context.sessionID)
+                give(state, { id: entry.id, revision: entry.revision, title: entry.title, text: entry.body })
+                if (entry.repo && !(entry.tags ?? []).includes("general")) state.about.set(entry.id, entry.repo)
+              }),
             ),
             Effect.map((entry) => ({ output: entry, content: show(entry) })),
             Effect.mapError(failure),

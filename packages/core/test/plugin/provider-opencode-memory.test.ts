@@ -195,6 +195,8 @@ function fakeConsole() {
             retired: { at: new Date(0).toISOString(), reason: "Deploys moved to the pipeline", supersededBy: "mem_2" },
           }),
         )
+      if (id === "mem_web" && request.method === "GET") return Response.json(entry(id, { repo: "github.com/acme/web" }))
+      if (id === "mem_app" && request.method === "GET") return Response.json(entry(id, { repo: "github.com/acme/app" }))
       if (id && request.method === "GET") return Response.json(entry(id))
       if (id && request.method === "PATCH") {
         const current = entry(id).body
@@ -1313,6 +1315,30 @@ describe("OpencodePlugin memory standing block", () => {
         yield* hooks.trigger("session", "context", later)
         expect(later.system.map((part) => part.text)).toEqual(["Agent prompt", block])
         expect(console.state.requests.filter((item) => item.path.startsWith("/api/memory/standing"))).toHaveLength(1)
+      }),
+    ),
+  )
+
+  it.effect("doesn't retire or rewrite an entry about another repository from this one", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        yield* inRepo
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        const read = yield* memoryTool("read")
+        const retire = yield* memoryTool("retire")
+        yield* read.execute({ id: "mem_web" }, context(session.id))
+        const asked = console.state.requests.length
+        const refused = yield* retire
+          .execute({ id: "mem_web", revision: 1, reason: "Not in this repo" }, context(session.id))
+          .pipe(Effect.flip)
+        expect(refused.message).toBe(
+          "Nothing was sent: mem_web is about github.com/acme/web, not this repository (github.com/Acme/App), and what holds there can't be checked from here. Leave it as it is; if it's wrong for this repository too, publish what holds here instead.",
+        )
+        expect(console.state.requests.length).toBe(asked)
+        yield* read.execute({ id: "mem_app" }, context(session.id))
+        yield* retire.execute({ id: "mem_app", revision: 1, reason: "Outdated" }, context(session.id))
+        expect(console.state.requests.at(-1)?.path).toBe("/api/memory/entries/mem_app/retire")
       }),
     ),
   )
