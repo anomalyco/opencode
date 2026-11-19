@@ -161,6 +161,32 @@ mod tests {
         assert!(matches!(storage.update("view", &initial, |value| *value = json!(1)), Err(Error::NotObject)));
     }
 
+    // Two TUIs share a storage key: every update is read and written under the lock, so none is lost, and none meets
+    // a release that is deleting another writer's lock directory.
+    #[test]
+    fn concurrent_updates_keep_every_change() {
+        let state = opencode_util::temp::tempdir().unwrap();
+        let storage = Storage::new(state.path(), "dev").unwrap();
+        let threads: Vec<_> = (0..4)
+            .map(|_| {
+                let storage = storage.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..10 {
+                        storage
+                            .update("count", &json!({ "count": 0 }), |value| {
+                                value["count"] = json!(value["count"].as_u64().unwrap_or_default() + 1);
+                            })
+                            .unwrap();
+                    }
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        assert_eq!(storage.load("count", &json!({})).unwrap(), json!({ "count": 40 }));
+    }
+
     // Expected (re-review final pass, the storage bound): a bounded update is measured on what the change makes of the
     // file's value under the lock: a change that fits alone is refused when the file grew meanwhile, and nothing is
     // written; one within the bound is written as `update` writes it.
