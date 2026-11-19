@@ -454,6 +454,43 @@ test("Enter in the diff panel cannot approve a pending permission in either pres
   expect(setup.requests.permission).toEqual([{ decision: "once" }])
 })
 
+test("Always allow scrolls through every saved pattern in a short terminal", async () => {
+  await using state = await tmpdir()
+  const save = [
+    "git show *",
+    "sed *",
+    "echo *",
+    "git ls-tree *",
+    "grep *",
+    "tr *",
+    "head *",
+    "cat *",
+    "ls *",
+    "wc *",
+    "tail *",
+    "sort *",
+    "uniq *",
+  ]
+  await using setup = await createSessionFixture(state.path, {
+    permission: true,
+    permissionSave: save,
+    width: 120,
+    height: 24,
+  })
+  await setup.waitForFrame((frame) => frame.includes("Permission required"))
+  setup.mockInput.pressArrow("right")
+  await setup.waitForFrame((frame) => frame.includes("This will always allow"))
+
+  const always = node(setup, "permission.always")
+  if (!(always instanceof ScrollBoxRenderable)) throw new Error("Missing Always allow scrollbox")
+  expect(always.scrollHeight).toBeGreaterThan(always.viewport.height)
+  expect(setup.captureCharFrame()).toContain(save[0])
+
+  always.scrollTo(Infinity)
+  await setup.waitForVisualIdle()
+  expect(setup.captureCharFrame()).toContain(save.at(-1)!)
+})
+
 test.each([true, false])("a form cannot capture diff keys (form already pending: %s)", async (pending) => {
   await using state = await tmpdir()
   await using setup = await createSessionFixture(state.path, { form: pending })
@@ -552,10 +589,12 @@ async function createSessionFixture(
   state: string,
   input: {
     width?: number
+    height?: number
     tabs?: Config.Info["tabs"]
     diffs?: Config.Info["diffs"]
     keybinds?: Config.Info["keybinds"]
     permission?: boolean
+    permissionSave?: ReadonlyArray<string>
     form?: boolean
   } = {},
 ) {
@@ -576,6 +615,7 @@ async function createSessionFixture(
     sessionID: session.id,
     action: "shell",
     resources: ["echo permission-fixture"],
+    save: input.permissionSave,
   } satisfies PermissionRequest
   const form = {
     id: `frm_panel_${crypto.randomUUID()}`,
@@ -602,7 +642,7 @@ async function createSessionFixture(
   }
   const setup = await createAppFixture({
     width: input.width ?? 160,
-    height: 36,
+    height: input.height ?? 36,
     state,
     args: { sessionID: session.id },
     config: {

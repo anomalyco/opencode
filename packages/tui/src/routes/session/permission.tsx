@@ -222,11 +222,22 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               header={header()}
               body={(option) => (
                 <Show when={option === "always"} fallback={presentationBody()}>
-                  <box paddingLeft={1} gap={1}>
-                    <For each={permissionAlwaysLines(props.request)}>
-                      {(line, index) => <text fg={index() === 0 ? theme.text.muted : theme.text.base}>{line}</text>}
-                    </For>
-                  </box>
+                  <scrollbox
+                    id="permission.always"
+                    height="100%"
+                    verticalScrollbarOptions={{
+                      trackOptions: {
+                        backgroundColor: theme.background.base,
+                        foregroundColor: theme.scrollbar.base,
+                      },
+                    }}
+                  >
+                    <box paddingLeft={1} gap={1}>
+                      <For each={permissionAlwaysLines(props.request)}>
+                        {(line, index) => <text fg={index() === 0 ? theme.text.muted : theme.text.base}>{line}</text>}
+                      </For>
+                    </box>
+                  </scrollbox>
                 </Show>
               )}
               options={
