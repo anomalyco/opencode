@@ -22,8 +22,8 @@ import { use } from "./render-context"
 export const FIND_MODE = "find"
 
 /**
- * Takes the prompt's place while Find is open, in the prompt's shape: the query on the input row and
- * the keys where the agent and model go. Incremental, with a match counter.
+ * Takes the prompt's place while Find is open, in the prompt's shape: the query on the input row,
+ * the match counter where the agent and model go and the keys in the footer. Incremental.
  */
 export function FindBar(props: {
   query: string
@@ -80,32 +80,28 @@ export function FindBar(props: {
           flexGrow={1}
           width="100%"
         >
-          <box flexDirection="row" gap={2}>
-            <input
-              ref={input}
-              flexGrow={1}
-              minWidth={10}
-              onInput={props.onInput}
-              placeholder="Find in session..."
-              placeholderColor={theme.text.muted}
-              backgroundColor="transparent"
-              focusedBackgroundColor="transparent"
-              textColor={theme.text.base}
-              focusedTextColor={theme.text.base}
-              cursorColor={theme.text.base}
-              cursorStyle={cursorStyle()}
-            />
-            <Show when={props.query}>
-              <text fg={theme.text.muted} flexShrink={0}>
-                {props.count ? props.index + 1 : 0}/{props.count}
-              </text>
-            </Show>
-          </box>
+          <input
+            ref={input}
+            width="100%"
+            onInput={props.onInput}
+            placeholder="Find in session..."
+            placeholderColor={theme.text.muted}
+            backgroundColor="transparent"
+            focusedBackgroundColor="transparent"
+            textColor={theme.text.base}
+            focusedTextColor={theme.text.base}
+            cursorColor={theme.text.base}
+            cursorStyle={cursorStyle()}
+          />
           <box flexDirection="row" flexShrink={0} paddingTop={1}>
-            <text fg={theme.text.muted} wrapMode="none" truncate flexShrink={1} minWidth={0}>
-              <span style={{ fg: theme.text.base }}>enter</span> next{"  "}
-              <span style={{ fg: theme.text.base }}>shift+enter</span> previous{"  "}
-              <span style={{ fg: theme.text.base }}>esc</span> close
+            <text fg={theme.text.base} wrapMode="none">
+              Find
+              <Show when={props.query}>
+                <span style={{ fg: theme.text.muted }}>
+                  {" · "}
+                  {props.count ? `${props.index + 1} of ${props.count}` : "No matches"}
+                </span>
+              </Show>
             </text>
           </box>
         </box>
@@ -123,8 +119,20 @@ export function FindBar(props: {
           customBorderChars={{ ...EmptyBorder, horizontal: background().a !== 0 ? "▀" : " " }}
         />
       </box>
-      {/* Stands in for the prompt's footer row, so the transcript keeps its height. */}
-      <box height={1} />
+      {/* The keys sit where the prompt's footer shows its shortcuts. */}
+      <box width="100%" height={1} flexDirection="row" justifyContent="flex-end" gap={2}>
+        <Show when={dimensions().width >= 50}>
+          <text fg={theme.text.base} wrapMode="none" flexShrink={0}>
+            enter <span style={{ fg: theme.text.muted }}>next</span>
+          </text>
+          <text fg={theme.text.base} wrapMode="none" flexShrink={0}>
+            shift+enter <span style={{ fg: theme.text.muted }}>previous</span>
+          </text>
+        </Show>
+        <text fg={theme.text.base} wrapMode="none" flexShrink={0}>
+          esc <span style={{ fg: theme.text.muted }}>close</span>
+        </text>
+      </box>
     </box>
   )
 }

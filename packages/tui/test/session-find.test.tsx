@@ -192,15 +192,15 @@ test("Find highlights prompts and markdown, moves between matches, and clears on
   )
   await app.mockInput.typeText("needle")
   // The first match is the oldest, so the transcript scrolls up to it.
-  await app.waitForFrame((frame) => frame.includes("1/5") && frame.includes("Where is the needle?"))
+  await app.waitForFrame((frame) => frame.includes("Find · 1 of 5") && frame.includes("Where is the needle?"))
   await app.waitFor(() => painted().length === 4)
   expect(painted()).toEqual(["needle", "Needle", "needle", "needle"])
 
   app.mockInput.pressEnter()
-  await app.waitForFrame((frame) => frame.includes("2/5"))
+  await app.waitForFrame((frame) => frame.includes("Find · 2 of 5"))
   app.mockInput.pressArrow("up")
   app.mockInput.pressArrow("up")
-  await app.waitForFrame((frame) => frame.includes("5/5") && frame.includes("Last needle here"))
+  await app.waitForFrame((frame) => frame.includes("Find · 5 of 5") && frame.includes("Last needle here"))
 
   app.mockInput.pressEscape()
   await app.waitForFrame((frame) => !frame.includes("shift+enter previous") && frame.includes("Demo Model"))
