@@ -199,8 +199,8 @@ type Tracked = {
   readonly given: Map<string, OpencodeMemoryPolicy.Given>
   /** Per entry, each revision this session wrote over the one before it, by that one: its own edits aren't news to it. */
   readonly revisions: Map<string, Map<number, number>>
-  /** Entries this session wrote a revision of. */
-  readonly edited: Set<string>
+  /** The latest revision this session wrote of each entry it wrote. */
+  readonly edited: Map<string, number>
   /**
    * Per entry, the revisions this session was shown whole since its last compaction: read, injected or written by it.
    * A rewrite or retire replaces what the entry says, so it starts from one of these.
@@ -257,7 +257,7 @@ export const make = Effect.fnUntraced(function* (
       injected: { prompt: 0, failure: 0 },
       given: new Map(),
       revisions: new Map(),
-      edited: new Set(),
+      edited: new Map(),
       shown: new Map(),
       delivered: new Map(),
       compactions: 0,
@@ -294,7 +294,7 @@ export const make = Effect.fnUntraced(function* (
     const state = tracked(sessionID)
     const given = state.given.get(id)
     if (written.revision === undefined) return
-    state.edited.add(id)
+    state.edited.set(id, written.revision)
     if (given) give(state, { ...given, revision: written.revision })
     see(state, id, written.revision)
     // What was injected no longer says what the entry does; it isn't delivered again.
@@ -688,7 +688,9 @@ export const make = Effect.fnUntraced(function* (
           // A correction of an entry the session holds goes in as a new revision of it, its history kept; one the
           // session edited itself keeps that edit. Only the rest are superseded, by the entry as the correction leaves it.
           const remaining = yield* Effect.filter(supersedes, (id) =>
-            correct(sessionID, shown, id, candidate, evidence).pipe(Effect.map((done) => !done)),
+            correct(sessionID, shown, id, candidate, evidence, { ...source, sessionID, ...writer }).pipe(
+              Effect.map((done) => !done),
+            ),
           )
           if (supersedes.length > 0 && remaining.length === 0) return
           const original = remaining.length === 1 ? shown.find((entry) => entry.id === remaining[0]) : undefined
@@ -741,8 +743,8 @@ export const make = Effect.fnUntraced(function* (
 
   /**
    * Applies a correction the user confirmed to entry `id` as a new revision of it, from the revision the distiller was
-   * shown: true when it's in, or when the session already edited the entry itself (that edit stands), false when the
-   * entry has to be superseded instead.
+   * shown: true when it's in, or when the session already edited the entry itself (that edit stands, backed by the
+   * user's confirmation), false when the entry has to be superseded instead.
    */
   const correct = (
     sessionID: Session.ID,
@@ -750,6 +752,7 @@ export const make = Effect.fnUntraced(function* (
     id: string,
     candidate: OpencodeMemoryCapture.Candidate,
     evidence: ReadonlyArray<{ readonly kind: string; readonly ref: string }>,
+    source: Record<string, unknown>,
   ) =>
     Effect.gen(function* () {
       const entry = shown.find((item) => item.id === id)
@@ -762,9 +765,22 @@ export const make = Effect.fnUntraced(function* (
       ).pipe(
         Effect.as(true),
         Effect.catch((cause) =>
-          Effect.logDebug("memory correction not applied as an edit", { id, cause }).pipe(
-            Effect.as(tracked(sessionID).edited.has(id)),
-          ),
+          Effect.gen(function* () {
+            yield* Effect.logDebug("memory correction not applied as an edit", { id, cause })
+            const revision = tracked(sessionID).edited.get(id)
+            if (revision === undefined) return false
+            // The session's own edit made the correction, without evidence, which leaves that revision unbacked: the
+            // user's confirmation backs the revision it wrote, with no revision of its own.
+            const confirmation = evidence.filter((link) => link.kind === "confirmation")
+            if (confirmation.length > 0)
+              yield* call(Schema.Unknown, "POST", `/api/memory/entries/${encodeURIComponent(id)}/evidence`, {
+                evidence: confirmation,
+                revision,
+                source,
+                ...(yield* reader),
+              }).pipe(Effect.catch((cause) => Effect.logDebug("memory confirmation not sent", { id, cause })))
+            return true
+          }),
         ),
       )
     })
@@ -914,7 +930,10 @@ export const make = Effect.fnUntraced(function* (
         const before = heads.get(event.id)
         heads.delete(event.id)
         if (event.status !== "completed") return
-        const files = touched(event.tool, event.input).map((file) => relative(ctx.location.directory, file))
+        // The checkout's root names no file of it to remember.
+        const files = touched(event.tool, event.input)
+          .map((file) => relative(ctx.location.directory, file))
+          .filter((file) => file !== ".")
         if (files.length > 0) yield* record(event.sessionID, { type: event.tool === "read" ? "read" : "edit", files })
         if (event.tool === "subagent") yield* record(event.sessionID, { type: "subtask" })
         if (
@@ -1430,7 +1449,9 @@ function touched(tool: string, input: unknown) {
 function relative(directory: string, file: string) {
   if (!path.isAbsolute(file)) return file
   const inside = path.relative(directory, file)
-  return inside && !inside.startsWith("..") && !path.isAbsolute(inside) ? inside : file
+  // The directory itself is inside it, as ".".
+  if (inside === "") return "."
+  return !inside.startsWith("..") && !path.isAbsolute(inside) ? inside : file
 }
 
 /** The entry Console said already holds what a refused publish said, if that's why it was refused. */

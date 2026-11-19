@@ -1022,6 +1022,16 @@ describe("OpencodePlugin memory", () => {
         expect(console.state.requests.at(-1)?.body).toMatchObject({ evidence })
         expect(console.state.requests.at(-1)?.body).not.toHaveProperty("tainted")
 
+        // Reading the checkout, its root included, isn't outside input; a file elsewhere is.
+        yield* ran(session.id, "read", { path: directory })
+        yield* ran(session.id, "read", { path: path.join(directory, "src") })
+        yield* publish.execute(entry, context(session.id, "call_root"))
+        expect(console.state.requests.at(-1)?.body).not.toHaveProperty("tainted")
+        const outside = yield* host.session.create({})
+        yield* ran(outside.id, "read", { path: path.join(path.dirname(directory), "elsewhere.txt") })
+        yield* publish.execute(entry, context(outside.id, "call_outside"))
+        expect(console.state.requests.at(-1)?.body).toMatchObject({ tainted: true })
+
         // A session that fetched from the web publishes tainted.
         const browsing = yield* host.session.create({})
         yield* ran(browsing.id, "webfetch", { url: "https://example.com" }, { output: "page" })
@@ -1849,7 +1859,7 @@ describe("OpencodePlugin memory capture", () => {
   )
 
   capturing("console_memory,memory_capture").effect(
-    "keeps the session's own edit of an entry when the distiller's correction no longer applies, and supersedes nothing",
+    "backs the session's own edit of an entry with the user's confirmation when the distiller's correction no longer applies",
     () =>
       withConsole((console) =>
         Effect.gen(function* () {
@@ -1862,9 +1872,28 @@ describe("OpencodePlugin memory capture", () => {
             context(session.id, "call_edit"),
           )
           yield* prompt(session.id, correction)
-          yield* waitUntil(Effect.sync(() => patches(console).length > 1))
+          yield* waitUntil(
+            Effect.sync(() =>
+              console.state.requests.some((item) => item.path === "/api/memory/entries/mem_1/evidence"),
+            ),
+          )
           yield* drain
           expect(patches(console)[1]?.body).toMatchObject({ expectedRevision: 2 })
+          // The agent's edit, without evidence, left the entry contested; the user's words back the revision it wrote,
+          // and the entry is neither superseded nor written again.
+          expect(
+            console.state.requests
+              .filter((item) => item.path === "/api/memory/entries/mem_1/evidence")
+              .map((item) => item.body),
+          ).toEqual([
+            expect.objectContaining({
+              evidence: [{ kind: "confirmation", ref: correction }],
+              // The revision the agent's edit wrote, which the confirmation backs.
+              revision: 2,
+              source: expect.objectContaining({ sessionID: session.id }),
+            }),
+          ])
+          expect(patches(console)).toHaveLength(2)
           expect(publishes(console)).toEqual([])
         }),
       ),
