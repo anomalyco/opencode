@@ -14,7 +14,8 @@ import { errorMessage } from "../util/error"
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn", "vp", "brew", "winget"] as const
 
 export type Method = (typeof methods)[number]
-export type RunResult = { readonly type: "available" | "installed"; readonly version: string }
+/** "external": a newer release exists, but whatever installed this copy (a distro package, Nix, ...) has to update it. */
+export type RunResult = { readonly type: "available" | "installed" | "external"; readonly version: string }
 export type CheckResult = RunResult | { readonly type: "unavailable"; readonly message: string }
 
 export class UpgradeError extends Error {
@@ -618,14 +619,7 @@ const make = Effect.gen(function* () {
       yield* Effect.logInfo("update check skipped", { reason: "policy-disabled" })
       return undefined
     }
-    // Distro packages and other unmanaged copies update through whatever installed them, so offering an update here
-    // would only lead to a failed install. Volta and mise copies still notify: applying explains their command.
     const detected = yield* method()
-    if (!detected && !installedOwner) {
-      yield* Effect.logInfo("update check skipped", { reason: "unknown-install-method" })
-      return undefined
-    }
-
     const current = yield* Ref.get(installedVersion)
     const version = yield* latest(detected)
     yield* Effect.logInfo("update check", {
@@ -638,7 +632,7 @@ const make = Effect.gen(function* () {
       return undefined
     }
     yield* Effect.logInfo("OpenCode update available", { current, latest: version, action: next })
-    return { policy, version }
+    return { policy, version, detected }
   })
 
   const install = Effect.fnUntraced(function* (version: string) {
@@ -681,12 +675,11 @@ const make = Effect.gen(function* () {
         message: managedMessage(managedError(installedOwner, `${data.package}@${data.version}`)),
       }
     }
-    if (!detected)
-      return {
-        type: "unavailable" as const,
-        message:
-          "Could not detect the installation method. Update with your package manager or download the latest release.",
-      }
+    if (!detected) {
+      const data = yield* release("npm")
+      if (action(OPENCODE_VERSION, data.version, "auto") === "none") return undefined
+      return { type: "external" as const, version: data.version }
+    }
     const version = yield* latest(detected)
     if (!parseReleaseVersion(version)) return yield* Effect.fail(new Error(`Invalid version: ${version}`))
     const current = yield* Ref.get(installedVersion)
@@ -703,6 +696,8 @@ const make = Effect.gen(function* () {
     function* (onInstall: (version: string) => void = () => {}) {
       const result = yield* inspect()
       if (!result) return undefined
+      // Distro packages and other copies OpenCode can't update itself only hear about the release.
+      if (!result.detected && !installedOwner) return { type: "external" as const, version: result.version }
       if (result.policy === "notify") return { type: "available" as const, version: result.version }
       onInstall(result.version)
       if (!(yield* install(result.version))) return yield* Effect.fail(new Error("Installation method not found"))
