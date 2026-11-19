@@ -79,10 +79,11 @@ Users choose three fonts in Settings > Appearance. Every surface uses one of the
 | Code font     | Shell commands, code, paths shown as code, diffs, logs, tool input | `var(--font-family-mono)`, `var(--v2-font-family-code)`, `font-mono`, or a `<code>` / `<pre>` element |
 | Terminal font | Terminal output only                                               | `appearance.font("mono")` from the GUI plugin SDK                                                     |
 
-- Never write a literal family (`Inter`, `"IBM Plex Mono"`, `monospace`, `Menlo`, `system-ui`) in production CSS, classes, inline styles, canvas `font` strings or widget options. A literal ignores the user's setting.
-- Never add an `@font-face`, font file, or font package outside `packages/app/src/index.css`. That file is the only place the app ships faces: Inter (variable), IBM Plex Mono Text (weights below 600), Bold (600 and up) and Text Italic, and JetBrainsMono Nerd Font Mono Regular and Bold. If a design needs a face that is not shipped, add it there and say why in the PR.
+- Never write a literal family (`Inter`, `"OpenMono"`, `monospace`, `Menlo`, `system-ui`) in production CSS, classes, inline styles, canvas `font` strings or widget options. A literal ignores the user's setting.
+- Never add an `@font-face`, font file, or font package outside `packages/app/src/index.css`. That file is the only place the app ships faces: Inter (variable), and OpenMono Regular (weights below 600), Bold (600 and up) and Italic for both code and the terminal. If a design needs a face that is not shipped, add it there and say why in the PR.
+- The OpenMono files in `public/assets` are the app build of OpenMono Nerd: no ligatures and every character one cell wide. Each style has a `-text` file, and all styles share `OpenMono-icons.woff2` (the Nerd Fonts icons), which `unicode-range` loads on demand. Do not replace them with the files from the OpenMono release, which have ligatures. Refresh them with `bun script/openmono.ts <app-nerd build folder>` from `packages/app`. It copies nothing unless the build's icons are the same in every style, and its `unicode-range` values and copyright lines match `src/index.css` and the third-party notices.
 - Show shell commands with the timeline shell metrics: code font, `13px`, weight `440`, `-0.04px` letter spacing. Do not invent another size for the same content.
-- Prefer weight tokens (`font-medium`, `var(--font-weight-medium)`) over literal weights. Mono at `600` or more renders IBM Plex Mono Bold, so reserve it for real emphasis.
+- Prefer weight tokens (`font-medium`, `var(--font-weight-medium)`) over literal weights. Mono at `600` or more renders OpenMono Bold, so reserve it for real emphasis.
 - Do not read font settings directly. `src/settings/model.tsx` writes them to the CSS variables above, and the plugin host passes the terminal font through `appearance.font`.
 
 ## Loading Indicators

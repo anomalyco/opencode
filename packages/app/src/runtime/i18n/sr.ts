@@ -686,7 +686,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, агент за кодирање отвореног кода",
   "settings.about.trademark": "OpenCode је регистровани заштитни знак Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Откуцано у Inter и IBM Plex Mono",
+  "settings.about.typeset": "Откуцано у Inter и OpenMono",
   "settings.about.tagline": "AI не може да направи одличан софтвер без вас",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Уреди пројекат",

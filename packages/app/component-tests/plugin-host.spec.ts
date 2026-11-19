@@ -752,7 +752,7 @@ story(
 
       const read = () => ({
         state: reads.state?.(),
-        font: reads.font?.().startsWith('"JetBrainsMono Nerd Font Mono"') ? "default mono" : reads.font?.(),
+        font: reads.font?.().startsWith('"OpenMono"') ? "default mono" : reads.font?.(),
         prefs: reads.prefs?.value?.count,
         ready: reads.prefs?.ready(),
         writes: [...host.writes],

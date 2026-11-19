@@ -679,7 +679,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, açıq mənbəli kodlaşdırma agenti",
   "settings.about.trademark": "OpenCode, Anomaly Innovations, Inc. şirkətinin qeydiyyatdan keçmiş ticarət nişanıdır.",
-  "settings.about.typeset": "Inter və IBM Plex Mono şriftləri ilə tərtib olunub",
+  "settings.about.typeset": "Inter və OpenMono şriftləri ilə tərtib olunub",
   "settings.about.tagline": "Siz olmadan AI möhtəşəm proqram təminatı yarada bilməz",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Layihəni redaktə et",

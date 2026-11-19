@@ -31,7 +31,9 @@ export default function DialogThirdPartyNotices() {
               {(entry) => (
                 <section class="settings-notice">
                   <div class="settings-notice-heading">
-                    <ExternalLink href={entry.url}>{entry.name}</ExternalLink>
+                    <Show when={entry.url} fallback={entry.name}>
+                      {(url) => <ExternalLink href={url()}>{entry.name}</ExternalLink>}
+                    </Show>
                     <span>{entry.license}</span>
                   </div>
                   <p>{entry.detailKey ? language.t(entry.detailKey) : entry.detail}</p>

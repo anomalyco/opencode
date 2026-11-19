@@ -673,7 +673,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, agjenti kodues me burim të hapur",
   "settings.about.trademark": "OpenCode është një markë e regjistruar e Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Llojet në Inter dhe IBM Plex Mono",
+  "settings.about.typeset": "Llojet në Inter dhe OpenMono",
   "settings.about.tagline": "AI nuk mund të ndërtojë softuer të shkëlqyeshëm, pa ju",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Redakto projektin",

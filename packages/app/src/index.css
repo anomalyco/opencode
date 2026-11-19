@@ -18,50 +18,104 @@
 }
 
 @font-face {
-  font-family: "JetBrainsMono Nerd Font Mono";
-  src: url("/assets/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
-  font-weight: normal;
-  font-style: normal;
-}
-
-/* The terminal draws bold cells with a bold canvas font. */
-@font-face {
-  font-family: "JetBrainsMono Nerd Font Mono";
-  src: url("/assets/JetBrainsMonoNerdFontMono-Bold.woff2") format("woff2");
-  font-weight: bold;
-  font-style: normal;
-}
-
-@font-face {
   font-family: "Inter";
   src: url("/assets/Inter.ttf") format("truetype");
   font-weight: 100 900;
   font-style: normal;
 }
 
-/* Text covers every weight below bold, so only bold syntax tokens and markup load the Bold face. */
+/* OpenMono, the code and terminal font: the app build of OpenMono Nerd 1.000, which has no ligatures and every
+   character one cell wide (script/openmono.ts copies it; SIL OFL 1.1, /assets/OpenMono-OFL.txt). These faces take the
+   name ahead of an installed OpenMono, which has ligatures. Regular covers every weight below bold, so only bold
+   syntax tokens, markup and terminal cells load the Bold file.
+   The overrides are the font's typographic line metrics (ascender 965, descender 285, no gap; 1.25 em). macOS reads the
+   files' hhea table instead (descender 220, gap 65), which makes inline code backgrounds and terminal rows 17px tall,
+   not 18px. Remove them if the font's hhea table ever matches its typographic metrics. */
 @font-face {
-  font-family: "IBM Plex Mono";
-  src: url("@ibm/plex/IBM-Plex-Mono/fonts/complete/woff2/IBMPlexMono-Text.woff2") format("woff2");
+  font-family: "OpenMono";
+  src: url("/assets/OpenMono-Regular-text.woff2") format("woff2");
   font-weight: 100 599;
   font-style: normal;
   font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+20-2387, U+2500-25FF, U+2699-26A0, U+2713-2731, U+27F3, U+2948-2B30, U+2C62-AB68, U+E0B8, U+E0BA, U+E0BC, U+E0BE,
+    U+F882-1FBE7;
 }
 
 @font-face {
-  font-family: "IBM Plex Mono";
-  src: url("@ibm/plex/IBM-Plex-Mono/fonts/complete/woff2/IBMPlexMono-Bold.woff2") format("woff2");
+  font-family: "OpenMono";
+  src: url("/assets/OpenMono-Bold-text.woff2") format("woff2");
   font-weight: 600 900;
   font-style: normal;
   font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+20-2387, U+2500-25FF, U+2699-26A0, U+2713-2731, U+27F3, U+2948-2B30, U+2C62-AB68, U+E0B8, U+E0BA, U+E0BC, U+E0BE,
+    U+F882-1FBE7;
 }
 
 @font-face {
-  font-family: "IBM Plex Mono";
-  src: url("@ibm/plex/IBM-Plex-Mono/fonts/complete/woff2/IBMPlexMono-TextItalic.woff2") format("woff2");
+  font-family: "OpenMono";
+  src: url("/assets/OpenMono-Italic-text.woff2") format("woff2");
   font-weight: 100 599;
   font-style: italic;
   font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+20-2387, U+2500-25FF, U+2699-26A0, U+2713-2731, U+27F3, U+2948-2B30, U+2C62-AB68, U+E0B8, U+E0BA, U+E0BC, U+E0BE,
+    U+F882-1FBE7;
+}
+
+/* The Nerd Fonts icons (1 MB) share no character with the text files and load when a character in their range is
+   first drawn. Every style draws the same icons, so each style's rule names the one file. A style without a rule here
+   would take its icons from another font. */
+@font-face {
+  font-family: "OpenMono";
+  src: url("/assets/OpenMono-icons.woff2") format("woff2");
+  font-weight: 100 599;
+  font-style: normal;
+  font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+23FB-23FE, U+2630-2665, U+26A1, U+276C-2771, U+2800-28FF, U+2B58, U+E000-E0B7, U+E0B9, U+E0BB, U+E0BD,
+    U+E0BF-F533, U+F0001-F1AF0;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("/assets/OpenMono-icons.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+23FB-23FE, U+2630-2665, U+26A1, U+276C-2771, U+2800-28FF, U+2B58, U+E000-E0B7, U+E0B9, U+E0BB, U+E0BD,
+    U+E0BF-F533, U+F0001-F1AF0;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("/assets/OpenMono-icons.woff2") format("woff2");
+  font-weight: 100 599;
+  font-style: italic;
+  font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+23FB-23FE, U+2630-2665, U+26A1, U+276C-2771, U+2800-28FF, U+2B58, U+E000-E0B7, U+E0B9, U+E0BB, U+E0BD,
+    U+E0BF-F533, U+F0001-F1AF0;
 }
 
 /* Panel motion sets this on the one element whose own layout reads it. An inherited property would restyle every

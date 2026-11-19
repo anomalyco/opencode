@@ -42,6 +42,40 @@ test("restores a terminal from the server's snapshot after a reload", async ({ p
   ])
 })
 
+test("draws terminal icons whose font file arrives after the first paint", async ({ page }) => {
+  // The Nerd Fonts icons are a font file of their own, which loads when a terminal opens.
+  const icons = await holdRoute(page, /\/assets\/OpenMono-icons[^/]*\.woff2/)
+  // A folder icon on the first row, with the cursor, which the terminal redraws by itself, on the last one.
+  await openSession(page, {
+    name: "Terminals",
+    persistentPty: {
+      initial: [{ id: "pty_icons", sessionID: SESSION, title: "Build", output: "ls \uf07b\x1b[999;1H" }],
+    },
+  })
+
+  await openSide(page)
+  await showTerminal(page, "Build", "pty_icons")
+  await icons.arrived
+
+  // What the first row shows: undefined while it is blank, else a checksum of its pixels.
+  const row = () =>
+    terminalScreen(page, "pty_icons")
+      .locator("canvas")
+      .evaluate((canvas: HTMLCanvasElement) => {
+        const pixels = canvas.getContext("2d")!.getImageData(0, 0, 80, 12).data
+
+        if (pixels.every((value, index) => value === pixels[index % 4])) return
+
+        return pixels.reduce((sum, value) => (sum * 31 + value) >>> 0, 0)
+      })
+
+  await expect.poll(row).toBeDefined()
+  const fallback = await row()
+  icons.release()
+
+  await expect.poll(row).not.toBe(fallback)
+})
+
 test("after a reload, the close shortcut closes the restored terminal", async ({ page }) => {
   // Elsewhere Ctrl+W reaches the shell, so the terminal hands only macOS's Cmd+W to the app.
   await page.addInitScript(() => Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }))

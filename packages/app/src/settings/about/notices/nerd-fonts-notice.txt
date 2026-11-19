@@ -1,0 +1,21 @@
+Icons added by the Nerd Fonts Font Patcher v3.5.1 (https://github.com/ryanoasis/nerd-fonts), each one cell wide.
+The icon sets, with the license of each, from the patcher's src/glyphs/README.md:
+
+Codicons 0.0.45, https://github.com/microsoft/vscode-codicons: CC BY 4.0
+Devicons 2.17.0, https://github.com/devicons/devicon: MIT
+Heavy angle brackets and progress indicators, https://github.com/source-foundry/Hack: MIT
+Font Awesome 6.5.1, https://github.com/FortAwesome/Font-Awesome: CC BY 4.0
+Font Awesome Extension 0.0.3, https://github.com/AndreLZGava/font-awesome-extension: MIT
+Font Logos 1.3.0, https://github.com/lukas-w/font-logos: The Unlicense (public domain)
+Material Design Icons (Oct 6, 2022), https://github.com/Templarian/MaterialDesign-Font: Apache 2.0
+Octicons 18.3.0, https://github.com/primer/octicons: MIT, Copyright (c) 2023 GitHub Inc.
+Seti UI 0.8.1 and Nerd Fonts originals, https://github.com/jesseweed/seti-ui: MIT
+Pomicons 1.001, https://github.com/gabrielelana/pomicons: SIL OFL 1.1, Copyright (c) 2021, Gabriele Lana, with Reserved Font Name Pomicons
+Powerline Extra Symbols 1.200, https://github.com/ryanoasis/powerline-extra-symbols: MIT, Copyright (c) 2016 Ryan L McIntyre
+Powerline Symbols 1.000, https://github.com/powerline/powerline: MIT, Copyright 2013 Kim Silkebækken and other contributors
+Power Symbols IEC (Feb 2015), https://github.com/jloughry/Unicode: MIT
+Weather Icons 2.0.10, https://github.com/erikflowers/weather-icons: SIL OFL 1.1
+Braille patterns, made by the patcher: MIT, Copyright (c) 2014 Ryan L McIntyre
+
+The Codicons and Font Awesome icons are licensed under Creative Commons Attribution 4.0 International.
+The logos in Font Logos are trademarks of their owners.
