@@ -425,16 +425,33 @@ fn a_theme_switch_restyles_the_dock_the_composer_and_the_terminal_in_place() {
 /// The picker opens on the first tab with something running, Subagents before Shell (#64972).
 #[test]
 fn the_picker_opens_on_the_first_busy_tab() {
-    let harness = mount();
-    assert!(harness.wait(|harness| harness.app.text().contains("1 shell")));
+    // No subagent runs, so a running shell takes the picker to its tab.
+    let mut routes = vec![MemoryRoute::json("GET", "/api/session/active", 200, &json!({ "data": {} }))];
+    routes.extend(self::routes());
+    let harness = mount_routes(None, routes);
+    shell_started(&harness);
+    assert!(harness.wait(|harness| harness.app.text().contains("1 shell")), "{}", harness.app.text());
+    assert!(!harness.app.text().contains("subagent"));
     harness.tui.keymap.dispatch("session.child.first", None);
     assert!(harness.wait(|harness| harness.app.text().contains("make watch")), "{}", harness.app.text());
+}
 
+#[test]
+fn the_picker_opens_on_running_subagents_before_a_running_shell() {
     let harness = mount_family();
+    shell_started(&harness);
     assert!(harness.wait(|harness| harness.app.text().contains("3 subagents · 1 shell")), "{}", harness.app.text());
     harness.tui.keymap.dispatch("session.child.first", None);
     assert!(harness.wait(|harness| harness.app.text().contains("Scan")), "{}", harness.app.text());
     assert!(!harness.app.text().contains("make watch"));
+}
+
+fn shell_started(harness: &Harness) {
+    harness.memory.emit(&json!({
+        "id": "evt_shell", "created": 1, "type": "shell.created",
+        "location": { "directory": "/project", "project": { "id": "proj_test", "directory": "/project" } },
+        "data": { "info": shell() },
+    }));
 }
 
 #[test]
