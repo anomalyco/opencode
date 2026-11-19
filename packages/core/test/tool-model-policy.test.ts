@@ -11,13 +11,14 @@ import { Instructions } from "@opencode/core/instructions/index"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
 import { ReferenceInstructions } from "@opencode/core/reference/instructions"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionContext } from "@opencode/core/session/context"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
-import { SkillInstructions } from "@opencode/core/skill/instructions"
+import { Skill } from "@opencode/core/skill"
 import { Tool } from "@opencode/core/tool"
 import { modelTools } from "@opencode/core/tool/model-policy"
 import { EditTool } from "@opencode/core/tool/plugin/edit"
@@ -130,7 +131,6 @@ const makeContextLayer = (overrides: string | undefined) =>
           load: emptyInstructions,
         }),
       ),
-      SkillInstructions.node.replace(Layer.mock(SkillInstructions.Service, { load: emptyInstructions })),
       ReferenceInstructions.node.replace(Layer.mock(ReferenceInstructions.Service, { load: emptyInstructions })),
     ]),
   ).pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides)))
@@ -285,5 +285,74 @@ describe("SessionContext.select model tool policy", () => {
           SessionRunnerModel.ModelUnavailableError,
         )
       }),
+  )
+
+  defaultIt.effect("omits direct tools, Code Mode tools, MCP servers, and skills denied by experimental.rules", () =>
+    Effect.gen(function* () {
+      const { select } = yield* setupContext
+      const hooks = yield* PluginHooks.Service
+      const skills = yield* Skill.Service
+      yield* skills.transform((editor) => {
+        editor.add({
+          id: Skill.ID.make("deploy"),
+          name: Skill.Name.make("Deploy"),
+          description: "Deploy services",
+          path: Skill.Info.fields.path.make("/project/.opencode/skills/deploy/SKILL.md"),
+          content: "Deploy instructions",
+        })
+        editor.add({
+          id: Skill.ID.make("review"),
+          name: Skill.Name.make("Review"),
+          description: "Review changes",
+          path: Skill.Info.fields.path.make("/project/.opencode/skills/review/SKILL.md"),
+          content: "Review instructions",
+        })
+      })
+
+      const before = yield* select("openai", "gpt-5")
+      const beforeText = (yield* readInitial(before.instructions)).text
+      expect(names(before)).toContain("webfetch")
+      expect(names(before)).toContain("read")
+      expect(paths(before)).toEqual(["alpha.search", "opencode.session_move"])
+      expect(beforeText).toContain("Alpha docs")
+      expect(beforeText).toContain("<id>deploy</id>")
+      expect(beforeText).toContain("<id>review</id>")
+
+      const registration = yield* hooks.register("permission", "experimental.rules", (event) =>
+        Effect.sync(() => {
+          event.deny({ action: "webfetch", resource: "*" })
+          event.deny({ action: "read", resource: "*.env" })
+          event.deny({ action: "alpha_search", resource: "*" })
+          event.deny({ action: "skill", resource: "deploy" })
+        }),
+      )
+
+      const denied = yield* select("openai", "gpt-5")
+      const deniedText = (yield* readInitial(denied.instructions)).text
+      expect(names(denied)).not.toContain("webfetch")
+      // A resource-scoped deny does not wholly disable the tool, so it stays listed.
+      expect(names(denied)).toContain("read")
+      expect(paths(denied)).toEqual(["opencode.session_move"])
+      expect(deniedText).not.toContain("Alpha docs")
+      expect(deniedText).not.toContain("<id>deploy</id>")
+      expect(deniedText).toContain("<id>review</id>")
+
+      // Denying execute itself drops Code Mode from the step's tool list.
+      const noCodeMode = yield* hooks.register("permission", "experimental.rules", (event) =>
+        Effect.sync(() => event.deny({ action: "execute", resource: "*" })),
+      )
+      const withoutCodeMode = yield* select("openai", "gpt-5")
+      expect(names(withoutCodeMode)).not.toContain("execute")
+      expect(withoutCodeMode.tools.codeModeCatalog).toBeUndefined()
+      yield* noCodeMode.dispose
+
+      yield* registration.dispose
+      const restored = yield* select("openai", "gpt-5")
+      const restoredText = (yield* readInitial(restored.instructions)).text
+      expect(names(restored)).toContain("webfetch")
+      expect(paths(restored)).toEqual(["alpha.search", "opencode.session_move"])
+      expect(restoredText).toContain("Alpha docs")
+      expect(restoredText).toContain("<id>deploy</id>")
+    }),
   )
 })

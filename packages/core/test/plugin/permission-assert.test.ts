@@ -1,11 +1,14 @@
 import { expect } from "bun:test"
+import { Agent } from "@opencode/core/agent"
+import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginPromise } from "@opencode/core/plugin/promise"
+import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import type { PermissionDomain } from "@opencode/plugin/promise/permission"
-import { Session } from "@opencode/schema/session"
 import { Cause, Effect, Exit, Layer, Option } from "effect"
 import { testEffect } from "../lib/effect"
 import { makePluginTestLayer } from "./fixture"
@@ -90,5 +93,48 @@ it.live("Promise plugins assert permissions with plain input", () =>
     expect(asserted).toEqual([{ sessionID, action: "deploy", resources: ["prod"] }])
     expect(yield* assert("corrected")).toMatchObject({ _tag: "Tool.Error", message: "Use staging" })
     expect(yield* assert("declined")).toBeInstanceOf(Permission.DeclinedError)
+  }),
+)
+
+it.live("Promise plugins add denies through experimental.rules and fail closed on throw", () =>
+  Effect.gen(function* () {
+    const hooks = yield* PluginHooks.Service
+    const location = yield* Location.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      location: Location.Ref.make({ directory: location.directory }),
+      permissions: [{ action: "webfetch", resource: "*", effect: "allow" }],
+    })
+    const info = Agent.Info.default(Agent.defaultID)
+    const agent: Agent.Selection = {
+      id: Agent.defaultID,
+      info: { ...info, permissions: [{ action: "*", resource: "*", effect: "allow" }] },
+    }
+    yield* PluginPromise.fromPromise({
+      id: "promise-rules",
+      async setup(context) {
+        const deny = await context.permission.hook("experimental.rules", (event) => {
+          if (event.agent === "build") event.deny({ action: "webfetch", resource: "*" })
+        })
+        return () => deny.dispose()
+      },
+    }).effect(yield* PluginHost.make(yield* Plugin.Service, "test"))
+    expect(yield* Permission.rules(hooks, { session, agent })).toEqual([
+      { action: "*", resource: "*", effect: "allow" },
+      { action: "webfetch", resource: "*", effect: "allow" },
+      { action: "webfetch", resource: "*", effect: "deny" },
+    ])
+
+    yield* PluginPromise.fromPromise({
+      id: "promise-rules-throw",
+      async setup(context) {
+        await context.permission.hook("experimental.rules", async () => {
+          throw new Error("promise rules boom")
+        })
+      },
+    }).effect(yield* PluginHost.make(yield* Plugin.Service, "test"))
+    const exit = yield* Permission.rules(hooks, { session, agent }).pipe(Effect.exit)
+    expect(exit._tag).toBe("Failure")
+    if (exit._tag === "Failure") expect(Cause.pretty(exit.cause)).toContain("promise rules boom")
   }),
 )
