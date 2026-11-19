@@ -65,7 +65,7 @@ type Handle = {
   partition: string
   /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
   shared: boolean
-  workspace?: (identity?: string) => ReturnType<typeof workspacePages>
+  workspace?: () => ReturnType<typeof workspacePages>
   previewFailure: ReturnType<typeof createPreviews>["failure"]
   artifacts?: () => ReturnType<typeof artifactPages>
   source?: WorkspaceSource
@@ -258,7 +258,7 @@ export function createBrowserPane(input: {
 
             handle.source = source
             handle.artifacts = () => artifactPages(previews, server, session.location.directory, abort.signal)
-            handle.workspace = (identity) => workspacePages(previews, input.verifier, session.location.directory, source, abort.signal, identity)
+            handle.workspace = () => workspacePages(previews, input.verifier, session.location.directory, source, abort.signal)
 
             if (shared) handle.network = createDirectNetwork(input.profile.session)
 
@@ -723,7 +723,7 @@ export function createBrowserPane(input: {
   }
 
   /** The tab's page, created the first time the pane shows a restored or crashed tab or a command names it. */
-  function load(binding: string, tabID: Browser.TabID, identity?: string, navigateTo?: string) {
+  function load(binding: string, tabID: Browser.TabID, navigateTo?: string) {
     const existing = page(binding, tabID)
 
     if (existing) return existing
@@ -743,7 +743,6 @@ export function createBrowserPane(input: {
 
     // A crashed tab's error belongs to its last page; the new page reports its own.
     return create(binding, {
-      identity,
       restore: {
         id: tab.id,
         url: denied ? "about:blank" : tab.url,
@@ -763,7 +762,6 @@ export function createBrowserPane(input: {
       readonly initialize?: boolean
       readonly popupOptions?: Electron.BrowserWindowConstructorOptions
       readonly activity?: TabActivity
-      readonly identity?: string
       /** The tab whose page opened this one, which joins its pop-up group. */
       readonly opener?: Browser.TabID
     } = {},
@@ -813,7 +811,7 @@ export function createBrowserPane(input: {
       restore: options.restore,
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, binding),
-      workspace: handle.workspace?.(options.identity),
+      workspace: handle.workspace?.(),
       previewFailure: handle.previewFailure,
       artifacts: handle.artifacts?.(),
       remote: remoteSource(binding),
@@ -1012,27 +1010,20 @@ export function createBrowserPane(input: {
       announce(binding, tabID, reveal, active)
     }
 
-    // A user preview may already have consumed files that the agent may not read. Revoke its origins and
-    // discard the complete WebContents before handing the agent a target; rechecking only future fetches is too late.
     const acquire = (id: Browser.TabID) => {
-      if (origin !== "agent") return load(binding, id, undefined, action.type === "navigate" ? action.url : undefined)
+      if (origin !== "agent") return load(binding, id, action.type === "navigate" ? action.url : undefined)
       const handle = handles.get(binding)
       const activity = handle?.activity.get(id) ?? { agentRuns: 0 }
-      const changed = !agentDriven(activity) || activity.agent !== command.agent
       const current = page(binding, id)
-      const identity = current?.previewIdentity()
       handle?.pluginTabs.forget(id)
       recordPageInput(activity, "agent")
-      activity.agent = command.agent
       handle?.activity.set(id, activity)
-
-      if (changed && current?.previewUsed()) dispatchBinding(binding, {type:"tab.restricted", tabID:id, url:current.state().url})
 
       // The agent may only focus the tab, which runs no command on its page: the refusal starts now all the same, and
       // where it cannot, the page fails.
       void current?.restrictPasskeys().catch(() => undefined)
 
-      return load(binding, id, identity)
+      return load(binding, id)
     }
 
     if (signal.aborted)
@@ -1062,7 +1053,7 @@ export function createBrowserPane(input: {
         const existing = fileTab(inventory(binding).tabs, url)
 
         if (existing) handles.get(binding)?.pluginTabs.forget(existing.id)
-        const tab = existing ? acquire(existing.id) : create(binding, { activity: createdActivity(origin, command.agent) })
+        const tab = existing ? acquire(existing.id) : create(binding, { activity: createdActivity(origin) })
 
         if (!tab) throw new Error("Workspace preview tab is unavailable.")
         using opening = new DisposableStack()
@@ -1117,7 +1108,7 @@ export function createBrowserPane(input: {
         }
       }
 
-      const opened = create(binding, { activity: createdActivity(origin, command.agent, inherited) })
+      const opened = create(binding, { activity: createdActivity(origin, inherited) })
       const tabID = opened.state().id
 
       if (origin === "agent" && action.focus === false) handles.get(binding)?.background.add(tabID)

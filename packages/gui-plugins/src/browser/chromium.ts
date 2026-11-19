@@ -1284,8 +1284,6 @@ export function createBrowserPage(
     areaTop: () => (metrics.applied().viewport.mode === "auto" && view.getBounds().height > 0 ? view.getBounds().y : undefined),
     state: () => state(true),
     childActivity: () => childActivity(activity),
-    previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),
-    previewIdentity: () => options.workspace?.identity(),
     answerNotice: notices.answer,
     personCommand,
     openPage,

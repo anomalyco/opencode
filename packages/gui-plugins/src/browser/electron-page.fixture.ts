@@ -143,14 +143,14 @@ void electron.app.whenReady().then(async () => {
     ])
 
   const rightClick = async () => {
-    const snapshot = await page.execute({ action: { type: "snapshot", tabID }, files: [], agent: "build" }, signal, "agent")
+    const snapshot = await page.execute({ action: { type: "snapshot", tabID }, files: [] }, signal, "agent")
     const content = Schema.decodeUnknownSync(Schema.Struct({ content: Schema.String }))(snapshot.value).content
     const ref = /@(e\d+) \[button\] "Target"/.exec(content)?.[1]
 
     if (!ref) throw new Error(`The snapshot names no Target button:\n${content}`)
     const reported = menu()
     await page.execute(
-      { action: { type: "click", tabID, ref: Browser.Ref.make(ref), button: "right" }, files: [], agent: "build" },
+      { action: { type: "click", tabID, ref: Browser.Ref.make(ref), button: "right" }, files: [] },
       signal,
       "agent",
     )
@@ -177,7 +177,7 @@ void electron.app.whenReady().then(async () => {
   const waited = { done: false }
 
   const wait = page
-    .execute({ action: { type: "wait", tabID, condition: "delay", timeoutMs: 3_000 }, files: [], agent: "build" }, signal, "agent")
+    .execute({ action: { type: "wait", tabID, condition: "delay", timeoutMs: 3_000 }, files: [] }, signal, "agent")
     .finally(() => {
       waited.done = true
     })

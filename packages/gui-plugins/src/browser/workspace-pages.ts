@@ -16,11 +16,9 @@ export function workspacePages(
   root: string,
   source: WorkspaceSource,
   lifetime: AbortSignal,
-  previousRoot?: string,
 ) {
   const grants = new Map<string, { document: string; identity: string; release(): void }>()
-  let lastRoot = previousRoot
-  let exposed = false
+  let lastRoot: string | undefined
   let disposed = false
   const remote = source.type === "remote" ? source.prefix : undefined
   const roots = source.type === "local" ? [root] : []
@@ -33,13 +31,10 @@ export function workspacePages(
         : undefined
 
   return {
-    used: () => exposed,
-    identity: () => lastRoot,
     async load(address: string, refused: () => void, retryFrom?: string) {
       const document = path(address)
 
       if (!document) return
-      exposed = true
       const old = retryFrom && this.host(retryFrom)
       const prior = retryFrom === undefined ? undefined : (old && grants.get(old)?.identity) || lastRoot
 
@@ -47,7 +42,7 @@ export function workspacePages(
       const identity =
         source.type === "remote"
           ? undefined
-          : (prior ?? previousRoot ?? (await previewRoot(root).then((pin) => pin.id, () => undefined)))
+          : (prior ?? (await previewRoot(root).then((pin) => pin.id, () => undefined)))
 
       if (lifetime.aborted || disposed) return
 
@@ -57,7 +52,6 @@ export function workspacePages(
         grants.delete(old)
       }
 
-      previousRoot = undefined
       lastRoot = identity
       let first = true
       let notified = false

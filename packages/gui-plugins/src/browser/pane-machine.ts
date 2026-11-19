@@ -111,7 +111,6 @@ export type BindingEvent =
     }
   | { readonly type: "tab.focused"; readonly tabID: Browser.TabID; readonly fromStrip?: boolean }
   | { readonly type: "tab.active"; readonly tabID: Browser.TabID }
-  | { readonly type: "tab.restricted"; readonly tabID: Browser.TabID; readonly url: string }
   | { readonly type: "tab.closed"; readonly tabID: Browser.TabID }
 
 export type PaneMachineEvent =
@@ -402,17 +401,6 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     const focusedTabID = state.focusedTabID === event.tabID ? (tabs.keys().next().value ?? null) : state.focusedTabID
 
     return withoutTab({ ...state, tabs, focusedTabID, agentTabID: event.tabID === state.agentTabID ? undefined : state.agentTabID }, event.tabID, closed, undefined)
-  }
-
-  if (event.type === "tab.restricted") {
-    const slot = state.tabs.get(event.tabID)
-
-    if (slot?.status !== "live") return { state, effects: [] }
-    // Keep the logical tab and its pending command, never its old DOM, opener, history or captured responses.
-    const tab = { ...slot.tab, title: "", url: event.url, canGoBack: false, canGoForward: false, generation: slot.tab.generation + 1 }
-
-    return {state: {...state, tabs: new Map(state.tabs).set(event.tabID, {status:"unloaded", tab})},
-      effects: [{type:"release-pages", binding:state.binding, attempts:[slot.attempt]}]}
   }
 
   if (event.type !== "tab.published" && event.type !== "tab.crashed") return { state, effects: [] }

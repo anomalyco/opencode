@@ -693,7 +693,6 @@ export const Target = Schema.Struct({ resources: Schema.Array(text), key: text }
 export type Target = typeof Target.Type
 export const Command = Schema.Struct({
   action: Action,
-  agent: optional(text),
   expectedSite: optional(text),
   generation: optional(count),
   files: Schema.Array(File),

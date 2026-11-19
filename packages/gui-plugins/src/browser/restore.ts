@@ -5,12 +5,11 @@ import type { TabActivity } from "./policy"
 
 const Stored = Schema.Struct({
   // Who drove the tab, which keeps every agent-driven limit when it comes back: `control` says whether the person took
-  // it over since, `agent` names the agent. `agent: true` is the earlier form of an agent-driven tab.
+  // it over since.
   tabs: Schema.Array(Schema.Struct({
     id: Browser.TabID,
     url: Browser.Tab.fields.url,
     control: Schema.optionalKey(Schema.Literals(["agent", "reclaimed"])),
-    agent: Schema.optionalKey(Schema.Union([Schema.Literal(true), Schema.String])),
   })),
   focusedTabID: Schema.NullOr(Browser.TabID),
 })
@@ -29,9 +28,7 @@ const empty: Stored = { tabs: [], focusedTabID: null }
 export function restoredActivity(saved: Stored) {
   return new Map<Browser.TabID, TabActivity>(
     saved.tabs.flatMap((tab) =>
-      tab.control || tab.agent
-        ? [[tab.id, { agentRuns: 0, control: tab.control ?? "agent", agent: tab.agent === true ? undefined : tab.agent }]]
-        : [],
+      tab.control ? [[tab.id, { agentRuns: 0, control: tab.control }]] : [],
     ),
   )
 }
@@ -63,8 +60,6 @@ export function createBrowserRestoreStore(storage: BuiltinMainStorage) {
         const saved: SavedTab = { id: tab.id, url: tab.url }
 
         if (driven?.control) saved.control = driven.control
-
-        if (driven?.agent) saved.agent = driven.agent
 
         return saved
       })

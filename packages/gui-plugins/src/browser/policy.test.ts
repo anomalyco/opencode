@@ -393,7 +393,7 @@ test.each([
 ] as const)("%s makes a tab, opener %s, agent command in flight %s: %s owns it", (origin, opener, running, owner, driven) => {
   const control = opener === "person" ? undefined : opener
 
-  const created = createdActivity(origin, "build", opener && { agentRuns: Number(running), control })
+  const created = createdActivity(origin, opener && { agentRuns: Number(running), control })
 
   expect(activityOwner(created)).toBe(owner)
   expect(agentDriven(created)).toBe(driven)

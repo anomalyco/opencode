@@ -127,16 +127,6 @@ test("reconnect tears down the previous native pages before restoring the same w
   expect(next.effects.map(effect => effect.type)).toEqual(["emit", "release-pages", "teardown", "start-timer"])
 })
 
-test("sharing a preview releases its old page without closing the tab or exposing its old title", () => {
-  const start = attached()
-  const attempt = entry(start).nextAttempt
-  const url = "workspace://ses_x/report.html"
-  const opened = play(start, on({ type: "tab.opened", tabID: tabA, attempt, tab: tab(tabA, url, "user content") }))
-  const next = play(opened.state, on({ type: "tab.restricted", tabID: tabA, url }))
-  expect(next.effects).toEqual([{ type: "release-pages", binding: "b1", attempts: [attempt] }])
-  expect(entry(next.state).tabs.get(tabA)).toMatchObject({ status: "unloaded", tab: { id: tabA, url, title: "", generation: 1 } })
-})
-
 test("a restored preview retries the failed attempt when the server returns", () => {
   const state = attached({tabs:[{ ...tab(tabA,"workspace://ses_x/report.html"), loadError:"ERR_FAILED" }], focusedTabID:tabA})
   const restored = entry(state).tabs.get(tabA)?.tab

@@ -22,7 +22,7 @@ type Attachment = {
 
 export type Connection = Effect.Success<ReturnType<typeof make>>
 
-type Approval = { connectionID: string; site?: string; tabID?: string; agent?: string }
+type Approval = { connectionID: string; site?: string; tabID?: string }
 
 /** Never persist grants for opaque documents or file paths. Host, scheme and port are all significant. */
 function site(url: string | undefined) {
@@ -352,7 +352,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     action: Browser.Action,
     tab: Browser.Tab | undefined,
     files: readonly Browser.File[],
-    inspection: Pick<Browser.Command, "inspect" | "target" | "expectedSite" | "agent">,
+    inspection: Pick<Browser.Command, "inspect" | "target" | "expectedSite">,
   ) {
     const requestID = crypto.randomUUID()
     const target = { sessionID, connectionID, requestID }
@@ -438,7 +438,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         } },
         source: { type: "tool", messageID: tool.messageID, id: tool.id },
       })
-      return { connectionID: connection.connectionID, site: origin, tabID: tab?.id, agent: tool.agent } satisfies Approval
+      return { connectionID: connection.connectionID, site: origin, tabID: tab?.id } satisfies Approval
     }),
     target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action, approved?: Approval) {
       const selected = BrowserMachine.selectTarget(machine.state, sessionID, action)
@@ -449,7 +449,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       return {
         tab: selected.tab,
         inspect: () =>
-          request(sessionID, selected.connectionID, action, selected.tab, [], { inspect: true, agent: approved?.agent }).pipe(
+          request(sessionID, selected.connectionID, action, selected.tab, [], { inspect: true }).pipe(
             Effect.flatMap((result) => Schema.decodeUnknownEffect(Browser.Target)(result.value)),
             Effect.mapError(
               (error) =>
@@ -463,7 +463,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             ),
           ),
         request: (files: readonly Browser.File[], target?: Browser.Target) =>
-          request(sessionID, selected.connectionID, action, selected.tab, files, { target, expectedSite: approved?.site, agent: approved?.agent }),
+          request(sessionID, selected.connectionID, action, selected.tab, files, { target, expectedSite: approved?.site }),
       }
     }),
   }

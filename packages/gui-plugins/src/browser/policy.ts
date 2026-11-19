@@ -116,7 +116,7 @@ export function pagePermission(permission: string, origin: string, declared: (id
  * `control` is absent on a person's untouched tab; reclaimed only by input or a person-issued command, never by elapsed
  * time. `agentRuns` counts the agent's commands in flight that act on the page; its `wait` only observes and is left out.
  */
-export type TabActivity = { agentRuns: number; control?: "agent" | "reclaimed"; agent?: string }
+export type TabActivity = { agentRuns: number; control?: "agent" | "reclaimed" }
 
 export function recordPageInput(activity: TabActivity, origin: "agent" | "user") {
   if (origin === "agent") activity.control = "agent"
@@ -129,7 +129,7 @@ export function recordTabFocus(activity: TabActivity, origin: "agent" | "user") 
   if (origin === "agent") recordPageInput(activity, origin)
 }
 
-/** Permission, preview-read and prompt-focus restrictions outlive even an explicit human takeover. */
+/** Permission, passkey and prompt-focus restrictions outlive even an explicit human takeover. */
 export function agentDriven(activity: Readonly<TabActivity>): boolean {
   return activity.agentRuns > 0 || activity.control !== undefined
 }
@@ -144,8 +144,8 @@ export function childActivity(activity: Readonly<TabActivity>): TabActivity {
  * tab, an extension acting on it) carries that `opener`'s provenance; one the person made is the person's. An agent
  * command in flight in another tab is not provenance: nothing about other tabs reaches here.
  */
-export function createdActivity(origin: "agent" | "user", agent: string | undefined, opener?: Readonly<TabActivity>): TabActivity {
-  if (origin === "agent") return { agentRuns: 0, control: "agent", agent }
+export function createdActivity(origin: "agent" | "user", opener?: Readonly<TabActivity>): TabActivity {
+  if (origin === "agent") return { agentRuns: 0, control: "agent" }
 
   return opener ? childActivity(opener) : { agentRuns: 0 }
 }
