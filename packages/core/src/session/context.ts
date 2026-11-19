@@ -8,7 +8,6 @@ import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { CodeModeTool } from "../codemode/tool.js"
 import { Database } from "../database/database.js"
-import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
@@ -243,7 +242,6 @@ export const node = makeLocationNode({
     Agent.node,
     Model.node,
     Database.node,
-    Environment.node,
     FileAccess.node,
     FileMutation.node,
     FileWrite.node,
