@@ -198,41 +198,43 @@ function RootSettings() {
 
   const addServer = () => void dialog.push(() => <DialogServer mode="add" onSave={selectServer} />)
 
-  const pluginTabs = (group?: "about") =>
+  const pluginTabs = (include: (page: { id: string; group?: "about" }) => boolean) =>
     surface.plugins
       .pages()
-      .filter((item) => item.value.group === group)
+      .filter((item) => include(item.value))
       .map((item) => ({ value: item.value.id, icon: item.value.icon ?? pageIcons.extensions, label: item.value.title }))
 
-  const groups = createMemo<SettingsNavGroup[]>(() => [
-    {
-      items: serverTabs.map((item) => ({
-        ...item,
-        label: language.t(item.label),
-        onPrefetch: item.value === "workspaces" ? prefetchWorkspaces : undefined,
-      })),
-    },
-    {
-      items: [
-        ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
-        ...pluginTabs(),
-        {
-          value: "servers",
-          icon: pageIcons.servers,
-          label: language.t(multiple() ? "settings.tab.servers" : pageLabels.servers),
-        },
-      ],
-    },
-    {
-      items: [
-        ...pluginTabs("about"),
-        ...(experimentalSettingsAvailable
-          ? experimentalTab.map((item) => ({ ...item, label: language.t(item.label) }))
-          : []),
-        ...aboutTab.map((item) => ({ ...item, label: language.t(item.label) })),
-      ],
-    },
-  ])
+  const groups = createMemo<SettingsNavGroup[]>(() =>
+    [
+      { items: rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })) },
+      {
+        items: [
+          ...serverTabs.map((item) => ({
+            ...item,
+            label: language.t(item.label),
+            onPrefetch: item.value === "workspaces" ? prefetchWorkspaces : undefined,
+          })),
+          {
+            value: "servers",
+            icon: pageIcons.servers,
+            label: language.t(multiple() ? "settings.tab.servers" : pageLabels.servers),
+          },
+          // Pairing is a built-in plugin page, but it belongs with Servers rather than with other plugins' pages.
+          ...pluginTabs((page) => page.id === "pairing"),
+        ],
+      },
+      { items: pluginTabs((page) => !page.group && page.id !== "pairing") },
+      {
+        items: [
+          ...pluginTabs((page) => page.group === "about"),
+          ...(experimentalSettingsAvailable
+            ? experimentalTab.map((item) => ({ ...item, label: language.t(item.label) }))
+            : []),
+          ...aboutTab.map((item) => ({ ...item, label: language.t(item.label) })),
+        ],
+      },
+    ].filter((group) => group.items.length > 0),
+  )
 
   const change = (value: string) => {
     if (value === "workspaces") setState("worktreeFilterReset", (current) => current + 1)

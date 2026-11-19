@@ -228,7 +228,7 @@ describe("ai.video.status / result / cancel / Seedance", () => {
           ),
         ),
       )
-      expect(statuses).toEqual([{ status: "queued" }, { status: "running" }, { status: "completed" }])
+      expect(statuses).toEqual([{ status: "running" }, { status: "running" }, { status: "completed" }])
       expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
         "POST https://ark.test/api/v3/contents/generations/tasks",
         "GET https://ark.test/api/v3/contents/generations/tasks/cgt-1",
@@ -244,15 +244,15 @@ describe("ai.video.status / result / cancel / Seedance", () => {
       const statuses = yield* Effect.forEach(raw, (status) =>
         ai.video.status(model, id).pipe(Effect.provide(reply({ id: "cgt-1", status }))),
       )
-      expect(statuses.map((value) => value.status)).toEqual([
-        "queued",
-        "running",
-        "completed",
-        "failed",
-        "cancelled",
-        "expired",
-        "running",
-        "running",
+      expect(statuses).toEqual([
+        { status: "running" },
+        { status: "running" },
+        { status: "completed" },
+        { status: "error", reason: "failed" },
+        { status: "error", reason: "cancelled" },
+        { status: "error", reason: "expired" },
+        { status: "running" },
+        { status: "running" },
       ])
     }),
   )

@@ -33,7 +33,8 @@ story("running rows combine execution and shells without refreshing existing ses
 })
 
 story("running branches retry and recover after reconnect with the Inbox loader", async ({ mount, page }) => {
-  await page.clock.install()
+  await page.clock.install({ time: new Date("2026-11-19T00:00:00Z") })
+  await page.clock.pauseAt(new Date("2026-11-19T00:00:00Z"))
   const root = await mount("sidebar-running--retry")
   await expect(root.getByLabel("Branch attempts")).toHaveText("1")
   await page.clock.fastForward(1_000)

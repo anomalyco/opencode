@@ -12,4 +12,12 @@ export default {
   noChanges: "Ei muutoksia",
   "settings.wrapLines.title": "Rivitä rivit",
   "settings.wrapLines.description": "Rivitä pitkät rivit mobiilidiffeissä vaakavierityksen sijaan",
+  "menu.count.one": "{{count}} tiedosto muutettu",
+  "menu.count.other": "{{count}} tiedostoa muutettu",
+  "folder.more": "{{count}} · lisää ei näytetä",
+  "folder.failed": "Muutoksia ei voitu ladata",
+  "command.open": "Avaa tarkistus",
+  "load.failed": "Muutoksia ei voitu ladata",
+  "load.timeout": "Palvelin ei vastannut ajoissa",
+  offline: "Tähän palvelimeen ei saada yhteyttä",
 }

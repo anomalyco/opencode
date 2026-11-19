@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "अगला",
   "releaseNotes.action.hideFuture": "भविष्य में इन्हें न दिखाएँ",
   "releaseNotes.media.alt": "रिलीज़ पूर्वावलोकन",
+  "action.reload": "अपडेट के लिए पुनः लोड करें",
+  "action.reloading": "पुनः लोड हो रहा है…",
+  "web.ready.title": "अपडेट तैयार है",
+  "web.ready.message": "OpenCode का नया संस्करण तैयार है। हर खुली विंडो में इसका उपयोग करने के लिए पुनः लोड करें।",
+  "web.reload": "पुनः लोड करें",
+  "web.reset.title": "सर्वर से पुनः लोड करें",
+  "web.reset.description": "ऐप की सहेजी गई कॉपी साफ़ करें और सर्वर का वर्तमान संस्करण लोड करें",
+  "web.reset.action": "सर्वर से पुनः लोड करें",
 }

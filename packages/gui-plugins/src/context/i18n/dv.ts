@@ -28,4 +28,5 @@ export default {
   "export.success.description": "ސެޝަން ސޭވްކޮށްފައިވަނީ ⁨{{filename}}⁩ އަށެވެ",
   "export.failed.title": "އެކްސްޕޯޓް ސެޝަން ނާކާމިޔާބުވެއްޖެ",
   "export.failed.description": "ސެޝަން އެކްސްޕޯޓް ކުރަމުން ދިޔައިރު ގޯހެއް ދިމާވިއެވެ",
+  "usage.toggle": "ސެޝަން ކޮންޓެކްސްޓް ޓޮގްލް ކުރާ",
 }

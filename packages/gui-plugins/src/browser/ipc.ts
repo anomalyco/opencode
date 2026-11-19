@@ -1,6 +1,7 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
 import { Ipc } from "@opencode/plugin/gui"
+import { devices, previewScales } from "./viewport-presets"
 
 const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(maximum))
 
@@ -10,6 +11,24 @@ const binding = text(128)
 
 /** The longest page icon data URL main reports: a 32px PNG is a few kilobytes; larger icons are dropped. */
 export const MAX_ICON_URL = 24_576
+
+const dimension = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4096 }))
+
+/** The layout viewport in guest CSS pixels. Preview scaling is local to the displayed view. */
+export const Viewport = Schema.Union([
+  Schema.Struct({ mode: Schema.Literal("auto") }),
+  Schema.Struct({
+    mode: Schema.Literal("fixed"),
+    width: dimension,
+    height: dimension,
+    // Omit scale to fit the pane.
+    scale: Schema.optional(Schema.Literals(previewScales)),
+    // The selected device survives rotation; custom dimensions have no preset.
+    preset: Schema.optionalKey(Schema.Literals(devices.map((device) => device.id))),
+  }),
+])
+
+export type Viewport = typeof Viewport.Type
 
 /** An element the user picked in the page. The ref stays valid for browser tools until the page navigates. */
 export const PaneElement = Schema.Struct({
@@ -42,13 +61,14 @@ export const PaneEvent = Schema.Union([
     active: Schema.Boolean,
     element: Schema.optionalKey(PaneElement),
   }),
-  // Details only this desktop shows, kept out of the server's tab state: the page's icon as a data URL, and its zoom
-  // factor, 1 at 100%.
+  // Presentation details belong to this desktop's page, outside the server's tab inventory.
   Schema.Struct({
     type: Schema.Literal("page"),
     tabID: Browser.TabID,
     icon: Schema.optionalKey(detail(MAX_ICON_URL).check(Schema.isStartingWith("data:image/"))),
     zoom: Schema.Finite.check(Schema.isBetween({ minimum: 0.25, maximum: 5 })),
+    viewport: Viewport,
+    viewportNotice: Schema.optionalKey(Schema.Literals(["zoom", "failed"])),
   }),
   // The user put keyboard focus in the page, outside the window's own document.
   Schema.Struct({ type: Schema.Literal("focused"), tabID: Browser.TabID }),
@@ -115,6 +135,7 @@ export const BrowserPane = Ipc.define({
     zoom: {
       input: Schema.Struct({ binding, tabID: Browser.TabID, zoom: Schema.Literals(["in", "out", "reset"]) }),
     },
+    setViewport: { input: Schema.Struct({ binding, tabID: Browser.TabID, viewport: Viewport }) },
     // The site data the page's address can read in this desktop's browser: its cookie count. Zero for a page that is
     // not a web page.
     site: {

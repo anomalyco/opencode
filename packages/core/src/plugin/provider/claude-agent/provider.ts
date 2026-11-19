@@ -63,6 +63,7 @@ export const register = Effect.fn("ClaudeProvider.register")(function* (
     })
   })
 
+  const checked = new Set<string>()
   yield* SubscriptionRef.changes(status.state).pipe(
     Stream.runForEach((state) =>
       Effect.gen(function* () {
@@ -71,6 +72,11 @@ export const register = Effect.fn("ClaudeProvider.register")(function* (
         const next = {
           priceSource: priceSource(state.probe.account, baseURL),
           models: fromClaude(state.probe.models, current.catalog.models),
+        }
+        const unknown = next.models.filter((model) => model.contextWindow === undefined && !checked.has(model.id))
+        if (state.fromChat && unknown.length > 0) {
+          for (const model of unknown) checked.add(model.id)
+          yield* status.refresh().pipe(Effect.forkScoped)
         }
         if (JSON.stringify(next) === JSON.stringify(current.catalog)) return
         current.catalog = next

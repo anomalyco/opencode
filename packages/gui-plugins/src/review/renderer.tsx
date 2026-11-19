@@ -185,7 +185,7 @@ const setup: Plugin.Setup<typeof Review> = (ctx) => {
     // The same icon as the empty changes view.
     label: () => (
       <div class="flex items-center gap-1.5">
-        <Icon name="review" size="small" />
+        <Icon name="review" />
         <span>{tab.title}</span>
       </div>
     ),

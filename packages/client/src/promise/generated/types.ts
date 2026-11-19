@@ -178,7 +178,7 @@ export type SessionMessageToolStateRunning1 = {
   metadata: { [x: string]: JsonValue }
 }
 
-export type ModelType = "chat" | "decision" | "image" | (string & {})
+export type ModelType = "chat" | "decision" | "image" | "video" | (string & {})
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
@@ -197,6 +197,12 @@ export type GenerateTextResponse = { data: { text: string } }
 export type GenerateUsage = { input?: number; output?: number }
 
 export type GenerateNative = { [x: string]: JsonValue }
+
+export type GenerateVideoID = string
+
+export type BlobID = string
+
+export type GenerateVideoErrorReason = "failed" | "cancelled" | "expired" | "unknown"
 
 export type GeneratePredicateAnswer = { type: "predicate"; name: string; probability: number }
 
@@ -321,23 +327,21 @@ export type SessionStatus =
 
 export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
 
-export type ScheduleID = string
+export type AutomationID = string
 
-export type ScheduleDuration = string
+export type AutomationTriggerAt = { type: "at"; at: string; tz?: string }
 
-export type ScheduleWhenAt = { type: "at"; at: string; tz?: string }
+export type AutomationDuration = string
 
-export type ScheduleWhenCron = { type: "cron"; cron: string; tz?: string }
+export type AutomationTriggerCron = { type: "cron"; cron: string; tz?: string }
 
-export type ScheduleConditionShell = { type: "shell"; run: string; is?: string; matches?: string; changes?: boolean }
+export type AutomationTriggerEvent = { type: "event"; server: string; event: string; args?: { [x: string]: JsonValue } }
 
-export type ScheduleConditionCode = { type: "code"; code: string }
+export type AutomationActionCode = { type: "code"; code: string; args?: JsonValue }
 
-export type ScheduleActionPrompt = { type: "prompt"; prompt: string }
+export type AutomationStatus = "active" | "paused" | "done"
 
-export type ScheduleStatus = "active" | "paused" | "done"
-
-export type ScheduleOutcome = "fired" | "late" | "checked" | "expired" | "skipped" | "disabled" | "failed"
+export type AutomationOutcome = "fired" | "late" | "skipped" | "disabled" | "failed" | "expired"
 
 export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
 
@@ -412,6 +416,8 @@ export type ConfigModelVariantSettings = { compaction?: ProviderCompaction; enco
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
+
+export type AutomationTarget = { session: SessionID; subagent?: never } | { subagent: AgentID; session?: never }
 
 export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
@@ -730,6 +736,17 @@ export type ModelCost = {
   cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
 }
 
+export type GenerateVideoRunning = { id: GenerateVideoID; status: "running" }
+
+export type BlobInfo = { id: BlobID; mime: string; bytes: number }
+
+export type GenerateVideoError = {
+  id: GenerateVideoID
+  status: "error"
+  error: string
+  reason: GenerateVideoErrorReason
+}
+
 export type GenerateChoiceAnswer = {
   type: "choice"
   name: string
@@ -931,13 +948,7 @@ export type FormMultiselectField1 = {
 
 export type FormAnswer1 = { [x: string]: FormValue1 }
 
-export type ScheduleWhenIn = { type: "in"; in: ScheduleDuration; tz?: string }
-
-export type ScheduleWhenEvery = { type: "every"; every: ScheduleDuration; tz?: string }
-
-export type ScheduleCondition = ScheduleConditionShell | ScheduleConditionCode
-
-export type ScheduleAction = ScheduleActionPrompt
+export type AutomationTriggerEvery = { type: "every"; every: AutomationDuration; tz?: string }
 
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
 
@@ -983,6 +994,25 @@ export type JobImage = {
   time: JobTime
   path: string
   model: string
+}
+
+export type JobVideo = {
+  kind: "video"
+  id: string
+  sessionID: SessionID
+  status: JobStatus
+  title?: string
+  time: JobTime
+  path: string
+}
+
+export type JobCodeMode = {
+  kind: "codemode"
+  id: string
+  sessionID: SessionID
+  status: JobStatus
+  title?: string
+  time: JobTime
 }
 
 export type VcsInfo = { provider?: string; branch: VcsBranch }
@@ -1099,6 +1129,8 @@ export type ModelVariant = {
 }
 
 export type PermissionRuleset = Array<PermissionRule>
+
+export type AutomationActionPrompt = { type: "prompt"; prompt: string; to: AutomationTarget }
 
 export type UsageLimitsBudget = {
   id: string
@@ -2195,6 +2227,10 @@ export type SessionMessageToolStateError1 = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type GenerateVideoCreateResponse = { data: GenerateVideoRunning }
+
+export type GenerateVideoCompleted = { id: GenerateVideoID; status: "completed"; blobs: Array<BlobInfo> }
+
 export type GenerateDecisionAnswer =
   | GeneratePredicateAnswer
   | GenerateChoiceAnswer
@@ -2269,11 +2305,15 @@ export type FormReplied = {
   data: { id: FormID; sessionID: string; answer: FormAnswer1 }
 }
 
-export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery | ScheduleWhenCron
+export type AutomationTrigger =
+  | AutomationTriggerAt
+  | AutomationTriggerEvery
+  | AutomationTriggerCron
+  | AutomationTriggerEvent
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
-export type JobInfo = JobShell | JobSubagent | JobImage
+export type JobInfo = JobShell | JobSubagent | JobImage | JobVideo | JobCodeMode
 
 export type SessionInboxMove = {
   id: SessionMessageID
@@ -2513,7 +2553,12 @@ export type ConfigEntry =
                 }
           }
         }
-        compaction?: { auto?: boolean; keep?: { tokens?: number }; buffer?: ConfigCompactionPercent | number }
+        compaction?: {
+          auto?: boolean
+          background?: boolean
+          keep?: { tokens?: number }
+          buffer?: ConfigCompactionPercent | number
+        }
         skills?: Array<string>
         commands?: {
           [x: string]: {
@@ -2589,12 +2634,14 @@ export type ConfigEntry =
           codemode_vm?: boolean
           all_flags?: boolean
           todo?: boolean
-          background_compaction?: boolean
           media_blob?: boolean
-          schedules?: boolean
+          automations?: boolean
           artifacts?: boolean
+          video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           console_watches?: boolean
           mcp_events?: boolean
+          full_codemode?: boolean
+          schedules?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
@@ -2616,6 +2663,8 @@ export type ConfigEntry =
       }
     }
   | { type: "directory"; path: AbsolutePath }
+
+export type AutomationAction = AutomationActionPrompt | AutomationActionCode
 
 export type UsageLimitsInfo = {
   workspace: { id: string; name?: string; usageURL: string }
@@ -2670,6 +2719,8 @@ export type SessionMessageAssistantTool1 = {
   time: { created: number; ran?: number; completed?: number }
 }
 
+export type GenerateVideoJob = GenerateVideoRunning | GenerateVideoCompleted | GenerateVideoError
+
 export type GenerateDecisionResult = {
   answers: Array<GenerateDecisionAnswer>
   cost?: MoneyUSD
@@ -2686,26 +2737,6 @@ export type CredentialEntry = {
 }
 
 export type FormFields1 = [FormField1, ...Array<FormField1>]
-
-export type ScheduleInfo = {
-  id: ScheduleID
-  sessionID?: SessionID
-  name?: string
-  when: ScheduleWhen
-  tz: string
-  if?: ScheduleCondition
-  until?: ScheduleCondition
-  action: ScheduleAction
-  status: ScheduleStatus
-  nextDueAt?: number
-  endsAt?: number
-  remainingRuns?: number
-  runCount: number
-  lastFiredAt?: number
-  lastOutcome?: ScheduleOutcome
-  lastOutput?: string
-  time: { created: number; updated: number }
-}
 
 export type AgentInfo = {
   id: AgentID
@@ -2724,6 +2755,26 @@ export type AgentInfo = {
 export type SessionsResponse = {
   data: Array<SessionInfo>
   cursor: { previous?: SessionsCursor | null; next?: SessionsCursor | null }
+}
+
+export type AutomationInfo = {
+  id: AutomationID
+  name: string
+  projectID: ProjectID
+  sessionID?: SessionID
+  directory: string
+  trigger: AutomationTrigger
+  tz: string
+  action: AutomationAction
+  expires?: number
+  status: AutomationStatus
+  nextDueAt?: number
+  runCount: number
+  lastRunAt?: number
+  lastOutcome?: AutomationOutcome
+  lastOutput?: string
+  state?: JsonValue
+  time: { created: number; updated: number }
 }
 
 export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove
@@ -2777,6 +2828,8 @@ export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantText1
   | SessionMessageAssistantReasoning1
   | SessionMessageAssistantTool1
+
+export type GenerateVideoGetResponse = { data: GenerateVideoJob }
 
 export type GenerateDecisionsResponse = { data: GenerateDecisionResult }
 
@@ -3174,6 +3227,18 @@ export type ProviderRequestError = {
 export const isProviderRequestError = (value: unknown): value is ProviderRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProviderRequestError"
 
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
+
+export type VideoNotFoundError = {
+  readonly _tag: "VideoNotFoundError"
+  readonly videoID: string
+  readonly message: string
+}
+export const isVideoNotFoundError = (value: unknown): value is VideoNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "VideoNotFoundError"
+
 export type IntegrationNotFoundError = {
   readonly _tag: "IntegrationNotFoundError"
   readonly integrationID: string
@@ -3207,10 +3272,6 @@ export type McpServerNotFoundError = {
 }
 export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
-
-export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
-export const isForbiddenError = (value: unknown): value is ForbiddenError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type ProjectNotFoundError = {
   readonly _tag: "ProjectNotFoundError"
@@ -3270,13 +3331,21 @@ export type PtyFeatureUnsupportedError = {
 export const isPtyFeatureUnsupportedError = (value: unknown): value is PtyFeatureUnsupportedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyFeatureUnsupportedError"
 
-export type ScheduleNotFoundError = {
-  readonly _tag: "ScheduleNotFoundError"
-  readonly scheduleID: string
+export type BlobNotFoundError = {
+  readonly _tag: "BlobNotFoundError"
+  readonly blobID: string
   readonly message: string
 }
-export const isScheduleNotFoundError = (value: unknown): value is ScheduleNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ScheduleNotFoundError"
+export const isBlobNotFoundError = (value: unknown): value is BlobNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "BlobNotFoundError"
+
+export type AutomationNotFoundError = {
+  readonly _tag: "AutomationNotFoundError"
+  readonly automationID: string
+  readonly message: string
+}
+export const isAutomationNotFoundError = (value: unknown): value is AutomationNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AutomationNotFoundError"
 
 export type ArtifactNotFoundError = {
   readonly _tag: "ArtifactNotFoundError"
@@ -3964,7 +4033,7 @@ export type MessageListOutput = SessionMessagesResponse
 
 export type ModelListInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | (string & {})> | undefined
+  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | "video" | (string & {})> | undefined
 }
 
 export type ModelListOutput = { location: LocationPublicRef; data: Array<ModelInfo> }
@@ -3990,6 +4059,26 @@ export type ExperimentalGenerateImageInput = {
 }
 
 export type ExperimentalGenerateImageOutput = GenerateImageResponse["data"]
+
+export type ExperimentalGenerateVideoCreateInput = {
+  readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+  readonly prompt: string
+  readonly start?: { readonly data: string; readonly mime: string; readonly name?: string } | undefined
+  readonly end?: { readonly data: string; readonly mime: string; readonly name?: string } | undefined
+  readonly references?:
+    | ReadonlyArray<{ readonly data: string; readonly mime: string; readonly name?: string }>
+    | undefined
+  readonly duration?: number | undefined
+  readonly aspect?: (`${number}${":"}${number}` | "auto") | undefined
+  readonly resolution?: ("480p" | "720p" | "1080p" | "4k" | (string & {})) | undefined
+  readonly sound?: boolean | undefined
+}
+
+export type ExperimentalGenerateVideoCreateOutput = GenerateVideoCreateResponse["data"]
+
+export type ExperimentalGenerateVideoGetInput = { readonly id: string }
+
+export type ExperimentalGenerateVideoGetOutput = GenerateVideoGetResponse["data"]
 
 export type ExperimentalGenerateDecisionsInput = {
   readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -4593,102 +4682,60 @@ export type ExperimentalMediaGetInput = { readonly hash: string }
 
 export type ExperimentalMediaGetOutput = globalThis.Uint8Array
 
-export type ExperimentalScheduleCreateInput = {
-  readonly sessionID: string
-  readonly name?: string | undefined
-  readonly when?:
-    | (
-        | {
-            readonly in: string
-            readonly at?: never
-            readonly every?: never
-            readonly cron?: never
-            readonly tz?: string
-          }
-        | {
-            readonly at: string
-            readonly in?: never
-            readonly every?: never
-            readonly cron?: never
-            readonly tz?: string
-          }
-        | {
-            readonly every: string
-            readonly in?: never
-            readonly at?: never
-            readonly cron?: never
-            readonly tz?: string
-          }
-        | {
-            readonly cron: string
-            readonly in?: never
-            readonly at?: never
-            readonly every?: never
-            readonly tz?: string
-          }
-      )
-    | undefined
-  readonly if?:
-    | (
-        | {
-            readonly run: string
-            readonly is?: string
-            readonly matches?: string
-            readonly changes?: boolean
-            readonly code?: never
-          }
-        | {
-            readonly code: string
-            readonly run?: never
-            readonly is?: never
-            readonly matches?: never
-            readonly changes?: never
-          }
-      )
-    | undefined
-  readonly until?:
-    | (
-        | {
-            readonly run: string
-            readonly is?: string
-            readonly matches?: string
-            readonly changes?: boolean
-            readonly code?: never
-          }
-        | {
-            readonly code: string
-            readonly run?: never
-            readonly is?: never
-            readonly matches?: never
-            readonly changes?: never
-          }
-      )
-    | undefined
-  readonly ends?: { readonly after?: string; readonly at?: string; readonly times?: number } | undefined
-  readonly prompt: string
+export type ExperimentalBlobGetInput = { readonly id: string }
+
+export type ExperimentalBlobGetOutput = globalThis.Uint8Array
+
+export type ExperimentalAutomationCreateInput = {
+  readonly sessionID?: string | undefined
+  readonly directory?: string | undefined
+  readonly name: string
+  readonly trigger:
+    | { readonly type: "at"; readonly at: string; readonly tz?: string }
+    | { readonly type: "every"; readonly every: string; readonly tz?: string }
+    | { readonly type: "cron"; readonly cron: string; readonly tz?: string }
+    | {
+        readonly type: "event"
+        readonly server: string
+        readonly event: string
+        readonly args?: { readonly [x: string]: JsonValue }
+      }
+  readonly action:
+    | {
+        readonly type: "prompt"
+        readonly prompt: string
+        readonly to?:
+          | { readonly session: string; readonly subagent?: never }
+          | { readonly subagent: string; readonly session?: never }
+      }
+    | { readonly type: "code"; readonly code: string; readonly args?: JsonValue }
+  readonly expires?: string | undefined
 }
 
-export type ExperimentalScheduleCreateOutput = { data: ScheduleInfo }["data"]
+export type ExperimentalAutomationCreateOutput = { data: AutomationInfo }["data"]
 
-export type ExperimentalScheduleListInput = { readonly sessionID: string }
+export type ExperimentalAutomationListInput = {
+  readonly sessionID?: string | undefined
+  readonly directory?: string | undefined
+}
 
-export type ExperimentalScheduleListOutput = { data: Array<ScheduleInfo> }["data"]
+export type ExperimentalAutomationListOutput = { data: Array<AutomationInfo> }["data"]
 
-export type ExperimentalScheduleGetInput = { readonly scheduleID: string }
+export type ExperimentalAutomationGetInput = { readonly automationID: string }
 
-export type ExperimentalScheduleGetOutput = { data: ScheduleInfo }["data"]
+export type ExperimentalAutomationGetOutput = { data: AutomationInfo }["data"]
 
-export type ExperimentalSchedulePauseInput = { readonly scheduleID: string }
+export type ExperimentalAutomationPauseInput = { readonly automationID: string }
 
-export type ExperimentalSchedulePauseOutput = { data: ScheduleInfo }["data"]
+export type ExperimentalAutomationPauseOutput = { data: AutomationInfo }["data"]
 
-export type ExperimentalScheduleResumeInput = { readonly scheduleID: string }
+export type ExperimentalAutomationResumeInput = { readonly automationID: string }
 
-export type ExperimentalScheduleResumeOutput = { data: ScheduleInfo }["data"]
+export type ExperimentalAutomationResumeOutput = { data: AutomationInfo }["data"]
 
-export type ExperimentalScheduleDeleteInput = { readonly scheduleID: string }
+export type ExperimentalAutomationDeleteInput = { readonly automationID: string }
 
-export type ExperimentalScheduleDeleteOutput = void
+export type ExperimentalAutomationDeleteOutput = void
 
 export type ExperimentalArtifactsProvidersInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
@@ -4750,7 +4797,7 @@ export type ExperimentalArtifactsViewOutput = globalThis.Uint8Array
 
 export type ExperimentalJobListInput = {
   readonly sessionID?: string | undefined
-  readonly kind?: ("shell" | "subagent" | "image") | undefined
+  readonly kind?: ("shell" | "subagent" | "image" | "video" | "codemode") | undefined
   readonly status?: ("running" | "completed" | "error" | "cancelled") | undefined
   readonly descendants?: boolean | undefined
 }

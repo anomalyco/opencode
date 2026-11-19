@@ -53,6 +53,30 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
   }
 })
 
+test("choosing Customize replaces Home with Settings in desktop side tabs", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "Website",
+    sessions: [],
+    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+  })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  const sidebar = page.locator("#vertical-tabs-sidebar")
+
+  const main = page.getByRole("main")
+
+  await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toBeVisible()
+  await main.getByRole("button", { name: "Settings", exact: true }).click()
+  await main.getByRole("tab", { name: "Experimental", exact: true }).click()
+  await main.locator('[data-action="settings-sidebar-organize"]').click()
+  await page.getByRole("option", { name: "Customize", exact: true }).click()
+  await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toHaveCount(0)
+  await main.getByRole("button", { name: "Back to app", exact: true }).click()
+  await expect(main.getByRole("button", { name: "New session", exact: true })).toBeVisible()
+  await expect(sidebar.getByRole("button", { name: "View options", exact: true })).toBeVisible()
+  await sidebar.getByRole("button", { name: "Settings", exact: true }).click()
+  await expect(page.getByTestId("settings-screen")).toBeVisible()
+})
+
 test("a working Home session keeps its project avatar and shows its activity ring at the end of the row", async ({
   page,
 }) => {

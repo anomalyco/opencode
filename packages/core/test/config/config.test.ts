@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
-import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
+import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream, Tracer } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigIntegration } from "@opencode/core/config/integration"
@@ -797,6 +797,157 @@ describe("Config", () => {
       ),
     ),
   )
+
+  const countReloads = () => {
+    const counter = { reloads: 0 }
+    let finished = () => {}
+    const first = new Promise<void>((resolve) => (finished = resolve))
+    const tracer = Tracer.make({
+      span: (options) => {
+        const span = Tracer.nativeTracer.span(options)
+        if (options.name !== "Config.reload") return span
+        counter.reloads++
+        const end = span.end.bind(span)
+        span.end = (time, exit) => {
+          end(time, exit)
+          finished()
+        }
+        return span
+      },
+    })
+    // The watches' readiness reload; later counts only see what the test triggers.
+    const settled = Effect.promise(() => first).pipe(Effect.timeout("3 seconds"))
+    return { counter, tracer, settled }
+  }
+
+  it.live("does not reload when an unrelated file under a config root changes", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const file = path.join(global, "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(global, "skills", "demo"), { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(file, JSON.stringify({ shell: "one" }))
+          })
+          const { counter, tracer, settled } = countReloads()
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
+            const changes = yield* config
+              .changes()
+              .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+            yield* settled
+            const before = counter.reloads
+
+            // The config file changed on disk, but only unrelated paths report updates.
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
+            yield* watcher.emit({ type: "update", path: path.join(global, "skills", "demo", "SKILL.md") })
+            yield* watcher.emit({ type: "update", path: path.join(global, "opencode.json.bak") })
+            expect(Array.from(yield* Fiber.join(changes)).map((update) => update.path)).toEqual([
+              path.join(global, "skills", "demo", "SKILL.md"),
+              path.join(global, "opencode.json.bak"),
+            ])
+            // Outlasts the 100 ms reload debounce; proving no reload needs a wait.
+            yield* Effect.sleep("250 millis")
+            expect(counter.reloads).toBe(before)
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+          }).pipe(
+            Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)),
+            Effect.withTracer(tracer),
+          )
+        }),
+      ),
+    ),
+  )
+
+  const nextUpdate = Bus.Service.use((bus) =>
+    bus.subscribe(Event.Updated).pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true })),
+  )
+
+  it.live("reloads canonical events for a symlinked global root, even after removal", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const real = path.join(tmp.path, "real")
+        const link = path.join(tmp.path, "link")
+        const file = path.join(real, process.platform === "linux" ? "opencode.json" : "OpenCode.JSON")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(real)
+          await fs.symlink(real, link, "junction")
+        })
+        // Parcel delivers events for the underlying directory rather than the symlink spelling.
+        const canonical = Layer.effect(
+          Watcher.Service,
+          Watcher.Test.use((watcher) =>
+            Effect.succeed(
+              Watcher.Service.of({
+                subscribe: (target, ready) =>
+                  watcher.subscribe(target.path === link ? { ...target, path: real } : target, ready),
+              }),
+            ),
+          ),
+        ).pipe(Layer.provideMerge(Watcher.testLayer))
+        const { tracer, settled } = countReloads()
+        return yield* Effect.gen(function* () {
+          const config = yield* Config.Service
+          const watcher = yield* Watcher.Test
+          yield* settled
+          const created = yield* nextUpdate
+          yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "one" })))
+          yield* watcher.emit({ type: "create", path: file })
+          yield* Fiber.join(created).pipe(Effect.timeout("3 seconds"))
+          expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+
+          const deleted = yield* nextUpdate
+          yield* Effect.promise(() => fs.rename(real, path.join(tmp.path, "moved")))
+          yield* watcher.emit({ type: "delete", path: real })
+          yield* Fiber.join(deleted).pipe(Effect.timeout("3 seconds"))
+          expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
+        }).pipe(Effect.provide(testLayer(tmp.path, link, tmp.path, undefined, canonical)), Effect.withTracer(tracer))
+      }),
+    ),
+  )
+
+  for (const source of ["file", "content"] as const) {
+    it.live(`reloads ${source} config when its symlink target changes under a watched root`, () =>
+      withTempDir((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const alias = path.join(tmp.path, "alias")
+          const file = path.join(global, "work.json")
+          const write = (shell: string) => fs.writeFile(file, source === "file" ? JSON.stringify({ shell }) : shell)
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global)
+            await fs.symlink(global, alias, "junction")
+            await write("one")
+          })
+          const options =
+            source === "file"
+              ? { file: path.join(alias, "work.json") }
+              : {
+                  content: JSON.stringify({ shell: "{file:alias/work.json}" }),
+                }
+          const { tracer, settled } = countReloads()
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
+            yield* settled
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+            const changed = yield* nextUpdate
+            yield* Effect.promise(() => write("two"))
+            yield* watcher.emit({ type: "update", path: file })
+            yield* Fiber.join(changed).pipe(Effect.timeout("3 seconds"))
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("two")
+          }).pipe(
+            Effect.provide(testLayer(tmp.path, global, tmp.path, undefined, undefined, undefined, undefined, options)),
+            Effect.withTracer(tracer),
+          )
+        }),
+      ),
+    )
+  }
 
   // Real watcher on purpose: the regression this pins (a deleted config file's
   // watch being torn down, making recreation invisible) only reproduces with

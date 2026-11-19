@@ -38,7 +38,7 @@ export function ShellTool(props: ToolProps) {
     <BasicTool
       {...props}
       status={run.view().basicStatus}
-      icon="console"
+      icon="terminal"
       rail={false}
       hasContent
       compact

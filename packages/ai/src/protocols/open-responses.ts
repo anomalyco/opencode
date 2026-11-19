@@ -14,6 +14,7 @@ import {
   type ReasoningPart,
   type TextPart,
   type ToolCallPart,
+  type ToolChanges,
   type ToolDefinition,
   type ToolResultPart,
   type UserMessage,
@@ -30,6 +31,7 @@ import {
 } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate } from "../effort-updates.js"
+import { toolsUpdate } from "../tool-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -189,9 +191,49 @@ export const HostedToolReplay = Schema.StructWithRest(
 )
 export type HostedToolReplayItem = Schema.Schema.Type<typeof HostedToolReplay>
 
+export const Tool = Schema.Struct({
+  type: Schema.tag("function"),
+  name: Schema.String,
+  description: Schema.String,
+  parameters: JsonObject,
+  strict: Schema.optional(Schema.Boolean),
+})
+
+export const CustomTool = Schema.Struct({
+  type: Schema.tag("custom"),
+  name: Schema.String,
+  description: Schema.String,
+  format: Schema.Union([
+    Schema.Struct({ type: Schema.tag("text") }),
+    Schema.Struct({
+      type: Schema.tag("grammar"),
+      syntax: Schema.Literals(["lark", "regex"]),
+      definition: Schema.String,
+    }),
+  ]),
+})
+
+export const HostedTool = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+  }),
+  [JsonObject],
+)
+export type HostedTool = Schema.Schema.Type<typeof HostedTool>
+
+const NamedTool = Schema.Struct({ type: Schema.Literals(["function", "custom"]), name: Schema.String })
+
+// Tools added mid-conversation. Only the OpenAI extension lowers it; other hosts fold tool updates.
+export const AdditionalTools = Schema.Struct({
+  type: Schema.Literal("additional_tools"),
+  role: Schema.Literal("developer"),
+  tools: Schema.Array(Schema.Union([Tool, CustomTool, HostedTool])),
+})
+
 export const InputItem = Schema.Union([
   CompactionItem,
   ConfigurationUpdate,
+  AdditionalTools,
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({
@@ -243,38 +285,6 @@ type OpenResponsesReasoningInput = {
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
-export const Tool = Schema.Struct({
-  type: Schema.tag("function"),
-  name: Schema.String,
-  description: Schema.String,
-  parameters: JsonObject,
-  strict: Schema.optional(Schema.Boolean),
-})
-
-export const CustomTool = Schema.Struct({
-  type: Schema.tag("custom"),
-  name: Schema.String,
-  description: Schema.String,
-  format: Schema.Union([
-    Schema.Struct({ type: Schema.tag("text") }),
-    Schema.Struct({
-      type: Schema.tag("grammar"),
-      syntax: Schema.Literals(["lark", "regex"]),
-      definition: Schema.String,
-    }),
-  ]),
-})
-
-export const HostedTool = Schema.StructWithRest(
-  Schema.Struct({
-    type: Schema.String,
-  }),
-  [JsonObject],
-)
-export type HostedTool = Schema.Schema.Type<typeof HostedTool>
-
-const NamedTool = Schema.Struct({ type: Schema.Literals(["function", "custom"]), name: Schema.String })
-
 export const ToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
   NamedTool,
@@ -434,6 +444,8 @@ export interface ProviderAdapter {
     readonly request: LLMRequest
   }) => MediaInput | undefined
   readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
+  /** Lowers a `Message.tools(...)` marker sent in place; routes without it must fold tool updates. */
+  readonly lowerToolChanges?: (changes: ToolChanges) => Effect.Effect<ReadonlyArray<OpenResponsesInputItem>, AIError>
 }
 
 const BASE_ADAPTER: ProviderAdapter = { id: ADAPTER, name: NAME }
@@ -641,7 +653,7 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
+export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
@@ -662,6 +674,13 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
         if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
         input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
         continue
+      }
+      // Planning folds every marker on routes whose protocol has no `toolUpdates`, so only adapters with
+      // `lowerToolChanges` see one.
+      const tools = toolsUpdate(message)
+      if (tools && adapter.lowerToolChanges) {
+        input.push(...(yield* adapter.lowerToolChanges(tools)))
+        if (message.content.length === 0) continue
       }
       input.push({
         type: "message",
@@ -805,12 +824,15 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
   return input
 })
 
+// The system prompt leads `input` as a developer message: GPT-6.2 models never cache top-level `instructions`.
 export const lowerConversation = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
-  const instructions = ProviderShared.joinText(request.system)
+  const system = ProviderShared.joinText(request.system)
   return {
     model: request.model.id,
-    input: yield* lowerMessages(request, adapter),
-    ...(instructions ? { instructions } : {}),
+    input: [
+      ...(system ? [{ type: "message" as const, role: "developer" as const, content: system }] : []),
+      ...(yield* lowerMessages(request, adapter)),
+    ],
   }
 })
 
