@@ -540,6 +540,38 @@ describe("CodeMode-specific string behavior", () => {
     expect(await value(`return ["b","a","c"].sort((x, y) => x.localeCompare(y))`)).toEqual(["a", "b", "c"])
   })
 
+  test("localeCompare honors its locales and options like the host collator", async () => {
+    expect(
+      await value(`
+        const numeric = { get numeric() { return true } }
+        return [
+          ["a10", "a9", "a1"].sort((x, y) => x.localeCompare(y, undefined, numeric)),
+          "a".localeCompare("A", undefined, { sensitivity: "base" }),
+          "a".localeCompare("á", "en", { sensitivity: "base" }),
+          "a".localeCompare("A", ["en"], { sensitivity: { toString() { return "accent" } } }),
+          "a".localeCompare("A", "en", { caseFirst: "upper" }),
+          "a,b".localeCompare("ab", "en", { ignorePunctuation: true }),
+          "ä".localeCompare("z", "sv"),
+          "a".localeCompare("A"),
+        ]
+      `),
+    ).toEqual([["a1", "a9", "a10"], 0, 0, 0, 1, 0, 1, -1])
+  })
+
+  test("localeCompare rejects invalid locales and options with catchable errors", async () => {
+    expect(
+      await value(`
+        const attempt = (f) => { try { return f() } catch (e) { return e.name } }
+        return [
+          attempt(() => "a".localeCompare("b", "xx_bad")),
+          attempt(() => "a".localeCompare("b", undefined, { sensitivity: "nope" })),
+          attempt(() => "a".localeCompare("b", undefined, null)),
+          attempt(() => "a".localeCompare("b", [1])),
+        ]
+      `),
+    ).toEqual(["RangeError", "RangeError", "TypeError", "TypeError"])
+  })
+
   test("an invalid normalize form is a clear catchable error", async () => {
     expect(await value(`try { "x".normalize("nope"); return "no" } catch (e) { return e.message }`)).toContain('"NFC"')
   })
