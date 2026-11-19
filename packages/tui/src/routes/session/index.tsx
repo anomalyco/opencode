@@ -11,7 +11,6 @@ import {
   Show,
   Switch,
   type Accessor,
-  useContext,
 } from "solid-js"
 import path from "node:path"
 import { EOL, tmpdir } from "node:os"
@@ -126,7 +125,7 @@ import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
-import { ExecuteFilesShownByGroup, SessionGroupView } from "./group-view"
+import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
@@ -1690,7 +1689,6 @@ function SessionRowView(props: SessionRowViewProps) {
               message={props.message}
               entry={(entry, images) => <SessionEntryView row={entry} message={props.message} images={images} />}
               images={(parts) => <ToolImages parts={parts} />}
-              files={(parts) => <For each={parts}>{(part) => <ExecuteFiles part={part} />}</For>}
             />
           )}
         </Match>
@@ -3414,8 +3412,14 @@ function Execute(props: ToolProps) {
   const dialog = useDialog()
   const isLoading = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
   const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
-  // Inside a group, the group shows the files under itself.
-  const grouped = useContext(ExecuteFilesShownByGroup)
+  // Past the size cap a script's file keeps its counts without a patch.
+  const files = createMemo(() =>
+    parseApplyPatchFiles(
+      Array.isArray(props.metadata.files)
+        ? props.metadata.files.map((file) => ({ patch: "", ...recordValue(file) }))
+        : [],
+    ),
+  )
   const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
@@ -3453,27 +3457,12 @@ function Execute(props: ToolProps) {
           </For>
         </box>
       </Show>
-      <Show when={!grouped}>
-        <ExecuteFiles part={props.part} />
+      <Show when={files().length > 0}>
+        <box marginTop={1}>
+          <PatchedFiles files={files()} part={props.part} />
+        </box>
       </Show>
     </>
-  )
-}
-
-// The files a completed script changed, one merged diff each. Past the size cap a file keeps its counts without a patch.
-function ExecuteFiles(props: { part: SessionMessageAssistantTool }) {
-  const files = createMemo(() => {
-    const state = props.part.state
-    if (props.part.name !== "execute" || state.status !== "completed") return []
-    const value = recordValue(state.metadata)?.files
-    return parseApplyPatchFiles(Array.isArray(value) ? value.map((file) => ({ patch: "", ...recordValue(file) })) : [])
-  })
-  return (
-    <Show when={files().length > 0}>
-      <box marginTop={1}>
-        <PatchedFiles files={files()} part={props.part} />
-      </box>
-    </Show>
   )
 }
 
