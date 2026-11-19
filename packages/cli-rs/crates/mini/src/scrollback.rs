@@ -383,6 +383,8 @@ struct Active {
     widget: Stream,
     content: String,
     committed_rows: u32,
+    /// Markdown: the top-level blocks committed so far.
+    committed_blocks: u32,
     pending_spacer_rows: u32,
     rendered: bool,
     /// Mono: Markdown task boxes render as text ([`mono_tasks`]).
@@ -391,39 +393,45 @@ struct Active {
 
 impl Active {
     /// Renders the content and copies the rows that can no longer change and are not committed yet, after the spacer
-    /// rows to write first. `None` when there is nothing new. Text and code keep their last row open while streaming.
-    /// The Markdown widget does not expose its block positions, so a streaming Markdown entry renders only the blocks
-    /// Core calls stable ([`stable_prefix`]) and commits those.
-    ///
-    /// A Markdown part before the end ends its last row, so the next part starts below it and a blank row at the
-    /// boundary stays: the committed rows equal the reply rendered whole, as TS's since #63989 (`trailingNewline:
-    /// true` before the end).
+    /// rows to write first. `None` when there is nothing new. Text keeps its last row open while streaming.
     fn commit(&mut self, done: bool, trailing_newline: bool) -> Result<Option<(u32, Option<SplitSnapshot>)>> {
-        let (target, whole_rows) = match &self.widget {
+        let markdown = match &self.widget {
             Stream::Text(text) => {
                 text.set_text(self.content.clone());
                 self.surface.render()?;
                 let height = self.surface.height();
-                (if done { height } else { self.committed_rows.max(height.saturating_sub(1)) }, false)
-            }
-            Stream::Markdown(markdown) => {
-                let content = if done { self.content.as_str() } else { stable_prefix(&self.content) };
-                if content.is_empty() {
+                let target = if done { height } else { self.committed_rows.max(height.saturating_sub(1)) };
+                if target <= self.committed_rows {
                     return Ok(None);
                 }
-                markdown.set_markdown(if self.mono { mono_tasks(content) } else { content.to_owned() });
-                markdown.streaming(!done);
-                self.surface.render()?;
-                (self.surface.height(), !done)
+                let spacer = std::mem::take(&mut self.pending_spacer_rows);
+                let trailing = done && target == height && trailing_newline;
+                let snapshot = self.surface.commit_rows(self.committed_rows, target, None, trailing)?;
+                self.committed_rows = target;
+                self.rendered = true;
+                return Ok(Some((spacer, snapshot)));
             }
+            Stream::Markdown(markdown) => markdown,
         };
-        if target <= self.committed_rows {
+        markdown.set_markdown(if self.mono { mono_tasks(&self.content) } else { self.content.clone() });
+        markdown.streaming(!done);
+        self.surface.render()?;
+        // TS's `commitMarkdownBlocks`: a committed block goes out once a block follows it, so its line ending is
+        // known, with the gap above it; the last block waits for the end and the caller's line ending.
+        let rows = markdown.block_rows();
+        let count = rows.len() as u32;
+        let target = if done { count } else { markdown.committed_block_count().min(count.saturating_sub(1)) };
+        if target <= self.committed_blocks {
             return Ok(None);
         }
+        let start = match self.committed_blocks {
+            0 => rows[0].start,
+            from => rows[from as usize - 1].end,
+        };
         let spacer = std::mem::take(&mut self.pending_spacer_rows);
-        let trailing = whole_rows || (done && target == self.surface.height() && trailing_newline);
-        let snapshot = self.surface.commit_rows(self.committed_rows, target, None, trailing)?;
-        self.committed_rows = target;
+        let trailing = if done { trailing_newline } else { true };
+        let snapshot = self.surface.commit_rows(start, rows[target as usize - 1].end, None, trailing)?;
+        self.committed_blocks = target;
         self.rendered = true;
         Ok(Some((spacer, snapshot)))
     }
@@ -703,6 +711,7 @@ impl Writer {
             widget,
             content: String::new(),
             committed_rows: 0,
+            committed_blocks: 0,
             pending_spacer_rows: if rows > 0 { rows } else { u32::from(self.rendered.is_none() && self.wrote) },
             rendered: false,
             mono: self.mono,
@@ -856,120 +865,6 @@ fn static_body(commit: &Commit, body: Body, spaced: u32) -> Body {
     }
 }
 
-/// The Markdown blocks of streaming `content` that Core 0.8.4 calls stable: all but the last two of marked's tokens,
-/// up to the start of the first block held back. Marked makes each run of blank lines outside a fence a `space` token,
-/// except after a heading, a table, indented code, a link definition or an HTML block, which take the run into their
-/// own token, and inside a loose list, which stays one token. The prefix ends after a blank line, which closes its
-/// blocks, so the engine renders them final instead of holding the last line. OpenTUI's
-/// `Markdown::committed_block_count` is a later Core's count, which commits a heading or a table before 0.8.4 does and a
-/// loose list after, and it gives no block rows.
-pub fn stable_prefix(content: &str) -> &str {
-    // Each token's start and kind, as marked would split the text so far.
-    let mut tokens: Vec<(usize, Token)> = Vec::new();
-    let mut fence: Option<&str> = None;
-    let mut offset = 0;
-    let mut previous_blank = false;
-    for line in content.split_inclusive('\n') {
-        let trimmed = line.trim_start();
-        let blank = fence.is_none() && line.trim().is_empty() && line.ends_with('\n');
-        let marker = ["```", "~~~"].into_iter().find(|marker| trimmed.starts_with(marker));
-        match (fence, marker) {
-            (None, Some(marker)) => fence = Some(marker),
-            (Some(open), Some(marker)) if open == marker => fence = None,
-            _ => {}
-        }
-        let block_start = offset;
-        offset += line.len();
-        let last = tokens.last().copied();
-        let after_blank = std::mem::replace(&mut previous_blank, blank);
-        if blank {
-            // A blank run after a block that takes it, or inside a run, adds no token.
-            match last {
-                Some((_, Token::Space)) => {}
-                Some((_, Token::Block)) if after_blank => {}
-                Some((start, Token::Block)) if absorbs(&content[start..block_start]) => {}
-                _ => tokens.push((block_start, Token::Space)),
-            }
-            continue;
-        }
-        match last {
-            Some((_, Token::Block)) if !after_blank => {}
-            // A list item or an indented line after a blank run continues a list, which marked keeps as one token.
-            Some((_, Token::Space))
-                if tokens.len() >= 2
-                    && list_item(&content[tokens[tokens.len() - 2].0..])
-                    && (list_item(line) || line.starts_with([' ', '\t'])) =>
-            {
-                tokens.pop();
-            }
-            _ => tokens.push((block_start, Token::Block)),
-        }
-    }
-    if tokens.len() <= 2 {
-        return "";
-    }
-    let held = &tokens[tokens.len() - 2..];
-    let end = held.iter().find(|(_, kind)| *kind == Token::Block).map_or(content.len(), |&(start, _)| start);
-    &content[..end]
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum Token {
-    Block,
-    Space,
-}
-
-/// Whether marked's token for the block `text` (lines up to a blank run) takes the blank lines after it: an ATX or
-/// setext heading, a table, indented code, a link definition or an HTML block.
-fn absorbs(text: &str) -> bool {
-    let lines: Vec<&str> = text.lines().collect();
-    let Some(&first) = lines.first() else { return false };
-    let last = lines[lines.len() - 1];
-    let indented = |line: &str| line.len() - line.trim_start_matches(' ').len() <= 3;
-    let atx = indented(last) && {
-        let hashes = last.trim_start().chars().take_while(|&c| c == '#').count();
-        (1..=6).contains(&hashes) && last.trim_start()[hashes..].chars().next().is_none_or(|c| c == ' ' || c == '\t')
-    };
-    let setext = lines.len() >= 2
-        && indented(last)
-        && !last.trim().is_empty()
-        && (last.trim().chars().all(|c| c == '=') || last.trim().chars().all(|c| c == '-'));
-    let table = lines.len() >= 2 && first.contains('|') && delimiter_row(lines[1]);
-    let code = first.starts_with("    ") || first.starts_with('\t');
-    let definition = indented(first) && first.trim_start().starts_with('[') && first.contains("]:");
-    let html = indented(first) && {
-        let tag = first.trim_start().strip_prefix('<').unwrap_or("");
-        tag.starts_with("!--") || tag.starts_with('/') || tag.starts_with(|c: char| c.is_ascii_alphabetic())
-    };
-    atx || setext || table || code || definition || html
-}
-
-/// A GFM table's delimiter row, such as `| --- | :-: |`.
-fn delimiter_row(line: &str) -> bool {
-    let cells = line.trim().trim_matches('|');
-    !cells.is_empty()
-        && cells.split('|').all(|cell| {
-            let cell = cell.trim();
-            let dashes = cell.trim_start_matches(':').trim_end_matches(':');
-            !dashes.is_empty() && dashes.chars().all(|c| c == '-')
-        })
-}
-
-/// Whether `line` starts with a list marker: `-`, `+`, `*`, or a number and `.` or `)`, then a space, a tab or the end.
-fn list_item(line: &str) -> bool {
-    let line = line.trim_start_matches(' ');
-    let marker = if line.starts_with(['-', '+', '*']) {
-        1
-    } else {
-        let digits = line.chars().take_while(char::is_ascii_digit).count();
-        if !(1..=9).contains(&digits) || !line[digits..].starts_with(['.', ')']) {
-            return false;
-        }
-        digits + 1
-    };
-    line[marker..].chars().next().is_none_or(|c| c == ' ' || c == '\t' || c == '\n')
-}
-
 /// Mono's task boxes as text. Core draws a task item's box as `☐` or `☑`, and TS's mono maps those to `[ ]` and
 /// `[x]` before layout. OpenTUI's Rust Markdown has no hook for list markers, so mono escapes each task item's box
 /// outside fences and the item's text starts with it: the row reads `- [ ] item` as in TS. A wrapped item's next rows
@@ -1100,59 +995,6 @@ mod tests {
         assert_eq!(fit(Some((100, 52)), 40, 10), (38, 10));
     }
 
-    #[test]
-    fn the_stable_prefix_holds_back_two_of_markeds_tokens() {
-        // Marked's tokens for each text (Core 0.8.4's lexer), then what Core's streaming Markdown calls stable.
-        for (content, prefix) in [
-            ("one line", ""),
-            ("\n\nlead", ""),
-            // paragraph, space, paragraph
-            ("a\n\nb", "a\n\n"),
-            ("a\n\nb\n\n\nc", "a\n\nb\n\n\n"),
-            // paragraph, space, an open fence with its blank line
-            ("a\n\n```\nx\n\ny", "a\n\n"),
-            ("a\n\n```\nx\n\n```\n\nz", "a\n\n```\nx\n\n```\n\n"),
-            // paragraph, space, table with its blank line, paragraph
-            ("Packing list:\n\n| Item | Qty |\n| --- | --- |\n| Tent | 1 |\n\nDone.", "Packing list:\n\n"),
-            ("A:\n\n# Head\n\nDone.", "A:\n\n"),
-            ("A:\n\nTitle\n=====\n\nDone.", "A:\n\n"),
-            ("A:\n\n    indented\n\nDone.", "A:\n\n"),
-            ("A:\n\n[x]: http://x\n\nDone.", "A:\n\n"),
-            ("A:\n\n<div>\nx\n</div>\n\nDone.", "A:\n\n"),
-            // A rule keeps its own space token.
-            ("A:\n\n---\n\nDone.", "A:\n\n---\n\n"),
-            // A loose list is one token.
-            ("Intro:\n\n1. a\n\n2. b\n\nDone.", "Intro:\n\n1. a\n\n2. b\n\n"),
-            ("Intro:\n\n1. a\n\n2. b", "Intro:\n\n"),
-        ] {
-            assert_eq!(stable_prefix(content), prefix, "{content:?}");
-        }
-    }
-
-    /// The rows a streaming entry commits are final: its stable prefix renders as the finished blocks do, so the
-    /// engine does not hold back a last line it cannot decide yet (a setext underline, a rule, a closing fence).
-    #[test]
-    fn the_stable_prefix_renders_as_its_blocks_finish() {
-        let theme = crate::theme::mono(opentui::theme::ThemeMode::Dark);
-        let commit = assistant("", Phase::Progress);
-        let body = Body::Markdown(String::new());
-        let render = |text: &str, streaming: bool| {
-            let app = opentui::testing::TestApp::new(30, 12);
-            let markdown = entry_markdown(app.app(), &theme, &commit, &body, streaming);
-            app.app().root().add(&markdown);
-            markdown.set_markdown(text);
-            app.render().text()
-        };
-        for blocks in ["Para\n---", "x\n***", "```\ncode\n```", "| a |\n| - |\n| 1 |"] {
-            let content = format!("{blocks}\n\nnext\n\nmore");
-            assert_eq!(
-                render(stable_prefix(&content), true),
-                render(&format!("{blocks}\n\nnext"), false),
-                "{content:?}"
-            );
-        }
-    }
-
     /// Streamed equals whole: a Markdown reply committed in parts, at any split of its text, leaves the terminal with the
     /// rows of the reply rendered whole, blank rows between blocks included. TS loses the blank row at each boundary
     ///.
@@ -1180,6 +1022,7 @@ mod tests {
                 widget: Stream::Markdown(markdown),
                 content: String::new(),
                 committed_rows: 0,
+                committed_blocks: 0,
                 pending_spacer_rows: 0,
                 rendered: false,
                 mono: false,
