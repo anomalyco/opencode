@@ -5,6 +5,9 @@
 //!
 //! `psychoscript-bench --plugin [--runs N] SOURCE...` is the plugin-event benchmark instead: the conformance
 //! reducer handling a `git.status` command, N warm-up runs then N timed runs, as JSON lines of µs per execute.
+//!
+//! Both report instructions retired too where the platform counts them (macOS): the median per iteration for a
+//! program, the mean per execute for the plugin event.
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -12,6 +15,7 @@ use std::time::Instant;
 use psychoscript::{HostValue, Json, ProgramOptions, Runtime};
 use serde_json::json;
 
+mod counters;
 #[path = "../../conformance/reference.rs"]
 mod reference;
 
@@ -81,23 +85,27 @@ fn main() {
             Ok(value) => value,
             Err(d) => panic!("{name} failed: {d:?}"),
         };
-        let times: Vec<f64> = (0..iterations)
+        let (times, mut instructions): (Vec<f64>, Vec<u64>) = (0..iterations)
             .map(|_| {
+                let before = counters::instructions();
                 let start = Instant::now();
                 let _ = execute(&code);
-                start.elapsed().as_secs_f64() * 1e3
+                let ms = start.elapsed().as_secs_f64() * 1e3;
+                (ms, counters::instructions() - before)
             })
-            .collect();
+            .unzip();
         if times.is_empty() {
             continue;
         }
         let mut sorted = times.clone();
         sorted.sort_by(f64::total_cmp);
         let (median, min) = (sorted[sorted.len() / 2], sorted[0]);
+        instructions.sort_unstable();
+        let insns = instructions[instructions.len() / 2];
         if json {
-            report.push(json!({ "slug": slug, "name": name, "value": value.to_json(), "median_ms": median, "min_ms": min, "times_ms": times }));
+            report.push(json!({ "slug": slug, "name": name, "value": value.to_json(), "median_ms": median, "min_ms": min, "times_ms": times, "median_instructions": insns }));
         } else {
-            println!("{name:<28} {median:>8.1} ms  (min {min:.1} ms)");
+            println!("{name:<28} {median:>8.1} ms  (min {min:.1} ms)  {insns:>12} insns");
         }
     }
     if json {
@@ -129,6 +137,7 @@ fn plugin(mut args: impl Iterator<Item = String>) {
         for _ in 1..runs {
             let _ = runtime.execute_with(&code, &options);
         }
+        let before = counters::instructions();
         let times: Vec<f64> = (0..runs)
             .map(|_| {
                 let start = Instant::now();
@@ -136,12 +145,13 @@ fn plugin(mut args: impl Iterator<Item = String>) {
                 start.elapsed().as_secs_f64() * 1e6
             })
             .collect();
+        let insns = (counters::instructions() - before) / runs.max(1) as u64;
         let mut sorted = times.clone();
         sorted.sort_by(f64::total_cmp);
         let mean = times.iter().sum::<f64>() / runs.max(1) as f64;
         println!(
             "{}",
-            json!({ "source": source, "bytes": code.len(), "median_us": sorted[runs / 2], "min_us": sorted[0], "mean_us": mean })
+            json!({ "source": source, "bytes": code.len(), "median_us": sorted[runs / 2], "min_us": sorted[0], "mean_us": mean, "mean_instructions": insns })
         );
     }
 }

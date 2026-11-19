@@ -17,6 +17,8 @@ mod cross;
 mod data;
 mod diagnostic;
 mod exec;
+#[cfg(feature = "gc-stats")]
+mod gc;
 mod host;
 mod host_function;
 mod iteration;
@@ -42,6 +44,9 @@ mod vm;
 pub use data::Data;
 pub use diagnostic::{Diagnostic, DiagnosticKind, Interrupted, Limits};
 pub use exec::BoxFuture;
+#[cfg(feature = "gc-stats")]
+#[doc(hidden)]
+pub use gc::HeapStats;
 pub use host_function::{
     Call, CallType, DurableCall, DurableFunction, Failure, HostError, HostFunction, HostResult,
     HostString, HostValue, Namespace, Resolved, Returned, SnapshotHooks,
