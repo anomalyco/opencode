@@ -131,6 +131,9 @@ const CONTENT_POLICY_CODES = new Set([
   "refusal",
   "datainspectionfailed",
   "moderation_blocked",
+  // OpenAI's cybersecurity safeguard rejects a turn with `cyber_policy`, either as an
+  // HTTP 400 error body or as an error frame in the middle of a Responses stream.
+  "cyber_policy",
   // Gemini Decisions rejects blocked input with these `error.code` strings on a 400.
   "safety",
   "prohibited_content",

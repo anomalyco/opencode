@@ -217,6 +217,36 @@ describe("provider error classification", () => {
     ).toBe("ContentPolicy")
   })
 
+  test("classifies OpenAI cyber_policy refusals from HTTP 400 bodies and mid-stream Responses errors", () => {
+    const message = "Your request was rejected by the cybersecurity safeguard."
+    // OpenAI returns `cyber_policy` as the error code on a 400.
+    const http400 = {
+      error: {
+        message,
+        type: "invalid_request_error",
+        param: null,
+        code: "cyber_policy",
+      },
+    }
+    // The Responses wire API can emit the same code in an error frame mid-stream,
+    // under `response.error.code` with no HTTP status.
+    const streamFrame = {
+      type: "response.failed",
+      response: {
+        id: "resp_abc123",
+        status: "failed",
+        error: { code: "cyber_policy", message },
+      },
+    }
+
+    expect(
+      [
+        classifyProviderFailure({ message, status: 400, rawBody: JSON.stringify(http400) }),
+        classifyProviderFailure({ message, rawBody: JSON.stringify(streamFrame) }),
+      ].map((failure) => failure._tag),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
+  })
+
   test("classifies OpenAI image moderation blocks directly and through the Vercel AI Gateway", () => {
     const message =
       "Your request was rejected by the safety system. If you believe this is an error, contact us at help.openai.com and include the request ID req_123."
