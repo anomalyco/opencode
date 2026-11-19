@@ -521,24 +521,28 @@ export const make = Effect.fnUntraced(function* (
     ...(input.errors === undefined ? {} : { errors: input.errors }),
   })
 
-  // The model distillation runs on: a DeepSeek flash model when one is available, a paid one before a free one (free
-  // routes may refuse a signed-in caller), else OpenCode's default.
-  const distiller = yield* Effect.cached(
+  // The models distillation may run on, in order: the DeepSeek flash models listed, paid before free (a route may refuse
+  // a signed-in caller), each with its list price, or the same model's under another provider when its own listing has
+  // none; OpenCode's default model comes after them.
+  const distillers = yield* Effect.cached(
     ctx.model.list({ types: ["chat"] }).pipe(
       Effect.map((models) => {
-        const flash = models.data.filter((model) => /deepseek/i.test(model.id) && /flash/i.test(model.id))
-        const found = flash.find((model) => !/free/i.test(model.id)) ?? flash[0]
-        const price = found?.cost.find((tier) => tier.tier === undefined) ?? found?.cost[0]
-        return found === undefined
-          ? undefined
-          : {
-              ref: { id: found.id, providerID: found.providerID },
-              price: price === undefined ? undefined : { input: Number(price.input), output: Number(price.output) },
-            }
+        const price = (id: string, cost: (typeof models.data)[number]["cost"]) => {
+          const listed =
+            cost.length > 0 ? cost : (models.data.find((other) => other.id === id && other.cost.length > 0)?.cost ?? [])
+          const base = listed.find((tier) => tier.tier === undefined) ?? listed[0]
+          return base === undefined ? undefined : { input: Number(base.input), output: Number(base.output) }
+        }
+        return models.data
+          .filter((model) => /deepseek/i.test(model.id) && /flash/i.test(model.id))
+          .toSorted((a, b) => Number(/free/i.test(a.id)) - Number(/free/i.test(b.id)))
+          .map((model) => ({ ref: { id: model.id, providerID: model.providerID }, price: price(model.id, model.cost) }))
       }),
-      Effect.orElseSucceed(() => undefined),
+      Effect.orElseSucceed(() => []),
     ),
   )
+  // The first of them that answered, tried first from then on.
+  let answering: number | undefined
 
   /**
    * Adds a distillation to the session's writer totals, kept in plugin storage (`memory-writer:<session>`) and logged:
@@ -578,21 +582,21 @@ export const make = Effect.fnUntraced(function* (
     events: { readonly from: number; readonly to: number },
   ) =>
     Effect.gen(function* () {
-      const model = yield* distiller
+      const models = yield* distillers
       const prompt = OpencodeMemoryCapture.prompt({ segment, boundary })
-      // A listed model can still refuse the request; OpenCode's default model is the fallback, at a price not known here.
-      const answer = yield* ctx.experimental.generate
-        .text({ prompt, ...(model === undefined ? {} : { model: model.ref }) })
-        .pipe(
-          Effect.map((result) => ({ ...result, price: model?.price })),
-          Effect.catch((cause) =>
-            model === undefined
-              ? Effect.fail(cause)
-              : ctx.experimental.generate
-                  .text({ prompt })
-                  .pipe(Effect.map((result) => ({ ...result, price: undefined }))),
+      const order = [...(answering === undefined ? [] : [answering]), ...models.keys()].filter(
+        (index, at, all) => all.indexOf(index) === at,
+      )
+      // A listed model can still refuse the request; OpenCode's default model is the last try, at a price not known here.
+      const answer = yield* Effect.firstSuccessOf([
+        ...order.map((index) =>
+          ctx.experimental.generate.text({ prompt, model: models[index]!.ref }).pipe(
+            Effect.tap(() => Effect.sync(() => (answering = index))),
+            Effect.map((result) => ({ ...result, price: models[index]!.price })),
           ),
-        )
+        ),
+        ctx.experimental.generate.text({ prompt }).pipe(Effect.map((result) => ({ ...result, price: undefined }))),
+      ])
       yield* spent(sessionID, prompt, answer.text, answer.price)
       const found = OpencodeMemoryCapture.candidates(answer.text)
       if (found.length === 0) return
