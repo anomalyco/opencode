@@ -847,7 +847,7 @@ mod tests {
     }
 
     fn body(commit: &Commit) -> Option<Body> {
-        entry_body(commit, &commit.text, BodyOptions { shell_output: true, mono: false })
+        entry_body(commit, &commit.text, BodyOptions { shell_output: true, ..BodyOptions::default() })
     }
 
     fn text(body: Option<Body>) -> String {

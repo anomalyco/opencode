@@ -131,6 +131,8 @@ pub enum Body {
 pub struct BodyOptions {
     pub shell_output: bool,
     pub mono: bool,
+    /// `session.markdown: "source"`: reasoning shows its highlighted Markdown source instead of rendered Markdown.
+    pub markdown_source: bool,
 }
 
 /// Where an entry starts and whether it ends its row (`EntryFlags`).
@@ -178,7 +180,7 @@ pub fn entry_body(commit: &Commit, options: BodyOptions) -> Body {
             Phase::Start => Body::None,
             Phase::Final if commit.interrupted => text_body("reasoning interrupted".into()),
             Phase::Final => Body::None,
-            Phase::Progress => reasoning_body(&raw, mono),
+            Phase::Progress => reasoning_body(&raw, mono, !options.markdown_source),
         },
         EntryKind::System | EntryKind::Error => {
             let text = if commit.phase == Phase::Progress { raw } else { raw.trim().to_owned() };
@@ -217,13 +219,17 @@ fn user_body(raw: &str, mono: bool) -> Body {
     text_body(format!("{lead}{} {body}", if mono { ">" } else { "›" }))
 }
 
-fn reasoning_body(raw: &str, mono: bool) -> Body {
+/// Rendered reasoning is Markdown, as an answer is; source reasoning is highlighted Markdown source (#63989).
+fn reasoning_body(raw: &str, mono: bool, rendered: bool) -> Body {
     let clean = raw.replace("[REDACTED]", "");
     if clean.is_empty() {
         return Body::None;
     }
     let (lead, body) = leading_newlines(&clean);
-    let code = |content: String| Body::Code { content, filetype: Some("markdown".into()) };
+    let code = |content: String| match rendered {
+        true => Body::Markdown(content),
+        false => Body::Code { content, filetype: Some("markdown".into()) },
+    };
     if let Some(rest) = body.strip_prefix("Thinking:") {
         let rest = rest.trim_start();
         if mono {
@@ -428,6 +434,8 @@ pub struct Writer {
     theme: RunTheme,
     mono: bool,
     shell_output: bool,
+    /// `session.markdown: "source"`, for reasoning bodies.
+    markdown_source: bool,
     /// `session.image_preview`: image commits draw the picture under their caption.
     image_preview: bool,
     /// Something was written above the transcript, so its first entry starts one row lower.
@@ -445,6 +453,7 @@ impl Writer {
             theme,
             mono,
             shell_output: false,
+            markdown_source: false,
             image_preview: false,
             wrote,
             tail: None,
@@ -485,6 +494,14 @@ impl Writer {
 
     pub fn set_shell_output(&mut self, show: bool) {
         self.shell_output = show;
+    }
+
+    pub fn set_markdown_source(&mut self, source: bool) {
+        self.markdown_source = source;
+    }
+
+    fn body_options(&self) -> BodyOptions {
+        BodyOptions { shell_output: self.shell_output, mono: self.mono, markdown_source: self.markdown_source }
     }
 
     pub fn set_image_preview(&mut self, show: bool) {
@@ -543,7 +560,7 @@ impl Writer {
             self.tail = Some(commit);
             return Ok(());
         }
-        let body = entry_body(&commit, BodyOptions { shell_output: self.shell_output, mono: self.mono });
+        let body = entry_body(&commit, self.body_options());
         if body == Body::None {
             if entry_done(&commit) {
                 self.finish_active(false)?;
@@ -588,7 +605,7 @@ impl Writer {
     /// `writeImage`: the caption, then the picture fitted to the terminal's width and the rows above the footer,
     /// or `No preview` when it does not decode.
     fn write_image(&mut self, commit: &Commit) -> Result<()> {
-        let body = entry_body(commit, BodyOptions { shell_output: self.shell_output, mono: self.mono });
+        let body = entry_body(commit, self.body_options());
         let Body::Text(caption) = &body else { return Ok(()) };
         let app = self.scrollback.app().clone();
         let image = commit
@@ -974,8 +991,10 @@ mod tests {
         assert_eq!(entry_body(&interrupted, options), Body::Text("assistant interrupted".into()));
         let reasoning =
             Commit::new(EntryKind::Reasoning, Source::Reasoning, Phase::Progress, "Thinking:   a [REDACTED]plan");
+        assert_eq!(entry_body(&reasoning, options), Body::Markdown("_Thinking:_ a plan".into()));
+        let source = BodyOptions { markdown_source: true, ..options };
         assert_eq!(
-            entry_body(&reasoning, options),
+            entry_body(&reasoning, source),
             Body::Code { content: "_Thinking:_ a plan".into(), filetype: Some("markdown".into()) }
         );
         assert_eq!(entry_body(&reasoning, mono), Body::Text("Thinking: a plan".into()));
