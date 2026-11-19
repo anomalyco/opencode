@@ -103,6 +103,30 @@ const vmSpecs = (): ReadonlyArray<ClassSpec> =>
     { name: "CustomIter", ctor: CustomIter, fields: ["done", "rawGen", "iterator", "next"] },
   ])
 
+/**
+ * For tests: the frames a saved state holds (the job stack, parked awaits, suspended generators), each as its
+ * function's name or the internal helper it runs, with " (redo)" for a getter an iterator op is running (`Mode.REDO`).
+ * It reads the Frame and Fn records as `vmSpecs` writes them, so it changes with the format.
+ */
+export const savedFrames = (snapshot: Snapshot): Array<string> => {
+  const fields = vmSpecs().find((spec) => spec.name === "Frame")!.fields
+  const records = snapshot.records as ReadonlyArray<
+    { t?: string; f?: ReadonlyArray<unknown>; o?: ReadonlyArray<unknown> } | undefined
+  >
+  return records.flatMap((record) => {
+    if (record?.t !== "Frame") return []
+    const fn = record.f![fields.indexOf("fn")]
+    const redo = record.f![fields.indexOf("mode")] === Mode.REDO ? " (redo)" : ""
+    if (Array.isArray(fn) && fn[0] === "r") {
+      const props = records[fn[1] as number]!.o!
+      return [`${String(props[props.indexOf("name") + 1])}${redo}`]
+    }
+    const [, source, index] = (record.f![fields.indexOf("code")] as [string, [string, string, number]])[1]
+    const codes = source === "@vm-internal" ? getInternalPrelude().codes : compiledPrelude().codes
+    return [`${codes[index]!.name}${redo}`]
+  })
+}
+
 let build: string | undefined
 
 /**
