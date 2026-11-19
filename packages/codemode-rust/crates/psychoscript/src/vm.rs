@@ -2872,7 +2872,7 @@ impl Vm {
                         let c = self.stack[base + i as usize].0 as usize;
                         #[cfg(feature = "gc-incremental")]
                         if self.heap.marking {
-                            self.gc_shade(v);
+                            self.gc_cell_write(c);
                         }
                         if let Some(cell) = self.cells.get_mut(c) {
                             *cell = v;
@@ -2896,7 +2896,7 @@ impl Vm {
                         let c = self.frames[fi].upvals[i as usize];
                         #[cfg(feature = "gc-incremental")]
                         if self.heap.marking {
-                            self.gc_shade(v);
+                            self.gc_cell_write(c as usize);
                         }
                         self.cells[c as usize] = v;
                     }

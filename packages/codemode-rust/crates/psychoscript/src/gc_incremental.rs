@@ -9,12 +9,18 @@
 //!   before the next cycle; at the limit, or whenever a free list holds slots or a cycle runs, the limit is 0 and the
 //!   cold path (`gc_alloc` and friends) reuses slots, colours them and counts the debt that schedules steps.
 //! - Colours: white (unreached), grey (reached, references not traced yet), black, and free. What a cycle allocates
-//!   survives it: a new object is grey while marking, so its initial references are traced, and black or white during
-//!   the sweep depending on whether the sweep has passed its slot. Cells and strings made after the cycle started are
-//!   beyond the sweep's end, so they survive without a colour.
-//! - Barriers: writing to an object while marking re-greys it if it was black (`Heap`'s `IndexMut`, a backward
-//!   barrier), for the atomic end of marking to trace; storing to a cell while marking shades the value
-//!   (`Vm::gc_shade`). The stack, frames and the other roots have no barrier: the atomic end scans them again.
+//!   survives it: a new object is black while marking, and black or white during the sweep depending on whether the
+//!   sweep has passed its slot. Cells and strings made after the cycle started are beyond the sweep's end, so they
+//!   survive without a colour.
+//! - Marking keeps a snapshot of the heap as the cycle started (Yuasa): the roots are scanned once, at the start, and
+//!   everything they reached then survives. The first write to an object while marking traces it before the write
+//!   (`Heap`'s `IndexMut`), and overwriting a cell shades its old value (`Vm::gc_cell_write`), so no reference the
+//!   snapshot held is lost. Values only move between the roots and the heap, and the roots need no barrier: what the
+//!   program can reach later was in the snapshot or is new, hence black. Marking ends when nothing is grey, with no
+//!   atomic rescan.
+//! - Work is counted in slots traced, and an object's long part (properties, elements, entries) is traced
+//!   `CHUNK` slots at a time, so a step stays short whatever the objects' sizes. Only the barrier traces a whole object
+//!   at once.
 //! - Stack slots hold a cell as its raw index, which reads as a tiny number, so the stack is scanned conservatively for
 //!   cells: a slot whose bits are a valid cell index keeps that cell. Zero keeps cell 0.
 //! - What a fresh runtime makes (objects, strings and cells below `snapshot_base`) and every atom are permanent.
@@ -26,7 +32,7 @@
 use std::ops::{Deref, Index, IndexMut};
 use std::slice::SliceIndex;
 
-use crate::object::{Kind, Obj, OrderedMap};
+use crate::object::{Kind, Obj};
 use crate::reach::Visit;
 use crate::strings::{NO_GROW, StrBuf, StrId, Strings};
 use crate::value::{Id, Slot, Value};
@@ -45,15 +51,19 @@ const FIRST: usize = 64 * 1024;
 /// The least room a cycle leaves before the next one starts, so a small heap does not collect all the time.
 const FLOOR: usize = 64 * 1024;
 /// Allocations between steps.
-const STEP: usize = 1024;
-/// Work units per allocation: enough to finish a cycle before the heap grows by about half.
-const MUL: usize = 16;
+const STEP: usize = 256;
+/// Work units per allocation: enough to finish a cycle before the heap grows by about half. A unit is about what
+/// tracing one slot costs, a nanosecond or so.
+const MUL: usize = 128;
 /// The most work units in one step, which bounds its pause.
-const MAX_WORK: usize = 32 * 1024;
-/// A freed slot costs this many units more than a surviving one: dropping its contents frees memory.
-const FREE_WORK: usize = 4;
+const MAX_WORK: usize = 64 * 1024;
+/// What freeing a slot's contents, or giving a string text of its own, costs on top: a call to the allocator.
+const FREE_WORK: usize = 16;
 /// The short strings' buffer is retired at a cycle's start once it holds this many bytes.
 const ARENA_RETIRE: usize = 64 * 1024;
+/// Slots of one object traced at a time; a few in the stress mode, so objects are often traced in part.
+const CHUNK: usize = 4096;
+const STRESS_CHUNK: usize = 3;
 /// The least work units per step in the stress mode, where steps are as small as the debt allows, so cycles
 /// interleave with the program as much as possible.
 const STRESS_WORK: usize = 64;
@@ -77,8 +87,8 @@ pub(crate) fn first_limit() -> usize {
     if stress() { 0 } else { FIRST }
 }
 
-/// The run's objects. Writing to an object while marking re-greys it when it is black, so the collector traces it
-/// again: every `heap[id]` that may write goes through `IndexMut`.
+/// The run's objects. The first write to an object while marking traces it first: every `heap[id]` that may write
+/// goes through `IndexMut`.
 // Only what the hot paths read is inline: with the colours inline too, the dispatch loop ran about 3% more
 // instructions on loops that never touch the heap.
 pub struct Heap {
@@ -91,9 +101,11 @@ pub struct Heap {
 struct Marks {
     color: Vec<u8>,
     grey: Vec<Id>,
-    /// Objects the barrier re-greyed, traced at the atomic end of marking only, as Lua's `grayagain`: an object the
-    /// program keeps writing to would otherwise be traced again at every step, and marking might never end.
-    again: Vec<Id>,
+    /// A long object traced in part: its id and the first slot of its bulk (`Visit::bulk`) not traced yet.
+    resume: Option<(Id, usize)>,
+    /// Strings and cells the barrier reached, which the next step marks: their colours are not the heap's.
+    strs: Vec<StrId>,
+    cells: Vec<u32>,
 }
 
 impl Heap {
@@ -110,13 +122,46 @@ impl Heap {
         self.objs.push(o);
     }
 
+    /// Traces object `i` as it is, before a write, unless it is black already.
     #[cold]
     #[inline(never)]
     fn barrier(&mut self, i: usize) {
-        let m = &mut self.marks;
-        if m.color.get(i) == Some(&BLACK) {
-            m.color[i] = GREY;
-            m.again.push(i as Id);
+        let m = &mut *self.marks;
+        if !matches!(m.color.get(i), Some(&WHITE | &GREY)) {
+            return;
+        }
+        m.color[i] = BLACK;
+        Shade(m).object(&self.objs[i]);
+    }
+}
+
+/// The barrier's trace: greys objects, and leaves strings and cells to the next step.
+struct Shade<'m>(&'m mut Marks);
+
+impl Visit for Shade<'_> {
+    fn id(&mut self, id: Id) {
+        let m = &mut *self.0;
+        if m.color.get(id as usize) == Some(&WHITE) {
+            m.color[id as usize] = GREY;
+            m.grey.push(id);
+        }
+    }
+
+    fn str(&mut self, s: StrId) {
+        self.0.strs.push(s);
+    }
+
+    fn cell(&mut self, c: u32) {
+        self.0.cells.push(c);
+    }
+
+    fn slots(&mut self, slots: &[Slot]) {
+        for s in slots {
+            // A saved frame's stack holds cells as raw indices: see `Marker::slots`.
+            if let Ok(c) = u32::try_from(s.0) {
+                self.cell(c);
+            }
+            self.val(&s.get());
         }
     }
 }
@@ -136,15 +181,6 @@ impl<I: SliceIndex<[Obj]>> Index<I> for Heap {
     #[inline]
     fn index(&self, i: I) -> &I::Output {
         &self.objs[i]
-    }
-}
-
-impl<'a> IntoIterator for &'a Heap {
-    type Item = &'a Obj;
-    type IntoIter = std::slice::Iter<'a, Obj>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.objs.iter()
     }
 }
 
@@ -169,6 +205,9 @@ pub struct Gc {
     cell_color: Vec<u8>,
     /// Slots in use at which the next cycle starts.
     trigger: usize,
+    /// Slots in use when marking ended, less what the sweep freed since: the live data the next threshold is set from.
+    /// What the program allocates during the sweep is left out, so this cycle's floating garbage does not raise it.
+    live: usize,
     /// Allocations not yet paid for with collector work.
     debt: usize,
     /// A step is due at the next safe point.
@@ -189,6 +228,7 @@ impl Gc {
             cell_free: Vec::new(),
             cell_color: Vec::new(),
             trigger: first_limit(),
+            live: 0,
             debt: 0,
             requested: false,
             owns_suspend: false,
@@ -286,17 +326,24 @@ impl Strings {
         match self.gc.color[i] {
             WHITE => {
                 self.gc.color[i] = FREE;
+                // Text in a shared buffer frees nothing.
+                let work = if self.bufs[i].grow == NO_GROW {
+                    FREE_WORK
+                } else {
+                    1
+                };
                 self.release(i);
                 self.gc.free.push(i as StrId);
-                1 + FREE_WORK
+                1 + work
             }
             BLACK => {
                 self.gc.color[i] = WHITE;
                 let g = self.bufs[i].grow as usize;
-                if self.gc.retired.get(g) == Some(&true) {
-                    self.own_text(i);
+                if self.gc.retired.get(g) != Some(&true) {
+                    return 1;
                 }
-                1
+                self.own_text(i);
+                1 + FREE_WORK
             }
             _ => 1,
         }
@@ -398,9 +445,7 @@ fn reused_color(phase: Phase, id: usize, swept_to: usize, marked: u8) -> u8 {
 /// Traces from roots and grey objects, with the colours taken out of the VM so the VM can be read meanwhile.
 struct Marker<'v> {
     vm: &'v Vm,
-    color: Vec<u8>,
-    grey: Vec<Id>,
-    again: Vec<Id>,
+    marks: Box<Marks>,
     cells: Vec<u8>,
     strs: Vec<u8>,
     grow_live: Vec<bool>,
@@ -410,11 +455,12 @@ struct Marker<'v> {
 impl Visit for Marker<'_> {
     fn id(&mut self, id: Id) {
         self.work += 1;
-        if let Some(c) = self.color.get_mut(id as usize)
+        let m = &mut *self.marks;
+        if let Some(c) = m.color.get_mut(id as usize)
             && *c == WHITE
         {
             *c = GREY;
-            self.grey.push(id);
+            m.grey.push(id);
         }
     }
 
@@ -445,15 +491,6 @@ impl Visit for Marker<'_> {
         }
     }
 
-    fn map(&mut self, m: &OrderedMap) {
-        // Deleted entries stay as tombstones, which cost a step time too.
-        self.work += m.entries.len() - m.live;
-        for (k, v) in m.entries.iter().flatten() {
-            self.val(k);
-            self.val(v);
-        }
-    }
-
     fn slots(&mut self, slots: &[Slot]) {
         let cells = self.vm.cells.len() as u64;
         for s in slots {
@@ -466,22 +503,45 @@ impl Visit for Marker<'_> {
 }
 
 impl Marker<'_> {
-    /// Traces grey objects until the work reaches `budget` or none is left; returns whether none is left.
+    /// Marks what the barrier reached, then traces grey objects until the work reaches `budget` or none is left;
+    /// returns whether none is left.
     fn propagate(&mut self, budget: usize) -> bool {
         let vm = self.vm;
+        for s in std::mem::take(&mut self.marks.strs) {
+            self.str(s);
+        }
+        for c in std::mem::take(&mut self.marks.cells) {
+            self.cell(c);
+        }
         while self.work < budget {
-            let Some(id) = self.grey.pop() else {
+            let next = self
+                .marks
+                .resume
+                .take()
+                .or_else(|| self.marks.grey.pop().map(|id| (id, 0)));
+            let Some((id, from)) = next else {
                 return true;
             };
-            let c = &mut self.color[id as usize];
-            if *c != GREY {
+            // Black already when the barrier traced it.
+            if self.marks.color[id as usize] != GREY {
                 continue;
             }
-            *c = BLACK;
-            self.work += 1;
-            self.object(&vm.heap[id as usize]);
+            let o = &vm.heap[id as usize];
+            if from == 0 {
+                self.work += 1;
+                self.head(o);
+            }
+            let len = bulk_len(o);
+            let to = from + if stress() { STRESS_CHUNK } else { CHUNK };
+            self.work += to.min(len).saturating_sub(from);
+            self.bulk(o, from, to);
+            if to < len {
+                self.marks.resume = Some((id, to));
+                continue;
+            }
+            self.marks.color[id as usize] = BLACK;
         }
-        self.grey.is_empty()
+        self.marks.grey.is_empty() && self.marks.resume.is_none()
     }
 
     /// Every root: what `reach::roots` visits, plus what only a run in progress holds.
@@ -521,6 +581,17 @@ impl Marker<'_> {
     }
 }
 
+/// How many slots `Visit::bulk` traces for `o`.
+fn bulk_len(o: &Obj) -> usize {
+    o.props.items.len()
+        + match &o.kind {
+            Kind::Array(items) | Kind::Arguments(items) => items.len(),
+            Kind::ListIter { items, .. } => items.len(),
+            Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => m.entries.len(),
+            _ => 0,
+        }
+}
+
 impl Vm {
     /// `alloc` at its limit: a reused slot, or a new one, coloured for the cycle in progress.
     #[cold]
@@ -532,7 +603,7 @@ impl Vm {
             Some(id) => {
                 self.heap.objs[id as usize] = obj;
                 self.heap.marks.color[id as usize] =
-                    reused_color(phase, id as usize, self.gc.obj_sweep.0, GREY);
+                    reused_color(phase, id as usize, self.gc.obj_sweep.0, BLACK);
                 id
             }
             None => {
@@ -542,17 +613,13 @@ impl Vm {
                 self.heap.objs.push(obj);
                 // Past the sweep's end, so the sweep never sees it.
                 match phase {
-                    Phase::Mark => self.heap.marks.color.push(GREY),
+                    Phase::Mark => self.heap.marks.color.push(BLACK),
                     Phase::Sweep => self.heap.marks.color.push(WHITE),
                     Phase::Idle => {}
                 }
                 (self.heap.len() - 1) as Id
             }
         };
-        // Its initial references are traced like those of any object reached.
-        if phase == Phase::Mark {
-            self.heap.marks.grey.push(id);
-        }
         self.gc_poll();
         id
     }
@@ -578,10 +645,13 @@ impl Vm {
         c
     }
 
-    /// The store barrier of cells: a value stored while marking is reached, wherever the cell is.
+    /// The barrier of cells: the value a write to cell `c` overwrites while marking survives the cycle.
     #[cold]
     #[inline(never)]
-    pub(crate) fn gc_shade(&mut self, v: Slot) {
+    pub(crate) fn gc_cell_write(&mut self, c: usize) {
+        let Some(v) = self.cells.get(c) else {
+            return;
+        };
         match v.get() {
             Value::Obj(id) => {
                 if self.heap.marks.color.get(id as usize) == Some(&WHITE) {
@@ -623,7 +693,8 @@ impl Vm {
             self.gc_request();
             return;
         }
-        let room = self.gc.trigger - used;
+        // Each arena may take a third of the room before the next look, so together they never overshoot it.
+        let room = (self.gc.trigger - used) / 3;
         let limit = |len: usize, free: bool| if free { 0 } else { len + room };
         self.gc.obj_limit = limit(self.heap.len(), !self.gc.free.is_empty()).min(MAX_OBJECTS);
         self.gc.cell_limit = limit(self.cells.len(), !self.gc.cell_free.is_empty());
@@ -689,7 +760,7 @@ impl Vm {
             Phase::Mark => self.gc_mark(budget),
             Phase::Sweep => self.gc_sweep(budget),
         }
-        if self.gc.phase != Phase::Idle && (stress() || left >= STEP) {
+        if self.gc.phase != Phase::Idle && (stress() || self.gc.debt >= STEP) {
             self.gc_request();
         }
         #[cfg(feature = "gc-stats")]
@@ -698,6 +769,8 @@ impl Vm {
 
     /// Idle → Mark: colours for what was made since the last cycle, then the roots and the fresh runtime's objects.
     fn gc_start(&mut self) {
+        // What was allocated while idle reused freed slots; this cycle pays for none of it.
+        self.gc.debt = 0;
         self.gc.phase = Phase::Mark;
         self.gc.obj_limit = 0;
         self.gc.cell_limit = 0;
@@ -719,16 +792,9 @@ impl Vm {
         let atoms_left = self.atoms.gc.atom_at < self.atoms.counts().1;
         let done = self.with_marker(|m| {
             m.work = spent;
-            if !m.propagate(budget) || atoms_left {
-                return false;
-            }
-            // Atomic: what the barrier recorded, and the roots again, which have no barrier.
-            let again = std::mem::take(&mut m.again);
-            m.grey.extend(again);
-            m.roots();
-            m.propagate(usize::MAX)
+            m.propagate(budget)
         });
-        if !done {
+        if !done || atoms_left {
             return;
         }
         // Atoms made since the last step, which nothing may reach but the interner.
@@ -736,6 +802,7 @@ impl Vm {
         let gc = &mut self.atoms.gc;
         gc.atoms_done = gc.atom_skip.unwrap_or(gc.atom_at);
         self.heap.marking = false;
+        self.gc.live = self.gc_used();
         self.gc.phase = Phase::Sweep;
         self.atoms.gc.phase = Phase::Sweep;
         let base = self.snapshot_base;
@@ -746,17 +813,13 @@ impl Vm {
 
     /// Runs `f` with the colours taken out of the VM, then puts them back.
     fn with_marker<R>(&mut self, f: impl FnOnce(&mut Marker) -> R) -> R {
-        let color = std::mem::take(&mut self.heap.marks.color);
-        let grey = std::mem::take(&mut self.heap.marks.grey);
-        let again = std::mem::take(&mut self.heap.marks.again);
+        let marks = std::mem::take(&mut self.heap.marks);
         let cells = std::mem::take(&mut self.gc.cell_color);
         let strs = std::mem::take(&mut self.atoms.gc.color);
         let grow_live = std::mem::take(&mut self.atoms.gc.grow_live);
         let mut m = Marker {
             vm: self,
-            color,
-            grey,
-            again,
+            marks,
             cells,
             strs,
             grow_live,
@@ -764,17 +827,13 @@ impl Vm {
         };
         let r = f(&mut m);
         let Marker {
-            color,
-            grey,
-            again,
+            marks,
             cells,
             strs,
             grow_live,
             ..
         } = m;
-        self.heap.marks.color = color;
-        self.heap.marks.grey = grey;
-        self.heap.marks.again = again;
+        self.heap.marks = marks;
         self.gc.cell_color = cells;
         self.atoms.gc.color = strs;
         self.atoms.gc.grow_live = grow_live;
@@ -786,6 +845,7 @@ impl Vm {
         #[cfg(feature = "gc-stats")]
         self.publish_stats();
         let mut work = 0;
+        let free = self.gc.free.len() + self.gc.cell_free.len() + self.atoms.gc.free.len();
         let (mut at, end) = self.gc.obj_sweep;
         while at < end && work < budget {
             work += 1;
@@ -823,6 +883,8 @@ impl Vm {
             at += 1;
             self.atoms.gc.sweep.0 = at;
         }
+        self.gc.live -=
+            self.gc.free.len() + self.gc.cell_free.len() + self.atoms.gc.free.len() - free;
         if work >= budget {
             return;
         }
@@ -831,8 +893,7 @@ impl Vm {
         self.gc.trigger = if stress() {
             0
         } else {
-            let live = self.gc_used();
-            live + live.max(FLOOR)
+            self.gc.live + self.gc.live.max(FLOOR)
         };
         self.gc_poll();
     }

@@ -126,7 +126,7 @@ fn natives() -> &'static Natives {
         let mut list: Vec<NativeFn> = Vec::new();
         list.extend(host::snapshot_natives());
         list.extend(crate::promise::snapshot_natives());
-        for o in &vm.heap {
+        for o in vm.heap.iter() {
             if let Kind::Native { f, .. } = &o.kind {
                 list.push(*f);
             }

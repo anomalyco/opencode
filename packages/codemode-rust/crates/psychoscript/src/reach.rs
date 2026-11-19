@@ -103,22 +103,49 @@ pub(crate) trait Visit {
         }
     }
 
-    fn map(&mut self, m: &OrderedMap) {
-        for (k, v) in m.entries.iter().flatten() {
-            self.val(k);
-            self.val(v);
+    fn object(&mut self, o: &Obj) {
+        self.head(o);
+        self.bulk(o, 0, usize::MAX);
+    }
+
+    /// The slots of `o` from `from` to `to`, in the order properties, then elements or entries: the parts that may be
+    /// long, which a collector traces a range at a time.
+    fn bulk(&mut self, o: &Obj, from: usize, to: usize) {
+        let props = &o.props.items;
+        for p in range(props, from, to) {
+            self.val(&p.value);
+        }
+        let (from, to) = (
+            from.saturating_sub(props.len()),
+            to.saturating_sub(props.len()),
+        );
+        match &o.kind {
+            Kind::Array(items) | Kind::Arguments(items) => self.vals(range(items, from, to)),
+            Kind::ListIter { items, .. } => self.vals(range(items, from, to)),
+            Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => {
+                for (k, v) in range(&m.entries, from, to).iter().flatten() {
+                    self.val(k);
+                    self.val(v);
+                }
+            }
+            _ => {}
         }
     }
 
-    fn object(&mut self, o: &Obj) {
+    /// Everything `o` refers to apart from its `bulk`.
+    fn head(&mut self, o: &Obj) {
         if let Some(p) = o.proto {
             self.id(p);
         }
-        for p in &o.props.items {
-            self.val(&p.value);
-        }
         match &o.kind {
             Kind::Ordinary
+            | Kind::Array(_)
+            | Kind::Arguments(_)
+            | Kind::ListIter { .. }
+            | Kind::Map(_)
+            | Kind::Set(_)
+            | Kind::WeakMap(_)
+            | Kind::WeakSet(_)
             | Kind::Error(_)
             | Kind::RegExp(_)
             | Kind::Date(_)
@@ -132,8 +159,6 @@ pub(crate) trait Visit {
                     self.id(ns.parent);
                 }
             }
-            Kind::Array(items) | Kind::Arguments(items) => self.vals(items.iter()),
-            Kind::ListIter { items, .. } => self.vals(items.iter()),
             Kind::Closure(c) => {
                 self.val(&c.this);
                 for cell in c.upvals.iter() {
@@ -155,7 +180,6 @@ pub(crate) trait Visit {
                     self.reaction(r);
                 }
             }
-            Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => self.map(m),
             Kind::Generator(g) => self.gen_state(g),
             Kind::ArrayIter { target, .. }
             | Kind::MapIter { target, .. }
@@ -205,6 +229,11 @@ pub(crate) trait Visit {
             }
         }
     }
+}
+
+/// The part of `s` from `from` to `to`, as far as it goes.
+fn range<T>(s: &[T], from: usize, to: usize) -> &[T] {
+    &s[from.min(s.len())..to.min(s.len())]
 }
 
 struct Walk<'v> {
