@@ -1,6 +1,7 @@
 import type { Model } from "@opencode/schema/model"
 
 const codeModeBuiltIns = ["read", "write", "edit", "patch", "shell", "websearch"] as const
+const fullCodeModeHidden = ["glob", "grep", "webfetch"] as const
 
 export interface ModelTools {
   readonly hidden: Set<string>
@@ -15,6 +16,8 @@ export function modelTools(input: {
   const hidden = new Set<string>()
   const direct = new Set<string>()
   if (!input.websearch) hidden.add("websearch")
+  // Code Mode programs search and fetch through shell and their `fetch` global, so these tools only add noise.
+  if (input.fullCodeMode) for (const name of fullCodeModeHidden) hidden.add(name)
   if (!input.model) {
     if (input.fullCodeMode) {
       for (const name of codeModeBuiltIns) {
@@ -36,12 +39,7 @@ export function modelTools(input: {
 
   if (!input.fullCodeMode) return { hidden, direct }
 
-  if (gpt !== undefined || isAnthropic(input.model, id, modelID)) {
-    hidden.add("glob")
-    hidden.add("grep")
-    hidden.add("webfetch")
-    return { hidden, direct }
-  }
+  if (gpt !== undefined || isAnthropic(input.model, id, modelID)) return { hidden, direct }
 
   for (const name of codeModeBuiltIns) {
     if (!hidden.has(name)) direct.add(name)
