@@ -321,16 +321,39 @@ fn a_fault_is_a_crash_and_a_request_is_an_end() {
 #[cfg(unix)]
 const PROBE: &str = "OPENCODE_CONTAIN_PROBE";
 
+/// The signals the parent takes over and waits with, and the ones its client gets back.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn parent_signals() -> libc::sigset_t {
+    // SAFETY: plain set operations on a valid, zeroed set.
+    unsafe {
+        let mut set: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&mut set);
+        for signal in [libc::SIGTERM, libc::SIGHUP, libc::SIGCHLD] {
+            libc::sigaddset(&mut set, signal);
+        }
+        set
+    }
+}
+
 /// Runs a real parent in a process of its own (this test binary again, in row `row`), as its signal dispositions are
 /// the process's; its client does as `mode` says, then waits. Returns the parent and its client's PID.
 #[cfg(unix)]
 #[allow(unsafe_code)]
 fn real_parent(row: &str, mode: &str) -> (std::process::Child, libc::pid_t) {
     use std::io::BufRead;
+    use std::os::unix::process::CommandExt;
     if let Ok(mode) = std::env::var(PROBE) {
         let raw = os(&["opencode-native"]);
-        // SAFETY: a disposition, in the probe's own process.
-        unsafe { libc::signal(libc::SIGCHLD, libc::SIG_IGN) };
+        // A real parent runs before any thread starts, so its `sigsuspend` is the only wait a signal can break.
+        // libtest runs this row on a thread of its own and keeps the process's main thread, which could take the
+        // signal or the wake instead and leave the wait unbroken; the probe starts with them blocked (below), and
+        // the thread that supervises gets the mask a real parent finds: none.
+        // SAFETY: a mask and a disposition, in the probe's own process.
+        unsafe {
+            libc::pthread_sigmask(libc::SIG_UNBLOCK, &parent_signals(), std::ptr::null_mut());
+            libc::signal(libc::SIGCHLD, libc::SIG_IGN);
+        }
         match supervise_with(&raw, &restart_of(&raw), &mut sys::Unix::new()) {
             Ok(_) => {
                 if mode == "lease" {
@@ -350,13 +373,23 @@ fn real_parent(row: &str, mode: &str) -> (std::process::Child, libc::pid_t) {
             Err(code) => std::process::exit(code),
         }
     }
-    let mut probe = std::process::Command::new(std::env::current_exe().unwrap())
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
         .args([row, "--exact", "--nocapture", "--test-threads=1"])
         .env(PROBE, mode)
         .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
+        .stdout(std::process::Stdio::piped());
+    // Both of the probe's threads would take a signal a real parent's one thread takes alone, and one taken by
+    // libtest's main thread never breaks the supervisor's wait. Start it as a real parent starts: with these blocked
+    // everywhere, so the row can unblock them on the thread that supervises.
+    // SAFETY: a mask, set in the child between fork and exec.
+    unsafe {
+        command.pre_exec(|| {
+            libc::sigprocmask(libc::SIG_BLOCK, &parent_signals(), std::ptr::null_mut());
+            Ok(())
+        });
+    }
+    let mut probe = command.spawn().unwrap();
     let mut lines = std::io::BufReader::new(probe.stdout.take().unwrap()).lines();
     let client: libc::pid_t = loop {
         let line = lines.next().expect("the probe's client").unwrap();
