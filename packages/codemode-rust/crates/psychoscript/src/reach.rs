@@ -1,8 +1,6 @@
-//! Which heap objects a run can still reach, for a snapshot: the reference saves only what is reachable, so a value
-//! the program dropped never stops a resume. Every cell, stack slot and coroutine counts as a root.
-//!
-//! [`roots`] lists every reference the VM holds outside its heap, and [`children`] every reference one object holds:
-//! a walk over the two (as [`reachable`], and the collector's marking) sees everything a run can reach.
+//! Which heap objects a run can still reach. [`roots`] lists every reference the VM holds outside its heap, and
+//! [`children`] every reference one object holds: a walk over the two (the collector's marking) sees everything a run
+//! can reach.
 
 use crate::object::*;
 use crate::strings::{Atom, StrId};
@@ -17,45 +15,6 @@ pub enum Ref {
     Str(StrId),
     Cell(u32),
     Atom(Atom),
-}
-
-/// Marks every object reachable from the run's roots; the objects every fresh run makes, and every cell, are roots
-/// too.
-pub fn reachable(vm: &Vm) -> Vec<bool> {
-    let mut m = Marks {
-        seen: vec![false; vm.heap.len()],
-        todo: Vec::new(),
-    };
-    for id in 0..vm.snapshot_base.heap.min(vm.heap.len()) {
-        m.mark(Ref::Obj(id as Id));
-    }
-    for c in &vm.cells {
-        if let Value::Obj(id) = c.get() {
-            m.mark(Ref::Obj(id));
-        }
-    }
-    roots(vm, &mut |r| m.mark(r));
-    while let Some(id) = m.todo.pop() {
-        children(&vm.heap[id as usize], &mut |r| m.mark(r));
-    }
-    m.seen
-}
-
-struct Marks {
-    seen: Vec<bool>,
-    todo: Vec<Id>,
-}
-
-impl Marks {
-    fn mark(&mut self, r: Ref) {
-        if let Ref::Obj(id) = r
-            && let Some(seen) = self.seen.get_mut(id as usize)
-            && !*seen
-        {
-            *seen = true;
-            self.todo.push(id);
-        }
-    }
 }
 
 /// Every reference the VM holds outside its heap objects and cells: stacks, frames, globals, constants, the realm's
@@ -128,7 +87,23 @@ pub fn roots(vm: &Vm, visit: &mut impl FnMut(Ref)) {
     match &vm.convert_req {
         Some(crate::conversion::Request::One(v, _)) => t.val(v),
         Some(crate::conversion::Request::List(values, ..)) => t.vals(values.iter()),
+        Some(crate::conversion::Request::Read(pairs)) => {
+            for (r, _) in pairs {
+                t.val(r);
+            }
+        }
         None => {}
+    }
+    for (r, _, v) in &vm.reads.table {
+        t.val(r);
+        t.val(v);
+    }
+    for (r, _) in &vm.reads.missing {
+        t.val(r);
+    }
+    if let Some((it, next)) = &vm.opened_next {
+        t.id(*it);
+        t.val(next);
     }
     let h = &vm.host;
     for q in &h.queued {
@@ -349,11 +324,6 @@ impl<F: FnMut(Ref)> Tracer<'_, F> {
             | Kind::TextDecoder(_)
             | Kind::Headers(_) => {}
             Kind::StrIter { s, .. } => self.val(&Value::Str(*s)),
-            Kind::Live(l) => {
-                for (k, _) in &l.accessors {
-                    self.atom(*k);
-                }
-            }
             Kind::Namespace(ns) => {
                 self.atom(ns.name);
                 if !ns.is_root() {
@@ -426,6 +396,10 @@ impl<F: FnMut(Ref)> Tracer<'_, F> {
                     self.val(&r.value);
                     self.id(r.promise);
                 }
+            }
+            Kind::Accessor(a) => {
+                self.val(&a.get);
+                self.val(&a.set);
             }
             Kind::AsyncFromSync { sync, next } => {
                 self.id(*sync);

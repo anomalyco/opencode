@@ -790,7 +790,37 @@ fn call_host(vm: &mut Vm, f: &Callee, args: &[Value], target: Target, callee: Va
         Callee::Fn(f) => f.is_async(),
     };
     let mut back = false;
-    let crossed = host_args(vm, args, &target.label, takes.then_some(&mut back));
+    // Program getters in the arguments run first, as program code, before anything else happens for the call: no
+    // promise, no call id. The call is then made again with their values (`Vm::with_reads`).
+    let crossed =
+        match vm.with_reads(|vm| host_args(vm, args, &target.label, takes.then_some(&mut back))) {
+            crate::accessors::WithReads::Done(r) => r,
+            // An async call reads them in a frame that settles its promise, so a getter that throws rejects it.
+            crate::accessors::WithReads::Prefetch(_)
+                if concurrent && vm.reads.table.is_empty() && !reading_for_call(vm) =>
+            {
+                let p = vm.new_promise();
+                let (u, z) = (Value::Undef, Value::Num(0.0));
+                let mut slots = vec![
+                    Value::Num(crate::promise::TRY as f64),
+                    Value::Obj(p),
+                    u,
+                    z,
+                    callee,
+                    u,
+                    Value::Num(args.len() as f64),
+                ];
+                slots.extend_from_slice(args);
+                return vm.enter_native_with(
+                    crate::native::NativeOp::Settle,
+                    READ_FOR_CALL,
+                    u,
+                    u,
+                    &slots,
+                );
+            }
+            crate::accessors::WithReads::Prefetch(missing) => return Err(vm.prefetch(missing)),
+        };
     // What the arguments can't cross fails at the call, as the reference locates it.
     let crossed = match crossed {
         Err(e) => {
@@ -1230,6 +1260,20 @@ fn host_args(
     Ok(Args::Ready(out))
 }
 
+/// The `Settle` frame's sub-op for an async host call whose arguments' getters it reads before calling it again.
+const READ_FOR_CALL: u16 = 1;
+
+/// Whether the call is the one that frame makes, which reads its getters ahead as a sync call does.
+fn reading_for_call(vm: &Vm) -> bool {
+    matches!(
+        vm.frames.last().map(|f| f.kind),
+        Some(crate::vm::FrameKind::Native(
+            crate::native::NativeOp::Settle,
+            READ_FOR_CALL
+        ))
+    )
+}
+
 /// What a copy for the host carries along.
 struct ToHost<'a> {
     /// Names the call in messages, with the argument's position: `Argument 1 to fetch`, made only when one needs it.
@@ -1449,7 +1493,7 @@ fn to_host(
                     }
                 }
             };
-            if vm.has_own(id, cause_key) {
+            if vm.has_own(id, cause_key) && !vm.setter_only(id, cause_key) {
                 let cause = vm.get_obj(id, cause_key);
                 if let Some(c) = left_behind(vm, &cause, cx)? {
                     error.cause = Some(Box::new(c));
@@ -1457,7 +1501,10 @@ fn to_host(
             }
             for (k, val) in vm.own_entries(id) {
                 let key = HostString::from_run_text(vm.atoms.text(k));
-                if key.as_str().is_some_and(crate::cross::uncrossed) || k == cause_key {
+                if key.as_str().is_some_and(crate::cross::uncrossed)
+                    || k == cause_key
+                    || vm.setter_only(id, k)
+                {
                     continue;
                 }
                 if let Some(item) = left_behind(vm, &val, cx)? {
@@ -1470,7 +1517,7 @@ fn to_host(
             let mut out = Vec::new();
             for (k, val) in vm.own_entries(id) {
                 let key = HostString::from_run_text(vm.atoms.text(k));
-                if key == "__proto__" {
+                if key == "__proto__" || vm.setter_only(id, k) {
                     continue;
                 }
                 if let Some(item) = to_host(vm, &val, depth + 1, cx)? {
@@ -1691,25 +1738,20 @@ fn response_from_host(
     place: &Place,
     depth: usize,
 ) -> Result<Value, Value> {
-    use crate::streaming::Live;
     let surface = crate::streaming::surface(response, &vm.host.epoch);
     let proto = vm.realm.object_proto;
-    let body_used = vm.atoms.intern_static("bodyUsed");
-    let result = vm.alloc(Obj::new(
-        Some(proto),
-        Kind::Live(Box::new(Live {
-            accessors: vec![(body_used, surface.body_used)],
-        })),
-    ));
+    let result = vm.alloc(Obj::new(Some(proto), Kind::Ordinary));
     let body = match surface.body {
         Some((cancel, get_reader, iterate, locked)) => {
-            let key = vm.atoms.intern_static("locked");
-            let body = vm.alloc(Obj::new(
-                Some(proto),
-                Kind::Live(Box::new(Live {
-                    accessors: vec![(key, locked)],
-                })),
-            ));
+            let body = vm.alloc(Obj::new(Some(proto), Kind::Ordinary));
+            live_accessor(
+                vm,
+                body,
+                "locked",
+                locked,
+                &format!("{label}.body.locked"),
+                place,
+            );
             let methods = [
                 (vm.atoms.intern_static("cancel"), cancel, "cancel"),
                 (vm.atoms.intern_static("getReader"), get_reader, "getReader"),
@@ -1754,12 +1796,37 @@ fn response_from_host(
     vm.define(result, key, Value::Bool(response.redirected));
     let key = vm.atoms.intern_static("body");
     vm.define(result, key, body);
+    live_accessor(
+        vm,
+        result,
+        "bodyUsed",
+        surface.body_used,
+        &format!("{label}.bodyUsed"),
+        place,
+    );
     for (key, f) in surface.methods {
         let f = response_fn(vm, f, &format!("{label}.{key}"), place);
         let key = vm.atoms.intern(key);
         vm.define(result, key, f);
     }
     Ok(Value::Obj(result))
+}
+
+/// A live response's state as a hidden accessor whose getter is a host function, the one kind of accessor made after
+/// the built-ins: a run that suspends loses it, as every host function it holds.
+fn live_accessor(
+    vm: &mut Vm,
+    id: Id,
+    key: &'static str,
+    g: crate::streaming::Getter,
+    label: &str,
+    place: &Place,
+) {
+    let name = format!("get {key}");
+    let f = HostFunction::live_getter(&name, g);
+    let f = wrap(vm, Callee::Fn(f), label, &place.child(None), None);
+    let k = vm.atoms.intern_static(key);
+    vm.define_accessor_half(id, k, false, f, false);
 }
 
 /// A streaming response's method, which never saves with snapshot hooks: a live response can't be kept.
@@ -1852,6 +1919,16 @@ fn host_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     {
         let message = message.clone();
         return Err(vm.type_error(&message));
+    }
+    // A live response's state is read where the run is driven, with no host call.
+    if let Callee::Fn(f) = &entry.f
+        && let Body::Getter(g) = &f.body
+    {
+        let g = g.clone();
+        return Ok(match crate::offload::home(&vm.host.offload) {
+            Some(home) => home.run(move || g()).unwrap_or(Value::Undef),
+            None => g(),
+        });
     }
     let f = entry.f.clone();
     let target = Target {

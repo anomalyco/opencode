@@ -2,13 +2,13 @@
   "bindings": {},
   "ok": true,
   "value": [
-    "Cannot assign to read only property 'source'.",
-    "Cannot assign to read only property 'length'.",
-    "Cannot assign to read only property 'size'.",
-    "Cannot assign to read only property 'encoding'.",
+    "Cannot set property 'source' of a RegExp which has only a getter.",
+    "Cannot set property 'length' of a Uint8Array which has only a getter.",
+    "Cannot set property 'size' of a URLSearchParams which has only a getter.",
+    "Cannot set property 'encoding' of a data object which has only a getter.",
     1,
-    "Cannot assign to read only property 'size'.",
-    "Cannot assign to read only property 'size'."
+    "Cannot set property 'size' of a Map which has only a getter.",
+    "Cannot set property 'size' of a Set which has only a getter."
   ],
   "logs": [],
   "metadata": null

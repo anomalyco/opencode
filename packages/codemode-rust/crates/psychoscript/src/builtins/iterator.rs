@@ -144,7 +144,7 @@ fn direct(vm: &mut Vm, v: &Value) -> Result<(Value, Value), Value> {
         return Err(vm.type_error("An iterator must be an object."));
     };
     let nk = vm.names.next;
-    let next = vm.get_obj(*id, nk);
+    let next = vm.get_calling(*id, nk)?;
     fuel::native(vm);
     Ok((*v, next))
 }
@@ -186,7 +186,7 @@ fn flattenable(vm: &mut Vm, v: &Value, strings: bool, name: &str) -> Result<Valu
             "{name} expects an iterable or iterator, received {d}."
         )));
     }
-    vm.get(v, SYM_ITERATOR)
+    vm.get_calling_value(v, SYM_ITERATOR)
 }
 
 /// The error of a call of a value that is not callable, naming `site` (a helper's kept name or the running call's), as
@@ -824,11 +824,11 @@ fn result_of(vm: &mut Vm, r: Value) -> Result<Option<Value>, Value> {
         return Err(vm.type_error("Iterator next() result must be an object."));
     };
     let (dk, vk) = (vm.names.done, vm.names.value);
-    let done = vm.get_obj(rid, dk);
+    let done = vm.get_calling(rid, dk)?;
     if vm.truthy(&done) {
         return Ok(None);
     }
-    Ok(Some(vm.get_obj(rid, vk)))
+    Ok(Some(vm.get_calling(rid, vk)?))
 }
 
 /// Calls `f` for the frame, counted as bytecode calls it or not as native code does, with what it throws coming back
@@ -888,7 +888,7 @@ fn close_source(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
         return out(vm, fr, None);
     };
     let rk = vm.names.return_;
-    let method = vm.get_obj(id, rk);
+    let method = vm.get_calling(id, rk)?;
     if method.is_nullish() {
         return out(vm, fr, None);
     }
@@ -920,7 +920,7 @@ fn close(vm: &mut Vm, fr: Frame, it: Value) -> Result<Step, Value> {
         | Kind::ListIter { .. } => closed(vm, fr, Ok(())),
         _ => {
             let rk = vm.names.return_;
-            let f = vm.get_obj(id, rk);
+            let f = vm.get_calling(id, rk)?;
             if f.is_nullish() {
                 return closed(vm, fr, Ok(()));
             }

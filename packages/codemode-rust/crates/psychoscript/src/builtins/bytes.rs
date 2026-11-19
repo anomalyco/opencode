@@ -158,9 +158,7 @@ pub fn set_prop(vm: &mut Vm, id: Id, key: Atom, val: Value) -> Option<Result<(),
         );
     }
     if key == vm.names.length {
-        return Some(Err(
-            vm.type_error("Cannot assign to read only property 'length'.")
-        ));
+        return Some(Err(vm.only_getter(&Value::Obj(id), key)));
     }
     None
 }
@@ -418,7 +416,8 @@ fn is_iterable(vm: &mut Vm, v: &Value) -> bool {
             matches!(
                 vm.heap[*id as usize].kind,
                 Kind::Array(_) | Kind::Map(_) | Kind::Set(_) | Kind::Generator(_)
-            ) || !matches!(vm.get_obj(*id, SYM_ITERATOR), Value::Undef | Value::Null)
+            ) || vm.has_program_getter(*id, SYM_ITERATOR)
+                || !matches!(vm.get_obj(*id, SYM_ITERATOR), Value::Undef | Value::Null)
         }
         Value::Str(_) => true,
         _ => false,

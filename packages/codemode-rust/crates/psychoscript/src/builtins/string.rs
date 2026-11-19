@@ -263,6 +263,23 @@ fn string_from_char_code(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Re
 }
 
 fn string_raw(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    // Program getters on the template are read ahead (`Vm::with_reads`).
+    let parts = vm.reading(|vm| raw_parts(vm, args))?;
+    fuel::with_primitive_list(vm, &[Hint::String], &parts, true, |vm, parts| {
+        let mut out = String::new();
+        for p in parts {
+            let t = vm.string_of(p)?;
+            out.push_str(vm.text(t));
+        }
+        if out.encode_utf16().count() > MAX_STRING_LEN {
+            return Err(vm.range_error("Invalid string length"));
+        }
+        Ok(vm.string_val(out))
+    })
+}
+
+/// `String.raw`'s literals, each followed by its substitution but the last.
+fn raw_parts(vm: &mut Vm, args: &[Value]) -> Result<Vec<Value>, Value> {
     let template = arg(args, 0);
     let raw = match template {
         Value::Obj(id) if !vm.is_namespace(id) => {
@@ -288,17 +305,7 @@ fn string_raw(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
             parts.push(args[i + 1]);
         }
     }
-    fuel::with_primitive_list(vm, &[Hint::String], &parts, true, |vm, parts| {
-        let mut out = String::new();
-        for p in parts {
-            let t = vm.string_of(p)?;
-            out.push_str(vm.text(t));
-        }
-        if out.encode_utf16().count() > MAX_STRING_LEN {
-            return Err(vm.range_error("Invalid string length"));
-        }
-        Ok(vm.string_val(out))
-    })
+    Ok(parts)
 }
 
 fn string_from_code_point(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {

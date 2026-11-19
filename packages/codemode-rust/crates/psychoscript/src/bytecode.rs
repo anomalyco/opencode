@@ -77,6 +77,10 @@ pub enum Op {
     InstanceOf,
     DefineField(Atom),
     DefineElem,
+    /// An object literal's `get x() {}` (`false`) or `set x(v) {}` (`true`): the function on top, the object under it.
+    DefineAccessor(Atom, bool),
+    /// The same with a computed key, which is under the function.
+    DefineAccessorElem(bool),
     NewObject,
     NewArray(u32),
     ArrayPush,

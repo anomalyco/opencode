@@ -58,11 +58,11 @@
     ],
     [
       "TypeError",
-      "Cannot assign to read only property 'origin'."
+      "Cannot set property 'origin' of a URL which has only a getter."
     ],
     [
       "TypeError",
-      "Cannot assign to read only property 'searchParams'."
+      "Cannot set property 'searchParams' of a URL which has only a getter."
     ],
     "http://user:pw@foo:99/a%20b#x%20y",
     "a=1&b=2&a=3&c=++d",

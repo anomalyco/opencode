@@ -296,6 +296,7 @@ fn cross(c: &crate::cross::Cross) -> J {
         Waiting::No => 0,
         Waiting::Root => 1,
         Waiting::Value => 2,
+        Waiting::Getter => 3,
     };
     json!([
         "x",
@@ -406,21 +407,8 @@ impl Enc<'_> {
             }
         }
         let mut rest = Vec::new();
-        // A streaming response's live accessors have no data form: one the run can still reach fails the resume, as
-        // in the reference.
-        let live = vm.heap[base.heap..]
-            .iter()
-            .any(|o| matches!(o.kind, Kind::Live(_)))
-            .then(|| crate::reach::reachable(vm));
-        for (i, o) in vm.heap.iter().enumerate().skip(base.heap) {
-            let mut encoded = self.obj(o)?;
-            if let (Kind::Live(l), Some(live)) = (&o.kind, &live)
-                && live[i]
-            {
-                let names: Vec<&str> = l.accessors.iter().map(|(k, _)| vm.atoms.text(*k)).collect();
-                encoded[3] = json!(["live", names]);
-            }
-            rest.push(encoded);
+        for o in vm.heap.iter().skip(base.heap) {
+            rest.push(self.obj(o)?);
         }
         let mut global_map: Vec<(&u32, &Value)> = vm.global_map.iter().collect();
         global_map.sort_by_key(|(a, _)| **a);
@@ -674,7 +662,7 @@ impl Enc<'_> {
                 json!(["ag", self.gen_state(&a.state)?, phase, queue])
             }
             Kind::AsyncFromSync { sync, next } => json!(["afs", sync, val(next)]),
-            Kind::Live(_) => json!(["live", []]),
+            Kind::Accessor(a) => json!(["acc", val(&a.get), val(&a.set)]),
         })
     }
 
@@ -1582,6 +1570,7 @@ impl Dec<'_> {
         let waiting = match uint(f(6)?)? {
             0 => Waiting::No,
             1 => Waiting::Root,
+            3 => Waiting::Getter,
             _ => Waiting::Value,
         };
         Ok(Kind::Cross(Box::new(Cross {
@@ -1817,13 +1806,6 @@ impl Dec<'_> {
             "h" => Kind::Headers(Box::new(crate::builtins::web::HeaderList {
                 list: pairs(f(1)?)?,
             })),
-            "live" => match list(Some(f(1)?))?.first() {
-                Some(name) => {
-                    let name = string(name)?;
-                    return Err(invalid(format!("the accessor {name} has no original.")));
-                }
-                None => Kind::Ordinary,
-            },
             "ag" => {
                 let phase = match uint(f(2)?)? {
                     0 => AsyncPhase::Start,
@@ -1849,6 +1831,10 @@ impl Dec<'_> {
                     queue,
                 }))
             }
+            "acc" => Kind::Accessor(Box::new(Accessor {
+                get: self.val(f(1)?)?,
+                set: self.val(f(2)?)?,
+            })),
             "afs" => Kind::AsyncFromSync {
                 sync: self.id(f(1)?)?,
                 next: self.val(f(2)?)?,

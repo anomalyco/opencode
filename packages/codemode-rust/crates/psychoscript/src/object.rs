@@ -16,6 +16,9 @@ pub const DEFAULT_FLAGS: u8 = ENUMERABLE | WRITABLE;
 pub const HIDDEN: u8 = WRITABLE;
 /// Not configurable, so `delete` refuses it: the reference's frozen built-in constants and prototypes.
 pub const FIXED: u8 = 4;
+/// An accessor property: its value is a `Kind::Accessor` object holding the getter and the setter. Its `WRITABLE`
+/// bit means nothing.
+pub const ACCESSOR: u8 = 8;
 
 #[derive(Clone)]
 pub struct Prop {
@@ -100,6 +103,21 @@ impl Props {
     pub fn len(&self) -> usize {
         self.items.len()
     }
+
+    /// The property `key`, data or accessor.
+    #[inline]
+    pub fn prop(&self, key: Atom) -> Option<&Prop> {
+        self.find(key).map(|i| &self.items[i])
+    }
+}
+
+/// An accessor property's halves: a function, or undefined for a missing half. A native half is the companion of a
+/// built-in's accessor (see `builtins::accessors`); anything else callable is a program function, which only program
+/// code may call.
+#[derive(Clone, Copy, Debug)]
+pub struct Accessor {
+    pub get: Value,
+    pub set: Value,
 }
 
 /// A path into a host namespace among the globals, as a small heap object: the path it was read from (`parent`) and
@@ -547,7 +565,8 @@ pub enum Kind {
         next: Value,
     },
     /// An object with accessors the host answers, such as a streaming response.
-    Live(Box<crate::streaming::Live>),
+    /// The getter and setter of an accessor property (see `ACCESSOR`), never reachable as a value.
+    Accessor(Box<Accessor>),
 }
 
 pub struct Combinator {
@@ -576,6 +595,9 @@ pub const LENGTH_DELETED: u8 = 16;
 pub const SPARSE: u8 = 32;
 /// A built-in callback sites don't admit (the reference's `callback: false`): the `Promise` statics and `Symbol`.
 pub const NOT_CALLBACK: u8 = 64;
+/// A program accessor was defined here at some point (the reference's `hasProgramAccessors`): the bulk readers' cue to
+/// take their slow paths.
+pub const ACCESSORS: u8 = 128;
 
 pub struct Obj {
     pub proto: Option<Id>,

@@ -1053,7 +1053,7 @@ fn in_method(program: &oxc_ast::ast::Program, at: u32) -> bool {
 }
 
 /// The reference's orientation to the supported subset, which unsupported syntax reports and suggests.
-pub const SUPPORTED_SYNTAX: &str = "This is a restricted JavaScript-like language. Supported: plain and async functions, data literals, destructuring, standard control flow, await and Promise, and built-ins such as Array, Object, Math, JSON, Date, RegExp, Map, Set, and URL. Unsupported: classes, getters/setters, BigInt, and custom Symbols. Use plain functions and data objects instead.";
+pub const SUPPORTED_SYNTAX: &str = "This is a restricted JavaScript-like language. Supported: plain and async functions, data literals, destructuring, standard control flow, await and Promise, and built-ins such as Array, Object, Math, JSON, Date, RegExp, Map, Set, and URL. Unsupported: classes, BigInt, and custom Symbols. Use plain functions and data objects instead.";
 
 fn unsupported(what: &str, span: oxc_span::Span) -> CompileError {
     CompileError {
@@ -3534,11 +3534,28 @@ impl<'a, 's> Compiler<'a, 's> {
                     self.emit(Op::ObjectSpread);
                 }
                 ObjectPropertyKind::ObjectProperty(p) => {
-                    // Like the reference, an accessor fails when the literal runs, after the properties before it.
                     if p.kind != PropertyKind::Init {
-                        let msg = self.str_const("Only init object properties are supported.");
+                        let setter = p.kind == PropertyKind::Set;
                         self.pos = p.span.start;
-                        self.emit(Op::ThrowType(msg));
+                        match static_key(&p.key, p.computed) {
+                            Some(k) => {
+                                let name = format!("{} {k}", if setter { "set" } else { "get" });
+                                self.expr_named(&p.value, Some(&name))?;
+                                let a = self.atom(&k);
+                                self.pos = p.span.start;
+                                self.emit(Op::DefineAccessor(a, setter));
+                            }
+                            None => {
+                                let Some(e) = p.key.as_expression() else {
+                                    return Err(unsupported("Private names", p.span));
+                                };
+                                self.expr(e)?;
+                                self.emit_at(e.without_parentheses().span().start, Op::ToKey);
+                                self.expr(&p.value)?;
+                                self.pos = p.span.start;
+                                self.emit(Op::DefineAccessorElem(setter));
+                            }
+                        }
                         continue;
                     }
                     self.pos = p.span.start;

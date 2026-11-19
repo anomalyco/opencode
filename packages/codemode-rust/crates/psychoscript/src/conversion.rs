@@ -57,11 +57,20 @@ const HINTS: usize = 13;
 const COERCE: usize = 14;
 const LIST_I: usize = 15;
 const LIST_OUT: usize = 16;
-const ARGS: usize = 17;
+/// The getters read ahead for a built-in (receiver, key, value, …), the pairs still to read (receiver, key, …) and
+/// the next of them (see `Request::Read`).
+const READS: usize = 17;
+const READ_PAIRS: usize = 18;
+const READ_I: usize = 19;
+const ARGS: usize = 20;
 
 /// Waiting for a conversion method's result; waiting for the frame a rerun built-in pushed.
 const CONVERTING: usize = 0;
 const WAITING: usize = 1;
+/// Waiting for a getter read ahead.
+const READING: usize = 2;
+/// Waiting for a program getter of the value's method, `valueOf` or `toString`.
+const GETTING: usize = 3;
 
 /// The operations an instruction converts in (`Vm::op_slow`).
 pub(crate) mod code {
@@ -135,6 +144,9 @@ pub(crate) type Meter = [i32; 4];
 pub(crate) enum Request {
     One(Value, Hint),
     List(Vec<Value>, Vec<Hint>, bool),
+    /// Program getters a built-in met (`Vm::with_reads`), by receiver and key: read in program code, then the
+    /// built-in runs again with their values, as the reference's `$vmReplay` reads a `Prefetch`.
+    Read(Vec<(Value, Atom)>),
 }
 
 impl Vm {
@@ -158,6 +170,10 @@ impl Vm {
             _ => [self.names.value_of, self.names.to_string],
         };
         names.into_iter().any(|name| {
+            // A program getter is program code, which runs where the conversion can be restarted.
+            if self.has_program_getter(*id, name) {
+                return true;
+            }
             let f = self.get_obj(*id, name);
             self.is_callable(&f) && !matches!(&f, Value::Obj(m) if matches!(self.heap[*m as usize].kind, Kind::Native { .. }))
         })
@@ -511,6 +527,20 @@ pub(crate) fn step(vm: &mut Vm, sub: u16, fr: Frame, input: Input) -> Result<Ste
             _ => begin(vm, fr),
         },
         Input::Returned(r) if fr.index(vm, PHASE) == WAITING => Ok(Step::Done(r.get())),
+        Input::Returned(r) if fr.index(vm, PHASE) == GETTING => {
+            fr.set_index(vm, PHASE, CONVERTING);
+            let f = r.get();
+            if vm.is_callable(&f) {
+                let v = fr.get(vm, VALUE);
+                return fr.call_slots(vm, Slot::pack(f), Slot::pack(v), []);
+            }
+            next_method(vm, fr)
+        }
+        Input::Returned(r) if fr.index(vm, PHASE) == READING => {
+            fr.set_index(vm, PHASE, CONVERTING);
+            read_one(vm, fr, r.get());
+            next_read(vm, fr)
+        }
         Input::Returned(r) => {
             let r = r.get();
             if matches!(r, Value::Obj(_)) {
@@ -552,8 +582,16 @@ fn next_method(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
     };
     let mut stage = fr.index(vm, STAGE);
     while stage < 2 {
+        vm.op_access = true;
         let f = vm.get_obj(id, names[stage]);
+        vm.op_access = false;
         stage += 1;
+        if let Some(g) = vm.getter_hit.take() {
+            // `v[name]` in the reference's `$vmToPrimitive`: the getter runs, then its value is called if callable.
+            fr.set_index(vm, STAGE, stage);
+            fr.set_index(vm, PHASE, GETTING);
+            return fr.call_slots(vm, Slot::pack(g), Slot::pack(v), []);
+        }
         if vm.is_callable(&f) {
             fr.set_index(vm, STAGE, stage);
             return fr.call_slots(vm, Slot::pack(f), Slot::pack(v), []);
@@ -615,6 +653,16 @@ fn convert_next(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
             fr.set_index(vm, HINT, hint_code(hint) as usize);
             begin(vm, fr)
         }
+        Request::Read(pairs) => {
+            let flat: Vec<Value> = pairs
+                .iter()
+                .flat_map(|(r, k)| [*r, key_value(vm, *k)])
+                .collect();
+            let list = vm.new_array(flat);
+            fr.set(vm, READ_PAIRS, list);
+            fr.set_index(vm, READ_I, 0);
+            next_read(vm, fr)
+        }
         Request::List(values, hints, coerce) => {
             let list = vm.new_array(values);
             let hints = vm.new_array(
@@ -633,6 +681,87 @@ fn convert_next(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
             next_listed(vm, fr)
         }
     }
+}
+
+/// A key as a value, for the frame's slots.
+fn key_value(vm: &Vm, k: Atom) -> Value {
+    if k <= SYM_ASYNC_ITERATOR {
+        Value::Sym(k)
+    } else {
+        vm.atom_val(k)
+    }
+}
+
+/// The pair at `READ_I`: its receiver and key.
+fn read_pair(vm: &mut Vm, fr: Frame) -> Option<(Value, Atom)> {
+    let i = fr.index(vm, READ_I);
+    let list = fr.get(vm, READ_PAIRS).as_obj()?;
+    let (r, k) = match &vm.heap[list as usize].kind {
+        Kind::Array(items) => (*items.get(2 * i)?, *items.get(2 * i + 1)?),
+        _ => return None,
+    };
+    let key = match k {
+        Value::Sym(s) => s,
+        k => vm.key_of(&k).ok()?,
+    };
+    Some((r, key))
+}
+
+/// The pair at `READ_I` read as `v`: kept with the reads, then the next.
+fn read_one(vm: &mut Vm, fr: Frame, v: Value) {
+    let Some((r, k)) = read_pair(vm, fr) else {
+        return;
+    };
+    let kv = key_value(vm, k);
+    let reads = match fr.get(vm, READS) {
+        Value::Obj(a) => a,
+        _ => {
+            let a = vm.new_array(Vec::new());
+            fr.set(vm, READS, a);
+            a.as_obj().unwrap_or(0)
+        }
+    };
+    if let Kind::Array(items) = &mut vm.heap[reads as usize].kind {
+        items.extend([r, kv, v]);
+    }
+    let i = fr.index(vm, READ_I);
+    fr.set_index(vm, READ_I, i + 1);
+}
+
+/// Reads the getters still to read, as the reference's `receiver[key]` reads each, then runs the built-in again.
+fn next_read(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
+    while let Some((r, k)) = read_pair(vm, fr) {
+        vm.op_access = true;
+        let got = vm.get(&r, k);
+        vm.op_access = false;
+        let v = got?;
+        if let Some(g) = vm.getter_hit.take() {
+            fr.set_index(vm, PHASE, READING);
+            return fr.call_slots(vm, Slot::pack(g), Slot::pack(r), []);
+        }
+        read_one(vm, fr, v);
+    }
+    rerun_native(vm, fr)
+}
+
+/// The getters read ahead so far, as the table a built-in reads them from.
+fn reads_of(vm: &Vm, fr: Frame) -> Vec<(Value, Atom, Value)> {
+    let items = match fr
+        .get(vm, READS)
+        .as_obj()
+        .map(|a| &vm.heap[a as usize].kind)
+    {
+        Some(Kind::Array(items)) => items.clone(),
+        _ => return Vec::new(),
+    };
+    items
+        .chunks(3)
+        .filter_map(|c| match c {
+            [r, Value::Sym(s), v] => Some((*r, *s, *v)),
+            [r, Value::Str(s), v] => Some((*r, vm.atoms.lookup(vm.text(*s))?, *v)),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The next value of a list of conversions, as `fuel::Conversions::convert` converts it: ToPrimitive, made a number
@@ -747,16 +876,27 @@ fn finish_op(
 }
 
 /// Runs the built-in again from the start with the answers so far, as `call_op` calls it.
+fn namespace_call(
+    vm: &mut Vm,
+    _this: Value,
+    args: &[Value],
+    id: crate::value::Id,
+) -> crate::vm::Res {
+    crate::host::call_namespace(vm, id, args, Value::Obj(id))
+}
+
 fn rerun_native(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
     let answers = answers_of(vm, fr);
     vm.start_replay(answers);
     let Some(id) = fr.slot(vm, CALLEE).obj() else {
         return Ok(Step::Done(Value::Undef));
     };
-    let Kind::Native { f, .. } = &vm.heap[id as usize].kind else {
-        return Ok(Step::Done(Value::Undef));
+    let f = match &vm.heap[id as usize].kind {
+        Kind::Native { f, .. } => *f,
+        // A host call through a namespace, whose arguments' getters were read ahead.
+        Kind::Namespace(_) => namespace_call,
+        _ => return Ok(Step::Done(Value::Undef)),
     };
-    let f = *f;
     let counted = matches!(fr.get(vm, COUNTED), Value::Bool(true));
     let this = match fr.get(vm, CONSTRUCTING) {
         Value::Bool(true) => Value::Uninit,
@@ -767,7 +907,12 @@ fn rerun_native(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
     let args: Vec<Value> = vm.stack[at..at + argc].iter().map(|s| s.get()).collect();
     vm.host.meter.counted = counted;
     vm.convert_ok = true;
+    vm.reads.fault = None;
+    let table = reads_of(vm, fr);
+    let outer = std::mem::replace(&mut vm.reads.table, table);
     let r = f(vm, this, &args, id);
+    vm.reads.table = outer;
+    let r = vm.checked_native(r);
     vm.convert_ok = false;
     if vm.convert_req.is_some() {
         vm.entered = false;

@@ -119,7 +119,7 @@ fn to_json_inner(
                     }
                     Json::Object(map)
                 }
-                Kind::Ordinary | Kind::Arguments(_) | Kind::Live(_) => {
+                Kind::Ordinary | Kind::Arguments(_) => {
                     let mut map = serde_json::Map::new();
                     for (k, val) in vm.own_entries(id) {
                         if vm.atoms.text(k) == "__proto__" {
@@ -190,11 +190,11 @@ fn apply_to_json(vm: &mut Vm, v: &Value, key: Key, mode: Option<&Mode>) -> Res {
 
 pub fn error_parts(vm: &mut Vm, id: Id) -> (String, String) {
     let (nk, mk) = (vm.names.name, vm.names.message);
-    let name = match vm.get_obj(id, nk) {
+    let name = match vm.peek(id, nk) {
         Value::Undef => "Error".to_owned(),
         v => vm.quiet_string(&v),
     };
-    let message = match vm.get_obj(id, mk) {
+    let message = match vm.peek(id, mk) {
         Value::Undef => String::new(),
         v => vm.quiet_string(&v),
     };
@@ -344,6 +344,18 @@ fn write_json(
     {
         mode.restart.set(true);
         return Ok(false);
+    }
+    // Program getters run in the internal walk, as the reference's fast path leaves them to its prelude walk.
+    if let Value::Obj(id) = v {
+        let (tk, nk, mk) = (vm.names.to_json, vm.names.name, vm.names.message);
+        if vm.heap[id as usize].flags & ACCESSORS != 0
+            || vm.has_program_getter(id, tk)
+            || (matches!(vm.heap[id as usize].kind, Kind::Error(_))
+                && (vm.has_program_getter(id, nk) || vm.has_program_getter(id, mk)))
+        {
+            mode.restart.set(true);
+            return Ok(false);
+        }
     }
     let mut v = apply_to_json(vm, &v, key, Some(mode))?;
     if crate::builtins::exotic::may_have_json_forms(vm) {
@@ -515,7 +527,7 @@ fn json_entries(vm: &mut Vm, id: Id, allow: Option<&[Atom]>) -> Vec<(Atom, Value
             );
             e
         }
-        Kind::Ordinary | Kind::Arguments(_) | Kind::Live(_) => vm.own_entries(id),
+        Kind::Ordinary | Kind::Arguments(_) => vm.own_entries(id),
         _ => Vec::new(),
     };
     match allow {
@@ -563,7 +575,7 @@ fn push_walk_keys(vm: &mut Vm, id: Id, allow: Option<Id>) -> usize {
                     .extend(keys.into_iter().map(|k| key_slot(&vm.atoms, k)));
             }
         }
-        Kind::Arguments(_) | Kind::Live(_) => {
+        Kind::Arguments(_) => {
             let keys = vm.own_keys(id);
             vm.stack
                 .extend(keys.into_iter().map(|k| key_slot(&vm.atoms, k)));
@@ -618,12 +630,16 @@ const L_FIRST: usize = 4;
 /// What the walk's call returns to: the value's `toJSON`, or the replacer.
 const TO_JSON: usize = 0;
 const REPLACED: usize = 1;
+/// A program getter `holder[key]` met, whose value is the one visited.
+const GOT: usize = 2;
 
 /// Where a step of the internal walk is.
 #[derive(Clone, Copy)]
 enum Stage {
     /// The value's depth check and `toJSON`.
     Visit,
+    /// The value read (`J_VAL`): its promise check and `toJSON`.
+    Check,
     /// The replacer.
     Replace,
     /// Writing the value, or entering it.
@@ -713,10 +729,10 @@ fn stringify_walk(
         Input::Start => Stage::Visit,
         Input::Returned(r) => {
             fr.set_slot(vm, J_VAL, r);
-            if fr.index(vm, J_PHASE) == TO_JSON {
-                Stage::Replace
-            } else {
-                Stage::Emit
+            match fr.index(vm, J_PHASE) {
+                TO_JSON => Stage::Replace,
+                GOT => Stage::Check,
+                _ => Stage::Emit,
             }
         }
         Input::Threw(e) => return Err(e),
@@ -732,16 +748,29 @@ fn stringify_walk(
                 }
                 // `holder[key]`, read as the walk reaches it.
                 let (holder, key) = (fr.get(vm, J_HOLDER), fr.get(vm, J_KEY));
+                vm.op_access = true;
                 let v = match key {
-                    Value::Num(_) => vm.get_elem(&holder, &key)?,
+                    Value::Num(_) => vm.get_elem(&holder, &key),
                     _ => {
                         let atom = fr.index(vm, J_ATOM) as Atom;
                         match plain_prop(vm, fr, holder, atom, depth) {
-                            Some(v) => v,
-                            None => vm.get(&holder, atom)?,
+                            Some(v) => Ok(v),
+                            None => vm.get(&holder, atom),
                         }
                     }
                 };
+                vm.op_access = false;
+                let v = v?;
+                if let Some(g) = vm.getter_hit.take() {
+                    flush(vm, fr, out);
+                    fr.set_index(vm, J_PHASE, GOT);
+                    return fr.call_slots(vm, Slot::pack(g), Slot::pack(holder), []);
+                }
+                fr.set(vm, J_VAL, v);
+                Stage::Check
+            }
+            Stage::Check => {
+                let v = fr.get(vm, J_VAL);
                 if matches!(v, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Promise(_)))
                 {
                     return Err(vm.invalid_data(
@@ -749,7 +778,6 @@ fn stringify_walk(
                          load(...)`.",
                     ));
                 }
-                fr.set(vm, J_VAL, v);
                 if let Value::Obj(id) = v
                     && !matches!(
                         vm.heap[id as usize].kind,
@@ -760,7 +788,7 @@ fn stringify_walk(
                     )
                 {
                     let k = vm.names.to_json;
-                    let f = vm.get_obj(id, k);
+                    let f = vm.get_calling(id, k)?;
                     if vm.is_callable(&f) {
                         let kv = walk_key(vm, fr);
                         flush(vm, fr, out);
@@ -862,7 +890,8 @@ fn plain_prop(
         return None;
     }
     let p = o.props.items.get(fr.index(vm, top(vm, fr) + L_I))?;
-    (p.key == atom && !matches!(p.value, Value::Uninit)).then_some(p.value)
+    (p.key == atom && p.flags & ACCESSOR == 0 && !matches!(p.value, Value::Uninit))
+        .then_some(p.value)
 }
 
 /// The key of the value the walk visits, as a `toJSON` or the replacer receives it.
@@ -1513,15 +1542,19 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
                     }
                     out.push(']');
                 }
-                Kind::Ordinary | Kind::Arguments(_) | Kind::Live(_) => {
+                Kind::Ordinary | Kind::Arguments(_) => {
                     out.push('{');
-                    for (i, (k, val)) in vm.own_entries(id).into_iter().enumerate() {
+                    for (i, (k, val)) in vm.shown_entries(id).into_iter().enumerate() {
                         if i > 0 {
                             out.push(',');
                         }
                         quote_str(vm, out, vm.atoms.atom_str(k));
                         out.push(':');
-                        format_inner(vm, out, &val, seen);
+                        match val {
+                            Ok(val) => format_inner(vm, out, &val, seen),
+                            // Showing a value never runs program code: a program accessor shows what it is.
+                            Err(label) => out.push_str(label),
+                        }
                     }
                     out.push('}');
                 }
@@ -1585,7 +1618,13 @@ pub fn holds_runtime_reference(vm: &Vm, v: &Value) -> bool {
             Kind::Array(items) | Kind::Arguments(items) => pending.extend(items.iter().copied()),
             _ => return true,
         }
-        pending.extend(o.props.items.iter().map(|p| p.value));
+        pending.extend(
+            o.props
+                .items
+                .iter()
+                .filter(|p| p.flags & ACCESSOR == 0)
+                .map(|p| p.value),
+        );
     }
     false
 }

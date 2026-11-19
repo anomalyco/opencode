@@ -20,7 +20,6 @@ use std::task::{Context, Poll, Waker};
 use rustc_hash::FxHashMap;
 
 use crate::host_function::{HostError, HostFunction, HostResult, HostValue};
-use crate::object::Atom;
 use crate::value::Value;
 
 /// A response body the host streams to the program.
@@ -97,31 +96,6 @@ impl fmt::Debug for StreamingResponse {
 
 /// The getter of a host accessor: an own, read-only, non-enumerable property whose value the host answers live.
 pub type Getter = Arc<dyn Fn() -> Value + Send + Sync>;
-
-/// An object with host accessors, such as a streaming response and its body. Deleting an accessor leaves an
-/// ordinary object behind.
-pub struct Live {
-    pub accessors: Vec<(Atom, Getter)>,
-}
-
-impl Live {
-    pub fn getter(&self, key: Atom) -> Option<Getter> {
-        self.accessors
-            .iter()
-            .find(|(k, _)| *k == key)
-            .map(|(_, g)| g.clone())
-    }
-
-    pub fn has(&self, key: Atom) -> bool {
-        self.accessors.iter().any(|(k, _)| *k == key)
-    }
-
-    pub fn remove(&mut self, key: Atom) -> bool {
-        let before = self.accessors.len();
-        self.accessors.retain(|(k, _)| *k != key);
-        self.accessors.len() != before
-    }
-}
 
 /// Counts the points where queued host calls start: a new job, or the end of a synchronous extension call.
 pub type Epoch = Arc<AtomicU64>;

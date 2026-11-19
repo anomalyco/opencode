@@ -2,8 +2,8 @@
   "bindings": {},
   "ok": true,
   "value": [
-    "TypeError: Only init object properties are supported.",
-    1,
+    null,
+    2,
     "function"
   ],
   "logs": [],

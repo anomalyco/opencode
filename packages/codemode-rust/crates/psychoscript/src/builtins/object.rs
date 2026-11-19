@@ -16,18 +16,30 @@ pub fn setup(vm: &mut Vm) {
             ("keys", 1, object_keys),
             ("values", 1, object_values),
             ("entries", 1, object_entries),
-            ("assign", 2, object_assign),
-            ("fromEntries", 1, object_from_entries),
             ("hasOwn", 2, object_has_own),
-            ("freeze", 1, object_freeze),
-            ("isFrozen", 1, object_is_frozen),
-            ("seal", 1, object_seal),
-            ("isSealed", 1, object_is_sealed),
-            ("preventExtensions", 1, object_prevent_extensions),
-            ("isExtensible", 1, object_is_extensible),
-            ("create", 2, object_create),
-            ("getPrototypeOf", 1, object_get_prototype_of),
             ("is", 2, object_is),
+            ("assign", 2, object_assign),
+            ("freeze", 1, object_freeze),
+            ("seal", 1, object_seal),
+            ("preventExtensions", 1, object_prevent_extensions),
+            ("isFrozen", 1, object_is_frozen),
+            ("isSealed", 1, object_is_sealed),
+            ("isExtensible", 1, object_is_extensible),
+            ("getPrototypeOf", 1, object_get_prototype_of),
+            ("create", 2, object_create),
+            ("defineProperty", 3, object_define_property),
+            ("defineProperties", 2, object_define_properties),
+            (
+                "getOwnPropertyDescriptor",
+                2,
+                object_get_own_property_descriptor,
+            ),
+            (
+                "getOwnPropertyDescriptors",
+                1,
+                object_get_own_property_descriptors,
+            ),
+            ("getOwnPropertyNames", 1, object_get_own_property_names),
         ],
     );
     vm.methods(
@@ -170,6 +182,15 @@ fn object_ctor(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 fn entries_of(vm: &mut Vm, label: &str, v: &Value) -> Result<Vec<(Value, Value)>, Value> {
     vm.enumerable_source(label, v)?;
     Ok(match v {
+        // Each getter runs in key order, and a key's enumerability is checked when it is reached (the reference's
+        // `objectEntries`).
+        Value::Obj(id) if vm.heap[*id as usize].flags & ACCESSORS != 0 => {
+            let id = *id;
+            vm.copy_data_calling(0, id, &[], true)?
+                .into_iter()
+                .map(|(k, v)| (Value::Str(vm.atoms.atom_str(k)), v))
+                .collect()
+        }
         Value::Obj(id) => {
             let id = *id;
             vm.own_entries(id)
@@ -241,10 +262,47 @@ fn object_assign(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         }
     };
     for src in args.iter().skip(1) {
+        if !src.is_nullish() {
+            vm.enumerable_source("Object.assign(...)", src)?;
+        }
+    }
+    // Program getters on a source or setters on the target's chain: Get then Set, key by key (the reference's
+    // `objectAssign`).
+    let calling = vm.accessors_on_chain(t)
+        || args
+            .iter()
+            .skip(1)
+            .any(|s| matches!(s, Value::Obj(id) if vm.heap[*id as usize].flags & ACCESSORS != 0));
+    if calling {
+        for src in args.iter().skip(1) {
+            match src {
+                Value::Obj(s) => {
+                    let s = *s;
+                    for k in vm.own_property_keys(s) {
+                        if !vm.own_slot(s, k).is_some_and(|x| x.enumerable) {
+                            continue;
+                        }
+                        let v = vm.get_calling(s, k)?;
+                        vm.check_assignment_at(&target, k, &v)?;
+                        vm.op_access = true;
+                        let r = vm.set_obj(t, k, v);
+                        vm.op_access = false;
+                        r?;
+                        if let Some(setter) = vm.setter_hit.take() {
+                            vm.call(&setter, target, &[v])?;
+                        }
+                    }
+                }
+                Value::Str(_) => vm.copy_props(t, src, &[])?,
+                _ => {}
+            }
+        }
+        return Ok(target);
+    }
+    for src in args.iter().skip(1) {
         if src.is_nullish() {
             continue;
         }
-        vm.enumerable_source("Object.assign(...)", src)?;
         if let Value::Obj(s) = src {
             let mut entries = vm.own_entries(*s);
             entries.extend(vm.own_symbol_entries(*s));
@@ -265,7 +323,7 @@ fn object_assign(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     Ok(target)
 }
 
-fn object_from_entries(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
+pub(crate) fn object_from_entries(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     // The reference's for...of over the entries: each entry is read as it comes, and a bad one closes the iterator.
     // Its fuel is the prelude's `Object$fromEntries` (see `fuel.rs`).
     fuel::method(vm);
@@ -367,12 +425,23 @@ fn has_flags(vm: &mut Vm, args: &[Value], flags: u8, primitive: bool) -> Res {
         // A namespace is no object: as a primitive, it is frozen and sealed.
         Value::Obj(id) if !vm.is_namespace(id) => {
             let o = &vm.heap[id as usize];
-            // An arguments object always has its own `length`, so it is never empty.
-            let empty = o.props.len() == 0
-                && !matches!(&o.kind, Kind::Array(items) if !items.is_empty())
-                && !matches!(&o.kind, Kind::Arguments(_));
-            o.flags & flags == flags
-                || (flags != NON_EXTENSIBLE && empty && o.flags & NON_EXTENSIBLE != 0)
+            if o.flags & flags == flags {
+                true
+            } else if flags == NON_EXTENSIBLE || o.flags & NON_EXTENSIBLE == 0 {
+                false
+            } else {
+                // Not extensible, and every own property as `freeze` or `seal` would leave it.
+                let frozen = flags == FROZEN;
+                let keys = vm.own_property_keys(id);
+                keys.into_iter().all(|k| {
+                    vm.own_slot(id, k).is_some_and(|s| {
+                        !s.configurable
+                            && !(frozen
+                                && s.writable
+                                && matches!(s.value, crate::accessors::SlotValue::Data(_)))
+                    })
+                })
+            }
         }
         _ => primitive,
     }))
@@ -406,12 +475,212 @@ fn object_create(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         Value::Null => None,
         _ => return Err(vm.type_error("Object prototype may only be an Object or null.")),
     };
-    if !matches!(arg(args, 1), Value::Undef) {
-        return Err(vm.type_error(
-            "Object.create property descriptors are not supported; assign the fields after creating the object.",
-        ));
+    if matches!(arg(args, 1), Value::Undef) {
+        return Ok(Value::Obj(vm.alloc(Obj::new(proto, Kind::Ordinary))));
     }
-    Ok(Value::Obj(vm.alloc(Obj::new(proto, Kind::Ordinary))))
+    let props = arg(args, 1);
+    vm.reading(|vm| {
+        let id = vm.alloc(Obj::new(proto, Kind::Ordinary));
+        define_properties(vm, id, &props)
+    })
+}
+
+/// The target `Object.defineProperty` and `defineProperties` define on.
+fn require_target(vm: &mut Vm, v: &Value, name: &str) -> Result<Id, Value> {
+    match v {
+        Value::Obj(id) if !vm.is_namespace(*id) => Ok(*id),
+        _ => Err(vm.type_error(&format!("Object.{name} called on non-object"))),
+    }
+}
+
+/// ObjectDefineProperties, under `with_reads`: every descriptor is read (getters included) before the first one is
+/// defined.
+fn define_properties(vm: &mut Vm, id: Id, props: &Value) -> Res {
+    let descriptors = match props {
+        Value::Undef | Value::Null => {
+            let t = if let Value::Null = props {
+                "null"
+            } else {
+                "undefined"
+            };
+            return Err(vm.type_error(&format!("Cannot convert {t} to object")));
+        }
+        Value::Obj(p) if !vm.is_namespace(*p) => {
+            let p = *p;
+            let keys = vm.own_property_keys(p);
+            let mut out = Vec::new();
+            for key in keys {
+                if !vm.own_slot(p, key).is_some_and(|s| s.enumerable) {
+                    continue;
+                }
+                let d = vm.get_obj(p, key);
+                let d = if let Value::Uninit = d {
+                    return Err(super::accessor_error(vm, p, key));
+                } else {
+                    d
+                };
+                out.push((key, vm.property_descriptor(&d)?));
+            }
+            out
+        }
+        Value::Str(s) => {
+            // ToObject: a string's indexes are its only own enumerable properties.
+            let s = *s;
+            let n = vm.atoms.sref(s).len16();
+            let mut out = Vec::new();
+            for i in 0..n {
+                let c = match vm.atoms.sref(s).code_unit(i) {
+                    Some(c) => vm.char_str(c),
+                    None => Value::Undef,
+                };
+                let key = vm.atoms.intern(&i.to_string());
+                out.push((key, vm.property_descriptor(&c)?));
+            }
+            out
+        }
+        _ => Vec::new(),
+    };
+    if vm.reads_pending() {
+        return Ok(Value::Obj(id));
+    }
+    for (key, desc) in descriptors {
+        vm.define_or_throw(id, key, &desc)?;
+    }
+    Ok(Value::Obj(id))
+}
+
+fn object_define_property(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    let id = require_target(vm, &arg(args, 0), "defineProperty")?;
+    let key = vm.key_of(&arg(args, 1))?;
+    let d = arg(args, 2);
+    vm.reading(|vm| {
+        let desc = vm.property_descriptor(&d)?;
+        if vm.reads_pending() {
+            return Ok(Value::Obj(id));
+        }
+        vm.define_or_throw(id, key, &desc)?;
+        Ok(Value::Obj(id))
+    })
+}
+
+fn object_define_properties(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    let id = require_target(vm, &arg(args, 0), "defineProperties")?;
+    let props = arg(args, 1);
+    vm.reading(|vm| define_properties(vm, id, &props))
+}
+
+/// RequireObjectCoercible for the descriptor readers.
+fn require_coercible(vm: &mut Vm, v: &Value, name: &str) -> Result<(), Value> {
+    match v {
+        Value::Undef | Value::Null | Value::Uninit => {
+            let t = if let Value::Null = v {
+                "null"
+            } else {
+                "undefined"
+            };
+            Err(vm.type_error(&format!("Object.{name} cannot convert {t} to an object.")))
+        }
+        Value::Obj(id) if vm.is_namespace(*id) => {
+            let root = vm.namespace_root(*id);
+            Err(vm.type_error(&format!(
+                "Object.{name} cannot read {root}: it is a namespace of host functions, not an object."
+            )))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// The own properties a primitive has after ToObject, which only a string's are: its indexes and `length`.
+fn primitive_slot(vm: &mut Vm, v: &Value, key: Atom) -> Option<crate::accessors::OwnSlot> {
+    use crate::accessors::{OwnSlot, SlotValue};
+    let Value::Str(s) = v else { return None };
+    let s = *s;
+    let n = vm.atoms.sref(s).len16();
+    if key == vm.names.length {
+        return Some(OwnSlot {
+            value: SlotValue::Data(Value::Num(n as f64)),
+            writable: false,
+            enumerable: false,
+            configurable: false,
+        });
+    }
+    let i = vm.atoms.index(key)? as usize;
+    if i >= n {
+        return None;
+    }
+    let c = match vm.atoms.sref(s).code_unit(i) {
+        Some(c) => vm.char_str(c),
+        None => Value::Undef,
+    };
+    Some(OwnSlot {
+        value: SlotValue::Data(c),
+        writable: false,
+        enumerable: true,
+        configurable: false,
+    })
+}
+
+fn primitive_keys(vm: &mut Vm, v: &Value) -> Vec<Atom> {
+    let Value::Str(s) = v else { return Vec::new() };
+    let n = vm.atoms.sref(*s).len16();
+    let mut out: Vec<Atom> = (0..n).map(|i| vm.atoms.intern(&i.to_string())).collect();
+    out.push(vm.names.length);
+    out
+}
+
+fn object_get_own_property_descriptor(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    let v = arg(args, 0);
+    require_coercible(vm, &v, "getOwnPropertyDescriptor")?;
+    let key = vm.key_of(&arg(args, 1))?;
+    let slot = match v {
+        Value::Obj(id) => vm.own_slot(id, key),
+        _ => primitive_slot(vm, &v, key),
+    };
+    Ok(vm.descriptor_object(slot))
+}
+
+fn object_get_own_property_descriptors(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    let v = arg(args, 0);
+    require_coercible(vm, &v, "getOwnPropertyDescriptors")?;
+    let result = vm.new_object();
+    let keys = match v {
+        Value::Obj(id) => vm.own_property_keys(id),
+        _ => primitive_keys(vm, &v),
+    };
+    for key in keys {
+        let slot = match v {
+            Value::Obj(id) => vm.own_slot(id, key),
+            _ => primitive_slot(vm, &v, key),
+        };
+        let d = vm.descriptor_object(slot);
+        vm.define(result, key, d);
+    }
+    Ok(Value::Obj(result))
+}
+
+fn object_get_own_property_names(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    let v = arg(args, 0);
+    if let Value::Obj(id) = v
+        && vm.is_namespace(id)
+    {
+        let names: Vec<Value> = vm
+            .namespace_names(id)?
+            .into_iter()
+            .map(|k| vm.atom_val(k))
+            .collect();
+        return Ok(vm.new_array(names));
+    }
+    require_coercible(vm, &v, "getOwnPropertyNames")?;
+    let keys = match v {
+        Value::Obj(id) => vm.own_property_keys(id),
+        _ => primitive_keys(vm, &v),
+    };
+    let names: Vec<Value> = keys
+        .into_iter()
+        .filter(|k| *k > SYM_ASYNC_ITERATOR)
+        .map(|k| vm.atom_val(k))
+        .collect();
+    Ok(vm.new_array(names))
 }
 
 fn object_get_prototype_of(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -642,7 +911,9 @@ fn function_apply(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     function_receiver(vm, &this, "apply")?;
     let list = match arg(args, 1) {
         Value::Undef | Value::Null => Vec::new(),
-        Value::Obj(id) if !vm.is_namespace(id) => array_like(vm, &Value::Obj(id))?,
+        Value::Obj(id) if !vm.is_namespace(id) => {
+            vm.reading(|vm| array_like(vm, &Value::Obj(id)))?
+        }
         _ => {
             return Err(
                 vm.type_error("Function.prototype.apply expects an array-like argument list.")
@@ -678,12 +949,14 @@ fn function_bind(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let rest: Vec<Value> = args.iter().skip(1).cloned().collect();
     // Like the reference: `bound <name>`, and the target's length less the bound arguments, at least 0.
     let (lk, nk) = (vm.names.length, vm.names.name);
-    let length = match vm.get(&this, lk)? {
+    // The target's `length` and `name` through their getters, read ahead (`Vm::with_reads`).
+    let (len, nm) = vm.reading(|vm| Ok((vm.get(&this, lk)?, vm.get(&this, nk)?)))?;
+    let length = match len {
         Value::Num(n) if n == f64::INFINITY => n,
         Value::Num(n) if n.is_finite() => (n.trunc() - rest.len() as f64).max(0.0),
         _ => 0.0,
     };
-    let name = match vm.get(&this, nk)? {
+    let name = match nm {
         Value::Str(s) => format!("bound {}", vm.text(s)),
         _ => "bound ".to_owned(),
     };
@@ -707,10 +980,17 @@ fn make_error_from(vm: &mut Vm, proto: Id, message: &Value, options: &Value) -> 
         let mk = vm.names.message;
         vm.define_hidden(id, mk, Value::Str(m));
     }
-    if let Value::Obj(o) = options {
+    if let Value::Obj(o) = *options {
         let ck = vm.names.cause;
-        if vm.has_key(*o, ck) {
-            let c = vm.get_obj(*o, ck);
+        // A program getter for `cause` is read ahead (`Vm::with_reads`).
+        let cause = vm.reading(|vm| {
+            Ok(if vm.has_key(o, ck) {
+                Some(vm.get_obj(o, ck))
+            } else {
+                None
+            })
+        })?;
+        if let Some(c) = cause {
             vm.define_hidden(id, ck, c);
         }
     }
@@ -807,7 +1087,24 @@ fn error_is_error(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 
 fn error_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = this_obj(vm, &this, "Error.prototype.toString")?;
-    let s = convert::error_to_string(vm, id);
+    // `name` and `message` through their getters, read ahead (`Vm::with_reads`).
+    let (nk, mk) = (vm.names.name, vm.names.message);
+    let (name, message) = vm.reading(|vm| Ok((vm.get_obj(id, nk), vm.get_obj(id, mk))))?;
+    let name = match name {
+        Value::Undef => "Error".to_owned(),
+        v => vm.quiet_string(&v),
+    };
+    let message = match message {
+        Value::Undef => String::new(),
+        v => vm.quiet_string(&v),
+    };
+    let s = if message.is_empty() {
+        name
+    } else if name.is_empty() {
+        message
+    } else {
+        format!("{name}: {message}")
+    };
     Ok(vm.string_val(s))
 }
 
@@ -1070,7 +1367,7 @@ fn contains_opaque(vm: &Vm, v: &Value, seen: &mut Vec<Id>) -> bool {
     let Value::Obj(id) = v else { return false };
     let o = &vm.heap[*id as usize];
     match &o.kind {
-        Kind::Ordinary | Kind::Error(_) | Kind::Arguments(_) | Kind::Array(_) | Kind::Live(_) => {}
+        Kind::Ordinary | Kind::Error(_) | Kind::Arguments(_) | Kind::Array(_) => {}
         Kind::Map(_)
         | Kind::Set(_)
         | Kind::WeakMap(_)
@@ -1088,7 +1385,14 @@ fn contains_opaque(vm: &Vm, v: &Value, seen: &mut Vec<Id>) -> bool {
         return false;
     }
     seen.push(*id);
-    let mut children: Vec<Value> = o.props.items.iter().map(|p| p.value).collect();
+    // A structural check, so it never runs program code: accessors are left out.
+    let mut children: Vec<Value> = o
+        .props
+        .items
+        .iter()
+        .filter(|p| p.flags & ACCESSOR == 0)
+        .map(|p| p.value)
+        .collect();
     if let Kind::Array(items) | Kind::Arguments(items) = &o.kind {
         children.extend(items.iter().copied());
     }
@@ -1105,13 +1409,23 @@ fn table_values(vm: &mut Vm, v: &Value, columns: &Option<Vec<String>>) -> Vec<(S
                 .iter()
                 .map(|c| {
                     let k = vm.atoms.intern(c);
-                    (c.clone(), vm.get_obj(*id, k))
+                    let v = match vm.shown_property(*id, k) {
+                        Ok(v) => v,
+                        Err(label) => vm.str_val(label),
+                    };
+                    (c.clone(), v)
                 })
                 .collect(),
             None => vm
-                .own_entries(*id)
+                .shown_entries(*id)
                 .into_iter()
-                .map(|(k, v)| (vm.atoms.text(k).to_owned(), v))
+                .map(|(k, v)| {
+                    let v = match v {
+                        Ok(v) => v,
+                        Err(label) => vm.str_val(label),
+                    };
+                    (vm.atoms.text(k).to_owned(), v)
+                })
                 .collect(),
         };
     }
@@ -1177,7 +1491,14 @@ fn console_table(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
                     .collect()
             }
             _ => {
-                let entries = vm.own_entries(id);
+                let entries: Vec<(Atom, Value)> = vm
+                    .shown_entries(id)
+                    .into_iter()
+                    .map(|(k, v)| match v {
+                        Ok(v) => (k, v),
+                        Err(label) => (k, vm.str_val(label)),
+                    })
+                    .collect();
                 entries
                     .into_iter()
                     .map(|(k, item)| {
@@ -1339,6 +1660,8 @@ pub(crate) fn family_step(
         SUB_STRINGIFY => convert::stringify_step(vm, fr, input),
         SUB_CROSS => crate::cross::frame_step(vm, fr, input),
         SUB_HOST_WAIT => crate::cross::wait_step(vm, fr, input),
+        crate::accessors::SUB_GETTER_METHOD => crate::accessors::getter_method_step(vm, fr, input),
+        crate::accessors::SUB_SETTER => crate::accessors::setter_step(vm, fr, input),
         _ => Ok(crate::native::Step::Done(Value::Undef)),
     }
 }

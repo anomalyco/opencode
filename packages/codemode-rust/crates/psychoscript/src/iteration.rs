@@ -88,7 +88,10 @@ impl Vm {
     /// `GetIter` over a value whose `[Symbol.iterator]` the program wrote: checks it as `get_iterator_in` does, then
     /// pushes a frame that calls it. `None` when opening it makes no call.
     pub(crate) fn open_by_call(&mut self, v: &Value, slot: u32, ctx: u8) -> Option<Res> {
-        let method = self.program_iterator_method(v)?;
+        let method = match self.program_iterator_method(v)? {
+            Ok(m) => m,
+            Err(e) => return Some(Err(e)),
+        };
         if !self.is_iterable(v) {
             return Some(Err(self.not_iterable(v, ctx)));
         }
@@ -108,7 +111,7 @@ impl Vm {
     }
 
     /// The `[Symbol.iterator]` method opening `v` calls, when it is not one the VM runs itself.
-    pub(crate) fn program_iterator_method(&mut self, v: &Value) -> Option<Value> {
+    pub(crate) fn program_iterator_method(&mut self, v: &Value) -> Option<Res> {
         let Value::Obj(id) = v else { return None };
         if self.walks(v)
             || matches!(
@@ -121,9 +124,12 @@ impl Vm {
         {
             return None;
         }
+        if self.has_program_getter(*id, SYM_ITERATOR) {
+            return Some(self.get_calling(*id, SYM_ITERATOR));
+        }
         let f = self.get_obj(*id, SYM_ITERATOR);
         (!f.is_nullish() && !matches!(&f, Value::Obj(m) if matches!(self.heap[*m as usize].kind, Kind::Native { .. })))
-            .then_some(f)
+            .then_some(Ok(f))
     }
 
     /// `IterNext` (`exit` is its jump), `IterStep` (`exit` none) or `IterRest` (`rest`) over an iterator stepped by a
@@ -366,13 +372,13 @@ fn open_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
                 return Err(vm.type_error("Iterator method result must be an object."));
             };
             let nk = vm.names.next;
-            let next = vm.get_obj(id, nk);
+            let next = vm.get_calling(id, nk)?;
             if !vm.is_callable(&next) {
                 return Err(vm.type_error("Iterator next must be a function."));
             }
             vm.fuel(fr.index(vm, EXTRA) as i32);
             let src = fr.get(vm, OUT);
-            let next = vm.record_next_of(&src, &it)?;
+            let next = vm.record_next_read(&src, &it, next)?;
             set_caller_slot(vm, fr, 0, Slot::pack(it));
             set_caller_slot(vm, fr, 1, Slot::pack(next));
             Ok(Step::DoneEmpty)
@@ -389,7 +395,7 @@ fn call_next(vm: &mut Vm, fr: Frame, it: Slot, next: Slot) -> Result<Step, Value
     let direct = next.get().is_nullish();
     let f = if direct {
         let nk = vm.names.next;
-        Slot::pack(vm.get_obj(id, nk))
+        Slot::pack(vm.get_calling(id, nk)?)
     } else {
         next
     };
@@ -417,11 +423,11 @@ fn result_of(vm: &mut Vm, r: Slot) -> Result<Option<Value>, Value> {
         return Err(vm.type_error("Iterator next() result must be an object."));
     };
     let (dk, vk) = (vm.names.done, vm.names.value);
-    let d = vm.get_obj(rid, dk);
+    let d = vm.get_calling(rid, dk)?;
     if vm.truthy(&d) {
         return Ok(None);
     }
-    Ok(Some(vm.get_obj(rid, vk)))
+    Ok(Some(vm.get_calling(rid, vk)?))
 }
 
 fn next_step(vm: &mut Vm, sub: u16, fr: Frame, input: Input) -> Result<Step, Value> {
@@ -471,6 +477,7 @@ fn spread_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
         Input::Start => {
             let src = fr.get(vm, OUT);
             if let Some(method) = vm.program_iterator_method(&src) {
+                let method = method?;
                 if !vm.is_callable(&method) {
                     return Err(vm.type_error("Iterator method must be a function."));
                 }
@@ -497,12 +504,12 @@ fn spread_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
                 return Err(vm.type_error("Iterator method result must be an object."));
             };
             let nk = vm.names.next;
-            let next = vm.get_obj(id, nk);
+            let next = vm.get_calling(id, nk)?;
             if !vm.is_callable(&next) {
                 return Err(vm.type_error("Iterator next must be a function."));
             }
             let src = fr.get(vm, OUT);
-            let next = vm.record_next_of(&src, &it)?;
+            let next = vm.record_next_read(&src, &it, next)?;
             fr.set(vm, IT, it);
             fr.set(vm, NEXT_FN, next);
             fr.set_index(vm, FLAG, 0);
@@ -543,7 +550,7 @@ fn spread_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
     let direct = next.get().is_nullish();
     let f = if direct {
         let nk = vm.names.next;
-        Slot::pack(vm.get_obj(id, nk))
+        Slot::pack(vm.get_calling(id, nk)?)
     } else {
         next
     };
@@ -600,7 +607,7 @@ fn close_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
                 };
             }
             let rk = vm.names.return_;
-            let f = Slot::pack(vm.get_obj(id, rk));
+            let f = Slot::pack(vm.get_calling(id, rk)?);
             let sp = (vm.stack.len() - fr.base()) as u32;
             vm.handlers_mut().push(crate::vm::Handler {
                 pc: crate::native::THREW as u32,
@@ -769,14 +776,14 @@ fn async_open_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> 
         return Err(vm.type_error("Iterator method result must be an object."));
     };
     let nk = vm.names.next;
-    let next = vm.get_obj(id, nk);
+    let next = vm.get_calling(id, nk)?;
     if !vm.is_callable(&next) {
         return Err(vm.type_error("Iterator next must be a function."));
     }
     let it = if matches!(fr.get(vm, FLAG), Value::Bool(true)) {
         vm.fuel(fr.index(vm, EXTRA) as i32);
         let src = fr.get(vm, OUT);
-        let next = vm.record_next_of(&src, &Value::Obj(id))?;
+        let next = vm.record_next_read(&src, &Value::Obj(id), next)?;
         let proto = vm.realm.async_from_sync_proto;
         Value::Obj(vm.alloc(Obj::new(
             Some(proto),
@@ -789,7 +796,20 @@ fn async_open_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> 
         }
         Value::Obj(id)
     };
-    let next = vm.record_next(&it)?;
+    // The `next` read above, unless the record keeps none.
+    let next = match it {
+        Value::Obj(i) if i == id => match vm.heap[id as usize].kind {
+            Kind::ArrayIter { .. }
+            | Kind::MapIter { .. }
+            | Kind::StrIter { .. }
+            | Kind::ListIter { .. }
+            | Kind::ExoticIter { .. }
+            | Kind::Generator(_)
+            | Kind::AsyncFromSync { .. } => Value::Undef,
+            _ => next,
+        },
+        _ => vm.record_next(&it)?,
+    };
     set_caller_slot(vm, fr, 0, Slot::pack(it));
     set_caller_slot(vm, fr, 1, Slot::pack(next));
     Ok(Step::DoneEmpty)

@@ -2,7 +2,7 @@
 
 use crate::native::{Frame, Input, Step};
 use crate::object::*;
-use crate::value::{Id, Value};
+use crate::value::{Id, Slot, Value};
 use crate::vm::{Job, NATIVE_FUEL, REQ_NEXT, REQ_RETURN, REQ_THROW, Reaction, Res, Vm};
 
 /// What a `Settle` frame's call is for (see `settle_step`).
@@ -11,6 +11,9 @@ pub(crate) const FINALLY: usize = 1;
 pub(crate) const THENABLE: usize = 2;
 pub(crate) const EXECUTOR: usize = 3;
 pub(crate) const TRY: usize = 4;
+/// A thenable whose `then` is a program getter: the getter runs in this job, then `then` as a `THENABLE` would,
+/// as the reference's `$vmThenableGet`.
+pub(crate) const THENABLE_GET: usize = 5;
 
 // The slots of a `Settle` frame: its kind; the promise it settles (for a thenable job, the resolve function); for a
 // thenable job or an executor the reject function, for a `finally` the outcome it restores (its kind, then its value),
@@ -73,6 +76,27 @@ pub(crate) fn settle_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, 
             let args: Vec<_> = vm.stack[at..at + argc].to_vec();
             return Ok(fr.catching_list(vm, f, this, &args, Step::CallSettling));
         }
+        Input::Returned(r) if kind == THENABLE_GET => {
+            let then = r.get();
+            let res = target;
+            if vm.is_callable(&then) {
+                fr.set_index(vm, SETTLE_KIND, THENABLE);
+                let (this, rej) = (fr.slot(vm, SETTLE_THIS), fr.slot(vm, SETTLE_B));
+                return Ok(fr.catching_list(
+                    vm,
+                    Slot::pack(then),
+                    this,
+                    &[Slot::pack(res), rej],
+                    Step::CallSettling,
+                ));
+            }
+            // Fulfilled with the thenable itself, without adopting it again.
+            if let Some(q) = res.as_obj().and_then(|r| vm.take_resolver(r)) {
+                let thenable = fr.get(vm, SETTLE_THIS);
+                vm.fulfill(q, thenable);
+            }
+            return Ok(Step::Done(Value::Undef));
+        }
         Input::Returned(r) => Ok(r.get()),
         Input::Threw(e) => Err(e),
         Input::Finished(_) => return Ok(Step::Done(Value::Undef)),
@@ -100,7 +124,7 @@ pub(crate) fn settle_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, 
                 },
             );
         }
-        (THENABLE, Err(e)) => {
+        (THENABLE, Err(e)) | (THENABLE_GET, Err(e)) => {
             if let Some(q) = vm.take_resolver(p) {
                 vm.reject(q, e);
             }
@@ -208,6 +232,14 @@ impl Vm {
             // A namespace is no object to the reference, so never a thenable, though `then` names a path in it.
             let namespace = matches!(self.heap[id as usize].kind, Kind::Namespace(_));
             let then_key = self.names.then;
+            if !namespace && self.has_program_getter(id, then_key) {
+                self.jobs.push_back(Job::Thenable {
+                    promise: p,
+                    thenable: v,
+                    then: Value::Undef,
+                });
+                return;
+            }
             let then = if namespace {
                 Value::Undef
             } else {
@@ -289,6 +321,28 @@ impl Vm {
                 thenable,
                 then,
             } => {
+                if let Value::Undef = then {
+                    // A program `then` getter (see `resolve_promise`).
+                    let (res, rej) = self.create_resolvers(promise);
+                    let getter = match thenable {
+                        Value::Obj(id) => self
+                            .accessor_on_chain(id, self.names.then)
+                            .map_or(Value::Undef, |a| a.get),
+                        _ => Value::Undef,
+                    };
+                    enter_settle(
+                        self,
+                        Value::Undef,
+                        THENABLE_GET,
+                        res,
+                        res,
+                        rej,
+                        getter,
+                        thenable,
+                        &[],
+                    )?;
+                    return self.run_job_frame();
+                }
                 let intrinsic = matches!(then, Value::Obj(t) if t == self.realm.promise_then);
                 if intrinsic && let Some(q) = self.as_promise(&thenable) {
                     self.perform_then(q, Reaction::Resolve(promise));
@@ -545,6 +599,20 @@ impl Vm {
         self.realm.generator_function_proto = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
         self.realm.async_function_proto = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
         self.realm.async_generator_function_proto = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
+        // Each generator function's default `prototype`'s prototype, read-only as the reference's.
+        let pk = self.names.prototype;
+        let (gfp, gp) = (
+            self.realm.generator_function_proto,
+            self.realm.generator_proto,
+        );
+        self.heap[gfp as usize].props.insert(pk, Value::Obj(gp), 0);
+        let (agfp, agp) = (
+            self.realm.async_generator_function_proto,
+            self.realm.async_generator_proto,
+        );
+        self.heap[agfp as usize]
+            .props
+            .insert(pk, Value::Obj(agp), 0);
     }
 
     fn async_gen(&mut self, g: Id) -> Option<&mut AsyncGen> {

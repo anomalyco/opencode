@@ -425,12 +425,7 @@ pub fn set_prop(vm: &mut Vm, id: Id, key: Atom, val: Value) -> Option<Result<(),
             Some(super::builtin_number(vm, &val).map(|n| data_mut(vm, id).last_index = n))
         }
         "source" | "flags" | "hasIndices" | "global" | "ignoreCase" | "multiline" | "dotAll"
-        | "unicode" | "unicodeSets" | "sticky" => {
-            let k = vm.atoms.text(key).to_owned();
-            Some(Err(vm.type_error(&format!(
-                "Cannot assign to read only property '{k}'."
-            ))))
-        }
+        | "unicode" | "unicodeSets" | "sticky" => Some(Err(vm.only_getter(&Value::Obj(id), key))),
         _ => None,
     }
 }

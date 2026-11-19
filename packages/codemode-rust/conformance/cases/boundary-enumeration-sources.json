@@ -376,10 +376,7 @@
       false,
       true
     ],
-    [
-      "TypeError",
-      "Object.create property descriptors are not supported; assign the fields after creating the object."
-    ]
+    {}
   ],
   "logs": [],
   "metadata": null

@@ -565,6 +565,8 @@ pub(crate) enum Body {
     Async(Arc<AsyncFn>),
     /// A function a resumed run lost: calling it throws this message at the call.
     Lost(Arc<str>),
+    /// A live response's state, read with no call of the host (the reference's `hostGetter`).
+    Getter(crate::streaming::Getter),
 }
 
 /// How a call of a host function reaches the program, the reference's `Host.Type`.
@@ -661,6 +663,14 @@ impl HostFunction {
     }
 
     /// A function a resumed run lost: calling it throws `message`.
+    /// The getter of a live response's accessor (`get bodyUsed`, `get locked`).
+    pub(crate) fn live_getter(name: &str, g: crate::streaming::Getter) -> Self {
+        let mut made = Self::with_body(Body::Getter(g));
+        made.name = name.into();
+        made.own_name = true;
+        made
+    }
+
     pub(crate) fn lost(name: &str, message: String) -> Self {
         let mut made = Self::with_body(Body::Lost(message.into()));
         made.name = name.into();

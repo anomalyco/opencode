@@ -27,6 +27,7 @@ pub fn setup(vm: &mut Vm) {
     let op = vm.realm.object_proto;
     if let Value::Obj(object) = vm.get_obj(op, k) {
         vm.method(object, "groupBy", 2, object_group_by);
+        vm.method(object, "fromEntries", 1, super::object::object_from_entries);
     }
     let sp = vm.realm.set_proto;
     for (i, (name, _)) in SET_METHODS.iter().enumerate() {
@@ -353,12 +354,12 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     fuel::receiver_then_loop(vm);
     let other = arg(args, 0);
     fuel::native(vm);
-    let oid = match other {
-        Value::Obj(oid) if !vm.is_namespace(oid) => oid,
-        _ => return Err(vm.type_error(&format!("Set.{name} expects a Set-like object."))),
-    };
+    if !matches!(other, Value::Obj(oid) if !vm.is_namespace(oid)) {
+        return Err(vm.type_error(&format!("Set.{name} expects a Set-like object.")));
+    }
     let sk = vm.names.size;
-    let raw = vm.get(&other, sk)?;
+    // `other.size`, `other.has` and `other.keys` as the reference's prelude reads them, through any getters.
+    let raw = vm.get_calling_value(&other, sk)?;
     let size = vm.number_of(&raw)?;
     if size.is_nan() {
         return Err(vm.type_error(&format!(
@@ -373,8 +374,8 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     }
     let hk = vm.atoms.intern_static("has");
     let kk = vm.atoms.intern_static("keys");
-    let has = vm.get_obj(oid, hk);
-    let keys = vm.get_obj(oid, kk);
+    let has = vm.get_calling_value(&other, hk)?;
+    let keys = vm.get_calling_value(&other, kk)?;
     fuel::native(vm);
     let callable = vm.is_callable(&has);
     if callable {
@@ -484,11 +485,11 @@ fn set_method_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> 
                     return Err(vm.type_error("Iterator next() result must be an object."));
                 };
                 let (dk, vk) = (vm.names.done, vm.names.value);
-                let done = vm.get_obj(rid, dk);
+                let done = vm.get_calling(rid, dk)?;
                 if vm.truthy(&done) {
                     return set_done(vm, set_result(result));
                 }
-                let item = vm.get_obj(rid, vk);
+                let item = vm.get_calling(rid, vk)?;
                 if let Some(step) = take_key(vm, fr, item, name, target, result)? {
                     return Ok(step);
                 }
@@ -622,7 +623,7 @@ fn opened(vm: &mut Vm, fr: Frame, iterator: Value, name: &str) -> Result<(), Val
         iterator
     };
     let nk = vm.names.next;
-    let next = vm.get_obj(iid, nk);
+    let next = vm.get_calling(iid, nk)?;
     if !array && !vm.is_callable(&next) {
         return Err(vm.type_error("The called value is not a function."));
     }
@@ -701,7 +702,7 @@ fn close_keys(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
         | Kind::ListIter { .. } => set_done(vm, Value::Bool(false)),
         _ => {
             let rk = vm.names.return_;
-            let f = vm.get_obj(id, rk);
+            let f = vm.get_calling(id, rk)?;
             if f.is_nullish() {
                 return set_done(vm, Value::Bool(false));
             }

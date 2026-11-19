@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use rustc_hash::FxHashMap;
 
+use crate::accessors::Read;
 use crate::bytecode::{Arith, Capture, FuncProto, Op, Program, TemplateSite};
 use crate::compiler::{DELEGATE_ASYNC, DELEGATE_NO_ARG};
 use crate::conversion::code;
@@ -211,6 +212,8 @@ pub struct Realm {
     pub map_proto: Id,
     pub set_proto: Id,
     pub generator_proto: Id,
+    /// Every arguments object's own `[Symbol.iterator]` (the reference's prelude `argumentsValues`).
+    pub arguments_values: Id,
     pub async_generator_proto: Id,
     /// What generator, async and async generator functions inherit from, below `Function.prototype`.
     pub generator_function_proto: Id,
@@ -303,6 +306,16 @@ pub struct Vm {
     /// The answers a rerun takes in order, and what the meter was when it started.
     pub(crate) replay: VecDeque<Value>,
     pub(crate) replay_meter: Option<crate::conversion::Meter>,
+    /// Program getters built-ins read ahead (see `accessors.rs`).
+    pub(crate) reads: crate::accessors::Reads,
+    /// Set while an instruction reads a property: a program getter it meets is handed back (`getter_hit`) instead of
+    /// read, for the instruction to call.
+    pub(crate) op_access: bool,
+    pub(crate) getter_hit: Option<Value>,
+    /// The program setter a write met (`Vm::set_obj`), for the instruction to call.
+    pub(crate) setter_hit: Option<Value>,
+    /// The `next` an iterator opened from native code was read as, for its record (see `Vm::record_next_of`).
+    pub(crate) opened_next: Option<(Id, Value)>,
     pub(crate) gc: crate::collector::Gc,
 }
 
@@ -389,6 +402,11 @@ impl Vm {
             convert_req: None,
             replay: VecDeque::new(),
             replay_meter: None,
+            reads: Default::default(),
+            op_access: false,
+            getter_hit: None,
+            setter_hit: None,
+            opened_next: None,
             gc: crate::collector::Gc::new(),
         }
     }
@@ -515,6 +533,17 @@ impl Vm {
             (Value::Undef, Value::Undef) | (Value::Null, Value::Null) => true,
             (Value::Sym(x), Value::Sym(y)) => x == y,
             _ => false,
+        }
+    }
+
+    /// SameValue (`Object.is`).
+    pub fn same_value(&self, a: &Value, b: &Value) -> bool {
+        match (a, b) {
+            (Value::Num(x), Value::Num(y)) => {
+                (x.is_nan() && y.is_nan())
+                    || (x == y && x.is_sign_negative() == y.is_sign_negative())
+            }
+            _ => self.strict_eq(a, b),
         }
     }
 
@@ -743,7 +772,9 @@ impl Vm {
                     }
                     self.native_depth += 1;
                     self.host.meter.counted = true;
+                    self.reads.fault = None;
                     let r = f(self, this, args, id);
+                    let r = self.checked_native(r);
                     if self.entered {
                         let r = self.drive_entered(true);
                         self.native_depth -= 1;
@@ -788,8 +819,9 @@ impl Vm {
         if walked && ctx != crate::bytecode::ITER_DELEGATE {
             return 0;
         }
-        let method = self.get_obj(*id, SYM_ITERATOR);
-        if self.is_closure(&method) {
+        // A program getter's method is not known until it runs; it is the program's own.
+        let method = self.peek(*id, SYM_ITERATOR);
+        if self.is_closure(&method) || self.has_program_getter(*id, SYM_ITERATOR) {
             0
         } else {
             NATIVE_FUEL
@@ -849,7 +881,33 @@ impl Vm {
     /// The `next` an iterator record over `it`, opened from `source`, keeps (see `record_next`). The reference
     /// steps a built-in iterator itself only when it opens the iterable directly; one that a `Symbol.iterator` method
     /// returned has its `next` read and called each step, as bytecode calls it.
+    /// `record_next_of` once the caller read the iterator's `next` as `read`: a getter is not called again.
+    pub(crate) fn record_next_read(&mut self, source: &Value, it: &Value, read: Value) -> Res {
+        let reads = match it {
+            Value::Obj(id) => match self.heap[*id as usize].kind {
+                Kind::ArrayIter { .. }
+                | Kind::MapIter { .. }
+                | Kind::StrIter { .. }
+                | Kind::ListIter { .. }
+                | Kind::ExoticIter { .. } => !self.walks(source),
+                Kind::Generator(_) | Kind::AsyncFromSync { .. } => false,
+                _ => true,
+            },
+            _ => false,
+        };
+        if reads {
+            Ok(read)
+        } else {
+            self.record_next_of(source, it)
+        }
+    }
+
     pub(crate) fn record_next_of(&mut self, source: &Value, it: &Value) -> Res {
+        if let (Some((opened, next)), Value::Obj(id)) = (self.opened_next.take(), it)
+            && opened == *id
+        {
+            return self.record_next_read(source, it, next);
+        }
         if let Value::Obj(id) = it
             && matches!(
                 self.heap[*id as usize].kind,
@@ -862,7 +920,7 @@ impl Vm {
             && !self.walks(source)
         {
             let nk = self.names.next;
-            return self.get(it, nk);
+            return self.get_calling_value(it, nk);
         }
         self.record_next(it)
     }
@@ -874,7 +932,7 @@ impl Vm {
             Kind::Generator(_) | Kind::IterHelper(_) => NATIVE_FUEL,
             Kind::Ordinary => {
                 let key = self.names.return_;
-                let method = self.get_obj(*id, key);
+                let method = self.peek(*id, key);
                 if matches!(&method, Value::Obj(m) if matches!(self.heap[*m as usize].kind, Kind::Native { .. }))
                 {
                     NATIVE_FUEL
@@ -1033,7 +1091,9 @@ impl Vm {
                 }
                 self.native_depth += 1;
                 self.host.meter.counted = false;
+                self.reads.fault = None;
                 let r = f(self, this, args, id);
+                let r = self.checked_native(r);
                 if self.entered {
                     let r = self.drive_entered(false);
                     self.native_depth -= 1;
@@ -1324,7 +1384,7 @@ impl Vm {
 
     /// The `Call` instruction: returns whether a frame was pushed.
     #[inline(never)]
-    fn call_op(&mut self, argc: usize) -> Result<bool, Value> {
+    pub(crate) fn call_op(&mut self, argc: usize) -> Result<bool, Value> {
         let fpos = self.stack.len() - argc - 2;
         let callee = self.stack[fpos].get();
         let Value::Obj(id) = callee else {
@@ -1359,7 +1419,9 @@ impl Vm {
                 self.stack.pop();
                 self.host.meter.counted = true;
                 self.convert_ok = true;
+                self.reads.fault = None;
                 let r = f(self, this, &args, id);
+                let r = self.checked_native(r);
                 self.convert_ok = false;
                 if self.convert_req.is_some() {
                     let c = self.convert_native(id, this, &args, true, false);
@@ -1404,7 +1466,15 @@ impl Vm {
                 let callee = self.stack[fpos].get();
                 let args: Vec<Value> = self.stack.drain(fpos + 2..).map(Slot::get).collect();
                 self.stack.truncate(fpos);
-                let r = crate::host::call_namespace(self, id, &args, callee)?;
+                // Program getters in the arguments are read ahead, then the call made again (see `conversion.rs`).
+                self.convert_ok = true;
+                let r = crate::host::call_namespace(self, id, &args, callee);
+                self.convert_ok = false;
+                if self.convert_req.is_some() {
+                    self.convert_native(id, Value::Undef, &args, false, false)?;
+                    return Ok(true);
+                }
+                let r = r?;
                 // A call that waits for promises in its arguments runs in a native frame (see `cross.rs`).
                 if std::mem::take(&mut self.entered) {
                     self.host.meter.bytecode = false;
@@ -1468,7 +1538,9 @@ impl Vm {
             let f = *f;
             self.host.meter.counted = false;
             self.convert_ok = true;
+            self.reads.fault = None;
             let r = f(self, Value::Uninit, &args, id);
+            let r = self.checked_native(r);
             self.convert_ok = false;
             if self.convert_req.is_some() {
                 self.convert_native(id, Value::Uninit, &args, false, true)?;
@@ -1629,7 +1701,13 @@ impl Vm {
             _ => crate::native::Input::Start,
         };
         self.frames[fi].pc = crate::native::RETURNED;
-        match crate::native::step(self, op, sub, base, input)? {
+        self.reads.fault = None;
+        let stepped = crate::native::step(self, op, sub, base, input);
+        let stepped = match self.reads.fault.take() {
+            None => stepped,
+            Some(key) => Err(self.unreachable_accessor(key)),
+        };
+        match stepped? {
             crate::native::Step::Call(argc) => {
                 self.call_op(argc)?;
                 if self.park
@@ -1709,7 +1787,9 @@ impl Vm {
                 self.stack.pop();
                 self.host.meter.counted = false;
                 self.convert_ok = true;
+                self.reads.fault = None;
                 let r = f(self, this, &args, id);
+                let r = self.checked_native(r);
                 self.convert_ok = false;
                 if self.convert_req.is_some() {
                     let c = self.convert_native(id, this, &args, false, false);
@@ -2503,7 +2583,7 @@ impl Vm {
     }
 
     #[inline(always)]
-    fn push(&mut self, v: Value) {
+    pub(crate) fn push(&mut self, v: Value) {
         self.stack.push(Slot::pack(v));
     }
 
@@ -2951,6 +3031,8 @@ impl Vm {
                         let id = self.alloc(Obj::new(Some(proto), Kind::Arguments(items)));
                         let lk = self.names.length;
                         self.define_hidden(id, lk, len);
+                        let values = Value::Obj(self.realm.arguments_values);
+                        self.define_hidden(id, SYM_ITERATOR, values);
                         self.push(Value::Obj(id));
                     }
                     Op::Rest(_) => {
@@ -2961,16 +3043,30 @@ impl Vm {
 
                     Op::GetProp(a) => {
                         let o = self.pop();
-                        let v = tri!(self.get(&o, a));
-                        self.push(v);
+                        match tri!(self.op_read(&o, a)) {
+                            Read::Value(v) => self.push(v),
+                            Read::Getter(g) => {
+                                self.frames[fi].pc = pc;
+                                if tri!(self.enter_getter(g, o)) {
+                                    continue 'outer;
+                                }
+                            }
+                        }
                     }
                     Op::GetPropW(a) => {
                         let o = self.pop();
                         if self.write_checked(&o) {
                             tri!(self.check_writable(&o, a));
                         }
-                        let v = tri!(self.get(&o, a));
-                        self.push(v);
+                        match tri!(self.op_read(&o, a)) {
+                            Read::Value(v) => self.push(v),
+                            Read::Getter(g) => {
+                                self.frames[fi].pc = pc;
+                                if tri!(self.enter_getter(g, o)) {
+                                    continue 'outer;
+                                }
+                            }
+                        }
                     }
                     Op::WriteKey => {
                         let n = self.stack.len();
@@ -2993,20 +3089,46 @@ impl Vm {
                     }
                     Op::DestructProp(a) => {
                         let o = self.pop();
-                        let v = tri!(self.get_destructured(&o, a));
-                        self.push(v);
+                        self.op_access = true;
+                        let r = self.get_destructured(&o, a);
+                        self.op_access = false;
+                        let v = tri!(r);
+                        match self.getter_hit.take() {
+                            None => self.push(v),
+                            Some(g) => {
+                                self.frames[fi].pc = pc;
+                                if tri!(self.enter_getter(g, o)) {
+                                    continue 'outer;
+                                }
+                            }
+                        }
                     }
                     Op::DestructElem => {
                         let k = self.pop();
                         let o = self.pop();
-                        let v = tri!(self.get_elem_destructured(&o, &k));
-                        self.push(v);
+                        self.op_access = true;
+                        let r = self.get_elem_destructured(&o, &k);
+                        self.op_access = false;
+                        let v = tri!(r);
+                        match self.getter_hit.take() {
+                            None => self.push(v),
+                            Some(g) => {
+                                self.frames[fi].pc = pc;
+                                if tri!(self.enter_getter(g, o)) {
+                                    continue 'outer;
+                                }
+                            }
+                        }
                     }
                     Op::SetProp(a) => {
                         let v = self.pop();
                         let o = self.pop();
-                        tri!(self.check_assignment(&o, &v));
-                        tri!(self.set(&o, a, v));
+                        tri!(self.check_assignment_at(&o, a, &v));
+                        if let Some(s) = tri!(self.op_write(&o, a, v)) {
+                            self.frames[fi].pc = pc;
+                            tri!(self.enter_setter(s, o, v));
+                            continue 'outer;
+                        }
                         self.push(v);
                     }
                     Op::GetElem => {
@@ -3015,8 +3137,15 @@ impl Vm {
                         if matches!(k, Value::Obj(_)) && self.operand_calls(&k) {
                             conv_op!(code::GET_ELEM, o, k, Value::Undef, 0, 0);
                         }
-                        let v = tri!(self.get_elem(&o, &k));
-                        self.push(v);
+                        match tri!(self.op_read_elem(&o, &k)) {
+                            Read::Value(v) => self.push(v),
+                            Read::Getter(g) => {
+                                self.frames[fi].pc = pc;
+                                if tri!(self.enter_getter(g, o)) {
+                                    continue 'outer;
+                                }
+                            }
+                        }
                     }
                     Op::SetElem => {
                         let v = self.pop();
@@ -3025,15 +3154,30 @@ impl Vm {
                         if matches!(k, Value::Obj(_)) && self.operand_calls(&k) {
                             conv_op!(code::SET_ELEM, o, k, v, 0, 0);
                         }
-                        tri!(self.check_assignment(&o, &v));
-                        tri!(self.set_elem(&o, &k, v));
+                        if matches!(v, Value::Obj(_)) && matches!(o, Value::Obj(_)) {
+                            let a = tri!(self.key_of(&k));
+                            tri!(self.check_assignment_at(&o, a, &v));
+                        }
+                        if let Some(s) = tri!(self.op_write_elem(&o, &k, v)) {
+                            self.frames[fi].pc = pc;
+                            tri!(self.enter_setter(s, o, v));
+                            continue 'outer;
+                        }
                         self.push(v);
                     }
                     Op::GetMethod(a) => {
                         let o = self.pop();
-                        let f = tri!(self.get(&o, a));
-                        self.push(f);
-                        self.push(o);
+                        match tri!(self.op_read(&o, a)) {
+                            Read::Value(f) => {
+                                self.push(f);
+                                self.push(o);
+                            }
+                            Read::Getter(g) => {
+                                self.frames[fi].pc = pc;
+                                tri!(self.enter_getter_method(g, o));
+                                continue 'outer;
+                            }
+                        }
                     }
                     Op::DelProp(a) => {
                         let o = self.pop();
@@ -3070,6 +3214,32 @@ impl Vm {
                         let v = self.pop();
                         let r = tri!(self.instance_of(&v, &c));
                         self.push(Value::Bool(r));
+                    }
+                    Op::DefineAccessor(a, setter) => {
+                        let f = self.pop();
+                        if let Value::Obj(id) = self.top() {
+                            self.define_accessor_half(id, a, setter, f, true);
+                        }
+                    }
+                    Op::DefineAccessorElem(setter) => {
+                        let f = self.pop();
+                        let k = self.pop();
+                        let a = tri!(self.key_of(&k));
+                        // A computed key names the function when the literal runs: `get x`, `set [Symbol.iterator]`.
+                        if let Value::Obj(fid) = f {
+                            let shown = match a {
+                                SYM_ITERATOR => "[Symbol.iterator]".to_owned(),
+                                SYM_ASYNC_ITERATOR => "[Symbol.asyncIterator]".to_owned(),
+                                _ => self.key_text(a),
+                            };
+                            let name = format!("{} {shown}", if setter { "set" } else { "get" });
+                            let nv = self.str_val(&name);
+                            let nk = self.names.name;
+                            self.heap[fid as usize].props.insert(nk, nv, 0);
+                        }
+                        if let Value::Obj(id) = self.top() {
+                            self.define_accessor_half(id, a, setter, f, true);
+                        }
                     }
                     Op::DefineField(a) => {
                         let v = self.pop();

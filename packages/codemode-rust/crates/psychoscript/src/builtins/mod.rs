@@ -19,7 +19,7 @@ pub mod web;
 
 use crate::object::*;
 use crate::value::{Id, Value};
-use crate::vm::{NativeFn, Vm};
+use crate::vm::{NativeFn, Res, Vm};
 
 /// Prototypes of the standard-library kinds beyond the core ones in `Realm`.
 #[derive(Default)]
@@ -304,6 +304,8 @@ impl Vm {
         self.realm.iter_proto = self.plain(object_proto);
         let ip = self.realm.iter_proto;
         self.realm.generator_proto = self.plain(ip);
+        let values = self.native_fn("argumentsValues", 0, arguments_values, Value::Undef);
+        self.realm.arguments_values = values.as_obj().unwrap_or(0);
 
         object::setup(self);
         array::setup(self);
@@ -544,4 +546,25 @@ pub fn accessor_error(vm: &mut Vm, this: Id, key: Atom) -> Value {
     };
     let k = vm.atoms.text(key).to_owned();
     incompatible(vm, &format!("{ctor}.prototype.{k}"), &Value::Obj(this))
+}
+
+/// An arguments object's `[Symbol.iterator]`: its values by `length` and index, read when it is called.
+fn arguments_values(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    let Value::Obj(id) = this else {
+        return Err(vm.type_error("argumentsValues called on a non-object."));
+    };
+    let lk = vm.names.length;
+    let len = vm.get_calling(id, lk)?;
+    let n = crate::value::to_integer(vm.number_of(&len)?).max(0.0) as usize;
+    let mut items = Vec::with_capacity(n.min(1 << 16));
+    for i in 0..n {
+        let k = vm.atoms.intern(&i.to_string());
+        items.push(vm.get_calling(id, k)?);
+    }
+    let proto = vm.realm.iter_proto;
+    let it = Kind::ListIter {
+        items: items.into(),
+        pos: 0,
+    };
+    Ok(Value::Obj(vm.alloc(Obj::new(Some(proto), it))))
 }

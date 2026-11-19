@@ -1,4 +1,4 @@
-// An accessor in an object literal fails when the literal runs, after the properties before it.
+// An accessor in an object literal is defined in order with the properties around it.
 let evaluated = 0
 const make = () => ({ a: evaluated++, get b() { return 1 }, c: evaluated++ })
 let error

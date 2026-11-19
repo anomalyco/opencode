@@ -144,7 +144,7 @@ fn is_runtime_reference(vm: &Vm, v: &Value) -> bool {
     match v {
         Value::Obj(id) => !matches!(
             vm.heap[*id as usize].kind,
-            Kind::Ordinary | Kind::Array(_) | Kind::Error(_) | Kind::Live(_)
+            Kind::Ordinary | Kind::Array(_) | Kind::Error(_)
         ),
         _ => false,
     }
@@ -297,9 +297,7 @@ pub fn url_set(vm: &mut Vm, id: Id, key: Atom, val: Value) -> Option<Result<(), 
     use url::quirks as q;
     let name = vm.atoms.text(key).to_owned();
     if name == "searchParams" || name == "origin" {
-        return Some(Err(vm.type_error(&format!(
-            "Cannot assign to read only property '{name}'."
-        ))));
+        return Some(Err(vm.only_getter(&Value::Obj(id), key)));
     }
     if !URL_FIELDS.contains(&name.as_str()) {
         return None;
@@ -422,7 +420,8 @@ fn is_iterable(vm: &mut Vm, v: &Value) -> bool {
             matches!(
                 vm.heap[*id as usize].kind,
                 Kind::Array(_) | Kind::Map(_) | Kind::Set(_) | Kind::Generator(_)
-            ) || !vm.get_obj(*id, SYM_ITERATOR).is_nullish()
+            ) || vm.has_program_getter(*id, SYM_ITERATOR)
+                || !vm.get_obj(*id, SYM_ITERATOR).is_nullish()
         }
         Value::Str(_) => true,
         _ => false,
@@ -1201,7 +1200,7 @@ fn clone_value(vm: &mut Vm, v: &Value, memo: &mut Vec<(Id, Id)>) -> Res {
         Kind::Bytes(b) => Plan::Bytes(b.to_vec()),
         Kind::Error(_) => Plan::Error,
         Kind::Array(items) => Plan::Array(items.len()),
-        Kind::Ordinary | Kind::Arguments(_) | Kind::TextDecoder(_) | Kind::Live(_) => Plan::Object,
+        Kind::Ordinary | Kind::Arguments(_) | Kind::TextDecoder(_) => Plan::Object,
         _ => Plan::Reject,
     };
     match plan {

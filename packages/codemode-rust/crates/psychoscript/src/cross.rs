@@ -44,6 +44,8 @@ pub enum Waiting {
     Root,
     /// The innermost visit met a promise, which it yielded.
     Value,
+    /// The innermost visit's read met a program getter, whose value is the read's.
+    Getter,
 }
 
 /// One `visit(holder, key, depth)` generator.
@@ -121,6 +123,8 @@ fn flat(vm: &Vm, v: &Value) -> Option<Json> {
         || o.proto != Some(vm.realm.object_proto)
         || o.props.items.len() > 4
         || o.props.find(vm.names.to_json).is_some()
+        || o.flags & ACCESSORS != 0
+        || o.props.items.iter().any(|p| p.flags & ACCESSOR != 0)
     {
         return None;
     }
@@ -182,6 +186,15 @@ impl FastWalk {
             return Ok(Some(None));
         }
         if matches!(vm.heap[id as usize].kind, Kind::Promise(_)) {
+            return Ok(None);
+        }
+        // Program getters run in the walk.
+        let (tk, nk, mk) = (vm.names.to_json, vm.names.name, vm.names.message);
+        if vm.heap[id as usize].flags & ACCESSORS != 0
+            || vm.has_program_getter(id, tk)
+            || (matches!(vm.heap[id as usize].kind, Kind::Error(_))
+                && (vm.has_program_getter(id, nk) || vm.has_program_getter(id, mk)))
+        {
             return Ok(None);
         }
         if !self.seen.insert(id) {
@@ -377,6 +390,9 @@ fn thenable(vm: &mut Vm, v: &Value) -> bool {
         _ => {}
     }
     let then = vm.names.then;
+    if vm.has_program_getter(*id, then) {
+        return true;
+    }
     let t = vm.get_obj(*id, then);
     vm.is_callable(&t)
 }
@@ -542,6 +558,10 @@ pub(crate) fn frame_step(
 fn call_to_json(vm: &mut Vm, fr: crate::native::Frame) -> Result<crate::native::Step, Value> {
     fr.set_index(vm, F_PHASE, CALLED);
     let (f, this, key) = (fr.slot(vm, F_FN), fr.slot(vm, F_THIS), fr.slot(vm, F_KEY));
+    // A program getter the walk's read met is called with no arguments.
+    if let Value::Uninit = key.get() {
+        return fr.catching(vm, f, this, []);
+    }
     fr.catching(vm, f, this, [key])
 }
 
@@ -578,6 +598,8 @@ enum Act {
     Root,
     /// The innermost visit reads `holder[key]`.
     Read,
+    /// The innermost visit has read its value.
+    Got(Value),
     /// The innermost visit has its value past the promise check.
     Value(Value),
     /// The innermost visit has its value past its `toJSON`.
@@ -599,6 +621,10 @@ enum Pause {
 /// Runs the walk until it pauses.
 fn step(vm: &mut Vm, c: &mut Cross, resume: Resume) -> Result<Pause, Value> {
     let resumed = match resume {
+        Resume::Called(v) if c.waiting == Waiting::Getter => {
+            c.waiting = Waiting::No;
+            return run(vm, c, Act::Got(v), false);
+        }
         Resume::Called(v) => return run(vm, c, Act::Classify(v), false),
         Resume::Settled(r) => Some(r.unwrap_or_default()),
         Resume::Start => None,
@@ -664,7 +690,17 @@ fn run(vm: &mut Vm, c: &mut Cross, mut act: Act, mut root_awaited: bool) -> Resu
                     )));
                 }
                 let (holder, key) = (top.holder, top.key);
-                let val = vm.get_elem(&holder, &key)?;
+                vm.op_access = true;
+                let val = vm.get_elem(&holder, &key);
+                vm.op_access = false;
+                let val = val?;
+                if let Some(g) = vm.getter_hit.take() {
+                    c.waiting = Waiting::Getter;
+                    return Ok(Pause::Call([g, holder, Value::Uninit]));
+                }
+                Act::Got(val)
+            }
+            Act::Got(val) => {
                 if matches!(val, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Promise(_)))
                 {
                     if std::mem::take(&mut c.owed) {

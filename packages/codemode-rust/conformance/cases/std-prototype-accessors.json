@@ -97,7 +97,7 @@
     ],
     [
       "TypeError",
-      "Cannot assign to read only property 'global'."
+      "Cannot set property 'global' of a data object which has only a getter."
     ],
     [
       3,

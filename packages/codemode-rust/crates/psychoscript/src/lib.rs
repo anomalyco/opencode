@@ -8,6 +8,7 @@
 //!
 //! The public API below is shared with the benchmark and conformance harnesses, so change it only together with them.
 
+mod accessors;
 mod builtins;
 mod bytecode;
 mod collector;

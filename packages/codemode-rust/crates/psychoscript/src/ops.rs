@@ -186,14 +186,93 @@ impl Vm {
                 _ => {}
             }
             let o = &self.heap[cur as usize];
-            if let Some(v) = o.props.get(key) {
-                return *v;
+            if let Some(p) = o.props.prop(key) {
+                if p.flags & ACCESSOR == 0 {
+                    return p.value;
+                }
+                let pair = p.value;
+                return self.accessor_read(pair, Value::Obj(id), key);
             }
             match o.proto {
                 Some(p) => cur = p,
                 None => return Value::Undef,
             }
         }
+    }
+
+    /// The accessor property `key` a primitive's wrapper prototype chain has first, if any.
+    pub(crate) fn primitive_accessor(&self, v: &Value, key: Atom) -> Option<Value> {
+        let proto = match v {
+            Value::Str(_) => self.realm.string_proto,
+            Value::Num(_) => self.realm.number_proto,
+            Value::Bool(_) => self.realm.boolean_proto,
+            _ => return None,
+        };
+        if !self.accessors_on_chain(proto) {
+            return None;
+        }
+        let mut cur = Some(proto);
+        while let Some(c) = cur {
+            if self.has_own(c, key) {
+                return self.heap[c as usize]
+                    .props
+                    .prop(key)
+                    .filter(|p| p.flags & ACCESSOR != 0)
+                    .map(|p| p.value);
+            }
+            cur = self.heap[c as usize].proto;
+        }
+        None
+    }
+
+    /// The accessor property `key` on the chain above `id`, when the first property found there is one.
+    pub(crate) fn inherited_accessor(&self, id: Id, key: Atom) -> Option<Value> {
+        let proto = self.heap[id as usize].proto?;
+        if !self.accessors_on_chain(proto) {
+            return None;
+        }
+        let mut cur = Some(proto);
+        while let Some(c) = cur {
+            if self.has_own(c, key) {
+                return self.heap[c as usize]
+                    .props
+                    .prop(key)
+                    .filter(|p| p.flags & ACCESSOR != 0)
+                    .map(|p| p.value);
+            }
+            cur = self.heap[c as usize].proto;
+        }
+        None
+    }
+
+    /// A write that reached an accessor property on `receiver`'s chain: its setter takes it. A program setter is not
+    /// called here: an instruction calls it (`setter_hit`); a built-in cannot (`Reads::fault`).
+    pub(crate) fn accessor_write(
+        &mut self,
+        pair: Value,
+        receiver: Value,
+        key: Atom,
+        val: Value,
+    ) -> Result<(), Value> {
+        let s = self.pair(pair).set;
+        if let Value::Undef = s {
+            let k = self.key_text(key);
+            let d = crate::builtins::describe_value(self, &receiver);
+            return Err(self.type_error(&format!(
+                "Cannot set property '{k}' of {d} which has only a getter."
+            )));
+        }
+        if self.is_companion(&s) {
+            let id = s.as_obj().unwrap_or(0);
+            crate::accessors::companion_set(self, receiver, &[val], id)?;
+            return Ok(());
+        }
+        if self.op_access {
+            self.setter_hit = Some(s);
+        } else if self.reads.fault.is_none() {
+            self.reads.fault = Some(key);
+        }
+        Ok(())
     }
 
     /// An array's element that is a hole or past its end, which its prototypes may still have.
@@ -380,10 +459,16 @@ impl Vm {
             let o = &self.heap[id as usize];
             if let Kind::Array(items) | Kind::Arguments(items) = &o.kind {
                 pending.extend(items.iter().filter_map(Value::as_obj));
-            } else if !matches!(o.kind, Kind::Ordinary | Kind::Error(_) | Kind::Live(_)) {
+            } else if !matches!(o.kind, Kind::Ordinary | Kind::Error(_)) {
                 continue;
             }
-            pending.extend(o.props.items.iter().filter_map(|p| p.value.as_obj()));
+            pending.extend(
+                o.props
+                    .items
+                    .iter()
+                    .filter(|p| p.flags & ACCESSOR == 0)
+                    .filter_map(|p| p.value.as_obj()),
+            );
         }
         Ok(())
     }
@@ -400,6 +485,19 @@ impl Vm {
             return self.reject_circular(*c, v, label);
         }
         Ok(())
+    }
+
+    /// `check_assignment` for a write of `key`: a write an accessor takes makes no cycle, as in the reference's
+    /// `assignToReference`.
+    pub fn check_assignment_at(&mut self, o: &Value, key: Atom, v: &Value) -> Result<(), Value> {
+        let r = self.check_assignment(o, v);
+        if r.is_err()
+            && let Value::Obj(id) = o
+            && self.accessor_on_chain(*id, key).is_some()
+        {
+            return Ok(());
+        }
+        r
     }
 
     #[inline(never)]
@@ -422,6 +520,13 @@ impl Vm {
             // A string's length and indexes are its own values, not fields.
             Value::Str(_) if key == self.names.length || self.atoms.index(key).is_some() => {
                 Err(self.type_error("Only data fields may be assigned."))
+            }
+            // Only an inherited setter can take a primitive's write, with the primitive as `this`.
+            Value::Str(_) | Value::Num(_) | Value::Bool(_)
+                if self.primitive_accessor(v, key).is_some() =>
+            {
+                let pair = self.primitive_accessor(v, key).unwrap_or_default();
+                self.accessor_write(pair, *v, key, val)
             }
             _ => {
                 let k = self.key_text(key);
@@ -525,6 +630,13 @@ impl Vm {
                         items[i] = val;
                         return Ok(());
                     }
+                    // A hole or a new element looks at the prototypes first, which may hold a program setter there.
+                    if let Some(pair) = self.inherited_accessor(id, key) {
+                        return self.accessor_write(pair, Value::Obj(id), key, val);
+                    }
+                    let Kind::Array(items) = &mut self.heap[id as usize].kind else {
+                        return Ok(());
+                    };
                     if flags & NON_EXTENSIBLE != 0 {
                         return Err(self.not_extensible(key));
                     }
@@ -584,22 +696,83 @@ impl Vm {
             }
             _ => {}
         }
-        let o = &mut self.heap[id as usize];
+        let o = &self.heap[id as usize];
         match o.props.find(key) {
             Some(i) => {
-                if flags & FROZEN != 0 || o.props.items[i].flags & WRITABLE == 0 {
+                let p = &o.props.items[i];
+                if p.flags & ACCESSOR != 0 {
+                    let pair = p.value;
+                    return self.accessor_write(pair, Value::Obj(id), key, val);
+                }
+                // A built-in accessor on the prototype itself: as the inherited one, its getter takes no write.
+                if matches!(p.value, Value::Uninit) {
+                    let text = self.atoms.text(key).to_owned();
+                    if id == self.realm.std.url && text != "origin" && text != "searchParams" {
+                        return Err(crate::builtins::incompatible(
+                            self,
+                            &format!("URL.prototype.{text}"),
+                            &Value::Obj(id),
+                        ));
+                    }
+                    return Err(self.only_getter(&Value::Obj(id), key));
+                }
+                if flags & FROZEN != 0 || p.flags & WRITABLE == 0 {
                     return Err(self.read_only(key));
                 }
-                o.props.items[i].value = val;
+                self.heap[id as usize].props.items[i].value = val;
             }
             None => {
+                if let Some(pair) = self.inherited_accessor(id, key) {
+                    return self.accessor_write(pair, Value::Obj(id), key, val);
+                }
+                if let Some(e) = self.builtin_accessor_write(id, key) {
+                    return Err(e);
+                }
                 if flags & NON_EXTENSIBLE != 0 {
                     return Err(self.not_extensible(key));
                 }
-                o.props.push_new(key, val, DEFAULT_FLAGS);
+                self.heap[id as usize]
+                    .props
+                    .push_new(key, val, DEFAULT_FLAGS);
             }
         }
         Ok(())
+    }
+
+    /// The error for a write a built-in accessor with no setter refuses, as the reference's `failedAssignment` words it.
+    pub(crate) fn only_getter(&mut self, receiver: &Value, key: Atom) -> Value {
+        let k = self.key_text(key);
+        let d = crate::builtins::describe_value(self, receiver);
+        self.type_error(&format!(
+            "Cannot set property '{k}' of {d} which has only a getter."
+        ))
+    }
+
+    /// A write that reaches a built-in accessor (an `Uninit` slot) on the chain above `id` before any other property:
+    /// a URL field's setter refuses a receiver of another kind, and an accessor with no setter refuses the write.
+    fn builtin_accessor_write(&mut self, id: Id, key: Atom) -> Option<Value> {
+        let mut cur = self.heap[id as usize].proto;
+        while let Some(c) = cur {
+            if let Some(p) = self.heap[c as usize].props.prop(key) {
+                if !matches!(p.value, Value::Uninit) {
+                    return None;
+                }
+                let text = self.atoms.text(key).to_owned();
+                if c == self.realm.std.url && text != "origin" && text != "searchParams" {
+                    return Some(crate::builtins::incompatible(
+                        self,
+                        &format!("URL.prototype.{text}"),
+                        &Value::Obj(id),
+                    ));
+                }
+                return Some(self.only_getter(&Value::Obj(id), key));
+            }
+            if self.has_own(c, key) {
+                return None;
+            }
+            cur = self.heap[c as usize].proto;
+        }
+        None
     }
 
     fn read_only(&mut self, key: Atom) -> Value {
@@ -1014,6 +1187,16 @@ impl Vm {
             ints.sort_unstable_by_key(|(i, _)| *i);
             out.extend(ints.into_iter().map(|(_, k)| k));
         }
+        // A function's `length` and `name` come first, where the reference makes them.
+        if matches!(
+            self.heap[id as usize].kind,
+            Kind::Closure(_) | Kind::Native { .. }
+        ) {
+            let (lk, nk) = (self.names.length, self.names.name);
+            let lead: Vec<Atom> = [lk, nk].into_iter().filter(|k| strs.contains(k)).collect();
+            strs.retain(|k| !lead.contains(k));
+            out.extend(lead);
+        }
         out.extend(strs);
         out
     }
@@ -1025,7 +1208,7 @@ impl Vm {
             let simple = props
                 .items
                 .iter()
-                .all(|p| self.atoms.index(p.key).is_none());
+                .all(|p| self.atoms.index(p.key).is_none() && p.flags & ACCESSOR == 0);
             if simple {
                 return props
                     .items
@@ -1040,14 +1223,43 @@ impl Vm {
     }
 
     /// Own enumerable properties keyed by the two confined symbols, which spread and `Object.assign` copy too.
-    pub fn own_symbol_entries(&self, id: Id) -> Vec<(Atom, Value)> {
-        self.heap[id as usize]
+    pub fn own_symbol_entries(&mut self, id: Id) -> Vec<(Atom, Value)> {
+        let keys: Vec<Atom> = self.heap[id as usize]
             .props
             .items
             .iter()
             .filter(|p| p.key <= SYM_ASYNC_ITERATOR && p.flags & ENUMERABLE != 0)
-            .map(|p| (p.key, p.value))
-            .collect()
+            .map(|p| p.key)
+            .collect();
+        keys.into_iter().map(|k| (k, self.get_obj(id, k))).collect()
+    }
+
+    /// CopyDataProperties from a source with program accessors (the reference's `$vmCopyDataProps`): its own keys
+    /// (strings and the iterator symbols, less `excluded`), each copied as data if it is enumerable when it is reached,
+    /// its getter called then, in key order.
+    pub(crate) fn copy_data_calling(
+        &mut self,
+        target: Id,
+        src: Id,
+        excluded: &[Atom],
+        strings_only: bool,
+    ) -> Result<Vec<(Atom, Value)>, Value> {
+        let keys = self.own_property_keys(src);
+        let mut out = Vec::new();
+        for k in keys {
+            if (strings_only && k <= SYM_ASYNC_ITERATOR) || excluded.contains(&k) {
+                continue;
+            }
+            if !self.own_slot(src, k).is_some_and(|s| s.enumerable) {
+                continue;
+            }
+            let v = self.get_calling(src, k)?;
+            if target != 0 || !strings_only {
+                self.define(target, k, v);
+            }
+            out.push((k, v));
+        }
+        Ok(out)
     }
 
     /// A namespace path read with a number or a symbol, which the reference refuses.
@@ -1161,6 +1373,10 @@ impl Vm {
                 {
                     return Ok(());
                 }
+                if self.heap[*id as usize].flags & ACCESSORS != 0 {
+                    self.copy_data_calling(target, *id, excluded, false)?;
+                    return Ok(());
+                }
                 let mut entries = self.own_entries(*id);
                 entries.extend(self.own_symbol_entries(*id));
                 for (k, v) in entries {
@@ -1188,17 +1404,22 @@ impl Vm {
     pub fn for_in_keys(&mut self, v: &Value) -> Vec<Value> {
         match v {
             Value::Obj(id) => {
-                let mut seen: Vec<Atom> = self.own_keys(*id);
+                // Each level's own enumerable keys that no nearer level has as an own key of any kind.
+                let mut chain = vec![*id];
                 let mut cur = self.heap[*id as usize].proto;
                 while let Some(p) = cur {
-                    for k in self.own_keys(p) {
-                        if !seen.contains(&k) {
-                            seen.push(k);
-                        }
-                    }
+                    chain.push(p);
                     cur = self.heap[p as usize].proto;
                 }
-                seen.into_iter()
+                let mut out: Vec<Atom> = Vec::new();
+                for (depth, level) in chain.iter().enumerate() {
+                    for k in self.own_keys(*level) {
+                        if !chain[..depth].iter().any(|n| self.has_own(*n, k)) {
+                            out.push(k);
+                        }
+                    }
+                }
+                out.into_iter()
                     .map(|k| Value::Str(self.atoms.atom_str(k)))
                     .collect()
             }
@@ -1379,7 +1600,7 @@ impl Vm {
             [self.names.value_of, self.names.to_string]
         };
         for name in order {
-            let f = self.get_obj(*id, name);
+            let f = self.get_calling(*id, name)?;
             if self.is_callable(&f) {
                 let r = self.call_counted(&f, *v, &[])?;
                 if !matches!(r, Value::Obj(_)) {
@@ -1631,10 +1852,12 @@ impl Vm {
             return Err(self.type_error("Iterator method result must be an object."));
         };
         let nk = self.names.next;
-        let next = self.get_obj(id, nk);
+        let next = self.get_calling(id, nk)?;
         if !self.is_callable(&next) {
             return Err(self.type_error("Iterator next must be a function."));
         }
+        // The `next` read, for the record its caller keeps (`Vm::record_next_of`): a getter is called once.
+        self.opened_next = Some((id, next));
         Ok(it)
     }
 
@@ -1660,7 +1883,10 @@ impl Vm {
                 | Kind::MapIter { .. }
                 | Kind::StrIter { .. }
                 | Kind::ListIter { .. } => true,
-                _ => !self.get_obj(*id, SYM_ITERATOR).is_nullish(),
+                _ => {
+                    self.has_program_getter(*id, SYM_ITERATOR)
+                        || !self.get_obj(*id, SYM_ITERATOR).is_nullish()
+                }
             },
             _ => false,
         }
@@ -1729,7 +1955,7 @@ impl Vm {
                 if let Some(k) = kind {
                     return Ok(Value::Obj(self.alloc(Obj::new(Some(proto), k))));
                 }
-                let f = self.get_obj(*id, SYM_ITERATOR);
+                let f = self.get_calling(*id, SYM_ITERATOR)?;
                 if !f.is_nullish() {
                     return self.open_with(&f, v);
                 }
@@ -1822,7 +2048,7 @@ impl Vm {
             cached_next
         } else {
             let name = self.request_name(kind);
-            self.get(&it, name)?
+            self.get_calling_value(&it, name)?
         };
         if kind != REQ_NEXT && m.is_nullish() {
             return Ok(None);
@@ -1879,9 +2105,9 @@ impl Vm {
             return Err(self.type_error(&format!("Iterator {name}() result must be an object.")));
         };
         let (dk, vk) = (self.names.done, self.names.value);
-        let d = self.get_obj(*rid, dk);
+        let d = self.get_calling(*rid, dk)?;
         let done = self.truthy(&d);
-        Ok((self.get_obj(*rid, vk), done))
+        Ok((self.get_calling(*rid, vk)?, done))
     }
 
     /// GetIterator for `for await` (`ITER_FOR_AWAIT`) or an async generator's `yield*` (`ITER_DELEGATE`), with the
@@ -1890,7 +2116,7 @@ impl Vm {
     #[inline(never)]
     pub fn get_async_iterator(&mut self, v: &Value, ctx: u8, slot: u32) -> Res {
         if let Value::Obj(id) = v {
-            let f = self.get_obj(*id, SYM_ASYNC_ITERATOR);
+            let f = self.get_calling(*id, SYM_ASYNC_ITERATOR)?;
             if !f.is_nullish() {
                 if self.calls_program(&f) {
                     return self.open_async_by_call(f, *v, slot, None);
@@ -1911,9 +2137,11 @@ impl Vm {
         }
         if self.is_iterable(v)
             && let Some(method) = self.program_iterator_method(v)
-            && self.calls_program(&method)
         {
-            return self.open_async_by_call(method, *v, slot, Some(open));
+            let method = method?;
+            if self.calls_program(&method) {
+                return self.open_async_by_call(method, *v, slot, Some(open));
+            }
         }
         let Value::Obj(sync) = self.get_iterator_in(v, ctx)? else {
             return Err(self.type_error("Iterator method result must be an object."));
@@ -1937,7 +2165,7 @@ impl Vm {
             REQ_NEXT => self.sync_step(made, sync, arg, next),
             _ => {
                 let name = self.request_name(kind);
-                let m = self.get_obj(sync, name);
+                let m = self.get_calling(sync, name)?;
                 if m.is_nullish() {
                     if kind == REQ_RETURN {
                         let r = self.iter_result(arg.unwrap_or_default(), true);
@@ -2040,7 +2268,7 @@ impl Vm {
         }
         let m = if next.is_nullish() {
             let nk = self.names.next;
-            self.get(&it, nk)?
+            self.get_calling_value(&it, nk)?
         } else {
             next
         };
@@ -2072,7 +2300,7 @@ impl Vm {
                 if !matches!(self.heap[id as usize].kind, Kind::AsyncFromSync { .. }) =>
             {
                 let rk = self.names.return_;
-                let m = self.get(&it, rk)?;
+                let m = self.get_calling_value(&it, rk)?;
                 if m.is_nullish() {
                     return Ok(None);
                 }
@@ -2111,7 +2339,7 @@ impl Vm {
             | Kind::AsyncFromSync { .. } => Ok(Value::Undef),
             _ => {
                 let next = self.names.next;
-                self.get(it, next)
+                self.get_calling_value(it, next)
             }
         }
     }
@@ -2207,7 +2435,7 @@ impl Vm {
             _ => {
                 let f = if next.is_nullish() {
                     let nk = self.names.next;
-                    self.get_obj(id, nk)
+                    self.get_calling(id, nk)?
                 } else {
                     next
                 };
@@ -2226,12 +2454,12 @@ impl Vm {
                     return Err(self.type_error("Iterator next() result must be an object."));
                 };
                 let done = self.names.done;
-                let d = self.get_obj(rid, done);
+                let d = self.get_calling(rid, done)?;
                 if self.truthy(&d) {
                     return Ok(None);
                 }
                 let value = self.names.value;
-                Ok(Some(self.get_obj(rid, value)))
+                Ok(Some(self.get_calling(rid, value)?))
             }
         }
     }
@@ -2252,7 +2480,7 @@ impl Vm {
             | Kind::ListIter { .. } => Ok(()),
             _ => {
                 let ret = self.names.return_;
-                let f = self.get_obj(id, ret);
+                let f = self.get_calling(id, ret)?;
                 if f.is_nullish() {
                     return Ok(());
                 }

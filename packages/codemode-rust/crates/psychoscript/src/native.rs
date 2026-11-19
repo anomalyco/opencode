@@ -454,14 +454,14 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
                     return Err(vm.type_error("Iterator method result must be an object."));
                 };
                 let nk = vm.names.next;
-                let next = vm.get_obj(id, nk);
+                let next = vm.get_calling(id, nk)?;
                 if !vm.is_callable(&next) {
                     return Err(vm.type_error("Iterator next must be a function."));
                 }
                 let open = fr.index(vm, LOOP_STASH) as i32;
                 vm.fuel(open);
                 let source = fr.get(vm, LOOP_SOURCE);
-                let next = vm.record_next_of(&source, &it)?;
+                let next = vm.record_next_read(&source, &it, next)?;
                 fr.set(vm, LOOP_IT, it);
                 fr.set(vm, LOOP_NEXT, next);
                 phase = STEP;
@@ -471,11 +471,11 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
                     return Err(vm.type_error("Iterator next() result must be an object."));
                 };
                 let (dk, vk) = (vm.names.done, vm.names.value);
-                let d = vm.get_obj(rid, dk);
+                let d = vm.get_calling(rid, dk)?;
                 if vm.truthy(&d) {
                     return loop_done::<C>(vm, fr);
                 }
-                let v = vm.get_obj(rid, vk);
+                let v = vm.get_calling(rid, vk)?;
                 flow = Some(body::<C>(vm, fr, |vm, fr| C::item(vm, fr, v)));
             }
             // A generator yielded.
@@ -501,7 +501,7 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
         let open = vm.open_fuel(&source, crate::bytecode::ITER_FOR_OF);
         let method = match source {
             Value::Obj(id) if !vm.walks(&source) && !is_builtin_iterator(vm, id) => {
-                vm.get_obj(id, crate::object::SYM_ITERATOR)
+                vm.get_calling(id, crate::object::SYM_ITERATOR)?
             }
             _ => Value::Undef,
         };
@@ -570,7 +570,7 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
                 };
                 let f = if direct {
                     let nk = vm.names.next;
-                    vm.get_obj(id, nk)
+                    vm.get_calling(id, nk)?
                 } else {
                     next
                 };
@@ -667,7 +667,7 @@ fn close<C: ForOf>(vm: &mut Vm, fr: Frame, outcome: Result<Value, Value>) -> Res
         | Kind::ListIter { .. } => close_done::<C>(vm, fr, None),
         _ => {
             let rk = vm.names.return_;
-            let f = vm.get_obj(id, rk);
+            let f = vm.get_calling(id, rk)?;
             if f.is_nullish() {
                 return close_done::<C>(vm, fr, None);
             }
