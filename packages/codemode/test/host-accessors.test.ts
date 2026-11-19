@@ -86,6 +86,23 @@ describe("getters crossing to the host", () => {
     expect(calls).toEqual([])
   })
 
+  test("a getter that throws rejects an async call's promise, and a sync call still throws", async () => {
+    const { runtime, calls, keys } = translating()
+    expect(
+      await value(
+        runtime,
+        `const bad = { get x() { throw new Error("boom") } }
+        const caught = await send(bad).catch((e) => e.message)
+        const settled = await Promise.allSettled([send(bad), send(2)])
+        let sync
+        try { keep(bad) } catch (e) { sync = e.message }
+        return [caught, settled.map((s) => s.status), sync, keep(3)]`,
+      ),
+    ).toEqual(["boom", ["rejected", "fulfilled"], "boom", 1])
+    expect(calls).toEqual([[2], [3]])
+    expect(keys.map((key) => key.split(":")[1])).toEqual(["0", "1"])
+  })
+
   test("an async host function returns its promise at once, and getter rounds take no call ids", async () => {
     const { runtime, calls, keys } = translating()
     expect(

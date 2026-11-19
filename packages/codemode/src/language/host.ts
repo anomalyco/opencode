@@ -103,8 +103,11 @@ export class HostCalls {
     // Program getters in the arguments run first, as program code, before anything else happens for the call: no
     // promise, no call id.
     const crossed = this.cross(values, target.label, waiting, back)
+    const async = fn instanceof DurableFn || fn.type === "async"
+    // An async call reads its getters in a frame that settles its promise, so a getter that throws rejects it.
+    if (crossed instanceof Prefetch && async && reads.list === undefined) return this.read(crossed, callee, values, site)
     if (crossed instanceof Prefetch) return crossed
-    if (fn instanceof DurableFn || fn.type === "async") {
+    if (async) {
       const resolving = this.promises.resolving(this.promises.newPromise(), site)
       if (!crossed.ok) {
         resolving.reject(crossed.error)
@@ -182,6 +185,29 @@ export class HostCalls {
       resolving === undefined ? Mode.CALLER : Mode.ASYNC,
       resolving,
       resolving?.promise,
+    )
+    return ENTERED
+  }
+
+  // Runs an async call's program getters, then the call again (`$vmReplay`), in a frame that settles the call's promise.
+  private read(prefetch: Prefetch, callee: Value, values: Array<Value>, site: AstNode | undefined): HostResult {
+    const builtins = this.ctx.builtins
+    const resolving = this.promises.resolving(this.promises.newPromise(), site)
+    this.ctx.vm.pushInternal(
+      internalCode("$vmReplay"),
+      [
+        callee,
+        undefined,
+        new Arr(builtins.Array, values),
+        false,
+        new Arr(builtins.Array, []),
+        new Arr(builtins.Array, []),
+        prefetch as unknown as Value,
+      ],
+      site,
+      Mode.ASYNC,
+      resolving,
+      resolving.promise,
     )
     return ENTERED
   }
