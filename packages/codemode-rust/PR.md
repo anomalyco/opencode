@@ -28,6 +28,11 @@ recorded from the TypeScript layer, never written by hand, and CI fails if a reg
   executor, in the same order.
 - Bench cost stays within 0.5% of single-threaded instruction counts (`bench/RESULTS.md`).
 
+## Memory
+
+- Runs collect garbage while they run: an incremental, non-moving mark-sweep, including atoms and deleted Map and Set
+  entries. Short runs never reach its first threshold; long-lived ones stay near their live data (`bench/GC.md`).
+
 ## Known differences
 
 - A saved state resumes only in the implementation and build that saved it (the snapshot formats differ).

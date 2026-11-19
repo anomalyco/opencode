@@ -131,6 +131,12 @@ How a run uses threads changes how it runs, never what a program can do or see.
   uncontended `Mutex`). The nine bench programs stay within 0.5% of the single-threaded instruction counts. The 3 KB
   plugin event stops paying for a thread: 9% fewer instructions.
 
+## Memory
+
+A run frees what it can no longer reach while it runs. The collector (`collector.rs`) is an incremental, non-moving
+mark-sweep collector: it does no work until a run passes its first threshold, works in short steps paced by
+allocation, only at safe points, and spends nothing on an idle run. Design, method and numbers are in `bench/GC.md`.
+
 ## Layout
 
 - `crates/psychoscript/src/`: compiler (`compiler.rs`, on `oxc_parser`), bytecode and VM (`vm.rs`, `ops.rs`), runtime
