@@ -21,11 +21,14 @@ const backgroundResult = (sessionID: SessionSchema.ID) => ({
   status: "running" as const,
   output: [
     `The subagent is working in the background (sessionID: ${sessionID}). You will receive a <subagent> message when it goes idle, and again after each later round of work.`,
+    "Do not answer the user's original question until you have the subagent's results — the answer depends on what the subagent finds.",
     "DO NOT sleep, poll, proactively check on its progress, or duplicate this subagent's work.",
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
     "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
   ].join("\n"),
 })
+
+export { backgroundResult }
 
 export const Input = Schema.Struct({
   agent: Schema.String.annotate({
@@ -51,6 +54,7 @@ export const Output = Schema.Struct({
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
   "Subagents always run in the background: the call returns immediately with a sessionID, and you receive a `<subagent>` message each time the child goes idle, including after later work.",
+  "Do not answer the user's original question until you have the subagent's results — the answer depends on what the subagent finds.",
   "Keep working on non-overlapping tasks, or briefly tell the user what you launched and end your response. Do not sleep, poll, or proactively check on the child's progress.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
   "Pass the returned sessionID to continue that specific child conversation. A follow-up to a running child joins its current run.",
