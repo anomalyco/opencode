@@ -1,9 +1,8 @@
 import { expect } from "bun:test"
 import { hostname } from "os"
 import path from "path"
-import { realpath, symlink } from "node:fs/promises"
-import { pathToFileURL } from "node:url"
-import { Context, Deferred, Effect, Exit, Fiber, Schedule, Schema, Stream } from "effect"
+import { realpath } from "node:fs/promises"
+import { Context, Deferred, Effect, Fiber, Schedule, Schema, Stream } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -34,7 +33,6 @@ import { Integration } from "@opencode/schema/integration"
 import { isRecord } from "@opencode/util/record"
 import { BrowserConnection } from "../../plugin-browser/src/connection"
 import { BrowserFiles } from "../../plugin-browser/src/files"
-import { initRepo } from "./fixture/git"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -439,16 +437,12 @@ it.live("a call a tool.use policy blocks hears the same answer whatever tab or f
   }),
 )
 
-it.live("a call that must ask names no tab before the prompt is answered", () =>
+it.live("an ask rule is not applied in an attached session, as on dev: a call goes on to its tab with no prompt", () =>
   Effect.gen(function* () {
     const browser = yield* setup({ permissions: [rule("*", "ask")] })
     const permissions = Context.get(browser.context, Permission.Service)
-    const call = yield* browser.run("snapshot", { tabID: missingTab }).pipe(Effect.forkScoped)
-    // Before, the call failed at once listing the open tabs and URLs; now it waits on the user before reading them.
-    const request = yield* asked(permissions, "snapshot")
-    expect(request.resources).toEqual(["snapshot"])
-    yield* permissions.reply({ requestID: request.id, reply: "reject" })
-    expect(Exit.isFailure(yield* Fiber.await(call))).toBe(true)
+    expect(yield* refusal(browser, "snapshot", { tabID: missingTab })).toStartWith("[browser.tab_unavailable]")
+    expect(yield* permissions.list()).toEqual([])
     expect(browser.commands.count).toBe(0)
   }),
 )
@@ -531,12 +525,11 @@ it.live("a deny of preview, the name the path forms had, still refuses them, and
     expect(yield* refusal(own, "navigate", { tabID: tab.id, path: "page.html" })).toStartWith("[browser.denied] browser.navigate")
     expect(own.commands.count).toBe(0)
 
-    // An ask on the old name prompts for the path form, and the request names both operations.
+    // An ask on the old name is not applied in an attached session, as on dev: the path form runs with no prompt.
     const asking = yield* setup({ permissions: [rule("preview", "ask")] }, page)
-    const prompt = yield* answer(asking, "tabs.open", { path: "page.html" }, "reject")
-    expect(prompt.request.resources).toEqual(["tabs.open", "preview"])
-    expect(prompt.request.metadata?.input).toEqual({ paths: ["page.html"] })
-    expect(asking.commands.count).toBe(0)
+    yield* asking.run("tabs.open", { path: "page.html" }).pipe(Effect.exit, Effect.timeout("5 seconds"))
+    expect(yield* Context.get(asking.context, Permission.Service).list()).toEqual([])
+    expect(asking.commands.count).toBe(1)
   }),
 )
 
@@ -549,50 +542,15 @@ it.live("an allow for one operation after a whole-browser deny wins, as the last
   }),
 )
 
-it.live("a configured browser ask prompts for the call instead of being answered by the grant", () =>
+it.live("a configured browser ask is answered by the grant in an attached session, as on dev: the call runs with no prompt", () =>
   Effect.gen(function* () {
     const browser = yield* setup({ permissions: [rule("tabs.list", "ask")] })
     const permissions = Context.get(browser.context, Permission.Service)
-    const call = yield* browser.call().pipe(Effect.forkScoped)
-    const request = yield* permissions.list().pipe(
-      Effect.flatMap((requests) => (requests[0] ? Effect.succeed(requests[0]) : Effect.fail("not asked yet"))),
-      Effect.retry(Schedule.spaced("10 millis")),
-      Effect.timeout("5 seconds"),
-    )
-    expect(request).toMatchObject({ sessionID: browser.session.id, action: "browser", resources: ["tabs.list"] })
-    expect(browser.commands.count).toBe(0)
-
-    yield* permissions.reply({ requestID: request.id, reply: "once" })
-    expect((yield* Fiber.join(call)).output).toEqual({ tabs: [], focusedTabID: null })
+    expect((yield* browser.call().pipe(Effect.timeout("5 seconds"))).output).toEqual({ tabs: [], focusedTabID: null })
+    expect(yield* permissions.list()).toEqual([])
     expect(browser.commands.count).toBe(1)
   }),
 )
-
-// The pending permission request for `operation`, once the call has asked.
-const asked = (permissions: Permission.Interface, operation: string) =>
-  permissions.list().pipe(
-    Effect.flatMap((requests) => {
-      const request = requests.find((item) => item.resources.includes(operation))
-      return request ? Effect.succeed(request) : Effect.fail("not asked yet")
-    }),
-    Effect.retry(Schedule.spaced("10 millis")),
-    Effect.timeout("5 seconds"),
-  )
-
-// Answers the prompt the call of `operation` raises with `reply` and returns the call's result.
-const answer = Effect.fnUntraced(function* (
-  browser: Effect.Success<ReturnType<typeof setup>>,
-  operation: string,
-  input: object,
-  reply: Permission.Reply,
-) {
-  const permissions = Context.get(browser.context, Permission.Service)
-  const call = yield* browser.run(operation, input).pipe(Effect.forkScoped)
-  const request = yield* asked(permissions, operation)
-  yield* permissions.reply({ requestID: request.id, reply })
-  // A plain rejection ends the step, so it surfaces as a defect.
-  return { request, exit: yield* Fiber.await(call) }
-})
 
 // What "always" remembers for the workspace file `name`: the file itself, by its real absolute path.
 const remembered = (directory: string, name: string) =>
@@ -600,101 +558,10 @@ const remembered = (directory: string, name: string) =>
     Effect.map((file) => `preview ${file.replaceAll("\\", "/")}`),
   )
 
-// The approval for showing a file names the file that opens, under the workspace, whatever spelling asked for it, and
-// "always" remembers that file: no other spelling of it asks again, and none stands for another file.
-it.live("a file approval names and remembers the resolved file, whatever spelling asked for it", () =>
+it.live("a remembered file in a folder whose rules deny showing files is refused all the same", () =>
   Effect.gen(function* () {
-    const browser = yield* setup(
-      { permissions: [rule("*", "ask")] },
-      { "secret.html": "<p>secret</p>", "page.html": "<p>page</p>", "real/inner.html": "<p>inner</p>" },
-    )
-    const permissions = Context.get(browser.context, Permission.Service)
-    const directory = browser.ref.directory
-    const address = pathToFileURL(directory).href
-    // A folder that is a link to another folder of the workspace.
-    yield* Effect.promise(() => symlink(path.join(directory, "real"), path.join(directory, "linked"), "junction"))
-
-    const secret = yield* remembered(directory, "secret.html")
-    const inner = yield* remembered(directory, "real/inner.html")
-
-    const spellings: object[] = [
-      { path: "secret.html" },
-      { path: "./secret.html" },
-      { path: "docs/../a/b/../../secret.html" },
-      { path: path.join(directory, "secret.html") },
-      { path: `${address}/%73%65%63%72%65%74.html?x=1#y` },
-      { url: `${address}/%73%65%63%72%65%74.html` },
-      { url: `workspace://${browser.session.id.toLowerCase()}/%73ecret.html` },
-      { url: `WORKSPACE://${browser.session.id}/secret.html` },
-    ]
-
-    for (const input of spellings) {
-      const { request } = yield* answer(browser, "tabs.open", input, "reject")
-      expect([JSON.stringify(input), request.metadata?.input, request.save]).toEqual([
-        JSON.stringify(input),
-        { paths: ["secret.html"] },
-        [secret],
-      ])
-    }
-
-    // A file reached through a link is named as the file it is, and the prompt says which link led to it.
-    const linked = yield* answer(browser, "tabs.open", { path: "linked/inner.html" }, "reject")
-    expect(linked.request.metadata?.input).toEqual({ paths: ["real/inner.html"], link: "linked/inner.html" })
-    expect(linked.request.save).toEqual([inner])
-    expect(browser.commands.count).toBe(0)
-
-    // "Always" for one spelling: every spelling of the file runs with no prompt, and one approval is kept.
-    yield* answer(browser, "tabs.open", spellings[0]!, "always")
-    for (const input of spellings) {
-      yield* browser.run("tabs.open", input).pipe(Effect.exit, Effect.timeout("5 seconds"))
-      expect(yield* permissions.list()).toEqual([])
-    }
-    expect(browser.commands.count).toBe(spellings.length + 1)
-    const saved = yield* PermissionSaved.Service
-    const projectID = Context.get(browser.context, Location.Service).project.id
-    expect((yield* saved.list({ projectID })).map((item) => [item.action, item.resource])).toEqual([["browser", secret]])
-
-    // It covers that file alone: another file, and the same file moved to with navigate, still ask.
-    expect((yield* answer(browser, "tabs.open", { path: "page.html" }, "reject")).request.save).toEqual([
-      yield* remembered(directory, "page.html"),
-    ])
-    expect((yield* answer(browser, "tabs.open", { path: "linked/inner.html" }, "reject")).request.save).toEqual([inner])
-    // A name that is no file on disk is not remembered: there is no file to remember.
-    expect((yield* answer(browser, "tabs.open", { path: "missing.html" }, "reject")).request.save).toEqual([])
-  }),
-)
-
-// The folders and worktrees of one repository are one project, which is what saved approvals are kept by, and each
-// has its own file at the same relative path.
-it.live("always for a file covers that file alone, not the same path in another folder of its project, and a deny still wins", () =>
-  Effect.gen(function* () {
-    const root = yield* tmpdirScoped()
-    yield* Effect.promise(() => initRepo(root.path))
-    const ask = { permissions: [rule("*", "ask")] }
-    const first = yield* setup(ask, { "page.html": "<p>first</p>" }, path.join(root.path, "first"))
-    const second = yield* setup(ask, { "page.html": "<p>second</p>" }, path.join(root.path, "second"))
-
-    const denying = yield* setup(
-      { permissions: [rule("*", "ask"), rule("preview", "deny")] },
-      { "page.html": "<p>third</p>" },
-      path.join(root.path, "third"),
-    )
-
-    const projectID = Context.get(first.context, Location.Service).project.id
-    expect(Context.get(second.context, Location.Service).project.id).toBe(projectID)
-    expect(Context.get(denying.context, Location.Service).project.id).toBe(projectID)
-
-    yield* answer(first, "tabs.open", { path: "page.html" }, "always")
-    yield* first.run("tabs.open", { path: "page.html" }).pipe(Effect.exit, Effect.timeout("5 seconds"))
-    expect(yield* Context.get(first.context, Permission.Service).list()).toEqual([])
-    expect(first.commands.count).toBe(2)
-
-    // The same relative path in the second folder is another file: it asks, and names its own.
-    const other = yield* answer(second, "tabs.open", { path: "page.html" }, "reject")
-    expect(other.request.save).toEqual([yield* remembered(second.ref.directory, "page.html")])
-    expect(second.commands.count).toBe(0)
-
-    // A remembered file in a folder whose rules deny showing files is refused all the same.
+    const denying = yield* setup({ permissions: [rule("*", "ask"), rule("preview", "deny")] }, { "page.html": "<p>third</p>" })
+    const projectID = Context.get(denying.context, Location.Service).project.id
     const saved = yield* PermissionSaved.Service
     yield* saved.add({ projectID, action: "browser", resources: [yield* remembered(denying.ref.directory, "page.html")] })
     expect((yield* denying.run("tabs.open", { path: "page.html" }).pipe(Effect.flip)).message).toStartWith("[browser.denied]")
@@ -702,87 +569,24 @@ it.live("always for a file covers that file alone, not the same path in another 
   }),
 )
 
-it.live("always for one browser operation stops its prompts, while other operations still prompt", () =>
-  Effect.gen(function* () {
-    const browser = yield* setup({ permissions: [rule("*", "ask")] })
-    const permissions = Context.get(browser.context, Permission.Service)
-    const approved = yield* answer(browser, "tabs.list", {}, "always")
-    expect(approved.request.save).toEqual(["tabs.list"])
-    expect(browser.commands.count).toBe(1)
-
-    expect((yield* browser.call().pipe(Effect.timeout("5 seconds"))).output).toEqual({ tabs: [], focusedTabID: null })
-    expect(yield* permissions.list()).toEqual([])
-    expect(browser.commands.count).toBe(2)
-    const other = yield* answer(browser, "tabs.open", {}, "reject")
-    expect(other.request.resources).toEqual(["tabs.open"])
-    expect(browser.commands.count).toBe(2)
-  }),
-)
-
-it.live("browser approvals retain legacy operation policy and bind always to the site and complete script", () =>
-  Effect.gen(function* () {
-    const browser = yield* setup({ permissions: [rule("evaluate", "ask")] })
-    const input = { tabID: tab.id, script: "document.title" }
-    const first = yield* answer(browser, "evaluate", input, "always")
-    expect(first.request.resources).toEqual(["evaluate"])
-    expect(first.request.metadata?.input).toEqual({ site: "https://example.com", script: input.script })
-    expect(first.request.save?.[0]).toMatch(/^evaluate https:\/\/example\.com [a-f0-9]{64}$/)
-    // The stand-in desktop answers with a tab list rather than an evaluation result; reaching it is the assertion.
-    yield* browser.run("evaluate", input).pipe(Effect.flip, Effect.timeout("5 seconds"))
-    expect(browser.commands.count).toBe(2)
-    const next = yield* answer(browser, "evaluate", { ...input, script: "location.href" }, "reject")
-    expect(next.request.save).not.toEqual(first.request.save)
-    expect(browser.commands.count).toBe(2)
-    yield* browser.navigate("https://elsewhere.test/")
-    const other = yield* answer(browser, "evaluate", input, "reject")
-    expect(other.request.metadata?.input).toEqual({ site: "https://elsewhere.test", script: input.script })
-    expect(other.request.save).not.toEqual(first.request.save)
-  }),
-)
-
-it.live("a saved browser approval outlives detach and re-attach, and only covers its operation", () =>
-  Effect.gen(function* () {
-    const browser = yield* setup({ permissions: [rule("*", "ask")] })
-    const permissions = Context.get(browser.context, Permission.Service)
-    yield* answer(browser, "tabs.list", {}, "always")
-
-    yield* browser.detach
-    yield* browser.permissions().pipe(
-      Effect.flatMap((rules) => (rules.length ? Effect.fail("grant not revoked yet") : Effect.void)),
-      Effect.retry(Schedule.spaced("10 millis")),
-      Effect.timeout("5 seconds"),
-    )
-    yield* browser.attach(browser.session.id)
-    expect(yield* browser.permissions()).toEqual([...grant])
-
-    expect((yield* browser.call().pipe(Effect.timeout("5 seconds"))).output).toEqual({ tabs: [], focusedTabID: null })
-    expect(yield* permissions.list()).toEqual([])
-    const other = yield* answer(browser, "tabs.open", {}, "reject")
-    expect(other.request.resources).toEqual(["tabs.open"])
-  }),
-)
-
 it.live("a configured deny that matches last refuses the call despite a saved approval", () =>
   Effect.gen(function* () {
     const browser = yield* setup({ permissions: [rule("*", "ask"), rule("tabs.open", "deny")] })
-    yield* answer(browser, "tabs.list", {}, "always")
     const saved = yield* PermissionSaved.Service
     const projectID = Context.get(browser.context, Location.Service).project.id
-    expect((yield* saved.list({ projectID })).map((item) => [item.action, item.resource])).toEqual([
-      ["browser", "tabs.list"],
-    ])
     yield* saved.add({ projectID, action: "browser", resources: ["tabs.open"] })
 
     expect((yield* browser.run("tabs.open", {}).pipe(Effect.flip)).message).toStartWith(
       "[browser.denied] browser.tabs.open",
     )
-    expect(browser.commands.count).toBe(1)
+    expect(browser.commands.count).toBe(0)
   }),
 )
 
 // Listing and calling. An attachment's grant follows every agent rule, so an attached session's next step offers the
 // browser tools and skill to its agent whatever that agent's rules say, and no other session's does. The agent's
-// rules decide each call: it reaches the desktop, prompts, or is refused as denied or disconnected.
+// rules decide each call: it reaches the desktop or is refused as denied or disconnected. An ask rule is not applied
+// in an attached session, as on dev.
 type Outcome = "allow" | "ask" | "deny" | "disconnected"
 const truth: ReadonlyArray<{
   readonly name: string
@@ -800,8 +604,8 @@ const truth: ReadonlyArray<{
   { name: "global allow, agent deny", global: [rule("*", "allow")], agent: [rule("*", "deny")], attached: true, list: "deny", open: "deny" },
   { name: "global deny, agent allow", global: [rule("*", "deny")], agent: [rule("*", "allow")], attached: true, list: "allow", open: "allow" },
   { name: "agent denies every tool", agent: [rule("*", "deny", "*"), rule("*", "allow", "read")], attached: true, list: "deny", open: "deny" },
-  { name: "global ask", global: [rule("*", "ask")], attached: true, list: "ask", open: "ask" },
-  { name: "global deny, agent ask", global: [rule("*", "deny")], agent: [rule("*", "ask")], attached: true, list: "ask", open: "ask" },
+  { name: "global ask", global: [rule("*", "ask")], attached: true, list: "allow", open: "allow" },
+  { name: "global deny, agent ask", global: [rule("*", "deny")], agent: [rule("*", "ask")], attached: true, list: "allow", open: "allow" },
   { name: "one operation denied", global: [rule("tabs.open", "deny")], attached: true, list: "allow", open: "deny" },
   { name: "operation pattern denied", global: [rule("tabs.*", "deny")], attached: true, list: "deny", open: "deny" },
   { name: "whole browser denied, one operation allowed after", global: [rule("*", "deny"), rule("tabs.list", "allow")], attached: true, list: "allow", open: "deny" },

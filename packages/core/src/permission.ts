@@ -212,8 +212,7 @@ const layer = Layer.effect(
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
-      const saved = yield* savedRules()
-      const all = [...rules, ...saved]
+      const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
@@ -224,10 +223,6 @@ const layer = Layer.effect(
         metadata: input.metadata,
         source: row(input.source),
         effect,
-        experimental: {
-          approved: input.resources.every((resource) => evaluate(input.action, resource, saved).effect === "allow"),
-          approvedSave: !!input.save?.length && input.save.every((key) => saved.some((rule) => rule.action === input.action && rule.resource === key)),
-        },
       })
       const unattended = yield* Unattended
       if (event.effect !== "ask" || unattended === undefined)

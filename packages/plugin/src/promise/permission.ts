@@ -14,17 +14,6 @@ export interface PermissionEvaluation {
   readonly source?: Permission.Source
   effect: Permission.Effect
   message?: string
-  /** Experimental: may change without compatibility guarantees. */
-  readonly experimental?: {
-    /**
-     * True when the user's saved "always" approvals allow every resource of this request. A hook that asks only
-     * because its own rules say so can leave `effect` alone then, so the user's saved answer stands. An `ask` a hook
-     * sets is never overridden.
-     */
-    readonly approved: boolean
-    /** True when every proposed save key was previously saved verbatim for this action. Does not change rule evaluation. */
-    readonly approvedSave?: boolean
-  }
 }
 
 export interface PermissionHooks {

@@ -93,25 +93,18 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
   ]
   // The attachment's grant is a session rule, evaluated after every agent rule, so core resolves every browser call to
   // allow, and lists the browser tools and their skill to every agent of an attached session, one whose own rules
-  // deny the browser included. This hook alone decides such an agent's calls, by the rules from config, the agent's
-  // definition and the session itself: a deny refuses the call, and an ask makes the permission check prompt as it
-  // would without the grant, unless the user already saved "always" for it. No matching rule leaves it allowed.
+  // deny the browser included. This hook alone refuses such an agent's calls, by the rules from config, the agent's
+  // definition and the session itself: a deny refuses the call. An ask rule is not applied in an attached session, as
+  // on dev, and no matching rule leaves the call allowed.
   yield* ctx.permission.hook("evaluate", (event) => {
     if (event.action !== "browser" || event.effect === "deny") return Effect.void
     return ctx.session.get({ sessionID: event.sessionID }).pipe(
       Effect.map((session) => {
-        const rules = rulesFor(session, event.agent)
-        const denied = denial(rules, event.resources)
+        const denied = denial(rulesFor(session, event.agent), event.resources)
         if (denied) {
           event.effect = "deny"
           event.message = denied
-          return
         }
-        if (
-          !event.experimental?.approvedSave &&
-          event.resources.some((operation) => BrowserMachine.selectBrowserRule(rules, operation)?.effect === "ask")
-        )
-          event.effect = "ask"
       }),
       // Without the rules, the grant must not decide alone.
       Effect.catchCause((cause) =>
@@ -410,7 +403,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     }),
     /**
      * The permission check for one call, with the operation as its resource. Its `permission.evaluate` hooks decide it:
-     * this plugin's (configured denies and asks win over the grant) and others such as `tool.use` policies.
+     * this plugin's (configured denies win over the grant) and others such as `tool.use` policies.
      */
     /**
      * `shown` is the workspace file a path form shows, as the server resolved it: the prompt names it (`path`), with
