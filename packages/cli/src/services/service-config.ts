@@ -43,12 +43,21 @@ export function filename(channel = OPENCODE_CHANNEL) {
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
+export function defaultPort(
+  channel = OPENCODE_CHANNEL,
+  platform: NodeJS.Platform | "wsl" = process.env.WSL_DISTRO_NAME ? "wsl" : process.platform,
+  env?: NodeJS.ProcessEnv,
+) {
   const port = channelPort(channel)
+  const isWsl = platform === "wsl" || (env?.WSL_DISTRO_NAME !== undefined && Boolean(env.WSL_DISTRO_NAME))
   // Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V and WinNAT reserve blocks of that range at boot,
-  // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. A reserved port fails as in
-  // use while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of them and keeps the low
-  // 12 bits: 0xC0DE becomes 0x70DE.
+  // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. WSL2 NAT localhost
+  // forwarding also passes through the Windows host port exclusions, leaving 49374 unreachable.
+  //
+  // Moving Windows into the 0x7000 block (0x70DE = 28894) and WSL into the 0x6000 block (0x60DE = 24798) keeps both
+  // below 32768, avoids collision between Windows desktop services and WSL services sharing localhost (#55907, #50672),
+  // and keeps the low 12 bits of the channel port.
+  if (isWsl && port >= 0x8000) return 0x6000 | (port & 0xfff)
   if (platform === "win32" && port >= 0x8000) return 0x7000 | (port & 0xfff)
   return port
 }
