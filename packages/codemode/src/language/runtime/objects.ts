@@ -152,6 +152,12 @@ export class Obj {
 
   /** How `console.log` shows the value; `item` formats a child with cycle and depth tracking. */
   inspect(item: (value: Value) => string): string {
+    const shown = this.inspectBody(item)
+    const name = instanceClassName(this)
+    return name === undefined ? shown : `${name} ${shown}`
+  }
+
+  private inspectBody(item: (value: Value) => string): string {
     if (!this.hasProgramAccessors) {
       return `{${entries(this)
         .map(([key, value]) => `${JSON.stringify(key)}:${item(value)}`)
@@ -290,6 +296,25 @@ export class Fn extends Callable {
   get generator(): boolean {
     return (this.code.flags & CodeFlags.GENERATOR) !== 0
   }
+  override inspect() {
+    if (this.klass === undefined) return super.inspect()
+    const name = ownName(this) || "(anonymous)"
+    const parent = this.klass.derived && this.proto instanceof Callable ? ownName(this.proto) : ""
+    return parent === "" ? `[class ${name}]` : `[class ${name} extends ${parent}]`
+  }
+}
+
+const ownName = (target: Obj): string => {
+  const slot = own(target, "name")
+  return slot !== undefined && "value" in slot && typeof slot.value === "string" ? slot.value : ""
+}
+
+/** The class an instance was made by, read from its prototype's own `constructor` without running program code. */
+const instanceClassName = (target: Obj): string | undefined => {
+  if (target.proto === null) return undefined
+  const slot = own(target.proto, "constructor")
+  if (slot === undefined || !("value" in slot) || !(slot.value instanceof Fn) || slot.value.klass === undefined) return undefined
+  return ownName(slot.value) || undefined
 }
 
 /** What a class constructor knows about its class. */

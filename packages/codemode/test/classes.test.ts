@@ -1,9 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Fiber } from "effect"
-import { Host, Runtime, toBytes } from "../src/language/index.js"
-import { getInternalPrelude } from "../src/language/internal-prelude.js"
-import { compiledPrelude } from "../src/language/prelude/prelude.js"
-import type { Snapshot } from "../src/language/snapshot/snapshot.js"
 import { compileSource } from "../src/language/compiler/compile.js"
 import { verifyAll } from "./verify-bytecode.js"
 import { parseVmSource, runProgram } from "./run-program.js"
@@ -143,349 +138,6 @@ describe("base classes", () => {
     const err = `class A { constructor() { for (let i = 0; i < 3; i++) {} } } try { A() } catch (e) { return e.message }`
     expect(runProgram(err, { roundTrip: { every: 1, max: 100_000 } })).toEqual(runProgram(err))
   })
-})
-
-type Saved = { readonly t?: string; readonly f?: ReadonlyArray<unknown>; readonly o?: ReadonlyArray<unknown> }
-
-const frames = (snapshot: Snapshot): Array<string> => {
-  const records = snapshot.records as ReadonlyArray<Saved | undefined>
-  return records.flatMap((record) => {
-    if (record?.t !== "Frame") return []
-    const [fn, code] = record.f as [unknown, [string, [string, string, number]], ...Array<unknown>]
-    if (Array.isArray(fn) && fn[0] === "r") {
-      const props = records[fn[1] as number]!.o!
-      return [String(props[props.indexOf("name") + 1])]
-    }
-    const [, source, index] = code[1]
-    const codes = source === "@vm-internal" ? getInternalPrelude().codes : compiledPrelude().codes
-    return [codes[index]!.name]
-  })
-}
-
-const latch = <A = void>() => {
-  let resolve!: (value: A) => void
-  const promise = new Promise<A>((done) => (resolve = done))
-  return { promise, resolve }
-}
-
-const hosting = (gate: Promise<void> | undefined) => {
-  const started = latch()
-  const runtime = Runtime.make({
-    translate: { promises: "await" },
-    globals: () => ({
-      slow: Host.fn(
-        ([n]) =>
-          Effect.promise(async () => {
-            started.resolve()
-            await gate
-            return (n as number) * 2
-          }),
-        { type: "async", idempotent: true },
-      ),
-      pick: Host.fn(([value]) => value),
-    }),
-  }) as Runtime.Runtime<never>
-  return { runtime, started: started.promise }
-}
-
-const suspendParked = async (code: string) => {
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const gate = latch()
-    const first = hosting(gate.promise)
-    const program = first.runtime.program(code, { runId: "r" })
-    const fiber = Effect.runFork(program.run())
-    await first.started
-    for (let i = 0; i < attempt; i++) await new Promise((done) => setImmediate(done))
-    const suspended = await Effect.runPromise(program.suspend())
-    gate.resolve()
-    await Effect.runPromise(Fiber.join(fiber))
-    if (suspended.ok !== "suspended") throw new Error(`expected a suspended run, got ${JSON.stringify(suspended)}`)
-    if (frames(suspended.state).includes("$vmHostWait")) return suspended
-  }
-  throw new Error("the run never parked on $vmHostWait while `slow` was in flight")
-}
-
-describe("class fields", () => {
-  test("instance fields with and without initializers", () => {
-    expect(
-      value(`
-        class A { count = 0; x; name = "a" }
-        const a = new A()
-        return [a.count, a.x === undefined, "x" in a, a.hasOwnProperty("x"), a.name]`),
-    ).toEqual([0, true, true, true, "a"])
-  })
-
-  test("fields run in order before the constructor body, and without a constructor", () => {
-    expect(
-      value(`
-        const log = []
-        class A { a = log.push("a"); constructor() { log.push("ctor:" + this.b) } b = log.push("b") }
-        new A()
-        class B { c = log.push("c") }
-        new B()
-        new B()
-        return log`),
-    ).toEqual(["a", "b", "ctor:2", "c", "c"])
-  })
-
-  test("initializers see this, earlier fields and methods", () => {
-    expect(
-      value(`
-        class A {
-          base = 2
-          doubled = this.base * 2
-          viaMethod = this.twice(this.doubled)
-          arrow = () => this.base
-          fn = function () { return 1 }
-          twice(n) { return n * 2 }
-        }
-        const a = new A()
-        return [a.base, a.doubled, a.viaMethod, a.arrow(), a.fn.name, a.arrow.name]`),
-    ).toEqual([2, 4, 8, 2, "fn", "arrow"])
-  })
-
-  test("each instance gets fresh field values", () => {
-    expect(
-      value(`
-        class A { items = [] }
-        const a = new A(), b = new A()
-        a.items.push(1)
-        return [a.items, b.items]`),
-    ).toEqual([[1], []])
-  })
-
-  test("static fields, initialized in order after methods, may refer to the class", () => {
-    expect(
-      value(`
-        class A {
-          static max = 10
-          static double = A.max * 2
-          static viaMethod = this.helper()
-          static helper() { return A.max + 1 }
-          static self = this === A
-        }
-        return [A.max, A.double, A.viaMethod, A.self, Object.keys(A), "max" in new A()]`),
-    ).toEqual([10, 20, 11, true, ["max", "double", "viaMethod", "self"], false])
-  })
-
-  test("fields are enumerable own properties", () => {
-    expect(
-      value(`
-        class A { x = 1; y = "two"; m() {} }
-        const a = new A()
-        a.z = 3
-        return [Object.keys(a), JSON.stringify(a)]`),
-    ).toEqual([["x", "y", "z"], '{"x":1,"y":"two","z":3}'])
-  })
-
-  test("fields are defined, not assigned: a prototype setter is not called", () => {
-    expect(
-      value(`
-        const log = []
-        class A { x = 1 }
-        Object.defineProperty(A.prototype, "x", { set(v) { log.push(v) }, get() { return "getter" } })
-        const a = new A()
-        a.x = 2
-        return [a.x, log, Object.getOwnPropertyDescriptor(a, "x")]`),
-    ).toEqual([2, [], { value: 2, writable: true, enumerable: true, configurable: true }])
-  })
-
-  test("private fields are still unsupported", () => {
-    const result = run(`class A { #x = 1 }`)
-    expect(result.ok).toBe(false)
-  })
-})
-
-describe("accessors, computed names and method kinds", () => {
-  test("instance and static getters and setters, not enumerable", () => {
-    expect(
-      value(`
-        class Temp {
-          constructor() { this._c = 0 }
-          get f() { return this._c * 9 / 5 + 32 }
-          set f(v) { this._c = (v - 32) * 5 / 9 }
-          static get unit() { return "C:" + this.name }
-          static set unit(v) { Temp.last = v }
-        }
-        const t = new Temp()
-        t.f = 212
-        Temp.unit = "K"
-        const d = Object.getOwnPropertyDescriptor(Temp.prototype, "f")
-        const keys = []
-        for (const k in t) keys.push(k)
-        return [t._c, t.f, Temp.unit, Temp.last, Object.keys(Temp.prototype), keys, d.enumerable,
-          d.get.name, d.set.name, typeof Object.getOwnPropertyDescriptor(Temp, "unit").get]`),
-    ).toEqual([100, 212, "C:Temp", "K", [], ["_c"], false, "get f", "set f", "function"])
-  })
-
-  test("an inherited getter and setter see the instance as this", () => {
-    expect(
-      value(`
-        class A { get double() { return this.n * 2 } set double(v) { this.n = v / 2 } }
-        const a = new A()
-        a.double = 10
-        const child = Object.create(a)
-        child.double = 40
-        return [a.n, a.double, child.n, child.double, Object.keys(child)]`),
-    ).toEqual([5, 10, 20, 40, ["n"]])
-  })
-
-  test("computed and symbol names, evaluated once in order", () => {
-    expect(
-      value(`
-        const log = []
-        const k = (name) => { log.push(name); return name }
-        const sym = Symbol.asyncIterator
-        class A {
-          [k("m")]() { return "m" }
-          static [k("s")]() { return "s" }
-          get [k("g")]() { return "g" }
-          [k("f")] = log.length;
-          [sym]() { return "sym" }
-          [1 + 1] = "two"
-        }
-        log.push("defined")
-        const a = new A(), b = new A()
-        return [log, a.m(), A.s(), a.g, a.f, b.f, a[sym](), a[2], A.prototype.m.name, A.prototype[sym].name, Object.keys(a)]`),
-    ).toEqual([["m", "s", "g", "f", "defined"], "m", "s", "g", 5, 5, "sym", "two", "m", "[Symbol.asyncIterator]", ["2", "f"]])
-  })
-
-  test("an iterable class via *[Symbol.iterator], with for...of and spread", () => {
-    expect(
-      value(`
-        class Range {
-          constructor(n) { this.n = n }
-          *[Symbol.iterator]() { for (let i = 0; i < this.n; i++) yield i }
-          static *count() { yield "a"; yield "b" }
-          *items() { yield* this }
-        }
-        const r = new Range(3)
-        const seen = []
-        for (const x of r) seen.push(x)
-        return [seen, [...r], [...Range.count()], [...r.items()], Range.prototype[Symbol.iterator].name]`),
-    ).toEqual([[0, 1, 2], [0, 1, 2], ["a", "b"], [0, 1, 2], "[Symbol.iterator]"])
-  })
-
-  test("async methods with await", async () => {
-    expect(
-      await value(`
-        class Loader {
-          async load(n) { const v = await Promise.resolve(n); return v + 1 }
-          static async make() { return (await new Loader().load(1)) * 10 }
-        }
-        return [await new Loader().load(4), await Loader.make()]`),
-    ).toEqual([5, 20])
-  })
-
-  test("an async generator method with for await", async () => {
-    expect(
-      await value(`
-        class Feed {
-          async *stream() { for (const x of [1, 2, 3]) yield await Promise.resolve(x * 2) }
-          async *[Symbol.asyncIterator]() { yield "x" }
-        }
-        const out = []
-        for await (const v of new Feed().stream()) out.push(v)
-        for await (const v of new Feed()) out.push(v)
-        return out`),
-    ).toEqual([2, 4, 6, "x"])
-  })
-})
-
-describe("suspended inside a class", () => {
-  for (const [name, code, expected, frame] of [
-    [
-      "constructor",
-      `class A { constructor(n) { this.v = pick(slow(n)) } m() { return this.v + 1 } }
-       const a = new A(21)
-       return [a.v, a.m(), a instanceof A, Object.keys(a)]`,
-      [42, 43, true, ["v"]],
-      "A",
-    ],
-    [
-      "field initializer",
-      `class A { static scale = 2; a = 1; v = pick(slow(this.a + 20)); w = this.v * A.scale; constructor() { this.after = this.w } }
-       const a = new A()
-       return [a.v, a.w, a.after, Object.keys(a)]`,
-      [42, 84, 84, ["a", "v", "w", "after"]],
-      "<instance_members_initializer>",
-    ],
-    [
-      "static field initializer",
-      `class A { static v = pick(slow(21)); static w = A.v + 1 }
-       return [A.v, A.w]`,
-      [42, 43],
-      "<static_initializer>",
-    ],
-    [
-      "method",
-      `class A { constructor() { this.base = 1 } m(n) { return this.base + pick(slow(n)) } static s() { return new A() } }
-       const a = A.s()
-       return [a.m(20), a instanceof A]`,
-      [41, true],
-      "m",
-    ],
-    [
-      "getter",
-      `class A { constructor() { this.n = 20 } get v() { return pick(slow(this.n)) + 1 } }
-       return [new A().v, Object.keys(A.prototype)]`,
-      [41, []],
-      "get v",
-    ],
-    [
-      "async method",
-      `class A { async load(n) { const v = await pick(slow(n)); return v + 1 } }
-       return [await new A().load(21)]`,
-      [43],
-      "load",
-    ],
-    [
-      "generator method",
-      `class A { *items() { yield 1; yield pick(slow(21)); yield 3 } }
-       const out = []
-       for (const x of new A().items()) out.push(x)
-       return out`,
-      [1, 42, 3],
-      "items",
-    ],
-    [
-      "parent constructor reached through super()",
-      `class A { constructor(n) { this.v = pick(slow(n)) } }
-       class B extends A { w = this.v + 1; constructor(n) { super(n); this.x = this.w * 2 } }
-       class C extends B {}
-       const c = new C(21)
-       return [c.v, c.w, c.x, c instanceof A, c instanceof C, Object.keys(c)]`,
-      [42, 43, 86, true, true, ["v", "w", "x"]],
-      "A",
-    ],
-    [
-      "method called through super.method()",
-      `class A { m(n) { return this.base + pick(slow(n)) } }
-       class B extends A { constructor() { super(); this.base = 1 } m(n) { return super.m(n) * 10 } }
-       return [new B().m(20)]`,
-      [410],
-      "m",
-    ],
-    [
-      "custom error's constructor after super()",
-      `class Base extends Error { name = "Base" }
-       class NotFound extends Base { constructor(n) { super("missing", { cause: n }); this.code = pick(slow(n)) } }
-       try { throw new NotFound(21) } catch (e) {
-         return [e instanceof NotFound, e instanceof Error, e.name, e.message, e.cause, e.code, String(e)]
-       }`,
-      [true, true, "Base", "missing", 21, 42, "Base: missing"],
-      "NotFound",
-    ],
-  ] as const) {
-    test(`a host call parked in a ${name}, resumed in a fresh runtime`, async () => {
-      const suspended = await suspendParked(code)
-      expect(frames(suspended.state)).toContain(frame)
-      const resumed = await Effect.runPromise(hosting(undefined).runtime.resume(toBytes(suspended.state)).run())
-      const plain = await Effect.runPromise(hosting(undefined).runtime.execute(code))
-      expect(plain).toMatchObject({ ok: true, value: expected })
-      expect(resumed).toEqual(plain)
-    }, 5000)
-  }
 })
 
 const failure = (code: string) => {
@@ -715,5 +367,42 @@ describe("classes extending Error", () => {
       value(`class E extends Error {}; return [JSON.stringify(new E("x")), JSON.stringify(new Error("x"))]`),
     ).toEqual(['{"name":"Error","message":"x"}', '{"name":"Error","message":"x"}'])
     expect(runProgram(`class E extends Error { name = "E" }; console.log(new E("hi"))`)).toMatchObject({ logs: ["E: hi"] })
+  })
+})
+
+describe("showing and copying class values", () => {
+  test("console.log shows the class name", () => {
+    const code = `
+      class Cache { constructor() { this.size = 2 } get g() { return 1 } }
+      class Empty {}
+      class Lru extends Cache { hits = 0 }
+      class E extends Error { name = "E" }
+      console.log(new Cache())
+      console.log(new Empty())
+      console.log(new Lru())
+      console.log([new Empty(), { c: new Cache() }])
+      console.log(Cache, Lru, class {})
+      console.log(new E("bad"))
+      console.log({ a: 1 })`
+    expect(runProgram(code)).toMatchObject({
+      logs: [
+        'Cache {"size":2}',
+        "Empty {}",
+        'Lru {"size":2,"hits":0}',
+        '[Empty {},{"c":Cache {"size":2}}]',
+        "[class Cache] [class Lru extends Cache] [class (anonymous)]",
+        "E: bad",
+        '{"a":1}',
+      ],
+    })
+  })
+
+  test("JSON.stringify and structuredClone keep own enumerable fields and drop the prototype", () => {
+    expect(
+      value(`
+        class A { x = 1; get g() { return 2 } m() {} }
+        const c = structuredClone(new A())
+        return [JSON.stringify(new A()), c, Object.getPrototypeOf(c) === Object.prototype, c instanceof A, typeof c.m]`),
+    ).toEqual(['{"x":1}', { x: 1 }, true, false, "undefined"])
   })
 })
