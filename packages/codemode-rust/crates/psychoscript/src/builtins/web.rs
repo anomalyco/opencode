@@ -26,9 +26,9 @@ pub fn setup(vm: &mut Vm) {
     let op = vm.realm.object_proto;
     let up = vm.plain(op);
     vm.realm.std.url = up;
+    let url = vm.ctor("URL", 1, url_ctor, up, Value::Undef);
     super::accessors(vm, up, &URL_FIELDS);
     super::accessors(vm, up, &["searchParams"]);
-    let url = vm.ctor("URL", 1, url_ctor, up, Value::Undef);
     vm.methods(
         url,
         &[("canParse", 1, url_can_parse), ("parse", 1, url_parse)],
@@ -40,10 +40,10 @@ pub fn setup(vm: &mut Vm) {
 
     let pp = vm.plain(op);
     vm.realm.std.params = pp;
-    super::accessors(vm, pp, &["size"]);
     // Both constructors keep the native that reads one pair of an iterable (see `Pairs`) as their data.
     let pair = vm.native_fn("", 1, read_pair, Value::Undef);
     vm.ctor("URLSearchParams", 0, params_ctor, pp, pair);
+    super::accessors(vm, pp, &["size"]);
     vm.methods(
         pp,
         &[
@@ -54,13 +54,15 @@ pub fn setup(vm: &mut Vm) {
             ("has", 1, p_has),
             ("set", 2, p_set),
             ("sort", 0, p_sort),
-            ("forEach", 1, p_for_each),
             ("keys", 0, p_keys),
             ("values", 0, p_values),
+            ("entries", 0, p_entries),
             ("toString", 0, p_to_string),
+            ("forEach", 1, p_for_each),
         ],
     );
-    let entries = vm.method(pp, "entries", 0, p_entries);
+    let ek = vm.atoms.intern_static("entries");
+    let entries = vm.get_obj(pp, ek);
     vm.define_hidden(pp, SYM_ITERATOR, entries);
 
     let hp = vm.plain(op);
@@ -75,12 +77,14 @@ pub fn setup(vm: &mut Vm) {
             ("getSetCookie", 0, h_get_set_cookie),
             ("has", 1, h_has),
             ("set", 2, h_set),
-            ("forEach", 1, h_for_each),
             ("keys", 0, h_keys),
             ("values", 0, h_values),
+            ("entries", 0, h_entries),
+            ("forEach", 1, h_for_each),
         ],
     );
-    let entries = vm.method(hp, "entries", 0, h_entries);
+    let ek = vm.atoms.intern_static("entries");
+    let entries = vm.get_obj(hp, ek);
     vm.define_hidden(hp, SYM_ITERATOR, entries);
 }
 

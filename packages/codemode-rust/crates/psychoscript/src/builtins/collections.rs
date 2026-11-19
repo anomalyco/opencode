@@ -16,53 +16,54 @@ pub fn setup(vm: &mut Vm) {
         mp,
         &[
             ("get", 1, map_get),
-            ("set", 2, map_set),
             ("has", 1, map_has::<false>),
+            ("set", 2, map_set),
+            ("getOrInsert", 2, super::sets::map_get_or_insert),
+            (
+                "getOrInsertComputed",
+                2,
+                super::sets::map_get_or_insert_computed,
+            ),
             ("delete", 1, map_delete::<false>),
             ("clear", 0, map_clear::<false>),
-            ("forEach", 1, map_for_each::<false>),
             ("keys", 0, map_keys),
             ("values", 0, map_values::<false>),
+            ("entries", 0, map_entries::<false>),
+            ("forEach", 1, map_for_each::<false>),
         ],
     );
-    let entries = vm.method(mp, "entries", 0, map_entries::<false>);
+    let ek = vm.atoms.intern_static("entries");
+    let entries = vm.get_obj(mp, ek);
     vm.define_hidden(mp, SYM_ITERATOR, entries);
 
     let sp = vm.realm.set_proto;
-    super::accessors(vm, sp, &["size"]);
     vm.ctor("Set", 0, set_ctor, sp, Value::Undef);
+    super::accessors(vm, sp, &["size"]);
     vm.methods(
         sp,
         &[
-            ("add", 1, set_add),
             ("has", 1, map_has::<true>),
+            ("add", 1, set_add),
             ("delete", 1, map_delete::<true>),
             ("clear", 0, map_clear::<true>),
-            ("forEach", 1, map_for_each::<true>),
-            ("entries", 0, map_entries::<true>),
         ],
     );
     let values = vm.method(sp, "values", 0, map_values::<true>);
+    vm.method(sp, "entries", 0, map_entries::<true>);
     let keys = vm.atoms.intern_static("keys");
     vm.define_hidden(sp, keys, values);
     vm.define_hidden(sp, SYM_ITERATOR, values);
+    vm.method(sp, "forEach", 1, map_for_each::<true>);
 
     let pp = vm.realm.promise_proto;
     let promise = vm.ctor("Promise", 1, promise_ctor, pp, Value::Undef);
-    vm.methods(
-        promise,
-        &[
-            ("resolve", 1, promise_resolve),
-            ("reject", 1, promise_reject),
-        ],
-    );
     // Each combinator keeps, as its data, the internal function that collects an input it iterates in a frame.
     let collect = vm.native_fn("", 1, collect_items, Value::Undef);
     let combinators: [(&'static str, crate::vm::NativeFn); 4] = [
         ("all", promise_combinator::<ALL>),
         ("allSettled", promise_combinator::<ALL_SETTLED>),
-        ("any", promise_combinator::<ANY>),
         ("race", promise_combinator::<RACE>),
+        ("any", promise_combinator::<ANY>),
     ];
     for (name, f) in combinators {
         let v = vm.native_fn(name, 1, f, collect);
@@ -72,6 +73,8 @@ pub fn setup(vm: &mut Vm) {
     vm.methods(
         promise,
         &[
+            ("resolve", 1, promise_resolve),
+            ("reject", 1, promise_reject),
             ("withResolvers", 0, promise_with_resolvers),
             ("try", 1, promise_try),
         ],

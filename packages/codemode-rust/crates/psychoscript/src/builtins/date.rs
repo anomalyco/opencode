@@ -704,7 +704,6 @@ pub fn setup(vm: &mut Vm) {
             ("toLocaleString", 0, to_locale_string),
             ("toLocaleDateString", 0, to_locale_date_string),
             ("toLocaleTimeString", 0, to_locale_time_string),
-            ("getTimezoneOffset", 0, get_timezone_offset),
         ],
     );
     for (i, name) in GETTERS.iter().enumerate() {
@@ -712,6 +711,7 @@ pub fn setup(vm: &mut Vm) {
         let k = vm.atoms.intern_static(name);
         vm.define_hidden(proto, k, f);
     }
+    vm.method(proto, "getTimezoneOffset", 0, get_timezone_offset);
     for (i, (name, len)) in SETTERS.iter().enumerate() {
         let f = vm.native_fn(name, *len, setter, Value::Num(i as f64));
         let k = vm.atoms.intern_static(name);

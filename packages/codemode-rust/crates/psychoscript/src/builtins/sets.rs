@@ -13,13 +13,6 @@ use crate::vm::{Res, Vm};
 
 pub fn setup(vm: &mut Vm) {
     let mp = vm.realm.map_proto;
-    vm.methods(
-        mp,
-        &[
-            ("getOrInsert", 2, map_get_or_insert),
-            ("getOrInsertComputed", 2, map_get_or_insert_computed),
-        ],
-    );
     let k = vm.names.constructor;
     if let Value::Obj(map) = vm.get_obj(mp, k) {
         vm.method(map, "groupBy", 2, map_group_by);
@@ -43,9 +36,9 @@ pub fn setup(vm: &mut Vm) {
         wmp,
         &[
             ("get", 1, weak_get),
-            ("set", 2, weak_set),
             ("has", 1, weak_has),
             ("delete", 1, weak_delete),
+            ("set", 2, weak_set),
             ("getOrInsert", 2, weak_get_or_insert),
             ("getOrInsertComputed", 2, weak_get_or_insert_computed),
         ],
@@ -56,9 +49,9 @@ pub fn setup(vm: &mut Vm) {
     vm.methods(
         wsp,
         &[
-            ("add", 1, weak_add),
             ("has", 1, weak_has),
             ("delete", 1, weak_delete),
+            ("add", 1, weak_add),
         ],
     );
 }
@@ -88,7 +81,7 @@ fn normalize(v: Value) -> Value {
 
 // ---------- Map ----------
 
-fn map_get_or_insert(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+pub(crate) fn map_get_or_insert(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = receiver(vm, &this, "Map.prototype.getOrInsert", |k| {
         matches!(k, Kind::Map(_))
     })?;
@@ -142,7 +135,12 @@ fn get_or_insert_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Valu
     }
 }
 
-fn map_get_or_insert_computed(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+pub(crate) fn map_get_or_insert_computed(
+    vm: &mut Vm,
+    this: Value,
+    args: &[Value],
+    callee: Id,
+) -> Res {
     let id = receiver(vm, &this, "Map.prototype.getOrInsertComputed", |k| {
         matches!(k, Kind::Map(_))
     })?;

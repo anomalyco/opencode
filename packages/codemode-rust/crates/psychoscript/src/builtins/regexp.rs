@@ -306,10 +306,10 @@ pub fn setup(vm: &mut Vm) {
             "global",
             "ignoreCase",
             "multiline",
-            "dotAll",
+            "sticky",
             "unicode",
             "unicodeSets",
-            "sticky",
+            "dotAll",
         ],
     );
     vm.methods(
