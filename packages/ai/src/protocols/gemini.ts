@@ -801,6 +801,11 @@ const GeminiCheckpoint = Schema.Struct({
       }),
     ),
   ),
+  promptFeedback: optionalNull(
+    Schema.Struct({
+      blockReason: optionalNull(Schema.String),
+    }),
+  ),
 })
 const decodeCheckpoint = Schema.decodeUnknownOption(GeminiCheckpoint)
 /** Marks where the transport starts another request for the same response; provider JSON can never match it. */
@@ -837,8 +842,12 @@ export const transport: Transport<GeminiBody, Prepared, unknown> = {
               ProviderShared.parseJson(route, frame, `Invalid ${label} stream event`).pipe(
                 Effect.map((event) => {
                   if (typeof event === "object" && event !== null) raw.set(event, frame)
-                  const candidate = Option.getOrUndefined(decodeCheckpoint(event))?.candidates?.[0]
-                  const candidateFinishReason = terminalFinishReason(candidate?.finishReason)
+                  const checkpoint = Option.getOrUndefined(decodeCheckpoint(event))
+                  const candidate = checkpoint?.candidates?.[0]
+                  const blockReason = checkpoint?.promptFeedback?.blockReason ?? undefined
+                  const candidateFinishReason =
+                    terminalFinishReason(candidate?.finishReason) ??
+                    (GeminiGenerateContent.contentFiltered(blockReason) ? blockReason : undefined)
                   token = candidate?.continuationToken ?? (candidateFinishReason ? undefined : token)
                   finishReason = candidateFinishReason ?? finishReason
                   return event
