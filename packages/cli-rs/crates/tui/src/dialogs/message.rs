@@ -35,11 +35,14 @@ pub fn show(tui: &Tui, session: SessionID, message: String) {
 /// dialog closes at once.
 fn revert(tui: &Tui, dialogs: &Dialogs, session: &SessionID, message: &str) {
     let restored = tui.data.read(|state| match state.message(session, message) {
-        Some(SessionMessageInfo::User(user)) => Some(crate::routes::session::actions::projected(
-            &user.text,
-            user.files.as_deref(),
-            user.agents.as_deref(),
-            user.skills.as_deref(),
+        Some(SessionMessageInfo::User(user)) => Some(crate::routes::session::actions::restored(
+            &tui.app,
+            crate::routes::session::actions::projected(
+                &user.text,
+                user.files.as_deref(),
+                user.agents.as_deref(),
+                user.skills.as_deref(),
+            ),
         )),
         _ => None,
     });
