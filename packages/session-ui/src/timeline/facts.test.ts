@@ -3,10 +3,9 @@ import { storyTool } from "../storybook/current-session-scenarios"
 import { categoryOf, factsOf, summarize } from "./facts"
 
 describe("timeline facts", () => {
-  test("reads a part once, under a stable id", () => {
+  test("names facts by stable ids", () => {
     const part = { ...storyTool("p1", "edit", "completed", { path: "/repo/a.ts" }), messageID: "msg_1" }
 
-    expect(factsOf([part])[0]).toBe(factsOf([part])[0]!)
     expect(factsOf([part]).map((fact) => fact.id)).toEqual(["msg_1:p1", "msg_1:p1:file:/repo/a.ts"])
   })
 
@@ -52,5 +51,14 @@ describe("timeline facts", () => {
       thoughts: 1,
       modes: { explore: 3, edit: 2, run: 0, tool: 0 },
     })
+  })
+
+  test("follows a part updated in place", () => {
+    const part = storyTool("s1", "shell", "running", { command: "false" })
+    const before = summarize(factsOf([part]))
+    Object.assign(part, storyTool("s1", "shell", "error", { command: "false" }))
+
+    expect(before.failed).toBe(0)
+    expect(summarize(factsOf([part])).failed).toBe(1)
   })
 })

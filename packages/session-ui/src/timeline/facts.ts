@@ -95,19 +95,12 @@ const modes = new Map<string, FactMode>(
   } satisfies Record<string, FactMode>),
 )
 
-const cache = new WeakMap<object, Fact[]>()
-
-/** The facts in a list of parts, in order. Each part is read once. */
+/**
+ * The facts in a list of parts, in order. Not cached: stores update a part in place as it streams, so its identity
+ * says nothing about whether its facts changed. Callers read it inside a memo.
+ */
 export function factsOf(parts: readonly FactPart[]): Fact[] {
-  return parts.flatMap((part) => {
-    const cached = cache.get(part)
-
-    if (cached) return cached
-    const value = partFacts(part)
-    cache.set(part, value)
-
-    return value
-  })
+  return parts.flatMap(partFacts)
 }
 
 function partFacts(part: FactPart): Fact[] {
