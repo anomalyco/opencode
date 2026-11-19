@@ -17,8 +17,16 @@ export const stepStart = (state: State, events: LLMEvent[]): State => {
 export const textStart = (state: State, events: LLMEvent[], id: string, providerMetadata?: ProviderMetadata): State => {
   if (state.text.has(id)) return state
   const stepped = stepStart(state, events)
+  // Normalize overlapping boundaries: close all open text fragments before starting a new
+  // one. Without this, gateways that stream overlapping blocks (e.g. Anthropic-compatible
+  // gateways with overlapping content_block_start) produce "text start before end" errors
+  // in the session runner, which only allows one open fragment at a time.
+  const closed = [...stepped.text].reduce(
+    (acc, openId) => textEnd(acc, events, openId),
+    stepped,
+  )
   events.push(LLMEvent.textStart({ id, providerMetadata }))
-  return { ...stepped, text: new Set([...stepped.text, id]) }
+  return { ...closed, text: new Set([id]) }
 }
 
 export const textDelta = (
@@ -41,8 +49,14 @@ export const reasoningStart = (
 ): State => {
   if (state.reasoning.has(id)) return state
   const stepped = stepStart(state, events)
+  // Normalize overlapping boundaries: close all open reasoning fragments before starting a
+  // new one. See textStart for details.
+  const closed = [...stepped.reasoning].reduce(
+    (acc, openId) => reasoningEnd(acc, events, openId),
+    stepped,
+  )
   events.push(LLMEvent.reasoningStart({ id, providerMetadata }))
-  return { ...stepped, reasoning: new Set([...stepped.reasoning, id]) }
+  return { ...closed, reasoning: new Set([id]) }
 }
 
 export const reasoningDelta = (
