@@ -125,6 +125,7 @@ export const DialogConnectProvider: Component<{
         ),
         () => {
           props.onDone?.()
+
           if (chatgptWelcome) showChatgptWelcome()
         },
       ),
