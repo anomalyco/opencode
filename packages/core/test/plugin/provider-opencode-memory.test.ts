@@ -6,6 +6,7 @@ import { Message, SystemPart } from "@opencode/ai/effect"
 import type { Plugin as PluginContext } from "@opencode/plugin/effect"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Document, Event, Info } from "@opencode/schema/config"
+import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Model } from "@opencode/schema/model"
 import { Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
@@ -117,6 +118,8 @@ const injected = (id: string, score: number, revision = 1) => ({
 function fakeConsole() {
   const state = {
     memory: true,
+    /** The OpenCode config Console hands out, such as its MCP servers. */
+    config: {} as Record<string, unknown>,
     hits: new Array<ReturnType<typeof hit>>(),
     injected: new Array<ReturnType<typeof injected>>(),
     /** An entry close enough to refuse a publish without `distinctFrom`. */
@@ -185,7 +188,7 @@ function fakeConsole() {
       if (url.pathname === "/api/memory/anchors")
         return state.stalled ? new Promise<Response>(() => {}) : Response.json({ anchors: state.anchors })
       if (url.pathname === "/api/v2/config")
-        return Response.json({}, { headers: state.memory ? { [OpencodeMemory.header]: "1" } : {} })
+        return Response.json(state.config, { headers: state.memory ? { [OpencodeMemory.header]: "1" } : {} })
       const body = (request.method === "GET" ? undefined : await request.json()) as Record<string, unknown> | undefined
       state.requests.push({
         method: request.method,
@@ -1481,6 +1484,49 @@ describe("OpencodePlugin memory evidence and taint", () => {
     ),
   )
 
+  it.effect("doesn't taint a session for the Console's own MCP tools, while other MCP servers' tools still do", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        // The Console's config delivers its own server, the one tasks come from, beside the workspace's others.
+        console.state.config = {
+          mcp: { servers: { opencode_console: { type: "remote", url: `${console.server.url.origin}/mcp` } } },
+        }
+        const { host } = yield* start(console, ["opencode_console", "linear"])
+        const publish = yield* memoryTool("publish")
+        const entry = { kind: "gotcha", title: "Dates are UTC", body: "Use toISOString" }
+        const published = () => console.state.requests.filter((item) => item.path === "/api/memory/entries").at(-1)
+
+        const tasks = yield* host.session.create({})
+        yield* ran(tasks.id, "opencode_console_task_claim", { id: "tsk_1" }, { text: "claimed" })
+        yield* publish.execute(entry, context(tasks.id, "call_tasks"))
+        expect(published()?.body).not.toHaveProperty("tainted")
+
+        const issues = yield* host.session.create({})
+        yield* ran(issues.id, "linear_get_issue", { id: 7 }, { text: "issue body" })
+        yield* publish.execute(entry, context(issues.id, "call_issues"))
+        expect(published()?.body).toMatchObject({ tainted: true })
+
+        // A server of the user's own under the Console's name is outside input like any other.
+        const config = yield* Config.Test
+        yield* config.setEntries([
+          new Document({
+            type: "document",
+            info: new Info({
+              mcp: new ConfigMCP.Info({
+                servers: { opencode_console: new ConfigMCP.Remote({ type: "remote", url: "https://example.com/mcp" }) },
+              }),
+            }),
+          }),
+        ])
+        yield* TestClock.adjust("2 minutes")
+        const lookalike = yield* host.session.create({})
+        yield* ran(lookalike.id, "opencode_console_task_claim", { id: "tsk_1" }, { text: "claimed" })
+        yield* publish.execute(entry, context(lookalike.id, "call_lookalike"))
+        expect(published()?.body).toMatchObject({ tainted: true })
+      }),
+    ),
+  )
+
   it.effect("taints a session that used an MCP server or a tainted subagent, across a restart and on edits too", () =>
     withConsole((console) =>
       Effect.gen(function* () {
@@ -1862,7 +1908,7 @@ describe("OpencodePlugin memory capture", () => {
   // The distiller's answer to a user's correction of mem_1, whose body is "Body of mem_1\nMore": an edit of the line it
   // changes, and a body narrower than the entry, which a superseding publish mustn't take.
   const correction = "From now on we never write More in log messages, write Less"
-  const correcting = (oldText: string) =>
+  const correcting = (oldText: string, newText = "Less") =>
     JSON.stringify({
       candidates: [
         {
@@ -1872,7 +1918,7 @@ describe("OpencodePlugin memory capture", () => {
           basis: "user",
           quote: correction,
           supersedes: ["mem_1", "mem_unknown"],
-          edits: [{ oldText, newText: "Less" }],
+          edits: [{ oldText, newText }],
         },
       ],
     })
@@ -1901,11 +1947,36 @@ describe("OpencodePlugin memory capture", () => {
             edits: [{ oldText: "More", newText: "Less" }],
             evidence: [{ kind: "confirmation", ref: correction }],
           })
+          // The title doesn't state what changed: it stays.
+          expect(patches(console)[0]?.body).not.toHaveProperty("title")
           // The user's words came first, so the patch carries them and its revision is live at once. The entry keeps
           // its history; nothing replaces or retires it.
           yield* drain
           expect(console.state.live.get("mem_1")).toBe(2)
           expect(publishes(console)).toEqual([])
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
+    "corrects an entry's title in the same patch when it states the corrected fact",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          // mem_1 is titled "Entry mem_1", and its body says "Body of mem_1".
+          distiller.reply = correcting("mem_1", "mem_one")
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
+          yield* prompt(session.id, correction)
+          yield* waitUntil(Effect.sync(() => patches(console).length > 0))
+          yield* drain
+          expect(patches(console)).toHaveLength(1)
+          expect(patches(console)[0]?.body).toMatchObject({
+            edits: [{ oldText: "mem_1", newText: "mem_one" }],
+            title: "Entry mem_one",
+            evidence: [{ kind: "confirmation", ref: correction }],
+          })
         }),
       ),
   )

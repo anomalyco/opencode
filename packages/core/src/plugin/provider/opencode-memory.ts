@@ -7,6 +7,7 @@ import { fileURLToPath } from "url"
 import { Message, SystemPart, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
+import type { Document } from "@opencode/schema/config"
 import type { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
@@ -14,7 +15,10 @@ import { AppProcess } from "@opencode/util/process"
 import { Clock, Effect, Exit, Fiber, Option, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
+import { Config } from "../../config.js"
+import { ConfigIntegration } from "../../config/integration.js"
 import { Git } from "../../git.js"
+import { Integration } from "../../integration.js"
 import { AbsolutePath, RelativePath } from "../../schema.js"
 import { normalizeContent, normalizedName } from "../../tool/runtime.js"
 import { Flag } from "../../flag.js"
@@ -56,6 +60,11 @@ const MAX_COMMITS = 10
  * a cheap DeepSeek flash model is used when one is listed, else OpenCode's default model.
  */
 const WRITER = Agent.ID.make("memory-writer")
+/**
+ * The OpenCode Console's own MCP server, as its config names it: tasks and agents from the same workspace memory comes
+ * from, so what its tools answer isn't outside input.
+ */
+const CONSOLE_MCP = "opencode_console"
 /** The session instruction entries memory keeps: entries again after a compaction, and a correction reminder. */
 const DELIVERED = "memory.delivered"
 const CORRECTION = "memory.correction"
@@ -258,6 +267,7 @@ export const make = Effect.fnUntraced(function* (
   const git = yield* Git.Service
   const processes = yield* AppProcess.Service
   const flags = yield* Flag.Service
+  const config = yield* Config.Service
   const github = yield* OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
@@ -768,9 +778,17 @@ export const make = Effect.fnUntraced(function* (
       const entry = shown.find((item) => item.id === id)
       if (entry === undefined) return false
       const edits = candidate.edits ?? []
+      // A corrected fact the title states too changes there in the same patch.
+      const title = edits
+        .filter((edit) => edit.oldText !== "" && entry.title.split(edit.oldText).length === 2)
+        .reduce((current, edit) => current.replace(edit.oldText, () => edit.newText), entry.title)
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 200)
+      const retitled = title !== entry.title && title !== "" ? { title } : {}
       return yield* (
         edits.length > 0
-          ? write("edit", sessionID, id, entry.revision, { edits, evidence })
+          ? write("edit", sessionID, id, entry.revision, { edits, ...retitled, evidence })
           : write("rewrite", sessionID, id, entry.revision, { body: candidate.body, evidence })
       ).pipe(
         Effect.as(true),
@@ -837,10 +855,23 @@ export const make = Effect.fnUntraced(function* (
     // Read now, so the first moment doesn't wait on Git or GitHub.
     yield* repository.pipe(Effect.forkIn(lease, { startImmediately: true }))
     yield* reachable.pipe(Effect.forkIn(lease, { startImmediately: true }))
-    // The prefixes of MCP servers' tools, whose results are outside input.
+    // The prefixes of MCP servers' tools, whose results are outside input: all but the Console's own, while the server
+    // config ends up with under its name is the one the Console delivered rather than one of the user's.
     const servers = yield* Effect.cachedWithTTL(
-      ctx.mcp.list().pipe(
-        Effect.map((answer) => answer.data.map((server) => `${normalizedName({ name: server.name })}_`)),
+      Effect.all([ctx.mcp.list(), config.entries()]).pipe(
+        Effect.map(([answer, entries]) => {
+          const delivered = entries.findLast(
+            (entry): entry is Document =>
+              entry.type === "document" && entry.info.mcp?.servers?.[CONSOLE_MCP] !== undefined,
+          )
+          const own =
+            delivered instanceof ConfigIntegration.Document &&
+            delivered.integrationID === Integration.ID.make("opencode")
+          return answer.data
+            .map((server) => normalizedName({ name: server.name }))
+            .filter((name) => !(own && name === CONSOLE_MCP))
+            .map((name) => `${name}_`)
+        }),
         Effect.orElseSucceed(() => new Array<string>()),
       ),
       "1 minute",
