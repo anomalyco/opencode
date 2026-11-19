@@ -1238,6 +1238,47 @@ describe("PatchTool", () => {
     }),
   )
 
+  it.live("refuses a file that is not valid UTF-8 instead of replacing its bytes with U+FFFD", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const target = path.join(directory, "gbk.ts")
+        const bytes = new Uint8Array([...new TextEncoder().encode("const x = 1\n// "), 0xd6, 0xd0, 0xce, 0xc4, 0x0a])
+        yield* Effect.promise(() => fs.writeFile(target, bytes))
+        expect(
+          yield* executeTool(
+            registry,
+            call("*** Begin Patch\n*** Update File: gbk.ts\n@@\n-const x = 1\n+const y = 1\n*** End Patch"),
+          ),
+        ).toEqual({
+          status: "error",
+          error: {
+            type: "tool.execution",
+            message: `patch verification failed: Failed to read file to update ${target}: file is not valid UTF-8`,
+          },
+        })
+        expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(target)))).toEqual(bytes)
+      }),
+    ),
+  )
+
+  it.live("still deletes a file that is not valid UTF-8", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const target = path.join(directory, "gbk.ts")
+        yield* Effect.promise(() =>
+          fs.writeFile(
+            target,
+            new Uint8Array([...new TextEncoder().encode("const x = 1\n// "), 0xd6, 0xd0, 0xce, 0xc4, 0x0a]),
+          ),
+        )
+        expect(
+          yield* executeTool(registry, call("*** Begin Patch\n*** Delete File: gbk.ts\n*** End Patch")),
+        ).toMatchObject({ status: "completed" })
+        expect(yield* Effect.promise(() => fs.stat(target).catch(() => undefined))).toBeUndefined()
+      }),
+    ),
+  )
+
   it.live("preserves a later commit defect after earlier sequential applications", () =>
     withTempDir((tmp) => {
       reset()

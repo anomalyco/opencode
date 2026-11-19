@@ -301,7 +301,7 @@ export const Plugin = {
 
               const target = yield* fileWrite.target(input.path, context)
 
-              const original = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
+              const original = yield* FileMutation.readTextFatal(target.environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () =>
                   Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
                 ),
@@ -309,6 +309,13 @@ export const Plugin = {
                   error.actual === "directory"
                     ? Effect.fail(new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` }))
                     : Effect.fail(new ToolFailure({ message: `Unable to edit ${input.path}`, error })),
+                ),
+                Effect.catchTag("FileMutation.MalformedUtf8", (error) =>
+                  Effect.fail(
+                    new ToolFailure({
+                      message: `${error.message}. Convert it to UTF-8 first: editing it would replace every non-UTF-8 byte with U+FFFD.`,
+                    }),
+                  ),
                 ),
               )
               const source = original.text
