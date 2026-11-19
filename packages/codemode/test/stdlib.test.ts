@@ -1078,6 +1078,24 @@ describe("Uint8Array", () => {
     ).toEqual([1, 1, 1, 1, 4, false, false, []])
   })
 
+  test("reads the bytes of a view's buffer at its byteOffset and byteLength", async () => {
+    expect(
+      await value(`
+      const a = new Uint8Array([1, 2, 3, 4])
+      const sub = a.subarray(1, 3)
+      const view = new Uint8Array(a.buffer, 2)
+      view[0] = 9
+      return [[...new Uint8Array(new Uint8Array([66]).buffer)], [...new Uint8Array(a.buffer, 1, 2)], [...a],
+        sub.byteOffset, sub.byteLength, sub.buffer.byteLength, [...new Uint8Array(sub.buffer, sub.byteOffset, sub.byteLength)],
+        Buffer.from(sub.buffer, sub.byteOffset, sub.byteLength).toString("hex")]
+    `),
+    ).toEqual([[66], [2, 9], [1, 2, 9, 4], 1, 2, 4, [2, 9], "0209"])
+    expect((await error(`new Uint8Array(new Uint8Array(2).buffer, 3)`)).message).toContain("outside the bounds")
+    expect((await error(`new Uint8Array(new Uint8Array(2).buffer, 1, 5)`)).message).toContain(
+      "Invalid typed array length",
+    )
+  })
+
   test("index reads and writes clamp to a byte and ignore out-of-range writes, like JS", async () => {
     expect(
       await value(`

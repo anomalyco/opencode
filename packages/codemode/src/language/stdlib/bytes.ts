@@ -54,6 +54,16 @@ export const finishBytes = (bytes: Uint8Array, into: Obj, offset: number): Value
 
 const constructBytes = <R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj) => {
   const source = args[0]
+  // There is no ArrayBuffer: `.buffer` is a Uint8Array over the whole memory, and an offset or length makes a view of it.
+  // JS would copy any Uint8Array given with an offset and ignore the offset; here every such call makes a shared view.
+  if (source instanceof Bytes && (args[1] !== undefined || args[2] !== undefined)) {
+    const offset = args[1] === undefined ? 0 : coerceToInteger(args[1])
+    const length = args[2] === undefined ? source.bytes.length - offset : coerceToInteger(args[2])
+    if (offset < 0 || offset > source.bytes.length)
+      throw rangeError(`Start offset ${offset} is outside the bounds of the buffer`)
+    if (length < 0 || offset + length > source.bytes.length) throw rangeError(`Invalid typed array length: ${length}`)
+    return new Bytes(proto, source.bytes.subarray(offset, offset + length))
+  }
   if (source !== null && typeof source === "object") return collectBytes(ctx, source, "new Uint8Array(...)", proto, 0)
   const length = source === undefined ? 0 : coerceToNumber(source)
   if (!Number.isInteger(length) || length < 0) throw rangeError(`Invalid typed array length: ${coerceToString(source)}`)
@@ -93,6 +103,9 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
   // Uint8Array cannot contain NaN, so non-number search values never match a byte.
   const search = (value: Value) => (typeof value === "number" ? value : NaN)
   defineAccessor(proto, "length", (thisValue) => self(thisValue, "length").bytes.length)
+  defineAccessor(proto, "byteLength", (thisValue) => self(thisValue, "byteLength").bytes.byteLength)
+  defineAccessor(proto, "byteOffset", (thisValue) => self(thisValue, "byteOffset").bytes.byteOffset)
+  defineAccessor(proto, "buffer", (thisValue) => wrap(new Uint8Array(self(thisValue, "buffer").bytes.buffer)))
   methods(builtins, proto, [
     ["at", 1, (thisValue, args) => self(thisValue, "at").bytes.at(optNumber(args[0]) ?? 0)],
     [
