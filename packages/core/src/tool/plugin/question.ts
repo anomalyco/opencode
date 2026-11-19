@@ -59,8 +59,9 @@ export const Plugin = {
           description,
           input: Input,
           output: Output,
-          execute: (input, context) =>
-            permission
+          execute: (input, context) => {
+            const questions = stripCarriageReturns(input.questions)
+            return permission
               .assert({
                 action: "question",
                 resources: ["*"],
@@ -78,8 +79,8 @@ export const Plugin = {
                         tool: { messageID: context.messageID, id: context.id },
                       },
                       fields: [
-                        toField(input.questions[0], 0),
-                        ...input.questions.slice(1).map((question, index) => toField(question, index + 1)),
+                        toField(questions[0], 0),
+                        ...questions.slice(1).map((question, index) => toField(question, index + 1)),
                       ],
                     })
                     .pipe(Effect.orDie),
@@ -94,7 +95,7 @@ export const Plugin = {
                     return Effect.fail(new ToolFailure({ message: state.message }))
                   if (state.status === "cancelled") return Effect.die(new CancelledError())
                   const output = {
-                    answers: input.questions.map((_, index): Question.Answer => {
+                    answers: questions.map((_, index): Question.Answer => {
                       const value = state.answer[`q${index}`]
                       if (value === undefined) return []
                       if (Array.isArray(value)) return Array.from(value)
@@ -103,11 +104,12 @@ export const Plugin = {
                   }
                   return Effect.succeed({
                     output,
-                    content: toModelContent(input.questions, output.answers),
+                    content: toModelContent(questions, output.answers),
                     metadata: { answers: output.answers },
                   })
                 }),
-              ),
+              )
+          }
         }),
       )
       .pipe(Effect.orDie)
@@ -127,4 +129,20 @@ function toField(question: Question.Prompt, index: number): Form.Field {
     })),
     custom: true,
   }
+}
+
+// Some models emit stray \r control characters at token boundaries inside strings. They
+// render as hard line breaks in the TUI question block, and the model-facing echo
+// re-injects them, which escalates the pollution within a session.
+function stripCarriageReturns(questions: ReadonlyArray<Question.Prompt>): Array<Question.Prompt> {
+  return questions.map((question) => ({
+    ...question,
+    header: question.header.replace(/\r/g, ""),
+    question: question.question.replace(/\r/g, ""),
+    options: question.options.map((option) => ({
+      ...option,
+      label: option.label.replace(/\r/g, ""),
+      description: option.description.replace(/\r/g, ""),
+    })),
+  }))
 }
