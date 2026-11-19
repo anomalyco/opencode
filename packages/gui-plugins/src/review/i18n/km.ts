@@ -12,4 +12,12 @@ export default {
   noChanges: "គ្មានការផ្លាស់ប្តូរទេ។",
   "settings.wrapLines.title": "រុំបន្ទាត់",
   "settings.wrapLines.description": "រុំបន្ទាត់វែងនៅក្នុងភាពខុសគ្នានៃទូរស័ព្ទជំនួសឱ្យការរមូរផ្ដេក",
+  "menu.count.one": "បានផ្លាស់ប្តូរ {{count}} ឯកសារ",
+  "menu.count.other": "បានផ្លាស់ប្តូរ {{count}} ឯកសារ",
+  "folder.more": "{{count}} · មិនបានបង្ហាញបន្ថែម",
+  "folder.failed": "មិនអាចផ្ទុកការផ្លាស់ប្តូរបានទេ",
+  "command.open": "បើកការពិនិត្យ",
+  "load.failed": "មិនអាចផ្ទុកការផ្លាស់ប្តូរបានទេ",
+  "load.timeout": "ម៉ាស៊ីនមេចំណាយពេលយូរពេកក្នុងការឆ្លើយតប",
+  offline: "មិនអាចទៅដល់ម៉ាស៊ីនមេនេះបានទេ",
 }

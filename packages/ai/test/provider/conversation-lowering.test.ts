@@ -21,8 +21,8 @@ it.effect("conversation lowering excludes generation settings and tool definitio
     )
     expect(body).toEqual({
       model: "fixture",
-      instructions: "Keep the context",
       input: [
+        { type: "message", role: "developer", content: "Keep the context" },
         { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] },
         { type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "hi" }] },
       ],

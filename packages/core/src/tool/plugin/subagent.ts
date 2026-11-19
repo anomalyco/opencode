@@ -11,6 +11,7 @@ import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
+import { SubagentDepth } from "../../session/subagent-depth.js"
 import { SubagentJob } from "../../session/subagent-job.js"
 
 export const name = "subagent"
@@ -78,12 +79,12 @@ export const Plugin = {
         (model) => model.providerID === ref.providerID && model.id === ref.id,
       )
       if (model === undefined) {
-        const other = (yield* models.available(["image", "decision"])).find(
+        const other = (yield* models.available(["image", "video", "decision"])).find(
           (model) => model.providerID === ref.providerID && model.id === ref.id,
         )
         return yield* new ToolFailure({
           message: other
-            ? `Model "${ref.providerID}/${ref.id}" is ${other.type === "image" ? "an image" : "a decision"} model; subagents need a chat model. Use the models tool to find one.`
+            ? `Model "${ref.providerID}/${ref.id}" is ${other.type === "image" ? "an image" : other.type === "video" ? "a video" : "a decision"} model; subagents need a chat model. Use the models tool to find one.`
             : `Model "${ref.providerID}/${ref.id}" is not available. Use the models tool to see what is available.`,
         })
       }
@@ -114,20 +115,12 @@ export const Plugin = {
                     (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                   ),
                 )
-              let current = parent
-              let depth = 0
-              while (current.parentID) {
-                depth++
-                current = yield* sessions
-                  .get(current.parentID)
-                  .pipe(
-                    Effect.mapError(
-                      (error) => new ToolFailure({ message: `Parent session not found: ${current.parentID}`, error }),
-                    ),
-                  )
-              }
-              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
-              if (depth >= limit)
+              const limit = yield* SubagentDepth.reached(parent, sessions, config).pipe(
+                Effect.mapError(
+                  (error) => new ToolFailure({ message: `Parent session not found: ${error.sessionID}`, error }),
+                ),
+              )
+              if (limit !== undefined)
                 return yield* new ToolFailure({
                   message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
                 })

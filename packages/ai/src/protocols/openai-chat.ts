@@ -577,6 +577,9 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
   const opaque = reasoningOpaque(reasoning, options.providerMetadataKey)
   const reasoningText =
     reasoning.length === 0 || (opaque !== undefined && text === "") ? (requireReasoning ? "" : undefined) : text
+  // A model that declares a different reasoning field reads reasoning there, so structured details and opaque values
+  // from earlier turns (including another model served under the same provider metadata key) must not be replayed.
+  const replaysStructured = configuredField === undefined || configuredField === "reasoning_details"
   const result = {
     role: "assistant" as const,
     content: (() => {
@@ -585,10 +588,11 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
       return content.map((part) => part.text).join("")
     })(),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-    ...(details !== undefined ? { reasoning_details: details } : {}),
-    ...(opaque !== undefined ? { reasoning_opaque: opaque } : {}),
+    ...(details !== undefined && replaysStructured ? { reasoning_details: details } : {}),
+    ...(opaque !== undefined && replaysStructured ? { reasoning_opaque: opaque } : {}),
   }
-  if (field === undefined || reasoningText === undefined) return result
+  // `reasoning_details` is the structured list itself, so scalar text must not be written over it.
+  if (field === undefined || reasoningText === undefined || field === "reasoning_details") return result
   return { ...result, [field]: reasoningText }
 })
 

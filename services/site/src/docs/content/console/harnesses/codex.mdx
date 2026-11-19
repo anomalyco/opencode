@@ -6,6 +6,11 @@ description: "Use Console and Go models from Codex."
 Codex speaks the OpenAI Responses API. Point it at Console and use any paid or Go model, including Claude, Gemini, and
 open models. Console translates the request for models that don't accept Responses.
 
+<Callout>
+  The [Console CLI](/console/harnesses#console-cli) sets up Codex with one command, including the workspace's policies,
+  MCP servers, skills and instructions. Run `npx @opencode/console setup codex`. The steps below set it up by hand.
+</Callout>
+
 ## Configure
 
 Add Console as a model provider in `~/.codex/config.toml` and make it the default.

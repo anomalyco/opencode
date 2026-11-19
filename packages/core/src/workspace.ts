@@ -310,6 +310,7 @@ const layer = (options: Options) =>
             remove: (path) => withFiles(path, (files) => files.remove(path)),
             move: (from, to) => withFiles(from, (files) => files.move(from, to)),
             mkdir: (path) => withFiles(path, (files) => files.mkdir(path)),
+            append: (path, bytes) => withFiles(path, (files) => files.append(path, bytes)),
           }
           return { spawner, overrides }
         }),

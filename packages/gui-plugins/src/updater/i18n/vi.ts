@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Tiếp theo",
   "releaseNotes.action.hideFuture": "Không hiển thị lại",
   "releaseNotes.media.alt": "Xem trước bản phát hành",
+  "action.reload": "Tải lại để cập nhật",
+  "action.reloading": "Đang tải lại…",
+  "web.ready.title": "Bản cập nhật đã sẵn sàng",
+  "web.ready.message":
+    "Phiên bản mới của OpenCode đã sẵn sàng. Tải lại để dùng phiên bản này trong mọi cửa sổ đang mở.",
+  "web.reload": "Tải lại",
+  "web.reset.title": "Tải lại từ máy chủ",
+  "web.reset.description": "Xóa bản sao đã lưu của ứng dụng và tải phiên bản hiện tại từ máy chủ",
+  "web.reset.action": "Tải lại từ máy chủ",
 }

@@ -250,7 +250,7 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
-  it.live("stops what a failed command left in its group, and leaves a successful one's", () =>
+  it.live("records successful and failed exits without signalling a finished command", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       yield* env.withShell(env.directory, (shell) =>
@@ -262,7 +262,7 @@ describe("Shell on the process daemon", () => {
           env.daemon.exit(2, 3)
           expect(yield* shell.wait(failed.id)).toMatchObject({ status: "exited", exit: 3 })
           expect(yield* shell.wait(succeeded.id)).toMatchObject({ status: "exited", exit: 0 })
-          expect(env.signals(2)).toEqual(["SIGTERM"])
+          expect(env.signals(2)).toEqual([])
           expect(env.signals(1)).toEqual([])
         }),
       )

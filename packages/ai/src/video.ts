@@ -1,5 +1,5 @@
 import { Duration, Effect, Schema } from "effect"
-import type { Status } from "./generation.js"
+import type { Reason, Status } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeQueuedRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
@@ -33,7 +33,7 @@ export class VideoModel<Options extends VideoOptions = VideoOptions> extends Med
     return new VideoModel<Options>({
       id: input.id,
       provider: route.protocol.provider,
-      http: input.http,
+      transport: input.transport,
       providerOptions: input.providerOptions,
       route: composeQueuedRoute(route, input) as VideoRoute,
     })
@@ -115,6 +115,8 @@ export interface VideoJob {
 
 export interface VideoStatus {
   readonly status: Status
+  /** Set when `status` is `error`. */
+  readonly reason?: Reason
   /** 0..1, only when the provider reports progress. */
   readonly progress?: number
 }
