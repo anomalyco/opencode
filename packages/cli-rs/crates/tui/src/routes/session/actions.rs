@@ -393,7 +393,8 @@ pub(crate) fn append_prompt(tui: &Tui, session: &SessionID, prompt: Value) {
     // A draft is in no buffer, so `measure` counts it.
     let prompt = match tui.prompt.drafts.take(Some(session)) {
         Some(draft) => {
-            let end = opencode_ui::prompt_input::parse::measure(draft.prompt["text"].as_str().unwrap_or_default());
+            let end =
+                opencode_ui::prompt_input::parse::measure(&tui.app, draft.prompt["text"].as_str().unwrap_or_default());
             append(&draft.prompt, prompt, end)
         }
         None => prompt,

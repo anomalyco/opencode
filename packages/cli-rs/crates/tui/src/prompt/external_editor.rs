@@ -17,8 +17,9 @@ pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
         failed(tui, "Set $VISUAL or $EDITOR to open an external editor");
         return;
     };
-    let snapshot =
-        super::paste::expand_prompt(&prompt.snapshot(), |offset| prompt_input::index_at(&prompt.textarea, offset));
+    let snapshot = super::paste::expand_prompt(&tui.app, &prompt.snapshot(), |offset| {
+        prompt_input::index_at(&prompt.textarea, offset)
+    });
     let cwd = working_directory(tui, prompt);
     let weak = Rc::downgrade(prompt);
     let released = crate::features::foreground::release(tui, move || {
@@ -106,9 +107,13 @@ fn mention(part: &Value) -> Option<Mention> {
 
 #[cfg(test)]
 mod tests {
-    use opencode_ui::prompt_input::parse::measure;
+    use opentui::testing::TestApp;
 
     use super::*;
+
+    fn measure(text: &str) -> u32 {
+        opencode_ui::prompt_input::parse::measure(&TestApp::new(10, 2), text)
+    }
 
     fn realign_default(content: &str, prompt: &Value) -> Value {
         realign(content, prompt, |index| measure(&content[..index]))
