@@ -1165,7 +1165,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                       type="button"
                       role="radio"
                       aria-checked={input.body.activeID === account.id}
-                      class="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 ps-2 pe-2 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
+                      class="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md ps-2 pe-2 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:-outline-offset-2"
                       disabled={input.body.busy}
                       onClick={() => props.controller.chooseAccount(account)}
                     >
@@ -1234,7 +1234,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
         <button
           type="button"
           data-action="provider-account-add"
-          class="flex h-8 w-full items-center gap-1.5 rounded-md ps-2 pe-2 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none disabled:pointer-events-none"
+          class="flex h-8 w-full items-center gap-1.5 rounded-md ps-2 pe-2 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:-outline-offset-2 disabled:pointer-events-none"
           disabled={!input.body.canAdd}
           onClick={() => props.controller.dispatch({ type: "account.add" })}
         >

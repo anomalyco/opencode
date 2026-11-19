@@ -31,17 +31,7 @@
 
   &[data-checked] {
     --preview-ink-strong: color-mix(in srgb, var(--v2-background-bg-accent) 70%, transparent);
-    border-color: var(--v2-border-border-focus);
-
-    /* An inset shadow on the card paints under the opaque name row, so the inner ring sits on top instead. */
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: 7px;
-      box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
-      pointer-events: none;
-    }
+    border-color: var(--v2-border-border-inverse);
   }
 
   &:has(input:focus-visible) {

@@ -5,9 +5,13 @@ import "@/shell/titlebar/tab-nav.css"
 import "@/shell/titlebar/titlebar.css"
 import "@/session/session-identity-header.css"
 import "@/settings/settings.css"
+import "@/settings/general/interface-mode.css"
 import "@/settings/workspaces/project.css"
+import "@/shell/palette-menu.css"
+import "@/shell/search-list.css"
 import "@opencode/session-ui/sources/panel"
 import "../../../gui-plugins/src/browser/bar.css"
+import treeFocusCss from "../../../gui-plugins/src/file/tree-focus.css?inline"
 
 import { File } from "@opencode/session-ui/file"
 import { SessionFilePanelV2 } from "@opencode/session-ui/v2/session-file-panel-v2"
@@ -16,6 +20,7 @@ import { Accordion } from "@opencode/ui/accordion"
 import { Button } from "@opencode/ui/button"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { Collapsible } from "@opencode/ui/collapsible"
+import { ErrorDetails } from "@opencode/ui/error-details"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { ProjectAvatar } from "@opencode/ui/project-avatar"
@@ -26,9 +31,9 @@ import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { Tabs } from "@opencode/ui/tabs"
 import { TextInput } from "@opencode/ui/text-input"
-import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { createTabStripScroll } from "@/runtime/plugin/tab-strip-scroll"
-import { createTabFocus } from "@/runtime/tab-focus"
+import { createFieldFocus } from "@opencode/ui/context/field-focus"
 import { SessionHeaderActions } from "@/session/header/session-header-actions"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
@@ -86,6 +91,18 @@ const surfaces: Surface[] = [
   {
     name: "Titlebar",
     cases: [
+      {
+        name: "Narrow-screen Tabs button: no keyboard ring",
+        failure: "Invisible",
+        target: "button",
+        keys: "Narrow the browser and Tab to the Tabs button.",
+        sizing: "Below the mobile breakpoint, the button fills the titlebar.",
+        source: "app/src/shell/titlebar/titlebar.tsx",
+        fix: "Draw the shared ring inside the button instead of suppressing the outline.",
+        render: () => (
+          <button class="h-7 w-48 rounded-[6px] px-2 text-start focus-visible:-outline-offset-2">Tabs</button>
+        ),
+      },
       {
         name: "Search and New tab: ring cut at the top and bottom by the titlebar row",
         failure: "Clipped",
@@ -145,6 +162,16 @@ const surfaces: Surface[] = [
   {
     name: "Session header and composer",
     cases: [
+      {
+        name: "Child session: parent breadcrumb only changes background",
+        failure: "Inconsistent",
+        target: "button",
+        keys: "Open a child session and Tab from the project to its parent breadcrumb.",
+        sizing: "The breadcrumb has space for the default outset ring.",
+        source: "app/src/session/session-identity-header.tsx",
+        fix: "Use the shared outset ring for the parent breadcrumb and preserve hover styling.",
+        render: () => <button class="h-7 rounded-[6px] px-1.5 text-13-medium">Parent session</button>,
+      },
       {
         name: "Project button: keyboard focus only changes the background",
         failure: "Inconsistent",
@@ -211,13 +238,13 @@ const surfaces: Surface[] = [
         ),
       },
       {
-        name: "Composer editor: caret is the only Tab focus cue",
+        name: "Composer editor: caret is the only focus cue",
         failure: "Invisible",
         target: '[data-component="composer-editor"]',
         keys: "Focus the preceding button, then press Tab into the prompt. Click inside the prompt to see the ring go away.",
         sizing: "The editor sits inside a masked scroll viewport.",
-        source: "app/src/composer/editor/editor.css, runtime/tab-focus.ts",
-        fix: "Tab focus on the editor draws a 2px inset ring on the composer frame. Click-to-type and automatic focus leave it quiet.",
+        source: "app/src/composer/editor/editor.css, ui/src/context/field-focus.tsx, context/dialog.tsx",
+        fix: "Draw an inset ring on focus entry except for click-to-type and session autofocus. Returning from a dialog restores the previous ring state.",
         render: (forced) => <ComposerFocusExample forced={forced()} />,
       },
     ],
@@ -305,6 +332,89 @@ const surfaces: Surface[] = [
   {
     name: "Timeline",
     cases: [
+      {
+        name: "Copy response: focus scrolls under the sticky session header",
+        failure: "Occluded",
+        target: '[aria-label="Copy response"]',
+        keys: "In a long session, Shift+Tab into the timeline and watch the copy button scroll clear of the header.",
+        sizing: "The scrollport reserves the 48px header and its 16px fade.",
+        source: "app/src/index.css, session/timeline/message-timeline.tsx",
+        fix: "Set block-start scroll padding where the header inset is present, so keyboard scroll reveals the whole ring.",
+        render: () => (
+          <ScrollView data-slot="session-timeline-scroll" class="h-32 w-[300px] bg-v2-background-bg-layer-01">
+            <div data-slot="session-header-inset" class="sticky top-0 z-10 h-16 bg-v2-background-bg-base p-3">
+              Session header
+            </div>
+            <div class="h-28 p-2">
+              <IconButton variant="ghost-muted" icon={<Icon name="copy" />} aria-label="Copy response" />
+            </div>
+          </ScrollView>
+        ),
+      },
+      {
+        name: "Read more: the folded prompt uses an old accent ring",
+        failure: "Inconsistent",
+        target: "button",
+        keys: "Tab to Read more on a folded prompt.",
+        sizing: "The text disclosure has room for the default outset ring.",
+        source: "session-ui/src/components/message-part.css",
+        fix: "Replace the old 1px accent outline with the shared 2px ring.",
+        render: () => (
+          <div data-component="user-message">
+            <button type="button" data-slot="user-message-fold-toggle" aria-expanded="false">
+              Read more <Icon name="chevron-down" />
+            </button>
+          </div>
+        ),
+      },
+      {
+        name: "Timeline Find close: an old thin outline shows at rest in forced colours",
+        failure: "Inconsistent",
+        target: "button",
+        keys: "Open Find in a session and Tab to its close button.",
+        sizing: "The icon sits inside the compact Find field.",
+        source: "app/src/session/timeline/search-bar.tsx",
+        fix: "Draw no outline at rest and use the shared inset ring on keyboard focus.",
+        render: () => (
+          <button
+            type="button"
+            aria-label="Close Find"
+            class="grid size-5 place-items-center rounded-[4px] focus-visible:-outline-offset-2"
+          >
+            <Icon name="close" />
+          </button>
+        ),
+      },
+      ...[
+        { name: "Execute call", slot: "execute-tool-call", source: "components/message-part.css" },
+        { name: "More search results", slot: "exa-tool-more", source: "components/message-part.css" },
+        { name: "Fetched page link", slot: "webfetch-link", source: "components/basic-tool.css" },
+        { name: "Timeline event link", slot: "timeline-event-item", source: "timeline-next/timeline-next.css" },
+      ].map(
+        (example): Case => ({
+          name: `${example.name}: thin accent outline`,
+          failure: "Inconsistent",
+          target: "button",
+          keys: `Tab to the ${example.name.toLowerCase()} in the timeline.`,
+          sizing: "There is room for the default outset ring.",
+          source: `session-ui/src/${example.source}`,
+          fix: "Replace the 1px accent outline with the shared 2px ring and rounded corners.",
+          render: () => (
+            <div data-timeline="next" class="w-56">
+              <div data-component={example.slot === "execute-tool-call" ? "execute-tool-calls" : "timeline-event-list"}>
+                <button
+                  type="button"
+                  role="button"
+                  data-slot={example.slot}
+                  class={example.slot === "webfetch-link" ? "webfetch-link" : undefined}
+                >
+                  {example.name}
+                </button>
+              </div>
+            </div>
+          ),
+        }),
+      ),
       {
         name: "Copy response: ring cut at the bottom by the virtual row",
         failure: "Clipped",
@@ -486,13 +596,22 @@ const surfaces: Surface[] = [
       },
     ],
     also: [
-      "Shift+Tab from the session header's More actions to Copy response leaves it under the sticky header.",
       "Fixed: the new timeline's command group lost the bottom of its shadow. The 5px row clip margin above covers it.",
     ],
   },
   {
     name: "Home",
     cases: [
+      {
+        name: "Home search results: Shift+Tab reaches a background-only option",
+        failure: "Invisible",
+        target: "input",
+        keys: "Type a Home search. Use ArrowDown to move the highlight and Shift+Tab to leave the field.",
+        sizing: "Results are controlled by the search input's active descendant.",
+        source: "app/src/home/sessions/view.tsx, view.css",
+        fix: "Remove result buttons from the Tab order. Give the active option a visible system highlight in forced colours.",
+        render: () => <SearchHighlightExample kind="home-session-search-row" />,
+      },
       {
         name: "Home viewport: invisible Tab stop",
         failure: "Invisible",
@@ -568,8 +687,8 @@ const surfaces: Surface[] = [
         target: "input",
         keys: "Focus the preceding button and Tab into Search sessions. Click the field to clear the ring.",
         sizing: "The field spans the Home results column. The ring belongs on the field, not just its editable text.",
-        source: "app/src/home/sessions/view.tsx, view.css, runtime/tab-focus.ts",
-        fix: "Tab entry draws the shared 2px outset ring around the search field. Clicking still shows only the normal field background and caret.",
+        source: "app/src/home/sessions/view.tsx, view.css, ui/src/context/field-focus.tsx",
+        fix: "Tab, Find and other non-pointer focus entry draw the shared outset ring around the field. Click-to-type keeps the field background and caret without the ring.",
         render: (forced) => <HomeSearchFocusExample forced={forced()} />,
       },
       {
@@ -671,6 +790,16 @@ const surfaces: Surface[] = [
     name: "Right panel",
     cases: [
       {
+        name: "Files and Review tree: ArrowDown moves focus without a visible cue",
+        failure: "Invisible",
+        target: '[data-slot="lab-tree-host"]',
+        keys: "Tab to a file tree and use the arrow keys. The focus outline follows the row without changing selection.",
+        sizing: "The tree rows are full width inside the plugin's shadow root.",
+        source: "gui-plugins/src/file/pierre-tree.tsx, tree-focus.css",
+        fix: "Use the shared inset ring on the keyboard-focused row, independently of the selected background.",
+        render: () => <TreeFocusExample />,
+      },
+      {
         name: "Review diff viewer: no visible keyboard focus",
         failure: "Invisible",
         target: '[data-component="file"]',
@@ -749,12 +878,48 @@ const surfaces: Surface[] = [
       "Review header at a 164px preview: Previous and Next overlap the line buttons, and Split diff is cut off.",
       "CSV preview at 80px: Copy content overflows the header.",
       "Line comment More options runs past the panel edge at 360px.",
-      "Files and Review trees: ArrowDown from the selected file moves focus with no visible change (pierre-tree.tsx:41–42, 84–92).",
     ],
   },
   {
     name: "Settings",
     cases: [
+      {
+        name: "Interface layout: selection and focus use the same blue",
+        failure: "Inconsistent",
+        target: "input",
+        keys: "Tab onto the selected Interface layout card.",
+        sizing: "The card has a separate selected border and an outset focus ring.",
+        source: "app/src/settings/general/interface-mode.css",
+        fix: "Use a neutral selected border. Blue is reserved for keyboard focus.",
+        render: () => (
+          <fieldset data-component="interface-mode">
+            <label data-slot="interface-mode-option" data-checked>
+              <input type="radio" name="focus-lab-layout" checked />
+              <span data-slot="interface-mode-sketch" aria-hidden="true" />
+              <span data-slot="interface-mode-name">Top tabs</span>
+            </label>
+          </fieldset>
+        ),
+      },
+      ...(["Work account", "Add account"] as const).map(
+        (label): Case => ({
+          name: `Connect: ${label} has only a background change`,
+          failure: "Inconsistent",
+          target: "button",
+          keys: "Open a provider with saved accounts in Connect and Tab through the accounts and Add account.",
+          sizing: "Each button is a separate Tab stop in the scrolling dialog.",
+          source: "app/src/providers/connect/dialog.tsx",
+          fix: "Show a shared inset ring, rather than reusing the hover background as the only cue.",
+          render: () => (
+            <button
+              type="button"
+              class="flex h-8 w-64 items-center rounded-md px-2 text-start focus-visible:-outline-offset-2"
+            >
+              {label}
+            </button>
+          ),
+        }),
+      ),
       {
         name: "Extensions tab panel: the ring loses both sides",
         failure: "Clipped",
@@ -1032,6 +1197,32 @@ const surfaces: Surface[] = [
   {
     name: "Shared controls",
     cases: [
+      {
+        name: "Error details: thin focus outline",
+        failure: "Inconsistent",
+        target: "pre",
+        keys: "Tab into the selectable details on an error.",
+        sizing: "The details fill a scrollable area.",
+        source: "ui/src/components/error-details.css",
+        fix: "Use the same inset 2px ring as other scrollable regions.",
+        render: () => (
+          <ErrorDetails error="Could not load this file.">
+            <span />
+          </ErrorDetails>
+        ),
+      },
+      ...(["palette-menu-row", "search-list-row"] as const).map(
+        (row): Case => ({
+          name: `${row === "palette-menu-row" ? "Palette" : "Search list"}: active option loses contrast in forced colours`,
+          failure: "Invisible",
+          target: "input",
+          keys: "Enable forced colours and use the arrow keys while focus stays in the search input.",
+          sizing: "Applies to active options rather than independent Tab stops.",
+          source: `app/src/shell/${row === "palette-menu-row" ? "palette-menu" : "search-list"}.css`,
+          fix: "Use system Highlight and HighlightText colours for the active option.",
+          render: () => <SearchHighlightExample kind={row} />,
+        }),
+      ),
       {
         name: "Focus ring colour: the default did not adapt to the scheme",
         failure: "Inconsistent",
@@ -1351,27 +1542,130 @@ function CaseCard(props: { case: Case; number: number; forced: boolean; locator:
   )
 }
 
-function createPreviewTabFocus(forced: () => boolean) {
-  const focus = createTabFocus()
+function createPreviewFieldFocus(forced: () => boolean) {
+  const focus = createFieldFocus()
   const [entered, setEntered] = createSignal(false)
 
   return {
     visible: () => focus.visible() || (forced() && !entered()) || undefined,
-    enter: () => {
+    enter: (element: HTMLElement) => {
       setEntered(true)
-      focus.enter()
+      focus.enter(element)
     },
+    pointer: focus.pointer,
+    leave: focus.leave,
   }
 }
 
+function SearchHighlightExample(props: { kind: "home-session-search-row" | "palette-menu-row" | "search-list-row" }) {
+  const [active, setActive] = createSignal(0)
+
+  const list = createUniqueId()
+
+  return (
+    <div class="grid w-64 max-w-full gap-1">
+      <input
+        role="combobox"
+        aria-label="Search results"
+        aria-controls={list}
+        aria-expanded={true}
+        aria-activedescendant={`${list}-${active()}`}
+        placeholder="Search results"
+        class="rounded-[4px] px-2"
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
+
+          event.preventDefault()
+          setActive((index) => 1 - index)
+        }}
+      />
+      <div id={list} role="listbox">
+        <For each={["Active option", "Next option"]}>
+          {(label, index) => (
+            <button
+              id={`${list}-${index()}`}
+              type="button"
+              role="option"
+              tabindex={-1}
+              aria-selected={active() === index()}
+              data-component={props.kind}
+              data-active={active() === index() ? "" : undefined}
+              class={
+                props.kind === "home-session-search-row"
+                  ? "flex h-9 w-full items-center rounded-[4px] px-2"
+                  : props.kind
+              }
+              classList={{
+                "bg-v2-overlay-simple-overlay-hover": props.kind === "home-session-search-row" && active() === index(),
+              }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setActive(index())}
+            >
+              <span>{label}</span>
+            </button>
+          )}
+        </For>
+      </div>
+    </div>
+  )
+}
+
+function TreeFocusExample() {
+  return (
+    <div
+      data-slot="lab-tree-host"
+      role="tree"
+      aria-label="Example files"
+      tabindex={0}
+      class="w-56 outline-none"
+      ref={(host) => {
+        const root = host.attachShadow({ mode: "open" })
+
+        const style = document.createElement("style")
+
+        style.textContent = `
+          ${treeFocusCss}
+          ${treeFocusCss.replaceAll(":focus-visible", "[data-lab-focus]")}
+          button { display: block; width: 100%; height: 28px; border: 0; border-radius: 4px;
+            background: transparent; color: inherit; text-align: start; padding-inline: 8px; font: inherit; }
+          button[aria-selected="true"] { background: var(--v2-overlay-simple-overlay-pressed); }
+        `
+        root.append(style)
+
+        const rows = ["README.md", "index.ts"].map((name, index) => {
+          const row = document.createElement("button")
+
+          row.dataset.type = "item"
+          row.dataset.itemFocused = String(index === 0)
+          row.setAttribute("role", "treeitem")
+          row.setAttribute("aria-selected", String(index === 0))
+          row.tabIndex = -1
+          row.textContent = name
+          root.append(row)
+
+          return row
+        })
+
+        host.onkeydown = (event) => {
+          if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
+
+          event.preventDefault()
+          rows.forEach((row, index) => (row.dataset.itemFocused = String(index === (event.key === "ArrowUp" ? 0 : 1))))
+        }
+      }}
+    />
+  )
+}
+
 function HomeSearchFocusExample(props: { forced: boolean }) {
-  const focus = createPreviewTabFocus(() => props.forced)
+  const focus = createPreviewFieldFocus(() => props.forced)
 
   return (
     <div class="grid w-[360px] gap-2">
       <Button class="justify-self-start">Previous control</Button>
       <label
         data-slot="home-session-search-field"
+        onPointerDown={focus.pointer}
         class="flex h-9 items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02/60 ps-3 pe-2 text-v2-icon-icon-muted focus-within:bg-v2-background-bg-layer-02"
       >
         <Icon name="magnifying-glass" />
@@ -1380,7 +1674,8 @@ function HomeSearchFocusExample(props: { forced: boolean }) {
           aria-label="Search sessions"
           placeholder="Search sessions"
           class="min-w-0 flex-1 border-0 bg-transparent text-v2-text-text-base outline-0"
-          onFocus={focus.enter}
+          onFocus={(event) => focus.enter(event.currentTarget)}
+          onBlur={focus.leave}
         />
       </label>
     </div>
@@ -1388,7 +1683,7 @@ function HomeSearchFocusExample(props: { forced: boolean }) {
 }
 
 function ComposerFocusExample(props: { forced: boolean }) {
-  const focus = createPreviewTabFocus(() => props.forced)
+  const focus = createPreviewFieldFocus(() => props.forced)
 
   return (
     <div class="grid w-[360px] gap-2">
@@ -1402,7 +1697,9 @@ function ComposerFocusExample(props: { forced: boolean }) {
             aria-label="Prompt"
             contenteditable
             class="px-4 pt-4 pb-2 text-13-regular focus:outline-none"
-            onFocus={focus.enter}
+            onPointerDown={focus.pointer}
+            onFocus={(event) => focus.enter(event.currentTarget)}
+            onBlur={focus.leave}
           >
             Ask anything
           </div>

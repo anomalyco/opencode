@@ -781,7 +781,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           >
                             <MobileDrawerTrigger
                               data-slot="mobile-tabs-trigger"
-                              class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:outline-none [app-region:no-drag]"
+                              class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:-outline-offset-2 [app-region:no-drag]"
                               aria-label={language.t("titlebar.tabs")}
                             >
                               <Show when={currentTab()} fallback={<Icon name="grid-plus" class="shrink-0" />}>

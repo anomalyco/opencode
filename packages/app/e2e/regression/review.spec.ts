@@ -37,10 +37,10 @@ test("review toggle shows its tooltip with the side panel open or closed", async
   await expect(tooltip).toBeVisible()
 })
 
-test("review mode focus stays inside the trigger next to the file-tree toggle", async ({ page }) => {
+test("review rings stay visible on the mode trigger, file tree, and diff", async ({ page }) => {
   await openSession(page, {
     name: "ReviewModeFocus",
-    vcsDiff: [fileDiff("alpha.ts")],
+    vcsDiff: [fileDiff("alpha.ts"), fileDiff("beta.ts")],
   })
   await page.getByRole("button", { name: "Toggle review", exact: true }).click()
 
@@ -56,6 +56,14 @@ test("review mode focus stays inside the trigger next to the file-tree toggle", 
   await tree.press("Tab")
   await expect(mode).toBeFocused()
   await expect(mode).toHaveCSS("outline-offset", "-2px")
+
+  const alpha = panel.getByRole("treeitem", { name: "alpha.ts", exact: true })
+
+  const beta = panel.getByRole("treeitem", { name: "beta.ts", exact: true })
+
+  await alpha.press("ArrowDown")
+  await expect(beta).toHaveCSS("outline-style", "solid")
+  await expect(beta).toHaveCSS("outline-offset", "-2px")
 
   await tree.click()
   await expect(tree).toHaveAttribute("aria-expanded", "false")

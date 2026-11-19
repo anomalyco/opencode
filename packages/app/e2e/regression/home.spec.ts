@@ -300,6 +300,17 @@ test("tabbing out of session search closes its results, and tabbing back reopens
   await page.keyboard.press("Shift+Tab")
   await expect(search).toBeFocused()
   await expect(panel.getByRole("option")).toContainText(earlier.title)
+
+  // The results are active descendants, not independent Tab stops before the search input.
+  await search.press("Shift+Tab")
+  await expect(panel).toHaveCount(0)
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  await page.keyboard.press(`${modifier}+f`)
+  await expect(search).toBeFocused()
+  await expect(page.locator('[data-slot="home-session-search-field"]')).toHaveCSS("outline-style", "solid")
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
 })
 
 test("Escape cancels an inline rename whose save does not answer", async ({ page }) => {

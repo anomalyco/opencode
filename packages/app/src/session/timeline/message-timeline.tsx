@@ -578,7 +578,7 @@ function MessageTimelineView(
       )}
       headerInset={
         <Show when={!props.hideHeader}>
-          <div aria-hidden="true" class="h-16" />
+          <div data-slot="session-header-inset" aria-hidden="true" class="h-16" />
           <SessionHeaderFade />
         </Show>
       }

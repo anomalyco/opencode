@@ -1,5 +1,45 @@
 import { expect, story } from "../../stories/playwright/story"
 
+story("active search options keep their system highlight in forced colours", async ({ mount, page }) => {
+  await page.emulateMedia({ forcedColors: "active" })
+
+  const root = await mount("review-focus-visibility--all-surfaces", { args: { forced: false } })
+
+  const highlight = await page.evaluate(() => {
+    const probe = document.createElement("span")
+
+    probe.style.backgroundColor = "Highlight"
+    probe.style.color = "HighlightText"
+    document.body.append(probe)
+    const style = getComputedStyle(probe)
+
+    const result = { background: style.backgroundColor, color: style.color }
+
+    probe.remove()
+
+    return result
+  })
+
+  for (const name of [
+    "Palette: active option loses contrast",
+    "Search list: active option loses contrast",
+    "Home search results: Shift+Tab reaches",
+  ]) {
+    const card = root.locator("figure").filter({ hasText: name })
+
+    const active = card.locator("[data-active]")
+
+    const input = card.getByRole("combobox")
+
+    await expect(active).toHaveCSS("background-color", highlight.background)
+    await expect(active.getByText("Active option")).toHaveCSS("color", highlight.color)
+    await input.press("ArrowDown")
+    await expect(input).toBeFocused()
+    await expect(active).toHaveText("Next option")
+    await expect(active).toHaveCSS("background-color", highlight.background)
+  }
+})
+
 story("focus-only outlines stay off at rest in forced colours", async ({ mount, page }) => {
   await page.emulateMedia({ forcedColors: "active" })
 

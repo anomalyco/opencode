@@ -75,9 +75,20 @@
     transition: none;
   }
 }
-[data-slot="home-session-search-field"]:has(> input[data-keyboard-focus]:focus-visible) {
+[data-slot="home-session-search-field"]:has(> input[data-keyboard-focus]:focus) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  [data-component="home-session-search-row"][aria-selected="true"] {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+
+  [data-component="home-session-search-row"][aria-selected="true"] * {
+    color: inherit;
+  }
 }
 
 [data-component="home-session-row"]:focus-visible {
