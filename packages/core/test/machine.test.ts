@@ -10,10 +10,10 @@ import { environmentConformance } from "./lib/environment-conformance"
 import { it } from "./lib/effect"
 
 const connected = Effect.gen(function* () {
-  const machine = Machine.make("gpu")
+  const machine = Machine.make(Environment.ID.make("gpu"))
   const worker = makeWorker(machine)
   yield* worker.restore
-  return { worker, environment: Environment.make(Environment.ID.make("gpu"), machine.driver) }
+  return { worker, environment: machine.environment }
 })
 
 const command = ChildProcess.make("/bin/sh", ["-c", "make"], { cwd: "/work" })
@@ -100,7 +100,7 @@ describe("machine driver", () => {
 
   it.effect("fails at once with NotSent when there is no connection", () =>
     Effect.gen(function* () {
-      const environment = Environment.make(Environment.ID.make("gpu"), Machine.make("gpu").driver)
+      const environment = Machine.make(Environment.ID.make("gpu")).environment
       const spawn = yield* environment.spawner.spawn(command).pipe(Effect.flip)
       expect(cause(spawn)).toBeInstanceOf(Machine.NotSent)
       expect(spawn.message).toContain("gpu is offline, command not sent")
@@ -183,6 +183,41 @@ describe("machine driver", () => {
     }),
   )
 
+  it.effect("returns from kill at once when the process already exited, even offline", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const handle = yield* environment.spawner.spawn(command)
+      yield* worker.runs[0].exit(0)
+      expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+      yield* worker.cut
+      yield* handle.kill()
+      yield* worker.restore
+      expect(worker.received.filter((message) => message.type === "kill")).toHaveLength(0)
+    }),
+  )
+
+  it.effect("replaces a connection with a newer one before the old one is seen to close", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const handle = yield* environment.spawner.spawn(command)
+      const run = worker.runs[0]
+      yield* run.print("a")
+      worker.drop("home", "fs")
+      const waiting = yield* Effect.forkChild(environment.files.stat("/work"), { startImmediately: true })
+      const closeOld = yield* worker.redial
+      const error = yield* Fiber.join(waiting).pipe(Effect.flip)
+      expect(error._tag === "Environment.Failed" && error.cause).toBeInstanceOf(Machine.Unknown)
+      yield* run.print("b")
+      yield* environment.files.write("/work/on-new.txt", bytes("new"))
+      yield* closeOld
+      yield* run.print("c")
+      yield* run.exit(0)
+      expect(yield* text(handle.all)).toBe("abc")
+      expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+      expect(new TextDecoder().decode((yield* environment.files.read("/work/on-new.txt")).bytes)).toBe("new")
+    }),
+  )
+
   it.effect("rejects stdin at spawn", () =>
     Effect.gen(function* () {
       const { worker, environment } = yield* connected
@@ -242,11 +277,11 @@ describe("machine wire", () => {
 
 environmentConformance("machine environment", () =>
   Effect.gen(function* () {
-    const machine = Machine.make("gpu")
+    const machine = Machine.make(Environment.ID.make("gpu"))
     const worker = makeWorker(machine)
     yield* worker.restore
     return {
-      files: Environment.make(Environment.ID.make("gpu"), machine.driver).files,
+      files: machine.environment.files,
       root: `/workspace-${crypto.randomUUID()}`,
       symlink: worker.files.symlink,
       dispose: worker.cut,

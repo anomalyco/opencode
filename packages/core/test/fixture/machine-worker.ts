@@ -21,9 +21,11 @@ interface Process {
   sent?: number
 }
 
+type Message = Exclude<Machine.FromWorker, Machine.Hello>
+
 interface Link {
   open: boolean
-  readonly queue: Queue.Queue<Machine.FromWorker, Cause.Done>
+  readonly queue: Queue.Queue<Message, Cause.Done>
   fiber?: Fiber.Fiber<void>
 }
 
@@ -31,12 +33,14 @@ type Direction = "home" | "worker"
 
 /**
  * A worker in memory that keeps the worker's rules: files on a memory driver, scripted processes, and controls to
- * cut and restore the connection, drop the next message of a type heading either way, and restart.
+ * cut, restore and redial the connection, drop the next message of a type heading either way, and restart.
  */
-export const makeWorker = (machine: Machine.Interface, name = "gpu") => {
+export const makeWorker = (machine: Machine.Interface) => {
   const files = Environment.makeMemoryDriver()
   const fs = Environment.makeFiles(files)
   const runs: Run[] = []
+  /** Every message that reached the worker. */
+  const received: Machine.ToWorker[] = []
   const drops: Array<{ readonly direction: Direction; readonly type: string }> = []
   let instance = crypto.randomUUID()
   let table = new Map<string, Process>()
@@ -48,7 +52,7 @@ export const makeWorker = (machine: Machine.Interface, name = "gpu") => {
     return index !== -1
   }
 
-  const emit = (message: Machine.FromWorker) =>
+  const emit = (message: Message) =>
     Effect.suspend(() => {
       if (!link?.open || dropped("home", message.type)) return Effect.void
       return Queue.offer(link.queue, message).pipe(Effect.asVoid)
@@ -129,12 +133,13 @@ export const makeWorker = (machine: Machine.Interface, name = "gpu") => {
   const receive = (message: Machine.ToWorker) =>
     Effect.gen(function* () {
       if (dropped("worker", message.type)) return
+      received.push(message)
       if (message.type === "start") return yield* start(message)
       if (message.type === "fs")
         return yield* answer(message).pipe(
           Effect.match({
-            onSuccess: (result): Machine.FromWorker => ({ type: "fs", req: message.req, ok: true, result }),
-            onFailure: (error): Machine.FromWorker => ({
+            onSuccess: (result): Message => ({ type: "fs", req: message.req, ok: true, result }),
+            onFailure: (error): Message => ({
               type: "fs",
               req: message.req,
               ok: false,
@@ -155,23 +160,30 @@ export const makeWorker = (machine: Machine.Interface, name = "gpu") => {
       yield* flush(process)
     })
 
-  const cut = Effect.gen(function* () {
-    if (!link) return
+  // The worker stops using its connection, and its attachments end with it.
+  const leave = () => {
     const current = link
     link = undefined
-    current.open = false
-    // Attachments end with the connection; what was already sent still arrives.
+    if (current) current.open = false
     table.forEach((process) => (process.sent = undefined))
-    yield* Queue.end(current.queue)
-    if (current.fiber) yield* Fiber.join(current.fiber)
-  })
+    return current
+  }
 
-  const restore = Effect.gen(function* () {
-    yield* cut
-    const current: Link = { open: true, queue: yield* Queue.unbounded<Machine.FromWorker, Cause.Done>() }
+  // The home sees the connection close; what was already sent still arrives.
+  const close = (current: Link | undefined) =>
+    Effect.gen(function* () {
+      if (!current) return
+      yield* Queue.end(current.queue)
+      if (current.fiber) yield* Fiber.join(current.fiber)
+    })
+
+  const cut = Effect.suspend(() => close(leave()))
+
+  const dial = Effect.gen(function* () {
+    const current: Link = { open: true, queue: yield* Queue.unbounded<Message, Cause.Done>() }
     const hello: Machine.Hello = {
       type: "hello",
-      name,
+      name: machine.environment.id,
       os: "linux",
       arch: "x64",
       instance,
@@ -194,11 +206,19 @@ export const makeWorker = (machine: Machine.Interface, name = "gpu") => {
     )
   })
 
+  const restore = Effect.andThen(cut, dial)
+
   return {
     files,
     runs,
+    received,
     cut,
     restore,
+    /** Dials again before the home notices the old connection is gone. Returns what closes the old one. */
+    redial: Effect.suspend(() => {
+      const old = leave()
+      return Effect.as(dial, close(old))
+    }),
     /** A new worker process: new instance, no processes, then it dials in again. */
     restart: Effect.gen(function* () {
       yield* cut
