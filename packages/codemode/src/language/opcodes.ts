@@ -83,6 +83,7 @@ export const Op = {
   NEW_OBJECT: 35,
   NEW_ARRAY: 36,
   ARRAY_APPEND: 37,
+  // a bit 0: computed key on the stack; bit 1: a class field, which throws when it cannot be defined.
   DEFINE_FIELD: 38,
   COPY_DATA_PROPS: 39,
   COPY_REST: 40,

@@ -250,6 +250,10 @@ describe("class inheritance", () => {
     ).toEqual([1, 2, 3, 26, 7, 26, 25, "ReferenceError"])
   })
 
+  test("a field cannot be defined on a frozen instance", () => {
+    expect(failure(`class A { f = Object.freeze(this); g = 1 }; new A()`)[0]).toBe("TypeError")
+  })
+
   test("arrows capture super and this", () => {
     expect(
       value(`

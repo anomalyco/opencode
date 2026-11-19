@@ -35,6 +35,7 @@ import {
   frozen,
   GeneratorObj,
   get,
+  defineOwnProperty,
   getOwn,
   own,
   hasOwn,
@@ -1646,8 +1647,15 @@ export class Vm {
       return sp
     }
     const v = regs[--sp] as Value
-    const k = regs[--sp] as PropertyKey
-    define(regs[sp - 1] as Obj, k, v)
+    if (computed === 1) {
+      const k = regs[--sp] as PropertyKey
+      define(regs[sp - 1] as Obj, k, v)
+      return sp
+    }
+    // A class field (a bit 1): CreateDataPropertyOrThrow, which fails on a frozen or non-configurable target.
+    const k = (computed & 1) !== 0 ? (regs[--sp] as PropertyKey) : (consts[bx] as string)
+    const desc = { value: v, writable: true, enumerable: true, configurable: true }
+    if (!defineOwnProperty(regs[sp - 1] as Obj, k, desc)) throw typeError(`Cannot define property ${String(k)}.`)
     return sp
   }
 

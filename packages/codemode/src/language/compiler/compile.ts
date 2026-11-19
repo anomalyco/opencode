@@ -1805,13 +1805,13 @@ const compileFunctionBody = (
           if (field.value) compileExpression(field.value)
           else builder.emit(Op.PUSH_UNDEF, 0, 0, idx(field), 1)
           if (field.value && isAnonymousFunction(field.value)) builder.emit(Op.SET_NAME, 1, 0, idx(field.value), 0)
-          builder.emit(Op.DEFINE_FIELD, 1, 0, idx(field), -2)
+          builder.emit(Op.DEFINE_FIELD, 3, 0, idx(field), -2)
           continue
         }
         const name = keyName(field.key)
         if (field.value) compileNamedExpression(field.value, name)
         else builder.emit(Op.PUSH_UNDEF, 0, 0, idx(field), 1)
-        builder.emit(Op.DEFINE_FIELD, 0, builder.constant(name), idx(field), -1)
+        builder.emit(Op.DEFINE_FIELD, 2, builder.constant(name), idx(field), -1)
       }
       builder.emit(Op.POP, 0, 0, idx(body), -1)
       builder.emit(Op.PUSH_UNDEF, 0, 0, idx(body), 1)

@@ -2470,7 +2470,6 @@ language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-iter-val-array-prot
 language/expressions/class/dstr/meth-static-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/class/dstr/meth-static-dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/class/elements/class-name-static-initializer-anonymous.js  # Expected SameValue(«""», «"C"») to be true
-language/expressions/class/elements/fields-computed-name-static-propname-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/class/elements/fields-run-once-on-double-super.js  # Expected a ReferenceError but got a SyntaxError
 language/expressions/class/restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/class/scope-name-lex-open-heritage.js  # TypeError: Class extends value a function is not a constructor or null.
@@ -2711,9 +2710,6 @@ language/statements/class/dstr/meth-static-ary-init-iter-get-err-array-prototype
 language/statements/class/dstr/meth-static-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/class/dstr/meth-static-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/class/dstr/meth-static-dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/statements/class/elements/class-field-on-frozen-objects.js  # Frozen objects can't be changed Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/class/elements/fields-computed-name-static-computed-var-propname-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/class/elements/fields-computed-name-static-propname-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/class/poisoned-underscore-proto.js  # TypeError: Extending the built-in Array is not supported. Only classes and Error types can be extend
 language/statements/class/restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/class/scope-name-lex-open-heritage.js  # TypeError: Class extends value a function is not a constructor or null.

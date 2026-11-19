@@ -199,7 +199,7 @@ export const verifyCode = (c: Code): Array<string> => {
         next(-2)
         break
       case Op.DEFINE_FIELD:
-        next(a === 0 ? -1 : -2)
+        next((a & 1) === 0 ? -1 : -2)
         break
       case Op.DEFINE_ACCESSOR:
         next((a & 1) === 0 ? -1 : -2)
