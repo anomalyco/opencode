@@ -469,6 +469,7 @@ impl Workspaces {
                     if !show_error {
                         props.actions = actions(&weak, session);
                     }
+                    props.grow = true;
                     let (view, select) = select::select(cx, props);
                     if !filter.is_empty() && !cx.rebuilt() {
                         select.set_filter(&filter);
