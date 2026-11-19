@@ -99,7 +99,7 @@ function frame(...children: SatoriElement[]) {
       width,
       height,
       backgroundColor: colors.background,
-      fontFamily: "OpenTUI Mono",
+      fontFamily: "OpenMono",
       color: colors.text,
     },
     dots(),
@@ -200,7 +200,7 @@ function fitSize(text: string, width: number, max: number, lines: number, min: n
     .split(" ")
     .flatMap((word) => word.split(/(?<=-)(?=\p{L})/u).map((part, index) => ({ part, space: index === 0 })))
   const sizes = Array.from({ length: Math.ceil((max - min) / 2) }, (_, index) => max - index * 2)
-  // OpenTUI Mono advances 0.6em per character.
+  // OpenMono advances 0.6em per character.
   return sizes.find((size) => lineCount(words, Math.floor(width / (size * 0.6))) <= lines) ?? min
 }
 
