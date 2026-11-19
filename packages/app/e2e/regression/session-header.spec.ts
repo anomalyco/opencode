@@ -2,10 +2,10 @@ import type { SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
-import { reviewTabs } from "../utils/side-panel"
+import { openFileLauncher, reviewTabs } from "../utils/side-panel"
 import { chooseUserMessageAction, openUserMessageMenu } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
-import { mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
+import { fileNode, mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
 
 const tabs = (page: Page) => page.locator('[data-slot="titlebar-tabs"] a')
 
@@ -509,6 +509,92 @@ test.describe("location", () => {
       )
     })
   }
+
+  test("panel open-in-app targets the selected file then the worktree again when it closes", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"])
+    await page.setViewportSize({ width: 1440, height: 900 })
+
+    const mock = await mockWorkspace(page, {
+      ...workspace,
+      fileList: (path) => (path ? [] : [fileNode(worktree, "README.md")]),
+      fileContent: () => ({ type: "text", content: "contents:README.md" }),
+      seed: {
+        storage: {
+          ...reviewTabs(worktree, "ses_location"),
+          "opencode.global.dat:plugin.file.app": { app: "vscode" },
+        },
+      },
+    })
+
+    await page.goto(
+      `/e2e/utils/windows-menu.html?${new URLSearchParams({
+        server: mock.server,
+        path: sessionHref("ses_location", "sidecar"),
+        os: "macos",
+        openApps: "1",
+      })}`,
+    )
+    await expectSessionTitle(page, "Location session")
+    await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+    // Opening review hands focus to the panel after its motion; let that finish before opening another menu.
+    await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+
+    const panel = page.locator("#review-panel")
+    const button = page.locator(".session-review-v2-open-in-app")
+    const openIn = (app: string) => button.getByRole("button", { name: `Open in ${app}`, exact: true })
+    const choose = (app: string) => page.getByRole("menuitemradio", { name: app, exact: true })
+    const openOptions = button.getByRole("button", { name: "Open options", exact: true })
+    const copyPath = page.getByRole("menuitem", { name: "Copy path", exact: true })
+    // "opened" records paths an application was asked to open; "revealed" records the file the file
+    // manager was told to select in its folder (it is not opened itself).
+    const opened = page.getByLabel("Opened paths")
+    const revealed = page.getByLabel("Revealed paths")
+    const readClipboard = () => page.evaluate(() => navigator.clipboard.readText())
+
+    // With no file tab open, the header's actions act on the workspace folder:
+    // "Copy path" puts the worktree's path on the clipboard.
+    await expect(openIn("VS Code")).toBeVisible()
+    await openOptions.click()
+    await copyPath.click()
+    await expect.poll(readClipboard).toBe(worktree)
+
+    // Selecting the file manager in its dropdown opens at once; the workspace is still the target, so
+    // Finder shows the worktree folder, and no file is opened in an application.
+    await openOptions.click()
+    await choose("Finder").click()
+    await expect(opened).toHaveText(JSON.stringify([{ path: worktree }]))
+    await expect(revealed).toHaveText("[]")
+
+    await openFileLauncher(panel)
+    await panel.getByRole("treeitem", { name: "README.md" }).click()
+    await expect(panel.getByRole("tab", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true")
+
+    // With a file tab open, the header's actions act on that file: the file manager shows it selected
+    // in its folder (the file is not opened in its default app), and "Copy path" copies the full file path.
+    const file = `${worktree}/README.md`
+    await openIn("Finder").click()
+    await expect(revealed).toHaveText(JSON.stringify([file]))
+    await expect(opened).toHaveText(JSON.stringify([{ path: worktree }]))
+    await openOptions.click()
+    await copyPath.click()
+    await expect.poll(readClipboard).toBe(file)
+
+    // Switching the dropdown to VS Code opens at once with the new application: it opens the file.
+    await openOptions.click()
+    await choose("VS Code").click()
+    await expect(opened).toHaveText(JSON.stringify([{ path: worktree }, { path: file, app: "Visual Studio Code" }]))
+
+    // Closing the file tab puts the header's actions back on the workspace folder.
+    await panel
+      .getByRole("tab", { name: "README.md", exact: true })
+      .locator("..")
+      .getByRole("button", { name: "Close tab", exact: true })
+      .click()
+    await expect(panel.getByRole("tab", { name: "README.md", exact: true })).toHaveCount(0)
+    await openOptions.click()
+    await copyPath.click()
+    await expect.poll(readClipboard).toBe(worktree)
+  })
 
   test("an app launch that never answers releases the Open in controls", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })

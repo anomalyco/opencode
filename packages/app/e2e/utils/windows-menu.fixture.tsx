@@ -19,10 +19,12 @@ export function mount(input: { server: string; path?: string; os?: "macos"; open
     const [store, setStore] = createStore<{
       actions: string[]
       opened: { path: string; app?: string }[]
+      revealed: string[]
       trafficLights?: { x: number; y: number }
     }>({
       actions: [],
       opened: [],
+      revealed: [],
     })
 
     const unused = async () => {
@@ -69,7 +71,11 @@ export function mount(input: { server: string; path?: string; os?: "macos"; open
         return input.holdOpen ? new Promise<void>(() => undefined) : Promise.resolve()
       }
 
-      platform.revealPath = async () => true
+      platform.revealPath = async (path) => {
+        setStore("revealed", (revealed) => [...revealed, path])
+
+        return true
+      }
     }
 
     return (
@@ -78,6 +84,9 @@ export function mount(input: { server: string; path?: string; os?: "macos"; open
           <output aria-label="Desktop menu actions">{store.actions.join(",")}</output>
           <output aria-label="Opened paths" class="sr-only">
             {JSON.stringify(store.opened)}
+          </output>
+          <output aria-label="Revealed paths" class="sr-only">
+            {JSON.stringify(store.revealed)}
           </output>
           <output aria-label="Traffic lights" class="sr-only">
             {JSON.stringify(store.trafficLights ?? null)}
