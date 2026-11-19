@@ -1640,8 +1640,8 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
             class="h-11 rounded-lg px-3 text-[15px] leading-5"
             onMouseDown={keep}
             onClick={() => {
-              props.controller.dispatch({ type: "mode.normal" })
               props.controller.restoreFocus()
+              props.controller.dispatch({ type: "mode.normal" })
             }}
           >
             {i18n.t("ui.promptInput.exitShell")}
