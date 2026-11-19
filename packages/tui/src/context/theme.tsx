@@ -10,6 +10,7 @@ import {
 import {
   allThemes,
   getOpenCode2Theme,
+  getOpenCodeTheme,
   hasTheme,
   parseTheme,
   setCustomThemes,
@@ -292,16 +293,28 @@ const themeContext = createSimpleContext({
       themeRefreshTimeouts.length = 0
     })
 
-    const available = createMemo(
-      (): Record<string, ThemeDocumentSource> =>
-        newDesigns() ? { opencode2: getOpenCode2Theme(), ...themeSources() } : themeSources(),
-    )
-    const has = (name: string) => Boolean(name) && available()[name] !== undefined
+    const available = createMemo((): Record<string, ThemeDocumentSource> => {
+      const sources = themeSources()
+      if (!newDesigns()) return sources
+      // New designs make the new theme "opencode" and keep the previous one as "opencode-classic".
+      // A custom theme named "opencode" still wins.
+      const builtIn = sources.opencode === getOpenCodeTheme()
+      return {
+        "opencode-classic": getOpenCodeTheme(),
+        ...sources,
+        ...(builtIn || sources.opencode === undefined ? { opencode: getOpenCode2Theme() } : {}),
+      }
+    })
+    // "opencode2" was the new theme's name before it became "opencode".
+    const alias = (name: string) =>
+      name === "opencode2" && newDesigns() && !themeSources().opencode2 ? "opencode" : name
+    const has = (name: string) => Boolean(name) && available()[alias(name)] !== undefined
 
     const initStarted = performance.now()
     const selected = createMemo(() => {
       const sources = available()
-      const name = sources[store.active] ? store.active : "opencode"
+      const active = alias(store.active)
+      const name = sources[active] ? active : "opencode"
       try {
         return loadTheme(sources[name], name, store.mode, newDesigns())
       } catch (error) {

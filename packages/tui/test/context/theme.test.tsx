@@ -58,7 +58,7 @@ test("the system theme follows a palette reply that arrives after the query", as
   }
 })
 
-test("offers opencode2 only while the new designs experiment is enabled", async () => {
+test("names the new theme opencode and the previous one opencode-classic under new designs", async () => {
   await using temporary = await tmpdir()
   const settings: Info = {}
   let config!: ReturnType<typeof useConfig>
@@ -92,24 +92,23 @@ test("offers opencode2 only while the new designs experiment is enabled", async 
   try {
     app.renderer.start()
     await app.waitForFrame(() => themes !== undefined)
-    expect(themes.has("opencode2")).toBeFalse()
-    expect(Object.keys(themes.all())).not.toContain("opencode2")
-    expect(themes.set("opencode2")).toBeFalse()
-
-    await config.update((draft) => {
-      draft.experimental = { "new-designs": true }
-    })
-    expect(themes.has("opencode2")).toBeTrue()
+    const newTheme = resolveThemeDocument(getOpenCode2Theme(), "dark").background.base
+    const classic = resolveThemeDocument(getOpenCodeTheme(), "dark").background.base
+    // New designs are on by default.
+    expect(theme.background.base.equals(newTheme)).toBeTrue()
+    expect(themes.has("opencode-classic")).toBeTrue()
+    expect(themes.set("opencode-classic")).toBeTrue()
+    expect(theme.background.base.equals(classic)).toBeTrue()
     expect(themes.set("opencode2")).toBeTrue()
-    expect(theme.background.base.equals(resolveThemeDocument(getOpenCode2Theme(), "dark").background.base)).toBeTrue()
+    expect(theme.background.base.equals(newTheme)).toBeTrue()
 
     await config.update((draft) => {
       draft.experimental = { "new-designs": false }
     })
+    expect(themes.has("opencode-classic")).toBeFalse()
     expect(themes.has("opencode2")).toBeFalse()
-    expect(theme.background.base.equals(resolveThemeDocument(getOpenCodeTheme(), "dark").background.base)).toBeTrue()
-    expect(themes.selected).toBe("opencode2")
-    expect(settings.theme?.name).toBe("opencode2")
+    expect(themes.set("opencode")).toBeTrue()
+    expect(theme.background.base.equals(classic)).toBeTrue()
   } finally {
     app.renderer.destroy()
   }

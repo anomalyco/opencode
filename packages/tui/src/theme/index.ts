@@ -18,10 +18,12 @@ let customThemes: Record<string, ThemeDocumentSource> = {}
 let systemTheme: ThemeDocumentSource | undefined
 const listeners = new Set<(themes: Record<string, ThemeDocumentSource>) => void>()
 const parsed = { current: new WeakMap<object, ThemeDocument>(), newDesigns: new WeakMap<object, ThemeDocument>() }
-let opencodeTheme: (ThemeDocument & {
-  readonly light: ModeDefinition
-  readonly dark: ModeDefinition
-}) | undefined
+let opencodeTheme:
+  | (ThemeDocument & {
+      readonly light: ModeDefinition
+      readonly dark: ModeDefinition
+    })
+  | undefined
 
 export function getOpenCodeTheme() {
   if (opencodeTheme) return opencodeTheme
@@ -32,8 +34,9 @@ export function getOpenCodeTheme() {
 
 let opencode2Theme: ThemeDocument | undefined
 
-// Temporary theme for the "new-designs" experiment. It is not part of allThemes(), so only the
-// TUI theme context offers it, and only while the experiment is enabled.
+// The "opencode" theme under the "new-designs" experiment. It is not part of allThemes(): the TUI theme
+// context offers it as "opencode", and the previous "opencode" theme as "opencode-classic", only while the
+// experiment is enabled.
 export function getOpenCode2Theme() {
   opencode2Theme ??= parseThemeDocument(opencode2, "opencode2")
   return opencode2Theme
