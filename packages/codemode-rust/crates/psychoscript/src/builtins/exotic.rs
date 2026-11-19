@@ -34,7 +34,14 @@ pub fn get(vm: &mut Vm, id: Id, key: Atom) -> Option<Value> {
         Kind::SearchParams(_) if key == vm.names.size => {
             Some(Value::Num(web::params_size(vm, id) as f64))
         }
-        Kind::Live(l) => l.getter(key).map(|g| g()),
+        // A host accessor may run host code (a streaming body's `cancel`), so it runs where the run is driven.
+        Kind::Live(l) => {
+            let g = l.getter(key)?;
+            Some(match crate::offload::home(&vm.host.offload) {
+                Some(home) => home.run(move || g()).unwrap_or(Value::Undef),
+                None => g(),
+            })
+        }
         _ => None,
     }
 }

@@ -1,6 +1,7 @@
 //! The small amount of executor a run needs without depending on one: a set of host futures woken individually,
 //! a thread-parking `block_on`, and one shared timer thread that wakes runs at their deadline.
 
+use crate::offload::Home;
 use std::collections::BinaryHeap;
 use std::future::Future;
 use std::pin::pin;
@@ -134,7 +135,12 @@ impl<'a, T> Tasks<'a, T> {
     }
 
     /// Starts a future: it is polled once now, so its work begins at the call. `Ready` means it finished already.
-    pub fn spawn(&mut self, tag: u32, future: BoxFuture<'a, T>) -> Poll<T> {
+    /// While the run computes on a worker thread, that poll happens back `home`, where the run is driven.
+    pub fn spawn(&mut self, tag: u32, future: BoxFuture<'a, T>, home: Option<&Home>) -> Poll<T>
+    where
+        'a: 'static,
+        T: Send + 'static,
+    {
         let index = self.free.pop().unwrap_or_else(|| {
             self.slots.push(None);
             self.slots.len() - 1
@@ -143,13 +149,30 @@ impl<'a, T> Tasks<'a, T> {
             index,
             shared: self.shared.clone(),
         }));
-        let mut slot = Slot { future, waker, tag };
-        let mut cx = Context::from_waker(&slot.waker);
-        if let Poll::Ready(v) = slot.future.as_mut().poll(&mut cx) {
-            self.free.push(index);
-            return Poll::Ready(v);
-        }
-        self.slots[index] = Some(slot);
+        let first = |mut future: BoxFuture<'a, T>, waker: &Waker| {
+            let poll = future.as_mut().poll(&mut Context::from_waker(waker));
+            (future, poll)
+        };
+        let started = match home {
+            None => Some(first(future, &waker)),
+            Some(home) => {
+                let waker = waker.clone();
+                home.run(move || first(future, &waker))
+            }
+        };
+        let future = match started {
+            Some((_, Poll::Ready(v))) => {
+                self.free.push(index);
+                return Poll::Ready(v);
+            }
+            Some((future, Poll::Pending)) => future,
+            // The run is being dropped: the future went with the request.
+            None => {
+                self.free.push(index);
+                return Poll::Pending;
+            }
+        };
+        self.slots[index] = Some(Slot { future, waker, tag });
         self.live += 1;
         Poll::Pending
     }

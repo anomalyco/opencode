@@ -305,6 +305,9 @@ pub struct RunHost {
     pub(crate) promise_like: Option<Id>,
     /// Whether a call interrupted the run.
     pub interrupted: bool,
+    /// Moving long stretches of compute to a worker thread, for a run driven as a future. Boxed: the VM's hot fields
+    /// sit after this struct, and a few more bytes here measurably slow its dispatch loop.
+    pub(crate) offload: Option<Box<crate::offload::Offload>>,
     /// Rejected promises nothing handled yet, with their reasons, for the run's warnings.
     pub unhandled: Vec<(Id, Value)>,
     pub(crate) modules_loaded: FxHashMap<String, Value>,
@@ -393,6 +396,7 @@ impl RunHost {
             promise_like: None,
             interrupted: false,
             unhandled: Vec::new(),
+            offload: None,
             modules_loaded: FxHashMap::default(),
             namespaces: FxHashMap::default(),
             host_namespaces: FxHashMap::default(),
@@ -454,6 +458,11 @@ impl RunHost {
         if let Some(i) = self.calls.iter().position(|c| c.promise == promise) {
             self.calls.swap_remove(i);
         }
+    }
+
+    /// The run's offload state, made on first use.
+    pub(crate) fn offload(&mut self) -> &mut crate::offload::Offload {
+        self.offload.get_or_insert_default()
     }
 
     /// Stops durable work still running when the run ends or is interrupted for real; a suspend detaches it first.
@@ -723,7 +732,18 @@ pub fn call_namespace(vm: &mut Vm, id: Id, args: &[Value], callee: Value) -> Res
         return Err(vm.type_error(&message));
     };
     let resolve = namespace.resolve.clone();
-    let f = match resolve(&ns.keys) {
+    let resolved = match home_of(vm) {
+        None => resolve(&ns.keys),
+        Some(home) => {
+            let keys = ns.keys.clone();
+            let Some(resolved) = home.run(move || resolve(&keys)) else {
+                interrupt(vm);
+                return Err(Value::Undef);
+            };
+            resolved
+        }
+    };
+    let f = match resolved {
         Resolved::Missing(f) => {
             return Err(failure_value(
                 vm,
@@ -826,7 +846,14 @@ fn call_host(vm: &mut Vm, f: &Callee, args: &[Value], target: Target, callee: Va
     let call_id = vm.host.next_call();
     vm.host.enter_sync(call_id, target.label.clone());
     let call = vm.host.call(call_id);
-    let returned = body(host_args, &call);
+    let returned = match home_of(vm) {
+        None => body(host_args, &call),
+        Some(home) => {
+            let body = body.clone();
+            home.run(move || body(host_args, &call))
+                .unwrap_or(Returned::Now(Err(HostValue::Interrupt)))
+        }
+    };
     let returned = match returned {
         // The run waits for the work: the reference's driver takes over, starting the calls queued so far.
         Returned::Block(work) => {
@@ -876,20 +903,52 @@ fn call_host(vm: &mut Vm, f: &Callee, args: &[Value], target: Target, callee: Va
 }
 
 /// Waits on the thread for work a synchronous call blocks on, while the run's other host calls keep running: what they
-/// complete with waits in the inbox. The run's timeout stops the wait; the call then fails as the run times out.
+/// complete with waits in the inbox. The run's timeout stops the wait; the call then fails as the run times out. While
+/// the run is on its worker, the wait and the other calls' polls happen where the run is driven.
 fn block(vm: &mut Vm, work: BoxFuture<'static, HostResult>) -> HostResult {
     let deadline = vm
         .limits
         .timeout_ms
         .map(|ms| vm.start + std::time::Duration::from_millis(ms));
-    let mut work = work;
+    let (settled, done) = match home_of(vm) {
+        None => wait(&mut vm.host.tasks, work, deadline),
+        Some(home) => {
+            let mut tasks = std::mem::take(&mut vm.host.tasks);
+            let Some((tasks, waited)) = home.run(move || {
+                let waited = wait(&mut tasks, work, deadline);
+                (tasks, waited)
+            }) else {
+                return Err(HostValue::Interrupt);
+            };
+            vm.host.tasks = tasks;
+            waited
+        }
+    };
+    for (p, s) in settled {
+        vm.host.settled(p);
+        vm.inbox.push_back((p, s));
+    }
+    match done {
+        Some(r) => r,
+        None => {
+            let _ = vm.check_time();
+            Err(HostValue::Undefined)
+        }
+    }
+}
+
+/// Polls `work` to its end or the deadline, and the run's other host calls meanwhile: what they complete with, in
+/// order, and the work's result, `None` past the deadline.
+fn wait(
+    tasks: &mut crate::exec::Tasks<'static, Settlement>,
+    mut work: BoxFuture<'static, HostResult>,
+    deadline: Option<std::time::Instant>,
+) -> (Vec<(Id, Settlement)>, Option<HostResult>) {
+    let mut settled = Vec::new();
     let mut armed = false;
     let done = block_on(std::future::poll_fn(|cx| {
-        vm.host.tasks.set_parent(Some(cx.waker()));
-        for (p, s) in vm.host.tasks.poll_ready() {
-            vm.host.settled(p);
-            vm.inbox.push_back((p, s));
-        }
+        tasks.set_parent(Some(cx.waker()));
+        settled.extend(tasks.poll_ready());
         if let Poll::Ready(r) = work.as_mut().poll(cx) {
             return Poll::Ready(Some(r));
         }
@@ -903,14 +962,13 @@ fn block(vm: &mut Vm, work: BoxFuture<'static, HostResult>) -> HostResult {
             _ => Poll::Pending,
         }
     }));
-    vm.host.tasks.set_parent(None);
-    match done {
-        Some(r) => r,
-        None => {
-            let _ = vm.check_time();
-            Err(HostValue::Undefined)
-        }
-    }
+    tasks.set_parent(None);
+    (settled, done)
+}
+
+/// Where host code runs while the run computes on its worker thread; `None` while it runs where it is driven.
+fn home_of(vm: &Vm) -> Option<crate::offload::Home> {
+    crate::offload::home(&vm.host.offload).cloned()
 }
 
 /// Runs a future for a call, recorded as in flight while it runs.
@@ -920,7 +978,11 @@ fn track(
     future: BoxFuture<'static, Settlement>,
     in_flight: impl FnOnce() -> InFlight,
 ) {
-    match vm.host.tasks.spawn(p, future) {
+    match vm
+        .host
+        .tasks
+        .spawn(p, future, crate::offload::home(&vm.host.offload))
+    {
         Poll::Ready(s) => vm.inbox.push_back((p, s)),
         Poll::Pending => vm.host.calls.push(in_flight()),
     }
@@ -929,6 +991,7 @@ fn track(
 /// Starts an async or durable call whose promise is `p`, or starts one again on resume.
 fn spawn_call(vm: &mut Vm, p: Id, f: &Callee, mut r: Restart, holds_functions: bool) {
     let call = vm.host.call(r.call);
+    let home = home_of(vm);
     let detached = Arc::new(AtomicBool::new(false));
     let (label, owner, site) = (r.label.clone(), r.owner.clone(), r.site);
     let (kind, future): (CallKind, BoxFuture<'static, Settlement>) = match f {
@@ -941,7 +1004,14 @@ fn spawn_call(vm: &mut Vm, p: Id, f: &Callee, mut r: Restart, holds_functions: b
                 true => (CallKind::Idempotent, r.args.clone()),
                 false => (CallKind::Blocking, std::mem::take(&mut r.args)),
             };
-            let work = body(args, call);
+            let work = match &home {
+                None => body(args, call),
+                Some(home) => {
+                    let body = body.clone();
+                    home.run(move || body(args, call))
+                        .unwrap_or_else(|| Box::pin(async { Err(HostValue::Interrupt) }))
+                }
+            };
             (
                 kind,
                 Box::pin(async move { Settlement::host(work.await, label, owner, site) }),
@@ -962,7 +1032,14 @@ fn spawn_call(vm: &mut Vm, p: Id, f: &Callee, mut r: Restart, holds_functions: b
                     let data = data.clone();
                     Box::pin(async move { Ok(data) })
                 }
-                _ => (d.start)(r.args.clone(), call),
+                _ => match &home {
+                    None => (d.start)(r.args.clone(), call),
+                    Some(home) => {
+                        let (d, args) = (d.clone(), r.args.clone());
+                        home.run(move || (d.start)(args, call))
+                            .unwrap_or_else(|| Box::pin(async { Err(HostValue::Interrupt) }))
+                    }
+                },
             };
             let future: BoxFuture<'static, Settlement> = Box::pin(async move {
                 let result = match started.await {
@@ -2017,7 +2094,18 @@ pub(crate) fn namespace_keys(vm: &mut Vm, id: Id) -> Result<Vec<HostString>, Val
         let message = format!("The namespace {} is not available.", vm.atoms.text(ns.root));
         return Err(vm.type_error(&message));
     };
-    (namespace.keys)(&ns.keys).map_err(|thrown| {
+    let listed = match home_of(vm) {
+        None => (namespace.keys)(&ns.keys),
+        Some(home) => {
+            let keys = ns.keys.clone();
+            let Some(listed) = home.run(move || (namespace.keys)(&keys)) else {
+                interrupt(vm);
+                return Err(Value::Undef);
+            };
+            listed
+        }
+    };
+    listed.map_err(|thrown| {
         let label = vm.ns_label(&ns);
         thrown_value(vm, &thrown, &label)
     })

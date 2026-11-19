@@ -23,6 +23,7 @@ mod iteration;
 mod native;
 mod nesting;
 mod object;
+mod offload;
 mod ops;
 mod program;
 mod promise;

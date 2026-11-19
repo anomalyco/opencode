@@ -9,6 +9,7 @@ use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 use crate::exec;
+use crate::offload;
 use crate::run;
 use crate::runtime::ProgramOptions;
 use crate::snapshot::{self, Refusal, Snapshot};
@@ -17,6 +18,8 @@ use crate::{Interrupted, Outcome, Runtime};
 
 enum State {
     Running(Box<Running>),
+    /// Computing on the program's worker thread.
+    Away,
     /// It ended before running: the program did not compile.
     Failed(Box<Outcome>),
     Done,
@@ -226,6 +229,11 @@ pub struct Program<'a> {
     rt: &'a Runtime,
     state: State,
     shared: Arc<Shared>,
+    /// Driven as a future, so a long stretch of compute moves to a worker thread instead of holding the executor's.
+    offload: bool,
+    worker: Option<offload::Worker>,
+    /// The stretch of compute in progress continues on the worker.
+    move_away: bool,
 }
 
 impl<'a> Program<'a> {
@@ -244,7 +252,14 @@ impl<'a> Program<'a> {
         if let State::Running(r) = &mut state {
             r.vm.host.shared = shared.clone();
         }
-        Self { rt, state, shared }
+        Self {
+            rt,
+            state,
+            shared,
+            offload: false,
+            worker: None,
+            move_away: false,
+        }
     }
 
     /// A program continuing a suspended run's state, checked against this runtime.
@@ -270,7 +285,9 @@ impl<'a> Program<'a> {
     }
 
     /// Runs the program as a future on any executor. Asynchronous host calls run on that executor; a timeout wakes
-    /// the run from a shared timer thread. Dropping the future interrupts the run and every host call in flight.
+    /// the run from a shared timer thread. Dropping the future interrupts the run and every host call in flight. A
+    /// stretch of compute longer than a millisecond continues on a worker thread, so the executor's thread is free
+    /// meanwhile; every host function, namespace and accessor still runs on the executor.
     pub async fn run_async(self) -> Result<Outcome, Interrupted> {
         self.run_resumable_async().await.map(done_or_suspended)
     }
@@ -280,8 +297,9 @@ impl<'a> Program<'a> {
         exec::block_on(std::future::poll_fn(|cx| self.advance(cx)))
     }
 
-    /// [`Program::run_resumable`] as a future.
+    /// [`Program::run_resumable`] as a future, which moves long stretches of compute as [`Program::run_async`] does.
     pub async fn run_resumable_async(mut self) -> Result<RunOutcome, Interrupted> {
+        self.offload = true;
         std::future::poll_fn(|cx| self.advance(cx)).await
     }
 
@@ -296,38 +314,66 @@ impl<'a> Program<'a> {
             return Poll::Ready(Ok(outcome));
         }
         loop {
+            // Back from a stretch of compute on the worker, or still away running its host code.
+            let computed = matches!(self.state, State::Away);
+            if computed {
+                let Some(worker) = &self.worker else {
+                    unreachable!("a run is only away on its worker")
+                };
+                match worker.poll(cx) {
+                    Poll::Ready(r) => self.state = State::Running(r),
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
             let State::Running(r) = &mut self.state else {
                 return Poll::Pending;
             };
-            // Between jobs no native frame of the run is on the stack, so it may continue from wherever it is polled.
-            r.vm.stack_base = &probe as *const u8 as usize;
-            r.vm.stack_budget = run::RUN_STACK_BUDGET;
-            if r.vm.check_time().is_err() {
-                break;
-            }
-            if !r.started {
-                r.started = true;
-                r.vm.start = Instant::now()
-                    .checked_sub(r.active_before)
-                    .unwrap_or_else(Instant::now);
-                if round_trips(&self.shared) {
-                    r.vm.start_roundtrip(r.round_trip_every);
+            if !computed {
+                // Between jobs no native frame of the run is on the stack, so it may continue from wherever it is polled.
+                r.vm.stack_base = &probe as *const u8 as usize;
+                r.vm.stack_budget = run::RUN_STACK_BUDGET;
+                if r.vm.check_time().is_err() {
+                    break;
                 }
-                snapshot::restart_calls(&mut r.vm);
-                if r.vm.frames.is_empty() && !r.resumed() {
-                    run::call_main(&mut r.vm);
+                if self.offload {
+                    r.vm.host.offload().at = Some(Instant::now() + offload::OFFLOAD_AFTER);
                 }
-            }
-            for (p, s) in r.vm.host.tasks.poll_ready() {
-                r.vm.host.settled(p);
-                if let crate::host::Settlement::Interrupted = s {
-                    crate::host::interrupt(&mut r.vm);
+                if !r.started {
+                    r.started = true;
+                    r.vm.start = Instant::now()
+                        .checked_sub(r.active_before)
+                        .unwrap_or_else(Instant::now);
+                    if round_trips(&self.shared) {
+                        r.vm.start_roundtrip(r.round_trip_every);
+                    }
+                    snapshot::restart_calls(&mut r.vm);
+                    if r.vm.frames.is_empty() && !r.resumed() {
+                        run::call_main(&mut r.vm);
+                    }
                 }
-                r.vm.inbox.push_back((p, s));
-            }
-            let _ = r.vm.continue_frames();
-            if !r.vm.suspended {
-                let _ = r.vm.drive();
+                for (p, s) in r.vm.host.tasks.poll_ready() {
+                    r.vm.host.settled(p);
+                    if let crate::host::Settlement::Interrupted = s {
+                        crate::host::interrupt(&mut r.vm);
+                    }
+                    r.vm.inbox.push_back((p, s));
+                }
+                let away = std::mem::take(&mut self.move_away);
+                if let Some(worker) = self.worker.as_ref().filter(|_| away) {
+                    r.vm.host.offload().at = None;
+                    let State::Running(r) = std::mem::replace(&mut self.state, State::Away) else {
+                        unreachable!()
+                    };
+                    worker.compute(r);
+                    continue;
+                }
+                let _ = r.vm.continue_frames();
+                if !r.vm.suspended {
+                    let _ = r.vm.drive();
+                }
+                if let Some(o) = &mut r.vm.host.offload {
+                    o.at = None;
+                }
             }
             // The run stopped: the reference's driver starts the host calls queued so far.
             if !r.vm.host.queued.is_empty() {
@@ -338,6 +384,25 @@ impl<'a> Program<'a> {
             }
             if r.vm.outcome.is_some() || r.vm.fatal.is_some() {
                 break;
+            }
+            // A stop to move only: the stretch continues on the worker, and the next one starts here again. A suspend at
+            // the same stop goes first.
+            if r.vm.suspended
+                && r.vm
+                    .host
+                    .offload
+                    .as_mut()
+                    .is_some_and(|o| std::mem::take(&mut o.due))
+                && !self.shared.requested.load(Ordering::Relaxed)
+            {
+                r.vm.suspended = false;
+                r.vm.suspend_wanted = false;
+                if self.worker.is_none() {
+                    self.worker = offload::Worker::spawn().ok();
+                }
+                self.move_away = self.worker.is_some();
+                self.offload = self.move_away;
+                continue;
             }
             if r.vm.suspended {
                 match self.checkpoint() {
@@ -523,6 +588,20 @@ impl<'a> Program<'a> {
         }
         r.vm.host.calls.clear();
         r.vm.host.tasks.clear();
+    }
+}
+
+impl Drop for Program<'_> {
+    /// A run away on its worker is asked to stop at its next safe point and comes back, so it ends here, where its
+    /// host calls are cancelled.
+    fn drop(&mut self) {
+        let Some(worker) = self.worker.take() else {
+            return;
+        };
+        if let State::Away = self.state {
+            self.shared.requested.store(true, Ordering::Relaxed);
+            drop(worker.reclaim());
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 //! Runs every `conformance/cases/<name>.js` through `psychoscript::Runtime` and compares it with the reference outcome
 //! in `<name>.json`. Reports every failing case at once. `CONFORMANCE_FILTER=<substring>` narrows the run. A case
-//! with a `// @platform "<os>"` header is checked only on that OS, where `conformance/generate.ts` records it.
+//! with a `// @platform "<os>"` header is checked only on that OS, where `conformance/generate.ts` records it. Every
+//! case runs twice: blocking, and as a future, where a long stretch of compute continues on a worker thread.
 
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
@@ -23,7 +24,7 @@ fn runtime(limits: Limits, translate: Translate) -> Runtime {
         .translate(translate)
 }
 
-fn check(name: &str, code: &str, expected: &Json) -> Result<(), String> {
+fn check(name: &str, code: &str, expected: &Json, future: bool) -> Result<(), String> {
     let bindings = expected["bindings"]
         .as_object()
         .cloned()
@@ -46,15 +47,29 @@ fn check(name: &str, code: &str, expected: &Json) -> Result<(), String> {
     };
     let rt = runtime(limits, translate);
     let options = ProgramOptions::new().bindings(bindings);
-    let outcome = panic::catch_unwind(AssertUnwindSafe(|| rt.execute_with(code, &options)))
-        .map_err(|payload| {
-            let msg = payload
-                .downcast_ref::<String>()
-                .cloned()
-                .or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_owned()))
-                .unwrap_or_default();
-            format!("{name}: panicked: {msg}")
-        })?;
+    let run = || match future {
+        true => drive(rt.execute_async(code, &options)).unwrap_or_else(|i| psychoscript::Outcome {
+            result: Err(psychoscript::Diagnostic {
+                kind: psychoscript::DiagnosticKind::ExecutionFailure,
+                message: i.to_string().into(),
+                location: None,
+                suggestions: Vec::new(),
+            }),
+            warnings: Vec::new(),
+            logs: Vec::new(),
+            truncated: false,
+            metadata: psychoscript::Data::Null,
+        }),
+        false => rt.execute_with(code, &options),
+    };
+    let outcome = panic::catch_unwind(AssertUnwindSafe(run)).map_err(|payload| {
+        let msg = payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+            .unwrap_or_default();
+        format!("{name}: panicked: {msg}")
+    })?;
 
     let mut problems = Vec::new();
     match (&outcome.result, expected["ok"].as_bool()) {
@@ -146,7 +161,11 @@ fn conformance() {
                 &std::fs::read_to_string(dir.join(format!("{name}.json"))).unwrap(),
             )
             .unwrap();
-            check(name, &code, &expected).err()
+            check(name, &code, &expected, false)
+                .and_then(|()| {
+                    check(name, &code, &expected, true).map_err(|p| format!("as a future: {p}"))
+                })
+                .err()
         })
         .collect();
     panic::set_hook(hook);
@@ -160,4 +179,23 @@ fn conformance() {
         );
     }
     println!("{} conformance cases passed", names.len());
+}
+
+/// Polls a future to its end on this thread, parking until it is woken.
+fn drive<F: std::future::Future>(future: F) -> F::Output {
+    struct Unpark(std::thread::Thread);
+    impl std::task::Wake for Unpark {
+        fn wake(self: std::sync::Arc<Self>) {
+            self.0.unpark();
+        }
+    }
+    let waker = std::task::Waker::from(std::sync::Arc::new(Unpark(std::thread::current())));
+    let mut cx = std::task::Context::from_waker(&waker);
+    let mut future = std::pin::pin!(future);
+    loop {
+        if let std::task::Poll::Ready(v) = future.as_mut().poll(&mut cx) {
+            return v;
+        }
+        std::thread::park();
+    }
 }
