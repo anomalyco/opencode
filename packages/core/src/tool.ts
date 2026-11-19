@@ -306,7 +306,7 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const rules = permissions ?? []
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
-          const codeModeEnabled = !whollyDisabled("execute", rules)
+          const codeModeEnabled = codeModeAvailable(rules)
           const full = codeModeEnabled && options?.services !== undefined && (yield* flags.enabled("full_codemode"))
           const data = state.get()
           if (catalogData !== data) {
@@ -473,6 +473,9 @@ const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
   const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
   return rule?.resource === "*" && rule.effect === "deny"
 }
+
+/** Whether the rules leave Code Mode's `execute` reachable, as `snapshot` decides it. */
+export const codeModeAvailable = (rules: Permission.Ruleset) => !whollyDisabled("execute", rules)
 
 const CATALOG_CACHE_LIMIT = 5
 
