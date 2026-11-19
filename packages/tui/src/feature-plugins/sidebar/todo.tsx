@@ -4,6 +4,12 @@ import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { TodoItem } from "../../component/todo-item"
 import { sessionTodos, type Todo } from "../../util/todo"
 
+// The client store tracks whether older pages exist, but the public plugin API does not expose it. Read it directly
+// instead of growing the plugin surface for one built-in sidebar.
+type MessageWindow = Plugin.Context["data"]["session"]["message"] & {
+  more?(sessionID: string): boolean
+}
+
 export function SidebarTodo(props: { context: Plugin.Context; sessionID: string }) {
   const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
   const theme = props.context.theme
@@ -30,6 +36,10 @@ export function SidebarTodo(props: { context: Plugin.Context; sessionID: string 
     if (checkedSession() === id) return
     setCheckedSession(id)
     setFetchedTodos([])
+
+    // When the loaded window is the whole transcript there is no older `todowrite` to find, so skip the request.
+    const window = props.context.data.session.message as MessageWindow
+    if (window.more?.(id) === false) return
 
     void props.context.client.message
       .list({ sessionID: id, limit: 100, order: "desc" })

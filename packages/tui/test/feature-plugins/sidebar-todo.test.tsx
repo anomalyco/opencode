@@ -25,7 +25,7 @@ function todowrite(id: string, todos: string[]) {
   }
 }
 
-function context(local: unknown[], fetched: unknown[], calls: { count: number }) {
+function context(local: unknown[], fetched: unknown[], calls: { count: number; more?: number }, hasMore = true) {
   return {
     theme: { text: { base: color, muted: color, faint: color } },
     storage: {
@@ -36,6 +36,10 @@ function context(local: unknown[], fetched: unknown[], calls: { count: number })
         get: () => undefined,
         message: {
           list: () => local,
+          more: () => {
+            calls.more = (calls.more ?? 0) + 1
+            return hasMore
+          },
         },
       },
     },
@@ -72,6 +76,31 @@ test("sidebar todo uses the newest todowrite from a targeted lookup when the loa
     expect(frame).toContain("Gamma task")
     expect(frame).not.toContain("Alpha task")
     expect(calls.count).toBe(1)
+  } finally {
+    await app.dispose()
+  }
+})
+
+test("sidebar todo skips the lookup when the loaded window is the whole history", async () => {
+  const calls: { count: number; more?: number } = { count: 0 }
+  const app = await testRender(
+    () => (
+      <SidebarTodo
+        context={context(
+          [{ id: "msg_only", type: "assistant", content: [] }],
+          [todowrite("msg_remote", ["Remote task"])],
+          calls,
+          false,
+        )}
+        sessionID="session"
+      />
+    ),
+    { width: 42, height: 12 },
+  )
+
+  try {
+    await app.waitForFrame(() => (calls.more ?? 0) > 0)
+    expect(calls.count).toBe(0)
   } finally {
     await app.dispose()
   }
