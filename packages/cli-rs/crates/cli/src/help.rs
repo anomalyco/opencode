@@ -4,6 +4,7 @@ use opencode_util::error;
 use std::io::IsTerminal;
 
 use crate::args::{Flag, Shell, Spec};
+use crate::prompt::wrap;
 use crate::{completions, output, parse};
 
 // Like the TypeScript CLI, a build without OPENCODE_VERSION reports "local".
@@ -260,7 +261,7 @@ fn flag_row(flag: &Flag, style: Style) -> (String, String) {
 
 /// `renderTable`: the left column as wide as its widest cell plus four, up to `cap`.
 fn table(rows: &[(String, String)], cap: Option<usize>) -> String {
-    let width = |text: &str| strip_ansi(text).chars().count();
+    let width = |text: &str| wrap::strip(text).chars().count();
     let widest = rows.iter().map(|(left, _)| width(left)).max().unwrap_or(0) + 4;
     let column = cap.map_or(widest, |cap| widest.min(cap));
     rows.iter()
@@ -270,24 +271,4 @@ fn table(rows: &[(String, String)], cap: Option<usize>) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-fn strip_ansi(text: &str) -> String {
-    let mut out = String::new();
-    let mut chars = text.chars().peekable();
-    while let Some(char) = chars.next() {
-        if char == '\x1b' && chars.peek() == Some(&'[') {
-            chars.next();
-            while chars.next_if(|char| char.is_ascii_digit() || *char == ';').is_some() {}
-            chars.next_if_eq(&'m');
-            continue;
-        }
-        out.push(char);
-    }
-    out
-}
-
-#[cfg(test)]
-pub(crate) fn strip(text: &str) -> String {
-    strip_ansi(text)
 }

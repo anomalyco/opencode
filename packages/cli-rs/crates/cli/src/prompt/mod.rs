@@ -9,7 +9,7 @@ mod spinner;
 mod style;
 mod term;
 mod text;
-mod wrap;
+pub(crate) mod wrap;
 
 pub use autocomplete::{View, autocomplete};
 pub use confirm::confirm;
