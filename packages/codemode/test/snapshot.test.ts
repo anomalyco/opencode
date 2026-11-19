@@ -100,6 +100,15 @@ const programs: Record<string, string> = {
     try { null.x } catch (error) { caught = error }
     for (let i = 0; i < 5; i++) await null
     return [made.stack, caught.stack]`,
+  "an error's stack header, named after a slice and read after another": `
+    const unread = new Error("bad")
+    const read = new Error("worse")
+    read.stack
+    for (let i = 0; i < 3; i++) await null
+    unread.name = "Late"
+    read.name = "Late"
+    for (let i = 0; i < 3; i++) await null
+    return [unread.stack, read.stack]`,
   "the program's result is copied out after a slice in the boundary walk": `
     const rows = []
     for (let i = 0; i < 5; i++) rows.push({ i, toJSON() { return { row: this.i } } })

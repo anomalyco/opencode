@@ -19,10 +19,10 @@ import {
   type Native,
   Arr,
   ErrorObj,
+  errorToString,
   Obj,
   coerceToString,
   type Value,
-  peek,
 } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
 import { Invoke } from "./signals.js"
@@ -154,17 +154,6 @@ export const stackFrame = (node: AstNode, name?: string): string => {
   const location = sourceLocation(node)
   const at = `<program>:${location.line}:${location.column}`
   return `\n    at ${name === undefined ? at : `${name} (${at})`}`
-}
-
-/** Error.prototype.toString: `name: message`, omitting whichever side is empty. */
-const errorToString = (self: Obj, read: (target: Obj, key: string) => Value = peek): string => {
-  const name = read(self, "name")
-  const message = read(self, "message")
-  const shownName = name === undefined ? "Error" : coerceToString(name)
-  const shownMessage = message === undefined ? "" : coerceToString(message)
-  if (shownMessage === "") return shownName
-  if (shownName === "") return shownMessage
-  return `${shownName}: ${shownMessage}`
 }
 
 export const createAggregateErrorValue = <R>(

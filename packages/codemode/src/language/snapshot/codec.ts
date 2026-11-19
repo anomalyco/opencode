@@ -24,6 +24,7 @@ import {
   changed,
   DateObj,
   ErrorObj,
+  StackSlot,
   GeneratorObj,
   HeadersObj,
   HostNamespace,
@@ -590,7 +591,10 @@ class Encoder {
     const props: Array<Encoded> = []
     for (const [key, slot] of object.props) {
       props.push(typeof key === "symbol" ? this.value(key) : key)
-      if ("value" in slot) {
+      // An error's `stack` not read yet stays unformatted: its header is the error's name and message when it is.
+      if (slot instanceof StackSlot && slot.trace !== undefined) {
+        props.push(slot.trace, 16 | (slot.writable ? 1 : 0) | (slot.enumerable ? 2 : 0) | (slot.configurable ? 4 : 0))
+      } else if ("value" in slot) {
         props.push(
           this.value(slot.value),
           (slot.writable ? 1 : 0) | (slot.enumerable ? 2 : 0) | (slot.configurable ? 4 : 0),
@@ -969,6 +973,17 @@ class Decoder {
           enumerable,
           configurable,
         })
+        continue
+      }
+      if ((flags & 16) !== 0) {
+        const trace = entries[at + 1]
+        if (!(target instanceof ErrorObj) || typeof trace !== "string")
+          return invalid(`the stack ${String(key)} is not an error's.`)
+        const slot = new StackSlot(target, trace)
+        slot.writable = (flags & 1) !== 0
+        slot.enumerable = enumerable
+        slot.configurable = configurable
+        props.set(key as string | symbol, slot)
         continue
       }
       props.set(key as string | symbol, {

@@ -164,6 +164,35 @@ return [JSON.stringify(e), Object.keys(e), Object.getOwnPropertyDescriptor(e, "s
     ])
   })
 
+  test("takes its header from the name and message at the first read, then keeps it", async () => {
+    expect(
+      await value(`class MyErr extends Error { constructor(m) { super(m); this.name = "MyErr" } }
+const late = new Error("y"); late.name = "Late"; late.message = "z"
+const first = late.stack
+late.name = "After"
+const unnamed = new Error("q"); unnamed.name = ""
+const empty = new Error(""); empty.name = "N"
+const getter = new Error("g"); Object.defineProperty(getter, "name", { get() { return "G" } })
+return [new MyErr("x").stack, first, late.stack, unnamed.stack, empty.stack, getter.stack.split("\\n")[0]]`),
+    ).toEqual([
+      "MyErr: x\n    at MyErr (<program>:1:46)\n    at <program>:8:9",
+      "Late: z\n    at <program>:2:14",
+      "Late: z\n    at <program>:2:14",
+      "q\n    at <program>:5:17",
+      "N\n    at <program>:6:15",
+      // A program getter is not run to format a stack; it reads as undefined, as in Bun.
+      "Error: g",
+    ])
+  })
+
+  test("an assigned stack replaces it, before or after the first read", async () => {
+    expect(
+      await value(`const a = new Error("a"); a.stack = "custom"
+const b = new Error("b"); b.stack; b.stack = 1
+return [a.stack, b.stack, Object.getOwnPropertyDescriptor(a, "stack").enumerable]`),
+    ).toEqual(["custom", 1, false])
+  })
+
   test("keeps the 10 innermost frames", async () => {
     expect(
       await value(`function f(n) { return n === 0 ? new Error("deep") : f(n - 1) }
