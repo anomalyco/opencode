@@ -7,7 +7,7 @@ use std::process::Command;
 /// The quick start and the author's fixture.
 const PLUGINS: [&str; 2] = ["hello", "author"];
 /// What a plugin on the SDK never depends on.
-const INTERNAL: [&str; 4] = ["opentui", "opentui-sys", "opencode-ui", "opencode-tui"];
+const INTERNAL: [&str; 4] = ["anomalyco-opentui", "anomalyco-opentui-sys", "opencode-ui", "opencode-tui"];
 
 #[test]
 fn plugins_on_the_sdk_pull_in_no_tui() {

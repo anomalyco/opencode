@@ -12,6 +12,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "anomalyco-opentui"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95c79d287cfe519c62bce1a2bb66db8459c3df476c80aa7a0fd570b5f57ea2ca"
+dependencies = [
+ "anomalyco-opentui-sys",
+ "libc",
+ "tokio",
+ "tree-sitter",
+ "tree-sitter-javascript",
+ "tree-sitter-md",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
+ "tree-sitter-zig",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "anomalyco-opentui-sys"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7db7fb64775ff79d0a5a94ca4e83670c0bbdbd3c4a61deab7bb28721582a99cf"
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -184,7 +208,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -765,6 +789,7 @@ dependencies = [
 name = "opencode-cli"
 version = "0.1.0"
 dependencies = [
+ "anomalyco-opentui",
  "base64",
  "futures-util",
  "indexmap",
@@ -782,7 +807,6 @@ dependencies = [
  "opencode-tui",
  "opencode-ui",
  "opencode-util",
- "opentui",
  "regex",
  "reqwest",
  "rustix",
@@ -797,10 +821,10 @@ dependencies = [
 name = "opencode-drive"
 version = "0.1.0"
 dependencies = [
+ "anomalyco-opentui",
  "log",
  "opencode-api-types",
  "opencode-util",
- "opentui",
  "serde",
  "serde_json",
  "tokio-tungstenite",
@@ -810,11 +834,11 @@ dependencies = [
 name = "opencode-latex"
 version = "0.1.0"
 dependencies = [
+ "anomalyco-opentui",
  "opencode-parity",
  "opencode-plugin",
  "opencode-plugin-abi",
  "opencode-ui",
- "opentui",
  "serde_json",
  "unicode-segmentation",
  "unicode-width",
@@ -842,12 +866,12 @@ dependencies = [
 name = "opencode-mermaid"
 version = "0.1.0"
 dependencies = [
+ "anomalyco-opentui",
  "indexmap",
  "opencode-parity",
  "opencode-plugin",
  "opencode-plugin-abi",
  "opencode-ui",
- "opentui",
  "regex",
  "serde_json",
  "unicode-segmentation",
@@ -858,6 +882,7 @@ dependencies = [
 name = "opencode-mini"
 version = "0.1.0"
 dependencies = [
+ "anomalyco-opentui",
  "futures-util",
  "indexmap",
  "log",
@@ -866,7 +891,6 @@ dependencies = [
  "opencode-store",
  "opencode-ui",
  "opencode-util",
- "opentui",
  "rustix",
  "serde",
  "serde_json",
@@ -878,7 +902,7 @@ dependencies = [
 name = "opencode-parity"
 version = "0.1.0"
 dependencies = [
- "opentui",
+ "anomalyco-opentui",
  "regex",
  "serde",
  "serde_json",
@@ -888,6 +912,7 @@ dependencies = [
 name = "opencode-plugin"
 version = "0.1.0"
 dependencies = [
+ "anomalyco-opentui",
  "libc",
  "log",
  "mlua",
@@ -897,7 +922,6 @@ dependencies = [
  "opencode-plugin-abi",
  "opencode-ui",
  "opencode-util",
- "opentui",
  "ring",
  "serde",
  "serde_json",
@@ -957,6 +981,7 @@ dependencies = [
 name = "opencode-tui"
 version = "0.1.0"
 dependencies = [
+ "anomalyco-opentui",
  "base64",
  "bytes",
  "futures-util",
@@ -973,7 +998,6 @@ dependencies = [
  "opencode-store",
  "opencode-ui",
  "opencode-util",
- "opentui",
  "rand",
  "regex",
  "ring",
@@ -989,13 +1013,13 @@ dependencies = [
 name = "opencode-ui"
 version = "0.1.0"
 dependencies = [
+ "anomalyco-opentui",
  "base64",
  "indexmap",
  "log",
  "opencode-api-types",
  "opencode-parity",
  "opencode-util",
- "opentui",
  "regex",
  "serde",
  "serde_json",
@@ -1052,28 +1076,6 @@ name = "openssl-probe"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
-
-[[package]]
-name = "opentui"
-version = "0.9.3"
-source = "git+https://github.com/anomalyco/opentui?tag=v0.9.3#3dc895b5be6a0878d3f8db7be51ac417dfdd5306"
-dependencies = [
- "libc",
- "opentui-sys",
- "tokio",
- "tree-sitter",
- "tree-sitter-javascript",
- "tree-sitter-md",
- "tree-sitter-rust",
- "tree-sitter-typescript",
- "tree-sitter-zig",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "opentui-sys"
-version = "0.9.3"
-source = "git+https://github.com/anomalyco/opentui?tag=v0.9.3#3dc895b5be6a0878d3f8db7be51ac417dfdd5306"
 
 [[package]]
 name = "parking_lot"
@@ -1273,7 +1275,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1329,7 +1331,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2268,7 +2270,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -33,9 +33,10 @@ allow = [
     "Zlib",
 ]
 exceptions = [
-    # opentui-sys is `MIT AND LGPL-2.1-or-later`: the OpenTUI library it links statically includes LGPL code, which
-    # ships with its licence files (O-156). Allowed for this crate only, so another LGPL crate is read before it comes in.
-    { crate = "opentui-sys", allow = ["LGPL-2.1-or-later"] },
+    # anomalyco-opentui-sys is `MIT AND LGPL-2.1-or-later`: the OpenTUI library it links statically includes LGPL code,
+    # which ships with its licence files (O-156). Allowed for this crate only, so another LGPL crate is read before it
+    # comes in.
+    { crate = "anomalyco-opentui-sys", allow = ["LGPL-2.1-or-later"] },
 ]
 
 [bans]
@@ -50,8 +51,6 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
-    # OpenTUI's Rust crates, pinned by `rev` (O-68).
-    "https://github.com/anomalyco/opentui",
     # The HCL grammar, which the workspace takes from git at a tag, unlike its other grammars.
     "https://github.com/tree-sitter-grammars/tree-sitter-hcl",
     # mlua and mlua-sys at Luau 747, behind opencode-plugin's `luau` feature, until mlua 0.12.3 is on crates.io (O-172).

@@ -7,19 +7,20 @@ The OpenCode native CLI (command `opencode-native`), on OpenTUI's Rust crates. R
 ## Running cargo
 
 - Cargo reads `.cargo/config.toml` from the current directory, not from `--manifest-path`, and
-  `cargo -C` is unstable. Without that config `opentui-sys` fails with "set OPENTUI_LIB_DIR". Run
+  `cargo -C` is unstable. Without that config `anomalyco-opentui-sys` fails with "set OPENTUI_LIB_DIR". Run
   cargo through the package script, which runs in this directory:
   `bun run --cwd packages/cli-rs cargo check -p opencode-api`.
-- opentui comes from `packages/rust` of `anomalyco/opentui`, pinned to a release by git `tag` in `Cargo.toml` and
-  linked statically. That checkout has no native library: `.cargo/config.toml` points `OPENTUI_LIB_DIR` at
+- opentui comes from `packages/rust` of `anomalyco/opentui`, pinned to a release on crates.io
+  (`anomalyco-opentui` at an exact `version` in `Cargo.toml`; the tag is `v<version>`) and linked statically.
+  The crate has no native library: `.cargo/config.toml` points `OPENTUI_LIB_DIR` at
   `.opentui/<tag>/host` in this package (git-ignored), which `script/opentui-native.ts` fills from the release zip,
   checked against the sha256 table in the script and the header hash. `bun run cargo` runs it first, so nothing else is
   needed; a plain `cargo` run that finds it empty fails with `OPENTUI_LIB_HINT`'s command.
   `bun run opentui:native --target <target>` installs another target's and prints its directory. A shell
   `OPENTUI_LIB_DIR` wins over the config.
 - A change to OpenTUI's Rust crates is a pull request into `packages/rust` of `anomalyco/opentui`. A re-pin to a new
-  release adds its rows to the script's table and changes the `tag`, `Cargo.lock` and the tag in `.cargo/config.toml`'s
-  directory together. A `rev` between releases has no zip: build its library from source (native-hardening's
+  release adds its rows to the script's table and changes the `version`, `Cargo.lock` and the tag in `.cargo/config.toml`'s
+  directory together. A git `rev` between releases has no zip: build its library from source (native-hardening's
   `abi-artifacts.py`) and set `OPENTUI_LIB_DIR` to it.
 
 ## Checks

@@ -46,11 +46,11 @@ if ! $zig version > /dev/null 2>&1; then
     exit 2
 fi
 # The header of the pin's library: from the shell's OPENTUI_LIB_DIR; for a release pin, from the directory
-# script/opentui-native.ts fills (the one .cargo/config.toml names, relative to this package); for a `rev` pin, from
+# script/opentui-native.ts fills (the one .cargo/config.toml names, relative to this package); for a `git` pin, from
 # the directory .cargo/config.toml names.
 if [ -n "${OPENTUI_LIB_DIR:-}" ]; then
     header=$OPENTUI_LIB_DIR/opentui.h
-elif grep -q '^opentui = {.*\btag = ' Cargo.toml; then
+elif ! grep -q '^opentui = {.*\b\(git\|path\) = ' Cargo.toml; then
     header=$(bun run script/opentui-native.ts)/opentui.h
 else
     header=$(sed -n 's/^OPENTUI_LIB_DIR = { value = "\([^"]*\)".*/\1/p' .cargo/config.toml)/opentui.h

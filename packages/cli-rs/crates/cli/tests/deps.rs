@@ -12,7 +12,7 @@ const ROOT: &str = "opencode-cli";
 const SECTIONS: [&str; 2] = ["[tests]", "[optional]"];
 
 /// OpenTUI's packages, first-party when they come from where the workspace takes OpenTUI.
-const OPENTUI: [&str; 2] = ["opentui", "opentui-sys"];
+const OPENTUI: [&str; 2] = ["anomalyco-opentui", "anomalyco-opentui-sys"];
 
 type Graph = BTreeMap<String, BTreeSet<&'static str>>;
 
@@ -262,7 +262,7 @@ fn graph(manifest: &Path, metadata: &Value, selection: &[&str]) -> Graph {
     graph
 }
 
-/// The package ID prefix of OpenTUI's packages, from the workspace's `opentui` dependency: its git source and `rev`,
+/// The package ID prefix of OpenTUI's packages, from the workspace's `opentui` dependency: its registry or git source,
 /// or, for a path, the directory above its `crates/opentui` (an OpenTUI worktree's `packages/rust`).
 fn opentui_source(metadata: &Value) -> String {
     let dep = metadata["packages"]
@@ -270,12 +270,12 @@ fn opentui_source(metadata: &Value) -> String {
         .unwrap()
         .iter()
         .flat_map(|p| p["dependencies"].as_array().unwrap())
-        .find(|dep| dep["name"] == "opentui")
+        .find(|dep| dep["name"] == OPENTUI[0])
         .expect("a workspace member takes opentui");
     if let Some(source) = dep["source"].as_str() {
         return format!("{source}#");
     }
-    let path = dep["path"].as_str().expect("opentui comes from git or a path");
+    let path = dep["path"].as_str().expect("opentui comes from crates.io, git or a path");
     let root = Path::new(path).parent().and_then(Path::parent).expect("opentui is at <root>/crates/opentui");
     format!("path+file://{}/", root.display())
 }
