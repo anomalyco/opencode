@@ -162,7 +162,7 @@ export const Plugin = {
                   const original =
                     previous ??
                     (yield* Effect.gen(function* () {
-                      const content = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
+                      const content = yield* FileMutation.readTextFatal(target.environment.files, target.absolute).pipe(
                         Effect.mapError(
                           (error) =>
                             new ToolFailure({
@@ -304,6 +304,7 @@ export const Plugin = {
 }
 
 function errorMessage(error: unknown) {
+  if (error instanceof FileMutation.MalformedUtf8) return "file is not valid UTF-8"
   if (error instanceof Environment.NotFound) return "file does not exist"
   if (error instanceof Environment.WrongKind)
     return error.actual === "directory" ? "path is a directory" : `path is ${error.actual}`

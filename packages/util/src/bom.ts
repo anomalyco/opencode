@@ -24,6 +24,15 @@ export function decodeBytes(content: Uint8Array) {
   return split(decode(content))
 }
 
+/** Decode only text that survives a round trip: `undefined` when a decoder would replace bytes with U+FFFD. */
+export function decodeBytesFatal(content: Uint8Array) {
+  try {
+    return split(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(content))
+  } catch {
+    return undefined
+  }
+}
+
 export function syncBytes(content: Uint8Array, bom: boolean) {
   const decoded = decode(content)
   const current = split(decoded)

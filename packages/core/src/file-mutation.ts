@@ -1,7 +1,7 @@
 export * as FileMutation from "./file-mutation.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bom } from "@opencode/util/bom"
@@ -48,8 +48,26 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
 
+export class MalformedUtf8 extends Schema.TaggedError<MalformedUtf8>()("FileMutation.MalformedUtf8", {
+  resource: Schema.String,
+}) {
+  override get message() {
+    return `File is not valid UTF-8: ${this.resource}`
+  }
+}
+
 export const readText = Effect.fn("FileMutation.readText")(function* (files: Files, target: string) {
   return Bom.decodeBytes((yield* files.read(target)).bytes)
+})
+
+/**
+ * Read text a tool writes back. The lenient decoder above would turn every invalid byte into U+FFFD and the write
+ * would persist that corruption, so a mutation refuses the file instead and leaves its bytes untouched.
+ */
+export const readTextFatal = Effect.fn("FileMutation.readTextFatal")(function* (files: Files, target: string) {
+  const decoded = Bom.decodeBytesFatal((yield* files.read(target)).bytes)
+  if (!decoded) return yield* new MalformedUtf8({ resource: target })
+  return decoded
 })
 
 export const readOptionalText = Effect.fn("FileMutation.readOptionalText")(function* (files: Files, target: string) {
