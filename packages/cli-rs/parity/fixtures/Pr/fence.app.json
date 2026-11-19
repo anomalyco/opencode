@@ -4,10 +4,10 @@
  "height": 30,
  "directory": "/tmp/opencode/packages/tui",
  "config": {
+  "theme": {"name":"opencode-classic"},
   "plugins": ["./plugins/fence"],
   "animations": false,
-  "experimental": {"new-designs":true},
-  "theme": {"name":"opencode"}
+  "experimental": {"new-designs":true}
  },
  "args": {
   "sessionID": "ses_a"

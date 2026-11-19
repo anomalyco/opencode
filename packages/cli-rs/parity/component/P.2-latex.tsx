@@ -70,6 +70,8 @@ const cases = [
 
 for (const item of cases) {
   await renderComponent({
+    // Prose in OpenTUI's Rust Markdown takes the `default` scope's color (OT-markdown-default-scope).
+    theme: "opencode-classic",
     fixture: `P.2/${item.name}`,
     width: item.width,
     height: item.height,

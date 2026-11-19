@@ -4,10 +4,10 @@
  "height": 30,
  "directory": "/tmp/opencode/packages/tui",
  "config": {
+  "theme": {"name":"opencode-classic"},
   "experimental": {"new-designs":true},
   "plugins": ["./plugins/v2search"],
-  "animations": false,
-  "theme": {"name":"opencode"}
+  "animations": false
  },
  "args": {},
  "env": {
