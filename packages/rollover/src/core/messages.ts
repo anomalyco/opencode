@@ -33,6 +33,8 @@ export interface StatusTextInput {
   thresholdValue: number
   thresholdSource: "session" | "config" | "computed" | "fallback"
   modelLimit: number | null
+  /** `usage` = provider-reported; `estimate` = chars/4 fallback. */
+  contextSource: "usage" | "estimate"
   contextTokens: number
   tailN: number
   summaryModel: string | null
@@ -67,7 +69,7 @@ export function statusText(input: StatusTextInput): string {
   return [
     MODE_LABEL[input.mode],
     `Threshold: ${formatTokens(input.thresholdValue)} (model limit: ${limit}, source: ${input.thresholdSource})`,
-    `Current context: ${formatTokens(input.contextTokens)} (${percent}% of threshold)`,
+    `Current context: ${formatTokens(input.contextTokens)} (${percent}% of threshold, ${input.contextSource})`,
     `Tail: last ${input.tailN} prompts`,
     `Summary model: ${summary}${warning}`,
     `Ledger: ${input.recordCount} records, epoch ${input.epoch}, active render ${render}`,

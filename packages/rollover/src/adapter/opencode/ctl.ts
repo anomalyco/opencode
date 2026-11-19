@@ -123,6 +123,7 @@ function statusFor(deps: CtlDeps, cfg: RolloverConfig, state: SessionState, sid:
     thresholdValue: threshold.value,
     thresholdSource: threshold.source,
     modelLimit: deps.modelLimits.get(sid) ?? null,
+    contextSource: context.source,
     contextTokens: context.tokens,
     tailN: Math.min(cfg.tailMaxN, state.settings.tailN ?? cfg.tailN),
     summaryModel: cfg.extractionModel ?? deps.sessionModel?.(sid) ?? null,

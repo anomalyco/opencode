@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { showText } from "../../src/core/messages"
+import { showText, statusText } from "../../src/core/messages"
 
 const PREAMBLE =
   "Earlier conversation history was replaced by this record to save context. Treat it as reliable memory of earlier work in this session. Earlier tool outputs and file contents are no longer visible: re-read a file if you need its exact current contents."
@@ -88,5 +88,31 @@ describe("showText raw view", () => {
     expect(out).toBe(
       `Render preview (≈ 100 tokens):\n${RENDER}\n\nRecords: objective 0, decision 2, user_correction 0, open_item 1, verification 0`,
     )
+  })
+})
+
+describe("statusText context source display", () => {
+  const base = {
+    mode: "auto" as const,
+    thresholdValue: 100_000,
+    thresholdSource: "computed" as const,
+    modelLimit: 200_000,
+    contextSource: "usage" as const,
+    contextTokens: 50_000,
+    tailN: 2,
+    summaryModel: null,
+    recordCount: 0,
+    epoch: 1,
+    renderTokens: null,
+    renderBudgetTokens: 4000,
+    lastRollover: null,
+  }
+  test("usage source labeled as usage", () => {
+    const out = statusText(base)
+    expect(out).toContain("Current context: 50k (50% of threshold, usage)")
+  })
+  test("estimate fallback labeled as estimate", () => {
+    const out = statusText({ ...base, contextSource: "estimate" })
+    expect(out).toContain("Current context: 50k (50% of threshold, estimate)")
   })
 })
