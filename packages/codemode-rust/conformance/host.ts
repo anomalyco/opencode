@@ -309,6 +309,13 @@ return [thrown instanceof RangeError, thrown.message, sent instanceof Promise, a
   { code: `note(count()); return double(await load(2)) + count()`, compiled: true },
   { code: `job(1); return 1`, runId: "c", compiled: true },
   { code: `note(1); class A {}`, compiled: true },
+  // Getters and setters: an argument's getters run once before the host function, a setter-only property is left
+  // out; a getter that waits on a host call parks the read; the result's getters run as it crosses.
+  { code: `let n = 0; note({ a: 1, get b() { n++; return [double(2)] }, set c(v) {} }); return n` },
+  { code: `const o = { get v() { return inc(1) } }; const x = o.v; o.v; return [x, { get w() { return x + 1 } }]` },
+  { code: `const o = { set v(x) { note(inc(x)) } }; o.v = 4; return Object.keys(o)` },
+  { code: `const e = await load({ get a() { throw new Error("g") } }).catch((e) => e.message); return [e, await load({ get a() { return 2 }, set b(v) {} })]` },
+  { code: `let n = 0; const r = await api.issues.list({ get q() { n++; return 1 } }); try { double({ get x() { throw new Error("s") } }) } catch (e) { return [r, n, e.message] }` },
   // Compiling gives the diagnostic a run of the source fails with first.
   { code: `  `, compiled: true },
   { code: `return (`, compiled: true },
@@ -332,6 +339,11 @@ const suspensions: Array<Entry> = [
   { code: `const a = job(1, { b: [2] }); const b = job(); return [await a, await b, count()]`, runId: "d" },
   // promises: "await" keeps waiting across a suspend.
   { code: `return [note({ n: wait() }), await wait()]`, runId: "t", translate: wait },
+  // Accessors and their halves are saved with the run.
+  {
+    code: `let n = 0; const o = { get x() { return ++n }, set x(v) { n = v } }; o.x; await wait(); o.x = 10; return [o.x, Object.getOwnPropertyDescriptor(o, "x").get.name, Object.keys(o)]`,
+    runId: "g",
+  },
   // Limits are saved with the run.
   {
     code: `await wait(); console.log("x".repeat(20)); return "y".repeat(20)`,

@@ -1,0 +1,47 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    1,
+    5,
+    52,
+    "child",
+    "base",
+    [
+      "get x",
+      "get z"
+    ],
+    "Cannot set property 'r' of a data object which has only a getter.",
+    "HI",
+    [
+      1,
+      2
+    ],
+    "{\"a\":1,\"b\":[50]}",
+    [
+      "x",
+      "z",
+      "only"
+    ],
+    52,
+    [
+      "z",
+      "only"
+    ],
+    "adopted",
+    [
+      "get x",
+      "set x 5",
+      "only 3",
+      "str 1yo",
+      "get x",
+      "get x",
+      "then",
+      "next"
+    ]
+  ],
+  "logs": [
+    "{\"x\":[Getter/Setter],\"z\":[Getter],\"only\":[Setter]} {\"inner\":{\"q\":[Getter]}}"
+  ],
+  "metadata": null
+}

@@ -112,3 +112,27 @@ fn keys_only_json_stringify_holds_survive() {
     let outcome = Runtime::make().execute(code);
     assert_eq!(outcome.json().unwrap(), serde_json::json!(0));
 }
+
+/// Accessor halves only an accessor holds: a getter and setter defined and replaced on a long-lived object while cycles
+/// run (a write of a pair into an object already traced must reach the collector), and an accessor's pair copied by
+/// `defineProperty` from a descriptor that is then dropped. Cycles overlap the writes reliably only with
+/// `PSYCHOSCRIPT_GC_STRESS=1`.
+#[test]
+fn accessor_halves_survive_the_cycle() {
+    let code = r#"
+        const holder = { n: 0 }
+        let bad = 0
+        for (let i = 1; i < 1500; i++) {
+          const v = { i }
+          Object.defineProperty(holder, "x", { get() { return v }, set(w) { v.i = w }, configurable: true })
+          const lit = { get y() { return [i] } }
+          holder.lit = lit
+          for (let j = 0; j < 200; j++) [j, { j }]
+          holder.x = holder.x.i + 1
+          if (holder.x.i !== i + 1 || holder.lit.y[0] !== i) bad++
+        }
+        return bad
+    "#;
+    let outcome = Runtime::make().execute(code);
+    assert_eq!(outcome.json().unwrap(), serde_json::json!(0));
+}
