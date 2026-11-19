@@ -256,8 +256,9 @@ describe("permission syncs", () => {
 
 describe("reconcileBrowserPermissions", () => {
   const user = { action: "bash", resource: "*", effect: "ask" } as const
-  const allows = [BrowserMachine.GRANT]
-  const legacy = [BrowserMachine.GRANT, { action: "skill", resource: "browser", effect: "allow" } as const]
+  const allows = BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "allow" as const }))
+  // A grant some versions wrote: the browser allow alone.
+  const partial = [allows[0]!]
 
   test("granting what is already granted writes nothing", () => {
     expect(BrowserMachine.reconcileBrowserPermissions([user, ...allows], true)).toBeUndefined()
@@ -271,9 +272,9 @@ describe("reconcileBrowserPermissions", () => {
     expect(BrowserMachine.reconcileBrowserPermissions(undefined, true)).toEqual(allows)
   })
 
-  test("a grant from an earlier version, which also allowed the skill, is revoked and replaced in full", () => {
-    expect(BrowserMachine.reconcileBrowserPermissions([user, ...legacy], false)).toEqual([user])
-    expect(BrowserMachine.reconcileBrowserPermissions([user, ...legacy], true)).toEqual([user, ...allows])
+  test("a grant that allowed the browser alone is revoked and replaced in full", () => {
+    expect(BrowserMachine.reconcileBrowserPermissions([user, ...partial], false)).toEqual([user])
+    expect(BrowserMachine.reconcileBrowserPermissions([user, ...partial], true)).toEqual([user, ...allows])
   })
 
   test("browser denies are not browser allows", () => {

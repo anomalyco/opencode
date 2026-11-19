@@ -73,8 +73,10 @@ const it = testEffect(
 )
 
 const user = { action: "bash", resource: "*", effect: "ask" } as const
-const allows = [{ action: "browser", resource: "*", effect: "allow" }] as const
-
+const allows = [
+  { action: "browser", resource: "*", effect: "allow" },
+  { action: "skill", resource: "browser", effect: "allow" },
+] as const
 
 const setup = Effect.gen(function* () {
   writes.race = undefined

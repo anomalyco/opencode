@@ -1,6 +1,6 @@
 export * as BrowserMachine from "./machine.js"
 
-import { Permission } from "@opencode/schema/permission"
+import type { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
 import { Wildcard } from "@opencode/schema/wildcard"
@@ -13,15 +13,11 @@ export const PERMISSION_SYNC_TIMEOUT_MS = 10_000
 /** How long a dispatched browser command may run before it times out and is cancelled on the desktop. */
 export const REQUEST_TIMEOUT_MS = 60_000
 
-/**
- * What an attachment allows: the browser tools. It grants no skill rule. The `experimental.rules` hook shows the
- * built-in skill only while the session holds this grant, so the grant cannot outrank a person's own rules for any
- * skill, including their own skill named `browser`.
- */
-export const GRANT = { action: "browser", resource: "*", effect: "allow" } as const
-
-/** Every rule an attachment has granted. Earlier versions also allowed the skill; those grants are still recognised. */
-const GRANTED = [GRANT, { action: "skill", resource: BrowserSkill.id }] as const
+/** The browser tools and their skill, which an attachment allows together. */
+export const ACCESS = [
+  { action: "browser", resource: "*" },
+  { action: "skill", resource: BrowserSkill.id },
+] as const
 
 /** The one `session.permissions` sync in flight for a session: grant (`allow`) or revoke the browser rules. */
 export type PermissionSync = { readonly attempt: number; readonly allow: boolean }
@@ -549,7 +545,7 @@ function syncWarning(
 }
 
 /**
- * The session's permissions with exactly one browser grant (`allow`) or none, every other rule kept in order.
+ * The session's permissions with exactly one set of browser allows (`allow`) or none, every other rule kept in order.
  * Undefined when they already are, so a replace writes nothing.
  */
 export function reconcileBrowserPermissions(
@@ -558,7 +554,7 @@ export function reconcileBrowserPermissions(
 ): Permission.Rule[] | undefined {
   const rules = current ?? []
   const kept = rules.filter((rule) => !isGrant(rule))
-  const next = allow ? [...kept, { ...GRANT }] : kept
+  const next = allow ? [...kept, ...ACCESS.map((rule) => ({ ...rule, effect: "allow" as const }))] : kept
   const unchanged =
     next.length === rules.length &&
     next.every(
@@ -572,19 +568,12 @@ export function reconcileBrowserPermissions(
 }
 
 /**
- * One of the allows an attachment grants, or granted in an earlier version, so a revoke or the startup sweep removes
- * old grants too. A user rule of the same shape cannot be told apart from it.
+ * One of the allows an attachment grants. A grant that holds only the browser allow, as some versions wrote it, is
+ * recognised too, so a revoke or the startup sweep removes it. A user rule of the same shape cannot be told apart
+ * from it.
  */
 export function isGrant(rule: Permission.Rule) {
-  return (
-    rule.effect === "allow" &&
-    GRANTED.some((granted) => granted.action === rule.action && granted.resource === rule.resource)
-  )
-}
-
-/** Whether `rules` hold an attachment's grant of the browser tools. */
-export function holdsGrant(rules: readonly Permission.Rule[]) {
-  return rules.some((rule) => rule.effect === "allow" && rule.action === GRANT.action && rule.resource === GRANT.resource)
+  return rule.effect === "allow" && ACCESS.some((access) => access.action === rule.action && access.resource === rule.resource)
 }
 
 /**
@@ -599,10 +588,6 @@ export function selectBrowserRule(rules: readonly Permission.Rule[], operation: 
   )
 }
 
-/** Whether `rules` deny the whole browser, which is when core stops listing the browser tools. */
-export function deniesBrowser(rules: readonly Permission.Rule[]) {
-  return Permission.deniesAll("browser", rules, process.platform === "win32")
-}
 
 export function isConnectionDisposed(state: ConnectionState) {
   return state.status === "disposed"

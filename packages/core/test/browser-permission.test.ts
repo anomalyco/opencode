@@ -53,9 +53,12 @@ const it = testEffect(
   ),
 )
 
-const grant = [{ action: "browser", resource: "*", effect: "allow" }] as const
-// What versions before this one granted; a revoke or the startup sweep must still remove it.
-const legacyGrant = [...grant, { action: "skill", resource: "browser", effect: "allow" }] as const
+const grant = [
+  { action: "browser", resource: "*", effect: "allow" },
+  { action: "skill", resource: "browser", effect: "allow" },
+] as const
+// What some versions granted: the browser alone. A revoke or the startup sweep must still remove it.
+const partialGrant = [grant[0]] as const
 
 const tab = {
   id: Browser.TabID.make(`tab_${crypto.randomUUID()}`),
@@ -262,7 +265,7 @@ it.live("startup revokes a grant whose server no longer runs", () =>
     // What a server killed while attached leaves behind: the grant and the record of the process that wrote it.
     yield* storage.set(`grant:${sessionID}`, owner(ref.directory, exited))
     const sessions = yield* Session.Service
-    yield* sessions.create({ id: sessionID, location: ref, permissions: [...legacyGrant] })
+    yield* sessions.create({ id: sessionID, location: ref, permissions: [...partialGrant] })
     const locations = yield* LocationServiceMap.Service
     yield* Plugin.awaitActivation.pipe(Effect.provideContext(yield* locations.contextEffect(ref).pipe(Effect.scoped)))
 
@@ -505,10 +508,12 @@ it.live("a deny of preview, the name the path forms had, still refuses them, and
     // A managed policy.
     const policy = yield* setup({ policies: [{ action: "tool.use", resource: "browser:preview", effect: "deny" }] }, page)
     for (const [operation, input] of forms) expect(yield* refusal(policy, operation, input)).toBe("Blocked by configuration policy")
-    // A deny that another plugin's experimental.rules hook adds.
+    // A deny that another plugin's evaluate hook decides.
     const hooked = yield* setup({}, page)
-    yield* Context.get(hooked.context, PluginHooks.Service).register("permission", "experimental.rules", (event) =>
-      Effect.sync(() => event.deny({ action: "browser", resource: "preview" })),
+    yield* Context.get(hooked.context, PluginHooks.Service).register("permission", "evaluate", (event) =>
+      Effect.sync(() => {
+        if (event.action === "browser" && event.resources.includes("preview")) event.effect = "deny"
+      }),
     )
     for (const [operation, input] of forms) expect(yield* refusal(hooked, operation, input)).toBe("Permission denied: browser")
     // None of them reached the desktop, and none of them stops a web address.
@@ -775,31 +780,31 @@ it.live("a configured deny that matches last refuses the call despite a saved ap
   }),
 )
 
-// Listing and calling, decided by the same rules. `listed` is whether the agent's next step offers the browser tools and
-// skill; each operation either reaches the desktop, prompts, or is refused as denied or disconnected.
+// Listing and calling. An attachment's grant follows every agent rule, so an attached session's next step offers the
+// browser tools and skill to its agent whatever that agent's rules say, and no other session's does. The agent's
+// rules decide each call: it reaches the desktop, prompts, or is refused as denied or disconnected.
 type Outcome = "allow" | "ask" | "deny" | "disconnected"
 const truth: ReadonlyArray<{
   readonly name: string
   readonly global?: ReadonlyArray<ReturnType<typeof rule>>
   readonly agent?: ReadonlyArray<ReturnType<typeof rule>>
   readonly attached: boolean
-  readonly listed: boolean
   readonly list: Outcome
   readonly open: Outcome
 }> = [
-  { name: "no rules", attached: true, listed: true, list: "allow", open: "allow" },
-  { name: "no rules, no desktop", attached: false, listed: false, list: "disconnected", open: "disconnected" },
-  { name: "global deny", global: [rule("*", "deny")], attached: true, listed: false, list: "deny", open: "deny" },
-  { name: "global deny, no desktop", global: [rule("*", "deny")], attached: false, listed: false, list: "deny", open: "deny" },
-  { name: "agent deny", agent: [rule("*", "deny")], attached: true, listed: false, list: "deny", open: "deny" },
-  { name: "global allow, agent deny", global: [rule("*", "allow")], agent: [rule("*", "deny")], attached: true, listed: false, list: "deny", open: "deny" },
-  { name: "global deny, agent allow", global: [rule("*", "deny")], agent: [rule("*", "allow")], attached: true, listed: true, list: "allow", open: "allow" },
-  { name: "agent denies every tool", agent: [rule("*", "deny", "*"), rule("*", "allow", "read")], attached: true, listed: false, list: "deny", open: "deny" },
-  { name: "global ask", global: [rule("*", "ask")], attached: true, listed: true, list: "ask", open: "ask" },
-  { name: "global deny, agent ask", global: [rule("*", "deny")], agent: [rule("*", "ask")], attached: true, listed: true, list: "ask", open: "ask" },
-  { name: "one operation denied", global: [rule("tabs.open", "deny")], attached: true, listed: true, list: "allow", open: "deny" },
-  { name: "operation pattern denied", global: [rule("tabs.*", "deny")], attached: true, listed: true, list: "deny", open: "deny" },
-  { name: "whole browser denied, one operation allowed after", global: [rule("*", "deny"), rule("tabs.list", "allow")], attached: true, listed: true, list: "allow", open: "deny" },
+  { name: "no rules", attached: true, list: "allow", open: "allow" },
+  { name: "no rules, no desktop", attached: false, list: "disconnected", open: "disconnected" },
+  { name: "global deny", global: [rule("*", "deny")], attached: true, list: "deny", open: "deny" },
+  { name: "global deny, no desktop", global: [rule("*", "deny")], attached: false, list: "deny", open: "deny" },
+  { name: "agent deny", agent: [rule("*", "deny")], attached: true, list: "deny", open: "deny" },
+  { name: "global allow, agent deny", global: [rule("*", "allow")], agent: [rule("*", "deny")], attached: true, list: "deny", open: "deny" },
+  { name: "global deny, agent allow", global: [rule("*", "deny")], agent: [rule("*", "allow")], attached: true, list: "allow", open: "allow" },
+  { name: "agent denies every tool", agent: [rule("*", "deny", "*"), rule("*", "allow", "read")], attached: true, list: "deny", open: "deny" },
+  { name: "global ask", global: [rule("*", "ask")], attached: true, list: "ask", open: "ask" },
+  { name: "global deny, agent ask", global: [rule("*", "deny")], agent: [rule("*", "ask")], attached: true, list: "ask", open: "ask" },
+  { name: "one operation denied", global: [rule("tabs.open", "deny")], attached: true, list: "allow", open: "deny" },
+  { name: "operation pattern denied", global: [rule("tabs.*", "deny")], attached: true, list: "deny", open: "deny" },
+  { name: "whole browser denied, one operation allowed after", global: [rule("*", "deny"), rule("tabs.list", "allow")], attached: true, list: "allow", open: "deny" },
 ]
 
 const unattached = Schema.is(Schema.Struct({ output: Schema.Struct({ connected: Schema.Literal(false) }) }))
@@ -846,7 +851,7 @@ const settle = Effect.fnUntraced(function* (
   return yield* Effect.raceFirst(settled, prompted).pipe(Effect.timeout("5 seconds"))
 })
 for (const row of truth)
-  it.live(`listing agrees with calling: ${row.name}`, () =>
+  it.live(`an attached session lists the browser whatever its agent's rules, which decide each call: ${row.name}`, () =>
     Effect.gen(function* () {
       const browser = yield* setup({
         ...(row.global && { permissions: row.global }),
@@ -855,15 +860,15 @@ for (const row of truth)
       const sessions = yield* Session.Service
       const sessionID = row.attached ? browser.session.id : (yield* sessions.create({ location: browser.ref })).id
       const listed = yield* browser.listing(sessionID)
-      expect(listed.catalog.length > 0).toBe(row.listed)
-      expect(listed.skill).toBe(row.listed)
-      expect(listed.direct).toEqual([])
+      // An agent that denies Code Mode too gets the tools one by one instead of in its catalog.
+      expect(listed.catalog.length + listed.direct.length > 0).toBe(row.attached)
+      expect(listed.skill).toBe(row.attached)
       expect(yield* outcome(browser, "tabs.list", "build", sessionID)).toBe(row.list)
       expect(yield* outcome(browser, "tabs.open", "build", sessionID)).toBe(row.open)
     }),
   )
 
-it.live("an agent denied the browser finds no browser tools through Code Mode's catalog, search or tools", () =>
+it.live("an agent denied the browser sees the browser tools in an attached session, and every call of them is refused", () =>
   Effect.gen(function* () {
     const browser = yield* setup({ agents: { reviewer: { mode: "primary", permissions: [rule("*", "deny")] } } })
     const allowed = yield* browser.listing()
@@ -873,25 +878,29 @@ it.live("an agent denied the browser finds no browser tools through Code Mode's 
 
     const sessions = yield* Session.Service
     yield* sessions.switchAgent({ sessionID: browser.session.id, agent: Agent.ID.make("reviewer") })
+    // The grant follows the agent's rules, so the denied agent's step lists what the allowed agent's did.
     const denied = yield* browser.listing()
-    expect(denied.catalog).toEqual([])
+    expect(denied.catalog).toEqual(allowed.catalog)
     expect(denied.direct).toEqual([])
-    expect(denied.skill).toBe(false)
-    expect(yield* codeMode(denied.selection, 'return search({ namespace: "browser" }).items.length')).toMatchObject({ output: "0" })
-    expect(yield* codeMode(denied.selection, 'return search({ query: "browser tabs screenshot" }).items.filter((item) => item.path.startsWith("tools.browser")).length')).toMatchObject({ output: "0" })
-    expect(
-      yield* codeMode(
-        denied.selection,
-        'try { await tools.browser.tabs.list({}); return "called" } catch (error) { return String(error?.message ?? error) }',
-      ),
-    ).toMatchObject({ output: expect.stringMatching(/^Unknown tool 'browser\.tabs\.list'\./), toolCalls: [] })
+    expect(denied.skill).toBe(true)
+    expect(yield* codeMode(denied.selection, 'return search({ namespace: "browser" }).items.length > 0')).toMatchObject({ output: "true" })
+
+    // Listed is not callable: each call hears the denial and none reaches the desktop.
+    for (const call of ["tabs.list({})", 'tabs.open({ url: "https://example.com" })', `snapshot({ tabID: "${tab.id}" })`])
+      expect(
+        (yield* codeMode(
+          denied.selection,
+          `try { await tools.browser.${call}; return "called" } catch (error) { return String(error?.message ?? error) }`,
+        )).output,
+      ).toStartWith("[browser.denied]")
     expect(browser.commands.count).toBe(1)
   }),
 )
 
-// A removed name is answered with what to call instead only where the namespace is listed. Anywhere else it must read
-// exactly as any other name does, or the sentence tells a caller denied the browser that it exists and what it has.
-it.live("a removed browser tool is one more unknown tool to a caller that cannot see the browser", () =>
+// A removed name is answered with what to call instead only where the namespace is listed: in an attached session,
+// whatever its agent's rules. In a session no desktop is attached to it must read exactly as any other name does, or
+// the sentence tells a caller that sees no browser that one exists and what it has.
+it.live("a removed browser tool names its replacement where the browser is listed, and is one more unknown tool where it is not", () =>
   Effect.gen(function* () {
     const attempt = (name: string) =>
       `try { await tools.browser.${name}({}); return "called" } catch (error) { return String(error?.message ?? error) }`
@@ -909,54 +918,58 @@ it.live("a removed browser tool is one more unknown tool to a caller that cannot
         expect(yield* codeMode(selection, 'return Object.keys(tools).includes("browser")')).toMatchObject({ output: "false" })
       })
 
-    const browser = yield* setup({ agents: { reviewer: { mode: "primary", permissions: [rule("*", "deny")] } } })
-    const allowed = yield* browser.listing()
-    expect(yield* codeMode(allowed.selection, attempt("preview"))).toMatchObject({
+    const removed = {
       output: expect.stringMatching(/^browser\.preview was removed: call browser\.tabs\.open/),
       toolCalls: [],
-    })
+    }
+
+    const browser = yield* setup({ agents: { reviewer: { mode: "primary", permissions: [rule("*", "deny")] } } })
+    const allowed = yield* browser.listing()
+    expect(yield* codeMode(allowed.selection, attempt("preview"))).toMatchObject(removed)
     expect(yield* codeMode(allowed.selection, 'return Object.keys(tools).includes("browser")')).toMatchObject({ output: "true" })
 
-    // Denied by the agent's rules.
+    // An agent whose rules deny the browser, in the attached session: the namespace is listed to it as well, so it
+    // reads the same sentence. The call it names instead is refused.
     const sessions = yield* Session.Service
     yield* sessions.switchAgent({ sessionID: browser.session.id, agent: Agent.ID.make("reviewer") })
-    yield* absent((yield* browser.listing()).selection)
+    expect(yield* codeMode((yield* browser.listing()).selection, attempt("preview"))).toMatchObject(removed)
 
-    // Denied by a rule another plugin's hook adds.
-    const hooked = yield* setup({})
-    yield* Context.get(hooked.context, PluginHooks.Service).register("permission", "experimental.rules", (event) =>
-      Effect.sync(() => event.deny({ action: "browser", resource: "*" })),
-    )
-    const denied = yield* hooked.listing()
-    expect(denied.catalog).toEqual([])
-    yield* absent(denied.selection)
-
-    // A session no desktop is attached to.
-    const unattached = yield* setup({})
-    const lone = yield* sessions.create({ location: unattached.ref })
-    const none = yield* unattached.listing(lone.id)
-    expect(none.catalog).toEqual([])
-    yield* absent(none.selection)
+    // A session no desktop is attached to, for an allowed agent and for a denied one: the deny every agent gets until
+    // an attachment's grant hides the tools, and the namespace with them.
+    for (const agent of ["build", "reviewer"]) {
+      const lone = yield* sessions.create({ location: browser.ref, agent: Agent.ID.make(agent) })
+      const none = yield* browser.listing(lone.id)
+      expect(none.catalog).toEqual([])
+      yield* absent(none.selection)
+    }
   }),
 )
 
-it.live("the next step's listing follows an agent switch, a session rule, a config reload and the attachment", () =>
+it.live("the next step's listing follows the attachment and a session deny after the grant; an agent's, a session's or a reloaded config's deny before it refuses the calls", () =>
   Effect.gen(function* () {
     const browser = yield* setup({ agents: { reviewer: { mode: "primary", permissions: [rule("*", "deny")] } } })
     const sessions = yield* Session.Service
     const listed = Effect.map(browser.listing(), (listing) => listing.catalog.length > 0)
+    const refused = (agent = "build") => Effect.map(Effect.flip(browser.call(agent)), (error) => error.message)
     expect(yield* listed).toBe(true)
 
     yield* sessions.switchAgent({ sessionID: browser.session.id, agent: Agent.ID.make("reviewer") })
-    expect(yield* listed).toBe(false)
+    expect(yield* listed).toBe(true)
+    expect(yield* refused("reviewer")).toStartWith("[browser.denied]")
     yield* sessions.switchAgent({ sessionID: browser.session.id, agent: Agent.ID.make("build") })
     expect(yield* listed).toBe(true)
 
+    // A session rule after the grant is the last match, so core itself hides the tools.
     yield* sessions.setPermissions({ sessionID: browser.session.id, permissions: [...grant, rule("*", "deny")] })
     expect(yield* listed).toBe(false)
-    expect((yield* browser.call().pipe(Effect.flip)).message).toStartWith("[browser.denied]")
+    expect(yield* refused()).toStartWith("[browser.denied]")
+    // The same rule before the grant leaves them listed, and still refuses every call.
+    yield* sessions.setPermissions({ sessionID: browser.session.id, permissions: [rule("*", "deny"), ...grant] })
+    expect(yield* listed).toBe(true)
+    expect(yield* refused()).toStartWith("[browser.denied]")
     yield* sessions.setPermissions({ sessionID: browser.session.id, permissions: [...grant] })
     expect(yield* listed).toBe(true)
+    expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
 
     // A config source that changes while the server runs reloads the agents, and with them the rules the grant yields to.
     const config = Context.get(browser.context, Config.Service)
@@ -971,8 +984,8 @@ it.live("the next step's listing follows an agent switch, a session rule, a conf
       }),
     )
     yield* Plugin.awaitActivation.pipe(Effect.provideContext(browser.context))
-    expect(yield* listed).toBe(false)
-    expect((yield* browser.call().pipe(Effect.flip)).message).toStartWith("[browser.denied]")
+    expect(yield* listed).toBe(true)
+    expect(yield* refused()).toStartWith("[browser.denied]")
     yield* config.integration!(integrationID, undefined)
     yield* Plugin.awaitActivation.pipe(Effect.provideContext(browser.context))
     expect(yield* listed).toBe(true)
@@ -989,7 +1002,7 @@ it.live("the next step's listing follows an agent switch, a session rule, a conf
   }),
 )
 
-it.live("a subagent lists no browser tools, whether it lost the inherited grant or its agent denies an attached browser", () =>
+it.live("a subagent that lost the inherited grant lists no browser tools; one with its own attachment lists them, and its agent's deny refuses its calls", () =>
   Effect.gen(function* () {
     const browser = yield* setup({
       agents: { reviewer: { mode: "subagent", permissions: [rule("*", "deny")] } },
@@ -1005,16 +1018,18 @@ it.live("a subagent lists no browser tools, whether it lost the inherited grant 
     yield* browser.attach(reviewer.id)
     expect(yield* browser.permissions(reviewer.id)).toEqual([...grant])
     const denied = yield* browser.listing(reviewer.id)
-    expect(denied.catalog).toEqual([])
-    expect(denied.skill).toBe(false)
+    expect(denied.catalog).toContain("browser.tabs.list")
+    expect(denied.skill).toBe(true)
+    expect((yield* browser.call("reviewer", reviewer.id).pipe(Effect.flip)).message).toStartWith("[browser.denied]")
 
-    // Explore denies every tool, Code Mode included, so a browser it were offered would be listed as direct tools.
+    // Explore denies every tool, Code Mode included, so the browser its attachment grants is listed as direct tools.
     const explore = yield* sessions.create({ parentID: browser.session.id, agent: Agent.ID.make("explore") })
     yield* sessions.prompt({ sessionID: explore.id, text: "Find the page", resume: false })
     yield* browser.attach(explore.id)
     const listing = yield* browser.listing(explore.id)
-    expect(listing.direct).toEqual([])
-    expect(listing.skill).toBe(false)
+    expect(listing.catalog).toEqual([])
+    expect(listing.direct.length).toBeGreaterThan(0)
+    expect((yield* browser.call("explore", explore.id).pipe(Effect.flip)).message).toStartWith("[browser.denied]")
     expect(browser.commands.count).toBe(0)
   }),
 )
@@ -1045,7 +1060,7 @@ it.live("with the browser plugin removed, a grant left in a session lists and re
   }),
 )
 
-it.live("with the browser plugin removed, a person's deny on their own browser skill outranks a grant left behind", () =>
+it.live("with the browser plugin removed, a grant left behind still allows a skill named browser over a person's deny", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()
     yield* Effect.promise(() =>
@@ -1066,13 +1081,13 @@ it.live("with the browser plugin removed, a person's deny on their own browser s
     yield* Plugin.awaitActivation.pipe(Effect.provideContext(context))
     const sessions = yield* Session.Service
     const contexts = Context.get(context, SessionContext.Service)
-    // A grant allows no skill, so the person's deny decides.
+    // A grant allows the skill with the browser. Nothing sweeps it once the plugin is removed, so it outranks the
+    // deny; with the plugin loaded, a revoke or the startup sweep removes it.
     const current = yield* sessions.create({ location: ref, permissions: [...grant] })
-    expect((yield* listing(contexts, current.id)).skill).toBe(false)
-    // An earlier version's grant also allowed the skill. Nothing sweeps it once the plugin is removed, so it still
-    // outranks the deny; with the plugin loaded, a revoke or the startup sweep removes it.
-    const legacy = yield* sessions.create({ location: ref, permissions: [...legacyGrant] })
-    expect((yield* listing(contexts, legacy.id)).skill).toBe(true)
+    expect((yield* listing(contexts, current.id)).skill).toBe(true)
+    // A grant that allowed the browser alone leaves the person's deny to decide.
+    const partial = yield* sessions.create({ location: ref, permissions: [...partialGrant] })
+    expect((yield* listing(contexts, partial.id)).skill).toBe(false)
   }),
 )
 // Loads the browser skill as the model would, through the read tool.
@@ -1098,29 +1113,38 @@ const readSkill = (browser: Effect.Success<ReturnType<typeof setup>>, agent: str
 
 const reads = rule("*", "allow", "read")
 
-it.live("the attachment's grant does not override a configured skill deny or ask for the browser skill", () =>
+// The grant allows the skill with the tools and follows every configured rule, as on dev: it outranks a person's own
+// skill rule, for the built-in skill and for a skill of theirs named `browser`.
+it.live("the attachment's grant shows and allows the browser skill over a configured skill deny or ask, and no desktop hides it", () =>
   Effect.gen(function* () {
     const denied = yield* setup({ permissions: [reads, rule("*", "deny", "skill")] })
     const listed = yield* denied.listing()
     expect(listed.catalog).toContain("browser.tabs.list")
-    expect(listed.skill).toBe(false)
-    expect(yield* readSkill(denied, "build")).toBe("deny")
+    expect(listed.skill).toBe(true)
+    expect(yield* readSkill(denied, "build")).toBe("allow")
 
     const asked = yield* setup({ permissions: [reads, rule("browser", "ask", "skill")] })
     expect((yield* asked.listing()).skill).toBe(true)
-    expect(yield* readSkill(asked, "build")).toBe("ask")
+    expect(yield* readSkill(asked, "build")).toBe("allow")
 
     const allowed = yield* setup({
       permissions: [reads],
       agents: { reviewer: { mode: "primary", permissions: [rule("*", "deny")] } },
     })
     expect(yield* readSkill(allowed, "build")).toBe("allow")
-    // The skill tool refuses an agent denied the browser, as its listing does.
-    expect(yield* readSkill(allowed, "reviewer")).toBe("deny")
+    // Reading the skill is no browser call: an agent denied the browser reads it, and has its browser calls refused.
+    expect(yield* readSkill(allowed, "reviewer")).toBe("allow")
+    expect((yield* allowed.call("reviewer").pipe(Effect.flip)).message).toStartWith("[browser.denied]")
+
+    // Without a desktop, the deny every agent gets until an attachment hides the skill and refuses its read.
+    const sessions = yield* Session.Service
+    const lone = yield* sessions.create({ location: allowed.ref })
+    expect((yield* allowed.listing(lone.id)).skill).toBe(false)
+    expect(yield* readSkill(allowed, "build", lone.id)).toBe("deny")
   }),
 )
 
-it.live("a person's own skill named browser follows their rules, not the built-in's", () =>
+it.live("a person's own skill named browser is hidden and shown with the browser, as the built-in one is", () =>
   Effect.gen(function* () {
     const browser = yield* setup(
       { permissions: [reads, rule("*", "deny"), rule("browser", "allow", "skill")] },
@@ -1131,11 +1155,14 @@ it.live("a person's own skill named browser follows their rules, not the built-i
     )
     const sessions = yield* Session.Service
     const detached = yield* sessions.create({ location: browser.ref })
-    for (const sessionID of [browser.session.id, detached.id]) {
-      const listed = yield* browser.listing(sessionID)
-      expect(listed.catalog).toEqual([])
-      expect(listed.skill).toBe(true)
-    }
+    const attached = yield* browser.listing()
+    expect(attached.catalog).toContain("browser.tabs.list")
+    expect(attached.skill).toBe(true)
+    // The person denies the browser, so its calls are refused whatever is listed.
+    expect((yield* browser.call().pipe(Effect.flip)).message).toStartWith("[browser.denied]")
+    const hidden = yield* browser.listing(detached.id)
+    expect(hidden.catalog).toEqual([])
+    expect(hidden.skill).toBe(false)
   }),
 )
 
@@ -1154,7 +1181,8 @@ it.live("an automation's code runs the browser for an allowed agent and refuses 
     expect(yield* run()).toMatchObject({ ok: true, state: 0 })
     expect(browser.commands.count).toBe(1)
     yield* sessions.switchAgent({ sessionID: browser.session.id, agent: Agent.ID.make("reviewer") })
-    expect(yield* run()).toMatchObject({ ok: false, error: "Permission denied: browser" })
+    // The grant lets the run start; the denied agent's call is refused where every browser call is.
+    expect(yield* run()).toMatchObject({ ok: false, error: expect.stringMatching(/^\[browser\.denied\]/) })
     expect(browser.commands.count).toBe(1)
   }),
 )
