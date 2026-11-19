@@ -9,7 +9,7 @@ export function TimelineSearchBar(props: { controller: TimelineSearchController 
 
   return (
     <Show when={c.visible()}>
-      <div data-component="timeline-search-bar" class="h-7 w-[200px] max-w-[50vw] shrink-0">
+      <div data-component="timeline-search-bar" class="h-7 w-[240px] max-w-[50vw] shrink-0">
         <div data-component="text-input-v2" data-appearance="base" data-leading-icon class="!h-7 !w-full max-w-full">
           <div data-slot="text-input-v2-value">
             <span data-slot="text-input-v2-leading-icon">
