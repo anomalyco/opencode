@@ -63,6 +63,7 @@ export function SessionScreenView(props: { session: SessionModel }) {
         view={mounted.view}
         bindBackground={mounted.bindBackground}
         bindPrompt={mounted.bindPrompt}
+        bindTimeline={mounted.bindTimeline}
       />
     </PluginLinks>
   )
@@ -75,6 +76,7 @@ function SessionScreenContent(props: {
   screen: SessionScreen
   bindBackground: (tasks: () => readonly BackgroundTask[]) => void
   bindPrompt: (prompt: { quotable: () => boolean; focus: () => void; focused: () => boolean }) => void
+  bindTimeline: (timeline: { revealMessage: (id: string) => void; jumpToLatest: () => void }) => void
 }) {
   const session = props.session
   const language = useLanguage()
@@ -130,6 +132,10 @@ function SessionScreenContent(props: {
   const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
 
   const timeline = createSessionTimelineInteraction(session, conversationVisible)
+  props.bindTimeline({
+    revealMessage: timeline.actions.revealMessage,
+    jumpToLatest: () => timeline.actions.resume(),
+  })
 
   const timelineSearch = createTimelineSearchController({
     sessionID: session.identity.sessionID,

@@ -20,6 +20,7 @@ import type {
   ServerRef,
   MountedSession,
   SessionScreen,
+  Timeline,
 } from "@opencode/plugin/gui"
 import { useComments } from "@/composer/comments"
 import { createComposerEditorActions } from "@/composer/editor/actions"
@@ -63,6 +64,8 @@ export function createMountedSession(session: SessionModel) {
   const [background, setBackground] = createSignal<Accessor<readonly BackgroundTask[]>>()
   // The screen's composer view, created after this object, says whether it takes quotes and focuses its prompt.
   const [prompt, setPrompt] = createSignal<{ quotable: Accessor<boolean>; focus: () => void; focused: () => boolean }>()
+  // The screen's timeline view, created after this object, reveals messages and returns to the latest one.
+  const [timelineNav, setTimelineNav] = createSignal<Timeline>()
 
   const serverRef: ServerRef = {
     get id() {
@@ -343,10 +346,16 @@ export function createMountedSession(session: SessionModel) {
   }
 
   // One object while this screen is mounted, whichever session it routes: its models follow the route.
+  const timelineRef: Timeline = {
+    revealMessage: (messageID) => timelineNav()?.revealMessage(messageID),
+    jumpToLatest: () => timelineNav()?.jumpToLatest(),
+  }
+
   const screen: SessionScreen = Object.freeze({
     file: files,
     comment,
     composer: composerRef,
+    timeline: timelineRef,
   })
 
   const owner = getOwner()
@@ -394,5 +403,6 @@ export function createMountedSession(session: SessionModel) {
     bindBackground: (tasks: Accessor<readonly BackgroundTask[]>) => setBackground(() => tasks),
     bindPrompt: (value: { quotable: Accessor<boolean>; focus: () => void; focused: () => boolean }) =>
       setPrompt(() => value),
+    bindTimeline: (value: Timeline) => setTimelineNav(() => value),
   }
 }
