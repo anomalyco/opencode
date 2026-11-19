@@ -156,6 +156,78 @@ fn deep_input_does_not_overflow() {
 }
 
 #[test]
+fn every_deep_form_compiles_without_overflow() {
+    let rt = Runtime::make();
+    let forms = [
+        ("return ", "!", "1"),
+        ("return ", "`${", "1}`"),
+        ("return ", "() => ", "1"),
+        ("let a = 1; ", "if (a) a = 1; else ", "a = 2; return a"),
+        ("let a = 1;\n", "if (a)\n", "a = 2; return a"),
+    ];
+    for (head, form, tail) in forms {
+        let code = format!("{head}{}{tail}", form.repeat(900));
+        let code = code.replace("1}`", &format!("1{}", "}`".repeat(900)));
+        assert!(run(&rt, &code).result.is_ok(), "{form:?}");
+    }
+}
+
+#[test]
+fn deep_programs_compile_off_a_small_caller_stack() {
+    let code = format!("return {}1", "!".repeat(1_500));
+    let result = std::thread::Builder::new()
+        .stack_size(1 << 20)
+        .spawn(move || {
+            let rt = Runtime::make();
+            let program = rt.program(&code, &ProgramOptions::new());
+            program.run().unwrap().json()
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+    assert_eq!(result.unwrap(), json!(true));
+}
+
+/// Programs nested far past the limit, some disguised from a cheap scan by `/`s that may be regexes or divisions, end
+/// with a diagnostic or an outcome. A native stack overflow would abort this test process instead.
+#[test]
+fn deliberately_deep_programs_end_cleanly() {
+    let n = 20_000;
+    let parens = format!("{}1{}", "(".repeat(n), ")".repeat(n));
+    let programs = [
+        format!("return {parens}"),
+        format!("return {}1", "!".repeat(n)),
+        format!("return {}1", "typeof ".repeat(n)),
+        format!("return {}1{}", "[".repeat(n), "]".repeat(n)),
+        format!("return {}1{}", "`${".repeat(n), "}`".repeat(n)),
+        format!("return {}1", "() => ".repeat(n)),
+        format!("{}{}return 1", "{".repeat(n), "}".repeat(n)),
+        format!("let a = 1; {}a = 2", "if (a) a = 1; else ".repeat(n / 2)),
+        format!("let a = 1, g = 1; a++ / {parens} / g"),
+        format!("let await = 1, g = 1; await / {parens} / g"),
+        format!("function f(s) {{ if (s) {{}} /}}/.test(s); return {parens} }}"),
+        format!("// note\u{2028}{parens}"),
+        format!("return typeof\u{a0}{}1", "typeof\u{a0}".repeat(n)),
+    ];
+    std::thread::Builder::new()
+        .stack_size(1 << 20)
+        .spawn(move || {
+            let rt = Runtime::make();
+            for code in &programs {
+                let outcome = run(&rt, code);
+                let ended = match &outcome.result {
+                    Ok(_) => true,
+                    Err(d) => d.kind == DiagnosticKind::ParseError,
+                };
+                assert!(ended, "{}: {:?}", &code[..40], outcome.result);
+            }
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
 fn bindings_are_globals_programs_can_shadow() {
     let mut bindings = serde_json::Map::new();
     bindings.insert("n".into(), Json::from(4));

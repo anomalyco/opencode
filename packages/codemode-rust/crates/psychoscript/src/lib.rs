@@ -21,6 +21,7 @@ mod host;
 mod host_function;
 mod iteration;
 mod native;
+mod nesting;
 mod object;
 mod ops;
 mod program;

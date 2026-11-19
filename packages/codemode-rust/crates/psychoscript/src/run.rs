@@ -4,9 +4,11 @@ use std::borrow::Cow;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
-use crate::compiler;
+use crate::bytecode::Program;
+use crate::compiler::{self, CompileError};
 use crate::convert;
 use crate::host::{self, RunHost};
+use crate::nesting;
 use crate::object::{Closure, Kind, Obj};
 use crate::program::Running;
 use crate::runtime::{ProgramOptions, Run};
@@ -15,49 +17,47 @@ use crate::value::Value;
 use crate::vm::Vm;
 use crate::{Data, Diagnostic, DiagnosticKind, HostString, Outcome, Runtime};
 
-/// Small programs run on the caller's thread with a modest native-stack budget. Larger ones, whose parse can
-/// recurse deeper, run on their own thread with a large stack; the reservation is virtual, only touched pages are
-/// committed.
-const INLINE_SOURCE_BYTES: usize = 2048;
-const INLINE_BRACKET_DEPTH: usize = 64;
-pub const INLINE_STACK_BUDGET: usize = 512 << 10;
-const STACK_SIZE: usize = 256 << 20;
-const THREAD_STACK_BUDGET: usize = 64 << 20;
+/// Native stack that parsing and compiling may use per unit of [`nesting::bound`], measured with
+/// `bench/examples/stack_probe.rs`, with headroom. The costliest form per unit is a chain of prefix operators: 819 B a
+/// level in release builds and 12.9 KB in debug builds.
+pub const COMPILE_STACK_PER_LEVEL: usize = if cfg!(debug_assertions) {
+    16 << 10
+} else {
+    1 << 10
+};
+/// The native stack a run may use from where it is driven, wherever it runs: past it a call fails with a RangeError, so
+/// where a program runs never changes what it can do. A run on the caller's thread assumes this much is free there.
+pub const RUN_STACK_BUDGET: usize = 512 << 10;
+/// Room on a thread beyond what its work is measured to need.
+pub(crate) const THREAD_STACK_BASE: usize = 256 << 10;
 
 pub fn execute(rt: &Runtime, code: &str, options: &ProgramOptions) -> Outcome {
-    if code.len() <= INLINE_SOURCE_BYTES && bracket_depth(code) <= INLINE_BRACKET_DEPTH {
-        let run = AssertUnwindSafe(|| settled(rt.program(code, options).run()));
-        return std::panic::catch_unwind(run).unwrap_or_else(|_| internal_error());
-    }
-    std::thread::scope(|s| {
-        let spawned = std::thread::Builder::new()
-            .stack_size(STACK_SIZE)
-            .spawn_scoped(s, || {
-                let mut program = rt.program(code, options);
-                program.stack_budget = THREAD_STACK_BUDGET;
-                settled(program.run())
-            });
-        match spawned {
-            Ok(handle) => handle.join().unwrap_or_else(|_| internal_error()),
-            Err(_) => settled(rt.program(code, options).run()),
-        }
-    })
+    let run = AssertUnwindSafe(|| settled(rt.program(code, options).run()));
+    std::panic::catch_unwind(run).unwrap_or_else(|_| internal_error())
 }
 
-/// The deepest bracket nesting in the source text, a cheap bound on how deep parsing recurses.
-fn bracket_depth(code: &str) -> usize {
-    let (mut depth, mut max) = (0usize, 0usize);
-    for b in code.bytes() {
-        match b {
-            b'(' | b'[' | b'{' => {
-                depth += 1;
-                max = max.max(depth);
-            }
-            b')' | b']' | b'}' => depth = depth.saturating_sub(1),
-            _ => {}
-        }
+/// Compiles on the caller's thread when the program's syntax is shallow enough to compile within the run's stack
+/// budget, whatever its length; a deeper one compiles on a thread with the stack its nesting needs. Running needs no
+/// more native stack for deep syntax, so only compiling moves.
+pub fn compile(code: &str, atoms: &mut Strings) -> Result<Program, CompileError> {
+    let need = nesting::bound(code).saturating_mul(COMPILE_STACK_PER_LEVEL);
+    if need <= RUN_STACK_BUDGET {
+        return compiler::compile(code, atoms);
     }
-    max
+    std::thread::scope(|s| {
+        std::thread::Builder::new()
+            .stack_size(need.saturating_add(THREAD_STACK_BASE))
+            .spawn_scoped(s, || compiler::compile(code, atoms))
+            .map_err(|_| CompileError {
+                kind: DiagnosticKind::ExecutionFailure,
+                message:
+                    "The program is nested too deeply to compile: no thread with enough stack."
+                        .into(),
+                offset: None,
+            })?
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    })
 }
 
 /// The outcome of a run, or for an interrupted one, an `ExecutionFailure` that says so.
@@ -92,7 +92,7 @@ pub fn start<'a>(
     options: &ProgramOptions,
 ) -> Result<Box<Running<'a>>, Box<Outcome>> {
     let mut atoms = Strings::new();
-    let program = match compiler::compile(&code, &mut atoms) {
+    let program = match compile(&code, &mut atoms) {
         Ok(p) => p,
         Err(e) => {
             let location = e.offset.map(|o| line_col(&code, o));
@@ -139,7 +139,7 @@ pub fn start_for_resume<'a>(
 ) -> Result<Resumed<'a>, crate::snapshot::SnapshotError> {
     let code = restored.code;
     let mut atoms = Strings::new();
-    let program = compiler::compile(&code, &mut atoms).map_err(|_| {
+    let program = compile(&code, &mut atoms).map_err(|_| {
         crate::snapshot::SnapshotError::new(
             "Source main does not compile in this build, so it can't resume.",
         )

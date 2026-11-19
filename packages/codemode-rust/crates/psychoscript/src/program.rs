@@ -226,8 +226,6 @@ pub struct Program<'a> {
     rt: &'a Runtime,
     state: State<'a>,
     shared: Arc<Shared>,
-    /// How much of the native stack below the point it is driven from the run may use.
-    pub(crate) stack_budget: usize,
 }
 
 impl<'a> Program<'a> {
@@ -246,12 +244,7 @@ impl<'a> Program<'a> {
         if let State::Running(r) = &mut state {
             r.vm.host.shared = shared.clone();
         }
-        Self {
-            rt,
-            state,
-            shared,
-            stack_budget: run::INLINE_STACK_BUDGET,
-        }
+        Self { rt, state, shared }
     }
 
     /// A program continuing a suspended run's state, checked against this runtime.
@@ -308,7 +301,7 @@ impl<'a> Program<'a> {
             };
             // Between jobs no native frame of the run is on the stack, so it may continue from wherever it is polled.
             r.vm.stack_base = &probe as *const u8 as usize;
-            r.vm.stack_budget = self.stack_budget;
+            r.vm.stack_budget = run::RUN_STACK_BUDGET;
             if r.vm.check_time().is_err() {
                 break;
             }

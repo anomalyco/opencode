@@ -364,7 +364,7 @@ pub fn capture(vm: &Vm, c: &Capture) -> Result<Snapshot, Refusal> {
     };
     let state = enc.state(c).map_err(|e| Refusal::Other(e.message))?;
     let base = vm.snapshot_base;
-    let program = crate::compiler::compile(c.code, &mut crate::strings::Strings::new())
+    let program = crate::run::compile(c.code, &mut crate::strings::Strings::new())
         .map_err(|e| Refusal::Other(e.message))?;
     let limits = vm.limits;
     let metadata = vm.host.run.metadata();
@@ -907,7 +907,7 @@ fn hex_bytes(s: &str) -> R<Vec<u8>> {
 fn baseline(vm: &Vm, code: &str) -> R<Vec<J>> {
     let mut atoms = crate::strings::Strings::new();
     let program =
-        crate::compiler::compile(code, &mut atoms).map_err(|e| SnapshotError::new(e.message))?;
+        crate::run::compile(code, &mut atoms).map_err(|e| SnapshotError::new(e.message))?;
     let h = &vm.host;
     let host = host::RunHost::new(h.globals.clone(), h.modules, h.translate, h.run.clone());
     let mut fresh = Vm::new(host, vm.limits, atoms);
