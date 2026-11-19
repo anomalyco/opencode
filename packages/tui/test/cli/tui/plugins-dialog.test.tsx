@@ -42,6 +42,7 @@ async function renderPlugins(
   tui?: {
     registered: { id: string; source: "builtin" | "external"; active: boolean }[]
     list: { target: string; id?: string; status: "active" | "inactive" | "failed"; error?: string }[]
+    activate?: () => Promise<boolean>
   },
 ) {
   const state = path.join(root, "state")
@@ -83,7 +84,7 @@ async function renderPlugins(
         list: () => tui?.list ?? [],
         activate: async (id: string) => {
           activations.push(id)
-          return true
+          return tui?.activate?.() ?? true
         },
         deactivate: async () => true,
       } as unknown as ReturnType<typeof usePlugin>
@@ -152,6 +153,54 @@ test("failed TUI plugins keep enter to enable and use space to show the error", 
     await fixture.app.waitForFrame(
       (frame) => frame.includes("TUI plugin error") && frame.includes("Plugin setup failed"),
     )
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+test.each([false, true])("successful plugin toggle uses a success toast (active: %s)", async (active) => {
+  await using tmp = await tmpdir()
+  const fixture = await renderPlugins(
+    tmp.path,
+    { list: [], check: [] },
+    {
+      registered: [{ id: "local.plugin", source: "external", active }],
+      list: [{ target: "./local.ts", id: "local.plugin", status: active ? "active" : "inactive" }],
+    },
+  )
+
+  try {
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.toasts.length === 1)
+    expect(fixture.toasts).toEqual([
+      { variant: "success", message: `Plugin local.plugin ${active ? "disabled" : "enabled"}` },
+    ])
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+test.each([false, true])("failed plugin activation does not show success (throws: %s)", async (throws) => {
+  await using tmp = await tmpdir()
+  const fixture = await renderPlugins(
+    tmp.path,
+    { list: [], check: [] },
+    {
+      registered: [{ id: "broken.plugin", source: "external", active: false }],
+      list: [{ target: "./broken.ts", id: "broken.plugin", status: "inactive" }],
+      activate: async () => {
+        if (throws) throw new Error("Plugin setup failed")
+        return false
+      },
+    },
+  )
+
+  try {
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.toasts.length === 1)
+    expect(fixture.toasts).toEqual([
+      { variant: "error", message: throws ? "Plugin setup failed" : "Failed to update plugin broken.plugin" },
+    ])
   } finally {
     fixture.app.renderer.destroy()
   }

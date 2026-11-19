@@ -49,7 +49,8 @@ test("setup layers before and after await reach keyboard, palette, and slash acr
   await openPlugin(setup)
   await setup.waitForFrame((frame) => frame.includes("inactive"))
   setup.mockInput.pressEnter()
-  await setup.waitForFrame((frame) => frame.includes("Fixture ready generation 1"))
+  // The toggle confirmation replaces the plugin's setup toast after activation completes.
+  await setup.waitForFrame((frame) => frame.includes("Plugin fixture.setup-keymap enabled"))
   setup.mockInput.pressEscape()
   setup.mockInput.pressKey("g", { ctrl: true })
   await setup.waitForFrame((frame) => frame.includes("Setup keymap ran 1"))
