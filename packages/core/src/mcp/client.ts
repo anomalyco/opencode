@@ -823,7 +823,12 @@ function toCallToolResult(result: SdkCallToolResult): CallToolResult {
       if (part.type === "resource_link") return [{ type: "text", text: part.uri }]
       if (part.type === "resource") {
         const resource = part.resource
-        if ("text" in resource) return [{ type: "text", text: resource.text }]
+        if ("text" in resource) {
+          const header = resource.mimeType
+            ? `[Resource ${resource.uri} (${resource.mimeType})]`
+            : `[Resource ${resource.uri}]`
+          return [{ type: "text", text: `${header}\n${resource.text}` }]
+        }
         if ("blob" in resource && resource.mimeType !== undefined)
           return [{ type: "media", data: resource.blob, mimeType: resource.mimeType, uri: resource.uri }]
         return [{ type: "text", text: resource.uri }]

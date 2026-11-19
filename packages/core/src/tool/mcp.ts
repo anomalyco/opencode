@@ -13,7 +13,7 @@ import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
 import { ReadToolFileSystem } from "./read-filesystem.js"
-import { effectiveName, normalizedName } from "./runtime.js"
+import { effectiveName, normalizedName, stringify } from "./runtime.js"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
@@ -81,16 +81,10 @@ export const layer = Layer.effect(
                           "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
                         }),
                       )
-                    if (result.isError)
-                      return yield* new ToolFailure({
-                        message:
-                          result.content
-                            .flatMap((part) => (part.type === "text" ? [part.text] : []))
-                            .join("\n")
-                            .trim() || "MCP tool returned an error",
-                      })
-                    const content = yield* Effect.forEach(result.content, (part) => toContent(part, toolOutput))
-                    const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+                    if (result.isError) return yield* new ToolFailure({ message: errorMessage(result) })
+                    const baseContent = yield* Effect.forEach(result.content, (part) => toContent(part, toolOutput))
+                    const text = baseContent.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+                    const content = modelContent(baseContent, result.structured)
                     const output = () => {
                       if (result.structured !== undefined) return result.structured
                       if (text === "") return null
@@ -151,6 +145,28 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+function modelContent(content: Tool.Content[], structured: unknown): Tool.Content[] {
+  if (content.length === 0 || structured === undefined || structured === null) return content
+  const serialized = stringify(structured)
+  if (content.some((part) => part.type === "text" && part.text.trim() === serialized)) return content
+  return [...content, { type: "text", text: serialized }]
+}
+
+function errorMessage(result: Mcp.ToolResult): string {
+  const parts = result.content.flatMap((part) => {
+    if (part.type === "text") return [part.text]
+    const mime = part.mimeType.split(";", 1)[0].trim().toLowerCase()
+    if (!Mime.isTextual(mime)) return []
+    const label = part.uri ?? "content"
+    return [`[Resource ${label} (${part.mimeType})]\n${Buffer.from(part.data, "base64").toString("utf8")}`]
+  })
+  const text = parts.join("\n").trim()
+  if (result.structured === undefined || result.structured === null) return text || "MCP tool returned an error"
+  const serialized = stringify(result.structured)
+  if (text === "" || text === serialized) return serialized
+  return `${text}\n${serialized}`
+}
 
 // Only media the read tool also accepts is sent inline; other types would fail request lowering on every later turn.
 const toContent = Effect.fnUntraced(function* (part: Mcp.ToolResultContent, toolOutput: ToolOutput.Interface) {
