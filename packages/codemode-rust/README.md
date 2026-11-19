@@ -54,6 +54,7 @@ The API is the Rust form of the reference's `Language` namespace:
 | `StreamingResponse` | `StreamingResponse` over an `HttpBody` |
 | `globalNames` | `global_names()` |
 | `Diagnostic`, `DiagnosticKind`, `Json` | `Diagnostic`, `DiagnosticKind`, `Json` (`serde_json::Value`) |
+| a run's `Result` (`value`, `logs`, ...) | `Outcome`: `result` as `Data` (JSON whose strings are `HostString`s), `logs` as `HostString`s; `Outcome::json` and `Outcome::log_lines` give them lossily as `serde_json::Value` and `String` |
 | a JavaScript string crossing as a host value | `HostString`: lossless, including unpaired surrogates; `as_str`, `to_utf16`, `to_string_lossy` |
 
 Host work is a `Future` instead of an Effect: `Runtime::execute` drives a run on the calling thread, and
@@ -80,8 +81,8 @@ Its expectations are recorded from the reference's language layer, never written
 ### Known differences
 
 - A saved state resumes only in the implementation and build that saved it: the snapshot formats differ.
-- The program's result (`Outcome::result`, JSON) and its logs are Rust strings, so an unpaired surrogate in them
-  becomes U+FFFD; the reference keeps it. Host values don't have this difference (see `HostString`).
+- Diagnostic messages (`Diagnostic::message`) are Rust strings, so an unpaired surrogate in an error's message or an
+  uncaught value becomes U+FFFD there; the reference keeps it. Host values, the result and the logs keep it.
 
 ## Layout
 
