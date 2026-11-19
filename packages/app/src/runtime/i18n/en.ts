@@ -1220,6 +1220,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.title": "Show agent",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
+  "settings.general.row.sharedSidePanel.title": "Keep side panel across sessions",
+  "settings.general.row.sharedSidePanel.description":
+    "Keep the side panel open or closed, at the same width, when you switch sessions",
   "settings.general.row.followUpBehavior.title": "Follow-up behavior",
   "settings.general.row.followUpBehavior.description":
     "Choose whether to queue follow-ups or steer the current turn. Use {{keybind}} to switch.",

@@ -273,6 +273,18 @@ export const SettingsGeneral: Component = () => {
 
         <FollowUpBehaviorSetting />
 
+        <SettingsRow
+          title={language.t("settings.general.row.sharedSidePanel.title")}
+          description={language.t("settings.general.row.sharedSidePanel.description")}
+        >
+          <div data-action="settings-shared-side-panel">
+            <Switch
+              checked={settings.general.sharedSidePanel()}
+              onChange={(checked) => settings.general.setSharedSidePanel(checked)}
+            />
+          </div>
+        </SettingsRow>
+
         <Show when={desktop()}>
           <SettingsRow
             title={language.t("settings.general.row.pinchZoom.title")}

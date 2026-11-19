@@ -119,6 +119,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.general",
   },
   {
+    tab: "general",
+    label: "settings.general.row.sharedSidePanel.title",
+    description: "settings.general.row.sharedSidePanel.description",
+    target: "settings-shared-side-panel",
+    section: "settings.general.section.general",
+    keywords: "right side panel review sidebar persist keep open sessions switch",
+  },
+  {
     tab: "experimental",
     label: "settings.experimental.row.newTimeline.title",
     target: "settings-new-timeline",

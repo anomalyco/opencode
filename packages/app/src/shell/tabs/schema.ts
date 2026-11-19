@@ -50,18 +50,15 @@ export const Info = Persistence.struct({
 export const Infos = Schema.Record(Schema.String, Schema.mutableKey(Info))
 
 // The side region keeps the name it was stored under before plugins.
-export const Regions = Schema.Record(
-  Schema.String,
-  Schema.mutableKey(
-    Persistence.struct({
-      side: Schema.optional(Schema.Boolean),
-      sessionWidth: Schema.optional(Schema.Finite),
-      bottom: Schema.optional(Schema.Boolean),
-      bottomHeight: Schema.optional(Schema.Finite),
-      splitRatio: Schema.optional(Schema.Finite),
-    }).pipe(Schema.encodeKeys({ side: "review" })),
-  ),
-)
+export const Region = Persistence.struct({
+  side: Schema.optional(Schema.Boolean),
+  sessionWidth: Schema.optional(Schema.Finite),
+  bottom: Schema.optional(Schema.Boolean),
+  bottomHeight: Schema.optional(Schema.Finite),
+  splitRatio: Schema.optional(Schema.Finite),
+}).pipe(Schema.encodeKeys({ side: "review" }))
+
+export const Regions = Schema.Record(Schema.String, Schema.mutableKey(Region))
 
 export const ClosedTab = Persistence.struct({
   tab: SessionCodec,
