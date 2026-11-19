@@ -261,12 +261,13 @@ describe("suspended while a getter waits on a host call", () => {
     const code = `
       const o = { get x() { return pick(slow(21)) } }
       const it = { [Symbol.iterator]() { let i = 0; return { next() { return { get done() { return i++ > 0 }, get value() { return o.x } } } } } }
-      return [o.x, [...it]]`
+      return [[...it], o.x]`
     const run = await suspendInFlight(code)
-    expect(run.plain).toMatchObject({ ok: true, value: [42, [42]] })
-    expect(run.resumed).toMatchObject({ ok: true, value: [42, [42]] })
-    expect(frames(run.state)).toContain("get x")
-    expect(frames(run.state)).toContain("$vmHostWait")
+    expect(run.plain).toMatchObject({ ok: true, value: [[42], 42] })
+    expect(run.resumed).toMatchObject({ ok: true, value: [[42], 42] })
+    expect(frames(run.state)).toEqual(
+      expect.arrayContaining(["get x", "get value", "$vmRedo (redo)", "$vmHostWait"]),
+    )
   })
 
   test("a getter waiting under REDO itself", async () => {
@@ -337,10 +338,12 @@ describe("suspended while a getter waits on a host call", () => {
 
   test("a getter inside an iterator op, resumed in another process", async () => {
     const code = `
-      const it = { [Symbol.iterator]() { let i = 0; return { get next() { return () => ({ done: pick(slow(i)) > 2, value: i++ }) } } } }
+      const it = { [Symbol.iterator]() { let i = 0; return { get next() { return () => ({ get done() { return pick(slow(i)) > 4 }, value: i++ }) } } } }
       return [...it]`
     const run = await suspendInFlight(code)
+    expect(run.plain).toMatchObject({ ok: true, value: [0, 1] })
     expect(run.resumed).toEqual(run.plain)
+    expect(frames(run.state)).toEqual(expect.arrayContaining(["get done", "$vmRedo (redo)", "$vmHostWait"]))
     const file = path.join(tmpdir(), `codemode-getters-${crypto.randomUUID()}.state`)
     await Bun.write(file, run.bytes)
     try {
