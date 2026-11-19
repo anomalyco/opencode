@@ -125,10 +125,13 @@ export function defineApp(scenario: AppScenario) {
 }
 
 // The Rust client implements the TUI with the `new-designs` experiment on, and only that, so every recording
-// turns it on. A config that sets the experiment itself keeps its value.
+// turns it on. TS's test fixtures (`createAppFixture`, `createTuiResolvedConfig`) default to new designs off and the
+// `opencode-classic` theme, so recordings also name the product's default theme, `opencode`. A config that sets the
+// experiment or a theme itself keeps its value.
 export function withNewDesigns(config: Record<string, unknown>) {
   const experimental = (config.experimental ?? {}) as Record<string, unknown>
-  return { ...config, experimental: { "new-designs": true, ...experimental } }
+  const theme = (config.theme ?? {}) as Record<string, unknown>
+  return { ...config, experimental: { "new-designs": true, ...experimental }, theme: { name: "opencode", ...theme } }
 }
 
 // Wire objects with fixed times, as the server sends them.

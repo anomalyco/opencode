@@ -6,7 +6,8 @@
  "config": {
   "experimental": {"new-designs":true},
   "keybinds": {"app.toggle.animations":"f5","app.toggle.diffwrap":"f6","app.toggle.file_context":"f7","app.toggle.paste_summary":"f8","terminal.title.toggle":"f9","opencode.settings":"f10"},
-  "animations": false
+  "animations": false,
+  "theme": {"name":"opencode"}
  },
  "args": {},
  "routes": [],

@@ -6,7 +6,8 @@
  "config": {
   "experimental": {"new-designs":true},
   "diffs": {"source":"committed"},
-  "animations": false
+  "animations": false,
+  "theme": {"name":"opencode"}
  },
  "args": {},
  "routes": [

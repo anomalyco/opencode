@@ -6,7 +6,8 @@
  "config": {
   "experimental": {"new-designs":true},
   "keybinds": {"location.reload":"f5"},
-  "animations": false
+  "animations": false,
+  "theme": {"name":"opencode"}
  },
  "args": {},
  "routes": [
