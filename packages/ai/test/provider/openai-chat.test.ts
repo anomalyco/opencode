@@ -861,6 +861,40 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("bridges tool results before a system update that becomes a user message (Mistral)", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "write", input: { path: "AGENTS.md" } })]),
+            Message.tool({ id: "call_1", name: "write", result: { type: "content", value: "ok" } }),
+            Message.system("Instructions updated: Always answer in French."),
+          ],
+        }),
+      )
+
+      // Mistral needs an assistant "Done." bridge before any user message that follows a tool result,
+      // including the system-update-as-user message.
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: { name: "write", arguments: encodeJson({ path: "AGENTS.md" }) },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_1", content: encodeJson({ type: "content", value: "ok" }) },
+        { role: "assistant", content: "Done." },
+        { role: "user", content: "<system-update>\nInstructions updated: Always answer in French.\n</system-update>" },
+      ])
+    }),
+  )
+
   it.effect("passes encoded image media through without local validation", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

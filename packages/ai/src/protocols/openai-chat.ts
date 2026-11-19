@@ -697,6 +697,9 @@ const lowerMessages = Effect.fnUntraced(function* (
   for (const message of request.messages) {
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
+      // Mistral-family models require an assistant message between a tool result and
+      // any user message, including a system update lowered to user content.
+      bridgeTools()
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
       const cacheControl = options.cacheControl?.(part.cache)
       if (pendingAttachments.length > 0) {
