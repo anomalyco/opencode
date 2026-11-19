@@ -20,7 +20,7 @@ test("external hand-off uses a live grant, its pinned root and the physical HTML
   const host = "11111111-1111-1111-1111-111111111111"
 
   const pages = workspacePages({ grant: () => ({ host, release() {} }) }, root,
-    { type: "local", roots: () => [root] }, new AbortController().signal, () => undefined)
+    { type: "local", roots: () => [root] }, new AbortController().signal)
 
   const url = await pages.load(pathToFileURL(file).href, () => {})
 
@@ -108,7 +108,7 @@ test("preview and reveal resolve existing regular files under the real workspace
 
     const sources = new Map<string, PreviewSource>([
       ["local", { ...scope,type: "local", roots: () => [repo] }],
-      ["remote", { ...scope,type: "remote",root:"/work", prefix: "workspace://session/", pin:async()=>identity, stat: async (path) => {
+      ["remote", { document: scope.document, takeEntry: scope.takeEntry, denied: scope.denied, type: "remote", root: "/work", prefix: "workspace://session/", stat: async (path) => {
         remotePaths.push(path)
 
         return path === "server-only.html" ? 17 : null

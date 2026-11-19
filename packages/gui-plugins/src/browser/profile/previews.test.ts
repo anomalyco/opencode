@@ -30,8 +30,6 @@ function fixture(read: Remote["read"]) {
         type: "remote",
         root: "/work",
         document: "index.html",
-        identity: "fixture",
-        pin: async () => "fixture",
         takeEntry: () => false,
         denied: () => {},
         prefix: "workspace://session/",

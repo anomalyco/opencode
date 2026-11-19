@@ -15,21 +15,18 @@ export type WorkspaceSource =
       type: "remote"
       root: string
       prefix: string
-      pin(document: string, signal: AbortSignal): Promise<string | undefined>
-      needsUpdate?(): boolean
-      stat(path: string, signal: AbortSignal, document?: string, entry?: boolean, identity?:string): Promise<number | null | "denied">
-      read(
-        path: string,
-        range: string | undefined,
-        signal: AbortSignal,
-        document: string,
-        entry: boolean,
-        identity: string,
-      ): Promise<Response>
+      /** The size of the server's file at `path`, or null when it has none it can read. */
+      stat(path: string, signal: AbortSignal): Promise<number | null>
+      read(path: string, range: string | undefined, signal: AbortSignal): Promise<Response>
     }
 
+/** What a grant lets its document load: the document's folder, entered once through the document itself. */
+type PreviewScope = { document: string; takeEntry(): boolean; denied(): void }
+
 export type PreviewSource =
-  | (WorkspaceSource & { localRoots?: readonly string[]; document: string; identity: string; takeEntry(): boolean; denied(): void })
+  // `identity` names this machine's workspace folder as it was when the grant was made.
+  | (Extract<WorkspaceSource, { type: "local" }> & PreviewScope & { identity: string })
+  | (Extract<WorkspaceSource, { type: "remote" }> & PreviewScope)
   | { type: "artifact"; id: string; read(route: string, method: string, signal: AbortSignal): Promise<Response> }
 
 /** The grant must still belong to this binding after asynchronous path resolution. */
@@ -52,16 +49,8 @@ export async function resolvePreviewRequest(
     return item && { type: "artifact" as const, route: item.route, read: grant.read }
   }
 
-  if (!grant.identity) return
-
   if (grant.type === "remote") {
-    const origin = `oc-preview://${host}`
-
-    const local = grant.localRoots && previewResource(url, host, initiator, grant.localRoots)
-
-    const path = grant.localRoots
-      ? local && relative(grant.root, fileURLToPath(local)).replaceAll("\\", "/")
-      : remotePath(url, `${origin}/`)
+    const path = remotePath(url, `oc-preview://${host}/`)
 
     if (!path) {
       grant.denied()
@@ -77,30 +66,14 @@ export async function resolvePreviewRequest(
       return
     }
 
-    const size = await grant.stat(path, signal, grant.document, entry, grant.identity)
-
-    if (size === "denied") {
-      grant.denied()
-
-      return
-    }
+    const size = await grant.stat(path, signal)
 
     if (size === null || grants.get(host) !== grant || signal.aborted) return
 
-    return {
-      type: "remote" as const,
-      path,
-      size,
-      read: async (path: string, range: string | undefined, signal: AbortSignal) => {
-        const response = await grant.read(path, range, signal, grant.document, entry, grant.identity)
-
-        if (response.headers.get("x-opencode-preview-denied") === "1" && grants.get(host) === grant) grant.denied()
-
-        return response
-      },
-    }
+    return { type: "remote" as const, path, size, read: grant.read }
   }
 
+  if (!grant.identity) return
   const roots = grant.roots()
   const file = previewResource(url, host, initiator, roots)
 

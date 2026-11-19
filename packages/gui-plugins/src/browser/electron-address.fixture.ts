@@ -90,7 +90,7 @@ void electron.app.whenReady().then(async () => {
     local: true,
     signal,
     fileRoots: () => [root],
-    workspace: workspacePages(previews, root, { type: "local", roots: () => [root] }, signal, () => undefined),
+    workspace: workspacePages(previews, root, { type: "local", roots: () => [root] }, signal),
     previewFailure: previews.failure,
     waitForFilters: (url, stop) =>
       gate.held && /^https?:/.test(url)

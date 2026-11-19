@@ -61,7 +61,7 @@ const FindView = Schema.Struct({
 export type FindView = typeof FindView.Type
 
 const RefusalNotice = Schema.Union([
-  Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web", "browser.preview.restricted", "browser.preview.agentRestricted"]), source: Schema.optionalKey(Schema.Literal("conversation")) }),
+  Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web", "browser.preview.restricted"]), source: Schema.optionalKey(Schema.Literal("conversation")) }),
   // A site asked for a passkey or security key, refused at once: this browser shows no request for it, in a tab of the
   // person's or (`agent`) one the agent drives; or (`off`) the system's dialog would answer, but the tab refuses since
   // the agent used it or a window linked to it. `site` is the page's registrable domain.

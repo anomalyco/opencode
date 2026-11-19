@@ -15,10 +15,9 @@ export function workspacePages(
   root: string,
   source: WorkspaceSource,
   lifetime: AbortSignal,
-  guarded: () => Extract<WorkspaceSource, { type: "remote" }> | undefined,
   previousRoot?: string,
 ) {
-  const grants = new Map<string, { document: string; identity: string; reader: WorkspaceSource; release(): void }>()
+  const grants = new Map<string, { document: string; identity: string; release(): void }>()
   let lastRoot = previousRoot
   let exposed = false
   let disposed = false
@@ -35,16 +34,19 @@ export function workspacePages(
   return {
     used: () => exposed,
     identity: () => lastRoot,
-    async load(address: string, refused: (guarded: boolean) => void, retryFrom?: string) {
+    async load(address: string, refused: () => void, retryFrom?: string) {
       const document = path(address)
 
       if (!document) return
       exposed = true
-      const restricted = guarded()
-      const reader = restricted ?? source
       const old = retryFrom && this.host(retryFrom)
       const prior = retryFrom === undefined ? undefined : (old && grants.get(old)?.identity) || lastRoot
-      const identity = prior ?? previousRoot ?? (reader.type === "remote" ? await reader.pin(document, lifetime) : await previewRoot(root).then(pin => pin.id, () => undefined))
+
+      // Only this machine's folder is pinned; a remote server answers for its own files on each request.
+      const identity =
+        source.type === "remote"
+          ? undefined
+          : (prior ?? previousRoot ?? (await previewRoot(root).then((pin) => pin.id, () => undefined)))
 
       if (lifetime.aborted || disposed) return
 
@@ -59,29 +61,30 @@ export function workspacePages(
       let first = true
       let notified = false
 
-      const grant = previews.grant(
-        {
-          ...reader,
-          localRoots: restricted && source.type === "local" ? roots : undefined,
-          document,
-          // An unavailable initial bind must still let Chromium report a failed load. Never read without a pin.
-          identity: identity ?? "",
-          takeEntry() {
-            const value = first
-            first = false
+      const scope = {
+        document,
+        takeEntry() {
+          const value = first
+          first = false
 
-            return value
-          },
-          denied() {
-            if (notified || lifetime.aborted) return
-            notified = true
-            refused(!!restricted)
-          },
+          return value
         },
+        denied() {
+          if (notified || lifetime.aborted) return
+          notified = true
+          refused()
+        },
+      }
+
+      const grant = previews.grant(
+        source.type === "remote"
+          ? { ...source, ...scope }
+          : // An unavailable initial bind must still let Chromium report a failed load. Never read without a pin.
+            { ...source, ...scope, identity: identity ?? "" },
         lifetime,
       )
 
-      grants.set(grant.host, { document, identity: identity ?? "", reader, release: grant.release })
+      grants.set(grant.host, { document, identity: identity ?? "", release: grant.release })
 
       return previewAddress(address, grant.host, roots, remote)
     },
@@ -121,9 +124,6 @@ export function workspacePages(
       const file = display && path(display)
 
       if (source.type !== "local" || !grant || !file || !/\.html?$/i.test(file)) return false
-
-      // Agent previews on this machine also have a server-side read grant.
-      if (grant.reader.type === "remote" && !(await this.exists(url, lifetime))) return false
       const opened = await openPreviewFile(root, grant.document, file, file === grant.document, grant.identity)
 
       if (!opened || opened === "denied") return false
@@ -144,7 +144,7 @@ export function workspacePages(
       if (!grant || !file) return false
       const doc = grant.document
 
-      if (grant.reader.type === "remote") return Number.isSafeInteger(await grant.reader.stat(file, signal, doc, file === doc, grant.identity))
+      if (source.type === "remote") return Number.isSafeInteger(await source.stat(file, signal))
       const opened = await openPreviewFile(root, doc, file, file === doc, grant.identity).catch(FileVerificationError.orMissing)
 
       if (!opened || opened === "denied") return false

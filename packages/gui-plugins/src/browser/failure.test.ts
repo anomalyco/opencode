@@ -72,7 +72,6 @@ describe("a command that failed", () => {
     "browser.address.credentials",
     "browser.address.workspace",
     "browser.preview.restricted",
-    "browser.preview.agentRestricted",
     "browser.pane.replaced",
     "browser.pane.unavailable",
     "browser.menu.failed",

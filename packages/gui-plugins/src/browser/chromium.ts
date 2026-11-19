@@ -822,7 +822,7 @@ export function createBrowserPage(
     rendering.committed()
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
-    dispatch({ type: "navigation.failed", code, description: options.previewFailure?.(url) ?? (options.artifacts?.display(url) ? "browser.artifact.missing" : options.remote?.needsUpdate?.() && preview(url)?.startsWith("workspace:") ? "browser.preview.unsupported" : description), url, preview: preview(url), isMainFrame }),
+    dispatch({ type: "navigation.failed", code, description: options.previewFailure?.(url) ?? (options.artifacts?.display(url) ? "browser.artifact.missing" : description), url, preview: preview(url), isMainFrame }),
   )
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (!isMainFrame) return
@@ -1172,7 +1172,7 @@ export function createBrowserPage(
 
   const load = async (url: string, retry = false, commandSignal = options.signal, keepAddress = true) => {
     const visit = begin(commandSignal, keepAddress)
-    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, (guarded) => notices.show({reason: guarded ? "browser.preview.agentRestricted" : "browser.preview.restricted"}), retry ? contents.getURL() : undefined) : url
+    const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, () => notices.show({ reason: "browser.preview.restricted" }), retry ? contents.getURL() : undefined) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
 

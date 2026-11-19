@@ -69,9 +69,6 @@ export function loadFailure(error: string) {
   if (error === FileVerificationError.code)
     return { kind: "unavailable", title: "failed.unavailable.title", description: "preview.verificationUnavailable", reload: true, code: undefined } as const
 
-  if (error === "browser.preview.unsupported")
-    return { kind: "unavailable", title: "failed.unavailable.title", description: "preview.upgrade", reload: true, code: undefined } as const
-
   if (error === "page_crashed") return { kind: "crashed", ...LOAD_COPY.crashed, reload: true, code: undefined } as const
   // An HTTP status, as the proxy's 502 for a target it cannot reach. A site can answer with the same number, and
   // whatever follows it would be the site's own words: the page says what it says for any load, with the number alone.
@@ -97,8 +94,6 @@ export function refusalText(
 
   if (reason === "browser.preview.restricted") return "preview.restricted"
 
-  if (reason === "browser.preview.agentRestricted") return "preview.agentRestricted"
-
   return "refused.web"
 }
 
@@ -118,8 +113,6 @@ export function commandFailure(code: string, action: Browser.Action["type"] | un
   if (code === "browser.address.workspace") return notice("refused.workspace", { lasting: true })
 
   if (code === "browser.preview.restricted") return notice("preview.restricted", { lasting: true })
-
-  if (code === "browser.preview.agentRestricted") return notice("preview.agentRestricted", { lasting: true })
 
   if (code === "browser.pane.replaced") return notice("replaced", { lasting: true })
 

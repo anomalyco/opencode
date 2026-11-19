@@ -64,7 +64,7 @@ type Handle = {
   partition: string
   /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
   shared: boolean
-  workspace?: (activity: TabActivity, identity?: string) => ReturnType<typeof workspacePages>
+  workspace?: (identity?: string) => ReturnType<typeof workspacePages>
   previewFailure: ReturnType<typeof createPreviews>["failure"]
   artifacts?: () => ReturnType<typeof artifactPages>
   source?: WorkspaceSource
@@ -255,8 +255,7 @@ export function createBrowserPane(input: {
 
             handle.source = source
             handle.artifacts = () => artifactPages(previews, server, session.location.directory, abort.signal)
-            handle.workspace = (activity, identity) => workspacePages(previews, session.location.directory, source, abort.signal,
-              () => agentDriven(activity) ? remotePreview(server, sessionID, options.location, abort.signal, {agent:activity.agent}) : undefined, identity)
+            handle.workspace = (identity) => workspacePages(previews, session.location.directory, source, abort.signal, identity)
 
             if (shared) handle.network = createDirectNetwork(input.profile.session)
 
@@ -811,7 +810,7 @@ export function createBrowserPane(input: {
       restore: options.restore,
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, binding),
-      workspace: handle.workspace?.(activity, options.identity),
+      workspace: handle.workspace?.(options.identity),
       previewFailure: handle.previewFailure,
       artifacts: handle.artifacts?.(),
       remote: remoteSource(binding),
@@ -1045,8 +1044,8 @@ export function createBrowserPane(input: {
       const remote = remoteSource(binding)
       const url = remote ? `${remote.prefix}${path.split("/").map(encodeURIComponent).join("/")}` : roots[0] && workspaceFileURL(roots[0], path)
 
-      if (!url || !(remote ? Number.isSafeInteger(await remote.stat(path, signal, path, true)) : await workspaceFile(url, roots)))
-        throw new CodedError(Browser.FailureCode.previewUnavailable, remote?.needsUpdate?.() ? "Update this session's server to open workspace files in the browser." : "The workspace file no longer exists or cannot be read by this session.")
+      if (!url || !(remote ? Number.isSafeInteger(await remote.stat(path, signal)) : await workspaceFile(url, roots)))
+        throw new CodedError(Browser.FailureCode.previewUnavailable, "The workspace file no longer exists or cannot be read by this session.")
       signal.throwIfAborted()
       normalizeURL(url, pagePolicy(binding))
 
