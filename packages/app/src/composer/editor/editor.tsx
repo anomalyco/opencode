@@ -440,7 +440,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 keyboardFocus.enter(event.currentTarget)
 
                 // A request dock can replace the editor. Keyboard focus on the new editor must keep the draft's caret.
-                if (firstFocus && keyboardFocus.visible()) props.controller.restoreFocus()
+                if (firstFocus && keyboardFocus.visible()) props.controller.restoreCaret()
                 firstFocus = false
                 props.controller.dispatch({ type: "focus.editor" })
               }}

@@ -705,6 +705,9 @@ export function createComposerEditor(input: {
       editor = element
       input.onEditor?.(element)
     },
+    restoreCaret() {
+      if (editor) setCursorPosition(editor, draft.state.cursor ?? promptLength(draft.state.prompt))
+    },
     restoreFocus,
     onInput(value: string, prompt?: ComposerPersistedState["prompt"], cursor?: number) {
       cancelFocus()
