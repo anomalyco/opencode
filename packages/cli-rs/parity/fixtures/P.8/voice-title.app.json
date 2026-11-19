@@ -29,8 +29,8 @@
  "deviation": "F16-v2-compat-layer",
  "requests": {
   "writes": [
-   {"method":"POST","path":"/api/rpc/voice/settingsGet","query":{},"body":{"input":{}},"status":200,"json":{"output":{"json":"{}"}}},
    {"method":"POST","path":"/api/rpc/voice/status","query":{},"body":{"input":{}},"status":200,"json":{"output":{"recording":false,"engineLoaded":false,"modelInstalled":false,"rssMb":0,"cpuPct":0}}},
+   {"method":"POST","path":"/api/rpc/voice/settingsGet","query":{},"body":{"input":{}},"status":200,"json":{"output":{"json":"{}"}}},
    {"method":"POST","path":"/api/rpc/voice/status","query":{},"body":{"input":{}},"status":200,"json":{"output":{"recording":false,"engineLoaded":false,"modelInstalled":false,"rssMb":0,"cpuPct":0}}},
    {"method":"POST","path":"/api/rpc/voice/updateStatus","query":{},"body":{"input":{}},"status":404,"json":{"_tag":"NotFound","message":"no such RPC"}}
   ],

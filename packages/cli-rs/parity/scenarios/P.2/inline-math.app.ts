@@ -25,7 +25,11 @@ export default defineApp({
     {
       checkpoint: "open",
       until: "run echo $HOME.",
-      deviation: [{ file: "P2-latex-inline", cells: 191 }],
+      // TS's second blank row above the fence scrolls the transcript up a row (F16).
+      deviation: [
+        { file: "P2-latex-inline", cells: 191 },
+        { file: "F16-plugin-fence-margin", cells: 262 },
+      ],
     },
   ],
 })

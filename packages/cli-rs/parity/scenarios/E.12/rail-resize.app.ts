@@ -28,6 +28,11 @@ export default defineApp({
     { drag: [[41, 10], [30, 10]] },
     { checkpoint: "resized", until: "The notes are written." },
     { drag: [[30, 10], [8, 10]] },
-    { checkpoint: "compact", until: "The notes are written." },
+    // The blank row under the search icon: its spaces' foreground, which does not show (OT094).
+    {
+      checkpoint: "compact",
+      until: "The notes are written.",
+      deviation: [{ file: "OT094-blank-row-fg", cells: 8 }],
+    },
   ],
 })
