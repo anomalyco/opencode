@@ -55,83 +55,101 @@ const revert: Session.Interface["revert"] = {
   commit: () => Effect.die("unused"),
 }
 
+// Runs `echo elsewhere` in a working directory whose environment is not the session's object and has the given
+// id, and reports which spawner started it and whether the process daemon was asked first.
+const run = (id: Environment.ID) =>
+  withTempDir((tmp) =>
+    Effect.gen(function* () {
+      const targetSpawns: ChildProcess.Command[] = []
+      const sessionSpawns: ChildProcess.Command[] = []
+      const daemonCommands: string[] = []
+      // The host's files, so the working directory exists there, and a spawner that starts no process: a command
+      // elsewhere gets none of this machine's variables, which a real shell on Windows may not start without.
+      const output = Stream.succeed(Buffer.from("elsewhere"))
+      const other = elsewhere(tmp.path, {
+        ...Context.get(yield* Layer.build(hostEnvironmentLayer), Environment.Service),
+        id,
+        spawner: ChildProcessSpawner.make((command) =>
+          Effect.sync(() => {
+            targetSpawns.push(command)
+            return makeHandle({
+              pid: ProcessId(1),
+              exitCode: Effect.succeed(ExitCode(0)),
+              isRunning: Effect.succeed(false),
+              kill: () => Effect.void,
+              stdin: Sink.drain,
+              stdout: output,
+              stderr: Stream.empty,
+              all: output,
+              getInputFd: () => Sink.drain,
+              getOutputFd: () => Stream.empty,
+              unref: Effect.succeed(Effect.void),
+            })
+          }),
+        ),
+      })
+      // A process daemon that is available, so a local command would go to it before any spawner.
+      const daemon = Shell.Daemon.of({
+        at: () =>
+          Effect.succeed({
+            get: () => undefined,
+            list: () => [],
+            create: (input) =>
+              Effect.sync(() => daemonCommands.push(input.info.command)).pipe(
+                Effect.andThen(Effect.fail(new PersistentPty.UnavailableError({ message: "recording only" }))),
+              ),
+            timeout: () => Effect.void,
+            stop: () => Effect.void,
+            remove: () => Effect.void,
+          }),
+        watch: () => Effect.void,
+        handoffPrepared: () => false,
+      })
+
+      return yield* Effect.gen(function* () {
+        const registry = yield* Tool.Service
+        expect(
+          yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: { type: "tool-call", id: "call-shell", name: "shell", input: { command: "echo elsewhere" } },
+          }),
+        ).toMatchObject({ status: "completed", output: { exitCode: 0, output: "elsewhere" } })
+        return { targetSpawns, sessionSpawns, daemonCommands }
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(LayerNode.group([Tool.node, shellToolNode]), [
+            ...other.replacements,
+            Environment.node.replace(recordingEnvironmentLayer(sessionSpawns)),
+            Shell.daemonNode.replace(Layer.succeed(Shell.Daemon, daemon)),
+            PersistentPty.node.replace(disabledPersistentPtyLayer),
+            Session.node.replace(Layer.mock(Session.Service, { revert })),
+            Config.node.replace(Config.testLayer()),
+            Global.node.replace(tempGlobalLayer),
+          ]),
+        ),
+      )
+    }),
+  )
+
 describe("shell tool", () => {
   it.live("runs its command in the resolved working directory's environment, not the session's", () =>
-    withTempDir((tmp) =>
-      Effect.gen(function* () {
-        const targetSpawns: ChildProcess.Command[] = []
-        const sessionSpawns: ChildProcess.Command[] = []
-        const daemonCommands: string[] = []
-        // The host's files, so the working directory exists there, and a spawner that starts no process: a command
-        // elsewhere gets none of this machine's variables, which a real shell on Windows may not start without.
-        const output = Stream.succeed(Buffer.from("elsewhere"))
-        const other = elsewhere(tmp.path, {
-          ...Context.get(yield* Layer.build(hostEnvironmentLayer), Environment.Service),
-          spawner: ChildProcessSpawner.make((command) =>
-            Effect.sync(() => {
-              targetSpawns.push(command)
-              return makeHandle({
-                pid: ProcessId(1),
-                exitCode: Effect.succeed(ExitCode(0)),
-                isRunning: Effect.succeed(false),
-                kill: () => Effect.void,
-                stdin: Sink.drain,
-                stdout: output,
-                stderr: Stream.empty,
-                all: output,
-                getInputFd: () => Sink.drain,
-                getOutputFd: () => Stream.empty,
-                unref: Effect.succeed(Effect.void),
-              })
-            }),
-          ),
-        })
-        // A process daemon that is available, so a local command would go to it before any spawner.
-        const daemon = Shell.Daemon.of({
-          at: () =>
-            Effect.succeed({
-              get: () => undefined,
-              list: () => [],
-              create: (input) =>
-                Effect.sync(() => daemonCommands.push(input.info.command)).pipe(
-                  Effect.andThen(Effect.fail(new PersistentPty.UnavailableError({ message: "recording only" }))),
-                ),
-              timeout: () => Effect.void,
-              stop: () => Effect.void,
-              remove: () => Effect.void,
-            }),
-          watch: () => Effect.void,
-          handoffPrepared: () => false,
-        })
+    Effect.gen(function* () {
+      const ran = yield* run(Environment.ID.make("elsewhere"))
+      expect(ran.daemonCommands).toEqual([])
+      expect(ran.targetSpawns).toHaveLength(1)
+      expect(ran.targetSpawns[0]).toMatchObject({ args: expect.arrayContaining(["echo elsewhere"]) })
+      expect(ran.sessionSpawns).toEqual([])
+    }),
+  )
 
-        return yield* Effect.gen(function* () {
-          const registry = yield* Tool.Service
-          expect(
-            yield* executeTool(registry, {
-              sessionID,
-              ...toolIdentity,
-              call: { type: "tool-call", id: "call-shell", name: "shell", input: { command: "echo elsewhere" } },
-            }),
-          ).toMatchObject({ status: "completed", output: { exitCode: 0, output: "elsewhere" } })
-
-          expect(targetSpawns).toHaveLength(1)
-          expect(targetSpawns[0]).toMatchObject({ args: expect.arrayContaining(["echo elsewhere"]) })
-          expect(sessionSpawns).toEqual([])
-          expect(daemonCommands).toEqual([])
-        }).pipe(
-          Effect.provide(
-            AppNodeBuilder.build(LayerNode.group([Tool.node, shellToolNode]), [
-              ...other.replacements,
-              Environment.node.replace(recordingEnvironmentLayer(sessionSpawns)),
-              Shell.daemonNode.replace(Layer.succeed(Shell.Daemon, daemon)),
-              PersistentPty.node.replace(disabledPersistentPtyLayer),
-              Session.node.replace(Layer.mock(Session.Service, { revert })),
-              Config.node.replace(Config.testLayer()),
-              Global.node.replace(tempGlobalLayer),
-            ]),
-          ),
-        )
-      }),
-    ),
+  it.live("treats an environment with the session's id as the session's machine", () =>
+    Effect.gen(function* () {
+      const ran = yield* run(Environment.localID)
+      // Local, so the daemon is asked first; it is unavailable here, and the command falls back to the spawner.
+      expect(ran.daemonCommands).toEqual(["echo elsewhere"])
+      expect(ran.targetSpawns).toHaveLength(1)
+      expect(ran.sessionSpawns).toEqual([])
+    }),
   )
 })
