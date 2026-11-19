@@ -360,18 +360,7 @@ fn code_blocks_follow_activation_order() {
     // The plugin later in order wins; toggling `first` keeps its place, as TS's registrations keep theirs.
     registry.set_active(&dynamic(&host), "first", false);
     registry.set_active(&dynamic(&host), "first", true);
-    let markdown = opencode_ui::markdown::view(
-        host.app(),
-        &host.theme(),
-        &opencode_ui::code::syntax_theme(&host.theme()),
-        &registry.code_blocks({
-            let theme = host.theme();
-            Rc::new(move || theme.clone())
-        }),
-        true,
-        false,
-    );
-    markdown.set_markdown("```math\nx^2\n```\n");
+    let markdown = crate::loader::tests::fence_view(&*host, &registry, "```math\nx^2\n```\n");
     host.app().root().add(&markdown);
     host.app.render();
     assert_eq!(languages.borrow().first(), Some(&("second", "x^2".to_owned())));
