@@ -136,7 +136,7 @@ export function DialogIntegration(
         title: integration.name,
         value: integration.id,
         description: methods.length === 0 ? "Environment only" : undefined,
-        footer: status ? "Sign in required →" : connectionSummary(integration) || undefined,
+        footer: status ? (status.status === "needs_auth" ? "Sign in required →" : "Restricted →") : connectionSummary(integration) || undefined,
         footerColor: status ? theme.text.feedback.warning.base : undefined,
         category,
         disabled: methods.length === 0 && credentials.length === 0,
@@ -219,7 +219,7 @@ function manageConnections(
                   ? `Press ${shortcuts.get("dialog.integration.delete")} again to confirm`
                   : connection.label,
                 value: connection.id,
-                footer: connection.status ? "Sign in required →" : undefined,
+                footer: connection.status ? (connection.status.status === "needs_auth" ? "Sign in required →" : "Restricted →") : undefined,
                 footerColor: connection.status ? theme.text.feedback.warning.base : undefined,
                 category: "Connected accounts",
                 bg: confirming ? theme.background.action.destructive.focused : undefined,
