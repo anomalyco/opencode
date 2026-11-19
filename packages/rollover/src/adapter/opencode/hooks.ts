@@ -14,7 +14,7 @@ import { estimateTokens, estimateMessageTokens } from "../../core/tokens"
 import { loadConfig, withSessionSettings } from "../../core/config"
 import { metricEvent } from "../../core/metrics"
 import { rolloverToast } from "../../core/messages"
-import { createScheduler, isCaughtUp } from "./scheduler"
+import { createScheduler } from "./scheduler"
 import { createLlm } from "./llm"
 import { createStore } from "./store"
 
@@ -195,17 +195,18 @@ export async function runTransform(deps: HookDeps, event: { messages: unknown[];
     if (cfg.mode === "auto") {
       const st = st0 ?? (await ensureState(deps.store, sidResolved))
 
-      const extractionCaughtUp = isCaughtUp(st, msgs)
       const toolsOpen = hasOpenTools(msgs)
       const context = contextInfoFor(st, msgs)
 
       const threshold = effectiveThreshold({ cfg, sessionOverride: st.settings.thresholdTokens, modelLimit: deps.modelLimits.get(sidResolved) })
 
+      // v2: the swap decision is fully deterministic — extraction state can no
+      // longer gate it (a lagging ledger only means the frozen render carries
+      // the mechanical projection until enrichment lands).
       const d = decideSwap({
         msgs,
         st,
         thresholdValue: threshold.value,
-        extractionCaughtUp,
         toolsOpen,
         contextTokens: context.tokens,
       })
@@ -324,7 +325,9 @@ export async function runImmediateSwap(
   // own toast. notify failures must not crash the pipeline.
   void (async () => {
     try {
-      await deps.scheduler.runNow(sid)
+      // v2: enrichment, not a precondition — the swap no longer depends on the
+      // extraction cursor; a catch-up run only feeds the render refresh.
+      void deps.scheduler.runNow(sid).catch(() => {})
       const st2 = await deps.store.readState(sid)
       const msgs2 = deps.lastMessages.get(sid) ?? msgs
       if (!st2) return
@@ -332,10 +335,14 @@ export async function runImmediateSwap(
         msgs: msgs2,
         st: st2,
         thresholdValue: threshold.value,
-        extractionCaughtUp: isCaughtUp(st2, msgs2),
         toolsOpen: hasOpenTools(msgs2),
         contextTokens: context.tokens,
         anchor: "lastUser",
+        // Explicit user-triggered swap: re-evaluate even when the automatic
+        // flow already decided for this prompt (its pre-turn evaluation ran
+        // while the context was below the threshold and marked it decided —
+        // without this the immediate swap can never complete).
+        ignoreDecided: true,
       })
       if (d.action !== "swap") {
         await notify(`Rollover did not complete: ${d.action === "defer" ? d.reason : "conditions not met"}. The automatic mechanism will retry on later turns.`)

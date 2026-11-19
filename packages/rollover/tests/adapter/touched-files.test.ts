@@ -32,12 +32,15 @@ function msg(id: string, role: "user" | "assistant", text: string): NMessage {
 }
 
 describe("touched files", () => {
+  const makeDeps = (dir: string, store: ReturnType<typeof createStore>) =>
+    ({ store, projectDir: dir, homeConfigDir: dir, env: {}, log: () => {}, modelLimits: new Map(), lastMessages: new Map(), scheduler: {} }) as never
+
   test("edit event records a worktree-relative path and bumps the turn", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "touched-"))
     mkdirSync(path.join(dir, "src"), { recursive: true })
     const store = createStore({ dataDir: path.join(dir, ".opencode", "rollover") })
-    await store.writeState("s1", state({ epoch: 2 }))
-    const deps = { store, projectDir: dir } as never
+    await store.writeState("s1", state({ epoch: 2, settings: { enabled: true } }))
+    const deps = makeDeps(dir, store)
 
     await trackTouchedFile(deps, { tool: "edit", sessionID: "s1", input: { path: path.join(dir, "src", "a.ts") } })
     await trackTouchedFile(deps, { tool: "write", sessionID: "s1", input: { path: path.join(dir, "src", "b.ts") } })
@@ -52,9 +55,19 @@ describe("touched files", () => {
   test("other tools are ignored", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "touched-"))
     const store = createStore({ dataDir: path.join(dir, ".opencode", "rollover") })
-    await store.writeState("s1", state())
-    const deps = { store, projectDir: dir } as never
+    await store.writeState("s1", state({ settings: { enabled: true } }))
+    const deps = makeDeps(dir, store)
     await trackTouchedFile(deps, { tool: "read", sessionID: "s1", input: { path: "/tmp/x" } })
+    expect((await store.readState("s1"))?.touchedFiles).toEqual({})
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  test("off session tracks nothing", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "touched-"))
+    const store = createStore({ dataDir: path.join(dir, ".opencode", "rollover") })
+    await store.writeState("s1", state({ settings: { enabled: false } }))
+    const deps = makeDeps(dir, store)
+    await trackTouchedFile(deps, { tool: "edit", sessionID: "s1", input: { path: path.join(dir, "src", "a.ts") } })
     expect((await store.readState("s1"))?.touchedFiles).toEqual({})
     rmSync(dir, { recursive: true, force: true })
   })
@@ -62,14 +75,14 @@ describe("touched files", () => {
   test("touched files appear in the rendered rollover context at swap", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "touched-"))
     const store = createStore({ dataDir: path.join(dir, ".opencode", "rollover") })
-    await store.writeState("s1", state({ epoch: 2 }))
-    const deps = { store, projectDir: dir } as never
+    await store.writeState("s1", state({ epoch: 2, settings: { enabled: true } }))
+    const deps = makeDeps(dir, store)
     await trackTouchedFile(deps, { tool: "patch", sessionID: "s1", input: { path: path.join(dir, "src", "a.ts") } })
 
     const st = (await store.readState("s1"))!
     const msgs = [msg("u1", "user", "first"), msg("u2", "user", "second")]
     const rec = freezeRollover({ msgs, st, cfg, lines: [], userMessageId: "u2" })
-    expect(rec.renderText).toContain("## Files changed in this session")
+    expect(rec.renderText).toContain("## Files touched")
     expect(rec.renderText).toContain("- src/a.ts")
     rmSync(dir, { recursive: true, force: true })
   })
