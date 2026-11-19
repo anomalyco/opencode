@@ -6,6 +6,7 @@ mod subagents;
 mod terminals;
 
 use crate::prelude::*;
+use opencode_store::SessionStatus;
 
 /// The input mode the composer pushes while it is open.
 pub(crate) const MODE: &str = "composer";
@@ -229,7 +230,8 @@ impl Inner {
         Condition::when(bind!(self, |inner| check(&inner)))
     }
 
-    /// `session.child.first`: opens on the named tab (the prompt footer names one), else toggles the subagent picker.
+    /// `session.child.first`: opens on the named tab (the prompt footer names one), else toggles the picker on the
+    /// first busy tab.
     fn toggle(self: &Rc<Self>, tui: &Tui, tab: Option<&str>) {
         if let Some(tab) = tab.and_then(|tab| match tab {
             "subagents" => Some(Tab::Subagents),
@@ -241,9 +243,20 @@ impl Inner {
             self.requested.set(false);
             self.refresh(tui);
         } else {
-            self.show(tui, Some(Tab::Subagents));
+            self.show(tui, Some(self.busy_tab(tui)));
         }
         tui.dialogs.clear();
+    }
+
+    /// The tab the picker opens on when nothing asks for one (TS `busyTab`): the first that has something running,
+    /// else Subagents. TS puts Scripts first; this client has no Scripts tab.
+    fn busy_tab(&self, tui: &Tui) -> Tab {
+        let session = &self.session;
+        tui.data.read(|state| {
+            let subagents =
+                state.family(session).iter().any(|id| id != session && state.status(id) == SessionStatus::Running);
+            if !subagents && !state.session_shells(session).is_empty() { Tab::Shell } else { Tab::Subagents }
+        })
     }
 
     fn show(self: &Rc<Self>, tui: &Tui, tab: Option<Tab>) {

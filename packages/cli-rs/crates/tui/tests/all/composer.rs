@@ -422,6 +422,21 @@ fn a_theme_switch_restyles_the_dock_the_composer_and_the_terminal_in_place() {
     );
 }
 
+/// The picker opens on the first tab with something running, Subagents before Shell (#64972).
+#[test]
+fn the_picker_opens_on_the_first_busy_tab() {
+    let harness = mount();
+    assert!(harness.wait(|harness| harness.app.text().contains("1 shell")));
+    harness.tui.keymap.dispatch("session.child.first", None);
+    assert!(harness.wait(|harness| harness.app.text().contains("make watch")), "{}", harness.app.text());
+
+    let harness = mount_family();
+    assert!(harness.wait(|harness| harness.app.text().contains("3 subagents · 1 shell")), "{}", harness.app.text());
+    harness.tui.keymap.dispatch("session.child.first", None);
+    assert!(harness.wait(|harness| harness.app.text().contains("Scan")), "{}", harness.app.text());
+    assert!(!harness.app.text().contains("make watch"));
+}
+
 #[test]
 fn terminal_select_opens_the_terminal_list_and_enter_shows_the_terminal() {
     let harness = mount();
