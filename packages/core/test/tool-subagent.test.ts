@@ -797,7 +797,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("syncs updated parent permissions when continuing an existing child session", () =>
+  it.live("syncs updated parent permissions on continuation without loosening child-specific restrictions", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
@@ -823,7 +823,10 @@ describe("SubagentTool", () => {
           const childID = outputSessionID(first.metadata)
           expect((yield* sessions.get(childID)).permissions).toEqual(initialPermissions)
 
-          const tightenedPermissions: Permission.Ruleset = [{ action: "bash", resource: "*", effect: "deny" }]
+          const tightenedPermissions: Permission.Ruleset = [
+            { action: "edit", resource: "*", effect: "allow" },
+            { action: "bash", resource: "*", effect: "deny" },
+          ]
           yield* sessions.setPermissions({ sessionID: parent.id, permissions: tightenedPermissions })
 
           const second = yield* executeTool(registry, {
@@ -853,6 +856,45 @@ describe("SubagentTool", () => {
                 agent: Agent.ID.make("reviewer"),
                 action: "bash",
                 resources: ["git status"],
+              })
+              .pipe(Effect.flip),
+          ).toBeInstanceOf(Permission.BlockedError)
+
+          // A child given custom read-only permissions (by a plugin at creation or via session.update) must keep
+          // its own restrictions when continued, while still receiving non-allow parent rules.
+          const readOnlyChild = yield* sessions.create({
+            parentID: parent.id,
+            title: "readonly review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
+            permissions: [{ action: "edit", resource: "*", effect: "deny" }],
+          })
+          yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-perm-readonly-child",
+              name: SubagentTool.name,
+              input: {
+                agent: "reviewer",
+                description: "continue readonly",
+                prompt: "continue without edit",
+                sessionID: readOnlyChild.id,
+              },
+            },
+          })
+          expect((yield* sessions.get(readOnlyChild.id)).permissions).toEqual([
+            { action: "edit", resource: "*", effect: "deny" },
+            { action: "bash", resource: "*", effect: "deny" },
+          ])
+          expect(
+            yield* permission
+              .assertNotDenied({
+                sessionID: readOnlyChild.id,
+                agent: Agent.ID.make("reviewer"),
+                action: "edit",
+                resources: ["src/index.ts"],
               })
               .pipe(Effect.flip),
           ).toBeInstanceOf(Permission.BlockedError)

@@ -66,6 +66,7 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const models = yield* Model.Service
     const subagents = yield* SubagentJob.Service
+    const inheritedPermissions = new Map<SessionSchema.ID, Permission.Ruleset | undefined>()
 
     const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
       const ref = yield* Effect.try({
@@ -158,18 +159,29 @@ export const Plugin = {
               if (existing !== undefined) {
                 const switched = existing.agent !== agent.id
                 const model = override ?? (switched ? agent.model : undefined)
-                const permissionsChanged = !samePermissions(existing.permissions, parent.permissions)
+                const nextPermissions = nextChildPermissions(
+                  existing.permissions,
+                  parent.permissions,
+                  inheritedPermissions.has(existing.id),
+                  inheritedPermissions.get(existing.id),
+                )
                 yield* Effect.all([
                   switched ? sessions.switchAgent({ sessionID: existing.id, agent: agent.id }) : Effect.void,
                   model === undefined ? Effect.void : sessions.switchModel({ sessionID: existing.id, model }),
-                  permissionsChanged
-                    ? sessions.setPermissions({ sessionID: existing.id, permissions: parent.permissions ?? [] })
-                    : Effect.void,
+                  nextPermissions === undefined
+                    ? Effect.void
+                    : sessions.setPermissions({ sessionID: existing.id, permissions: nextPermissions }),
                 ]).pipe(
                   Effect.mapError(
                     (error) => new ToolFailure({ message: `Failed to switch subagent session: ${existing.id}`, error }),
                   ),
                 )
+                if (
+                  nextPermissions !== undefined &&
+                  inheritedPermissions.has(existing.id) &&
+                  samePermissions(existing.permissions, inheritedPermissions.get(existing.id))
+                )
+                  inheritedPermissions.set(existing.id, parent.permissions)
               }
 
               const model = override ?? agent.model ?? parent.model
@@ -183,6 +195,11 @@ export const Plugin = {
                     model,
                   })
                   .pipe(
+                    Effect.tap((created) =>
+                      Effect.sync(() => {
+                        inheritedPermissions.set(created.id, created.permissions)
+                      }),
+                    ),
                     Effect.mapError(
                       (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                     ),
@@ -274,12 +291,34 @@ export const Plugin = {
   }),
 }
 
+function sameRule(left: Permission.Rule, right: Permission.Rule | undefined) {
+  return left.action === right?.action && left.resource === right?.resource && left.effect === right?.effect
+}
+
 function samePermissions(left: Permission.Ruleset | undefined, right: Permission.Ruleset | undefined) {
   const a = left ?? []
   const b = right ?? []
   if (a.length !== b.length) return false
-  return a.every(
-    (rule, index) =>
-      rule.action === b[index]?.action && rule.resource === b[index]?.resource && rule.effect === b[index]?.effect,
+  return a.every((rule, index) => sameRule(rule, b[index]))
+}
+
+// Replaces the child's rules only while it is still on the snapshot inherited at creation; when a plugin created or
+// updated the child with custom permissions, keeps the child's own rules and layers non-allow parent rules on top so
+// continuation never loosens child-specific restrictions.
+function nextChildPermissions(
+  childPermissions: Permission.Ruleset | undefined,
+  parentPermissions: Permission.Ruleset | undefined,
+  tracked: boolean,
+  inherited: Permission.Ruleset | undefined,
+): Permission.Ruleset | undefined {
+  if (tracked && samePermissions(childPermissions, inherited)) {
+    if (samePermissions(childPermissions, parentPermissions)) return undefined
+    return parentPermissions ?? []
+  }
+  const base = childPermissions ?? []
+  const tightened = (parentPermissions ?? []).filter(
+    (rule) => rule.effect !== "allow" && !base.some((existing) => sameRule(rule, existing)),
   )
+  if (tightened.length === 0) return undefined
+  return [...base, ...tightened]
 }
