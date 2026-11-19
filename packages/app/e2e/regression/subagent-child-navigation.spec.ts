@@ -426,6 +426,7 @@ function titleInlineStart(title: Locator) {
 
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
     const text = walker.nextNode()
+
     if (!text) return 0
     range.selectNodeContents(text)
 
