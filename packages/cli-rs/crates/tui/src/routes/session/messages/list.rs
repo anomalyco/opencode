@@ -1283,7 +1283,11 @@ impl Context<'_> {
             }
         }
         let Some(index) = self.agents.iter().position(|item| item.id.as_str() == agent) else { return colors[0] };
-        self.agents[index].color.as_ref().and_then(|color| hex(color.as_str())).unwrap_or(colors[index % colors.len()])
+        self.agents[index]
+            .color
+            .as_ref()
+            .and_then(|color| Color::parse(color.as_str()))
+            .unwrap_or(colors[index % colors.len()])
     }
 
     pub fn model_name(&self, model: &ModelRef) -> String {
@@ -1630,22 +1634,6 @@ impl Body {
             Body::Error(view) => view.root(),
         }
     }
-}
-
-fn hex(value: &str) -> Option<Color> {
-    let digits = value.strip_prefix('#').unwrap_or(value);
-    let digits: String = match digits.len() {
-        3 => digits.chars().flat_map(|digit| [digit, digit]).collect(),
-        6 | 8 => digits.to_owned(),
-        _ => return None,
-    };
-    let value = u32::from_str_radix(&digits, 16).ok()?;
-    Some(if digits.len() == 8 {
-        let [r, g, b, a] = value.to_be_bytes();
-        Color::rgba(r, g, b, a)
-    } else {
-        Color::hex(value)
-    })
 }
 
 fn thinking_syntax(syntax: &SyntaxTheme, foreground: Color) -> SyntaxTheme {
