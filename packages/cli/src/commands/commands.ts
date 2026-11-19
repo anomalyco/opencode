@@ -277,6 +277,26 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           globalFlags: ServerFlags,
           params: { name: Argument.String("name").pipe(Argument.withDescription("Name of the MCP server")) },
         }),
+        Spec.make("trust", {
+          description: "Trust a self-signed certificate for a private-network MCP server",
+          globalFlags: ServerFlags,
+          params: {
+            url: Argument.String("url").pipe(
+              Argument.withDescription("URL of the MCP server, e.g. https://192.168.1.1/mcp"),
+            ),
+            force: Flag.Boolean("force").pipe(
+              Flag.withDescription("Re-pin the certificate even if it changed since it was last trusted"),
+              Flag.withDefault(false),
+            ),
+            yes: Flag.Boolean("yes").pipe(
+              Flag.withAlias("y"),
+              Flag.withDescription(
+                "Trust the certificate without asking for confirmation (required without an interactive terminal)",
+              ),
+              Flag.withDefault(false),
+            ),
+          },
+        }),
       ],
     }),
     Spec.make("plugin", {
