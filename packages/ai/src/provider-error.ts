@@ -128,6 +128,8 @@ const CONTENT_POLICY_CODES = new Set([
   "responsibleaipolicyviolation",
   "content_policy_violation",
   "image_content_policy_violation",
+  // OpenAI's cybersecurity safeguard, as an HTTP 400 or a mid-stream error frame.
+  "cyber_policy",
   "refusal",
   "datainspectionfailed",
   "moderation_blocked",
