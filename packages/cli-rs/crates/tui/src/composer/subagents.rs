@@ -96,19 +96,8 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
 }
 
 pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
-    let command = |id: &str, title: &str, run: fn(&Rc<Inner>, &Tui)| {
-        TuiCommand::new(
-            id,
-            bind!(inner, |inner, _, _| {
-                let Some(tui) = inner.tui.upgrade() else { return };
-                run(&inner, &tui);
-            }),
-        )
-        .title(title)
-        .group("Composer")
-    };
     vec![
-        command("composer.subagent.up", "Previous subagent", |inner, tui| {
+        inner.command("composer.subagent.up", "Previous subagent", |inner, tui| {
             let selected = inner.subagents.borrow().selected;
             if selected == 0 {
                 inner.close(tui);
@@ -117,7 +106,7 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             inner.subagents.borrow_mut().move_to(selected - 1, true);
             inner.refresh(tui);
         }),
-        command("composer.subagent.down", "Next subagent", |inner, tui| {
+        inner.command("composer.subagent.down", "Next subagent", |inner, tui| {
             {
                 let mut state = inner.subagents.borrow_mut();
                 if state.entries.is_empty() {
@@ -128,7 +117,7 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             }
             inner.refresh(tui);
         }),
-        command("composer.subagent.select", "Navigate to subagent", |inner, tui| {
+        inner.command("composer.subagent.select", "Navigate to subagent", |inner, tui| {
             let session = {
                 let state = inner.subagents.borrow();
                 state.entries.get(state.selected).map(|entry| entry.session.clone())
@@ -137,17 +126,18 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
                 tui.navigate(Route::Session { id });
             }
         }),
-        command("composer.subagent.toggle-activity", "Toggle active subagents", |inner, tui| {
-            tui.composer.active.set(!tui.composer.active.get());
-            {
-                let mut state = inner.subagents.borrow_mut();
-                state.selected = 0;
-                state.offset = 0;
-            }
-            inner.refresh(tui);
-        })
-        .bind(Bind::Key("ctrl+a".to_owned())),
-        command("composer.subagent.interrupt", "Interrupt subagent", |inner, tui| {
+        inner
+            .command("composer.subagent.toggle-activity", "Toggle active subagents", |inner, tui| {
+                tui.composer.active.set(!tui.composer.active.get());
+                {
+                    let mut state = inner.subagents.borrow_mut();
+                    state.selected = 0;
+                    state.offset = 0;
+                }
+                inner.refresh(tui);
+            })
+            .bind(Bind::Key("ctrl+a".to_owned())),
+        inner.command("composer.subagent.interrupt", "Interrupt subagent", |inner, tui| {
             let session = {
                 let state = inner.subagents.borrow();
                 state.entries.get(state.selected).filter(|entry| entry.running).map(|entry| entry.session.clone())
