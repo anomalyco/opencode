@@ -31,6 +31,7 @@ export default Runtime.handler(
           Effect.map(HttpClient.mapRequest(HttpClientRequest.setHeaders(Service.headers(endpoint) ?? {}))),
         ),
       ),
+      Effect.provide(NodeHttpClient.layerNodeHttp),
     )
     const connection = yield* ACP.connect(client, ndJsonStream(Writable.toWeb(process.stdout), Bun.stdin.stream()))
     const failure = yield* Effect.raceFirst(
@@ -55,5 +56,5 @@ export default Runtime.handler(
       if (failure) process.stderr.write(`opencode acp: ${failure}\n`)
       process.exit(failure ? 1 : 0)
     })
-  }, Effect.provide(NodeHttpClient.layerNodeHttp)),
+  }),
 )
