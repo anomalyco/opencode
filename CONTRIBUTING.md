@@ -73,6 +73,34 @@ Follow package-specific instructions in nearby `AGENTS.md` files. After changing
 
 Follow the repository [style guide](./AGENTS.md).
 
+### Windows
+
+Git checks out symbolic links as plain text files when `core.symlinks` is off,
+which is the Windows default. The checkout ends up with about 40 text files
+where symlinks should be, and `bun run check` fails on `packages/app`:
+
+```
+packages/app/src/custom-elements.d.ts(1,1): error TS1128
+```
+
+Enable Developer Mode (Settings > System > For developers), then clone with
+symlinks on:
+
+```powershell
+git clone -c core.symlinks=true https://github.com/anomalyco/opencode
+```
+
+For an existing checkout, turn symlinks on and re-check out every tracked file.
+This discards uncommitted changes:
+
+```powershell
+git config --local core.symlinks true
+git restore .
+```
+
+`packages/app` keeps failing without this. Typechecks for other packages, such
+as `cd packages/tui && bun typecheck`, work either way.
+
 ## Pull Requests
 
 ### Link Issues When Required
