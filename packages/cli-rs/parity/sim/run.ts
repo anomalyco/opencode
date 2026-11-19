@@ -173,8 +173,11 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
   await Bun.write(
     path.join(box.env.XDG_CONFIG_HOME, "opencode", "cli.json"),
     // The TS CLI from source is the `local` channel, which shows the DevTools bar by default.
+    // Both sides run `opencode-classic`, as P-APP does: in the default `opencode` theme OpenTUI's Rust Markdown colors
+    // prose with the syntax theme's `default` (parity/deviations/OT-markdown-default-scope.md).
     JSON.stringify({
       experimental: { "new-designs": true },
+      theme: { name: "opencode-classic" },
       animations: false,
       debug: { devtools: false },
       ...scenario.config,
