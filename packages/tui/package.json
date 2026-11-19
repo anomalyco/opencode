@@ -46,6 +46,11 @@
       "bun": "./src/plugin/runtime-plugin-support.bun.ts",
       "node": "./src/plugin/runtime-plugin-support.node.ts",
       "default": "./src/plugin/runtime-plugin-support.node.ts"
+    },
+    "#console-viewport": {
+      "bun": "./src/console-viewport.bun.ts",
+      "node": "./src/console-viewport.node.ts",
+      "default": "./src/console-viewport.node.ts"
     }
   },
   "dependencies": {
