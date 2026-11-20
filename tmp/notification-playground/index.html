@@ -51,12 +51,16 @@ textarea { resize: vertical; }
 .wall.os-win.t-light { background: radial-gradient(60% 80% at 72% 62%, #a9cbff 0%, #6b9cf0 45%, #e3edfc 88%); }
 .wall.os-mac.t-dark { background: linear-gradient(160deg, #1b1f3b, #55306e 55%, #b6604a); }
 .wall.os-mac.t-light { background: linear-gradient(160deg, #a9c7ff, #e7bddb 55%, #ffd6a8); }
-.t-dark { --t-bg: rgb(44 44 44 / .97); --m-bg: rgb(42 42 46 / .86); --t-fg: #fff; --t-fg2: rgb(255 255 255 / .78); --t-fg3: rgb(255 255 255 / .55); --t-line: rgb(255 255 255 / .09);
+.t-dark { --t-bg: rgb(44 44 44 / .97); --t-fg: #fff; --t-fg2: rgb(255 255 255 / .78); --t-fg3: rgb(255 255 255 / .55); --t-line: rgb(255 255 255 / .09);
   --t-ctl: rgb(255 255 255 / .06); --t-ctl-line: rgb(255 255 255 / .08); --t-item: rgb(255 255 255 / .05); --t-panel: rgb(32 32 32 / .95); --t-accent: #60cdff; --t-primary: #60cdff; --t-primary-fg: #000;
-  --tb: rgb(28 28 28 / .86); --mb: rgb(0 0 0 / .3); --t-menu: #2c2c2c; }
-.t-light { --t-bg: rgb(249 249 249 / .97); --m-bg: rgb(246 246 246 / .86); --t-fg: #1b1b1b; --t-fg2: rgb(0 0 0 / .7); --t-fg3: rgb(0 0 0 / .5); --t-line: rgb(0 0 0 / .08);
+  --tb: rgb(28 28 28 / .86); --mb: rgb(0 0 0 / .3); --t-menu: #2c2c2c;
+  --m-bg: rgb(36 36 38 / .94); --m-solid: #242426; --m-line: rgb(255 255 255 / .1); --m-fg: rgb(255 255 255 / .92); --m-fg2: rgb(255 255 255 / .84); --m-pill: #38383a; --m-close: #3a3a3c;
+  --m-sep: rgb(255 255 255 / .1); --m-menu: rgb(32 32 34 / .97); --m-field: rgb(255 255 255 / .06); }
+.t-light { --t-bg: rgb(249 249 249 / .97); --t-fg: #1b1b1b; --t-fg2: rgb(0 0 0 / .7); --t-fg3: rgb(0 0 0 / .5); --t-line: rgb(0 0 0 / .08);
   --t-ctl: rgb(255 255 255 / .85); --t-ctl-line: rgb(0 0 0 / .1); --t-item: rgb(255 255 255 / .75); --t-panel: rgb(243 243 243 / .96); --t-accent: #005fb8; --t-primary: #005fb8; --t-primary-fg: #fff;
-  --tb: rgb(243 243 243 / .86); --mb: rgb(255 255 255 / .45); --t-menu: #f9f9f9; }
+  --tb: rgb(243 243 243 / .86); --mb: rgb(255 255 255 / .45); --t-menu: #f9f9f9;
+  --m-bg: rgb(251 251 251 / .94); --m-solid: #fbfbfb; --m-line: rgb(0 0 0 / .07); --m-fg: rgb(0 0 0 / .88); --m-fg2: rgb(0 0 0 / .8); --m-pill: #ededed; --m-close: #e8e8e8;
+  --m-sep: rgb(0 0 0 / .1); --m-menu: rgb(246 246 246 / .97); --m-field: #fff; }
 .screen { position: relative; height: 500px; border-radius: 12px; overflow: hidden; isolation: isolate; }
 .appwin { position: absolute; left: 5%; top: 9%; width: 54%; height: 66%; border-radius: 8px; background: var(--t-bg); opacity: .5; box-shadow: 0 20px 50px rgb(0 0 0 / .3); padding: 44px 28px; display: flex; flex-direction: column; gap: 14px; }
 .os-mac .appwin { top: 13%; border-radius: 12px; }
@@ -109,29 +113,58 @@ textarea { resize: vertical; }
 .win.compact { width: auto; padding: 10px 12px; border-radius: 6px; box-shadow: none; background: var(--t-item); margin-bottom: 6px; }
 .win.compact .title, .win.compact .body { -webkit-line-clamp: 1; }
 
-.toast.mac { width: 344px; padding: 11px 12px; border-radius: 16px; background: var(--m-bg); border: 1px solid var(--t-line); box-shadow: 0 10px 30px rgb(0 0 0 / .28); backdrop-filter: blur(24px) saturate(1.6); font: 13px/17px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; }
-.mac .m-main { display: flex; gap: 10px; align-items: center; }
-.mac .m-icon { flex: none; width: 38px; height: 38px; } .mac .m-icon svg { width: 100%; height: 100%; }
+/* macOS 26 banners, measured on a real Mac (Electron 44, UNUserNotificationCenter). */
+.toast.mac { position: relative; width: 344px; padding: 12px 12px 13px 13px; border-radius: 20px; background: var(--m-bg); border: 1px solid var(--m-line); box-shadow: 0 10px 30px rgb(0 0 0 / .22); backdrop-filter: blur(30px) saturate(1.6); color: var(--m-fg); font: 13px/16px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; }
+.mac .m-main { display: flex; gap: 13px; align-items: center; }
+.mac .m-icon { flex: none; width: 32px; height: 32px; } .mac .m-icon svg { width: 100%; height: 100%; }
 .mac .m-top { display: flex; gap: 8px; align-items: baseline; }
-.mac .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mac .m-time { font-size: 12px; color: var(--t-fg3); }
-.mac .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mac .body { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.mac .img { border-radius: 6px; overflow: hidden; }
-.mac .inputs { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
-.mac .inputs + .acts { margin-top: 6px; }
-.mac .acts { display: flex; gap: 6px; margin-top: 10px; }
-.mac .acts.col { flex-direction: column; }
-.mac .acts button { flex: 1; min-height: 26px; padding: 0 8px; border-radius: 7px; background: var(--t-ctl); border: 1px solid var(--t-ctl-line); font-size: 12.5px; }
-.mac .reply { display: flex; align-items: center; height: 28px; border-radius: 7px; background: var(--t-ctl); border: 1px solid var(--t-ctl-line); padding: 0 4px 0 10px; }
-.mac .reply button { width: 26px; height: 22px; display: grid; place-items: center; color: #0a84ff; }
-.mac.live .acts, .mac.live .inputs { display: none; }
-.mac.live:hover .acts, .mac.live:focus-within .acts, .mac.live:hover .inputs, .mac.live:focus-within .inputs { display: flex; }
-.mac.compact { width: auto; margin-bottom: 8px; box-shadow: none; }
-.mac.compact .m-icon { width: 32px; height: 32px; }
+.mac .title { flex: 1; min-width: 0; font-weight: 700; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.mac .m-sub { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mac .body { color: var(--m-fg2); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+.mac.has-sub .title { -webkit-line-clamp: 1; }
+.mac.has-sub .body { -webkit-line-clamp: 3; }
+.mac .m-time { flex: none; font-size: 12px; color: var(--t-fg3); }
+.mac .img { align-self: flex-end; border-radius: 6px; overflow: hidden; }
+.mac .m-close { position: absolute; left: -7px; top: -5px; z-index: 1; width: 20px; height: 20px; border-radius: 50%; display: none; place-items: center; font-size: 9px; background: var(--m-close); border: 1px solid var(--m-line); color: var(--t-fg2); box-shadow: 0 1px 3px rgb(0 0 0 / .2); }
+.mac .m-pill { position: absolute; right: 10px; bottom: 13px; height: 22px; padding: 0 12px; border-radius: 11px; display: none; align-items: center; gap: 3px; background: var(--m-pill); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.mac.has-pill.live:hover .body, .mac.has-pill.live:focus-within .body, .mac.has-pill.pinned .body { mask-image: linear-gradient(#000 0 0), linear-gradient(to left, transparent 96px, #000 150px); mask-size: 100% calc(100% - 16px), 100% 100%; mask-repeat: no-repeat; }
+.mac .m-ctl { position: absolute; top: 8px; display: none; place-items: center; width: 18px; height: 20px; color: var(--t-fg2); font-size: 13px; letter-spacing: 1px; }
+.mac .m-expand { right: 10px; } .mac .m-dots { right: 32px; } .mac .m-collapse { right: 9px; }
+.mac .m-menu { position: absolute; top: calc(100% - 7px); right: -10px; z-index: 3; min-width: 108px; padding: 5px; border-radius: 12px; display: none; background: var(--m-menu); border: 1px solid var(--m-line); box-shadow: 0 10px 28px rgb(0 0 0 / .3); backdrop-filter: blur(30px); }
+.mac .m-menu button { display: block; width: 100%; padding: 4px 10px; border-radius: 6px; text-align: left; white-space: nowrap; }
+.mac .m-menu button:hover, .mac .m-menu button:focus-visible { background: #0a84ff; color: #fff; outline: none; }
+.mac .m-rows, .mac .m-reply { display: none; margin: 12px 0 -6px; border-top: 1px solid var(--m-sep); }
+.mac .m-rows button { display: block; width: calc(100% - 8px); margin: 0 4px; height: 29px; text-align: center; }
+.mac .m-rows button + button { border-top: 1px solid var(--m-sep); }
+.mac .m-reply { flex-direction: column; gap: 6px; padding: 12px 0 0; margin-bottom: -4px; }
+.mac .m-reply input { height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--m-sep); background: var(--m-field); color: var(--t-fg); font: inherit; outline: none; }
+.mac .m-reply input:focus { border-color: rgb(128 128 128 / .45); }
+.mac .m-reply button { height: 24px; color: var(--t-fg2); font-weight: 500; }
+.mac .m-reply input:placeholder-shown + button { color: var(--t-fg3); }
+.mac.live:hover .m-close, .mac.live:focus-within .m-close, .mac.pinned .m-close { display: grid; }
+.mac.live:hover .m-pill, .mac.live:focus-within .m-pill, .mac.pinned .m-pill { display: flex; }
+.mac.can-expand.live:hover .m-expand, .mac.can-expand.live:focus-within .m-expand, .mac.can-expand.pinned .m-expand { display: grid; }
+.mac.can-expand.live:hover .title, .mac.can-expand.live:focus-within .title, .mac.can-expand.pinned .title { margin-right: 22px; }
+.mac.menu-open .m-menu { display: block; }
+.mac.expanded .m-pill, .mac.replying .m-pill, .mac.expanded .m-expand, .mac.replying .m-expand { display: none !important; }
+.mac.expanded .m-dots, .mac.expanded .m-collapse, .mac.replying .m-dots, .mac.replying .m-collapse { display: grid; }
+.mac.expanded .title, .mac.replying .title { margin-right: 46px; }
+.mac.expanded .body, .mac.replying .body { display: block; mask-image: none !important; }
+.mac.expanded .m-rows { display: block; }
+.mac.replying .m-reply { display: flex; }
+.mac.compact { margin-bottom: 7px; box-shadow: none; }
+.m-stack { position: relative; isolation: isolate; margin-bottom: 7px; cursor: pointer; border-radius: 20px; }
+.m-stack.n2 { margin-bottom: 14px; } .m-stack.n3 { margin-bottom: 19px; }
+.m-stack > .toast { position: relative; z-index: 1; margin: 0; }
+.m-layer { position: absolute; left: 50%; bottom: -6px; z-index: 0; width: 94%; height: 24px; transform: translateX(-50%); border-radius: 0 0 18px 18px; background: var(--m-bg); border: 1px solid var(--m-line); border-top: 0; }
+.m-layer + .m-layer { bottom: -11px; width: 88%; z-index: -1; opacity: .75; }
+.m-thread + .m-thread { margin-top: 16px; }
+.m-less, .m-less:hover { height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; background: var(--m-bg); border: 1px solid var(--m-line); color: var(--t-fg); }
+.m-clear { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: 9px; background: var(--m-bg); border: 1px solid var(--m-line); color: var(--t-fg2); text-shadow: none; }
 
 .center { position: absolute; z-index: 2; right: 12px; top: 12px; bottom: 52px; width: 380px; overflow: auto; padding: 12px; border-radius: 8px; background: var(--t-panel); border: 1px solid var(--t-line); box-shadow: 0 16px 40px rgb(0 0 0 / .35); color: var(--t-fg); font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
-.os-mac .center { top: 34px; bottom: 12px; right: 10px; width: 360px; background: none; border: 0; box-shadow: none; padding: 0; font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+.os-mac .center { top: 34px; bottom: 12px; right: 10px; width: 352px; background: none; border: 0; box-shadow: none; padding: 6px 4px 0; font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+.os-mac .center.open .c-head { font-size: 15px; }
 .c-head { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 10px; }
 .c-clear { color: var(--t-fg3); }
 .c-group { display: flex; justify-content: space-between; font-weight: 600; font-size: 13px; padding: 6px 2px; }
@@ -141,7 +174,7 @@ textarea { resize: vertical; }
 .tile { border-radius: 10px; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 190px; overflow: hidden; }
 .static .toast { pointer-events: none; }
 .static .center { position: static; width: 380px; overflow: visible; }
-.static.os-mac .center { width: 344px; }
+.static.os-mac .center { width: 352px; }
 
 .frames { display: flex; gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 12px; margin: 0; }
 .frame { flex: none; width: 430px; margin: 0; scroll-snap-align: start; cursor: pointer; }
@@ -303,7 +336,7 @@ ul.rules li + li { margin-top: 4px; }
         <tr><td>A</td><td>Drop the icon, swap title and body</td><td><code>desktop/src/renderer/platform/notifications.ts</code>, <code>app/src/shell/notifications/notification.tsx</code></td></tr>
         <tr><td>B, C</td><td>Also pass the project, branch, and the command, question, error or last message through <code>platform.notify</code></td><td>Same files, plus the <code>Platform["notify"]</code> signature</td></tr>
         <tr><td>D, E</td><td>Move to Electron's main-process <code>Notification</code>. On Windows, <code>toastXml</code> gives buttons, a menu, a text box and a project header. Answers go back through the same permission and form replies the app uses</td><td>New IPC handler in <code>desktop/src/main/ipc-handlers</code></td></tr>
-        <tr><td>macOS</td><td>Buttons and one reply field work through Electron's <code>actions</code> and <code>hasReply</code>. There is no menu, so the web search choice opens the app. The app icon always shows on the left</td><td>Same handler</td></tr>
+        <tr><td>macOS</td><td>Buttons from <code>actions</code> and a reply from <code>hasReply</code> work together, but stay hidden until you hover: one choice shows as a button, several go under Options, and the arrow lists them all. The reply button is always called Reply; only its placeholder changes. There is no menu, so the web search choice opens the app. The small line is the subtitle, which the renderer's web <code>Notification</code> can't set. The app icon always shows on the left, and <code>icon</code> becomes a thumbnail on the right. <code>groupId</code> stacks notifications per project in Notification Center, without a project name. Banners and alerts look the same; the user picks which in System Settings</td><td>Same handler. Electron 44 already posts through <code>UNUserNotificationCenter</code>, so the app must be signed</td></tr>
       </tbody>
     </table>
   </section>
@@ -313,6 +346,8 @@ ul.rules li + li { margin-top: 4px; }
 const APP_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="3.5" fill="#2f6fde"/><rect x="5" y="3.5" width="6" height="9" rx="1" fill="none" stroke="#fff" stroke-width="1.6"/></svg>'
 const LOGO = '<svg viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" fill="#111"/><rect x="13" y="9" width="22" height="30" fill="#fff"/><rect x="19" y="16" width="10" height="16" fill="#4a4a4a"/></svg>'
 const SEND = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-7-6 15-2.5-6.5L4 12z" fill="currentColor"/></svg>'
+const DOWN = '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+const RIGHT = '<svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true"><path d="M3.5 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 const PERMISSION = { buttons: ['Allow once', 'Allow always', 'Deny'], primary: true }
 const OPEN = { buttons: ['Open', 'Dismiss'] }
 const KINDS = {
@@ -382,6 +417,8 @@ const $ = (s) => document.querySelector(s)
 const form = $('#controls')
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 const md = (s) => esc(s).replace(/`(.+?)`/g, '<code>$1</code>')
+// macOS shows notification text as plain text, so code is not set apart.
+const plain = (s) => esc(s).replace(/`(.+?)`/g, '$1')
 const variantOf = (kind) => KINDS[kind].variants.find((v) => v.id === state.variant[kind]) ?? KINDS[kind].variants[0]
 const detailOf = (kind) => content.details[kind + ':' + variantOf(kind).id] ?? variantOf(kind).detail
 
@@ -396,49 +433,92 @@ function texts(layout, kind, c) {
   return { headline: layout.headline === 'status' ? K.label : c.title, body: pick(layout.body), small: pick(layout.small) }
 }
 
-function actionsHtml(a, mac) {
+function actionsHtml(a) {
   if (!a) return ''
   const inputs = [
     a.select ? `<select aria-label="Search provider">${a.select.map((o) => `<option>${esc(o)}</option>`).join('')}</select>` : '',
     a.reply ? `<div class="reply"><input type="text" placeholder="${esc(a.reply)}" aria-label="${esc(a.reply)}"><button type="button" data-act="send" aria-label="Send">${SEND}</button></div>` : '',
   ].join('')
-  const buttons = (a.buttons ?? []).map((b, i) => `<button type="button" data-act="${esc(b)}"${a.answer ? ' data-answer' : ''}${i === 0 && a.primary && !mac ? ' class="primary"' : ''}>${esc(b)}</button>`).join('')
-  return (inputs ? `<div class="inputs">${inputs}</div>` : '') + (buttons ? `<div class="acts${mac && a.buttons.length > 2 ? ' col' : ''}">${buttons}</div>` : '')
+  const buttons = (a.buttons ?? []).map((b, i) => `<button type="button" data-act="${esc(b)}"${a.answer ? ' data-answer' : ''}${i === 0 && a.primary ? ' class="primary"' : ''}>${esc(b)}</button>`).join('')
+  return (inputs ? `<div class="inputs">${inputs}</div>` : '') + (buttons ? `<div class="acts">${buttons}</div>` : '')
 }
 
 function toastHtml(layout, kind, c, o) {
   const V = variantOf(kind)
   const t = texts(layout, kind, c)
   const mac = o.platform === 'mac'
-  const size = o.compact ? 32 : mac ? 38 : 48
+  const size = o.compact || mac ? 32 : 48
   const image = layout.image === 'logo' ? `<div class="img" style="--s:${size}px">${LOGO}</div>` : ''
-  const actions = layout.actions && !o.compact ? actionsHtml(mac ? (V.mac ?? V.actions) : V.actions, mac) : ''
+  if (mac) return macToastHtml(t, layout.actions && !o.compact ? (V.mac ?? V.actions) : undefined, image, o)
+  const actions = layout.actions && !o.compact ? actionsHtml(V.actions) : ''
   const cls = `toast ${o.platform}${o.compact ? ' compact' : ''}${o.live ? ' live' : ''}`
-  if (mac) {
-    const text = `<div class="txt"><div class="m-top"><span class="title">${md(t.headline)}</span><span class="m-time">now</span></div>${t.small ? `<div class="sub">${esc(t.small)}</div>` : ''}${t.body ? `<div class="body">${md(t.body)}</div>` : ''}</div>`
-    return `<div class="${cls}"><div class="m-main"><div class="m-icon">${APP_ICON}</div>${text}${image}</div>${actions}</div>`
-  }
   const text = `<div class="txt"><div class="title">${md(t.headline)}</div>${t.body ? `<div class="body">${md(t.body)}</div>` : ''}${t.small ? `<div class="small">${esc(t.small)}</div>` : ''}</div>`
   const header = o.compact ? '' : `<div class="w-hdr"><span class="w-app">${APP_ICON}</span>OpenCode Dev<span class="sp"></span><span class="w-ctl" aria-hidden="true">···</span><button type="button" class="w-ctl" data-act="close" aria-label="Dismiss">✕</button></div>`
   return `<div class="${cls}">${header}<div class="w-row">${image}${text}</div>${actions}</div>`
 }
 
+// macOS hides actions until you hover. One choice shows as a button; a reply plus buttons, or several buttons, go under
+// Options. The arrow lists them all, and appears for a reply, an image or a body that doesn't fit. The reply button is
+// always called Reply.
+function macToastHtml(t, a, image, o) {
+  const items = a ? [...(a.reply ? ['Reply'] : []), ...(a.buttons ?? [])] : []
+  const act = (b) => b === 'Reply' ? 'data-act="m-reply"' : `data-act="${esc(b)}"${a.answer ? ' data-answer' : ''}`
+  const cls = `toast mac${o.compact ? ' compact' : ''}${o.live ? ' live' : ''}${t.small ? ' has-sub' : ''}${items.length ? ' has-pill' : ''}${o.pinned && items.length ? ' pinned' : ''}`
+  const top = `<div class="m-top"><div class="title">${plain(t.headline)}</div>${o.ago ? `<span class="m-time">${esc(o.ago)}</span>` : ''}</div>`
+  const text = `<div class="txt">${top}${t.small ? `<div class="m-sub">${esc(t.small)}</div>` : ''}${t.body ? `<div class="body">${plain(t.body)}</div>` : ''}</div>`
+  const main = `<div class="m-main"><div class="m-icon">${APP_ICON}</div>${text}${image}</div>`
+  if (o.compact) return `<div class="${cls}">${main}</div>`
+  const chrome = `<button type="button" class="m-close" data-act="close" aria-label="Close">✕</button><button type="button" class="m-ctl m-expand" data-act="m-expand" aria-label="Show more">${RIGHT}</button><span class="m-ctl m-dots" aria-hidden="true">···</span><button type="button" class="m-ctl m-collapse" data-act="m-collapse" aria-label="Show less">${DOWN}</button>`
+  const pill = items.length === 1
+    ? `<button type="button" class="m-pill" ${act(items[0])}>${esc(items[0])}</button>`
+    : items.length ? `<button type="button" class="m-pill" data-act="m-options" aria-haspopup="menu">Options${DOWN}</button>` : ''
+  const menu = items.length > 1 ? `<div class="m-menu" role="menu">${items.map((b) => `<button type="button" role="menuitem" ${act(b)}>${esc(b)}</button>`).join('')}</div>` : ''
+  const rows = items.length ? `<div class="m-rows">${items.map((b) => `<button type="button" ${act(b)}>${esc(b)}</button>`).join('')}</div>` : ''
+  const reply = a?.reply ? `<div class="m-reply"><input type="text" placeholder="${esc(a.reply)}" aria-label="${esc(a.reply)}"><button type="button" data-act="send">Reply</button></div>` : ''
+  return `<div class="${cls}">${chrome}${main}${pill}${menu}${rows}${reply}</div>`
+}
+
+function markExpandable(root) {
+  root.querySelectorAll('.toast.mac:not(.compact)').forEach((t) => {
+    const body = t.querySelector('.body')
+    t.classList.toggle('can-expand', Boolean(t.querySelector('.img, .m-reply') || (body && body.scrollHeight > body.clientHeight + 1)))
+  })
+}
+
 function feed() {
   return [
-    { kind: 'response', c: content },
-    { kind: 'question', c: { ...content, title: 'Refactor session inbox delivery', branch: 'inbox-delivery' } },
-    { kind: 'permission', c: { ...content, title: 'Regenerate SDK', branch: 'regenerate-sdk' } },
-    { kind: 'error', c: { ...content, title: 'Pricing page copy pass', project: 'website', branch: 'pricing-copy' } },
+    { kind: 'response', ago: 23, c: content },
+    { kind: 'question', ago: 26, c: { ...content, title: 'Refactor session inbox delivery', branch: 'inbox-delivery' } },
+    { kind: 'permission', ago: 28, c: { ...content, title: 'Regenerate SDK', branch: 'regenerate-sdk' } },
+    { kind: 'error', ago: 21, c: { ...content, title: 'Pricing page copy pass', project: 'website', branch: 'pricing-copy' } },
   ]
 }
 
 function centerHtml(o, layout) {
+  if (o.platform === 'mac') return macCenterHtml(o, layout)
   const items = feed()
   const groups = layout.group
     ? Object.entries(items.reduce((acc, i) => ({ ...acc, [i.c.project]: [...(acc[i.c.project] ?? []), i] }), {}))
     : [['', items]]
   const list = groups.map(([name, its]) => (name ? `<div class="c-group"><span>${esc(name)}</span><span>${its.length}</span></div>` : '') + its.map((i) => toastHtml(layout, i.kind, i.c, { ...o, compact: true })).join('')).join('')
   return `<div class="center"><div class="c-head"><span class="w-app">${APP_ICON}</span><b>OpenCode Dev</b><span class="sp"></span><span class="c-clear">Clear all</span></div>${list}</div>`
+}
+
+// macOS stacks notifications per thread (groupId), newest stack first, with no project name. Opening a stack shows
+// the app name, Show less and a clear button.
+function macCenterHtml(o, layout) {
+  const items = feed().sort((x, y) => x.ago - y.ago)
+  const threads = Object.values(items.reduce((acc, i) => {
+    const key = layout.group ? i.c.project : 'all'
+    return { ...acc, [key]: [...(acc[key] ?? []), i] }
+  }, {}))
+  const card = (i) => toastHtml(layout, i.kind, i.c, { ...o, compact: true, ago: i.ago + 'm ago' })
+  if (!o.ncOpen) {
+    const stacks = threads.map((t) => `<div class="m-stack n${Math.min(t.length, 3)}" role="button" tabindex="0" data-nc="open" aria-label="Show ${t.length} notifications">${card(t[0])}${t.slice(1, 3).map(() => '<i class="m-layer"></i>').join('')}</div>`)
+    return `<div class="center">${stacks.join('')}</div>`
+  }
+  const list = threads.map((t) => `<div class="m-thread">${t.map(card).join('')}</div>`).join('')
+  return `<div class="center open"><div class="c-head"><b>OpenCode Dev</b><span class="sp"></span><button type="button" class="m-less" data-nc="close">Show less</button><span class="m-clear" aria-hidden="true">✕</span></div>${list}</div>`
 }
 
 function costNote(l) {
@@ -449,16 +529,22 @@ function costNote(l) {
 }
 
 function hint() {
+  if (state.view === 'center' && state.platform === 'mac') return state.layout.group ? 'One stack per project, newest first, with no project name. Click one to open it.' : 'Everything from OpenCode in one stack. Click it to open it.'
   if (state.view === 'center') return 'Everything you missed, newest first.'
   const V = variantOf(state.kind)
   const a = state.platform === 'mac' ? (V.mac ?? V.actions) : V.actions
   if (!state.layout.actions || !a) return 'Click the notification to open the session.'
-  if (state.platform === 'mac') return 'Hover the notification to see its actions.'
+  if (state.platform === 'mac') {
+    const items = [...(a.reply ? ['Reply'] : []), ...(a.buttons ?? [])]
+    if (items.length === 1) return `Hover the notification: macOS shows ${items[0]} in the corner.`
+    return a.reply ? 'Hover the notification: the choices are under Options, or press › to list them.' : 'Hover the notification: the choices are under Options.'
+  }
   if (a === OPEN) return 'This one is too big for a notification, so it opens the app.'
   return 'Answer it here, or click the notification to open the session.'
 }
 
 function render(animate) {
+  if (animate) state.ncOpen = false
   const o = { platform: state.platform, theme: state.theme }
   const wall = `wall os-${o.platform} t-${o.theme}`
   const screen = $('#screen')
@@ -467,7 +553,7 @@ function render(animate) {
     ? '<div class="taskbar" aria-hidden="true"><i></i><i></i><i class="oc"></i><i></i><i></i><span class="clock">10:07<br>11/20/2026</span></div>'
     : '<div class="menubar" aria-hidden="true"><b>Slack</b><span>File</span><span>Edit</span><span>View</span><span class="sp"></span><span>Fri 10:07</span></div>'
   const body = state.view === 'center'
-    ? centerHtml(o, state.layout)
+    ? centerHtml({ ...o, ncOpen: state.ncOpen }, state.layout)
     : `<div class="toast-slot${animate ? ' enter' : ''}">${toastHtml(state.layout, state.kind, content, { ...o, live: true })}</div>`
   screen.innerHTML = '<div class="appwin" aria-hidden="true"><i></i><i></i><i></i></div>' + chrome + body
   document.querySelectorAll('button[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)))
@@ -478,7 +564,7 @@ function render(animate) {
     const tile = fr.querySelector('.tile')
     tile.className = 'tile static ' + wall
     const c = fr.dataset.title ? { ...content, title: fr.dataset.title, project: fr.dataset.project, branch: fr.dataset.branch } : content
-    tile.innerHTML = fr.dataset.view === 'center' ? centerHtml(o, state.layout) : toastHtml(state.layout, fr.dataset.kind, c, o)
+    tile.innerHTML = fr.dataset.view === 'center' ? centerHtml(o, state.layout) : toastHtml(state.layout, fr.dataset.kind, c, { ...o, pinned: true })
   })
 
   $('#cmp-kind').textContent = '“' + KINDS[state.kind].name + '”'
@@ -486,9 +572,10 @@ function render(animate) {
     const p = card.dataset.preset
     const tile = card.querySelector('.tile')
     tile.className = 'tile static ' + wall
-    tile.innerHTML = p === 'grouped' ? centerHtml(o, PRESETS.grouped) : toastHtml(PRESETS[p], state.kind, content, o)
+    tile.innerHTML = p === 'grouped' ? centerHtml(o, PRESETS.grouped) : toastHtml(PRESETS[p], state.kind, content, { ...o, pinned: true })
     card.classList.toggle('active', state.preset === p)
   })
+  markExpandable(document)
 }
 
 function sync() {
@@ -548,13 +635,18 @@ function dismiss(msg) {
   slot.classList.add('leave')
 }
 function send(toast) {
-  const v = toast.querySelector('.reply input').value.trim()
+  const v = toast.querySelector('.reply input, .m-reply input').value.trim()
   if (!v) return log('Type something first.')
   const verb = { question: 'Answered', elicitation: 'Submitted' }[state.kind] ?? 'Sent'
   dismiss(`${verb} “${v}” without opening the app.`)
 }
 
 $('#screen').addEventListener('click', (e) => {
+  const nc = e.target.closest('[data-nc]')
+  if (nc) {
+    state.ncOpen = nc.dataset.nc === 'open'
+    return render(false)
+  }
   const toast = e.target.closest('.toast-slot .toast')
   if (!toast || e.target.closest('input, select')) return
   const act = e.target.closest('[data-act]')
@@ -562,12 +654,25 @@ $('#screen').addEventListener('click', (e) => {
   const a = act.dataset.act
   if (a === 'close') return dismiss('Dismissed. It stays in the notification center.')
   if (a === 'send') return send(toast)
+  if (a === 'm-options') return toast.classList.toggle('pinned', toast.classList.toggle('menu-open'))
+  if (a === 'm-expand') return toast.classList.add('expanded', 'pinned')
+  if (a === 'm-collapse') return toast.classList.remove('expanded', 'replying', 'pinned')
+  if (a === 'm-reply') {
+    toast.classList.remove('menu-open', 'expanded')
+    toast.classList.add('replying', 'pinned')
+    return toast.querySelector('.m-reply input').focus()
+  }
   if (act.hasAttribute('data-answer')) return dismiss(`Answered “${a}”. The agent keeps going without you opening the app.`)
   if (a === 'Enable') return dismiss(`Web search is on, using “${toast.querySelector('select').value}”.`)
   dismiss(ACT_LOG[a] ?? a)
 })
 $('#screen').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.matches('.reply input')) send(e.target.closest('.toast'))
+  if (e.key === 'Enter' && e.target.matches('.reply input, .m-reply input')) send(e.target.closest('.toast'))
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-nc]')) {
+    e.preventDefault()
+    e.target.click()
+  }
+  if (e.key === 'Escape') document.querySelectorAll('.toast.menu-open').forEach((t) => t.classList.remove('menu-open', 'pinned'))
 })
 $('#replay').addEventListener('click', () => { state.view = 'toast'; render(true) })
 document.querySelectorAll('button[data-view]').forEach((b) => b.addEventListener('click', () => { state.view = b.dataset.view; render(true) }))
