@@ -21,6 +21,7 @@ describe("cli-version", () => {
   test.each([
     { version: undefined, message: "Background service failed to start", expected: true },
     { version: undefined, message: "Timed out waiting for the background service to start", expected: true },
+    { version: undefined, message: "Timed out waiting for the background service to respond", expected: false },
     {
       version: undefined,
       message: "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",

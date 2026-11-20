@@ -4,15 +4,20 @@ import { Effect } from "effect"
 import { Service } from "../src/effect/service"
 import { ensure, stop } from "../src/promise/service"
 import type { EnsureOptions, EnsureReason, StopOptions } from "../src/service"
+import type { EnsureTiming } from "../src/service-timing"
 import { serviceFixture, stopSignal, stoppedExitCode } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
 
-const effect = accelerate(Service.ensure)
 const clients = [
-  { name: "Promise", ensure: accelerate(ensure), stop },
+  {
+    name: "Promise",
+    ensure: (options: EnsureOptions, timing?: Partial<EnsureTiming>) => accelerate(ensure, timing)(options),
+    stop,
+  },
   {
     name: "Effect",
-    ensure: (options: EnsureOptions) => Effect.runPromise(effect(options).pipe(Effect.provide(NodeFileSystem.layer))),
+    ensure: (options: EnsureOptions, timing?: Partial<EnsureTiming>) =>
+      Effect.runPromise(accelerate(Service.ensure, timing)(options).pipe(Effect.provide(NodeFileSystem.layer))),
     stop: (options: StopOptions) => Effect.runPromise(Service.stop(options).pipe(Effect.provide(NodeFileSystem.layer))),
   },
 ]
@@ -90,5 +95,71 @@ for (const client of clients) {
     expect(await owner.exited).toBe(stoppedExitCode)
     expect(await fixture.signal()).toBe(stopSignal)
     expect(await Bun.file(fixture.registration).exists()).toBe(false)
+  })
+
+  test(`${client.name} keeps a slow owner within its unresponsive budget without spawning contenders`, async () => {
+    await using fixture = await serviceFixture()
+    const owner = fixture.spawn("hanging")
+    await fixture.waitForFile()
+    const original = await Bun.file(fixture.registration).json()
+    const starts: EnsureReason[] = []
+
+    const pending = client.ensure(
+      {
+        file: fixture.registration,
+        command: fixture.command("record-start"),
+        onStart: (reason) => starts.push(reason),
+      },
+      { unresponsiveTimeout: 60_000 },
+    )
+    await fixture.waitForRequests(5)
+
+    expect(owner.exitCode).toBe(null)
+    expect(await Bun.file(fixture.registration + ".signal").exists()).toBe(false)
+    expect(await Bun.file(fixture.registration + ".started").exists()).toBe(false)
+    expect(starts).toEqual([])
+
+    await Bun.write(fixture.registration + ".release", "")
+    const endpoint = await pending
+    expect(endpoint.url).toBe(original.url)
+    expect(owner.exitCode).toBe(null)
+  })
+
+  test(`${client.name} evicts a hung owner once a budget longer than the startup deadline runs out`, async () => {
+    await using fixture = await serviceFixture()
+    const owner = fixture.spawn("hanging")
+    await fixture.waitForFile()
+    const original = await Bun.file(fixture.registration).json()
+    const started = Date.now()
+    const endpoint = await client.ensure(
+      { file: fixture.registration, command: fixture.command("delayed", "10") },
+      { requestTimeout: 80, unresponsiveTimeout: 700, spawnDelay: 100, promiseTimeout: 250 },
+    )
+    const replacement = await Bun.file(fixture.registration).json()
+    fixture.track(replacement.pid)
+
+    expect(Date.now() - started).toBeGreaterThanOrEqual(700)
+    expect(await owner.exited).toBe(stoppedExitCode)
+    expect(replacement.pid).not.toBe(original.pid)
+    expect(endpoint.url).toBe(replacement.url)
+  })
+
+  test(`${client.name} keeps a server it started that stops answering until the startup deadline`, async () => {
+    await using fixture = await serviceFixture()
+    const pending = client
+      .ensure({ file: fixture.registration, command: fixture.command("controlled") })
+      .catch((error: unknown) => error)
+    const [started] = await fixture.waitForStarts(1)
+    await fixture.release(started, "hang")
+    // Unanswered for longer than the 320 ms unresponsive budget, which would evict a service it did not start.
+    await fixture.waitForRequests(5)
+    expect(() => process.kill(started, 0)).not.toThrow()
+    const error = await pending
+
+    expect(error).toBeInstanceOf(Error)
+    if (!(error instanceof Error)) throw error
+    expect(error.message).toBe("Timed out waiting for the background service to start")
+    expect((await Bun.file(fixture.registration).json()).pid).toBe(started)
+    expect(() => process.kill(started, 0)).not.toThrow()
   })
 }

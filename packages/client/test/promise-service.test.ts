@@ -172,20 +172,27 @@ test("accepts a surviving contender after a failure without recruiting replaceme
   expect(await fixture.starts()).toHaveLength(2)
 })
 
-test("recovers when an unresponsive contender is evicted after a prior failure", async () => {
+test("keeps a registered contender that stops answering after its sibling fails", async () => {
   await using fixture = await serviceFixture()
-  const pending = ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") })
+  // A longer deadline leaves room for the steps before the survivor answers again.
+  const pending = accelerate(Service.ensure, { promiseTimeout: 4_000 })({
+    file: fixture.registration,
+    version: "test",
+    command: fixture.command("controlled"),
+  })
   const [first, second] = await fixture.waitForStarts(2)
   await fixture.release(second, "hang")
   await fixture.waitForFile()
   await fixture.release(first, "fail")
-  const [, , third] = await fixture.waitForStarts(3)
-  await fixture.release(third, "ready")
+  // Unanswered for longer than the 320 ms unresponsive budget, which would evict a service it did not start.
+  await fixture.waitForRequests(5)
+  expect(() => process.kill(second, 0)).not.toThrow()
+  await Bun.write(fixture.registration + ".release", "")
   const endpoint = await pending
-  fixture.track(third)
 
   expect((await Service.discover({ file: fixture.registration, version: "test" }))?.url).toBe(endpoint.url)
-  expect((await Bun.file(fixture.registration).json()).pid).toBe(third)
+  expect((await Bun.file(fixture.registration).json()).pid).toBe(second)
+  expect(await fixture.starts()).toHaveLength(2)
 })
 
 test("reports a bounded contender stderr tail with native promises", async () => {
@@ -218,7 +225,7 @@ test("evicts an unresponsive registered service before starting its replacement"
   const replacement = await Bun.file(registration).json()
   fixture.track(replacement.pid)
 
-  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n").length).toBeGreaterThanOrEqual(2)
   expect(await existing.exited).toBe(stoppedExitCode)
   expect(replacement.pid).not.toBe(original.pid)
   expect(endpoint.url).toBe(replacement.url)

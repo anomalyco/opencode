@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, jest, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createClientConnection } from "../src/solid"
 import { OpenCode, type OpenCodeEvent } from "../src/promise"
@@ -177,5 +177,70 @@ test("a reconnect does not ask the volatile event stream to replay", async () =>
     expect(fake.streams[1].headers.get("last-event-id")).toBeNull()
   } finally {
     ctx.dispose()
+  }
+})
+
+test.each([
+  {
+    name: "a failing server resolution backs off exponentially up to 15s",
+    reconnect: async (): Promise<never> => {
+      throw new Error("unavailable")
+    },
+    gaps: [1_000, 2_000, 4_000, 8_000, 15_000, 15_000],
+  },
+  {
+    name: "a plain stream retry keeps a 1s delay",
+    reconnect: undefined,
+    gaps: [1_000, 1_000, 1_000, 1_000, 1_000, 1_000],
+  },
+])("$name", async (input) => {
+  jest.useFakeTimers()
+  const attempts: number[] = []
+  let disconnects = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => {
+      attempts.push(Date.now())
+      return new Response("", { headers: { "content-type": "text/event-stream" } })
+    },
+  })
+  // The connect timeout is cleared before a disconnect is reported, so the next pending timer is the retry delay.
+  // Spinning on microtasks starves the test timeout, so give up after a bound instead of hanging the run.
+  const retryScheduled = async (count: number) => {
+    for (let spin = 0; spin < 10_000; spin++) {
+      if (disconnects >= count && jest.getTimerCount() > 0) return
+      await Promise.resolve()
+    }
+    throw new Error(`No retry was scheduled after disconnect ${count}`)
+  }
+
+  const start = Date.now()
+  let dispose!: () => void
+  createRoot((cleanup) => {
+    dispose = cleanup
+    createClientConnection(api, {
+      reconnect: input.reconnect,
+      flushInterval: 0,
+      onEvent: () => {},
+      log: {
+        info(message) {
+          if (message === "event stream disconnected") disconnects += 1
+        },
+      },
+    })
+  })
+
+  try {
+    for (let step = 1; step <= input.gaps.length; step++) {
+      await retryScheduled(step)
+      jest.advanceTimersToNextTimer()
+    }
+    await retryScheduled(input.gaps.length + 1)
+
+    expect(attempts[0]).toBe(start)
+    expect(attempts.slice(1).map((time, index) => time - attempts[index])).toEqual(input.gaps)
+  } finally {
+    dispose()
+    jest.useRealTimers()
   }
 })

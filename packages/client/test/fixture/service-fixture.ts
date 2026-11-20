@@ -77,6 +77,23 @@ export async function serviceFixture() {
         .text()
         .catch(() => undefined)
     },
+    // A hanging service records each health probe it leaves unanswered.
+    async waitForRequests(count: number) {
+      const deadline = Date.now() + 3_000
+      while (true) {
+        const seen = (
+          await Bun.file(registration + ".requests")
+            .text()
+            .catch(() => "")
+        )
+          .trim()
+          .split("\n")
+          .filter(Boolean).length
+        if (seen >= count) return
+        if (Date.now() >= deadline) throw new Error(`Expected ${count} unanswered health probes, saw ${seen}`)
+        await Bun.sleep(10)
+      }
+    },
     async waitForFile(file = registration) {
       for (let attempt = 0; attempt < 600; attempt++) {
         if (await Bun.file(file).exists()) return

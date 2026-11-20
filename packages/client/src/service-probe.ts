@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info } from "./service.js"
@@ -102,4 +103,78 @@ function decodeInfo(input: unknown) {
   if (!("version" in input) || typeof input.version !== "string") return
   if (!("pid" in input) || typeof input.pid !== "number" || !Number.isInteger(input.pid) || input.pid < 0) return
   return { version: input.version, pid: input.pid }
+}
+
+/**
+ * Parse the single-character task state from Linux `/proc/<pid>/stat`.
+ * `comm` is enclosed in parentheses and may itself contain spaces or `)`, so scan from the final `)`.
+ */
+export function parseLinuxProcStatState(stat: string) {
+  const close = stat.lastIndexOf(")")
+  if (close === -1) return undefined
+  const state = stat[close + 2]
+  return state && state !== " " ? state : undefined
+}
+
+/**
+ * Tracks how long one registered owner has accepted connections without answering its health probe.
+ * An owner that answers, or a different owner, starts the clock over. Time the owner spends in disk sleep
+ * does not count: it is waiting for the disk, not hung, and a check only at the end of the budget would
+ * evict it the moment the disk catches up.
+ */
+export function unresponsiveOwner(budget: number) {
+  let current:
+    | {
+        readonly info: Info
+        readonly since: number
+        readonly last: number
+        readonly counted: number
+        readonly past: boolean
+      }
+    | undefined
+  return {
+    /**
+     * Records a probe that began at `probedAt`, timed out for `info` (or answered, when `info` is undefined), and
+     * whether the owner was then in disk sleep. Returns the owner once its counted time reaches the budget.
+     */
+    observe(info: Info | undefined, probedAt: number, now: number, diskSleep: boolean) {
+      if (info === undefined) {
+        current = undefined
+        return undefined
+      }
+      const previous =
+        current !== undefined && same(current.info, info)
+          ? current
+          : { info, since: probedAt, last: probedAt, counted: 0, past: false }
+      const counted = previous.counted + (diskSleep ? 0 : now - previous.last)
+      current = {
+        info,
+        since: previous.since,
+        last: now,
+        counted,
+        past: counted >= budget || now - previous.since >= budget,
+      }
+      return counted >= budget ? info : undefined
+    },
+    /**
+     * Whether no probe has yet seen the owner past its budget, so the startup deadline waits for the probe that may
+     * evict it. Wall time also ends the wait, so an owner that stays in disk sleep cannot hold the deadline forever.
+     */
+    waiting() {
+      return current !== undefined && !current.past
+    },
+    forget() {
+      current = undefined
+    },
+  }
+}
+
+/**
+ * Whether `pid` is currently in Linux uninterruptible disk sleep (`state D`). Always false elsewhere.
+ * It is one sample per probe, so the time it excludes from an unresponsive budget is an estimate.
+ */
+export async function isUninterruptibleDiskSleep(pid: number) {
+  if (process.platform !== "linux") return false
+  const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => undefined)
+  return stat !== undefined && parseLinuxProcStatState(stat) === "D"
 }

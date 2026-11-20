@@ -4,7 +4,15 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import {
+  decide,
+  fallback,
+  headers,
+  isUninterruptibleDiskSleep,
+  probeResult,
+  same,
+  unresponsiveOwner,
+} from "../service-probe.js"
 
 export * from "../service.js"
 export { fallback, headers }
@@ -27,9 +35,9 @@ export async function discover(options: DiscoverOptions = {}) {
 /** Ensure a healthy, compatible local service is running. */
 export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
-  const deadline = Date.now() + timing.promiseTimeout
+  let deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  const unresponsive = unresponsiveOwner(timing.unresponsiveTimeout)
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -48,25 +56,39 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   }
 
   try {
+    let unanswered = false
     while (true) {
-      if (Date.now() >= deadline)
-        throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
+      // An owner still within its unresponsive budget holds the deadline open, so a long budget is not cut short.
+      if (Date.now() >= deadline && !unresponsive.waiting())
+        throw (
+          pool.failure() ??
+          new Error(
+            unanswered
+              ? "Timed out waiting for the background service to respond"
+              : "Timed out waiting for the background service to start",
+          )
+        )
+      const probedAt = Date.now()
       const registration = await registered(options.file, timing.requestTimeout)
-      if (registration.timedOut && registration.info !== undefined) {
-        timeouts = {
-          info: registration.info,
-          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
-        }
-        if (timeouts.count >= 3) {
-          announce("missing")
-          console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
-          await PtyHandoff.clear(options.file ?? fallback())
-          await terminate(registration.info, options, timing)
-          pool.evict(registration.info.pid)
-          pool.recruitNow()
-          timeouts = undefined
-        }
-      } else timeouts = undefined
+      const info = registration.info
+      // A server this call started can block its event loop while it boots, opening a large database on a slow disk.
+      // The startup deadline bounds it rather than the unresponsive budget, so that boot is never killed and repeated.
+      const owner = registration.timedOut && info !== undefined && !pool.spawned(info.pid) ? info : undefined
+      unanswered = owner !== undefined
+      const diskSleep = owner !== undefined && (await isUninterruptibleDiskSleep(owner.pid))
+      const expired = unresponsive.observe(owner, probedAt, Date.now(), diskSleep)
+      let evicted = false
+      if (expired !== undefined) {
+        announce("missing")
+        console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
+        await PtyHandoff.clear(options.file ?? fallback())
+        await terminate(expired, options, timing)
+        pool.evict(expired.pid)
+        pool.recruitNow()
+        unresponsive.forget()
+        deadline = Date.now() + timing.promiseTimeout
+        evicted = true
+      }
 
       if (registration.service !== undefined) {
         pool.serviceAnswered()
@@ -87,7 +109,8 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       } else {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
-        if (pool.shouldRecruit(registration.info !== undefined)) {
+        // An owner that times out still holds the port; a contender would only add load until it is evicted.
+        if ((!registration.timedOut || evicted) && pool.shouldRecruit(info !== undefined)) {
           announce("missing")
           pool.add(await spawnContender())
         }

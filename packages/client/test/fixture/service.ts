@@ -75,7 +75,7 @@ const server = Bun.serve({
       return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".status-request", "")
-    if (mode === "hanging" || controlled === "hang") {
+    if ((mode === "hanging" || controlled === "hang") && !(await Bun.file(registration + ".release").exists())) {
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
     }
