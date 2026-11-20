@@ -111,6 +111,7 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Machines") {}
 
 const SECRET_BYTES = 32
+const KEY_BYTES = 32
 /** How long a printed join string stays good. */
 const INVITE_TTL = 5 * 60 * 1000
 const digest = (secret: Uint8Array) => createHash("sha256").update(secret).digest("base64url")
@@ -215,6 +216,8 @@ const layer = Layer.effect(
         return Join.encode({ v: 1, home, secret, expires, reach: options.reach })
       }),
       join: Effect.fn("Machines.join")(function* (input) {
+        // Only an Ed25519 public key is ever stored as a machine's key. The secret is not spent on a malformed call.
+        if (input.key.length !== KEY_BYTES) return yield* new InvalidJoin()
         const hash = digest(input.secret)
         const found = [...invitations].find(([, invitation]) => invitation.hash === hash)
         if (!found) return yield* new InvalidJoin()

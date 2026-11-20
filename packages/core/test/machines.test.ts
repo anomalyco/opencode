@@ -473,6 +473,25 @@ it.effect("refuses a key another machine already wears and spends the refused se
   }),
 )
 
+it.effect("refuses a key that is not 32 bytes without spending the secret", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const machines = yield* Machines.Service
+        const gpu = yield* machines.add("gpu")
+        const printed = yield* invite(machines, gpu)
+        for (const key of [new Uint8Array(), new Uint8Array(31).fill(9), new Uint8Array(33).fill(9)])
+          expect(yield* machines.join({ secret: printed.secret, key }).pipe(Effect.flip)).toBeInstanceOf(
+            Machines.InvalidJoin,
+          )
+        expect(yield* machines.identify(new Uint8Array()).pipe(Effect.flip)).toBeInstanceOf(Machines.UnknownKey)
+        expect(yield* machines.join({ secret: printed.secret, key: new Uint8Array(32).fill(9) })).toBe(gpu)
+      }),
+    ).pipe(Effect.provide(tempLayers(tmp.path), { local: true }))
+  }),
+)
+
 it.effect("drops a pending join string when the machine is removed and refuses work for a stranger", () =>
   Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
