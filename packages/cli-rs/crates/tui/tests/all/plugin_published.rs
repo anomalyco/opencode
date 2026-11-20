@@ -690,6 +690,10 @@ fn published_slots_draw_again_after_the_js_host_restarts() {
     let Some(h) = open_as(&carriers, 170, usage(Arc::new(Mutex::new(false)), false), false, None) else { return };
     h.wait_for_all(&["≈ $2.50 session total", "Session tokens"]);
     let scripts = h.tui.plugins.scripts.borrow().clone().unwrap();
+    // A killed JS host that was still running a plugin's view or handler fails that plugin ("… ended the JS host"),
+    // and nothing sets it up again: the panels' own reads land a frame after they show, so the kill can catch one.
+    // Settle first: the end is nobody's, and only the restart is left to explain what draws again.
+    h.settle();
     let pid = scripts.pid();
     scripts.kill();
     h.wait("a new JS host", || {
@@ -697,6 +701,16 @@ fn published_slots_draw_again_after_the_js_host_restarts() {
         scripts.pid().is_some_and(|now| Some(now) != pid)
     });
     h.settle();
+    // A restart that failed a plugin never draws it again, whatever the wait: name that, not the missing text.
+    let failed: Vec<String> = h
+        .tui
+        .plugins
+        .entries()
+        .into_iter()
+        .filter(|entry| matches!(entry.status, opencode_plugin::Status::Failed(_)))
+        .map(|entry| format!("{} {:?}", entry.id, entry.status))
+        .collect();
+    assert!(failed.is_empty(), "a plugin failed across the restart: {failed:#?}");
     h.wait_for_all(&["≈ $2.50 session total", "Session tokens"]);
 }
 
