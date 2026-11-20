@@ -445,22 +445,25 @@ decision model from your providers, or set `false` to turn decisions off.
 
 With a decision model, memory delivers entries at these moments.
 
-| Moment             | What is delivered                                                                                      |
-| ------------------ | ------------------------------------------------------------------------------------------------------ |
-| A task starts      | Up to three entries that apply to the task, and up to three of the repository's rules for all its work |
-| A command fails    | Up to three entries that apply to the failure                                                          |
-| First commit or PR | The repository's rules for committing or opening a pull request, before the command runs               |
+| Moment          | What is delivered                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------ |
+| A task starts   | Up to three entries that apply to the task, and up to three of the repository's rules for all its work |
+| A command fails | Up to three entries that apply to the failure                                                          |
 
 Rules for all of a repository's work, such as how commits are written or which
 command runs the tests, reach every task in it, so memory works without an
 `AGENTS.md`. They arrive as their own message, the way an `AGENTS.md` is shown,
-titled `Instructions from: Engram (conventions for <repo>)`. When the repository has one, or another instruction file is loaded,
+titled `Instructions from: Engram (conventions for <repo>)`, and stay in the
+session's instructions, so a compacted conversation keeps them.
+
+When the repository has an `AGENTS.md`, or another instruction file is loaded,
 an entry that file already states isn't delivered. An entry that disagrees with
 it is delivered, and says it takes precedence; you aren't asked.
 
-Before a session's first `git commit` and first `gh pr create`, memory looks for
-the repository's rules for that action. When some apply, the command fails once
-with those rules, and the agent runs it again following them.
+Memory never holds anything up. When Console or the decision model is slow, the
+first request goes ahead after a short wait and the entries arrive at the next
+step; a failing command's result goes back as it is, and its entries follow at
+the next step.
 
 Without a decision model, either turned off or not offered by any provider, the
 features that need one are off.
@@ -468,7 +471,6 @@ features that need one are off.
 - No rules, corrections or lessons are captured from sessions.
 - No correction reminders are shown.
 - Entries are delivered as Console's own scoring picks them.
-- No commit or pull request is held.
 - The memory tools and search work as usual.
 
 A decision call that fails or times out counts as a no for that item. Nothing is

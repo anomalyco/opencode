@@ -6,12 +6,12 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { Message, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Agent } from "@opencode/schema/agent"
 import type { Document } from "@opencode/schema/config"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { Session } from "@opencode/schema/session"
-import { Tool } from "@opencode/schema/tool"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
 import { AppProcess } from "@opencode/util/process"
@@ -85,7 +85,7 @@ const CANDIDATES = { limit: 10, minScore: 0, maxTokens: 20_000, record: false }
 const RULES = { includeRepository: true }
 /** Where the plugin records the entries it delivered to a session, each at the revision Console gave, once. */
 const DELIVERIES = "/api/memory/deliveries"
-/** The most entries one injection delivers that apply to the task, failure or action at hand, as Console does. */
+/** The most entries one injection delivers that apply to the task or failure at hand, as Console does. */
 const MAX_DELIVERED = 3
 /** And at a task's start, the most of the repository's rules for all its work, besides. */
 const MAX_RULES = 3
@@ -103,6 +103,8 @@ const VERIFIED = "verified-fix"
 /** The session instruction entries memory keeps: entries again after a compaction, and a correction reminder. */
 const DELIVERED = "memory.delivered"
 const CORRECTION = "memory.correction"
+/** The repository's rules for all its work, as an instruction file: a compaction restates them with the others. */
+const CONVENTIONS = "memory.conventions"
 /** Per-session state that outlives the process, removed with the session. */
 const taintedKey = (sessionID: string) => `memory-tainted:${sessionID}`
 
@@ -227,7 +229,6 @@ const SubagentMetadata = Schema.Struct({ sessionID: Schema.String })
 const ResourceInput = Schema.Struct({ server: Schema.String })
 /** `git commit`, after any global options, as its own command. */
 const COMMIT = /(?:^|[;&|(]\s*)git(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+commit\b/m
-const PULL_REQUEST = /(?:^|[;&|(]\s*)gh\s+pr\s+create\b/m
 const KindInput = Kind.annotate({
   description:
     "bug: symptom, cause, fix. convention: how this code does it. procedure: build, test, CI, release. gotcha: an API or tool pitfall. decision: what and why, with commits. failed-approach: what didn't work and why",
@@ -275,22 +276,24 @@ type Tracked = {
   /** The repository (`host/owner/name`) of each entry the session read, unless it holds anywhere (tagged general). */
   readonly about: Map<string, string>
   task?: string
-  /** An injection started at a task's start, waiting for the model request that follows it. */
-  pending?: Fiber.Fiber<(Delivery & { readonly moment: Prompted }) | undefined>
+  /**
+   * Injections still running when the request they're for went ahead, delivered at the first step after they're back:
+   * nothing waits on them beyond the policy's short wait, once.
+   */
+  readonly pending: Array<{ readonly fiber: Fiber.Fiber<Delivered | undefined>; waited: boolean }>
   /**
    * The repository's instruction files as the session's first request in this process carries them, "" when it has
    * none: an entry they already state isn't delivered. Later edits to them aren't followed.
    */
   readonly instructions: Deferred.Deferred<string>
-  /** The actions held once for the repository's rules for them. */
-  readonly acted: Set<"commit" | "pr">
 }
 type Prompted = Extract<OpencodeMemoryPolicy.Moment, { readonly type: "prompt" }>
-/** What a moment delivers: entries for the task, failure or action at hand, and at a task's start the repo's rules. */
+/** What a moment delivers: entries for the task or failure at hand, and at a task's start the repository's rules. */
 type Delivery = {
   readonly entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>
   readonly rules: ReadonlyArray<OpencodeMemoryPolicy.Injected>
 }
+type Delivered = Delivery & { readonly moment: OpencodeMemoryPolicy.Moment }
 
 /**
  * The workspace's shared memory for one Location: while `sync` is given a Console, the `memory` tools, and the hooks
@@ -355,7 +358,7 @@ export const make = Effect.fnUntraced(function* (
       turn: { commits: [], tests: [], pending: [] },
       about: new Map(),
       instructions: Deferred.makeUnsafe<string>(),
-      acted: new Set(),
+      pending: [],
     }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
@@ -1069,7 +1072,7 @@ export const make = Effect.fnUntraced(function* (
               sessionID,
               moment: moment.type,
               ...inject,
-              ...(gated ? { ...CANDIDATES, ...(moment.type === "failure" ? {} : RULES) } : {}),
+              ...(gated ? { ...CANDIDATES, ...(moment.type === "prompt" ? RULES : {}) } : {}),
               ...set,
             }),
           ),
@@ -1180,15 +1183,18 @@ export const make = Effect.fnUntraced(function* (
         Effect.catch((cause) => Effect.logDebug("memory delivery not recorded", { cause })),
         Effect.forkIn(lease, { startImmediately: true }),
       )
-    // Task start is asked in the background, so the prompt doesn't wait on Console; one at a time per session.
+    // An injection asked in the background, so nothing on the session's path waits on Console or the decisions.
+    const start = (sessionID: Session.ID, moment: OpencodeMemoryPolicy.Moment) =>
+      ask(sessionID, moment).pipe(
+        Effect.map((delivery): Delivered | undefined => (delivery === undefined ? undefined : { ...delivery, moment })),
+        Effect.forkIn(lease, { startImmediately: true }),
+      )
+    // Task start, for the request after the prompt; one at a time per session.
     const begin = (sessionID: Session.ID, moment: Prompted) =>
       Effect.gen(function* () {
         const state = tracked(sessionID)
-        if (state.pending) return
-        state.pending = yield* ask(sessionID, moment).pipe(
-          Effect.map((delivery) => (delivery === undefined ? undefined : { ...delivery, moment })),
-          Effect.forkIn(lease, { startImmediately: true }),
-        )
+        if (state.pending.length > 0) return
+        state.pending.push({ fiber: yield* start(sessionID, moment), waited: false })
       })
     // Points out the given entry the user's message may correct, as a session instruction: the next request carries
     // it as an instruction update, recorded with the session, and the cached prefix holds.
@@ -1269,25 +1275,7 @@ export const make = Effect.fnUntraced(function* (
         const shell = Schema.decodeUnknownOption(ShellInput)(event.input)
         if (Option.isNone(shell)) return
         const command = shell.value.command
-        const action = COMMIT.test(command)
-          ? ("commit" as const)
-          : PULL_REQUEST.test(command)
-            ? ("pr" as const)
-            : undefined
-        const state = tracked(event.sessionID)
-        // A session's first commit and first pull request are held once, when the decision model finds rules of the
-        // repository's for them, so the agent reads them before acting: as the call's error, run again after it.
-        if (action !== undefined && !state.acted.has(action) && (yield* decide.available)) {
-          state.acted.add(action)
-          const moment = { type: "action" as const, action, command }
-          const entries = (yield* ask(event.sessionID, moment))?.entries
-          if (entries !== undefined && entries.length > 0) {
-            deliver(state, entries)
-            yield* report(event.sessionID, entries)
-            return yield* new Tool.Error({ message: policy.held(entries, moment) })
-          }
-        }
-        if (action === "commit") heads.set(event.id, yield* head)
+        if (COMMIT.test(command)) heads.set(event.id, yield* head)
       }),
     )
     yield* ctx.tool.hook("execute.after", (event) =>
@@ -1356,8 +1344,12 @@ export const make = Effect.fnUntraced(function* (
         if (!failed) return
         const moment = { type: "failure" as const, command, output: shell.value.output.output, exitCode }
         // Appended to the failing command's own result, where the agent reads the failure, so it's in the next request
-        // without a message of its own. The command's result waits for Console at most the policy's timeout.
-        const entries = (yield* ask(event.sessionID, moment))?.entries
+        // without a message of its own. The result waits for them only the policy's short wait; after it, they come at
+        // the next step instead.
+        const fiber = yield* start(event.sessionID, moment)
+        const answer = yield* Fiber.join(fiber).pipe(Effect.timeoutOption(policy.wait))
+        if (Option.isNone(answer)) return tracked(event.sessionID).pending.push({ fiber, waited: true })
+        const entries = answer.value?.entries
         if (entries === undefined || entries.length === 0) return
         yield* report(event.sessionID, entries)
         const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
@@ -1403,11 +1395,49 @@ export const make = Effect.fnUntraced(function* (
       ),
       Effect.forkIn(lease, { startImmediately: true }),
     )
+    /**
+     * Delivers what an injection found into the request at hand. The repository's rules come first, in an instruction
+     * file's form, as a session instruction entry, so later requests and a compacted conversation keep them; this
+     * request, which the entry reaches only after it, gets them as a message. The entries for the task or failure follow
+     * in memory's own form. A failure's delivery may have given an entry since Console answered.
+     */
+    const hand = (event: SessionHooks["context"], state: Tracked, delivery: Delivered) =>
+      Effect.gen(function* () {
+        const fresh = (entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>) =>
+          entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision)
+        const rules = fresh(delivery.rules)
+        const entries = fresh(delivery.entries)
+        if (rules.length + entries.length === 0) return
+        yield* report(event.sessionID, [...rules, ...entries])
+        if (rules.length > 0) {
+          const text = policy.conventions(rules, yield* label)
+          yield* ctx.session.instructions.entry.put({ sessionID: event.sessionID, key: CONVENTIONS, value: text })
+          event.messages.push(Message.user(text))
+          rules.forEach((entry) =>
+            give(state, { id: entry.id, revision: entry.revision, title: entry.title, text: entry.body }),
+          )
+        }
+        if (entries.length > 0) {
+          const text = policy.render(entries, delivery.moment)
+          const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
+          yield* ctx.session.synthetic({
+            sessionID: event.sessionID,
+            id: messageID(event.sessionID, ids.join(",")),
+            text,
+            description: `${ids.length === 1 ? "1 memory entry" : `${ids.length} memory entries`} for this ${delivery.moment.type === "prompt" ? "task" : "failure"}`,
+            metadata: { source: "console.memory", moment: delivery.moment.type, entries: ids },
+            resume: false,
+          })
+          event.messages.push(Message.user(text))
+          deliver(state, entries)
+        }
+        state.injected[delivery.moment.type]++
+      })
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
-        // The request after a task's first prompt waits for its injection, at most the policy's timeout. It's persisted
-        // so later requests keep it, and lands after this step, so this request gets it at the end, which keeps the
-        // cached prefix.
+        // An injection is delivered at the first step after it's back: the request after a task's first prompt waits
+        // for it at most the policy's short wait, and none after that waits at all. It's persisted so later requests
+        // keep it, and lands after this step, so this request gets it at the end, which keeps the cached prefix.
         const state = tracked(event.sessionID)
         yield* Deferred.succeed(
           state.instructions,
@@ -1422,54 +1452,23 @@ export const make = Effect.fnUntraced(function* (
             .map((source) => source.text)
             .join("\n\n"),
         )
-        const pending = state.pending
-        if (!pending) return
-        state.pending = undefined
-        const delivery = yield* Fiber.join(pending)
-        // A failure's delivery may have given an entry since Console answered.
-        const fresh = (entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>) =>
-          entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision)
-        const rules = fresh(delivery?.rules ?? [])
-        const entries = fresh(delivery?.entries ?? [])
-        if (!delivery || rules.length + entries.length === 0) return
-        yield* report(event.sessionID, [...rules, ...entries])
-        // The repository's rules first, in an instruction file's form, then the entries for the task in memory's own.
-        const messages = [
-          ...(rules.length === 0
-            ? []
-            : [
-                {
-                  delivered: rules,
-                  text: policy.conventions(rules, yield* label),
-                  description: `${rules.length === 1 ? "1 repository convention" : `${rules.length} repository conventions`}`,
-                  form: "instructions",
-                },
-              ]),
-          ...(entries.length === 0
-            ? []
-            : [
-                {
-                  delivered: entries,
-                  text: policy.render(entries, delivery.moment),
-                  description: `${entries.length === 1 ? "1 memory entry" : `${entries.length} memory entries`} for this task`,
-                  form: "entries",
-                },
-              ]),
-        ]
-        yield* Effect.forEach(messages, (message) => {
-          const ids = message.delivered.map((entry) => `${entry.id}@${entry.revision}`)
-          event.messages.push(Message.user(message.text))
-          return ctx.session.synthetic({
-            sessionID: event.sessionID,
-            id: messageID(event.sessionID, ids.join(",")),
-            text: message.text,
-            description: message.description,
-            metadata: { source: "console.memory", moment: delivery.moment.type, form: message.form, entries: ids },
-            resume: false,
-          })
-        })
-        state.injected[delivery.moment.type]++
-        deliver(state, [...rules, ...entries])
+        const due = state.pending.splice(0)
+        const settled = yield* Effect.forEach(due, (item) =>
+          item.waited
+            ? Effect.sync(() =>
+                Option.fromNullishOr(item.fiber.pollUnsafe()).pipe(
+                  Option.map((exit) => (Exit.isSuccess(exit) ? exit.value : undefined)),
+                ),
+              )
+            : Fiber.join(item.fiber).pipe(Effect.timeoutOption(policy.wait)),
+        )
+        state.pending.push(
+          ...due.flatMap((item, index) => (Option.isNone(settled[index]) ? [{ ...item, waited: true }] : [])),
+        )
+        yield* Effect.forEach(
+          settled.flatMap((answer) => (Option.isSome(answer) && answer.value !== undefined ? [answer.value] : [])),
+          (delivery) => hand(event, state, delivery),
+        )
       }).pipe(Effect.catch((cause) => Effect.logWarning("failed to deliver memory entries", { cause }))),
     )
   })

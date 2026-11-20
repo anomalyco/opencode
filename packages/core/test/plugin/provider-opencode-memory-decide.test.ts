@@ -134,19 +134,6 @@ describe("OpencodeMemoryDecide", () => {
         },
       ])
       expect(fake.asked[3]?.questions.map((question) => question.name)).toEqual(["applies"])
-
-      // Before an action, the command about to run comes with the task.
-      yield* decide.applies(
-        { type: "action", action: "commit", command: "git commit -m wip" },
-        "Deploy the worker",
-        entry,
-      )
-      expect(fake.asked[4]?.input).toEqual([
-        {
-          type: "text",
-          text: "Task given to an AI coding agent:\nDeploy the worker\n\nThe agent is about to run `git commit -m wip`.\n\nNote from the team's shared memory (procedure): Deploys use wrangler\nRun wrangler deploy.",
-        },
-      ])
     }),
   )
 

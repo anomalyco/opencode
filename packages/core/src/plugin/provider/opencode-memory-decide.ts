@@ -206,15 +206,13 @@ export const make = (input: {
         yield* logged("D3.t2", result.ms, p)
         return p
       }),
-    /** D4: the probability an entry applies to the task at hand, the failure just seen or the action about to run. */
+    /** D4: the probability an entry applies to the task at hand, or to the failure just seen. */
     applies: (moment: OpencodeMemoryPolicy.Moment, task: string, entry: OpencodeMemoryPolicy.Injected) =>
       Effect.gen(function* () {
         const happening =
           moment.type === "failure"
             ? `\n\nThe agent ran \`${moment.command}\` and it failed with:\n${moment.output.slice(-2000)}`
-            : moment.type === "action"
-              ? `\n\nThe agent is about to run \`${moment.command}\`.`
-              : ""
+            : ""
         const result = yield* ask(
           `Task given to an AI coding agent:\n${task}${happening}\n\nNote from the team's shared memory (${entry.kind}): ${entry.title}\n${entry.body.slice(0, 3000)}`,
           [D4],

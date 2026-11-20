@@ -111,7 +111,7 @@ export function prompt(input: {
   return [
     "You read the record of a coding agent's work since its last work boundary and propose lessons for the team's shared memory. Most records yield nothing: then answer {\"candidates\": []}.",
     "Propose only a verified, non-obvious finding that an agent on a DIFFERENT task in this repository would need, as it holds for the repository as committed: a cause found behind a failure, a dead end and why, a command or setting the repository needs, a team rule, decision or correction the user stated. Use only what the record shows; never guess. Never: task status or a summary of the change, what the code or docs already say, facts about this machine, files the agent added and didn't commit, secrets.",
-    'The user\'s task requests are not lessons: what they asked for in this task (add this, fix that, make the tests pass, commit your change) and what this task required hold for this task only; never record them. basis "user" is only for a durable team rule, decision or correction the user stated, one that holds for future work in this repository, with their exact words in quote. Everything else is basis "observed".',
+    'The user\'s task requests are not lessons: what they asked for in this task (add this, fix that, make the tests pass, commit your change) and what this task required hold for this task only; never record them. A message that states a new rule ("new rule", "from now on", "from today", "going forward") states a team rule even when it also asks to apply it now ("do it now", "commit your change"): record the rule, first. basis "user" is only for a durable team rule, decision or correction the user stated, one that holds for future work in this repository, with their exact words in quote. Everything else is basis "observed".',
     'Answer only JSON: {"candidates": [{"kind": "bug|convention|procedure|gotcha|decision|failed-approach", "title": "...", "body": "...", "paths": ["repository-relative paths"], "errors": ["exact error messages"], "basis": "user|observed", "quote": "the user\'s exact words, for basis user"}]}, at most 2. Each body has these lines: Claim: / Applies when: / Action: / Verify: (or Avoid:) / Anchors: / Evidence:.',
     ...((input.known ?? []).length === 0
       ? []
@@ -158,11 +158,16 @@ const Distilled = Schema.Struct({ candidates: Schema.Array(Schema.Unknown) })
 /** The candidates in the distiller's answer that have every field right; the rest, and anything unparsable, dropped. */
 export function candidates(text: string): ReadonlyArray<Candidate> {
   const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
-  return Option.match(Schema.decodeUnknownOption(Schema.fromJsonString(Distilled))(json), {
-    onNone: () => [],
-    onSome: (answer) =>
-      answer.candidates.flatMap((item) => Option.toArray(Schema.decodeUnknownOption(Candidate)(item))),
-  }).slice(0, 2)
+  return (
+    Option.match(Schema.decodeUnknownOption(Schema.fromJsonString(Distilled))(json), {
+      onNone: () => [],
+      onSome: (answer) =>
+        answer.candidates.flatMap((item) => Option.toArray(Schema.decodeUnknownOption(Candidate)(item))),
+    })
+      // A rule the user stated takes a slot ahead of what the work showed.
+      .toSorted((a, b) => Number(b.basis === "user") - Number(a.basis === "user"))
+      .slice(0, 2)
+  )
 }
 
 const MIN_QUOTE = 12
