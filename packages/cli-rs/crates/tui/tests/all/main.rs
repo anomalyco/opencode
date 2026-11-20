@@ -16,6 +16,7 @@ mod cold_catalogs;
 mod complete;
 mod composer;
 mod config_live;
+mod dialog_model;
 mod diffs;
 mod drive;
 mod editor;

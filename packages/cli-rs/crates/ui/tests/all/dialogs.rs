@@ -172,45 +172,6 @@ fn confirm_cancels_on_escape() {
 }
 
 #[test]
-fn escape_closes_the_dialog_and_calls_its_close_handler() {
-    let kit = kit(70, 16);
-    let log = Rc::new(RefCell::new(Vec::new()));
-    let closed = log.clone();
-    kit.dialogs.replace(
-        |cx| alert::alert(cx, alert::AlertProps { title: "A".into(), message: "B".into(), on_confirm: None }),
-        Some(Box::new(move || closed.borrow_mut().push("closed"))),
-        Default::default(),
-    );
-    kit.app.press("escape");
-    assert_eq!(*log.borrow(), ["closed"]);
-    assert!(!kit.dialogs.is_open());
-    assert_eq!(kit.keymap.mode(), "base");
-}
-
-#[test]
-fn replace_closes_the_previous_dialog_and_restores_focus_after_the_last() {
-    let kit = kit(70, 16);
-    let input = Input::new(&kit.app);
-    kit.app.root().add(&input);
-    input.focus();
-    let log = Rc::new(RefCell::new(Vec::new()));
-    for name in ["first", "second"] {
-        let closed = log.clone();
-        kit.dialogs.replace(
-            |cx| alert::alert(cx, alert::AlertProps { title: name.into(), message: String::new(), on_confirm: None }),
-            Some(Box::new(move || closed.borrow_mut().push(name))),
-            Default::default(),
-        );
-        assert!(!input.is_focused());
-    }
-    assert_eq!(*log.borrow(), ["first"]);
-    assert_eq!(kit.dialogs.len(), 1);
-    kit.dialogs.clear();
-    assert_eq!(*log.borrow(), ["first", "second"]);
-    assert!(input.is_focused());
-}
-
-#[test]
 fn a_release_frees_the_open_dialog_without_its_close_handler() {
     for name in ["alert", "prompt"] {
         let kit = kit(70, 16);
