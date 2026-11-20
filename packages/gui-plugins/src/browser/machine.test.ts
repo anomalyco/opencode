@@ -435,7 +435,7 @@ describe("browser pane machine", () => {
     const closed = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.registration.closed")).state
     const retry = transition(closed, { type: "retry.due", sessionKey: key, attempt: attempt(closed) }).state
     expect(sessionRegistration(retry, key)).toBeUndefined()
-    const accepted = transition(retry, { type: "register.accepted", sessionKey: key, attempt: attempt(retry) }).state
+    const accepted = transition(retry, { type: "register.accepted", sessionKey: key, attempt: attempt(retry), fileRoots: [] }).state
     expect(sessionRegistration(accepted, key)).toBe(attempt(retry))
   })
   test("a cold registration that cannot reach the server keeps main's saved inventory until retry", () => {
@@ -478,7 +478,7 @@ describe("browser pane machine", () => {
       failed.state,
     ).state
 
-    const taken = transition(accepted, { type: "register.accepted", sessionKey: key, attempt: attempt(accepted) })
+    const taken = transition(accepted, { type: "register.accepted", sessionKey: key, attempt: attempt(accepted), fileRoots: [] })
     expect(phase(taken.state)).toEqual({ status: "ready", attempt: attempt(accepted) })
     expect(types(taken.effects)).toEqual(["cancel-register-timeout"])
 
@@ -907,7 +907,7 @@ describe("browser pane machine", () => {
       { type: "pane.state", sessionKey: key, attempt: old, state: null, error: "browser.pane.replaced" },
       { type: "pane.embed", sessionKey: key, attempt: old, tabID: tabA, embed: "stale" },
       { type: "pane.focus", sessionKey: key, attempt: old, tabID: tabA },
-      { type: "register.accepted", sessionKey: key, attempt: old },
+      { type: "register.accepted", sessionKey: key, attempt: old, fileRoots: [] },
       { type: "retry.due", sessionKey: key, attempt: retry },
     ] satisfies Event[])
       expect(transition(registering, event)).toEqual({ state: registering, effects: [] })

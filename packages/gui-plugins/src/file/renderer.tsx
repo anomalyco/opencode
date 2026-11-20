@@ -286,8 +286,10 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   ctx.provide(FileSource, { open(session, address, tab, unprompted) {
     const files = ctx.screen.current()?.file
     const path = files?.resolve(address)
+    const pane = shared.browser()
+    const allowed = !!files && !!path && (!files.absolute(path) || (pane.status === "active" && pane.value.canOpen(session, path)))
 
-    if (!files || !path || files.absolute(path) || path.split(/[\\/]/).includes("..") || sessions.current()?.key !== session.key)
+    if (!files || !path || !allowed || path.split(/[\\/]/).includes("..") || sessions.current()?.key !== session.key)
       return ctx.toast.show({ variant: "error", title: ctx.t("load.failed") })
 
     if (tab === "append" && layout.state(key(files, address), session) !== "visible") setUnseen(`${session.key}\n${fileTabId(files, address)}`, true)
@@ -301,21 +303,23 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const open = (session: MountedSession, path: string, options?: OpenOptions) => {
     if (!desktop || artifactKind(path) !== "html") return openSource(session, path, options)
 
-    if (ctx.screen.current()?.file.absolute(path)) {
-      ctx.toast.show({ variant: "error", title: ctx.t("preview.outside") })
-
-      return
-    }
-
     const pane = shared.browser()
 
     if (pane.status === "active" && pane.value.canOpen(session, path)) return pane.value.openFile(session, path)
 
-    ctx.toast.show({ variant: "error", title: ctx.t("preview.unavailable"), actions: [{
-      label: ctx.t("view.viewSource"), run: () => {
-        if (sessions.current()?.key === session.key) openSource(session, path)
-      },
-    }] })
+    const outside =
+      pane.status === "active" && pane.value.canOpen(session) && Boolean(ctx.screen.current()?.file.absolute(path))
+
+    ctx.toast.show({
+      variant: "error",
+      title: ctx.t(outside ? "preview.outside" : "preview.unavailable"),
+      actions: [{
+        label: ctx.t("view.viewSource"),
+        run: () => {
+          if (sessions.current()?.key === session.key) openSource(session, path)
+        },
+      }],
+    })
   }
 
   const applySelection = (session: MountedSession, files: Files, path: string, selection: LineRange | undefined) => {

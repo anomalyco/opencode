@@ -257,6 +257,9 @@ export const BrowserPane = Ipc.define({
         session: text(256).check(Schema.isStartingWith("ses")),
         restore: Schema.optionalKey(Browser.State),
       }),
+      output: Schema.Struct({
+        fileRoots: Schema.Array(Schema.String),
+      }),
     },
     // Creates the page of a restored tab the first time the pane shows it.
     load: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },

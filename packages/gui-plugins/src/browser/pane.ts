@@ -1,6 +1,7 @@
 import { NodeHttpClient } from "@effect/platform-node"
 import { homedir } from "node:os"
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { tempRoots } from "@opencode/plugin-browser/workspace"
 import { OpenCode } from "@opencode/client/effect"
 import { SessionID } from "@opencode/schema/session-id"
 import electron, { type BrowserWindow } from "electron"
@@ -49,7 +50,7 @@ import { workspacePages } from "./workspace-pages"
 import { FileVerificationError } from "./file-verification"
 import type { HandlePath } from "./disk"
 import { artifactKind } from "@opencode/util/artifact"
-import { fileTab, reusableFile, workspaceFileURL } from "./link"
+import { fileTab, isLocalAbsolutePath, reusableFile, workspaceFileURL } from "./link"
 import { createPreviews } from "./profile/previews"
 import { pluginTabs } from "./plugin-tabs"
 import { remotePreview } from "./remote-preview"
@@ -240,10 +241,14 @@ export function createBrowserPane(input: {
 
             const session = yield* client.session.get({ sessionID })
 
-            // The agent can already read this workspace, so showing its files adds no access. A forwarded or explicit
-            // loopback server does not share this machine's disk.
+            // The agent can already read this workspace and OpenCode's temp directory, so showing their files adds no
+            // access. A forwarded or explicit loopback server does not share this machine's disk.
             const builtin = server.id === "sidecar"
-            const fileRoots = builtin ? [session.location.directory] : []
+            const temp = builtin ? yield* Effect.promise(() => tempRoots()) : []
+
+            const fileRoots = builtin
+              ? [session.location.directory, ...temp.filter((root) => root !== session.location.directory)]
+              : []
 
             const options = {
               location: { directory: session.location.directory, workspace: session.location.workspaceID },
@@ -258,7 +263,8 @@ export function createBrowserPane(input: {
 
             handle.source = source
             handle.artifacts = () => artifactPages(previews, server, session.location.directory, abort.signal)
-            handle.workspace = () => workspacePages(previews, input.verifier, session.location.directory, source, abort.signal)
+            handle.workspace = () =>
+              workspacePages(previews, input.verifier, session.location.directory, source, abort.signal, temp)
 
             if (shared) handle.network = createDirectNetwork(input.profile.session)
 
@@ -408,6 +414,8 @@ export function createBrowserPane(input: {
       await handle.registered.promise
 
       if (!selectBinding(machine.state, binding)) throw new Error("browser.pane.registration.closed")
+
+      return { fileRoots: selectFileRoots(machine.state, binding) }
     },
     load(window: number, binding: string, tabID: Browser.TabID) {
       owned(window, binding)
@@ -1033,10 +1041,17 @@ export function createBrowserPane(input: {
 
     if (action.type === "tabs.list") return { value: inventory(binding, origin === "agent" ? "agent" : "window"), files: [] }
 
-    // The address a tab loads this workspace file from, once the session is known to read it still.
+    // The address a tab loads this workspace or approved temp file from, once the session is known to read it still.
     const fileURL = async (path: string) => {
       const roots = selectFileRoots(machine.state, binding)
       const remote = remoteSource(binding)
+
+      if (remote && isLocalAbsolutePath(path))
+        throw new CodedError(
+          Browser.FailureCode.previewUnavailable,
+          "This file is outside the session's workspace and cannot be previewed from a remote server.",
+        )
+
       const url = remote ? `${remote.prefix}${path.split("/").map(encodeURIComponent).join("/")}` : roots[0] && workspaceFileURL(roots[0], path)
 
       if (!url || !(remote ? Number.isSafeInteger(await remote.stat(path, signal)) : await workspaceFile(input.verifier, url, roots)))
@@ -1048,6 +1063,12 @@ export function createBrowserPane(input: {
     }
 
     if (action.type === "preview") {
+      if (remoteSource(binding) && isLocalAbsolutePath(action.path))
+        throw new CodedError(
+          Browser.FailureCode.previewUnavailable,
+          "This file is outside the session's workspace and cannot be previewed from a remote server.",
+        )
+
       if (artifactKind(action.path) === "html") {
         const url = await fileURL(action.path)
         const existing = fileTab(inventory(binding).tabs, url)

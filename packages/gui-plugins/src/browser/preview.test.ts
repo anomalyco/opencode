@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { previewAddress, previewFile, previewResource, reloadAddress } from "./preview"
 import { refusal } from "./policy"
 import { navigationNotice } from "./refusal-notice"
-import { fileTab, reusableFile, workspaceFileURL } from "./link"
+import { fileTab, isLocalAbsolutePath, pathWithinRoots, reusableFile, workspaceFileURL } from "./link"
 
 const roots = ["/work/repo #1"]
 
@@ -33,6 +33,39 @@ test("a file the agent opens again goes to the tab that already shows it", () =>
   // A remote server's file has its own address, so the same path in this machine's workspace is another file.
   expect(fileTab(tabs, workspaceFileURL("/work/repo #1", "site/index.html", "ses_x"))).toBeUndefined()
   expect(fileTab([{ id: "remote", url: "workspace://ses_x/site/index.html#top" }], workspaceFileURL("/work", "site/index.html", "ses_x"))?.id).toBe("remote")
+})
+
+test("approved local absolute paths map cleanly to file URLs and reject traversal, sibling prefixes and UNC shares", () => {
+  expect(workspaceFileURL("/work/repo", "/private/tmp/opencode/report/index.html")).toBe(
+    "file:///private/tmp/opencode/report/index.html",
+  )
+  expect(workspaceFileURL("/work/repo", "C:\\Temp\\opencode\\report\\index.html")).toBe(
+    "file:///C:/Temp/opencode/report/index.html",
+  )
+  expect(isLocalAbsolutePath("/tmp/opencode/a.html")).toBe(true)
+  expect(isLocalAbsolutePath("C:\\Temp\\opencode\\a.html")).toBe(true)
+  expect(isLocalAbsolutePath("//server/share/a.html")).toBe(false)
+  expect(isLocalAbsolutePath("\\\\server\\share\\a.html")).toBe(false)
+
+  const allowed = ["/private/tmp/opencode", "/tmp/opencode", "C:\\Temp\\opencode"]
+  expect(pathWithinRoots("/private/tmp/opencode/report/index.html", allowed)).toBe(true)
+  expect(pathWithinRoots("/tmp/opencode/report/index.html", allowed)).toBe(true)
+  expect(pathWithinRoots("c:/temp/opencode/report/index.html", allowed)).toBe(true)
+
+  for (const denied of [
+    "/private/tmp/opencode",
+    "/private/tmp/opencode-other/index.html",
+    "/private/tmp/opencode/../secret.html",
+    "/etc/passwd",
+    "/Users/me/.ssh/id_ed25519",
+    "//server/share/index.html",
+    "\\\\server\\share\\index.html",
+    "/private/tmp/opencode/bad\0.html",
+  ]) {
+    expect(pathWithinRoots(denied, allowed)).toBe(false)
+  }
+
+  expect(pathWithinRoots("/private/tmp/opencode/report/index.html", [])).toBe(false)
 })
 
 test("a remote policy opens only its own session's workspace and explains a refusal as a workspace restriction", () => {

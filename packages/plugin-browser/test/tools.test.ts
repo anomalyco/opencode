@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises"
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { pathToFileURL } from "node:url"
@@ -9,6 +9,7 @@ import { Browser } from "../src/rpc.js"
 import { BrowserFiles } from "../src/files.js"
 import { BrowserSkill } from "../src/skill.js"
 import { BrowserTools } from "../src/tools.js"
+import { tempRoots } from "../src/workspace.js"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
 const navigate = (url: string) => BrowserTools.normalizeAction({ type: "navigate", tabID, url })
@@ -364,5 +365,98 @@ test("a workspace file's path resolves the way the file panel resolves it", asyn
   } finally {
     await rm(`${directory}-link`, { recursive: true, force: true })
     await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("BrowserFiles.locate allows files inside approved temp roots (canonical and symlinked) while rejecting escapes", async () => {
+  const base = await mkdtemp(join(tmpdir(), "browser-temp-"))
+  const directoryLink = process.platform === "win32" ? "junction" : "dir"
+  try {
+    const workspace = join(base, "workspace")
+    const tmpReal = join(base, "real-tmp", "opencode")
+    const tmpParentLink = join(base, "linked-tmp")
+    const tmpLink = join(tmpParentLink, "opencode")
+    const sibling = join(base, "real-tmp", "opencode-other")
+    await Promise.all([
+      mkdir(workspace, { recursive: true }),
+      mkdir(join(tmpReal, "report"), { recursive: true }),
+      mkdir(sibling, { recursive: true }),
+    ])
+    await symlink(join(base, "real-tmp"), tmpParentLink, directoryLink)
+
+    const canonicalTmp = await realpath(tmpReal)
+    const canonicalReport = join(canonicalTmp, "report", "index.html")
+    await Bun.write(canonicalReport, "<h1>temp report</h1>")
+    await Bun.write(join(sibling, "secret.html"), "<h1>sibling</h1>")
+    await symlink(sibling, join(tmpReal, "report", "escape"), directoryLink)
+
+    const roots = await tempRoots(tmpLink)
+    expect(roots).toEqual([canonicalTmp, tmpLink])
+
+    const approved: string[] = []
+    const locate = (target: string) =>
+      Effect.runPromise(
+        BrowserFiles.locate(
+          target,
+          workspace,
+          (absolute) => Effect.sync(() => void approved.push(absolute)),
+          roots,
+        ),
+      )
+
+    // Canonical path, symlinked path, and file:// URL all resolve to the canonical temp file.
+    expect(await locate(canonicalReport)).toEqual({
+      absolute: canonicalReport,
+      found: true,
+      directory: false,
+      temp: true,
+    })
+    approved.length = 0
+    const linkedReport = join(tmpLink, "report", "index.html")
+    expect(await locate(linkedReport)).toEqual({
+      absolute: canonicalReport,
+      found: true,
+      directory: false,
+      temp: true,
+    })
+    expect(approved).toEqual([linkedReport])
+    expect(await locate(pathToFileURL(canonicalReport).href)).toEqual({
+      absolute: canonicalReport,
+      found: true,
+      directory: false,
+      temp: true,
+    })
+
+    // Escapes out of temp root are strictly rejected.
+    for (const outside of [
+      join(tmpReal, "..", "opencode-other", "secret.html"),
+      join(sibling, "secret.html"),
+      join(tmpReal, "report", "escape", "secret.html"),
+      "/etc/passwd",
+    ]) {
+      expect(await locate(outside)).toMatchObject({ outside: true })
+    }
+  } finally {
+    await rm(base, { recursive: true, force: true })
+  }
+})
+
+test("tempRoots canonicalizes a symlinked temp directory, including before it exists", async () => {
+  const base = await mkdtemp(join(tmpdir(), "temp-roots-"))
+  try {
+    const realParent = join(base, "real")
+    const linkedParent = join(base, "linked")
+    await mkdir(realParent)
+    await symlink(realParent, linkedParent, process.platform === "win32" ? "junction" : "dir")
+
+    const pending = join(linkedParent, "opencode")
+    const canonical = join(await realpath(realParent), "opencode")
+    expect(await tempRoots(pending)).toEqual([canonical, pending])
+
+    await mkdir(join(realParent, "opencode"))
+    expect(await tempRoots(pending)).toEqual([canonical, pending])
+    expect(await tempRoots(canonical)).toEqual([canonical])
+  } finally {
+    await rm(base, { recursive: true, force: true })
   }
 })

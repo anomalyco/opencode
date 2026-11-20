@@ -3,6 +3,7 @@ import { link, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import { tempRoots } from "@opencode/plugin-browser/workspace"
 import { createHandlePath, previewRoot } from "./disk"
 import { resolvePreviewRequest, workspaceFile, type PreviewSource } from "./workspace-file"
 import { workspacePages } from "./workspace-pages"
@@ -149,4 +150,165 @@ test("preview and reveal resolve existing regular files under the real workspace
     await verifier.close()
     await rm(temp, { recursive: true, force: true })
   }
+})
+
+test("approved temp roots serve subfolder HTML previews with relative assets while blocking cross-root, sibling and traversal reads", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "tmp-preview-"))
+  await using cleanup = new AsyncDisposableStack()
+  cleanup.defer(() => rm(temp, { recursive: true, force: true }))
+  const verifier = createHandlePath()
+  cleanup.defer(() => verifier.close())
+
+  const base = await realpath(temp)
+  const workspace = path.join(base, "workspace")
+  const opencodeTmp = path.join(base, "opencode")
+  const opencodeTmpLink = path.join(base, "opencode-link")
+  const siblingTmp = path.join(base, "opencode-other")
+  const reportDir = path.join(opencodeTmp, "my-report")
+  const uploadsDir = path.join(opencodeTmp, "uploads")
+  const directoryLink = process.platform === "win32" ? "junction" : "dir"
+
+  await Promise.all([
+    mkdir(workspace, { recursive: true }),
+    mkdir(path.join(reportDir, "assets"), { recursive: true }),
+    mkdir(uploadsDir, { recursive: true }),
+    mkdir(siblingTmp, { recursive: true }),
+  ])
+  await symlink(opencodeTmp, opencodeTmpLink, directoryLink)
+
+  const workspaceDoc = path.join(workspace, "index.html")
+  const workspaceSecret = path.join(workspace, "secret.txt")
+  const reportDoc = path.join(reportDir, "index.html")
+  const reportAsset = path.join(reportDir, "assets", "app.js")
+  const reportHidden = path.join(reportDir, ".env")
+  const soloDoc = path.join(opencodeTmp, "solo.html")
+  const uploadFile = path.join(uploadsDir, "private.txt")
+  const siblingFile = path.join(siblingTmp, "leak.html")
+  await Promise.all([
+    writeFile(workspaceDoc, "<h1>workspace</h1>"),
+    writeFile(workspaceSecret, "workspace-secret"),
+    writeFile(reportDoc, "<h1>report</h1>"),
+    writeFile(reportAsset, "console.log('ok')"),
+    writeFile(reportHidden, "API_KEY=secret"),
+    writeFile(soloDoc, "<h1>solo</h1>"),
+    writeFile(uploadFile, "other-session-upload"),
+    writeFile(siblingFile, "<h1>sibling</h1>"),
+  ])
+  await symlink(siblingTmp, path.join(reportDir, "escape"), directoryLink)
+
+  const sharedRoots = await tempRoots(opencodeTmpLink)
+  expect(sharedRoots).toEqual([opencodeTmp, opencodeTmpLink])
+  const allRoots = [workspace, ...sharedRoots]
+  const grants = new Map<string, PreviewSource>()
+
+  const previews = {
+    grant(source: PreviewSource) {
+      const host = crypto.randomUUID()
+      grants.set(host, source)
+
+      return { host, release: () => void grants.delete(host) }
+    },
+  }
+
+  const signal = new AbortController().signal
+  const pages = workspacePages(previews, verifier, workspace, { type: "local", roots: () => allRoots }, signal, sharedRoots)
+  cleanup.defer(() => pages.dispose())
+
+  // Opening via canonical temp path AND via symlinked temp path (macOS /var -> /private/var) both work.
+  for (const docPath of [reportDoc, path.join(opencodeTmpLink, "my-report", "index.html")]) {
+    const fileURL = pathToFileURL(docPath).href
+    const previewURL = await pages.load(fileURL, () => {})
+
+    if (!previewURL) throw new Error(`missing preview for ${docPath}`)
+    const origin = `oc-preview://${new URL(previewURL).host}`
+    expect(pages.display(previewURL)).toBe(fileURL)
+    expect(await pages.exists(previewURL, signal)).toBe(true)
+
+    const entry = await resolvePreviewRequest(previewURL, "GET", undefined, grants, signal, verifier)
+    expect(entry?.type).toBe("local")
+
+    if (entry?.type === "local") await entry.file.close()
+
+    // workspaceFile and external launch both resolve the physical temp HTML file.
+    expect(await workspaceFile(verifier, fileURL, allRoots)).toMatchObject({ path: reportDoc })
+    const launched: string[] = []
+    expect(await pages.external(previewURL, async (file) => void launched.push(file))).toBe(true)
+    expect(launched).toEqual([reportDoc])
+
+    const assetURL = new URL("assets/app.js", previewURL).href
+    const asset = await resolvePreviewRequest(assetURL, "GET", origin, grants, signal, verifier)
+    expect(asset?.type).toBe("local")
+
+    if (asset?.type === "local") {
+      expect(await asset.file.readFile("utf8")).toBe("console.log('ok')")
+      await asset.file.close()
+    }
+
+    // Blocked: hidden file, sibling dir, parent uploads dir, symlink escape, workspace file, and /etc/passwd.
+    for (const denied of [
+      new URL(".env", previewURL).href,
+      new URL("escape/leak.html", previewURL).href,
+      new URL("../uploads/private.txt", previewURL).href,
+      `${origin}${pathToFileURL(uploadFile).href.slice("file://".length)}`,
+      `${origin}${pathToFileURL(siblingFile).href.slice("file://".length)}`,
+      `${origin}${pathToFileURL(workspaceSecret).href.slice("file://".length)}`,
+      `${origin}/etc/passwd`,
+    ]) {
+      expect(await resolvePreviewRequest(denied, "GET", origin, grants, signal, verifier)).toBeUndefined()
+    }
+  }
+
+  // Standalone HTML directly in the shared temp root loads as an entry document, but cannot read sibling/upload files.
+  const soloURL = await pages.load(pathToFileURL(soloDoc).href, () => {})
+
+  if (!soloURL) throw new Error("missing solo preview")
+  const soloOrigin = `oc-preview://${new URL(soloURL).host}`
+  expect(pages.display(soloURL)).toBe(pathToFileURL(soloDoc).href)
+  const soloEntry = await resolvePreviewRequest(soloURL, "GET", undefined, grants, signal, verifier)
+  expect(soloEntry?.type).toBe("local")
+
+  if (soloEntry?.type === "local") await soloEntry.file.close()
+  expect(await resolvePreviewRequest(new URL("uploads/private.txt", soloURL).href, "GET", soloOrigin, grants, signal, verifier)).toBeUndefined()
+  expect(await resolvePreviewRequest(new URL("my-report/index.html", soloURL).href, "GET", soloOrigin, grants, signal, verifier)).toBeUndefined()
+
+  // A workspace grant cannot read temp files either.
+  const wsURL = await pages.load(pathToFileURL(workspaceDoc).href, () => {})
+
+  if (!wsURL) throw new Error("missing workspace preview")
+  const wsOrigin = `oc-preview://${new URL(wsURL).host}`
+  expect(
+    await resolvePreviewRequest(
+      `${wsOrigin}${pathToFileURL(reportDoc).href.slice("file://".length)}`,
+      "GET",
+      wsOrigin,
+      grants,
+      signal,
+      verifier,
+    ),
+  ).toBeUndefined()
+
+  // workspaceFile rejects sibling directories outside temp roots and symlink escapes inside temp roots.
+  expect(await workspaceFile(verifier, pathToFileURL(siblingFile).href, allRoots)).toBeUndefined()
+  expect(await workspaceFile(verifier, pathToFileURL(path.join(reportDir, "escape", "leak.html")).href, allRoots)).toBeUndefined()
+
+  // A remote server can never load local temp files from disk.
+  const remotePages = workspacePages(
+    previews,
+    verifier,
+    "/remote/repo",
+    {
+      type: "remote",
+      root: "/remote/repo",
+      prefix: "workspace://ses_remote/",
+      stat: async () => 10,
+      read: () => Promise.reject(new Error("unexpected read")),
+    },
+    signal,
+    sharedRoots,
+  )
+
+  cleanup.defer(() => remotePages.dispose())
+
+  expect(await remotePages.load(pathToFileURL(reportDoc).href, () => {})).toBeUndefined()
+  expect(await remotePages.load(pathToFileURL(soloDoc).href, () => {})).toBeUndefined()
 })

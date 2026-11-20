@@ -5,8 +5,15 @@ import { relative } from "node:path"
 import { openContained } from "./contained-file"
 import type { HandlePath } from "./handle-path"
 
-/** Paths are relative to the workspace, never relative to the process. Do not normalize away a rejected segment. */
-export function previewAllowed(root: string, document: string, path: string, entry: boolean, home: string) {
+/** Paths are relative to the preview root, never relative to the process. Do not normalize away a rejected segment. */
+export function previewAllowed(
+  root: string,
+  document: string,
+  path: string,
+  entry: boolean,
+  home: string,
+  sharedRoots: readonly string[] = [],
+) {
   const split = (value: string) => value.replaceAll("\\", "/").split("/")
   const doc = split(document)
   const file = split(path)
@@ -32,11 +39,12 @@ export function previewAllowed(root: string, document: string, path: string, ent
   if (
     ["", "/Desktop", "/Documents", "/Downloads", "/AppData", "/AppData/Local", "/AppData/Roaming", "/Library"].some(
       (suffix) => directory === name(home + suffix),
-    )
+    ) ||
+    sharedRoots.some((shared) => directory === name(shared))
   )
     return false
 
-  // The grant already names this workspace. Protect hidden and secret paths beneath it, not its ancestors.
+  // The grant already names this root. Protect hidden and secret paths beneath it, not its ancestors.
   return !file.some(
     (part) =>
       part.startsWith(".") ||
@@ -67,8 +75,9 @@ export async function openPreviewFile(
   path: string,
   entry: boolean,
   identity: string,
+  sharedRoots: readonly string[] = [],
 ) {
-  if (!previewAllowed(workspace, document, path, entry, homedir())) return "denied"
+  if (!previewAllowed(workspace, document, path, entry, homedir(), sharedRoots)) return "denied"
   const root = await previewRoot(workspace)
 
   if (root.id !== identity) return "denied"
@@ -77,7 +86,7 @@ export async function openPreviewFile(
   if (!opened) return
 
   if (
-    previewAllowed(root.path, document, relative(root.path, opened.path), entry, homedir()) &&
+    previewAllowed(root.path, document, relative(root.path, opened.path), entry, homedir(), sharedRoots) &&
     (await previewRoot(workspace).then(
       (current) => current.id === identity,
       () => false,
