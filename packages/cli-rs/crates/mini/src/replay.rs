@@ -1118,6 +1118,10 @@ impl Transcript {
                         &ended.data.output,
                     ));
                 }
+                // A shell outside this client's turns ends idle; this client's own shell turn ends with its wait.
+                if self.wait.is_none() {
+                    output.extend(Output::patch(false, ""));
+                }
                 output
             }
             V2Event::SessionCompactionStarted(started) => {
@@ -2031,6 +2035,21 @@ mod tests {
         let listed = message(json!({ "id": "msg_a", "type": "assistant", "content": [{ "type": "tool", "id": "call_1",
             "name": "bash", "state": { "status": "completed", "input": {}, "content": [] }, "time": { "created": 1 } }] }));
         assert!(transcript.message(&listed, true).commits.is_empty(), "nor when listed later");
+    }
+
+    /// A shell outside this client's turns ends idle; a turn in flight ends the footer's work itself.
+    #[test]
+    fn a_shell_ends_idle_unless_a_turn_waits() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        transcript.hydrate(&[], false);
+        let shell = json!({ "id": "sh_1", "status": "exited", "command": "ls", "cwd": "/", "shell": "bash",
+            "file": "/out", "metadata": {}, "time": { "started": 1, "completed": 2 }, "exit": 0 });
+        let output = json!({ "output": "", "cursor": 0, "size": 0, "truncated": false });
+        let ended = event("session.shell.ended", json!({ "shell": shell, "output": output }));
+        let idle = Patch { running: Some(false), status: Some(String::new()), usage: None };
+        assert_eq!(transcript.event(&ended).patch, Some(idle));
+        transcript.begin_wait("msg_p");
+        assert_eq!(transcript.event(&ended).patch, None);
     }
 
     /// One message the client cannot read does not fail the list.

@@ -781,7 +781,12 @@ impl Mini {
                             self.trace("recv.event", value);
                         }
                     }
-                    transcript.event(&event)
+                    let mut output = transcript.event(&event);
+                    // This client's own shell turn ends with its wait (`shellWait`), not idle.
+                    if self.shell.borrow().is_some() && matches!(*event, V2Event::SessionShellEnded(_)) {
+                        output.patch = None;
+                    }
+                    output
                 }
                 Incoming::Disconnected(error) => {
                     self.trace("recv.reconnect", json!({ "error": error }));
