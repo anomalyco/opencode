@@ -79,12 +79,12 @@ export const Plugin = {
       .transform((editor) => {
         if (!enabled()) return
         editor.add({
-          name: "session_search",
+          name: "search",
           description:
-            'Find the user\'s past sessions. With query: full-text search over session titles, user and assistant messages, and compaction summaries. Matches any query word, ranked so messages with more and rarer words come first; supports "exact phrase", prefix*, AND, OR, NOT. Returns the best-matching sessions with up to 3 snippets and messageIDs each. Without query: lists sessions, most recently updated first. Filter either way by directory or time. Follow up with session_read(sessionID, messageID).',
+            'Find the user\'s past sessions. With query: full-text search over session titles, user and assistant messages, and compaction summaries. Matches any query word, ranked so messages with more and rarer words come first; supports "exact phrase", prefix*, AND, OR, NOT. Returns the best-matching sessions with up to 3 snippets and messageIDs each. Without query: lists sessions, most recently updated first. Filter either way by directory or time. Follow up with opencode.session.read({ sessionID, messageID }).',
           input: SearchInput,
           output: SessionSearch.SearchOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "opencode.session", codemode: true },
           execute: (input, context) =>
             Effect.gen(function* () {
               yield* requireEnabled
@@ -98,12 +98,12 @@ export const Plugin = {
             }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : failure(error)))),
         })
         editor.add({
-          name: "session_read",
+          name: "read",
           description:
-            'Read messages from one session, including history from before compaction. With messageID, returns a window around that message (from session_search). Without it, returns the session\'s latest messages, or its first ones with from="start". Tool calls are shown as one-line summaries unless includeTools is true. Page with olderCursor or newerCursor.',
+            'Read messages from one session, including history from before compaction. With messageID, returns a window around that message (from opencode.session.search). Without it, returns the session\'s latest messages, or its first ones with from="start". Tool calls are shown as one-line summaries unless includeTools is true. Page with olderCursor or newerCursor.',
           input: ReadInput,
           output: SessionSearch.ReadOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "opencode.session", codemode: true },
           execute: (input, context) =>
             Effect.gen(function* () {
               yield* requireEnabled

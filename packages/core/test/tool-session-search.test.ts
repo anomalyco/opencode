@@ -74,25 +74,25 @@ describe("SessionSearchTools", () => {
         Effect.provide(permissionLayer({ assert: () => Effect.void })),
       )
 
-      expect(yield* paths(tools)).not.toContain("opencode.session_search")
-      expect(yield* paths(tools)).not.toContain("opencode.session_read")
+      expect(yield* paths(tools)).not.toContain("opencode.session.search")
+      expect(yield* paths(tools)).not.toContain("opencode.session.read")
 
       yield* config.setEntries(documents(true))
       yield* bus.publish(Event.Updated, {})
       const deadline = Date.now() + 5_000
-      while (!(yield* paths(tools)).includes("opencode.session_search") && Date.now() < deadline) {
+      while (!(yield* paths(tools)).includes("opencode.session.search") && Date.now() < deadline) {
         yield* Effect.sleep("5 millis")
       }
 
-      expect(yield* paths(tools)).toContain("opencode.session_search")
-      expect(yield* paths(tools)).toContain("opencode.session_read")
+      expect(yield* paths(tools)).toContain("opencode.session.search")
+      expect(yield* paths(tools)).toContain("opencode.session.read")
 
       const listed = yield* tools.list()
-      const searchTool = listed.find((def) => def.name === "session_search")
-      const readTool = listed.find((def) => def.name === "session_read")
-      expect(searchTool?.options?.namespace).toBe("opencode")
+      const searchTool = listed.find((def) => def.name === "search")
+      const readTool = listed.find((def) => def.name === "read")
+      expect(searchTool?.options?.namespace).toBe("opencode.session")
       expect(searchTool?.options?.codemode).toBe(true)
-      expect(readTool?.options?.namespace).toBe("opencode")
+      expect(readTool?.options?.namespace).toBe("opencode.session")
       expect(readTool?.options?.codemode).toBe(true)
     }),
   )
@@ -159,7 +159,7 @@ describe("SessionSearchTools", () => {
         ),
       )
 
-      const searched = yield* runCode(tools, `return await tools.opencode.session_search({ query: "walrus" })`)
+      const searched = yield* runCode(tools, `return await tools.opencode.session.search({ query: "walrus" })`)
       expect(searched.status).toBe("completed")
       expect(JSON.parse(searched.content?.[0]?.type === "text" ? searched.content[0].text : "")).toMatchObject({
         results: [{ sessionID: targetSession, title: "Walrus notes" }],
@@ -167,7 +167,7 @@ describe("SessionSearchTools", () => {
 
       const read = yield* runCode(
         tools,
-        `return await tools.opencode.session_read({ sessionID: ${JSON.stringify(targetSession)}, messageID: ${JSON.stringify(targetMessage)} })`,
+        `return await tools.opencode.session.read({ sessionID: ${JSON.stringify(targetSession)}, messageID: ${JSON.stringify(targetMessage)} })`,
       )
       expect(read.status).toBe("completed")
       expect(JSON.parse(read.content?.[0]?.type === "text" ? read.content[0].text : "")).toMatchObject({
