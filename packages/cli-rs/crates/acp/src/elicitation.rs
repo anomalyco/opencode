@@ -180,7 +180,10 @@ fn field_answer(field: &Value, content: &Map<String, Value>) -> Option<Value> {
     if !matches!(kind, "string" | "multiselect") || !flag(field, "custom") || !has_options(field) {
         return value;
     }
-    let custom = content.get(&custom_key(field)).and_then(Value::as_str).filter(|custom| !custom.trim().is_empty());
+    let custom = content
+        .get(&custom_key(field))
+        .and_then(Value::as_str)
+        .filter(|custom| !custom.trim_matches(opencode_api::js::is_whitespace).is_empty());
     let Some(custom) = custom else { return value };
     if kind == "string" {
         return Some(json!(custom));

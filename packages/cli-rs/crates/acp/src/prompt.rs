@@ -1,4 +1,5 @@
 use opencode_api::generated::CommandInfo;
+use opencode_api::js::is_whitespace;
 use serde_json::Value;
 
 use crate::catalog::{Catalog, Start, builtin};
@@ -106,10 +107,25 @@ fn readable(path: &std::path::Path) -> bool {
     std::fs::File::open(path).is_ok()
 }
 
+// JavaScript's white space, for `trim` and `/\s+/`: a byte order mark is one, U+0085 is not.
 fn detect_slash_command(text: &str) -> Option<Slash> {
-    let value = text.trim();
+    let value = text.trim_matches(is_whitespace);
     let rest = value.strip_prefix('/')?;
-    let name = rest.split(char::is_whitespace).next().filter(|name| !name.is_empty())?;
-    let args = rest[name.len()..].split_whitespace().collect::<Vec<_>>().join(" ");
-    Some(Slash { name: name.to_owned(), args: args.trim().to_owned() })
+    let name = rest.split(is_whitespace).next().filter(|name| !name.is_empty())?;
+    let args = rest[name.len()..].split(is_whitespace).filter(|word| !word.is_empty()).collect::<Vec<_>>().join(" ");
+    Some(Slash { name: name.to_owned(), args })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slash_commands_split_on_javascript_white_space() {
+        let slash = |text: &str| detect_slash_command(text).map(|slash| (slash.name, slash.args));
+        assert_eq!(slash("\u{feff}/review\u{feff}a  b\u{3000}"), Some(("review".into(), "a b".into())));
+        assert_eq!(slash("/review\u{85}a"), Some(("review\u{85}a".into(), String::new())));
+        assert_eq!(slash("\u{85}/review"), None);
+        assert_eq!(slash("/ review"), None);
+    }
 }
