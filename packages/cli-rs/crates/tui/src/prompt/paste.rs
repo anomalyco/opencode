@@ -235,6 +235,7 @@ fn insert(prompt: &Inner, normalized: &str, pasted: &str) {
 
 fn paste_text(prompt: &Inner, text: &str, label: &str) {
     let textarea = &prompt.textarea;
+    clear_selection(textarea);
     let start = textarea.cursor_offset();
     textarea.insert(format!("{label} "));
     let end = prompt_input::after(textarea, start, label);
@@ -253,6 +254,7 @@ fn attachment(prompt: &Inner, uri: &str, filename: Option<&str>, path: Option<&s
     let files = prompt.prompt.borrow()["files"].as_array().cloned().unwrap_or_default();
     let label = attach::label(&files, uri, filename)?;
     let textarea = &prompt.textarea;
+    clear_selection(textarea);
     let start = textarea.cursor_offset();
     textarea.insert(format!("{label} "));
     let end = prompt_input::after(textarea, start, &label);
@@ -279,6 +281,14 @@ fn attachment(prompt: &Inner, uri: &str, filename: Option<&str>, path: Option<&s
     }
     prompt.parts_changed();
     Ok(())
+}
+
+/// Deletes the selection an insert would replace, so that the cursor is where the label lands. TS takes the cursor
+/// first and marks the wrong text when a selection ends after the cursor.
+fn clear_selection(textarea: &Textarea) {
+    if textarea.view().selection().ok().flatten().is_some() {
+        textarea.perform(EditorAction::Backspace);
+    }
 }
 
 fn expand(prompt: &Inner, mark: opentui::widget::ExtmarkId) -> bool {
