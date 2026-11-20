@@ -142,7 +142,15 @@ const decode = Effect.fnUntraced(function* (directory: string, filepath: string,
     yield* Effect.logWarning("command file skipped", { filepath, reason: "markdown" })
     return
   }
-  const info = decodeCommand({ ...markdown.data, template: markdown.content.trim() })
+  // Join legacy model + variant without migrating native command fields such as subagent.
+  const data =
+    typeof markdown.data.model === "string" &&
+    !markdown.data.model.includes("#") &&
+    typeof markdown.data.variant === "string" &&
+    /^[^#]+$/.test(markdown.data.variant)
+      ? { ...markdown.data, model: `${markdown.data.model}#${markdown.data.variant}` }
+      : markdown.data
+  const info = decodeCommand({ ...data, template: markdown.content.trim() })
   if (Result.isFailure(info)) {
     yield* Effect.logWarning("command file skipped", {
       filepath,

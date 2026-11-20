@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { advance, drain } from "../lib/clock"
 import { Directory, Document, Event, Info } from "@opencode/schema/config"
+import { Model } from "@opencode/schema/model"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { Job } from "@opencode/core/job"
@@ -154,6 +155,89 @@ describe("ConfigCommandPlugin.Plugin", () => {
       }),
     )
   }
+
+  it.live("retains legacy and native model selections in Markdown commands", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const cases = [
+            {
+              name: "legacy",
+              frontmatter: "model: example/chat\nvariant: high\nsubagent: false\nsubtask: true",
+              model: "example/chat#high",
+            },
+            {
+              name: "embedded",
+              frontmatter: "model: example/chat#high\nvariant: low",
+              model: "example/chat#high",
+            },
+            {
+              name: "structured",
+              frontmatter: "model:\n  providerID: example\n  model: chat\n  variant: high\nvariant: low",
+              model: "example/chat#high",
+            },
+            { name: "unqualified", frontmatter: "model: example/chat", model: "example/chat" },
+            { name: "standalone", frontmatter: "variant: high", model: undefined },
+          ]
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "commands"))
+            await Promise.all(
+              cases.map((item) =>
+                fs.writeFile(
+                  path.join(tmp.path, "commands", `${item.name}.md`),
+                  `---\n${item.frontmatter}\n---\nReply PROBE_OK.`,
+                ),
+              ),
+            )
+          })
+          const command = yield* Command.Service
+          const selections: { sessionID: string; model: Model.Ref }[] = []
+          yield* ConfigCommandPlugin.Plugin.effect(
+            host({
+              command: {
+                list: () => Effect.die("unused command.list"),
+                transform: command.transform,
+                reload: command.reload,
+              },
+              session: {
+                switchModel: (input) =>
+                  Effect.sync(() => {
+                    selections.push({ sessionID: input.sessionID, model: Model.Ref.make(input.model) })
+                  }),
+                prompt: (input) =>
+                  Effect.succeed(
+                    SessionInbox.User.make({
+                      id: SessionMessage.ID.make("msg_test"),
+                      sessionID: input.sessionID,
+                      time: { created: DateTime.makeUnsafe(0) },
+                      type: "user",
+                      payload: { text: input.text },
+                      delivery: input.delivery ?? "steer",
+                    }),
+                  ),
+              },
+            }),
+          ).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)])))
+
+          for (const item of cases)
+            yield* command.execute({
+              name: item.name,
+              invocation: {
+                sessionID: Session.ID.make(`ses_${item.name}`),
+                prompt: { text: "" },
+                delivery: "steer",
+              },
+            })
+
+          expect(selections).toEqual(
+            cases.flatMap((item) =>
+              item.model === undefined ? [] : [{ sessionID: `ses_${item.name}`, model: Model.Ref.parse(item.model) }],
+            ),
+          )
+        }),
+      ),
+    ),
+  )
 
   it.live("loads inline and file-based commands in config order", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
