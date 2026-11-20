@@ -121,6 +121,19 @@ permissions:
     }
   }
 
+  it.live("loads an agent with unquoted colon description and inline native mappings", () =>
+    Effect.gen(function* () {
+      const agent = yield* loadMarkdownAgent(`description: Review changes. Keywords: review, audit
+model: { providerID: example, model: chat, variant: high }
+permissions: [{ action: edit, resource: "*", effect: deny }]`)
+      expect(agent).toMatchObject({
+        description: "Review changes. Keywords: review, audit",
+        model: { providerID: "example", id: "chat", variant: "high" },
+      })
+      expect(agent.permissions).toContainEqual({ action: "edit", resource: "*", effect: "deny" })
+    }),
+  )
+
   it.live("keeps Markdown legacy permission precedence in source order", () =>
     Effect.gen(function* () {
       const agent = yield* loadMarkdownAgent('permission:\n  "*": allow\n  bash: ask\n  edit: deny')
