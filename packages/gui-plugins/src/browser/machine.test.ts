@@ -110,17 +110,16 @@ describe("browser pane machine", () => {
   test.each([
     ["a preview with the pane closed", {}, "open"],
     ["a preview with another browser tab, Review or Files selected", { opened: true }, "open"],
-    ["a focused new tab with the pane closed", { reveal: "pane" }, "open"],
-    ["a focused new tab with another tab selected", { reveal: "pane", opened: true }, "mark"],
+    ["the agent's new or focused tab with the pane closed", {}, "open"],
+    ["the agent's new or focused tab with another tab selected", { opened: true }, "open"],
     ["target already visible", { opened: true, visible: true }, "none"],
     ["a preview of the tab a closed pane has selected", { visible: true }, "open"],
     ["a preview for a session off screen or in a hidden window", { onScreen: false }, "select"],
     ["a preview off screen with the setting turned off", { onScreen: false, enabled: false }, "mark"],
-    ["a focused new tab off screen", { onScreen: false, reveal: "pane" }, "none"],
     ["the setting turned off", { enabled: false }, "mark"],
     ["open pane with the setting turned off", { enabled: false, opened: true }, "mark"],
     ["no room beside the chat", { room: false }, "mark"],
-    ["navigate, popup, focus, implicit open or quiet tab", { reveal: "none" }, "mark"],
+    ["navigate, popup or a tab opened with focus: false", { reveal: "none" }, "mark"],
     ["superseded binding", { attempt: -1 }, "none"],
     ["a tab the inventory does not have yet", { tabID: tabB }, "kept"],
   ] as const)("agent navigation, preview or new tab: %s", (_label, input, expected) => {
@@ -183,7 +182,7 @@ describe("browser pane machine", () => {
     expect(transition(hidden, activity(hidden)).effects).toEqual([])
     const nextRun = transition(hidden, { type: "execution.ended", sessionKey: key }).state
     expect(types(transition(nextRun, activity(nextRun)).effects)).toEqual(["focus-strip-tab"])
-    const mark = replay([side(true), { ...activity(hidden), reveal: "pane", opened: true }], hidden).state
+    const mark = replay([side(true), { ...activity(hidden), reveal: "none", opened: true }], hidden).state
     expect(attachment(mark)?.unseen).toEqual([tabA])
     expect(attachment(transition(mark, { type: "activity.seen", sessionKey: key, tabID: tabA }).state)?.unseen).toEqual([])
   })
@@ -234,18 +233,18 @@ describe("browser pane machine", () => {
   }
 
   test.each(["inventory", "strip"] as const)("a show request that arrives before the %s is kept as asked, with a bound", (waits) => {
-    const { tabID, early } = kept(waits, { reveal: "pane", onScreen: false, opened: true, enabled: false, room: false, visible: true })
+    const { tabID, early } = kept(waits, { reveal: "none", onScreen: false, opened: true, enabled: false, room: false, visible: true })
     const held = attachment(early.state)?.held
 
     // Only the binding, the tab and what was asked: nothing of the screen, the pane or the setting at that moment.
-    expect(held).toEqual({ attempt: attempt(early.state), tabID, reveal: "pane", token: held?.token ?? -1 })
+    expect(held).toEqual({ attempt: attempt(early.state), tabID, reveal: "none", token: held?.token ?? -1 })
     expect(early.effects).toEqual([{ type: "expire-held", sessionKey: key, token: held?.token ?? -1, delayMs: HELD_REQUEST_TTL_MS }])
     expect(revealGuard(early.state, key, tabID)).toBeUndefined()
 
     // What it waited for arrives: the machine decides nothing itself, and the request lands once.
     const landed = arrive(waits, early.state)
     expect(types(landed.effects)).not.toContain("focus-strip-tab")
-    expect(landed.effects.at(-1)).toEqual({ type: "present-held", sessionKey: key, attempt: attempt(early.state), tabID, reveal: "pane" })
+    expect(landed.effects.at(-1)).toEqual({ type: "present-held", sessionKey: key, attempt: attempt(early.state), tabID, reveal: "none" })
     expect(attachment(landed.state)?.held).toBeUndefined()
     expect(types(arrive(waits, landed.state).effects)).not.toContain("present-held")
   })
@@ -256,7 +255,6 @@ describe("browser pane machine", () => {
     ["asked off screen, the person is back", "strip", { onScreen: false }, {}, "open"],
     ["asked on screen, nobody looks now", "inventory", {}, { onScreen: false }, "select"],
     ["asked on screen, nobody looks now", "strip", {}, { onScreen: false }, "select"],
-    ["asked for a closed pane, which shows another tab now", "inventory", { reveal: "pane" }, { opened: true }, "mark"],
     ["asked with the setting on, which is off now", "strip", {}, { enabled: false }, "mark"],
     ["asked with room beside the chat, which is gone now", "inventory", {}, { room: false }, "mark"],
     ["asked for a tab the pane shows by now", "strip", {}, { opened: true, visible: true }, "none"],

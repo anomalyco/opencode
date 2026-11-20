@@ -3,6 +3,7 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import {
   agentFrame,
   agentDriven,
+  agentTabShow,
   childActivity,
   createdActivity,
   agentFrames,
@@ -423,4 +424,15 @@ test("the user still opens extension pages the agent may not", () => {
 
   expect(refusal(extensionPage, { extensions })).toBeUndefined()
   expect(agentRefusal({ type: "navigate", url: extensionPage }, web)).toBeDefined()
+})
+
+// As on dev: an agent's new tab and an explicit focus open the pane on their tab; only focus: false keeps a new tab
+// back, and a later focus shows even that tab.
+test.each([
+  [{ type: "tabs.open" }, { reveal: "tab", background: false }],
+  [{ type: "tabs.open", focus: true }, { reveal: "tab", background: false }],
+  [{ type: "tabs.open", focus: false }, { reveal: "none", background: true }],
+  [{ type: "tabs.focus" }, { reveal: "tab", background: false }],
+] as const)("agent %o shows %o", (action, shown) => {
+  expect(agentTabShow(action)).toEqual(shown)
 })

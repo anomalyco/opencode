@@ -140,6 +140,16 @@ export function childActivity(activity: Readonly<TabActivity>): TabActivity {
 }
 
 /**
+ * What an agent's `tabs.open` or `tabs.focus` shows the person: the tab, in the pane, which opens for it. Only
+ * `tabs.open` with `focus: false` keeps a new tab in the background, and an explicit focus shows even such a tab.
+ */
+export function agentTabShow(action: { readonly type: "tabs.open" | "tabs.focus"; readonly focus?: boolean }) {
+  return action.type === "tabs.open" && action.focus === false
+    ? ({ reveal: "none", background: true } as const)
+    : ({ reveal: "tab", background: false } as const)
+}
+
+/**
  * Whose a new tab is, by who made it: the agent's own tab is the agent's; one a page made (a pop-up, its menu's new
  * tab, an extension acting on it) carries that `opener`'s provenance; one the person made is the person's. An agent
  * command in flight in another tab is not provenance: nothing about other tabs reaches here.

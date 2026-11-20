@@ -11,7 +11,7 @@ import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plug
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure, CodedError, missingArtifact, pageReports } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
-import { activityOwner, agentDriven, agentRefusal, childActivity, createdActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
+import { activityOwner, agentDriven, agentTabShow, agentRefusal, childActivity, createdActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { FindAction, PaneEvent, PromptAnswer, Viewport } from "./ipc"
@@ -987,7 +987,7 @@ export function createBrowserPane(input: {
   }
 
   /** Reports the page's state after a command, which may have changed it without a page event yet. */
-  function announce(binding: string, tabID: Browser.TabID, reveal: "none" | "pane" | "tab", active: boolean) {
+  function announce(binding: string, tabID: Browser.TabID, reveal: "none" | "tab", active: boolean) {
     if (active) dispatchBinding(binding, { type: "tab.active", tabID })
     const handle = handles.get(binding)
 
@@ -1005,7 +1005,7 @@ export function createBrowserPane(input: {
   async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity, created?: (id: Browser.TabID) => void): Promise<Browser.Result> {
     const action = command.action
 
-    const present = (tabID: Browser.TabID, reveal: "none" | "pane" | "tab" = "none", active = true) => {
+    const present = (tabID: Browser.TabID, reveal: "none" | "tab" = "none", active = true) => {
       if (origin === "user") return dispatchBinding(binding, { type: "tab.focused", tabID })
       announce(binding, tabID, reveal, active)
     }
@@ -1110,8 +1110,9 @@ export function createBrowserPane(input: {
 
       const opened = create(binding, { activity: createdActivity(origin, inherited) })
       const tabID = opened.state().id
+      const shown = agentTabShow(action)
 
-      if (origin === "agent" && action.focus === false) handles.get(binding)?.background.add(tabID)
+      if (origin === "agent" && shown.background) handles.get(binding)?.background.add(tabID)
       created?.(tabID)
       using opening = new DisposableStack()
       opening.defer(() => { if (page(binding, tabID) === opened) dispatchBinding(binding, { type: "tab.closed", tabID }) })
@@ -1128,7 +1129,7 @@ export function createBrowserPane(input: {
           await opened.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
         refresh(binding, tabID, opened)
 
-        if (origin === "agent") present(tabID, action.focus === true ? "pane" : "none", action.focus !== false)
+        if (origin === "agent") present(tabID, shown.reveal, action.focus !== false)
         opening.move()
 
         return { value: opened.state(), files: [] }
@@ -1158,7 +1159,10 @@ export function createBrowserPane(input: {
         dispatchBinding(binding, { type: "tab.focused", tabID: action.tabID, fromStrip: true })
       }
 
-      if (origin === "agent") present(action.tabID)
+      if (origin === "agent") {
+        handles.get(binding)?.background.delete(action.tabID)
+        present(action.tabID, agentTabShow(action).reveal)
+      }
 
       return { value: restricted?.state() ?? slot.tab, files: [] }
     }

@@ -260,7 +260,7 @@ export default {
   "menu.pageUnavailable": "This page can't open in your default browser",
   "menu.privateAddress": "This address only works in OpenCode's browser.",
   "settings.agentPages.title": "Open the browser when the agent shows a page",
-  "settings.agentPages.description": "When the agent wants to show you a page or a file, the browser opens if it is closed. A file it shows you comes to the front. A web page never switches you away from the tab you are on.",
+  "settings.agentPages.description": "When the agent opens or switches to a tab, or shows you a file, the browser opens if it is closed and that tab comes to the front. A tab the agent opens in the background stays behind the one you are on.",
   "tab.activity": "The agent used this tab",
   "menu.failed": "Couldn't open this page in your default browser.",
   "menu.copyLink": "Copy link address",

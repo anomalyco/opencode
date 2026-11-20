@@ -120,7 +120,7 @@ export const HELD_REQUEST_TTL_MS = 5_000
 export type Held = {
   readonly attempt: number
   readonly tabID: Browser.TabID
-  readonly reveal: "none" | "pane" | "tab"
+  readonly reveal: "none" | "tab"
   readonly token: number
 }
 
@@ -156,10 +156,10 @@ export type Event =
   | {
       readonly type: "pane.activity"
       /**
-       * `none`: the tab is only marked. `pane`: a closed pane opens on the tab. `tab`: the tab is selected, in a closed
-       * pane or in an open one that shows another tab (a preview).
+       * `none`: the tab is only marked. `tab`: the tab is selected, in a closed pane or in an open one that shows
+       * another tab (a preview, or a tab the agent opened or focused to show it).
        */
-      readonly reveal: "none" | "pane" | "tab"
+      readonly reveal: "none" | "tab"
       readonly room: boolean
       readonly sessionKey: string
       readonly attempt: number
@@ -256,7 +256,7 @@ export type MachineEffect =
       readonly sessionKey: string
       readonly attempt: number
       readonly tabID: Browser.TabID
-      readonly reveal: "none" | "pane" | "tab"
+      readonly reveal: "none" | "tab"
     }
   /** Starts the delay after which `reveal.elapsed` shows the revealed page. */
   | { readonly type: "expire-reveal"; readonly sessionKey: string; readonly token: number }
@@ -816,7 +816,7 @@ function present(
   const select =
     event.enabled &&
     settled.side !== "dismissed" &&
-    (!event.onScreen || (event.room && (event.reveal === "tab" || (event.reveal === "pane" && !event.opened))))
+    (!event.onScreen || (event.room && event.reveal === "tab"))
 
   if (!select) return marked === settled.unseen ? unchanged : put(state, key, { ...settled, unseen: marked })
   const focus: MachineEffect = { type: "focus-strip-tab", sessionKey: key, tabID: event.tabID }

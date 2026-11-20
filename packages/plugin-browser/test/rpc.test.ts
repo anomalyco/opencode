@@ -54,7 +54,7 @@ test("optional parameters keep their descriptions in the model's JSON Schema", (
         onExcessProperty: "error",
       }).schema as { readonly properties: Record<string, { readonly description?: string }> }
     ).properties
-  expect(properties("tabs.open").focus?.description).toContain("Omit to open the tab without revealing the pane")
+  expect(properties("tabs.open").focus?.description).toContain("Default true: opens the browser if it is closed and selects the new tab")
   expect(properties("console").limit?.description).toBe("Maximum entries, 1–500. Default 100.")
   expect(properties("evaluate").expression?.description).toBe("Same as script.")
   expect(properties("evaluate").frameID?.description).toBe("Frame ID from browser.frames. Omit for the main frame.")

@@ -7,7 +7,7 @@ import en from "./i18n/en"
 /**
  * The browser's preferences on this device.
  * - `links`: web links in a session open in the browser pane.
- * - `agentPages`: previews and explicit show requests can reveal a closed pane; defaults to true. Activity marks are independent.
+ * - `agentPages`: previews and the tabs the agent opens or focuses can open the pane and select their tab; defaults to true. Activity marks are independent.
  * - `advanced`: Settings › Browser shows its Advanced section open; closed until the person opens it.
  * - `welcomed`: the user imported sign-ins or declined the pane's offer, so the pane stops offering.
  */

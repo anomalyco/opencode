@@ -281,7 +281,7 @@ const workspaceFile = optional(
 const focus = optional(
   Schema.Boolean.annotate({
     description:
-      "For a web address. True, only when the person asked to see or be shown the page: opens the browser if it is closed and the person's settings allow it. Omit to open the tab without revealing the pane. False keeps it in the background until the person selects it. Never switches the person's open tab. A workspace file is always shown to the person.",
+      "For a web address. Default true: opens the browser if it is closed and selects the new tab, as the person's settings allow. Pass false only when the person asked for the tab to stay in the background; it then waits until they select it. A workspace file is always shown to the person.",
   }),
 )
 const FileTab = Schema.Struct({
@@ -298,14 +298,14 @@ export const Operations = [
   ),
   operation(
     "tabs.open",
-    'Open a tab on a web address (url), or show a workspace file to the user (path). Pass one of them, or neither for about:blank. A web address loads over the connected server\'s network; localhost reaches that server. A web page opens without showing itself: pass focus: true only when the user asked to see or be shown the page. Use path to present an artifact, result or output for the user to view. An HTML page opens in a tab, even off screen, and opening the same file again reloads that tab; keep its assets in its own folder or subfolders, because hidden and secret files cannot load. Any other file opens in the file panel instead, for display only while the session is on screen, and returns { path, shown: "file" } without a tab: images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as media previews; text and code show source. A missing file, a folder or a path outside the workspace fails.',
+    'Open a tab on a web address (url), or show a workspace file to the user (path). Pass one of them, or neither for about:blank. A web address loads over the connected server\'s network; localhost reaches that server. A web page opens in the browser, which opens if it is closed, and becomes the selected tab: pass focus: false only when the user asked for it to stay in the background. Use path to present an artifact, result or output for the user to view. An HTML page opens in a tab, even off screen, and opening the same file again reloads that tab; keep its assets in its own folder or subfolders, because hidden and secret files cannot load. Any other file opens in the file panel instead, for display only while the session is on screen, and returns { path, shown: "file" } without a tab: images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as media previews; text and code show source. A missing file, a folder or a path outside the workspace fails.',
     { url: webAddress, focus },
     Schema.Union([FileTab, Schema.Struct({ path: short, shown: Schema.Literal("file") })]),
     { url: webAddress, path: workspaceFile, focus },
   ),
   operation(
     "tabs.focus",
-    "Make a tab active for the agent, without switching the person's selection or opening the pane. Other tools still require an explicit tabID.",
+    "Show a tab to the person: opens the browser if it is closed and selects the tab, even one opened with focus: false. Other tools still require an explicit tabID.",
     tab,
     Tab,
   ),

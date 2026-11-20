@@ -709,15 +709,16 @@ story("keeps a restored browser tab selected and undrawn until the desktop's fir
   await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
-story("an agent show request preserves the selected file, and a plugin open wakes the suspended binding", async ({ page }) => {
+// An agent's tabs.open or tabs.focus shows its tab: it comes to the front over the file the person had selected.
+story("an agent show request selects its tab over the selected file, and a plugin open wakes the suspended binding", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   const file = root.getByRole("tab", { name: "beta.ts" })
   await file.click()
   await root.getByRole("button", { name: "Agent show request" }).click()
-  await expect(file).toHaveAttribute("aria-selected", "true")
-  await expect(root.getByRole("img", { name: "The agent used this tab" })).toBeVisible()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(file).toHaveAttribute("aria-selected", "false")
   await root.getByRole("button", { name: "Suspend binding" }).click()
   await root.getByRole("button", { name: "Plugin open and close" }).click()
   await expect(root.getByText("Plugin closed: true", { exact: true })).toBeVisible()
