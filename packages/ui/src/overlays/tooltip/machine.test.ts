@@ -12,11 +12,9 @@ import {
   POINTER_OUTSIDE,
   POPUP_COLLAPSED,
   POPUP_EXPANDED,
-  PRESS_ENDED,
   selectTooltipForceOpen,
   selectTooltipMounted,
   selectTooltipOpen,
-  selectTooltipPressing,
   selectTooltipTracking,
   syncPropsEvent,
   transitionTooltip,
@@ -46,11 +44,10 @@ describe("tooltip machine", () => {
     expect(selectTooltipOpen(state.state)).toBe(true)
   })
 
-  test("opening a menu from an open tooltip ends the press, and the next hover opens it again", () => {
+  test("a menu opened by a press releases the tooltip after the pointer leaves", () => {
     const opened = run(hoveredOpen(), TRIGGER_PRESSED, POPUP_EXPANDED)
 
     expect(opened.state).toEqual({ status: "suppressed", popup: "open", hovered: true, disabled: false })
-    expect(selectTooltipPressing(opened.state)).toBe(false)
 
     // The pointer leaves while the menu is open, Escape closes it, and the pointer comes back.
     const closed = run(opened.state, POINTER_OUTSIDE, POPUP_COLLAPSED)
@@ -72,17 +69,16 @@ describe("tooltip machine", () => {
     expect(selectTooltipOpen(state.state)).toBe(true)
   })
 
-  test("a press without a click still lets Escape close the tooltip", () => {
-    const state = run(hoveredOpen(), TRIGGER_PRESSED, PRESS_ENDED, KOBALTE_CLOSED)
+  test.each([
+    ["pending", run(createTooltipState(undefined, false), POINTER_ENTERED).state, "cancel-opening"],
+    ["open", hoveredOpen(), "hide"],
+  ] as const)("pressing the %s tooltip suppresses further opens until re-entry", (_, before, effect) => {
+    const pressed = run(before, TRIGGER_PRESSED)
 
-    expect(state.state).toEqual({ status: "idle", hovered: true, disabled: false })
-  })
-
-  test("the click that ends a press keeps the tooltip open once", () => {
-    const clicked = run(hoveredOpen(), TRIGGER_PRESSED, KOBALTE_CLOSED)
-
-    expect(clicked.state).toEqual({ status: "open", hovered: true, pressing: false })
-    expect(run(clicked.state, KOBALTE_CLOSED).state).toEqual({ status: "idle", hovered: true, disabled: false })
+    expect(selectTooltipOpen(pressed.state)).toBe(false)
+    expect(pressed.effects).toEqual([effect])
+    expect(run(pressed.state, KOBALTE_CLOSED, POINTER_ENTERED, KOBALTE_OPENED).state).toBe(pressed.state)
+    expect(selectTooltipOpen(run(pressed.state, POINTER_LEFT, POINTER_ENTERED, KOBALTE_OPENED).state)).toBe(true)
   })
 
   test("a menu closed over a still pointer keeps the tooltip hidden until the pointer moves off", () => {
@@ -113,12 +109,12 @@ describe("tooltip machine", () => {
     expect(selectTooltipOpen(state.state)).toBe(true)
   })
 
-  test("the first hover or focus mounts Kobalte and replays the event", () => {
+  test("the first hover or focus mounts Kobalte", () => {
     const hovered = transitionTooltip(createTooltipState(undefined, false), POINTER_ENTERED)
     const focused = transitionTooltip(createTooltipState(undefined, false), FOCUSED)
 
     expect(hovered).toEqual({ state: { status: "idle", hovered: true, disabled: false }, effects: ["replay"] })
-    expect(focused).toEqual({ state: { status: "idle", hovered: false, disabled: false }, effects: ["replay"] })
+    expect(focused).toEqual({ state: { status: "idle", hovered: false, disabled: false }, effects: [] })
     expect(selectTooltipMounted(hovered.state)).toBe(true)
   })
 
@@ -171,7 +167,7 @@ describe("tooltip machine", () => {
     expect(disposed).toEqual({ status: "disposed" })
     expect(selectTooltipMounted(disposed)).toBe(false)
     expect(transitionTooltip(disposed, LEAVE_SETTLED).state).toBe(disposed)
-    expect(transitionTooltip(disposed, PRESS_ENDED).state).toBe(disposed)
+    expect(transitionTooltip(disposed, KOBALTE_OPENED).state).toBe(disposed)
   })
 
   test("every reachable state and transition is a frozen singleton", () => {
@@ -182,7 +178,6 @@ describe("tooltip machine", () => {
       POINTER_OUTSIDE,
       FOCUSED,
       TRIGGER_PRESSED,
-      PRESS_ENDED,
       LEAVE_SETTLED,
       POPUP_EXPANDED,
       POPUP_COLLAPSED,

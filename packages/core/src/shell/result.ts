@@ -2,6 +2,7 @@ export * as ShellResult from "./result.js"
 
 import os from "os"
 import type { Shell } from "@opencode/schema/shell"
+import { BackgroundResult } from "../session/background-result.js"
 
 export type Result = {
   info: Shell.Info
@@ -81,7 +82,10 @@ export function notification(input: {
   output?: Output
 }) {
   return {
-    text: `<shell id="${input.jobID ?? input.shellID}" state="${input.state}" command="${input.command}">\n${input.text}\n</shell>`,
+    text: BackgroundResult.render(
+      `kind="shell" id="${input.jobID ?? input.shellID}" state="${input.state}" command="${input.command}"`,
+      input.text,
+    ),
     metadata: {
       source: "shell",
       shellID: input.shellID,

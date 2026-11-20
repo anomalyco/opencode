@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Използване",
   "usage.cost": "цена",
   "usage.view": "Преглед на използването на контекста",
-  "systemPrompt.title": "Системен ред",
   "rawMessages.title": "Сурови съобщения",
   "export.session": "Експортиране на сесия",
   "stats.session": "Сесия",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Запазена сесия в {{filename}}",
   "export.failed.title": "Неуспешно експортиране на сесия",
   "export.failed.description": "Възникна грешка при експортиране на сесията",
+  "usage.toggle": "Превключване на контекста на сесията",
 }

@@ -66,6 +66,7 @@ const model = OpenAIChat.route
   })
   .model({ id: "gpt-4o-mini", capabilities: { promptCacheKey: true } })
 const models = Layer.mock(SessionRunnerModel.Service)({
+  select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
   resolve: () =>
     Effect.succeed(
       SessionRunnerModel.resolved(model, {
@@ -79,6 +80,7 @@ const systemContext = Layer.mock(InstructionBuiltIns.Service, { load: () => Effe
 const instructionContext = Layer.mock(InstructionDiscovery.Service, {
   project: true,
   global: true,
+  claude: true,
   load: () => Effect.succeed(Instructions.empty),
 })
 const skillInstructions = Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
@@ -247,6 +249,7 @@ describe("SessionRunnerLLM recorded", () => {
         "session.instructions.updated.2",
         "session.inbox.delivered.1",
         "session.step.started.1",
+        "session.step.first-token.1",
         "session.text.started.1",
         "session.text.ended.1",
         "session.step.streamed.1",

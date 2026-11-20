@@ -17,6 +17,7 @@ const RemoteModel = Schema.Struct({
     vision: Schema.Boolean,
     trained_for_tool_use: Schema.Boolean,
   }).pipe(Schema.optional),
+  has_vision_adapter: Schema.Boolean.pipe(Schema.optional),
 })
 
 const Response = Schema.Struct({ models: Schema.Array(RemoteModel) })
@@ -31,15 +32,16 @@ export const make = createLocalProviderPlugin({
     Effect.gen(function* () {
       const response = yield* client.getJson("/api/v1/models", Response)
       return response.models
-        .filter((model) => model.type === "llm" && model.key.length > 0)
+        .filter((model) => (model.type === "llm" || model.type === "decision") && model.key.length > 0)
         .toSorted((a, b) => a.key.localeCompare(b.key))
     }),
   model: (item) => ({
     id: item.key,
     name: item.display_name || item.key,
     family: item.architecture,
+    type: item.type === "decision" ? "decision" : "chat",
     tools: item.capabilities?.trained_for_tool_use,
-    vision: item.capabilities?.vision,
+    vision: item.capabilities?.vision ?? item.has_vision_adapter,
     context:
       item.loaded_instances.length === 0
         ? item.max_context_length

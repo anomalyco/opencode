@@ -24,6 +24,7 @@ import type {
   SessionGenerate,
   SessionRequest,
   SessionRequestKind,
+  SessionRequestMessage,
   SessionTitle,
 } from "@opencode/plugin/effect/session"
 import type { Agent } from "@opencode/schema/agent"
@@ -83,7 +84,7 @@ export interface Input {
   readonly model: SessionRunnerModel.Resolved
   readonly tools?: Tool.Snapshot
   readonly system: Array<SystemPart>
-  readonly messages: Array<Message>
+  readonly messages: Array<SessionRequestMessage>
   readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
@@ -123,7 +124,15 @@ export const baseTranscript = (input: {
         metadata: { experimental: { instructions: input.initial } },
       },
     ].filter((part) => part.text.length > 0),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+    // Hooks read each stored message's metadata on the messages built from it; `prepare` strips it before the request.
+    messages: input.messages.flatMap((message) =>
+      toLLMMessages([message], input.model.ref, providerMetadataKey).map(
+        (item): SessionRequestMessage =>
+          message.metadata === undefined || item.id !== message.id
+            ? item
+            : { ...item, metadata: message.metadata },
+      ),
+    ),
   }
 }
 
@@ -327,7 +336,17 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
+        // Strip the stored metadata hooks could read, so it never reaches the provider.
+        messages: boundImages(
+          unsupportedParts(
+            shaped.messages.map((message) => {
+              const { metadata, ...rest } = message
+              return metadata === undefined ? message : Message.make(rest)
+            }),
+            model.capabilities,
+            model.model.provider,
+          ),
+        ),
         tools: Array.from(hooked, ([name, t]) => ({
           ...t,
           name,

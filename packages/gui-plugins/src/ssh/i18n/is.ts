@@ -36,4 +36,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Bæta við netþjóni",
   "menu.delete": "Eyða",
+  "error.unavailable": "SSH er ekki tiltækt",
 }

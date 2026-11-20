@@ -178,7 +178,7 @@ export function createPluginContext(input: {
     data: host.data,
     attention: host.attention,
     get theme() {
-      return host.themes.currentTokens()
+      return host.themes.current
     },
     get themeMode() {
       return host.themes.mode()

@@ -104,7 +104,7 @@ export function TextInput(props: TextInputProps) {
             local.onCopyClick?.(event)
           }}
         >
-          <Icon name={local.showClearButton ? (local.clearIcon ?? "xmark-small") : "copy"} />
+          <Icon name={local.showClearButton ? (local.clearIcon ?? "close") : "copy"} />
         </button>
       </Show>
       <Show when={local.trailing}>

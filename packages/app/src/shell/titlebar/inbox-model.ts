@@ -12,8 +12,14 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { sessionBusy, sessionRequests, type SessionRequests } from "@/shell/layout/project-avatar-state"
 import { pathKey } from "@/workspaces/path-key"
 import { parseHomeSessionIndex } from "@/home/sessions/index"
+import { rawTime } from "@/runtime/server/data"
 import { mergeRootSessionIndex } from "@/runtime/server/session-index"
-import { sessionFormRequest, sessionPermissionRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
+import {
+  sessionFormRequest,
+  sessionMayHoldRequests,
+  sessionPermissionRequest,
+  sessionTreeIDs,
+} from "@/session/requests/session-request-tree"
 import { notifySessionTabsRemoved } from "./session-events"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
@@ -269,14 +275,16 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
     const entry = byKey().get(effect.key)
 
-    void Promise.allSettled(
-      entry
-        ? [
-            Promise.try(() => entry.ctx.data.session.permission.sync(entry.session.id)),
-            Promise.try(() => entry.ctx.data.session.form.sync(entry.session.id)),
-          ]
-        : [],
-    ).then(() => dispatchSettle({ type: "requests.settled", key: effect.key }))
+    const requests = entry
+      ? [...new Set([entry.session.id, ...entry.ctx.data.session.family(entry.session.id)])]
+          .filter((id) => id === entry.session.id || sessionMayHoldRequests(entry.ctx.data, id))
+          .flatMap((id) => [
+            Promise.try(() => entry.ctx.data.session.permission.sync(id)),
+            Promise.try(() => entry.ctx.data.session.form.sync(id)),
+          ])
+      : []
+
+    void Promise.allSettled(requests).then(() => dispatchSettle({ type: "requests.settled", key: effect.key }))
   }
 
   // Synchronous, so a warm cache settles before the first paint without flashing the loader. A server that never
@@ -411,7 +419,11 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
   // Move the session between the cached indexes so it changes section before either refetches.
   const move = (entry: InboxEntry, archivedAt: number | undefined) => {
-    const session = { ...entry.session, time: { ...entry.session.time, archived: archivedAt } }
+    // The cached index goes back through `apply`, so it keeps the server time rather than a send bump.
+    const session = {
+      ...entry.session,
+      time: { ...entry.session.time, updated: rawTime(entry.session), archived: archivedAt },
+    }
 
     forget(entry.conn, entry.session.id)
     queryClient.setQueryData<SessionInfo[]>(

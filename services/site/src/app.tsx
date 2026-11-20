@@ -25,7 +25,6 @@ const shareImagePages = [
   "/terminal",
   "/mobile",
   "/sdk",
-  "/ide",
   "/mini",
   "/product/browse",
   "/product",

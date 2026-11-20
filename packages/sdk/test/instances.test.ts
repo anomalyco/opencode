@@ -118,7 +118,10 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
   expect(fork.fork?.sessionID).toBe(sessionID)
   const inherited = await first.sessions.prompt({ sessionID: fork.id, text: "Review the fork", resume: false })
   expect(inherited.payload.text).toBe(`first:alpha@${directory.path}: Review the fork`)
-  expect(await first.sessions.inbox.list({ sessionID: fork.id })).toEqual([inherited])
+  expect(await first.sessions.inbox.list({ sessionID: fork.id })).toEqual([
+    expect.objectContaining({ type: "synthetic", sessionID: fork.id, id: `msg_fork_notice_${fork.id}` }),
+    inherited,
+  ])
 
   expect(configured.toSorted()).toEqual(["first:alpha", "first:alpha", "first:beta", "second:alpha"])
   expect(setups.toSorted()).toEqual(
@@ -141,6 +144,30 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
   await second.close()
   expect(cleanups.toSorted()).toEqual(setups.toSorted())
 }, 20_000)
+
+test("a throwing fork hook still returns the saved fork", async () => {
+  await using directory = await tmpdir("opencode-fork-hook-")
+  const seen: string[] = []
+  await using host = await OpenCode.create({
+    ...hostOptions(directory.path),
+    plugins: [
+      {
+        id: "broken-fork-hook",
+        async setup(ctx) {
+          await ctx.session.hook("fork", ({ sessionID }) => {
+            seen.push(sessionID)
+            throw new Error("fork hook failed")
+          })
+        },
+      },
+    ],
+  })
+  const parent = await host.sessions.create({ location: { directory: directory.path } })
+  await host.sessions.switchAgent({ sessionID: parent.id, agent: "plan" })
+  const fork = await host.sessions.fork({ sessionID: parent.id })
+  expect(seen).toEqual([fork.id])
+  expect(await host.sessions.get({ sessionID: fork.id })).toMatchObject({ id: fork.id, fork: { sessionID: parent.id } })
+})
 
 test.each(["configuration", "plugin setup"])(
   "Promise instance %s failure admits nothing, preserves healthy instances, and can be retried",

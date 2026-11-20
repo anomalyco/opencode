@@ -1,7 +1,7 @@
-import { createEffect, createSignal, onCleanup, Show } from "solid-js"
+import { createSignal, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useConfig } from "../config"
-import type { JSX } from "@opentui/solid"
+import { onAnimationTick, type JSX } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
 import "./spinner-renderable"
 import { SPINNER_FRAMES } from "./spinner-frames"
@@ -14,11 +14,11 @@ export function Spinner(props: { children?: JSX.Element; color?: RGBA; shimmer?:
   const config = useConfig().data
   const color = () => props.color ?? theme.text.muted
   const [frame, setFrame] = createSignal(0)
-  createEffect(() => {
-    if (!(config.animations ?? true) || !props.shimmer) return
-    const timer = setInterval(() => setFrame((value) => (value + 1) % SPINNER_FRAMES.length), 80)
-    onCleanup(() => clearInterval(timer))
-  })
+  // The Solid hook is not bound to a node's draw: hidden with visible={false} it keeps ticking. Mount under <Show>.
+  onAnimationTick(
+    () => ((config.animations ?? true) && props.shimmer ? 1000 / 80 : undefined),
+    (_deltaTime, ticks) => setFrame((value) => (value + ticks) % SPINNER_FRAMES.length),
+  )
   // A bare spinner beside a long sibling shrinks to a fractional width that rounds to 0, so the
   // glyph paints on top of the row gap. Only a labeled spinner may shrink (to wrap its text).
   return (

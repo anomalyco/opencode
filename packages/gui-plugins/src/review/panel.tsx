@@ -11,6 +11,7 @@ import {
   type SessionReviewExpandMode,
 } from "@opencode/session-ui/v2/session-review-v2"
 import { SessionReviewFilePreviewV2 } from "@opencode/session-ui/v2/session-review-file-preview-v2"
+import type { LineCommentSendAction } from "@opencode/session-ui/v2/line-comment-annotations-v2"
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import type {
   SessionReviewComment,
@@ -89,6 +90,7 @@ type ReviewPanelProps = {
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
   lineCommentActions?: SessionReviewCommentActions
+  lineCommentSend?: LineCommentSendAction
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
@@ -133,6 +135,7 @@ export default function ReviewPanelContent(props: {
       onLineCommentUpdate={props.review.comments.update}
       onLineCommentDelete={props.review.comments.remove}
       lineCommentActions={props.review.comments.actions()}
+      lineCommentSend={props.review.comments.send()}
       comments={props.review.comments.all()}
       focusedComment={props.review.comments.focus()}
       onFocusedCommentChange={props.review.comments.changeFocus}
@@ -366,6 +369,7 @@ function ReviewPanel(props: ReviewPanelProps) {
                   onLineCommentUpdate={props.onLineCommentUpdate}
                   onLineCommentDelete={props.onLineCommentDelete}
                   lineCommentActions={props.lineCommentActions}
+                  lineCommentSend={props.lineCommentSend}
                   comments={props.comments}
                   focusedComment={props.focusedComment}
                   onFocusedCommentChange={props.onFocusedCommentChange}
@@ -452,6 +456,12 @@ function ReviewPanelSidebar(props: {
         </Match>
         <Match when={props.status === "error"}>
           <div class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("load.failed")}</div>
+        </Match>
+        <Match when={!props.diffs.length}>
+          <div role="status" class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("sidebar.noChanges")}</div>
+        </Match>
+        <Match when={!views()}>
+          <div role="status" class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("sidebar.unavailable")}</div>
         </Match>
         <Match when={true}>
           <Show

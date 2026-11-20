@@ -1235,7 +1235,7 @@ export function Site(props: {
       }
       data-status-bars={siteSettings.statusBars}
       data-logo-menu-hover={siteSettings.logoMenuHover}
-      data-light-bg={siteSettings.lightBackground === "#ffffff" ? undefined : siteSettings.lightBackground.slice(1)}
+      data-light-bg={siteSettings.lightBackground === "#fbfbfb" ? undefined : siteSettings.lightBackground.slice(1)}
       data-sidebar={siteSettings.sidebar === "fifth column" ? "column" : undefined}
       data-layout={props.aside ? "docs" : undefined}
       data-bare={props.bare ? "" : undefined}

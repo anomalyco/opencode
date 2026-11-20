@@ -1,10 +1,10 @@
 import { app, BrowserWindow } from "electron"
+import { sameLoopbackServer } from "@opencode/app/loopback"
 import { builtins } from "@opencode/gui-plugins/main"
 import {
   pluginIdAvailable,
   runsOn,
   shipsPluginGui,
-  type BridgeLayout,
   type BridgeMenubarItem,
   type Entry,
   type Scope,
@@ -330,7 +330,8 @@ export function createHost(input: {
       id,
       url: endpoint.url,
       headers: authorization ? { authorization } : {},
-      sameMachine: !!sidecar && URL.canParse(endpoint.url) && new URL(endpoint.url).origin === sidecar.url,
+      // The window's rule for a local server, so the pane offers extensions exactly where pages share the profile.
+      sameMachine: sameLoopbackServer(endpoint.url, sidecar?.url),
       password: endpoint.password,
     }
   }
@@ -1053,7 +1054,7 @@ export function createHost(input: {
         throw new PluginError("output", { cause, message: String(cause) })
       })
     },
-    embed: (window: number, id: string, layout?: BridgeLayout) => embeds.layout(window, id, layout),
+    embed: embeds.layout,
     capture: (window: number, id: string) =>
       embeds.capture(window, id).then((image) => (image ? new Uint8Array(image.toJPEG(90)) : undefined)),
     listMenubarItems,

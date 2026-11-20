@@ -11,14 +11,22 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
-import { Flag } from "../flag.js"
+import { Identifier } from "@opencode/schema/identifier"
+import { CallID } from "@opencode/schema/tool"
+import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
+import { FileAccess } from "../file-access.js"
+import { FileMutation } from "../file-mutation.js"
+import { FileWrite } from "../file-write.js"
+import { Location } from "../location.js"
 import { Permission } from "../permission.js"
+import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
+import { CodeModeDiffs } from "./diffs.js"
 import { CodeModeExecution } from "./execution.js"
 import { CodeModeFetch } from "./fetch.js"
+import { CodeModePath } from "./path.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -67,30 +75,45 @@ class Run extends Context.Service<
   }
 >()("@opencode/CodeModeTool/Run") {}
 
+/** The session's Location and file services, which a run with the experimental `path` and `Bun` globals acts through. */
+export type Services = Location.Service | CodeModeBun.Services
+
+/** Those services alone, so a run they are given to keeps its own scope and the rest of its context. */
+export const services = Effect.map(
+  Effect.context<Services>(),
+  Context.pick(Location.Service, FileAccess.Service, FileMutation.Service, FileWrite.Service),
+)
+
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
 }
 
-// Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
-const description = [
-  "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-  "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-  "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-  'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
-  "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-  "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
-].join("\n")
+// Invariant model-facing guidance; the changing tool catalog is delivered through Instructions. With `full_codemode`,
+// the runtime also has Bun's file APIs.
+const description = (full: boolean) =>
+  [
+    "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+    "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
+    full
+      ? "`fetch` is available for HTTP requests, and Bun's file APIs (`Bun.file`, `Bun.write`, `Bun.Glob`) for files, in place of Node's `fs`. Imports and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`."
+      : "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
+    "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+    'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
+    "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
+    "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+  ].join("\n")
 
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
-  flag: Flag.Interface,
+  /** With `full_codemode`, the session's services, which turn on the experimental `path` and `Bun` globals. */
+  services?: Context.Context<Services>,
 ) => {
   return {
     name: "execute",
-    description,
+    description: description(services !== undefined),
     input: CodeMode.Input,
     freeform: { type: "text" },
     output: ExecuteOutput,
@@ -100,6 +123,8 @@ export const create = (
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
         const lock = Semaphore.makeUnsafe(1)
+        // The files the program changes, shown under the call when it finishes in the foreground.
+        const diffs = CodeModeDiffs.make()
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
         const scope = yield* Effect.scope
@@ -121,16 +146,26 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
-        const result = yield* runtime(inventory, (yield* flag.enabled("codemode_vm")) ? "vm" : "legacy")
-          .execute(code)
+        const result = yield* runtime(inventory)
+          .execute(code, undefined, {
+            extensions: services
+              ? [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension]
+              : [CodeModeFetch.extension],
+          })
           .pipe(
             Effect.provideService(Run, {
               executeTool: (name, tool, input) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+                  // Its own ID, so plugin hooks and traces can tell the program's calls apart. It has no row, so
+                  // until the program ends its permission requests show on this call's.
+                  const id = CallID.make(`call_${Identifier.ascending()}`)
+                  yield* permission.nested(id, context.id).pipe(Scope.provide(scope))
                   // The program sees the same failure text the model gets for a direct call.
-                  const executed = yield* executeTool(name, tool, input, {
+                  const call = executeTool(name, tool, input, {
                     ...context,
+                    id,
+                    codemode: true,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.
@@ -138,6 +173,8 @@ export const create = (
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
+                  // The name the program called, so a namespaced tool that happens to be named edit or write records nothing.
+                  const executed = yield* CodeModeDiffs.around(diffs, name, input, call)
                   const content = resultContent(executed)
                   const outputFileParts = outputFiles(content)
                   if (outputFileParts.length > 0)
@@ -150,8 +187,11 @@ export const create = (
             Effect.onError(() =>
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
-            Effect.provideService(CodeModeExecution.Service, context),
+            // Readers outlive the fetch call that returned them, up to the end of this program's scope.
+            Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
             Effect.provideService(Permission.Service, permission),
+            Effect.provideService(CodeModeDiffs.Service, diffs),
+            (program) => (services ? Effect.provideContext(program, services) : program),
           )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -173,9 +213,11 @@ export const create = (
             ...(file.name === undefined ? {} : { name: file.name }),
           })),
         ]
+        const changed = diffs.files()
         const metadata: Metadata = {
           toolCalls: value.toolCalls,
           ...(value.error ? { error: true } : {}),
+          ...(changed.length > 0 ? { files: changed } : {}),
         }
         return {
           output: value,
@@ -215,6 +257,8 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
         case "fetch":
           return start(call, { tool: call.name, status: "running", input: CodeModeFetch.display(call.args) })
         default:
+          if (call.extension === "bun")
+            return start(call, { tool: "Bun", status: "running", input: CodeModeBun.display(call.name, call.args) })
           return Effect.void
       }
     },
@@ -222,16 +266,17 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
   } satisfies CodeMode.Hooks
 }
 
+const isPinned = (registration: Info) => {
+  const codemode = registration.options?.codemode
+  const pinned = typeof codemode === "object" && codemode !== null ? codemode.pinned : undefined
+  return (pinned ?? registration.options?.pinned) === true
+}
+
 export const catalog = (inventory: Inventory) => {
-  const pinned = new Set(
-    Array.from(inventory.tools.values())
-      .filter((registration) => registration.options?.pinned === true)
-      .map(qualifiedName),
-  )
+  const pinned = new Set(Array.from(inventory.tools.values()).filter(isPinned).map(qualifiedName))
   const root: CatalogNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
-  // Either engine's runtime has the same catalog; reuse whichever exists rather than preparing the tools again.
-  for (const tool of (runtimes.legacy.get(inventory) ?? runtimes.vm.get(inventory) ?? runtime(inventory)).catalog)
+  for (const tool of runtime(inventory).catalog)
     getNode(root, tool.path).tool = {
       type: "tool",
       name: tool.path.split(".").at(-1) ?? tool.path,
@@ -270,23 +315,23 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 }
 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
-// once per inventory and engine, and shared by its catalog and every execution.
-const runtimes = {
-  legacy: new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>(),
-  vm: new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>(),
-}
+// once per inventory and shared by its catalog and every execution.
+const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>()
 
-function runtime(inventory: Inventory, engine: "legacy" | "vm" = "legacy") {
-  const cached = runtimes[engine].get(inventory)
+function runtime(inventory: Inventory) {
+  const cached = runtimes.get(inventory)
   if (cached) return cached
   const tools = inventoryTools(inventory)
-  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
+  // Every extension a run may get; `create` picks each run's.
+  const created = CodeMode.make<
+    typeof tools,
+    [typeof CodeModeFetch.extension, typeof CodeModePath.extension, typeof CodeModeBun.extension]
+  >({
     tools,
-    extensions: [CodeModeFetch.extension],
+    extensions: [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension],
     hooks: runHooks,
-    engine,
   })
-  runtimes[engine].set(inventory, created)
+  runtimes.set(inventory, created)
   return created
 }
 
@@ -299,34 +344,33 @@ export const check = (
   bindings: Readonly<Record<string, CodeMode.DataValue>>,
   limits: CodeMode.ExecutionLimits,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
-  flag: Flag.Interface,
 ) =>
-  flag.enabled("codemode_vm").pipe(
-    Effect.flatMap((vm) =>
-      CodeMode.make({
-        tools: inventoryTools(inventory),
-        hooks: runHooks,
-        limits,
-        engine: vm ? "vm" : "legacy",
-      }).execute(code, bindings),
-    ),
-    Effect.provideService(Run, {
-      executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
-      hooks: {},
-    }),
-  )
+  CodeMode.make({
+    tools: inventoryTools(inventory),
+    hooks: runHooks,
+    limits,
+  })
+    .execute(code, bindings)
+    .pipe(
+      Effect.provideService(Run, {
+        executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
+        hooks: {},
+      }),
+    )
 
 function inventoryTools(inventory: Inventory) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
-    const child = definition(registration)
+    const child = definition(registration, true)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
       freeform: registration.freeform !== undefined,
-      output: child.outputSchema ?? Schema.NullOr(Schema.String),
+      // JSON Schema, which Code Mode renders but does not check: Core has validated the result of the tool that ran,
+      // and a plugin may have renamed the call to a tool with another output.
+      output: child.outputSchema ?? { type: ["string", "null"] },
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
   }
@@ -433,12 +477,15 @@ function formatResult(result: CodeMode.Result) {
       ? `Warnings:\n${result.warnings.map((item) => `- [${item.kind}] ${item.message}`).join("\n")}`
       : undefined
   const logs = result.logs && result.logs.length > 0 ? `Logs:\n${result.logs.join("\n")}` : undefined
-  return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
+  // A program that only logs returns undefined (sent as null); a "null" line before its logs says nothing.
+  const value = result.ok && result.value === null && (warnings || logs) ? undefined : output
+  return [value, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
+// Compact JSON: indentation adds tokens on every later step without helping the model. Clients pretty-print it.
 function formatValue(value: CodeMode.DataValue) {
   if (typeof value === "string") return value
-  return JSON.stringify(value, null, 2) ?? String(value)
+  return JSON.stringify(value) ?? String(value)
 }
 
 function outputFiles(content: ReadonlyArray<Content>): Array<typeof ExecuteFile.Type> {

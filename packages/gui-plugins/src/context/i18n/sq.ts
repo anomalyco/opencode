@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Përdorimi",
   "usage.cost": "Kostoja",
   "usage.view": "Shikoni përdorimin e kontekstit",
-  "systemPrompt.title": "Prompt i sistemit",
   "rawMessages.title": "Mesazhe të papërpunuara",
   "export.session": "Sesioni i eksportit",
   "stats.session": "Sesioni",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sesioni u ruajt në {{filename}}",
   "export.failed.title": "Eksportimi i sesionit dështoi",
   "export.failed.description": "Ndodhi një gabim gjatë eksportimit të sesionit",
+  "usage.toggle": "Shfaq/fshih kontekstin e sesionit",
 }

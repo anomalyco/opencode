@@ -25,11 +25,12 @@ flowchart LR
 
 ```text
 src/pairing/
-├── index.ts          Plugin.define: os, stores, i18n
+├── index.ts          Plugin.define: os, stores, icons, i18n
 ├── contract.ts       tokens other code may import: Ipc, Contract, Registry
 ├── renderer.tsx      window entry, default export Plugin.Setup<typeof definition>
 ├── main.ts           main entry, default export Plugin.MainSetup (desktop only)
 ├── page.tsx          heavy UI, loaded with lazy()
+├── icons/pair.svg    the plugin's own icons
 └── i18n/en.ts        English copy
 ```
 
@@ -41,6 +42,7 @@ Unit tests of logic that carries a contract sit beside the code as `*.test.ts`, 
 | -------- | ----------------------------------------------------------------------------- | --------------------- |
 | `os`     | The operating systems it runs on; omit it to run everywhere, the web included |                       |
 | `stores` | Window state the host loads before it is read                                 | `ctx.stores.name`     |
+| `icons`  | The plugin's own icons, each an SVG document (see [Icons](#icons))            | `ctx.icons.name`      |
 | `i18n`   | The plugin's copy                                                             | `ctx.t`, `ctx.plural` |
 
 Contracts are not declared: a plugin provides its own with `ctx.provide` and reads others' with `ctx.use` at runtime.
@@ -59,6 +61,7 @@ Setup receives one context. Components read the same object with `usePlugin<type
 | Another plugin's contract | `ctx.use(token)`: `Accessor<Live<T>>`                                                       |                                      |
 | Your own main entry       | `ctx.main(Ipc)`: its `IpcClient`                                                            |                                      |
 | Declared stores           | `ctx.stores.name`: `Persisted`, or `(session) => Persisted`                                 | `ctx.storage.store(key, options)`    |
+| Declared icons            | `ctx.icons.name`: the icon's name, for every SDK icon field and `ctx.ui.Icon`               |                                      |
 | Contribute to a registry  | `ctx.add(Registry, item)`                                                                   | `ctx.add(MenubarItem, item)`         |
 | Provide a contract        | `ctx.provide(Contract, impl)`                                                               | `ctx.provide(Ipc, impl)`             |
 | Lifetime                  | Solid's `onCleanup` and `ctx.signal`                                                        | `ctx.onCleanup(fn)` and `ctx.signal` |
@@ -248,7 +251,53 @@ const runScreen = (effect: Extract<PairingEffect, { type: "read-screen" | "set-s
 
 Each line links to the file whose TSDoc covers every field.
 
-SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift. A plugin bundle cannot require `@opencode/ui`, so it renders an icon with `ctx.ui.Icon`, and the app's buttons, menus, menu rows, dialog frame, fields, selects, settings pages and rows, Markdown and code with the other `ctx.ui` components. Built-ins use them too where they need nothing more, such as the settings rows of pairing, updates and review.
+A plugin bundle cannot require `@opencode/ui`, so it renders the app's buttons, menus, menu rows, dialog frame, fields, selects, settings pages and rows, Markdown, code and icons with the `ctx.ui` components. Built-ins use them too where they need nothing more, such as the settings rows of pairing, updates and review.
+
+### Icons
+
+Every SDK icon field (`SettingsPage.icon`, `ComposerPillView.icon`, `ComposerNote.icon`, `ToastOptions.icon`, …) and `ctx.ui.Icon` takes an `IconName`. Any other string fails to compile.
+
+| Name             | What it is                                                              | Where it comes from                               |
+| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
+| `AppIconName`    | One of the app's own icons, such as `"folder"`                          | The app's icon catalog                            |
+| `PluginIconName` | One of your plugin's own icons, stored and sent as `<plugin id>:<name>` | `ctx.icons.name`, for an icon the plugin declared |
+
+- **The app's icons.** `AppIconName` lists the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift.
+- **Your own icons.** Artwork that only your plugin shows stays out of the app's catalog. Keep each SVG file in the plugin's folder, declare it in `Plugin.define({ icons })` with a `?raw` import, and read its name from `ctx.icons`. The host registers the artwork before setup and withdraws it with the plugin. A value that is not an SVG document fails the plugin when it starts.
+- **Draw for the host.** The document's `viewBox` frames the drawing, and the host scales it to the place that shows it: draw on the app's 16px grid. Draw with `currentColor`, so the icon takes the color of that place, such as a pill's `tone` or a menu row's muted icon color.
+- **Motion.** A drawing may move with SVG animation elements (`animate`, `animateTransform`). Every place that shows the icon moves in step, and the animation goes on while the host renders that place again, for example when a pill's `show` runs again. Under the user's reduced motion setting the host holds every icon on its first frame, so make that frame the resting drawing. An icon that no place shows costs nothing.
+- **Stored names.** A name is a plain string. A composer note or quote keeps it with the draft and the sent message, and a closed tab keeps it in the session's layout. While the plugin that declared the icon is not active, the icon draws nothing and keeps its size.
+- **In the app.** `Icon` from `@opencode/ui/icon` draws a plugin's icon by the same name, so every part of the app that takes an icon name shows it. App code with artwork of its own registers it with `registerIcons` from `@opencode/ui/icons/registry`.
+
+The goal plugin declares the glyphs of its composer pill, one for each goal status. The active one moves:
+
+<!-- source: src/goal/index.ts -->
+
+```ts
+import { Plugin } from "@opencode/plugin/gui"
+import en from "./i18n/en"
+import active from "./icons/active.svg?raw"
+import complete from "./icons/complete.svg?raw"
+import paused from "./icons/paused.svg?raw"
+
+// The pill's glyph of each goal status. Each is framed to its 14px ring, the size of a pill's icon, so it draws at
+// full size there.
+export default Plugin.define({ icons: { active, paused, complete }, i18n: { en } })
+```
+
+Its pill then names the glyph of the goal's status, and the host colors it by `tone`:
+
+<!-- source: src/goal/renderer.tsx#status -->
+
+```ts
+// The pill and the popover's status line of each goal status. The pill shows the plugin's own glyphs: the host
+// colors a paused and a reached goal by `tone`, and the active glyph carries the accent color itself.
+const status = {
+  active: { label: "active", status: "statusActive", icon: ctx.icons.active, tone: undefined },
+  paused: { label: "paused", status: "statusPaused", icon: ctx.icons.paused, tone: "warning" },
+  complete: { label: "reached", status: "statusFinished", icon: ctx.icons.complete, tone: "success" },
+} as const
+```
 
 ### Registries
 
@@ -324,6 +373,17 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `ctx.embeds` (main)          | `Embeds`                                                                           | `create(view, window)` places a web page                         |
 | `ctx.cli` (main)             | `Cli`                                                                              | The opencode CLI the app runs                                    |
 
+### Contracts
+
+The contracts `file`, `review` and `browser` publish with the SDK as `@opencode/plugin/gui/<name>`. Read one with `ctx.use`.
+
+The desktop `Browser` contract (`@opencode/plugin/gui/browser`) can return a handle to a new tab in the session on screen:
+`const id = await browser.experimental.open(session, url)`, then `await browser.experimental.close(id)` from the same
+plugin instance. Experimental: may change without compatibility guarantees. The branded handle survives a session rebind.
+It ends with the plugin instance or the window, when the person clicks or types in the tab or runs a command on it, and
+when the agent uses the tab. `close` returns true only for a tab closed now; a page that asks "Leave site?" stays open.
+`open(session, url)` stays fire-and-forget.
+
 ### Built-in only
 
 `@opencode/plugin/gui/builtin` holds what only the built-ins use. It is never published and is not in the modules a plugin bundle may require; a public SDK module never imports it.
@@ -333,8 +393,10 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `onIdle(fn)`                                            | Runs work while the main thread is idle, e.g. a lazy chunk's preload                           |
 | `BuiltinPanel`, `BuiltinPanelTab`                       | `legacy` stored keys of a panel; `first` and stable `dom` ids of a tab                         |
 | `BuiltinCommand`                                        | `follows`: share another command's shortcut inside `scope`                                     |
+| `BuiltinAppLink`                                        | Review a person's activation of an application link in the desktop conversation                |
+| `BuiltinPromptGate`                                     | Work the host waits for, for at most one second, before it sends a prompt or a command         |
 | `BuiltinStore`, `BuiltinStoreFrom`                      | Window stores imported from parts of the app's own keys                                        |
-| `builtinContext(ctx)`                                   | `ctx.desktop.forceFocus`, `ctx.locale.setDirection`                                            |
+| `builtinContext(ctx)`                                   | `ctx.desktop.forceFocus`, `ctx.locale.setDirection`, `ctx.provideFor` for per-consumer contracts |
 | `builtinMainContext(ctx)`, `MainStoreFrom`, `Lifecycle` | Main stores imported from settings files or other namespaces, and `lifecycle.restart(handoff)` |
 | `builtinCatalog(catalog)`, `BuiltinCatalog`             | Locales other than English as loaders, loaded when the user picks the locale                   |
 
@@ -477,14 +539,14 @@ A built-in always runs, whatever setting is saved under its id, so Extensions �
 
 ## Testing
 
-| Gate                    | Where                                                                                                                                           | Catches                                                                                                       |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| SDK compile checks      | [`plugin/src/gui/context.typecheck.ts`](../plugin/src/gui/context.typecheck.ts), [`plugin.typecheck.ts`](../plugin/src/gui/plugin.typecheck.ts) | Async window setups, readonly drafts, panel and slot inputs, no-input Ipc options, declared store types       |
-| Registry compile checks | [`plugin/src/gui/registries.typecheck.ts`](../plugin/src/gui/registries.typecheck.ts)                                                           | A `MenuItem` field its menu ignores                                                                           |
-| Graph matrix            | `packages/app/component-tests/plugin-graph.spec.ts`                                                                                             | A built-in that fails when another built-in is disabled                                                       |
-| Keeper suites           | `packages/app/e2e/regression/`                                                                                                                  | What the user sees, per product area                                                                          |
-| Unit tests              | `*.test.ts` beside the code                                                                                                                     | Pure logic with a contract: paths, migrations, protocols                                                      |
-| Lint gate               | `bun run lint` (oxlint, ast-grep, `script/sdk-docs.ts`); `bun run lint:changed`                                                                 | Raw effects, app imports, module state, undocumented SDK, a guide block that differs from its shipping source |
+| Gate                    | Where                                                                                                                                           | Catches                                                                                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SDK compile checks      | [`plugin/src/gui/context.typecheck.ts`](../plugin/src/gui/context.typecheck.ts), [`plugin.typecheck.ts`](../plugin/src/gui/plugin.typecheck.ts) | Async window setups, readonly drafts, panel and slot inputs, no-input Ipc options, declared store types, icon names only from the catalog or ctx.icons |
+| Registry compile checks | [`plugin/src/gui/registries.typecheck.ts`](../plugin/src/gui/registries.typecheck.ts)                                                           | A `MenuItem` field its menu ignores                                                                                                                    |
+| Graph matrix            | `packages/app/component-tests/plugin-graph.spec.ts`                                                                                             | A built-in that fails when another built-in is disabled                                                                                                |
+| Keeper suites           | `packages/app/e2e/regression/`                                                                                                                  | What the user sees, per product area                                                                                                                   |
+| Unit tests              | `*.test.ts` beside the code                                                                                                                     | Pure logic with a contract: paths, migrations, protocols                                                                                               |
+| Lint gate               | `bun run lint` (oxlint, ast-grep, `script/sdk-docs.ts`); `bun run lint:changed`                                                                 | Raw effects, app imports, module state, undocumented SDK, a guide block that differs from its shipping source                                          |
 
 - Test a main entry through its `Ipc` contract with real inputs, not Electron mocks.
 - The hosts own their contracts: main storage in `packages/desktop/src/main/plugin/storage.test.ts`, the real window host in `packages/app/component-tests/plugin-host.spec.ts`. A plugin does not test them again.
@@ -525,15 +587,16 @@ export const Pairing = Ipc.define({
 })
 ```
 
-2. **Write the definition.** Pairing declares only its copy: its Ipc is provided at runtime, and its state lives in main.
+2. **Write the definition.** Pairing declares its copy and the icon of its settings page: its Ipc is provided at runtime, and its state lives in main.
 
 <!-- source: src/pairing/index.ts -->
 
 ```ts
 import { Plugin } from "@opencode/plugin/gui"
 import en from "./i18n/en"
+import pair from "./icons/pair.svg?raw"
 
-export default Plugin.define({ i18n: { en } })
+export default Plugin.define({ icons: { pair }, i18n: { en } })
 ```
 
 3. **Provide it from main.** Whether main keeps the display awake is a main store, read synchronously and imported once from the key the desktop kept it under before; a built-in names that older home through `builtinMainContext`. Remote access runs `opencode service` through `ctx.cli`, one command at a time through the machine in `main-machine.ts`, with the same `createDispatch` loop as the settings page: a read stops when its caller goes away, a change goes on when the window closes, and every command has a timeout, so a hung one never holds the queue. `ctx.onCleanup` disposes the machine, which releases the blocker.
@@ -673,7 +736,7 @@ const setup: Plugin.MainSetup = (ctx) => {
 export default setup
 ```
 
-4. **Write the window entry.** Pairing exists only on desktop, so setup returns at once on the web. The settings page is heavy, so it loads behind `lazy()` and compiles while the app idles; its search entries are indexed without mounting it. The page receives the desktop's own server, found through `ctx.servers` by `builtin`, and `ctx.use(Pairing)`. The search entries for remote access and the display setting, like the settings themselves, exist only while main answers (see `main` under [Live and failure handling](#live-and-failure-handling)).
+4. **Write the window entry.** Pairing exists only on desktop, so setup returns at once on the web. The settings page is heavy, so it loads behind `lazy()` and compiles while the app idles; its search entries are indexed without mounting it. Its nav icon is pairing's own, by its name in `ctx.icons`. The page receives the desktop's own server, found through `ctx.servers` by `builtin`, and `ctx.use(Pairing)`. The search entries for remote access and the display setting, like the settings themselves, exist only while main answers (see `main` under [Live and failure handling](#live-and-failure-handling)).
 
 <!-- source: src/pairing/renderer.tsx -->
 
@@ -702,7 +765,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   ctx.add(SettingsPage, {
     id: "pairing",
-    icon: "outline-pair",
+    icon: ctx.icons.pair,
     get title() {
       return ctx.t("title")
     },
@@ -799,7 +862,7 @@ export const builtins = compose({
 Your own plugin takes the same steps:
 
 1. **Pick the id.** It is your folder name and your key in both built-in lists, and it prefixes your commands, panel keys, stored keys and Ipc ids. A later rename needs the migrations under [Stored state](#stored-state).
-2. **Define it.** Create `src/<id>/index.ts` with `Plugin.define({ i18n: { en } })`, and `src/<id>/i18n/en.ts` with your copy. Once other locales arrive, load them lazily with `builtinCatalog({ en, de: () => import("./i18n/de") })`.
+2. **Define it.** Create `src/<id>/index.ts` with `Plugin.define({ i18n: { en } })`, and `src/<id>/i18n/en.ts` with your copy. Declare artwork the app's icon catalog does not have as `icons`, from SVG files in `src/<id>/icons/`. Once other locales arrive, load them lazily with `builtinCatalog({ en, de: () => import("./i18n/de") })`.
 3. **Declare the tokens.** Put any token another plugin or your main entry needs in `contract.ts`: a `Contract`, a `Registry` or an `Ipc`, each with an id under your plugin's id.
 4. **Write the window entry.** In `renderer.tsx`, a `Plugin.Setup<typeof definition>` contributes with `ctx.add`, branches each action on `ctx.use(token)()`, runs side work in `createKeyed`, and keeps heavy UI behind `lazy()` with an `onIdle` preload.
 5. **Write the main entry, if you need Node or Electron.** In `main.ts`, a `Plugin.MainSetup` provides your Ipc with `ctx.provide` and tears down with `ctx.onCleanup`.

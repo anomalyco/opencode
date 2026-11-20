@@ -1,4 +1,5 @@
 import {
+  mergeTransport,
   mergeProviderOptions,
   ProviderID,
   type ModelID,
@@ -8,6 +9,7 @@ import {
 import { OpenAICompatibleChat } from "../protocols/openai-compatible-chat.js"
 import { OpenAIEmbeddings, type OptionsInput as OpenAIEmbeddingOptionsInput } from "../protocols/openai-embeddings.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
+import { SystemOne } from "../protocols/system-one.js"
 import { MediaRoute } from "../route/media.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { ProviderPackage } from "../provider-package.js"
@@ -47,8 +49,13 @@ export const configure = (input: Config) => {
     provider,
     endpoint: { baseURL },
     auth,
-    headers: input.headers,
-    http: input.http,
+    ...mergeTransport(input),
+  })
+  const decisionRoute = SystemOne.route.with({
+    provider,
+    endpoint: { baseURL },
+    auth,
+    ...mergeTransport(input),
   })
   return {
     id: ProviderID.make(provider),
@@ -67,6 +74,9 @@ export const configure = (input: Config) => {
       }),
     embedding: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       embeddingRoute.model<OpenAIEmbeddingOptionsInput>({ id: modelID, providerOptions }),
+    // Compatible hosts follow llama.cpp's System One API, which takes inline media in root `images` (alias of `files`).
+    decision: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      decisionRoute.model({ id: modelID, compatibility: { mediaInput: "root" }, providerOptions }),
     configure,
   }
 }
@@ -85,6 +95,10 @@ export const imageModel = (modelID: string, settings: Settings) => {
 export const embeddingModel = (modelID: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).embedding(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
 }
 
 function config({ provider, ...settings }: Settings) {

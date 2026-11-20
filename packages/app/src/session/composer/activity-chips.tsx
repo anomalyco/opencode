@@ -6,6 +6,7 @@ import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
 import { stripAnsi } from "@opencode/session-ui/tools/ansi"
+import { Match } from "effect"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
@@ -16,14 +17,21 @@ import "./activity-chips.css"
 
 export type SessionActivityItem = {
   key: string
-  type: "subagent" | "shell"
   label?: string
   agent?: string
-  sessionID?: string
   target: string
   // When the work started running, from the server's record of it.
   started: number
-}
+} & (
+  | {
+      type: "subagent"
+      sessionID: string
+      // Running jobs in its tree, which its Stop cancels.
+      jobs?: readonly string[]
+    }
+  | { type: "shell" }
+  | { type: "script" }
+)
 
 type DurationKey =
   | "ui.message.duration.seconds"
@@ -53,12 +61,13 @@ export function formatElapsed(ms: number, t: (key: DurationKey, params: Record<s
 export function SessionActivityChips(props: {
   subagents: readonly SessionActivityItem[]
   shells: readonly SessionActivityItem[]
+  scripts?: readonly SessionActivityItem[]
   shell: {
     directory: string
     output: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     ended: Parameters<typeof createShellPanel>[0]["ended"]
   }
-  onOpen: (item: SessionActivityItem) => void
+  onOpen: (item: Extract<SessionActivityItem, { type: "subagent" }>) => void
   onStop: (item: SessionActivityItem) => Promise<boolean>
   // The menu closed with nothing left running, so the capsule and its trigger are gone; focus goes to the composer.
   onEmpty: () => void
@@ -74,6 +83,7 @@ export function SessionActivityChips(props: {
     enabled: () => settings.general.backgroundActivity() !== "off",
     subagents: () => props.subagents,
     shells: () => props.shells,
+    scripts: () => props.scripts ?? [],
     stop: props.onStop,
     ended: props.shell.ended,
     focus: {
@@ -106,16 +116,16 @@ export function SessionActivityChips(props: {
 
   const alignment = useComposerLaneAlignment()
 
-  // A subagent can only be interrupted once its child session exists.
-  const stoppable = (item: SessionActivityItem) => item.type === "shell" || !!item.sessionID
-
   const row = (item: SessionActivityItem) => ({
-    "data-stoppable": stoppable(item) || undefined,
-    // A shell opens its own panel in place; a subagent opens where it runs.
-    closeOnSelect: item.type !== "shell",
-    onSelect: () => (item.type === "shell" ? panel.open(item) : props.onOpen(item)),
+    // A shell opens its own panel in place; a subagent opens where it runs; a script has nowhere to open.
+    closeOnSelect: item.type === "subagent",
+    onSelect: () => {
+      if (item.type === "shell") return panel.open(item)
+
+      if (item.type === "subagent") props.onOpen(item)
+    },
     onKeyDown: (event: KeyboardEvent) => {
-      if ((event.key !== "Delete" && event.key !== "Backspace") || !stoppable(item)) return
+      if (event.key !== "Delete" && event.key !== "Backspace") return
 
       event.preventDefault()
       panel.stop(item)
@@ -135,7 +145,7 @@ export function SessionActivityChips(props: {
     onCleanup(() => clearInterval(timer))
   })
 
-  // The run time and the stop button share the row's end; hovering a stoppable row swaps one for the other.
+  // The run time and the stop button share the row's end; hovering a row swaps one for the other.
   const end = (item: SessionActivityItem) => (
     <span data-slot="session-activity-end">
       <span
@@ -145,12 +155,6 @@ export function SessionActivityChips(props: {
       >
         {formatElapsed(now() - item.started, language.t)}
       </span>
-      {stop(item)}
-    </span>
-  )
-
-  const stop = (item: SessionActivityItem) => (
-    <Show when={stoppable(item)}>
       {/* The row selects on press, so the stop button keeps its pointer events to itself. */}
       <IconButton
         type="button"
@@ -158,8 +162,14 @@ export function SessionActivityChips(props: {
         variant="ghost-muted"
         tabIndex={-1}
         data-slot="session-activity-stop"
-        icon={rowStopping(item) ? <Loader /> : <Icon name="outline-xmark" size="small" />}
-        aria-label={language.t(item.type === "shell" ? "session.running.stop.shell" : "session.running.stop.subagent")}
+        icon={rowStopping(item) ? <Loader /> : <Icon name="close" />}
+        aria-label={language.t(
+          Match.value(item.type).pipe(
+            Match.when("shell", () => "session.running.stop.shell" as const),
+            Match.when("script", () => "session.running.stop.script" as const),
+            Match.orElse(() => "session.running.stop.subagent" as const),
+          ),
+        )}
         aria-disabled={rowStopping(item) || undefined}
         aria-busy={rowStopping(item) || undefined}
         onPointerDown={(event) => {
@@ -172,7 +182,7 @@ export function SessionActivityChips(props: {
           panel.stop(item)
         }}
       />
-    </Show>
+    </span>
   )
 
   const label = () => language.activitySummary(counts())
@@ -192,7 +202,9 @@ export function SessionActivityChips(props: {
             class="tabular-nums duration-150 ease-out motion-reduce:animate-none"
             classList={{ "animate-in fade-in": view().enter }}
           >
-            <SessionProgressIndicatorV2 class="shrink-0" />
+            <span data-composer-pill-icon class="flex size-4 shrink-0 items-center justify-center">
+              <SessionProgressIndicatorV2 />
+            </span>
             <span data-slot="session-activity-summary" class="flex min-w-0 items-center gap-2 overflow-hidden">
               {language.activitySummaryRich(counts(), (text) => (
                 <span class="truncate">
@@ -204,6 +216,7 @@ export function SessionActivityChips(props: {
           <Menu.Portal>
             <Menu.Content
               data-slot="session-activity-panel"
+              data-focus-scope
               data-view={view().shell ? "shell" : "list"}
               aria-label={label()}
               ref={content}
@@ -230,10 +243,24 @@ export function SessionActivityChips(props: {
                         </Menu.Item>
                       )}
                     </For>
+                    <For each={props.scripts}>
+                      {(item) => (
+                        <Menu.Item {...row(item)} ref={(el: HTMLElement) => rows.set(item.key, el)}>
+                          <Icon name="code" class="shrink-0 text-v2-icon-icon-muted" />
+                          <span
+                            dir="ltr"
+                            class="min-w-0 flex-1 truncate font-mono text-[13px] tracking-[-0.04px] text-v2-text-text-base"
+                          >
+                            {item.label}
+                          </span>
+                          {end(item)}
+                        </Menu.Item>
+                      )}
+                    </For>
                     <For each={props.shells}>
                       {(item) => (
                         <Menu.Item {...row(item)} ref={(el: HTMLElement) => rows.set(item.key, el)}>
-                          <Icon name="console" class="shrink-0 text-v2-icon-icon-muted" />
+                          <Icon name="terminal" class="shrink-0 text-v2-icon-icon-muted" />
                           <span
                             dir="ltr"
                             class="min-w-0 flex-1 truncate font-mono text-[13px] tracking-[-0.04px] text-v2-text-text-base"
@@ -257,7 +284,7 @@ export function SessionActivityChips(props: {
                         onSelect={panel.back}
                         ref={(el: HTMLElement) => (back = el)}
                       >
-                        <Icon name="arrow-left" size="small" />
+                        <Icon name="arrow-left" />
                       </Menu.Item>
                       <span dir="ltr" data-slot="session-activity-shell-command" class="min-w-0 flex-1 truncate">
                         {shell().label}

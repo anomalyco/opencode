@@ -51,4 +51,5 @@ export default {
   "error.commandTimeout": "Tímamörk {{command}} {{args}} runnu út eftir {{timeout}} ms",
   "error.failedPort": "Ekki tókst að sækja gátt",
   "menu.remove": "Fjarlægja",
+  "error.busy": "{{distro}} er upptekin við annað verk. Reyndu aftur þegar því lýkur.",
 }

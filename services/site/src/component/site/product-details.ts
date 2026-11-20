@@ -182,25 +182,6 @@ export const productDetails: Record<
       },
     ],
   },
-  ide: {
-    title: "OpenCode | Editor integrations for VS Code, Cursor and Zed",
-    description:
-      "Use OpenCode inside your editor, with the extension for VS Code, Cursor, Windsurf and VSCodium, and opencode acp for Zed, JetBrains IDEs and other ACP editors.",
-    operatingSystem: "macOS, Windows, Linux",
-    intro:
-      "Use OpenCode inside your editor. In VS Code, Cursor, Windsurf and VSCodium, run opencode in the integrated terminal and the extension installs itself. Zed, JetBrains IDEs and other editors that support the Agent Client Protocol run OpenCode with opencode acp.",
-    features: [
-      { title: "Quick launch", body: "Cmd+Esc or Ctrl+Esc opens OpenCode in a split terminal." },
-      { title: "New session", body: "Cmd+Shift+Esc or Ctrl+Shift+Esc starts another session." },
-      { title: "Context", body: "Shares your current selection or tab with OpenCode." },
-      { title: "File references", body: "Cmd+Option+K or Alt+Ctrl+K inserts @File#L37-42." },
-      { title: "Installs itself", body: "Run opencode in the integrated terminal to add it." },
-      { title: "ACP editors", body: "Zed, JetBrains IDEs, Avante.nvim and CodeCompanion.nvim." },
-      { title: "Open VSX", body: "Also on Open VSX for Cursor, Windsurf and VSCodium." },
-      { title: "Same agent", body: "The OpenCode you run in the terminal, beside your code." },
-    ],
-    showcase: [],
-  },
   mini: {
     title: "OpenCode | Mini, a minimal terminal interface for the agent",
     description:
