@@ -1,5 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
 import { currentToolFailed, currentToolGroupedRead, currentToolInput } from "../message/current-tool-state"
+import { toolName } from "../timeline/facts"
 import { timelineNoticeRequired, type TimelineDetail, type TimelinePlacement } from "../timeline/detail"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
 import { Predicate } from "effect"
@@ -61,16 +62,9 @@ const tools = new Map<string, ToolRule>(
 
 const other: ToolRule = { category: "tools", mode: "tool", layout: "line" }
 
-// Sessions migrated from v1 keep the tools' old names.
-const renamed = new Map([
-  ["bash", "shell"],
-  ["task", "subagent"],
-  ["apply_patch", "patch"],
-])
-
 /** A call's rule, under the tool's current name. */
 export function toolRule(tool: SessionMessageAssistantTool): ToolRule & { name: string } {
-  const name = renamed.get(tool.name) ?? tool.name
+  const name = toolName(tool.name)
   const rule = tools.get(name) ?? other
 
   // A shell the agent started in the background reports back like a subagent.
