@@ -7,6 +7,7 @@ import {
   Alibaba,
   AmazonBedrock,
   AnthropicCompatible,
+  Azure,
   CloudflareAIGateway,
   DigitalOcean,
   GoogleVertexMessages,
@@ -220,6 +221,7 @@ describe("applyCachePolicy", () => {
 
   const messagesModels = [
     ["alibaba-messages", Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).messages("qwen3.8-max")],
+    ["azure-anthropic-messages", Azure.configure({ resourceName: "test", apiKey: "test" }).messages("claude-opus-5-5")],
     [
       "cloudflare-ai-gateway-messages",
       CloudflareAIGateway.configure({ accountId: "test", gatewayId: "test", apiKey: "test" }).model(
