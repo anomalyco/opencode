@@ -301,6 +301,10 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
         if let Some(captures) = SUBGRAPH.captures(line) {
             let (id, label) = parse_subgraph_token(&captures[1], parser.subgraphs.len());
             let parent_id = parser.stack.last().map(|open| parser.subgraphs[open.0].id.clone());
+            let groups = parser.subgraphs.iter().map(|subgraph| (subgraph.id.as_str(), subgraph.parent_id.as_deref()));
+            if crate::core::nests_in_itself(&id, parent_id.as_deref(), groups) {
+                return Err(syntax(source.number, line, "A subgraph cannot be nested in itself"));
+            }
             parser.subgraphs.push(Subgraph { id, label, node_ids: Vec::new(), parent_id, direction: None });
             parser.stack.push((parser.subgraphs.len() - 1, source.number, line.to_string()));
             continue;
