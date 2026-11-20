@@ -1991,7 +1991,10 @@ export type ConfigInfoEncoded = {
         })?,
         console_watches: boolean?,
         mcp_events: boolean?,
+        recommended_api: boolean?,
         full_codemode: boolean?,
+        machines: boolean?,
+        home_memory: boolean?,
         schedules: boolean?,
         part_rows: boolean?,
         image_generate: (boolean | {
