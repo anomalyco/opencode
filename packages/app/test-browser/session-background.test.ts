@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
+import type { JobSubagent, SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSessionBackground } from "@/session/requests/background"
@@ -92,6 +92,53 @@ describe("createSessionBackground", () => {
       setStore("status", "stuck", "running")
       expect(background.tasks().map((task) => task.id)).toEqual(["stuck", "noticed"])
       setStore("status", { stuck: "idle", noticed: "idle" })
+      expect(background.tasks()).toEqual([])
+      dispose()
+    })
+  })
+
+  test("shows a direct subagent job before its session record arrives, even with the parent idle", () => {
+    createRoot((dispose) => {
+      const job: JobSubagent = {
+        kind: "subagent",
+        id: "child",
+        sessionID: "root",
+        childSessionID: "child",
+        status: "running",
+        description: "Inspect",
+        agent: "explore",
+        time: { started: 12 },
+      }
+      const [store, setStore] = createStore<{ jobs: JobSubagent[]; sessions: SessionInfo[] }>({
+        jobs: [],
+        sessions: [],
+      })
+      const background = createSessionBackground({
+        sessionID: () => "root",
+        messages: () => [],
+        sessions: () => store.sessions,
+        status: () => "idle",
+        shells: () => [],
+        jobs: () => store.jobs,
+      })
+
+      expect(background.tasks()).toEqual([])
+      setStore("jobs", [job, { ...job, id: "unrelated", sessionID: "other", childSessionID: "other-child" }])
+      expect(background.tasks()).toEqual([
+        {
+          id: "child",
+          type: "subagent",
+          sessionID: "child",
+          label: "Inspect",
+          agent: "explore",
+          started: 12,
+          jobs: ["child"],
+        },
+      ])
+
+      setStore("sessions", [{ ...session("child"), title: "Inspect" }])
+      expect(background.tasks().map((task) => task.id)).toEqual(["child"])
+      setStore("jobs", 0, "status", "completed")
       expect(background.tasks()).toEqual([])
       dispose()
     })
