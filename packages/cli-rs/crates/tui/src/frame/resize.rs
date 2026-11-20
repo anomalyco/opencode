@@ -188,12 +188,4 @@ mod tests {
         assert!(layout::tabs_fit_vertically(106, 42));
         assert!(!layout::tabs_fit_vertically(105, 42));
     }
-
-    #[test]
-    fn session_pane_width_keeps_an_even_split_when_tight() {
-        assert_eq!(layout::clamp_pane_width(10, 120), 24);
-        assert_eq!(layout::clamp_pane_width(100, 120), 76);
-        assert_eq!(layout::clamp_pane_width(80, 100), 56);
-        assert_eq!(layout::clamp_pane_width(5, 30), 15);
-    }
 }

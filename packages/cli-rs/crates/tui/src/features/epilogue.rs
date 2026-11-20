@@ -138,36 +138,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn prints_nothing_without_a_session_or_update() {
-        assert_eq!(render(None, None, "opencode"), None);
-    }
-
-    #[test]
-    fn prints_the_session_and_its_continue_command() {
-        let text = render(Some(("Fix the parser", "ses_b")), None, "opencode").unwrap();
-        let plain = strip(&text);
-        let lines: Vec<&str> = plain.lines().collect();
-        assert_eq!(lines[1], "  █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█");
-        assert_eq!(lines[5], "  Session   Fix the parser");
-        assert_eq!(lines[6], "  Continue  opencode -s ses_b");
-        assert!(text.ends_with('\n'), "a trailing empty line, as in TS");
-        assert!(text.contains("\x1b[90mSession   \x1b[0m\x1b[1mFix the parser\x1b[0m"));
-    }
-
-    #[test]
-    fn prints_the_updated_version_first() {
-        let text = strip(&render(Some(("A", "ses_a")), Some("2.1.0"), "opencode").unwrap());
-        let lines: Vec<&str> = text.lines().collect();
-        assert_eq!(lines[5], "  Run opencode to use 2.1.0");
-        assert_eq!(lines[7], "  Session   A");
-    }
-
-    #[test]
     fn the_session_title_cannot_write_escape_sequences() {
         let text = render(Some(("x\x1b]52;c;cHduZWQ=\x07y\u{9b}", "ses_b")), None, "opencode").unwrap();
         assert!(text.contains("\x1b[1mxy\x1b[0m"), "{text:?}");
     }
 
+    // The Windows console needs escape processing on until the write flushes; no other system takes that path.
     #[test]
     fn writes_with_escape_sequences_on() {
         struct Log<'a>(&'a RefCell<Vec<String>>);
@@ -192,18 +168,5 @@ mod tests {
         let log = RefCell::new(Vec::new());
         write(&mut Log(&log), &mut Log(&log), "\x1b[1mA\x1b[0m").unwrap();
         assert_eq!(log.into_inner(), ["escapes on", "\x1b[1mA\x1b[0m", "\n", "flush", "restore"]);
-    }
-
-    fn strip(text: &str) -> String {
-        let mut out = String::new();
-        let mut chars = text.chars();
-        while let Some(char) = chars.next() {
-            if char == '\x1b' {
-                chars.by_ref().find(|char| *char == 'm');
-                continue;
-            }
-            out.push(char);
-        }
-        out
     }
 }

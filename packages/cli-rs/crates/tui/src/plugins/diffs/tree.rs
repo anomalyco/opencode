@@ -364,56 +364,6 @@ fn row_node(id: String, line: &Line, surface: &'static str) -> v2::Node {
 mod tests {
     use super::*;
 
-    const FILES: [&str; 5] = ["README.md", "src/b.ts", "src/lexer/token.ts", "docs/deep/one/a.md", "src/a.ts"];
-
-    #[test]
-    fn trees_sort_directories_first_and_collapse_chains() {
-        let tree = build(FILES);
-        let rows = flatten(&tree, None);
-        let rows: Vec<(usize, &str, Option<usize>)> =
-            rows.iter().map(|row| (row.depth, row.name.as_str(), row.file)).collect();
-        assert_eq!(
-            rows,
-            [
-                (0, "docs/deep/one", None),
-                (1, "a.md", Some(3)),
-                (0, "src", None),
-                (1, "lexer", None),
-                (2, "token.ts", Some(2)),
-                (1, "a.ts", Some(4)),
-                (1, "b.ts", Some(1)),
-                (0, "README.md", Some(0)),
-            ]
-        );
-        assert_eq!(ordered_files(&flatten(&tree, None)), [3, 2, 4, 1, 0]);
-    }
-
-    #[test]
-    fn collapsed_directories_hide_their_files() {
-        let tree = build(FILES);
-        let src = flatten(&tree, None).iter().find(|row| row.name == "src").unwrap().id;
-        let expanded = toggle(&tree, &all_expanded(&tree), src);
-        let names: Vec<String> = flatten(&tree, Some(&expanded)).into_iter().map(|row| row.name).collect();
-        assert_eq!(names, ["docs/deep/one", "a.md", "src", "README.md"]);
-        assert!(toggle(&tree, &expanded, src).contains(&src));
-        let token = parents_of(&tree, 2).unwrap();
-        assert!(token.contains(&src) && token.len() == 2);
-        // A file is not a directory to toggle.
-        let file = flatten(&tree, None).iter().find(|row| row.file == Some(0)).unwrap().id;
-        assert_eq!(toggle(&tree, &expanded, file), expanded);
-    }
-
-    #[test]
-    fn file_moves_clamp_and_start_at_the_first() {
-        let files = [3, 2, 4];
-        assert_eq!(move_file(&files, None, 1), Some(3));
-        assert_eq!(move_file(&files, Some(9), -1), Some(3));
-        assert_eq!(move_file(&files, Some(3), 1), Some(2));
-        assert_eq!(move_file(&files, Some(4), 1), Some(4));
-        assert_eq!(move_file(&files, Some(3), -1), Some(3));
-        assert_eq!(move_file(&[], Some(3), 1), None);
-    }
-
     #[test]
     fn directory_chains_drop_leading_segments() {
         assert_eq!(truncate_directory_chain("a/b/c/d", 20), "a/b/c/d");

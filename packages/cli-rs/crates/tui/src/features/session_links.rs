@@ -317,24 +317,4 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn a_label_change_selects_only_the_blocks_that_mention_the_session() {
-        let other = format!("ses_{:0<26}", "other");
-        let changed = HashSet::from([SessionID(KNOWN.to_owned())]);
-        assert!(mentions_any(&format!("First {KNOWN}"), &changed));
-        assert!(mentions_any(&format!("@session:{KNOWN} and {other}"), &changed));
-        assert!(!mentions_any(&format!("Second {other}"), &changed));
-        assert!(!mentions_any(&format!("x{KNOWN}"), &changed));
-    }
-
-    #[test]
-    fn display_label_collapses_fallback_titles() {
-        assert_eq!(display_label(Some("Fix the parser"), false), "Fix the parser");
-        assert_eq!(display_label(Some("New session - 2026-03-01T12:00:00.000Z"), false), "New session");
-        assert_eq!(display_label(Some("Child session - 2026-03-01T12:00:00.000Z"), true), "Child session");
-        assert_eq!(display_label(Some("New session - today"), false), "New session - today");
-        assert_eq!(display_label(None, false), "New session");
-        assert_eq!(display_label(Some(""), true), "Child session");
-    }
 }

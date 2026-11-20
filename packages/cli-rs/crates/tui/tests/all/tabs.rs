@@ -539,6 +539,13 @@ fn a_split_panel_shows_beside_the_session_and_resizes() {
     };
     assert!(h.app.wait_until(WAIT, || column() == Some(90)), "{}", h.app.text());
     h.wait_file("layout", |layout| layout["paneWidth"] == 50);
+    // A drag to the far edge stops where the session keeps its minimum width.
+    h.app.hover(89, 10);
+    h.app.drag((89, 10), (1, 10));
+    assert!(h.app.wait_until(WAIT, || column().is_some_and(|at| (20..70).contains(&at))), "{}", h.app.text());
+    // Without room for both panes the panel takes the whole width.
+    h.app.resize(100, 30);
+    assert!(h.app.wait_until(WAIT, || column().is_some_and(|at| at < 10)), "{}", h.app.text());
 
     h.open("ses_b");
     assert!(h.app.wait_until(WAIT, || h.tui.panels.current().is_none()));

@@ -159,26 +159,3 @@ fn diff_wrap(info: &Info) -> bool {
 fn paste_summary(info: &Info) -> bool {
     info.prompt.as_ref().and_then(|prompt| prompt.paste) != Some(PromptPaste::Full)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use opencode_local::cli_config::merge;
-    use serde_json::json;
-
-    #[test]
-    fn toggle_reads_follow_the_typescript_defaults() {
-        let empty = merge(&[None]);
-        assert!(title_enabled(&empty) && file_context(&empty));
-        assert!(diff_wrap(&empty) && paste_summary(&empty));
-        let set = merge(&[Some(json!({
-            "terminal": { "title": false },
-            "prompt": { "editor": false, "paste": "full" },
-            "diffs": { "wrap": "none" },
-        }))]);
-        assert!(!title_enabled(&set) && !file_context(&set));
-        assert!(!diff_wrap(&set) && !paste_summary(&set));
-        assert_eq!(toggle_title(true, "animations"), "Disable animations");
-        assert_eq!(toggle_title(false, "terminal title"), "Enable terminal title");
-    }
-}

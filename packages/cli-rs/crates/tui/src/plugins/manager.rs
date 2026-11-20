@@ -531,34 +531,3 @@ fn display_version(version: &str) -> String {
     let hash = matches!(version.len(), 40 | 64) && version.chars().all(|c| c.is_ascii_hexdigit());
     if hash { version[..7].to_owned() } else { version.to_owned() }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_slow_row_says_what_costs_and_shows_the_report() {
-        let report = "slow (p50/p99/worst): view 0.0/0.0/0.1 ms, run-command 0.0/0.0/0.0 ms, draw 1.9/2.0/2.4 ms, \
-                      host 0.0/0.1/0.1 ms; setup 3.0 ms";
-        let row = |slow: Option<&str>| {
-            Row::Tui(PluginEntry {
-                key: "k".to_owned(),
-                id: "live.stress".to_owned(),
-                target: Some("/plugins/stress".to_owned()),
-                origin: PluginOrigin::External,
-                status: PluginStatus::Active,
-                active: true,
-                slow: slow.map(str::to_owned),
-            })
-        };
-        let slow = row(Some(report));
-        assert_eq!(slow.footer().as_deref(), Some("local, slow: draw 2.4 ms"));
-        assert!(slow.has_details() && !slow.has_error());
-        let shown = details(&slow);
-        assert_eq!((shown.title.as_str(), shown.error.as_str()), ("TUI plugin is slow", report));
-        assert!(shown.context.unwrap().contains("Status: slow"));
-        let backlog = row(Some("backlog: full at the end of 13 of the last 16 frames, 9 sends refused"));
-        assert_eq!(backlog.footer().as_deref(), Some("local, slow: backlog"));
-        assert!(!row(None).has_details());
-    }
-}

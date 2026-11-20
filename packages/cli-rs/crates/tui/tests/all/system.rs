@@ -480,6 +480,26 @@ fn pair_server(fails: bool) -> Answer {
     })
 }
 
+/// A running data migration shows its label and progress in a corner overlay once the server is up.
+#[test]
+fn a_running_migration_shows_its_progress() {
+    use opencode_api::memory::{Memory, Route as MemoryRoute};
+    let progress =
+        json!({ "status": "running", "progress": { "label": "Sessions", "numerator": 3, "denominator": 9 } });
+    let memory = Memory::new(vec![
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
+        MemoryRoute::json("GET", "/api/experimental/migration/v1", 200, &progress),
+    ]);
+    let deps = Deps { events: true, route: Route::Home, ..support::deps(Arc::new(memory)) };
+    let harness = support::mount(100, 30, deps);
+    // The first poll waits a second on the app's clock.
+    let shown = harness.app.wait_until(WAIT, || {
+        harness.app.advance(Duration::from_millis(100));
+        harness.app.text().contains("Sessions 3/9")
+    });
+    assert!(shown, "{}", harness.app.text());
+}
+
 #[test]
 fn pair_matches_typescript() {
     let app = TestApp::new(100, 40);
@@ -634,6 +654,12 @@ fn highlights_open_once_after_an_update_into_an_idle_home() {
     wait_for(&app, "What's new in 2.0.28");
     app.press("enter");
     highlights::startup(&tui, &update, false);
+    app.wait_until(Duration::from_millis(300), || app.text().contains("What's new"));
+    assert!(!app.text().contains("What's new"), "{}", app.text());
+
+    // A development build neither shows them nor records itself as seen.
+    let dev = highlights::Release { version: "0.0.0-dev-1".to_owned(), ..release.clone() };
+    highlights::startup(&tui, &dev, false);
     app.wait_until(Duration::from_millis(300), || app.text().contains("What's new"));
     assert!(!app.text().contains("What's new"), "{}", app.text());
 

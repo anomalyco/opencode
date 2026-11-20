@@ -276,41 +276,6 @@ mod tests {
     }
 
     #[test]
-    fn only_changes_are_sent_and_gone_sessions_are_cleared() {
-        let mut sent = Sent::new();
-        let mut log = Vec::new();
-        let mut step = |sent: &mut Sent, sessions: &[Pending], accept: bool| {
-            update(sent, &reports(sessions), |record| {
-                log.push((record.state, record.id.clone()));
-                accept
-            });
-        };
-        step(&mut sent, &[working("ses_a", "A")], true);
-        step(&mut sent, &[working("ses_a", "A")], true);
-        step(&mut sent, &[blocked("ses_a", ProgramKind::Permission)], true);
-        step(&mut sent, &[], true);
-        step(&mut sent, &[working("ses_b", "B")], false);
-        step(&mut sent, &[working("ses_b", "B")], true);
-        let blocked = ProgramState::Blocked(Some(ProgramKind::Permission));
-        let id = |id: &str| id.to_owned();
-        assert_eq!(
-            log,
-            [
-                (ProgramState::Working, id("")),
-                (ProgramState::Working, id("ses_a")),
-                (blocked, id("")),
-                (blocked, id("ses_a")),
-                (ProgramState::Clear, id("ses_a")),
-                (ProgramState::Idle, id("")),
-                (ProgramState::Working, id("")),
-                (ProgramState::Working, id("ses_b")),
-                (ProgramState::Working, id("")),
-                (ProgramState::Working, id("ses_b")),
-            ]
-        );
-    }
-
-    #[test]
     fn ids_are_kept_when_valid() {
         let long = "s".repeat(33);
         let table = [

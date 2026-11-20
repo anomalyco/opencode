@@ -304,6 +304,30 @@ fn open_dialog_matches_typescript() {
     support::wait_fixture(&kit.app, "E.11a/open-worktrees");
 }
 
+/// A session in a subdirectory of a worktree is named by the worktree: its `subpath` leads up to the worktree's root.
+#[test]
+fn a_session_below_a_worktree_root_is_named_by_the_worktree() {
+    let nested = session(
+        "ses_n",
+        Some("Nested work"),
+        noon(3),
+        json!({ "location": { "directory": "/tmp/opencode/app-feature/src/lib" }, "subpath": "src/lib" }),
+    );
+    let fake = Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/project") => (200, projects()),
+        ("GET", "/api/session") => (200, json!({ "data": [nested.clone()], "cursor": {} })),
+        _ => support::base(seen, DIRECTORY),
+    });
+    let deps = Deps { directory: DIRECTORY.into(), route: Route::Home, ..support::deps(Arc::new(fake)) };
+    let harness = support::mount(100, 30, deps);
+    harness.wait_for("Model M");
+    harness.app.press("ctrl+x");
+    harness.app.press("l");
+    let screen = harness.wait_for("Nested work");
+    let row = screen.lines().find(|line| line.contains("Nested work")).unwrap();
+    assert!(row.contains("app-feature") && !row.contains("lib"), "{screen}");
+}
+
 fn evented() -> (Harness, opencode_api::memory::Memory) {
     use opencode_api::memory::{Memory, Route as MemoryRoute};
     let session = session("ses_r1", Some("Review the plan"), 1.0, json!({}));

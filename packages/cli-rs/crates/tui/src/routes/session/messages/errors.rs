@@ -457,15 +457,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn json_string_finds_console_fields() {
-        let body = r#"{"error":{"resetsAt" : "2026-01-15T12:00:00Z","limitName":"weekly","workspace":"wrk_1"}}"#;
-        assert_eq!(json_string(body, "resetsAt"), Some("2026-01-15T12:00:00Z"));
-        assert_eq!(json_string(body, "limitName"), Some("weekly"));
-        assert_eq!(json_string(body, "missing"), None);
-        assert_eq!(refusal_reset(body), Some(1_768_478_400_000.0));
-    }
-
-    #[test]
     fn free_limit_reset_drops_bad_delays() {
         assert_eq!(free_limit_reset(None, 0.0, 0.0), None);
         assert_eq!(free_limit_reset(Some(-1.0), 0.0, 0.0), None);

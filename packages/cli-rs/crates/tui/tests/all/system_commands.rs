@@ -260,6 +260,19 @@ fn toggles_write_cli_json_as_typescript_does_and_typescript_reads_them() {
         assert!(landed, "{key} did not write {path:?}");
     }
     let text = std::fs::read_to_string(&file).unwrap();
+    // A TUI started on the written file reads every toggle as off and names each by what it turns on.
+    let started = TestApp::new(100, 30);
+    let off = mount(&started, CliConfig::new(&paths).get().unwrap(), None);
+    let title = |id: &str| off.keymap.commands().into_iter().find(|command| command.id == id).and_then(|c| c.title);
+    for (id, expected) in [
+        ("terminal.title.toggle", "Enable terminal title"),
+        ("app.toggle.animations", "Enable animations"),
+        ("app.toggle.file_context", "Enable file context"),
+        ("app.toggle.diffwrap", "Enable diff wrapping"),
+        ("app.toggle.paste_summary", "Enable paste summary"),
+    ] {
+        assert_eq!(title(id).as_deref(), Some(expected), "{id}");
+    }
 
     let twin = opencode_util::temp::tempdir().unwrap();
     let twin_file = support::xdg_paths(twin.path()).config.join("cli.json");

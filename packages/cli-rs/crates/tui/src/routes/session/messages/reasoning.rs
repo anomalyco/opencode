@@ -231,18 +231,3 @@ pub(crate) fn summary(content: &str) -> Option<String> {
         || after.starts_with("\r\n\n");
     closed.then(|| rest[..end].trim().to_owned())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::summary;
-
-    #[test]
-    fn summary_takes_a_leading_bold_block() {
-        assert_eq!(summary("**Inspecting PR workflow**\n\nbody").as_deref(), Some("Inspecting PR workflow"));
-        assert_eq!(summary("**Done**").as_deref(), Some("Done"));
-        assert_eq!(summary("**Title** and more"), None);
-        assert_eq!(summary("**Title**\nbody"), None);
-        assert_eq!(summary("plain"), None);
-        assert_eq!(summary("****\n\n"), None);
-    }
-}

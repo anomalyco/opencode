@@ -234,6 +234,26 @@ fn usage_dialogs_match_typescript() {
     support::wait_fixture(&kit.app, "E.16/usage-model");
 }
 
+/// A limit on whole vendors names them as a list, and its price floor in dollars.
+#[test]
+fn a_vendor_limit_names_its_vendors_and_its_price_floor() {
+    let mut server = Arc::into_inner(Server::new()).unwrap();
+    let budgets = server.routes["/api/experimental/usage/limits"]["budgets"].as_array_mut().unwrap();
+    let mut vendors = budgets[1].clone();
+    vendors["id"] = json!("vendors");
+    vendors["per"] = json!("set");
+    vendors["vendors"] = json!(["Anthropic", "OpenAI", "xAI"]);
+    vendors["inputPriceAtLeast"] = json!(1234.5);
+    budgets.push(vendors);
+    let kit = kit_with(90, 34, Arc::new(server));
+    let sonnet = kit.local.models(|models| models[0].clone());
+    usage_model::show(&kit.local, sonnet);
+    let words = || kit.app.text().split_whitespace().collect::<Vec<_>>().join(" ");
+    let named =
+        kit.app.wait_until(WAIT, || words().contains("Anthropic, OpenAI, and xAI models over $1,234.50 per 1M"));
+    assert!(named, "{}", kit.app.text());
+}
+
 #[test]
 fn go_upsell_matches_typescript_when_compact() {
     let kit = kit(80, 20);

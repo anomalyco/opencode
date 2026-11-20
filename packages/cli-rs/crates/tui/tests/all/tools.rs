@@ -736,3 +736,17 @@ fn execute_lists_its_calls_and_opens_the_dialog() {
         assert!(screen.contains(text), "{text:?} missing:\n{screen}");
     }
 }
+
+/// The dialog's scroll box is as tall as the code and output wrapped by character: the last row shows unscrolled.
+#[test]
+fn the_execute_dialog_fits_wrapped_code() {
+    let code = format!("const long = \"{}\"", "x".repeat(300));
+    let output = "{\"a\":1}\n\nLogs:\nthe last log line";
+    let messages =
+        turn(vec![timed("c1", "execute", completed(json!({ "code": code }), output, json!({ "toolCalls": [] })))]);
+    let h = open(120, 40, messages, Vec::new());
+    let (x, y) = h.find("✓ execute");
+    h.app.click(x + 2, y);
+    h.app.advance(Duration::from_millis(1));
+    h.wait_for_all(&["Completed", "the last log line"]);
+}

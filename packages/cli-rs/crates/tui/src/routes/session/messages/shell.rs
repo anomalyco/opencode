@@ -487,33 +487,6 @@ fn collapse_tail(output: &str, max_lines: usize, max_chars: usize) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn short_output_stays_whole() {
-        let collapsed = collapse_shell_output("$ ls", "a\nb", 10, 400);
-        assert_eq!(collapsed.input, "$ ls");
-        assert_eq!(collapsed.output, "a\nb");
-        assert!(!collapsed.overflow);
-    }
-
-    #[test]
-    fn long_output_keeps_its_tail_behind_a_count() {
-        let output: Vec<String> = (1..=20).map(|line| format!("line {line}")).collect();
-        let collapsed = collapse_shell_output("$ seq", &output.join("\n"), 10, 400);
-        assert!(collapsed.overflow);
-        // The command takes one line and a gap, so eight lines are left: a label and seven lines.
-        assert_eq!(
-            collapsed.output,
-            "(13 earlier lines)\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20"
-        );
-    }
-
-    #[test]
-    fn a_long_command_cuts_at_two_lines() {
-        let collapsed = collapse_shell_output(&"x".repeat(100), "", 10, 200);
-        assert!(collapsed.overflow);
-        assert_eq!(collapsed.input, format!("{}…", "x".repeat(39)));
-    }
-
     // `tput sgr0` resets the character set before the SGR reset; neither sequence produces text.
     #[test]
     fn the_output_drops_a_charset_reset() {

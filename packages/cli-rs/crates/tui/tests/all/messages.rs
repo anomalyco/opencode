@@ -164,9 +164,17 @@ fn shell_skill_notice_and_switch_messages_render_as_one_line_each() {
             "description": "Review   the\ndiff",
             "metadata": { "source": "subagent", "state": "completed", "agent": "explore", "childID": "ses_child" },
         }),
+        json!({
+            "id": "msg_9", "type": "synthetic", "text": "", "time": { "created": 2000 },
+            "description": "ran every test of the workspace twice over, then once more under load, slowly",
+            "metadata": { "source": "shell", "state": "completed" },
+        }),
     ];
     let h = open(50, session(json!({})), messages, Vec::new(), Info::default());
     let screen = h.wait_for("Explore finished");
+    // A long completion summary is cut to the row.
+    let finished = screen.lines().find(|line| line.contains("Shell finished")).unwrap_or_default();
+    assert!(finished.trim_end().ends_with('…') && !screen.contains("slowly"), "{screen}");
     assert!(screen.contains("┃  $ seq 15"), "{screen}");
     assert!(screen.contains("┃  (8 earlier lines)"), "{screen}");
     assert!(screen.contains("┃  out 15"), "{screen}");
@@ -211,19 +219,33 @@ fn errors_notices_and_retries_follow_the_footer_rules() {
             "id": "msg_3", "type": "idle", "outcome": "failed", "time": { "created": 2500 },
             "error": { "type": "execution", "message": "the runner crashed" },
         }),
-        failed("msg_4", 3000, json!({ "type": "provider.free-limit", "message": "free limit" })),
-        failed("msg_5", 4000, json!({ "type": "provider.budget-limit", "message": "budget" })),
+        failed(
+            "msg_4",
+            3000,
+            json!({ "type": "provider.free-limit", "message": "free limit", "retryAfterMs": 3_600_000 }),
+        ),
+        failed(
+            "msg_5",
+            4000,
+            json!({
+                "type": "provider.budget-limit", "message": "budget",
+                "response": { "body": r#"{"error":{"resetsAt" : "2026-01-15T12:00:00Z","limitName":"weekly"}}"# },
+            }),
+        ),
         retrying,
     ];
     let h = open(50, session(json!({})), messages, Vec::new(), Info::default());
     let screen = h.wait_for("Retry due");
     assert!(screen.contains("   Error: bad request"), "{screen}");
     assert!(screen.contains("   Error: the runner crashed"), "{screen}");
-    assert!(screen.contains("   You've used today's free messages."), "{screen}");
+    // The free messages reset after the delay the server sent; a usage limit at the time the console's refusal names.
+    let words = screen.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(words.contains("You've used today's free messages. They reset at"), "{screen}");
     assert!(screen.contains("   Upgrade to OpenCode Go → /connect · Switch model → /models"), "{screen}");
     // A usage limit is a bordered notice with the model-list key.
     assert!(screen.contains("  ┃ Usage limit reached"), "{screen}");
-    assert!(screen.contains("  ┃ Paid models are paused. Switch to a free model with"), "{screen}");
+    assert!(screen.contains("  ┃ Resets "), "{screen}");
+    assert!(words.contains("Paid models are paused. Switch to a free model"), "{screen}");
     assert!(screen.contains("   ⚠ Retry due · attempt 2 · overloaded"), "{screen}");
     in_order(&screen, &["bad request", "runner crashed", "free messages", "Usage limit", "Retry due"]);
 }

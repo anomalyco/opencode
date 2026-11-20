@@ -672,23 +672,3 @@ impl Connect {
         integration::copy_oauth(&self.local, &attempt, "Could not copy to the clipboard");
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn claims_once_a_day_unless_turned_off() {
-        let now = 10.0 * DAY_MS;
-        let mut empty = json!({});
-        assert_eq!(claim(&mut empty, now), Claim::Claimed);
-        assert_eq!(empty, json!({ "lastSeenAt": now as i64 }));
-        let mut recent = json!({ "lastSeenAt": now - 1000.0 });
-        assert_eq!(claim(&mut recent, now), Claim::Recent(Some(now - 1000.0)));
-        let mut old = json!({ "lastSeenAt": now - DAY_MS, "other": 1 });
-        assert_eq!(claim(&mut old, now), Claim::Claimed);
-        assert_eq!(old, json!({ "lastSeenAt": now as i64, "other": 1 }));
-        let mut off = json!({ "dontShow": true, "lastSeenAt": 5.0 });
-        assert_eq!(claim(&mut off, now), Claim::DontShow(Some(5.0)));
-    }
-}

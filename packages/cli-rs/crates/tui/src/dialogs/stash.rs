@@ -144,20 +144,3 @@ fn datetime(timestamp: f64) -> String {
     let date = Zone::Local.at(timestamp as i64).map(|date| date.numeric_date()).unwrap_or_default();
     format!("{} · {date}", crate::dialogs::timeline::time(timestamp))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn previews_and_times_follow_typescript() {
-        assert_eq!(preview("  first line  \nsecond"), "first line");
-        assert_eq!(preview(&"x".repeat(60)), format!("{}…", "x".repeat(49)));
-        let now = 1_000_000_000_000.0;
-        assert_eq!(relative_time(now - 59_000.0, now), "just now");
-        assert_eq!(relative_time(now - 5.0 * 60_000.0, now), "5m ago");
-        assert_eq!(relative_time(now - 3.0 * 3_600_000.0, now), "3h ago");
-        assert_eq!(relative_time(now - 6.0 * 86_400_000.0, now), "6d ago");
-        assert!(relative_time(now - 8.0 * 86_400_000.0, now).contains(" · "));
-    }
-}

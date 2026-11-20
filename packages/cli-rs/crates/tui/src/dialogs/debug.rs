@@ -176,26 +176,3 @@ pub fn describe_terminal(var: impl Fn(&str) -> Option<String>) -> String {
     };
     format!("{program}{version}{multiplexer}")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn describe_terminal_matches_typescript() {
-        let vars = |pairs: &'static [(&'static str, &'static str)]| {
-            move |name: &str| pairs.iter().find(|(key, _)| *key == name).map(|(_, value)| (*value).to_owned())
-        };
-        assert_eq!(describe_terminal(vars(&[])), "unknown");
-        assert_eq!(describe_terminal(vars(&[("TERM", "xterm")])), "xterm");
-        assert_eq!(
-            describe_terminal(vars(&[
-                ("TERM_PROGRAM", "ghostty"),
-                ("TERM_PROGRAM_VERSION", "1.2"),
-                ("TMUX", "/tmp/tmux"),
-            ])),
-            "ghostty 1.2 in tmux"
-        );
-        assert_eq!(describe_terminal(vars(&[("TERM", "screen"), ("STY", "1.pts")])), "screen in screen");
-    }
-}

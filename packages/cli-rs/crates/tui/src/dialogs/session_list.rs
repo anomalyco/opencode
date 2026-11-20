@@ -718,16 +718,10 @@ pub mod pins {
 mod tests {
     use super::*;
 
+    // Windows roots, which no test on another system reaches.
     #[test]
-    fn paths_follow_node() {
-        assert_eq!(relative("/a/b", "/a/b"), "");
-        assert_eq!(relative("/a/b", "/a/c/d"), "../c/d");
-        assert_eq!(relative("/a/b", "/a/b/c"), "c");
-        assert_eq!(resolve_up(Flavor::Posix, "/a/b/c", 2), "/a");
-        assert_eq!(resolve_up(Flavor::Posix, "/a", 3), "/");
+    fn windows_paths_resolve_up_to_the_drive() {
         assert_eq!(resolve_up(Flavor::Windows, "C:\\a\\b/c", 2), "C:\\a");
         assert_eq!(resolve_up(Flavor::Windows, "C:\\a", 3), "C:\\");
-        assert_eq!(basename("../c/d"), "d");
-        assert_eq!(basename(".."), "..");
     }
 }

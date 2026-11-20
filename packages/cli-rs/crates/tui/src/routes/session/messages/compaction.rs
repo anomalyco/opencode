@@ -208,16 +208,3 @@ fn truthy(value: &serde_json::Value) -> bool {
         _ => true,
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::number;
-
-    #[test]
-    fn number_abbreviates_as_locale_number() {
-        assert_eq!(number(999.0), "999");
-        assert_eq!(number(1250.0), "1.3K");
-        assert_eq!(number(999_950.0), "1.0M");
-        assert_eq!(number(0.0), "0");
-    }
-}

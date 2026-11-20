@@ -149,34 +149,6 @@ mod tests {
         Input { version: version.to_owned(), count, history }
     }
 
-    #[test]
-    fn decide_matches_typescript() {
-        let base = || input("2.0.27", 5, true);
-        let with = |change: fn(&mut Input)| {
-            let mut input = base();
-            change(&mut input);
-            input
-        };
-        let cases: Vec<(Input, Option<&str>, Decision)> = vec![
-            (base(), None, Decision::Show),
-            (with(|input| input.history = false), None, Decision::Record),
-            (with(|input| input.count = 0), None, Decision::Record),
-            (base(), Some("2.0.26"), Decision::Show),
-            (with(|input| input.history = false), Some("1.99.99"), Decision::Show),
-            (with(|input| input.count = 0), Some("2.0.26"), Decision::Record),
-            (base(), Some("2.0.27"), Decision::None),
-            (base(), Some("2.0.28"), Decision::None),
-            (with(|input| input.version = "2.0.30".into()), Some("2.1.0"), Decision::None),
-            (with(|input| input.version = "0.0.0-dev-123".into()), None, Decision::None),
-            (with(|input| input.version = "local".into()), None, Decision::None),
-            (with(|input| input.history = false), Some("2.0.0-next"), Decision::Record),
-            (base(), Some("garbage"), Decision::Show),
-        ];
-        for (input, seen, expected) in cases {
-            assert_eq!(decide(&input, seen), expected, "{input:?} {seen:?}");
-        }
-    }
-
     /// "only one of several concurrent TUIs claims the highlights".
     #[test]
     fn one_of_several_concurrent_tuis_claims_the_highlights() {

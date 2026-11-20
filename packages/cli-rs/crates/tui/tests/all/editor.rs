@@ -189,6 +189,14 @@ fn zed_selection_is_read_from_its_database() {
     setup.wait_for("src/index.ts#2");
     let selection = setup.tui.prompt.editor.selection().unwrap();
     assert_eq!(selection.ranges[0].text, "const");
+    // Zed counts bytes and the selection UTF-16 units; bytes 1..14 end inside 語, so the range takes all of it.
+    std::fs::write(&file, "héllo\n日本語 end").unwrap();
+    zed::exec(&db, "update editor_selections set start = 1, end = 14").unwrap();
+    let wide =
+        || setup.tui.prompt.editor.selection().is_some_and(|selection| selection.ranges[0].text == "éllo\n日本語");
+    setup.wait("the wide selection", wide);
+    let range = setup.tui.prompt.editor.selection().unwrap().ranges[0].selection;
+    assert_eq!((range.start.character, range.end.character), (2, 4));
 }
 
 /// A Zed database whose only workspace is `/` with `file` active, selected from byte `start` to `end`. Zed keeps

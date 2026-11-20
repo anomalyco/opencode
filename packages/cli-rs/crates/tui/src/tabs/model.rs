@@ -274,16 +274,6 @@ pub fn layout(tabs: &[&str], active: Option<&str>, available: i64, previous_star
 mod tests {
     use super::*;
 
-    fn tabs(ids: &[&str]) -> Vec<Tab> {
-        ids.iter().map(|id| Tab::new(*id, None)).collect()
-    }
-
-    fn history(ids: &[&str]) -> History {
-        let mut history = History::new();
-        ids.iter().for_each(|id| history.record(id));
-        history
-    }
-
     #[test]
     fn detail_appends_the_branch_of_a_worktree() {
         assert_eq!(detail("app", Some("feat"), Some("dev"), true), "app ⎇ feat");
@@ -296,14 +286,6 @@ mod tests {
     fn overflow_markers_reserve_a_gap() {
         assert_eq!(overflow_width(5), 3);
         assert_eq!(overflow_width(12), 4);
-    }
-
-    #[test]
-    fn opens_each_session_once_and_refreshes_its_title() {
-        let tabs = open(&[Tab::new("a", Some("Old".into()))], Tab::new("a", Some("New".into()))).unwrap();
-        assert_eq!(tabs, [Tab::new("a", Some("New".into()))]);
-        assert_eq!(open(&tabs, Tab::new("b", None)).unwrap(), [Tab::new("a", Some("New".into())), Tab::new("b", None)]);
-        assert_eq!(open(&tabs, Tab::new("a", Some("New".into()))), None);
     }
 
     #[test]
@@ -324,122 +306,6 @@ mod tests {
                 assert_eq!(reopen(&mut stack, &rest, None), None);
             }
         }
-    }
-
-    #[test]
-    fn reorders_to_a_clamped_index() {
-        assert_eq!(reorder(&tabs(&["a", "b", "c"]), "a", 9).unwrap(), tabs(&["b", "c", "a"]));
-        assert_eq!(reorder(&tabs(&["a", "b", "c"]), "c", 0).unwrap(), tabs(&["c", "a", "b"]));
-        assert_eq!(reorder(&tabs(&["a", "b"]), "a", 0), None);
-        assert_eq!(reorder(&tabs(&["a", "b"]), "x", 0), None);
-    }
-
-    #[test]
-    fn cycles_through_a_filtered_set() {
-        let all = tabs(&["a", "c", "e"]);
-        let id = |tab: Option<&Tab>| tab.map(|tab| tab.session_id.clone());
-        assert_eq!(id(cycle(&all, Some("c"), true, |_| true)), Some("e".into()));
-        assert_eq!(id(cycle(&all, Some("c"), false, |_| true)), Some("a".into()));
-        assert_eq!(id(cycle(&all, Some("e"), true, |_| true)), Some("a".into()));
-        assert_eq!(id(cycle(&all, Some("b"), true, |_| true)), Some("a".into()));
-        let all = tabs(&["a", "b", "c", "d", "e"]);
-        let unread = |tab: &Tab| ["a", "d"].contains(&tab.session_id.as_str());
-        assert_eq!(id(cycle(&all, Some("c"), true, unread)), Some("d".into()));
-        assert_eq!(id(cycle(&all, Some("c"), false, unread)), Some("a".into()));
-        assert_eq!(id(cycle(&all, Some("e"), true, unread)), Some("a".into()));
-        assert_eq!(id(cycle(&all, Some("a"), false, unread)), Some("d".into()));
-    }
-
-    #[test]
-    fn history_moves_back_and_forward() {
-        let all = tabs(&["a", "b", "c", "d"]);
-        let mut history = history(&["a", "b", "c", "d"]);
-        let steps = [
-            history.step(&all, Some("d"), false),
-            history.step(&all, Some("c"), false),
-            history.step(&all, Some("b"), true),
-            history.step(&all, Some("c"), true),
-        ];
-        assert_eq!(steps.map(Option::unwrap), ["c", "b", "c", "d"]);
-    }
-
-    #[test]
-    fn history_truncates_forward_entries_after_a_new_selection() {
-        let all = tabs(&["a", "b", "c", "d"]);
-        let mut history = history(&["a", "b", "c"]);
-        history.step(&all, Some("c"), false);
-        history.record("d");
-        assert_eq!(history, History { entries: vec!["a".into(), "b".into(), "d".into()], index: 2 });
-        assert_eq!(history.step(&all, Some("d"), true), None);
-    }
-
-    #[test]
-    fn history_skips_closed_tabs_and_the_active_tab() {
-        let mut history = history(&["a", "b", "c", "b"]);
-        let before = history.clone();
-        history.record("b");
-        assert_eq!(history, before);
-        assert_eq!(history.step(&tabs(&["a", "b"]), Some("b"), false), Some("a".into()));
-    }
-
-    #[test]
-    fn history_keeps_the_newest_hundred() {
-        let ids: Vec<String> = (0..150).map(|index| format!("session-{index}")).collect();
-        let mut history = History::new();
-        ids.iter().for_each(|id| history.record(id));
-        assert_eq!(history.entries.len(), 100);
-        assert_eq!(history.entries[0], "session-50");
-        assert_eq!(history.entries[history.index as usize], "session-149");
-    }
-
-    #[test]
-    fn history_without_an_active_tab_returns_the_latest_entry() {
-        assert_eq!(history(&["a", "b"]).step(&tabs(&["a", "b"]), None, false), Some("b".into()));
-    }
-
-    #[test]
-    fn history_returns_to_the_previous_tab_after_a_close() {
-        let mut history = history(&["a", "c"]);
-        let rest = close(&tabs(&["a", "b", "c"]), "b", None).0.unwrap();
-        history.record("b");
-        assert_eq!(history.step(&rest, Some("b"), false), Some("c".into()));
-    }
-
-    #[test]
-    fn reopens_a_chosen_tab_and_keeps_newer_entries() {
-        let mut stack = Vec::new();
-        record_closed(&mut stack, Tab::new("b", None), 1);
-        record_closed(&mut stack, Tab::new("c", None), 2);
-        let full = stack.clone();
-        assert_eq!(reopen(&mut stack, &tabs(&["a"]), Some("b")), Some((tabs(&["a", "b"]), "b".into())));
-        assert_eq!(stack, [Closed { tab: Tab::new("c", None), index: 2 }]);
-        let mut missing = full.clone();
-        assert_eq!(reopen(&mut missing, &[], Some("missing")), None);
-        assert_eq!(missing, full);
-        let mut open_already = full;
-        assert_eq!(reopen(&mut open_already, &tabs(&["b"]), Some("b")), None);
-        assert_eq!(open_already, [Closed { tab: Tab::new("c", None), index: 2 }]);
-    }
-
-    #[test]
-    fn reopen_consumes_entries_that_are_open() {
-        let mut stack =
-            vec![Closed { tab: Tab::new("a", None), index: 0 }, Closed { tab: Tab::new("b", None), index: 1 }];
-        assert_eq!(reopen(&mut stack, &tabs(&["b"]), None), Some((tabs(&["a", "b"]), "a".into())));
-        assert!(stack.is_empty());
-    }
-
-    #[test]
-    fn closed_stack_clamps_positions_and_keeps_twenty_five() {
-        let mut stack = Vec::new();
-        record_closed(&mut stack, Tab::new("a", None), 5);
-        record_closed(&mut stack, Tab::new("a", None), 2);
-        assert_eq!(stack, [Closed { tab: Tab::new("a", None), index: 2 }]);
-        assert_eq!(reopen(&mut stack.clone(), &tabs(&["b"]), None).unwrap().0, tabs(&["b", "a"]));
-        (0..27).for_each(|index| record_closed(&mut stack, Tab::new(index.to_string(), None), index));
-        assert_eq!(stack.len(), 25);
-        assert_eq!(stack.last().unwrap().tab.session_id, "26");
-        assert_eq!(stack[0].tab.session_id, "2");
     }
 
     #[test]
@@ -494,5 +360,147 @@ mod tests {
             assert_eq!(inside.start, selected.start);
         }
         assert_eq!(layout(&tabs, None, 70, selected.start).start, selected.start);
+    }
+
+    /// A seeded walk of opens, closes, reopens, moves, cycles and history steps, against what each must leave: every tab
+    /// shows once with its newest title, a closed tab reopens where it was, a move lands at its clamped index, a cycle
+    /// takes the next tab around the strip that its filter takes, the closed stack and the history stay bounded, a new
+    /// selection drops the forward history, and a step lands on the nearest open entry in its direction other than the
+    /// active tab.
+    #[test]
+    fn any_walk_of_tab_operations_keeps_the_strip_the_stack_and_the_history_consistent() {
+        let mut rng = opencode_util::rng::SplitMix64(7);
+        for case in 0..400 {
+            let (mut tabs, mut stack, mut history, mut active) = (Vec::<Tab>::new(), Vec::new(), History::new(), None);
+            let steps = if case % 10 == 0 { 400 } else { 60 };
+            for step in 0..steps {
+                let at = format!("case {case} step {step}: {tabs:?} {history:?}");
+                let id = format!("s{}", rng.below(40));
+                match rng.below(7) {
+                    0 | 1 => {
+                        let title = Some(format!("T{}", rng.below(3)));
+                        let count = tabs.len() + usize::from(!tabs.iter().any(|tab| tab.session_id == id));
+                        if let Some(next) = open(&tabs, Tab::new(id.clone(), title.clone())) {
+                            tabs = next;
+                        }
+                        assert_eq!(tabs.len(), count, "{at}");
+                        assert!(tabs.iter().any(|tab| tab.session_id == id && tab.title == title), "{at}");
+                        select(&mut history, &mut active, &tabs, &id);
+                    }
+                    2 if !tabs.is_empty() => {
+                        let index = rng.below(tabs.len() as u64) as usize;
+                        let tab = tabs[index].clone();
+                        let (rest, next) = close(&tabs, &tab.session_id, None);
+                        let rest = rest.unwrap();
+                        assert!(rest.iter().all(|open| open.session_id != tab.session_id), "{at}");
+                        record_closed(&mut stack, tab.clone(), index);
+                        if rng.below(2) == 0 {
+                            assert_eq!(reopen(&mut stack, &rest, None), Some((tabs.clone(), tab.session_id)), "{at}");
+                            continue;
+                        }
+                        tabs = rest;
+                        if active.as_deref() == Some(tab.session_id.as_str()) {
+                            active = None;
+                            if let Some(next) = next {
+                                select(&mut history, &mut active, &tabs, &next);
+                            }
+                        }
+                    }
+                    3 if !stack.is_empty() && rng.below(2) == 0 => {
+                        // A chosen closed tab comes back at its index, clamped to the strip, unless it is open again.
+                        let entry = stack[rng.below(stack.len() as u64) as usize].clone();
+                        let id = entry.tab.session_id.clone();
+                        let shown = tabs.iter().any(|tab| tab.session_id == id);
+                        let reopened = reopen(&mut stack, &tabs, Some(&id));
+                        assert!(stack.iter().all(|left| left.tab.session_id != id), "{at}");
+                        match reopened {
+                            Some((next, back)) => {
+                                assert!(!shown && back == id, "{at}");
+                                assert_eq!(next[entry.index.min(tabs.len())], entry.tab, "{at}");
+                                tabs = next;
+                                select(&mut history, &mut active, &tabs, &id);
+                            }
+                            None => assert!(shown, "{at}"),
+                        }
+                    }
+                    3 => {
+                        if let Some((next, id)) = reopen(&mut stack, &tabs, None) {
+                            assert!(
+                                tabs.iter().all(|tab| tab.session_id != id) && next.len() == tabs.len() + 1,
+                                "{at}"
+                            );
+                            tabs = next;
+                            select(&mut history, &mut active, &tabs, &id);
+                        }
+                    }
+                    4 if !tabs.is_empty() => {
+                        let session = tabs[rng.below(tabs.len() as u64) as usize].session_id.clone();
+                        let to = rng.below(tabs.len() as u64 + 2) as usize;
+                        if let Some(next) = reorder(&tabs, &session, to) {
+                            tabs = next;
+                        }
+                        assert_eq!(tabs[to.min(tabs.len() - 1)].session_id, session, "{at}");
+                    }
+                    5 if !tabs.is_empty() => {
+                        // The next tab, around the strip, that the filter takes: the active one last.
+                        let (forward, count) = (rng.below(2) == 0, tabs.len());
+                        let wanted = |tab: &Tab| tab.title.as_deref() != Some("T0");
+                        let position =
+                            active.as_deref().and_then(|id| tabs.iter().position(|tab| tab.session_id == id));
+                        let start = position.unwrap_or(if forward { count - 1 } else { 0 });
+                        let expected =
+                            (1..=count)
+                                .map(|step| {
+                                    if forward {
+                                        (start + step) % count
+                                    } else {
+                                        (start + count - step % count) % count
+                                    }
+                                })
+                                .map(|index| &tabs[index])
+                                .find(|tab| wanted(tab));
+                        assert_eq!(cycle(&tabs, active.as_deref(), forward, wanted), expected, "{at}");
+                    }
+                    _ => {
+                        let forward = rng.below(2) == 0;
+                        let open = |id: &&String| tabs.iter().any(|tab| tab.session_id == **id);
+                        let index = history.index;
+                        let expected = match &active {
+                            None => usize::try_from(index).ok().and_then(|at| history.entries.get(at)).filter(open),
+                            Some(active) => {
+                                let other = |id: &&String| *id != active && open(id);
+                                match forward {
+                                    true => history.entries.iter().skip((index + 1).max(0) as usize).find(other),
+                                    false => history.entries[..index.max(0) as usize].iter().rev().find(other),
+                                }
+                            }
+                        }
+                        .cloned();
+                        let landed = history.step(&tabs, active.as_deref(), forward);
+                        assert_eq!(landed, expected, "{at}");
+                        if landed.is_some() {
+                            active = landed;
+                        }
+                    }
+                }
+                let ids: std::collections::HashSet<_> = tabs.iter().map(|tab| &tab.session_id).collect();
+                assert_eq!(ids.len(), tabs.len(), "{at}");
+                let closed: std::collections::HashSet<_> = stack.iter().map(|entry| &entry.tab.session_id).collect();
+                assert!(closed.len() == stack.len() && stack.len() <= 25, "{at}");
+                assert!(history.entries.len() <= 100 && history.index < history.entries.len() as isize, "{at}");
+            }
+        }
+
+        /// Selecting `id` records it last, unless it is the current entry, and leaves nothing to step forward to.
+        fn select(history: &mut History, active: &mut Option<String>, tabs: &[Tab], id: &str) {
+            let current = usize::try_from(history.index).ok().and_then(|at| history.entries.get(at));
+            let fresh = current.map(String::as_str) != Some(id);
+            history.record(id);
+            *active = Some(id.to_owned());
+            if fresh {
+                assert_eq!(history.entries.last().map(String::as_str), Some(id));
+                assert_eq!(history.step(tabs, Some(id), true), None);
+            }
+        }
     }
 }
