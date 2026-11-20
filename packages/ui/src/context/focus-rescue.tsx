@@ -2,6 +2,8 @@
 // event. Inside a focus scope ([data-focus-scope]: a list, a tab strip, a chip row), move it to the next item, or to the
 // previous one when the last item went, and widen to the enclosing scope when the inner one has nothing left.
 
+import { focusField } from "./field-focus"
+
 const FOCUSABLE = [
   'a[href]:not([tabindex="-1"])',
   'button:not(:disabled):not([tabindex="-1"])',
@@ -142,15 +144,17 @@ function rescue() {
     if (!entry.spot) return
     const target = pick(entry.spot)
 
-    if (target) return target.focus({ focusVisible: ring })
+    // Fields such as the composer draw their own ring.
+    if (target) return focusField(target, ring, { focusVisible: ring })
 
     if (target === undefined) continue
 
     // A scope left with nothing to focus, such as the last toast, hands focus back to what had it before.
-    return entries
-      .slice(index + 1)
-      .find((item) => !item.spot && usable(item.element))
-      ?.element.focus({ focusVisible: ring })
+    const previous = entries.slice(index + 1).find((item) => !item.spot && usable(item.element))
+
+    if (previous) focusField(previous.element, ring, { focusVisible: ring })
+
+    return
   }
 }
 
