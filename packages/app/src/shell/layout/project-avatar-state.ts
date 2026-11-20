@@ -1,4 +1,4 @@
-import { createMemo, type Accessor } from "solid-js"
+import { createEffect, createMemo, type Accessor } from "solid-js"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests/session-request-tree"
@@ -28,6 +28,15 @@ export function useSessionTabAvatarState(
     const project = projectSettingsKey(ctx.sdk.scope, ctx.data.session.get(sessionId())?.projectID)
 
     return attention(ctx, sessionId(), !!root?.(), settings.permissions.autoApproves(project))
+  })
+
+  // Roots load their family's running jobs once; job events keep them current and a reconnect re-reads them.
+  createEffect(() => {
+    const ctx = serverCtx()
+
+    if (!ctx || !root?.()) return
+
+    void ctx.data.job.sync(sessionId()).catch(() => undefined)
   })
 
   const unread = createMemo(
@@ -93,12 +102,15 @@ function attention(ctx: ServerCtx, sessionId: string, root: boolean, autoApprove
   return !!requests.permission || !!requests.form
 }
 
-// A root runs while any session in its family is busy.
-function running(data: ServerData, sessionId: string, root: boolean) {
+// A root runs while any session in its family is busy or has running background work.
+export function running(data: ServerData, sessionId: string, root: boolean) {
   if (root)
-    return data.session
-      .list()
-      .some((session) => data.session.root(session.id) === sessionId && sessionBusy(data, session.id))
+    return (
+      data.job.list(sessionId).length > 0 ||
+      data.session
+        .list()
+        .some((session) => data.session.root(session.id) === sessionId && sessionBusy(data, session.id))
+    )
 
   return sessionBusy(data, sessionId)
 }
