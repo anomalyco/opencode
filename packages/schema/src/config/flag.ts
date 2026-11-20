@@ -25,11 +25,11 @@ export const registry = {
   home_memory:
     "Give sessions in the home folder a persistent memory/, docs/ and scripts/ workspace the agent can use freely, tidied by a daily maintenance session that reads the day's home-folder conversations.",
   sqlite_fts:
-    "Build an SQLite full-text index of session titles and message text in the background, and enable the session_search and session_read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
+    "Build an SQLite full-text index of session titles and message text in the background, and enable the session_search and session_read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=sqlite_fts or experimental.sqlite_fts: true.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
-export const optInOnly: ReadonlySet<Key> = new Set(["todo"])
+export const optInOnly: ReadonlySet<Key> = new Set(["todo", "sqlite_fts"])
 
 /** Earlier names of a flag, still read from `experimental.<name>` and `OPENCODE_FLAGS` when the new key is unset. */
 export const aliases = {
