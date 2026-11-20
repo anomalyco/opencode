@@ -386,9 +386,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         get ready() {
           return preferences.ready
         },
-        get catalogReady() {
-          return models() !== undefined
-        },
         recent() {
           return preferences.recent
         },
@@ -604,11 +601,23 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const session = createSession()
 
+    // The agent and model selection reads the location's agents, models, and configured default model.
+    // Until all three have loaded it can resolve to another agent or default model.
+    const selectionCatalogs = [data.location.agent, data.location.model, data.location.config]
+
     const result = {
       model,
       agent,
       session,
       permission,
+      catalogsLoaded(ref = location.ref) {
+        return selectionCatalogs.every((catalog) => catalog.list(ref) !== undefined)
+      },
+      loadMissingCatalogs(ref = location.ref) {
+        return Promise.all(
+          selectionCatalogs.filter((catalog) => catalog.list(ref) === undefined).map((catalog) => catalog.sync(ref)),
+        )
+      },
     }
     return result
   },

@@ -71,6 +71,9 @@ import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
 import { limitLabel, useUsageLimits } from "../usage"
+import { isDeepEqual } from "remeda"
+import { isLocationNotFoundError } from "@opencode/client"
+import { retry } from "@opencode/util/retry"
 
 export type PromptProps = {
   sessionID?: string
@@ -548,6 +551,8 @@ export function Prompt(props: PromptProps) {
         name: "prompt.editor",
         slash: { name: "editor" },
         run: async () => {
+          // A send still waiting for workspace data must not go out while its draft is in the editor.
+          setPendingSubmit(undefined)
           dialog.clear()
 
           const editorPrompt = expandPromptInputPastedText(store.prompt, store.prompt.pasted, renderer.widthMethod)
@@ -1100,6 +1105,30 @@ export function Prompt(props: PromptProps) {
   })
 
   let submitting = false
+  const initializedCommands = new Set<string>()
+  const [pendingSubmit, setPendingSubmit] = createSignal<{
+    location: string
+    sessionID?: string
+    mode: "normal" | "shell"
+    prompt: PromptInfo
+  }>()
+  // A waiting send only goes out for the draft, mode, session, and location it was made for.
+  // Opening a dialog cancels it too, so it cannot go out behind the workspace picker, to the
+  // location the user is switching away from.
+  createEffect(() => {
+    const pending = pendingSubmit()
+    if (!pending) return
+    if (
+      dialog.stack.length > 0 ||
+      disabled() ||
+      props.sessionID !== pending.sessionID ||
+      store.mode !== pending.mode ||
+      !isDeepEqual(store.prompt, pending.prompt) ||
+      locationKey(currentLocation.ref ?? data.location.default()) !== pending.location
+    )
+      setPendingSubmit(undefined)
+  })
+
   async function submit(delivery: SessionInbox.Delivery = "steer") {
     if (disabled()) return false
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
@@ -1156,10 +1185,81 @@ export function Prompt(props: PromptProps) {
       await slash.command.run(slash.input)
       return true
     }
+    // A worktree switch updates the active location before its catalogs arrive.
+    // Wait for their loads instead of silently dropping this submission.
+    const location = currentLocation.ref ?? data.location.default()
+    const locationID = locationKey(location)
     const slashHead = parseSlashHead(inputText, /\s/)
-    const isCommand =
+    const knownCommand = () =>
       slashHead !== undefined &&
-      (data.location.command.list(currentLocation.ref) ?? []).some((command) => command.name === slashHead.name)
+      (data.location.command.list(location) ?? []).some((command) => command.name === slashHead.name)
+    // Slash input also needs the commands, or it would be sent as an ordinary prompt.
+    const needsCommands = store.mode === "normal" && slashHead !== undefined
+    const loaded = () =>
+      local.catalogsLoaded(location) &&
+      !!local.agent.current() &&
+      (!needsCommands ||
+        (data.location.command.list(location) !== undefined && (knownCommand() || initializedCommands.has(locationID))))
+    if (!loaded()) {
+      const pending = {
+        location: locationID,
+        sessionID: props.sessionID,
+        mode: store.mode,
+        prompt: structuredClone(unwrap(store.prompt)),
+      }
+      setPendingSubmit(pending)
+      const waiting = () => !disposed && pendingSubmit() === pending
+      // Match the location provider's bounded retry policy. A shared request can
+      // fail while that provider is still preparing the workspace in the background.
+      void retry(
+        async () => {
+          if (!waiting()) return
+          await Promise.all([
+            local.loadMissingCatalogs(location),
+            needsCommands && data.location.command.list(location) === undefined && data.location.command.sync(location),
+          ])
+          if (!waiting() || loaded() || !local.catalogsLoaded(location)) return
+          if (needsCommands && data.location.command.list(location) === undefined) return
+          // A cold location can return successful but partial catalogs before its
+          // first plugin activation. Only classify an unresolved slash as text after
+          // that activation, and refresh early snapshots without waiting for SSE.
+          const plugins = await client.api.plugin.list({ location })
+          if (!waiting()) return
+          if (plugins.data.length === 0) throw new Error("Workspace plugins are still loading")
+          await Promise.all(
+            [
+              ...(!local.agent.current() ? [data.location.agent] : []),
+              ...(needsCommands ? [data.location.command] : []),
+            ].map((catalog) => {
+              catalog.invalidate(location)
+              return catalog.sync(location)
+            }),
+          )
+          if (!waiting()) return
+          if (!local.agent.current()) throw new Error("No agent is available in this workspace")
+          if (needsCommands) initializedCommands.add(locationID)
+        },
+        { retryIf: (error) => waiting() && !isLocationNotFoundError(error) },
+      )
+        .then(() => {
+          if (!waiting()) return
+          // A load can settle without publishing under this location's key, and loading
+          // again would rejoin the settled entry, so fail instead of waiting forever.
+          if (!loaded()) throw new Error("Workspace data did not load")
+          setPendingSubmit(undefined)
+          void submit(delivery)
+        })
+        .catch((error: unknown) => {
+          if (!waiting()) return
+          setPendingSubmit(undefined)
+          toast.show({ title: "Failed to prepare prompt", message: errorMessage(error), variant: "error" })
+        })
+      return false
+    }
+    // This submission supersedes one still waiting for the catalogs. A blank Enter leaves the draft
+    // unchanged, so the effect above would not cancel it, and its retry would submit a second time.
+    setPendingSubmit(undefined)
+    const isCommand = knownCommand()
     const editorSelection = editorContext()
     const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
     if (delivery === "queue" && pendingEditorSelection) {
@@ -1549,7 +1649,7 @@ export function Prompt(props: PromptProps) {
       const sessionLocation = props.sessionID ? data.session.get(props.sessionID)?.location : location
       if (!sessionLocation || locationKey(sessionLocation) !== locationKey(location)) return previous
 
-      const loading = data.location.agent.list(location) === undefined || !local.model.catalogReady
+      const loading = !local.catalogsLoaded(location)
       const error = currentLocation.error
       const failed = error && locationKey(error.location) === locationKey(location)
       if (loading && !failed) return previous
@@ -1612,7 +1712,7 @@ export function Prompt(props: PromptProps) {
   const footerInput = () => ({
     sessionID: props.sessionID,
     mode: store.mode,
-    showDetails: store.interrupt === 0 || dimensions().width >= 80,
+    showDetails: (store.interrupt === 0 && !pendingSubmit()) || dimensions().width >= 80,
   })
 
   const placeholderText = createMemo(() => {
@@ -1917,21 +2017,30 @@ export function Prompt(props: PromptProps) {
                 }}
               >
                 <Switch>
-                  <Match when={status() === "running"}>
+                  <Match when={status() === "running" || pendingSubmit()}>
                     <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
-                      <box marginLeft={1}>
+                      <box marginLeft={1} flexShrink={0}>
                         <Show when={config.animations ?? true} fallback={<text fg={theme.text.muted}>[⋯]</text>}>
                           <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                         </Show>
                       </box>
-                      <PromptInterruptStatus
-                        armed={store.interrupt > 0}
-                        animations={animationsEnabled()}
-                        text={theme.text.base}
-                        subdued={theme.text.muted}
-                        warning={theme.text.feedback.warning.base}
-                        flash={theme.decrease(theme.text.feedback.warning.base, 2)}
-                      />
+                      <Show
+                        when={status() === "running"}
+                        fallback={
+                          <text fg={theme.text.muted} wrapMode="none" truncate flexShrink={1}>
+                            Loading workspace…
+                          </text>
+                        }
+                      >
+                        <PromptInterruptStatus
+                          armed={store.interrupt > 0}
+                          animations={animationsEnabled()}
+                          text={theme.text.base}
+                          subdued={theme.text.muted}
+                          warning={theme.text.feedback.warning.base}
+                          flash={theme.decrease(theme.text.feedback.warning.base, 2)}
+                        />
+                      </Show>
                     </box>
                   </Match>
                   <Match when={move.progress()}>
