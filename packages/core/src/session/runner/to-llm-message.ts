@@ -13,6 +13,7 @@ import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
+import { SessionCompactionBackground } from "../compaction-background.js"
 import { SessionCompactionSubagents } from "../compaction-subagents.js"
 import { SessionHistory } from "../history.js"
 import { SessionRecentText } from "../recent-text.js"
@@ -292,11 +293,13 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       return assistant(message, model, providerMetadataKey)
     case "compaction": {
       if (message.status !== "completed") return []
-      const subagents = SessionCompactionSubagents.format(message)
+      const listed = [SessionCompactionSubagents.format(message), SessionCompactionBackground.format(message)]
+        .filter(Boolean)
+        .join("\n\n")
       // History selection only keeps native windows the target model can replay.
       if (message.native?.messages !== undefined) {
         const window = decodeNativeWindow(message.native.messages)
-        return subagents ? [...window, Message.make({ id: message.id, role: "user", content: subagents })] : [...window]
+        return listed ? [...window, Message.make({ id: message.id, role: "user", content: listed })] : [...window]
       }
       const kept = SessionRecentText.kept(message)
       return [
@@ -309,7 +312,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
             "",
             `<summary>\n${message.summary}\n</summary>`,
             ...(kept ? ["", `<recent-context>\n${kept}\n</recent-context>`] : []),
-            ...(subagents ? ["", subagents] : []),
+            ...(listed ? ["", listed] : []),
             "</conversation-checkpoint>",
           ].join("\n"),
         }),
