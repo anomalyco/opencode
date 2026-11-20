@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Cause, Effect, Exit } from "effect"
+import { Effect } from "effect"
 import { rawRequest, resolveOperation, resolveRequest } from "./api"
 
 describe("api request resolution", () => {
@@ -65,6 +65,13 @@ describe("api request resolution", () => {
     })
   })
 
+  test("sends an existing query string as written when no params are added", () => {
+    expect(rawRequest(["GET", '/api/items?q=a%20b&flag&filter={"a":1}'])).toEqual({
+      method: "GET",
+      path: '/api/items?q=a%20b&flag&filter={"a":1}',
+    })
+  })
+
   test("does not treat braces in an existing query string as path placeholders", () => {
     expect(rawRequest(["GET", '/api/items?filter={"a":1}'], { limit: "10" })).toEqual({
       method: "GET",
@@ -94,11 +101,8 @@ describe("api request resolution", () => {
       path: "/api/session/ses_1?detail=full",
     })
 
-    const missing = resolveRequest(endpoint, ["GET", "/api/session/{sessionID}"], {})
-    const exit = await Effect.runPromiseExit(missing)
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      expect(Cause.pretty(exit.cause)).toContain("Missing path parameter: sessionID")
-    }
+    await expect(Effect.runPromise(resolveRequest(endpoint, ["GET", "/api/session/{sessionID}"], {}))).rejects.toThrow(
+      "Missing path parameter: sessionID",
+    )
   })
 })

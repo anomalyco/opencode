@@ -71,7 +71,8 @@ export function resolveRequest(endpoint: Endpoint, input: readonly string[], par
       catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
     })
     if (raw) return raw
-    if (input.length !== 1) return yield* Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
+    if (input.length !== 1)
+      return yield* Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
     return yield* Effect.tryPromise(async () => {
       const response = await fetch(new URL("/openapi.json", endpoint.url), { headers: Service.headers(endpoint) })
       if (!response.ok) throw new Error(`Failed to load OpenAPI document: HTTP ${response.status}`)
@@ -81,25 +82,27 @@ export function resolveRequest(endpoint: Endpoint, input: readonly string[], par
 }
 
 function interpolate(path: string, params: Record<string, string>) {
+  // Placeholders only live in the pathname: braces in an existing query string or fragment are literal.
   const hashIndex = path.indexOf("#")
-  const withoutHash = hashIndex === -1 ? path : path.slice(0, hashIndex)
   const hash = hashIndex === -1 ? "" : path.slice(hashIndex)
-  const queryIndex = withoutHash.indexOf("?")
-  const basePath = queryIndex === -1 ? withoutHash : withoutHash.slice(0, queryIndex)
-  const query = new URLSearchParams(queryIndex === -1 ? "" : withoutHash.slice(queryIndex + 1))
+  const target = hashIndex === -1 ? path : path.slice(0, hashIndex)
+  const queryIndex = target.indexOf("?")
+  const search = queryIndex === -1 ? "" : target.slice(queryIndex + 1)
 
   const used = new Set<string>()
-  const pathname = basePath.replaceAll(/\{([^}]+)\}/g, (_, name: string) => {
-    if (!Object.hasOwn(params, name)) throw new Error(`Missing path parameter: ${name}`)
-    used.add(name)
-    return encodeURIComponent(params[name])
-  })
+  const pathname = (queryIndex === -1 ? target : target.slice(0, queryIndex)).replaceAll(
+    /\{([^}]+)\}/g,
+    (_, name: string) => {
+      if (!Object.hasOwn(params, name)) throw new Error(`Missing path parameter: ${name}`)
+      used.add(name)
+      return encodeURIComponent(params[name])
+    },
+  )
 
-  for (const [name, value] of Object.entries(params)) {
-    if (used.has(name)) continue
-    query.set(name, value)
-  }
-
-  const search = query.toString()
-  return `${pathname}${search ? `?${search}` : ""}${hash}`
+  // Send the user's query string as written unless --param adds to it; an explicit --param wins over a duplicate key.
+  const extra = Object.entries(params).filter(([name]) => !used.has(name))
+  if (!extra.length) return `${pathname}${search ? `?${search}` : ""}${hash}`
+  const query = new URLSearchParams(search)
+  extra.forEach(([name, value]) => query.set(name, value))
+  return `${pathname}?${query}${hash}`
 }
