@@ -14,10 +14,11 @@ import { MachineTable } from "./sql.js"
 
 /**
  * A machine's name, as a path will use it: `gpu:/work`. Two characters or more, so a Windows drive such as `C:` is
- * never a machine, and never `local`, which is the server's own machine.
+ * never a machine, and never `local`, which is the server's own machine. At most 63, like a DNS label, so the link's
+ * welcome, which carries the name, always fits in one Noise message.
  */
 export const Name = Schema.String.check(
-  Schema.isPattern(/^[a-z][a-z0-9-]+$/),
+  Schema.isPattern(/^[a-z][a-z0-9-]{1,62}$/),
   Schema.makeFilter((name) => name !== Environment.localID, { expected: "a name other than local" }),
 )
 
@@ -43,7 +44,7 @@ export class InvalidName extends Schema.TaggedError<InvalidName>()("Machines.Inv
   name: Schema.String,
 }) {
   override get message() {
-    return `${JSON.stringify(this.name)} is not a machine name. Use lowercase letters, digits and hyphens, starting with a letter, two characters or more, and not "local".`
+    return `${JSON.stringify(this.name)} is not a machine name. Use lowercase letters, digits and hyphens, starting with a letter, 2 to 63 characters, and not "local".`
   }
 }
 
@@ -121,6 +122,8 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const identity = yield* Identity.Service
+    // The work under each name's lock is uninterruptible, so an interruption, such as a dropped connection mid-join,
+    // never leaves a row written without memory updated to match; waiting for the lock stays interruptible.
     const locks = KeyedMutex.makeUnsafe<Environment.ID>()
     // Known names are read once per process; a machine another process adds or removes in the shared database shows up
     // here on restart, as with process-local session execution until clustering. Live connections stay in the dialling process.
@@ -159,7 +162,7 @@ const layer = Layer.effect(
             // A row another process wrote is still a known machine, so it is taken into memory either way.
             instances.set(id, Machine.make(id))
             if (!inserted) return yield* new AlreadyExists({ machine: id })
-          }),
+          }).pipe(Effect.uninterruptible),
         )
         return id
       }),
@@ -173,7 +176,7 @@ const layer = Layer.effect(
             keys.delete(id)
             instances.delete(id)
             machine.close(new NotFound({ machine: id }))
-          }),
+          }).pipe(Effect.uninterruptible),
         )
       }),
       list: Effect.fn("Machines.list")(function* () {
@@ -245,7 +248,7 @@ const layer = Layer.effect(
               .pipe(Effect.orDie)
             if (!written) return yield* new InvalidJoin()
             keys.set(id, key)
-          }),
+          }).pipe(Effect.uninterruptible),
         )
         return id
       }),
