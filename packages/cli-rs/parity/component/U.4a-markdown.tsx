@@ -34,8 +34,6 @@ for (const name of ["prose", "fences"]) {
     .replace(/[`*#>-]/g, "")
     .trim()
   await renderComponent({
-    // Prose in OpenTUI's Rust Markdown takes the `default` scope's color (OT-markdown-default-scope).
-    theme: "opencode-classic",
     fixture: `U.4a/markdown-${name}`,
     width: 60,
     height: 24,

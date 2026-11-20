@@ -4,8 +4,8 @@
  "height": 34,
  "directory": "/tmp/opencode/packages/tui",
  "config": {
-  "theme": {"name":"tokyonight","mode":"light"},
   "experimental": {"new-designs":true},
+  "theme": {"name":"tokyonight","mode":"light"},
   "animations": false
  },
  "args": {

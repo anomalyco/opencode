@@ -4,10 +4,10 @@
  "height": 50,
  "directory": "/tmp/opencode/packages/tui",
  "config": {
-  "theme": {"name":"opencode-classic"},
   "session": {"grouping":"none"},
   "animations": false,
-  "experimental": {"new-designs":true}
+  "experimental": {"new-designs":true},
+  "theme": {"name":"opencode"}
  },
  "args": {
   "sessionID": "ses_pad"

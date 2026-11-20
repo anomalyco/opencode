@@ -4,10 +4,10 @@
  "height": 30,
  "directory": "/tmp/opencode/packages/tui",
  "config": {
-  "theme": {"name":"opencode-classic"},
   "experimental": {"new-designs":true},
   "keybinds": {"location.reload":"f5"},
-  "animations": false
+  "animations": false,
+  "theme": {"name":"opencode"}
  },
  "args": {},
  "routes": [
