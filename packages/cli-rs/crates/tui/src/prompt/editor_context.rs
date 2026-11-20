@@ -169,7 +169,7 @@ impl Selection {
         let selected: Vec<&Range> = self.ranges.iter().filter(|range| range.selects()).collect();
         if selected.is_empty() {
             return format!(
-                "<system-reminder>Note: The user opened the file \"{}\". This may or may not be relevant to the current task.</system-reminder>\n",
+                "<system-update>Note: The user opened the file \"{}\". This may or may not be relevant to the current task.</system-update>\n",
                 self.file_path
             );
         }
@@ -187,7 +187,7 @@ impl Selection {
             })
             .collect();
         format!(
-            "<system-reminder>{} This may or may not be relevant to the current task.</system-reminder>\n",
+            "<system-update>{} This may or may not be relevant to the current task.</system-update>\n",
             ranges.join("\n")
         )
     }
@@ -1154,11 +1154,11 @@ mod tests {
         assert_eq!(cursor.label(), "a.ts");
         assert_eq!(
             cursor.reminder(),
-            "<system-reminder>Note: The user opened the file \"/w/a.ts\". This may or may not be relevant to the current task.</system-reminder>\n"
+            "<system-update>Note: The user opened the file \"/w/a.ts\". This may or may not be relevant to the current task.</system-update>\n"
         );
         assert_eq!(
             many.reminder(),
-            "<system-reminder>Note: The user selected #2-4 from \"/w/lib.rs\". ```a\nb```\n\n This may or may not be relevant to the current task.</system-reminder>\n"
+            "<system-update>Note: The user selected #2-4 from \"/w/lib.rs\". ```a\nb```\n\n This may or may not be relevant to the current task.</system-update>\n"
         );
     }
 

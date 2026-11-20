@@ -106,7 +106,7 @@ fn ide_selection_shows_and_goes_once_before_the_prompt() {
     let synthetic = &posts.iter().find(|(path, _)| path.ends_with("/synthetic")).unwrap().1;
     assert_eq!(
         synthetic["text"],
-        "<system-reminder>Note: The user selected #3-5 from \"/project/src/main.rs\". ```fn main() {\n}```\n\n This may or may not be relevant to the current task.</system-reminder>\n"
+        "<system-update>Note: The user selected #3-5 from \"/project/src/main.rs\". ```fn main() {\n}```\n\n This may or may not be relevant to the current task.</system-update>\n"
     );
     assert_eq!(synthetic["resume"], false);
     assert_eq!(setup.tui.prompt.editor.label_state(), LabelState::Sent);
