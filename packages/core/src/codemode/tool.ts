@@ -173,9 +173,7 @@ export const create = (
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
-                  const executed = yield* services
-                    ? CodeModeDiffs.around(diffs, Context.get(services, FileAccess.Service), tool.name, input, call)
-                    : call
+                  const executed = yield* CodeModeDiffs.around(diffs, tool.name, input, call)
                   const content = resultContent(executed)
                   const outputFileParts = outputFiles(content)
                   if (outputFileParts.length > 0)

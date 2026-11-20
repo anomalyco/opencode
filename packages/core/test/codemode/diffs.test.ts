@@ -1,52 +1,79 @@
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import { CodeModeDiffs } from "../../src/codemode/diffs"
+import { fileDiff } from "../../src/tool/plugin/file-diff"
+
+const patchResult = (...files: ReturnType<typeof fileDiff>[]) => ({ output: {}, metadata: { files } })
 
 describe("CodeModeDiffs", () => {
-  test("merges several changes to a file into one diff from its first content to its last", () => {
+  test("two patches to one file are two changes, in order, each with the diff its result returned", () => {
     const diffs = CodeModeDiffs.make()
-    diffs.record("a", "src/app.ts", "one\ntwo\nthree\n", "one\nTWO\nthree\n")
-    diffs.record("a", "src/app.ts", "one\nTWO\nthree\n", "one\nTWO\nthree\nfour\n")
-    const files = diffs.files()
-    expect(files).toHaveLength(1)
-    expect(files[0]).toMatchObject({ file: "src/app.ts", status: "modified", additions: 2, deletions: 1 })
-    expect(files[0]?.patch).toContain("-two")
-    expect(files[0]?.patch).toContain("+four")
+    const first = fileDiff("src/app.ts", "one\ntwo\n", "one\nTWO\n")
+    const second = fileDiff("src/app.ts", "one\nTWO\n", "one\nTWO\nthree\n")
+    const call = (file: ReturnType<typeof fileDiff>) =>
+      Effect.runPromise(CodeModeDiffs.around(diffs, "patch", {}, Effect.succeed(patchResult(file))))
+    return call(first)
+      .then(() => call(second))
+      .then(() => {
+        expect(diffs.files()).toEqual([
+          { file: "src/app.ts", status: "modified", additions: 1, deletions: 1, patch: first.patch },
+          { file: "src/app.ts", status: "modified", additions: 1, deletions: 0, patch: second.patch },
+        ])
+      })
   })
 
-  test("marks written files added and removed files deleted, and drops a file created then removed", () => {
-    const diffs = CodeModeDiffs.make()
-    diffs.record("n", "notes.md", undefined, "# Notes\n")
-    diffs.record("o", "old.txt", "bye\n", undefined)
-    diffs.record("t", "tmp.txt", undefined, "x\n")
-    diffs.record("t", "tmp.txt", "x\n", undefined)
-    diffs.record("b", "logo.png", undefined, { binary: true })
-    expect(
-      diffs.files().map(({ file, status, additions, deletions }) => ({ file, status, additions, deletions })),
-    ).toEqual([
-      { file: "notes.md", status: "added", additions: 1, deletions: 0 },
-      { file: "old.txt", status: "deleted", additions: 0, deletions: 1 },
-      { file: "logo.png", status: "added", additions: 0, deletions: 0 },
+  test("an edit's result gives its diff; a write's created file counts its content, an overwrite keeps no counts", () => {
+    const edit = fileDiff("a.ts", "a\n", "b\n")
+    expect(CodeModeDiffs.changes("edit", {}, patchResult(edit))).toEqual([
+      { file: "a.ts", status: "modified", additions: 1, deletions: 1, patch: edit.patch },
     ])
-    expect(diffs.files()[2]?.patch).toBeUndefined()
-  })
-
-  test("keeps only counts for files past the patch budget", () => {
-    const diffs = CodeModeDiffs.make()
-    const big = "x".repeat(CodeModeDiffs.MAX_PATCH_BYTES) + "\n"
-    diffs.record("s", "small.txt", undefined, "a\n")
-    diffs.record("b", "big.txt", undefined, big)
-    const [small, large] = diffs.files()
-    expect(small?.patch).toBeDefined()
-    expect(large).toEqual({ file: "big.txt", status: "added", additions: 1, deletions: 0 })
-  })
-
-  test("finds the paths an inner edit, write or patch call names", () => {
-    expect(CodeModeDiffs.paths("edit", { path: "a.ts" })).toEqual(["a.ts"])
-    expect(CodeModeDiffs.paths("read", { path: "a.ts" })).toEqual([])
     expect(
-      CodeModeDiffs.paths("patch", {
-        patchText: "*** Begin Patch\n*** Add File: b.ts\n+x\n*** Delete File: c.ts\n*** End Patch",
-      }),
-    ).toEqual(["b.ts", "c.ts"])
+      CodeModeDiffs.changes(
+        "write",
+        { path: "n.md", content: "# N\nx\n" },
+        { output: "Created file successfully: n.md" },
+      ),
+    ).toMatchObject([{ file: "n.md", status: "added", additions: 2, deletions: 0 }])
+    expect(
+      CodeModeDiffs.changes("write", { path: "n.md", content: "y\n" }, { output: "Wrote file successfully: n.md" }),
+    ).toEqual([{ file: "n.md", status: "modified" }])
+    expect(CodeModeDiffs.changes("read", { path: "a.ts" }, patchResult(edit))).toEqual([])
+  })
+
+  test("a Bun write reuses its permission diff, an append counts its lines, and a delete has no counts", async () => {
+    const diffs = CodeModeDiffs.make()
+    const target = { resource: "log.txt" } as Parameters<typeof CodeModeDiffs.written>[0]
+    const preview = fileDiff("log.txt", "", "one\n", "added")
+    await Effect.runPromise(
+      Effect.all([
+        CodeModeDiffs.written(target, "added", preview),
+        CodeModeDiffs.appended(target, "modified", "two\nthree\n"),
+        CodeModeDiffs.written(target, "modified", undefined),
+        CodeModeDiffs.record({ file: "gone.txt", status: "deleted" }),
+      ]).pipe(Effect.provideService(CodeModeDiffs.Service, diffs)),
+    )
+    expect(diffs.files()).toEqual([
+      { file: "log.txt", status: "added", additions: 1, deletions: 0, patch: preview.patch },
+      { file: "log.txt", status: "modified", additions: 2, deletions: 0 },
+      { file: "log.txt", status: "modified" },
+      { file: "gone.txt", status: "deleted" },
+    ])
+  })
+
+  test("the patch budget and the change cap apply as changes arrive", () => {
+    const diffs = CodeModeDiffs.make()
+    const big = "x".repeat(CodeModeDiffs.MAX_PATCH_BYTES)
+    diffs.record({ file: "small.txt", status: "added", additions: 1, deletions: 0, patch: "+a" })
+    diffs.record({ file: "big.txt", status: "added", additions: 1, deletions: 0, patch: big })
+    diffs.record({ file: "after.txt", status: "added", additions: 1, deletions: 0, patch: "+b" })
+    expect(diffs.files().map((file) => [file.file, file.patch !== undefined])).toEqual([
+      ["small.txt", true],
+      ["big.txt", false],
+      ["after.txt", true],
+    ])
+    Array.from({ length: CodeModeDiffs.MAX_FILES }, (_, index) =>
+      diffs.record({ file: `f${index}.txt`, status: "deleted" }),
+    )
+    expect(diffs.files()).toHaveLength(CodeModeDiffs.MAX_FILES)
   })
 })

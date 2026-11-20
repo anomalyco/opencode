@@ -183,9 +183,9 @@ const remove = (handle: Handle) =>
       if (info.type === "directory")
         return yield* new Environment.WrongKind({ path: handle.target.absolute, actual: info.type })
       yield* host.fileWrite.authorize(handle.target, host.context)
-      const before = yield* CodeModeDiffs.read(handle.target.environment.files, handle.target.absolute)
       yield* handle.target.environment.files.remove(handle.target.absolute)
-      yield* CodeModeDiffs.record(handle.target, before, undefined)
+      // Removing a file builds no diff, so the change is recorded without counts.
+      yield* CodeModeDiffs.record({ file: handle.target.resource, status: "deleted" })
     }).pipe(host.fileMutation.withLock([handle.target])),
   )
 
@@ -232,24 +232,17 @@ const put = (
           after === undefined || options.append || type === undefined
             ? ""
             : text((yield* target.environment.files.read(target.absolute)).bytes)
-        yield* host.fileWrite.authorize(
-          target,
-          host.context,
-          after !== undefined && before !== undefined
-            ? fileDiff(target.resource, before, after, type === undefined ? "added" : "modified")
-            : undefined,
-        )
-        // The run's own record of the file reads it whole: the request above may show only an append.
-        const previous =
-          type === undefined ? undefined : yield* CodeModeDiffs.read(target.environment.files, target.absolute)
+        const status = type === undefined ? "added" : "modified"
+        const preview =
+          after !== undefined && before !== undefined ? fileDiff(target.resource, before, after, status) : undefined
+        yield* host.fileWrite.authorize(target, host.context, preview)
         yield* options.append
           ? host.fileMutation.append({ target, content: bytes })
           : host.fileMutation.write({ target, content: bytes })
-        yield* CodeModeDiffs.record(
-          target,
-          previous,
-          options.diff ? yield* CodeModeDiffs.read(target.environment.files, target.absolute) : { binary: true },
-        )
+        // The run's record reuses the request's diff. An append's diff starts at an empty file, so only its counts hold.
+        yield* options.append
+          ? CodeModeDiffs.appended(target, status, after)
+          : CodeModeDiffs.written(target, status, preview)
         return bytes.byteLength
       }).pipe(host.fileMutation.withLock([target]))
     }),
