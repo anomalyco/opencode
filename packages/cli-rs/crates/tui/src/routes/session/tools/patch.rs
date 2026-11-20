@@ -258,7 +258,8 @@ fn targets(patch: &str) -> Vec<String> {
         if end == 0 {
             continue;
         }
-        targets.push(line[..end].trim().to_owned());
+        // JavaScript's `trim`: a byte order mark goes, U+0085 stays.
+        targets.push(line[..end].trim_matches(opencode_api::js::is_whitespace).to_owned());
         at = patch.len() - line.len() + end;
     }
     targets
@@ -274,6 +275,7 @@ mod tests {
     fn targets_match_the_patch_headers() {
         let patch = "*** Begin Patch\n*** Add File: a.rs\n+x\n*** Update File:  b.rs \r\n*** Delete File: \n*** Move File: c\n*** Delete File: d.rs";
         assert_eq!(targets(patch), ["a.rs", "b.rs", "d.rs"]);
+        assert_eq!(targets("*** Add File: \u{feff}a.rs\u{85}\n"), ["a.rs\u{85}"]);
         assert!(targets("").is_empty());
     }
 
