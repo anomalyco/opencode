@@ -117,6 +117,10 @@ impl State {
     /// (`admitLocal`). This reconciles a durable echo with its optimistic placeholder.
     pub(crate) fn admit_local(&mut self, item: SessionInboxInfo) {
         let session = SessionID::from(item.session_id());
+        // A session the store found missing shows nothing, whatever arrives late (model O9).
+        if self.missing.contains(&session) {
+            return;
+        }
         let pending = self.pending.entry(session.clone()).or_default();
         match pending.iter().position(|entry| entry.id() == item.id()) {
             Some(at) => pending[at] = item.clone(),

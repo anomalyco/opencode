@@ -1688,6 +1688,12 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "transcript ses_1",
         &[Op::Enqueue(1), Op::Reconnect, Op::SyncMessages(1), Op::Promote(1, 1)],
     ),
+    // A late enqueue for a session the store found missing recreated its pending prompts and transcript.
+    (
+        "late enqueue for a missing session",
+        "missing ses_1",
+        &[Op::Enqueue(1), Op::Delete(1), Op::SyncPending(1), Op::Release(Read::Pending, 1)],
+    ),
 ];
 
 const OPEN: &[(&str, &str, &[Op])] = &[
