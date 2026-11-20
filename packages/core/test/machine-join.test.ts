@@ -131,6 +131,31 @@ it.effect("creates the home key on first use, keeps it across a rebuild, and sig
   }),
 )
 
+describe("Identity", () => {
+  // This runtime ignores trailing DER bytes, so without the length checks the first 32 bytes of a longer key would do.
+  test("makes a key only from a 32-byte seed", () => {
+    expect(Identity.fromSeed(bytes(32, 1)).publicKey).toHaveLength(32)
+    for (const size of [31, 33, 64]) expect(() => Identity.fromSeed(bytes(size, 1))).toThrow()
+  })
+
+  test("verifies only a 32-byte key and a 64-byte signature", () => {
+    const key = Identity.fromSeed(bytes(32, 1))
+    const message = new TextEncoder().encode("hello")
+    const signature = key.sign(message)
+    expect(Identity.verify(key.publicKey, message, signature)).toBe(true)
+    for (const size of [31, 33, 64]) {
+      const resized = new Uint8Array(size)
+      resized.set(key.publicKey.subarray(0, Math.min(size, 32)))
+      expect(Identity.verify(resized, message, signature)).toBe(false)
+    }
+    for (const size of [31, 33, 65]) {
+      const resized = new Uint8Array(size)
+      resized.set(signature.subarray(0, Math.min(size, 64)))
+      expect(Identity.verify(key.publicKey, message, resized)).toBe(false)
+    }
+  })
+})
+
 it.effect("fails an unusable key file without replacing it", () =>
   Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
