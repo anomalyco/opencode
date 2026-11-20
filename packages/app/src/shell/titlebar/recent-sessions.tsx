@@ -1,6 +1,7 @@
 import { isSessionNotFoundError, type SessionInfo } from "@opencode/client/promise"
 import { Accessibility, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
 import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
+import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { Key } from "@solid-primitives/keyed"
@@ -72,9 +73,11 @@ import {
 } from "./recent-view"
 import { RecentViewMenu } from "./recent-view-menu"
 import { notifySessionTabsRemoved } from "./session-events"
+import { SessionDetail, sessionAge } from "./session-detail"
 import { TabNavItem } from "./tab-nav"
 import { createSessionRowNavigation, syncInactiveSession } from "./tab-strip"
 import { sessionTabTitle } from "./tab-title"
+import "./recent-sessions.css"
 
 const RecentSidebarState = Persistence.struct({
   // Ordered `${server}\u0000${sessionID}` keys. Local to this desktop.
@@ -91,11 +94,20 @@ export function RecentSessions(
   input: {
     /** The navigation prototype's pins and groups replace this list's own pins; their sessions leave the recent rows. */
     pinned?: {
-      content: () => JSX.Element
+      content: (detail: () => boolean) => JSX.Element
       keys: () => string[]
       current: () => string | undefined
       unread: (key: string) => boolean
       navigate: (key: string) => void
+      /** Starts dragging a Recent row, which pins it when dropped on the pinned area. */
+      /** Pins and Recent rows drag in one list: dropping a Recent row among the pins pins it, and a pin dropped below unpins. */
+      /** How many sortable rows the pinned area renders; Recent's rows are numbered after them. */
+      sortables: () => number
+      drag: {
+        start: (source: string) => void
+        move: (point: { x: number; y: number }) => void
+        end: (point: { x: number; y: number } | undefined) => boolean
+      }
       holds: (server: string, sessionID: string) => boolean
       toggle: (server: string, sessionID: string) => void
     }
@@ -709,15 +721,7 @@ export function RecentSessions(
         ? item.session.time.created
         : (item.session.time.updated ?? item.session.time.created)
 
-    const seconds = Math.max(0, Math.floor((view.now - time) / 1000))
-
-    if (seconds < 60) return language.t("sidebar.inbox.time.now")
-
-    if (seconds < 3600) return language.plural("sidebar.inbox.elapsed.minutes", Math.floor(seconds / 60))
-
-    if (seconds < 86_400) return language.plural("sidebar.inbox.elapsed.hours", Math.floor(seconds / 3600))
-
-    return language.plural("sidebar.inbox.elapsed.days", Math.floor(seconds / 86_400))
+    return sessionAge(language, view.now, time)
   }
 
   const recent = () => (input.organize ? groups().flatMap(shownRows) : windowed().visible)
@@ -864,6 +868,7 @@ export function RecentSessions(
 
   // Rows take the side tabs' shortcuts, numbered and stepped through in the order shown.
   const rowRefs = new Map<string, HTMLDivElement>()
+  let scrollRef: HTMLDivElement | undefined
 
   // The prototype's pinned rows are numbered first, so ⌘1–9 continue from them into these rows.
   const pinnedKeys = () => input.pinned?.keys() ?? []
@@ -980,6 +985,9 @@ export function RecentSessions(
       ref: (element: HTMLDivElement) => rowRefs.set(key, element),
       onUnreadChange: (value: boolean) => setUnread(item().key, value),
       meta: () => meta(item()),
+      detail: () => arrangement().metadata,
+      dragID: input.pinned ? `session:${item().server}\u0000${item().session.id}` : undefined,
+      dragIndex: () => (input.pinned?.sortables() ?? 0) + Math.max(0, position() - pinned().length),
       hideAvatar: () => arrangement().groupBy === "project",
       pinned: index !== undefined,
       canMoveUp: () => index !== undefined && index() > 0,
@@ -1005,7 +1013,9 @@ export function RecentSessions(
       },
     }
 
-    return index === undefined ? <RecentSessionSlot {...props} /> : <PinnedSessionRow {...props} index={index} />
+    if (index !== undefined) return <PinnedSessionRow {...props} index={index} />
+
+    return props.dragID ? <DraggableRecentRow {...props} id={props.dragID} /> : <RecentSessionSlot {...props} />
   }
 
   return (
@@ -1014,7 +1024,14 @@ export function RecentSessions(
       data-shortcut-hints={hints() ? "" : undefined}
       class="flex min-h-0 flex-1 flex-col [app-region:no-drag]"
     >
-      <div data-scrollable class="no-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1">
+      <div
+        ref={scrollRef}
+        data-scrollable
+        data-slot="sidebar-recent-scroll"
+        data-edge-fade={input.organize ? "" : undefined}
+        class="no-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1"
+      >
+        <ListDrag drag={input.pinned?.drag} bounds={() => scrollRef}>
         <Show
           when={!firstPageLoading()}
           fallback={
@@ -1023,7 +1040,7 @@ export function RecentSessions(
             </div>
           }
         >
-          {input.pinned?.content()}
+          {input.pinned?.content(() => arrangement().metadata)}
           <Show when={!input.pinned && pinned().length > 0}>
             <div role="group" aria-labelledby="sidebar-recent-pinned" class="flex shrink-0 flex-col gap-2 pb-2.5">
               <SectionHeader id="sidebar-recent-pinned" label={language.t("sidebar.recent.pinned")} />
@@ -1150,6 +1167,7 @@ export function RecentSessions(
             </div>
           </Show>
         </Show>
+        </ListDrag>
         <Show when={loadingMore()}>
           <div class="flex justify-center p-2">
             <Loader role="img" aria-hidden="false" aria-label={language.t("common.loading")} />
@@ -1216,7 +1234,7 @@ function GroupHeader(props: {
           </Show>
           <Icon
             name="fill-triangle-down"
-            class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
+            class="shrink-0 text-v2-icon-icon-muted opacity-0 transition-[transform,opacity] group-hover/header:opacity-100 group-focus-within/header:opacity-100 motion-reduce:transition-none"
             classList={{ "-rotate-90 rtl:rotate-90": props.collapsed }}
           />
         </button>
@@ -1225,6 +1243,55 @@ function GroupHeader(props: {
         {props.menu}
       </div>
     </div>
+  )
+}
+
+/**
+ * List's shared drag for the navigation prototype: pins and Recent rows drag up and down in one context, and the pins
+ * decide where a drop lands. Without it (the plain Recent sidebar) the children render as they are.
+ */
+function ListDrag(props: {
+  drag:
+    | {
+        start: (source: string) => void
+        move: (point: { x: number; y: number }) => void
+        end: (point: { x: number; y: number } | undefined) => boolean
+      }
+    | undefined
+  bounds: () => HTMLElement | undefined
+  children: JSX.Element
+}) {
+  return (
+    <Show when={props.drag} fallback={props.children}>
+      {(drag) => (
+        <DragDropProvider
+          sensors={[
+            PointerSensor.configure({
+              activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
+              preventActivation: (event) =>
+                event.target instanceof Element &&
+                !!event.target.closest('[data-slot="tab-close"], [data-slot="pinned-group-options"], [contenteditable]'),
+            }),
+          ]}
+          modifiers={[RestrictToVerticalAxis, RestrictToElement.configure({ element: () => props.bounds() ?? null })]}
+          plugins={(defaults) => [
+            ...defaults.filter((plugin) => plugin !== Accessibility),
+            Feedback.configure({ dropAnimation: null }),
+          ]}
+          onDragStart={(event) => {
+            const source = event.operation.source
+
+            if (source) drag().start(source.id.toString())
+          }}
+          onDragMove={(event) => drag().move(event.operation.position.current)}
+          onDragEnd={(event) => {
+            drag().end(event.canceled ? undefined : event.operation.position.current)
+          }}
+        >
+          {props.children}
+        </DragDropProvider>
+      )}
+    </Show>
   )
 }
 
@@ -1246,6 +1313,10 @@ type RecentSessionTabProps = {
   ref: (element: HTMLDivElement) => void
   onUnreadChange: (unread: boolean) => void
   meta: () => string | undefined
+  detail: () => boolean
+  /** The row's id in List's shared drag, which lets it be dragged into the pins. */
+  dragID?: string
+  dragIndex: () => number
   hideAvatar: () => boolean
   pinned: boolean
   canMoveUp: () => boolean
@@ -1273,6 +1344,24 @@ function RecentSessionSlot(
       <RecentSessionTab {...props} />
     </div>
   )
+}
+
+// A Recent row in List's shared drag: it can be dropped among the pins, but Recent's own order is by time, so nothing
+// sorts around it here.
+function DraggableRecentRow(props: RecentSessionTabProps & { id: string }) {
+  const sortable = useSortable({
+    get id() {
+      return props.id
+    },
+    get index() {
+      return props.dragIndex()
+    },
+    group: "tab-items",
+    type: "pin",
+    accept: () => false,
+  })
+
+  return <RecentSessionSlot {...props} slotRef={sortable.ref} dragging={sortable.isDragSource()} />
 }
 
 function PinnedSessionRow(props: RecentSessionTabProps & { index: () => number }) {
@@ -1358,6 +1447,7 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
       session={item().session}
       preparing={false}
       label={muted() ? language.t("sidebar.recent.muted") : props.meta()}
+      detail={props.detail() ? <SessionDetail server={item().server} session={item().session} /> : undefined}
       hideAvatar={props.hideAvatar()}
       unread={unread()}
       attention={status.attention()}

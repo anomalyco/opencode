@@ -79,6 +79,8 @@ export function TabNavItem(
     shortcut?: number
     /** A faint trailing label, such as the tab's server. */
     label?: string
+    /** Vertical only: a second line under the title, such as the session's project and branch. */
+    detail?: JSX.Element
     /** Hides the project avatar under a header that already names the project; shortcut hints still show. */
     hideAvatar?: boolean
     /** Marks a session whose notifications are muted. */
@@ -567,6 +569,13 @@ export function TabNavItem(
             event.preventDefault()
           }}
         />
+        <Show when={props.orientation === "vertical" && props.detail}>
+          {(detail) => (
+            <span data-slot="tab-project" class="flex items-center gap-1.5 font-normal">
+              {detail()}
+            </span>
+          )}
+        </Show>
       </Menu.Context.Trigger>
       <Show when={props.label}>
         {(label) => (

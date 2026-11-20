@@ -179,6 +179,52 @@ export function toggleGroup(state: PinsState, groupId: string): PinsState {
   return { ...state, collapsed }
 }
 
+/**
+ * Where a dragged session lands: among the top-level pins, or inside a group. `index` counts the target list as it is
+ * once the session has left its old place, so dropping a session back where it was changes nothing.
+ */
+export type PinTarget = { index: number; group?: string }
+
+/** Pins a session at a target, or moves it there if it was pinned. A group the move empties goes away. */
+export function place(state: PinsState, ref: PinRef, target: PinTarget): PinsState {
+  const loose: PinRef = { server: ref.server, sessionId: ref.sessionId }
+
+  if (target.group && !state.items.some((item) => item.type === "group" && item.id === target.group)) return state
+  const rest = unpin(state, ref)
+
+  // Moving a group's only session back into it would remove the group first; the group stays as it was.
+  if (target.group && !rest.items.some((item) => item.type === "group" && item.id === target.group)) return state
+
+  if (!target.group) {
+    const index = Math.max(0, Math.min(target.index, rest.items.length))
+
+    return withItems(rest, rest.items.toSpliced(index, 0, { type: "session", ...loose }))
+  }
+
+  return withItems(
+    rest,
+    rest.items.map((item) => {
+      if (item.type !== "group" || item.id !== target.group) return item
+      const index = Math.max(0, Math.min(target.index, item.sessions.length))
+
+      return { ...item, sessions: item.sessions.toSpliced(index, 0, loose) }
+    }),
+  )
+}
+
+/** Moves a group among the top-level pins; `index` counts them without the group. */
+export function moveGroup(state: PinsState, groupId: string, index: number): PinsState {
+  const from = state.items.findIndex((item) => item.type === "group" && item.id === groupId)
+
+  if (from === -1) return state
+  const rest = state.items.toSpliced(from, 1)
+  const to = Math.max(0, Math.min(index, rest.length))
+
+  if (to === from) return state
+
+  return withItems(state, rest.toSpliced(to, 0, state.items[from]))
+}
+
 /** Drops pins whose sessions are gone. */
 export function prunePins(state: PinsState, missing: (ref: PinRef) => boolean): PinsState {
   const gone = pinnedRefs(state).filter(missing)

@@ -147,9 +147,26 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
             class="relative z-20 -me-1 flex h-7 min-w-0 max-w-[220px] shrink-0 items-center gap-1.5 rounded-[4px] ps-2 pe-1.5 text-[13px] leading-[var(--line-height-compact)] [font-weight:440] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
             onMouseDown={(event: MouseEvent) => event.preventDefault()}
           >
-            <Show when={selected()}>{(project) => <HomeProjectAvatar project={project()} />}</Show>
+            {/* Home lists one server at a time, so with several servers and no project the scope is that server. */}
+            <Show
+              when={selected()}
+              fallback={
+                <Show when={props.servers.length > 1 && server()}>
+                  <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
+                </Show>
+              }
+            >
+              {(project) => <HomeProjectAvatar project={project()} />}
+            </Show>
             <bdi class="min-w-0 truncate">
-              <Show when={selected()} fallback={props.language.t("home.projects.all")}>
+              <Show
+                when={selected()}
+                fallback={
+                  props.servers.length > 1 && server()
+                    ? props.serverLabel(server()!)
+                    : props.language.t("home.projects.all")
+                }
+              >
                 {(project) => displayName(project())}
               </Show>
             </bdi>
