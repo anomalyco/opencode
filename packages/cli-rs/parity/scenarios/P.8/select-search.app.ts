@@ -17,7 +17,12 @@ export default defineApp({
     { keys: ["enter"] },
     { checkpoint: "listed", until: "red fish" },
     { type: "one" },
-    { checkpoint: "searched", until: "someone else" },
+    {
+      checkpoint: "searched",
+      until: "someone else",
+      // The list's dialog leaves the placeholder in view since #64983 dropped its empty footer row.
+      masks: [{ x: 26, y: 16, width: 90, height: 1, reason: "the placeholder example: random in TS and Rust" }],
+    },
     { keys: ["enter"] },
     {
       checkpoint: "picked",

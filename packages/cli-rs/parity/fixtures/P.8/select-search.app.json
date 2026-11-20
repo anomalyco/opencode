@@ -20,7 +20,7 @@
   {"keys":["enter"]},
   {"checkpoint":"listed","until":"red fish","fixture":"P.8/select-search/listed"},
   {"type":"one"},
-  {"checkpoint":"searched","until":"someone else","fixture":"P.8/select-search/searched"},
+  {"checkpoint":"searched","until":"someone else","masks":[{"x":26,"y":16,"width":90,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"P.8/select-search/searched"},
   {"keys":["enter"]},
   {"checkpoint":"picked","until":"picked t1","masks":[{"x":26,"y":16,"width":90,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"P.8/select-search/picked"}
  ],
