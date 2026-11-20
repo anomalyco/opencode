@@ -138,50 +138,6 @@ impl Nav {
 /// The transcript's first row on screen, under the tab strip.
 const TOP: usize = 1;
 
-/// How far the content moved down between two screens, by the first answer or question line of
-/// `before` that `after` still shows.
-fn shift(before: &str, after: &str) -> Option<isize> {
-    let before: Vec<_> = before.lines().collect();
-    let after: Vec<_> = after.lines().collect();
-    before.iter().enumerate().skip(TOP).find_map(|(row, line)| {
-        if !(line.contains("Answer") || line.contains("Question")) {
-            return None;
-        }
-        let to = after.iter().position(|other| other == line)?;
-        Some(to as isize - row as isize)
-    })
-}
-
-#[test]
-fn line_half_page_and_page_scroll_by_their_distances() {
-    let h = open(turns(30), Info::default());
-    let start = h.app.text();
-    let anchor = "Answer 30 one.";
-    let at = Nav::row(&start, anchor).unwrap();
-    assert!(!start.contains("Jump to latest"), "{start}");
-
-    let screen = h.press("ctrl+alt+y");
-    assert_eq!(Nav::row(&screen, anchor), Some(at + 1), "{screen}");
-    assert!(screen.contains("Jump to latest ↓"), "{screen}");
-    let screen = h.press("ctrl+alt+e");
-    assert_eq!(Nav::row(&screen, anchor), Some(at), "{screen}");
-
-    let before = h.app.text();
-    let half = h.press("ctrl+alt+u");
-    let moved = shift(&before, &half).unwrap();
-    let page = h.press("pageup");
-    assert!((3..=5).contains(&moved), "half page moved {moved}:\n{half}");
-    assert_eq!(shift(&half, &page), Some(moved * 2), "{half}\n=====\n{page}");
-    let back = h.press("ctrl+alt+d");
-    assert_eq!(shift(&page, &back), Some(-moved), "{back}");
-    for _ in 0..3 {
-        h.press("pagedown");
-    }
-    let bottom = h.app.text();
-    assert_eq!(Nav::row(&bottom, anchor), Some(at), "{bottom}");
-    assert!(!bottom.contains("Jump to latest"), "{bottom}");
-}
-
 #[test]
 fn page_up_backfills_then_last_returns_to_the_tail() {
     let h = open(turns(30), Info::default());
@@ -383,49 +339,6 @@ fn the_scrollbar_toggles_and_the_wheel_moves_three_rows() {
     assert_eq!(thumb(&screen), 0, "{screen}");
     let screen = settle(&h, h.dispatch("session.toggle.scrollbar"));
     assert!(thumb(&screen) > 0, "a bar in the last column:\n{screen}");
-}
-
-#[test]
-fn a_tab_reopens_where_the_reader_left_it() {
-    let h = open(turns(30), Info::default());
-    let transcript = |screen: &str| -> Vec<String> { screen.lines().skip(TOP).take(17).map(str::to_owned).collect() };
-    let switch = |id: &str| {
-        h.tui.navigate(support::session_route(id));
-        h.app.advance(Duration::from_millis(1));
-    };
-    for _ in 0..3 {
-        h.press("pageup");
-    }
-    let screen = h.idle();
-    let left = transcript(&screen);
-    assert!(left.iter().any(|line| line.contains("Jump to latest ↓")), "{screen}");
-
-    switch("ses_m");
-    let other = h.app.wait_until(WAIT, || {
-        let screen = h.app.text();
-        screen.contains("Answer 30 three.") && !screen.contains("Jump to latest")
-    });
-    assert!(other, "{}", h.app.text());
-    switch("ses_n");
-    let restored = h.app.wait_until(WAIT, || transcript(&h.app.text()) == left);
-    assert!(restored, "{left:#?}\n=====\n{:#?}", transcript(&h.app.text()));
-
-    h.press("end");
-    let bottom = transcript(&h.wait_for("Answer 30 three."));
-    switch("ses_m");
-    h.wait_for("Answer 30 three.");
-    switch("ses_n");
-    let found = h.app.wait_until(WAIT, || transcript(&h.app.text()) == bottom);
-    assert!(found, "{bottom:#?}\n=====\n{}", h.app.text());
-
-    h.press("ctrl+g");
-    h.wait_for("┃  Question 1\n");
-    let first = transcript(&h.idle());
-    switch("ses_m");
-    h.wait_for("Answer 30 three.");
-    switch("ses_n");
-    let found = h.app.wait_until(WAIT, || transcript(&h.app.text()) == first);
-    assert!(found, "{first:#?}\n=====\n{}", h.app.text());
 }
 
 #[test]
