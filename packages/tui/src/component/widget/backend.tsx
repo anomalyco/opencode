@@ -31,9 +31,11 @@ export type WidgetInfo = {
 
 export type WidgetResponse = { value: JsonValue } | { dismiss: true }
 
+/** A template version's runnable program (prelude + source) and how it runs. */
+export type WidgetProgram = { readonly program: string; readonly mode: Widget.Mode }
+
 export type WidgetBackend = {
-  /** The runnable program (prelude + source) of an immutable template version. */
-  program: (template: { name: string; version: string }) => Promise<string>
+  program: (template: { name: string; version: string }) => Promise<WidgetProgram>
   respond: (input: { widget: WidgetInfo; response: WidgetResponse }) => Promise<void>
   /** Sends a non-final value from `send(...)`; the widget stays open. */
   send: (input: { widget: WidgetInfo; value: JsonValue; wake: boolean }) => Promise<void>
@@ -152,7 +154,7 @@ export function useWidgetBackend(): WidgetBackend {
       cached(template, () =>
         rpc()
           .program(template)
-          .then((result) => result.program),
+          .then((result) => ({ program: result.program, mode: result.mode })),
       ),
     respond: (input) =>
       rpc()
@@ -193,15 +195,20 @@ function isRpcFailure(error: unknown, type: string) {
 }
 
 // Versions are content addresses and never change, so programs stay cached for the whole process.
-const programs = new Map<string, Promise<string>>()
+const programs = new Map<string, Promise<WidgetProgram>>()
 
 /** Serves built-in templates locally when the version matches and caches every other program by name@version. */
-export function cached(template: { name: string; version: string }, load: () => Promise<string>) {
+export function cached(template: { name: string; version: string }, load: () => Promise<WidgetProgram>) {
   const key = `${template.name}@${template.version}`
   const existing = programs.get(key)
   if (existing) return existing
   const builtin = builtins.find((item) => item.name === template.name && item.version === template.version)
-  const pending = builtin ? Promise.resolve(program(builtin.source)) : load()
+  const pending: Promise<WidgetProgram> = builtin
+    ? Promise.resolve({
+        program: program(builtin.source),
+        mode: "mode" in builtin && builtin.mode === "live" ? "live" : "step",
+      })
+    : load()
   programs.set(key, pending)
   // A failed fetch must not stick, so the next mount retries.
   pending.catch(() => {

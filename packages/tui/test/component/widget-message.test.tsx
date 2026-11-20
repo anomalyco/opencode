@@ -21,11 +21,14 @@ import {
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
-async function render(name: WidgetFixtureName, options: { width?: number; status?: WidgetInfo["status"] } = {}) {
+async function render(
+  name: WidgetFixtureName,
+  options: { width?: number; status?: WidgetInfo["status"]; program?: WidgetBackend["program"] } = {},
+) {
   const responses: WidgetResponse[] = []
   const [message, setMessage] = createSignal(widgetFixtureMessage(name, options.status))
   const backend: WidgetBackend = {
-    program: (template) => cached(template, () => Promise.reject(new Error("not a built-in"))),
+    program: options.program ?? ((template) => cached(template, () => Promise.reject(new Error("not a built-in")))),
     async respond(input) {
       responses.push(input.response)
       setMessage((current) => ({
@@ -79,6 +82,12 @@ test.each([100, 44])("suggestions render cards and page carousels at width %i", 
   const first = await frame(setup, (current) => current.includes("Which cabin should we book?"))
   expect(first).toContain("Lakeside")
   expect(first).toContain("1/2")
+})
+
+test("a live widget points to desktop and mobile instead of running", async () => {
+  using setup = await render("confirm", { program: async () => ({ program: "", mode: "live" }) })
+  const current = await frame(setup, (current) => current.includes("Open this widget on desktop or mobile."))
+  expect(current).not.toContain("Confirm")
 })
 
 test("form renders every field kind", async () => {

@@ -60,6 +60,8 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
     failure?: string
     error?: string
     sending: boolean
+    /** A live template, which this client does not run. */
+    live?: boolean
     sent?: Status
     response?: unknown
   }>({ sending: false })
@@ -77,21 +79,29 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
     on(template, () => {
       let current = true
       onCleanup(() => (current = false))
-      setStore({ view: undefined, failure: undefined, error: undefined })
+      setStore({ view: undefined, failure: undefined, error: undefined, live: false })
       setSession(undefined)
       void backend
         .program(props.message.template)
-        .then((program) => WidgetSession.start(program, props.message.data))
-        .then((started) => {
-          if (!current) return
-          setSession(started)
-          setStore("view", started.view)
+        .then((loaded) => {
+          // The TUI does not run live programs yet (widgets-live.md).
+          if (loaded.mode === "live") return void (current && setStore("live", true))
+          return WidgetSession.start(loaded.program, props.message.data).then((started) => {
+            if (!current) return
+            setSession(started)
+            setStore("view", started.view)
+          })
         })
         .catch((error) => {
           if (current) setStore("failure", stepMessage(error))
         })
     }),
   )
+
+  // A widget this client cannot run gives the keyboard back to the prompt.
+  createEffect(() => {
+    if ((store.live || store.failure) && props.focus.engaged() === props.message.id) props.focus.release()
+  })
 
   function dispatch(event: WidgetEvent) {
     const current = session()
@@ -168,6 +178,11 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
               </text>
             )}
           </Match>
+          <Match when={store.live}>
+            <text fg={theme.text.muted} wrapMode="word">
+              {liveAlt(props.message.data) ?? "Open this widget on desktop or mobile."}
+            </text>
+          </Match>
           <Match when={store.view}>
             {(view) => (
               <WidgetView
@@ -228,6 +243,12 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
       </box>
     </box>
   )
+}
+
+/** A live widget's own description of itself for clients that cannot run it: its data's `alt`, if it has one. */
+function liveAlt(data: unknown) {
+  if (typeof data !== "object" || data === null || !("alt" in data) || typeof data.alt !== "string") return
+  return `${data.alt} · Open this widget on desktop or mobile.`
 }
 
 function stepMessage(error: unknown) {
