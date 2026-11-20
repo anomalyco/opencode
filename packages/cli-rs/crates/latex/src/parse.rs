@@ -667,10 +667,14 @@ impl Parser {
         self.source[start..end].iter().collect()
     }
 
-    /// The combining marks that continue the grapheme at the position, which stay on the atom before them.
+    /// The combining marks that continue the grapheme at the position, which stay on the atom before them. Like a
+    /// literal, they stop before TeX syntax that a prepended character joins to its grapheme.
     fn read_marks(&mut self) -> String {
         let start = self.position;
-        while self.position < self.source.len() && !self.boundaries[self.position] {
+        while self.position < self.source.len()
+            && !self.boundaries[self.position]
+            && !is_syntax(self.source[self.position])
+        {
             self.position += 1;
         }
         self.source[start..self.position].iter().collect()
