@@ -1,0 +1,134 @@
+import { describe, expect } from "bun:test"
+import { CodeMode } from "@opencode/codemode"
+import { CodeModeJob } from "@opencode/core/codemode/job"
+import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { Database } from "@opencode/core/database/database"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Flag } from "@opencode/core/flag"
+import { Job } from "@opencode/core/job"
+import type { Permission } from "@opencode/core/permission"
+import { Session } from "@opencode/core/session"
+import { Tool } from "@opencode/core/tool"
+import { ToolOutput } from "@opencode/core/tool-output"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
+import { Context, Deferred, Effect, Layer, Schema, Scope } from "effect"
+import { testEffect } from "./lib/effect"
+
+const it = testEffect(
+  Layer.mergeAll(
+    AppNodeBuilder.build(LayerNode.group([Job.node, Database.node, Global.node])),
+    Flag.testLayer([], { overrides: "full_codemode" }),
+    Layer.mock(ToolOutput.Service, { truncate: (result) => Effect.succeed(result) }),
+  ),
+)
+
+const tool = (full: boolean) =>
+  CodeModeTool.create(
+    { tools: new Map(), namespaces: new Map() },
+    () => Effect.die("unused"),
+    {} as Permission.Interface,
+    full ? (Context.empty() as never) : undefined,
+  )
+
+const context = (sessionID: string): Tool.Context => ({
+  sessionID: Session.ID.make(sessionID),
+  agent: "build",
+  messageID: "msg_test" as never,
+  id: Tool.CallID.make("call_test"),
+  progress: () => Effect.void,
+})
+
+const script = (ms: number) => () =>
+  Effect.sleep(ms).pipe(
+    Effect.as<Tool.NormalizedResult>({ content: [{ type: "text", text: "done" }], output: "done", metadata: {} }),
+  )
+
+const harness = Effect.gen(function* () {
+  const jobs = yield* Job.Service
+  const notices: Array<{ text: string; metadata?: Record<string, unknown> }> = []
+  const notified = yield* Deferred.make<void>()
+  const run = yield* CodeModeJob.make(
+    jobs,
+    (input) =>
+      Effect.sync(() => notices.push(input as never)).pipe(Effect.andThen(Deferred.succeed(notified, undefined))),
+    yield* Scope.make(),
+  )
+  if (!run) throw new Error("no job runner")
+  return { jobs, run, notices, notified }
+})
+
+describe("execute timeout and background", () => {
+  it.effect("has only code without full_codemode", () =>
+    Effect.sync(() => {
+      expect(tool(false).input).toBe(CodeMode.Input)
+      expect(Object.keys(tool(false).input.fields)).toEqual(["code"])
+      expect(tool(false).description).not.toContain("background")
+      expect(() =>
+        Schema.decodeUnknownSync(tool(false).input, { onExcessProperty: "error" })({ code: "1", background: true }),
+      ).toThrow()
+    }),
+  )
+
+  it.effect("adds timeout and background with full_codemode", () =>
+    Effect.sync(() => {
+      const input = tool(true).input
+      expect(Object.keys(input.fields)).toEqual(["code", "timeout", "background"])
+      expect(Schema.decodeUnknownSync(input)({ code: "1", timeout: 3000, background: true })).toEqual({
+        code: "1",
+        timeout: 3000,
+        background: true,
+      })
+      expect(() => Schema.decodeUnknownSync(input)({ code: "1", timeout: 0 })).toThrow()
+      expect(() => Schema.decodeUnknownSync(input)({ code: "1", timeout: 1.5 })).toThrow()
+      expect(tool(true).description).toContain("do not poll")
+    }),
+  )
+
+  it.live("background returns a job ID at once and notifies on completion", () =>
+    Effect.gen(function* () {
+      const h = yield* harness
+      const started = Date.now()
+      const result = yield* h.run(context("ses_bg"), script(300), { background: true })
+      expect(Date.now() - started).toBeLessThan(250)
+      const jobID = String(result.metadata?.jobID)
+      expect(jobID).toStartWith("cm_")
+      expect((yield* h.jobs.get(jobID))?.status).toBe("running")
+      yield* Deferred.await(h.notified)
+      expect(h.notices[0]?.metadata).toMatchObject({ jobID, state: "completed" })
+    }),
+  )
+
+  it.live("a foreground timeout moves the script to the background", () =>
+    Effect.gen(function* () {
+      const h = yield* harness
+      const started = Date.now()
+      const result = yield* h.run(context("ses_fg"), script(600), { timeout: 150 })
+      const elapsed = Date.now() - started
+      expect(elapsed).toBeGreaterThanOrEqual(140)
+      expect(elapsed).toBeLessThan(500)
+      expect(result.metadata?.jobID).toBeDefined()
+      yield* Deferred.await(h.notified)
+      expect(h.notices[0]?.metadata).toMatchObject({ state: "completed" })
+    }),
+  )
+
+  it.live("a foreground script that finishes within its timeout returns its result", () =>
+    Effect.gen(function* () {
+      const h = yield* harness
+      const result = yield* h.run(context("ses_fast"), script(20), { timeout: 1000 })
+      expect(result.metadata?.jobID).toBeUndefined()
+      expect(result.content).toEqual([{ type: "text", text: "done" }])
+    }),
+  )
+
+  it.live("a background timeout stops the script", () =>
+    Effect.gen(function* () {
+      const h = yield* harness
+      const result = yield* h.run(context("ses_bg_timeout"), script(5000), { background: true, timeout: 100 })
+      yield* Deferred.await(h.notified)
+      expect(h.notices[0]?.metadata).toMatchObject({ jobID: result.metadata?.jobID, state: "error" })
+      expect(h.notices[0]?.text).toContain("Script timed out after 100 ms.")
+    }),
+  )
+})
