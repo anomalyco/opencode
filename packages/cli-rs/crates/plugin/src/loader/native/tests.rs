@@ -2877,15 +2877,21 @@ fn the_host_refuses_borrowed_bytes_a_plugin_cannot_have_lent() {
         let mut out = Owned::EMPTY;
         // SAFETY: refused before anything is read, as the test checks; `out` is valid for writes.
         let status = unsafe { host_call(std::ptr::null_mut(), borrowed, &mut out) };
+        // SAFETY: `host_call` answered with its own error text in `out`, `len` readable bytes.
         let text = String::from_utf8(unsafe { out.to_vec() }).unwrap();
+        // SAFETY: `out` is the host's own buffer, freed once here.
         unsafe { host_free(out) };
         assert_eq!(status, abi::ERROR);
         assert!(text.contains("a bad host request") && text.contains(needle), "{text}");
         // Without a mailbox an intact send is `CLOSED`: the refusal comes first.
+        // SAFETY: a null `ctx` is no mailbox; the bad descriptor is refused unread and the empty one reads nothing.
         assert_eq!(unsafe { host_send(std::ptr::null_mut(), Bytes::new(b""), borrowed) }, abi::ERROR);
+        // SAFETY: a null `ctx` is no mailbox; the bad descriptor is refused unread and `{}` outlives the call.
         assert_eq!(unsafe { host_send(std::ptr::null_mut(), borrowed, Bytes::new(b"{}")) }, abi::ERROR);
+        // SAFETY: a null `ctx` is no mailbox, and the bad descriptor is refused unread.
         unsafe { host_report(std::ptr::null_mut(), borrowed) };
     }
+    // SAFETY: a null `ctx` is no mailbox, and both descriptors borrow literals that outlive the call.
     assert_eq!(unsafe { host_send(std::ptr::null_mut(), Bytes::new(b""), Bytes::new(b"{}")) }, abi::CLOSED);
     let mut owned = Owned::from_vec(b"abc".to_vec());
     owned.len = usize::MAX;

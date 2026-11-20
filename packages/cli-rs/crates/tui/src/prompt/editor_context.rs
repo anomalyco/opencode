@@ -945,10 +945,10 @@ mod sqlite {
         pub fn load(name: &str) -> Option<Sqlite> {
             // SAFETY: SQLite's initializers have no preconditions.
             let library = unsafe { opencode_util::dl::Library::open(name) }.ok()?;
-            // SAFETY: each field's type is the C signature of the symbol it names, and the library outlives the
-            // pointers because it is stored with them.
             macro_rules! symbol {
                 ($name:literal) => {
+                    // SAFETY: each field's type is the C signature of the symbol it names, and the library outlives
+                    // the pointers because it is stored with them.
                     unsafe { library.symbol($name) }.ok()?
                 };
             }
@@ -1008,6 +1008,7 @@ mod sqlite {
                 // SAFETY: as above, and `value` reads the row `step` returned.
                 match unsafe { (self.sqlite.step)(statement.raw) } {
                     ROW => {
+                        // SAFETY: `step` returned a row, so `value` reads a column of the statement's current row.
                         rows.push((0..columns).map(|column| unsafe { statement.value(column) }).collect::<Option<_>>()?)
                     }
                     DONE => return Some(rows),

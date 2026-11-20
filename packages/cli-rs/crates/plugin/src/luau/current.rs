@@ -83,8 +83,8 @@ impl Current {
 
     /// Setup's registration, while setup runs.
     pub(crate) fn setup<'a>(self) -> Option<&'a mut abi::Setup<'static>> {
-        // SAFETY: as for `read`; setup's methods run one at a time on this thread, and none keeps the reference.
         match self {
+            // SAFETY: as for `read`; setup's methods run one at a time on this thread, and none keeps the reference.
             Self::Setup(setup) => Some(unsafe { &mut *setup }),
             _ => None,
         }
@@ -92,8 +92,8 @@ impl Current {
 
     /// The running view, while one runs.
     pub(crate) fn view<'a>(self) -> Option<&'a mut v2::View<'static>> {
-        // SAFETY: as for `setup`; a memo's build enters the view it is given, so the outer one is not used meanwhile.
         match self {
+            // SAFETY: as for `setup`; a memo's build enters the view it is given, so the outer one is not used meanwhile.
             Self::View(view) => Some(unsafe { &mut *view }),
             _ => None,
         }

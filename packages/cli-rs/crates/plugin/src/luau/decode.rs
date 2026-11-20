@@ -259,6 +259,7 @@ impl Decode {
         let mut read = |state| {
             #[cfg(test)]
             WALKING.set(true);
+            // SAFETY: `enter` calls this in protected mode with `value` at slot 2 of `state`, so slot 2 is valid.
             decoded = unsafe { self.top(state, 2) };
             #[cfg(test)]
             WALKING.set(false);

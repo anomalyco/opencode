@@ -391,6 +391,7 @@ fn local_offset(seconds: i64) -> i32 {
     let time = seconds as libc::time_t;
     // SAFETY: `tm` is plain data, valid zeroed, and `localtime_r` writes only into it.
     let mut tm = unsafe { std::mem::zeroed::<libc::tm>() };
+    // SAFETY: `time` and `tm` are live locals, and `localtime_r` writes only into `tm`.
     if unsafe { libc::localtime_r(&time, &mut tm) }.is_null() {
         return 0;
     }
@@ -426,6 +427,7 @@ fn local_offset(seconds: i64) -> i32 {
     let time = seconds as libc::time_t;
     // SAFETY: `tm` is plain data, valid zeroed, and `localtime_s` writes only into it.
     let mut tm = unsafe { std::mem::zeroed::<libc::tm>() };
+    // SAFETY: `tm` and `time` are live locals, and `localtime_s` writes only into `tm`.
     if unsafe { libc::localtime_s(&mut tm, &time) } != 0 {
         return 0;
     }

@@ -493,6 +493,7 @@ impl Overlapped {
         // SAFETY: all-zero is a valid OVERLAPPED; the event is open and owned by nothing else.
         let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED = unsafe { std::mem::zeroed() };
         overlapped.hEvent = event;
+        // SAFETY: `event` is open and nothing else owns it; the OVERLAPPED only borrows it.
         Ok(Self(overlapped, unsafe { OwnedHandle::from_raw_handle(event) }))
     }
 }

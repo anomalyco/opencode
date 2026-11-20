@@ -141,6 +141,7 @@ impl<'a> Keys<'a> {
 /// In a protected call, with room for three slots, `build`'s marker slots and `keys`' slots valid.
 unsafe fn push<'a>(state: *mut ffi::lua_State, value: &'a serde_json::Value, build: Build, keys: &mut Keys<'a>) {
     let size = |count: usize| c_int::try_from(count).unwrap_or(0);
+    // SAFETY: `state` is in a protected call with room for three slots (the caller's promise); this pushes one.
     let null = || unsafe { ffi::lua_pushlightuserdata(state, std::ptr::null_mut()) };
     // SAFETY: as the caller's; a table checks for room for its key, its value and what the value needs to be built.
     unsafe {
