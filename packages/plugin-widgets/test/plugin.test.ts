@@ -292,6 +292,15 @@ describe("capabilities", () => {
         )
         expect(yield* reason({ capabilities: { https: { hosts: [] } } })).toContain("lists no hosts")
         expect(Exit.isSuccess(yield* save(fake, { capabilities: { https: { hosts: ["*"] } } }))).toBe(true)
+        // Local hosts and ports are valid declarations; only a client's dev mode lets them through.
+        expect(
+          Exit.isSuccess(
+            yield* save(fake, { capabilities: { https: { hosts: ["localhost:4097", "127.0.0.1", "*.local"] } } }),
+          ),
+        ).toBe(true)
+        expect(yield* reason({ capabilities: { https: { hosts: ["localhost:port"] } } })).toContain(
+          "is not a host name",
+        )
       }),
     ))
 })
