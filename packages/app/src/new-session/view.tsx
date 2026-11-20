@@ -381,14 +381,29 @@ function NewSessionLocation(props: {
           </Show>
           <button
             type="button"
-            data-action="prompt-extensions"
+            data-action="prompt-mcps"
             aria-haspopup="dialog"
-            aria-description={language.t("session.new.extensions.title")}
+            aria-description={language.t("dialog.mcp.title")}
             class={`${TRIGGER} min-w-0`}
-            onClick={props.extensions.open}
+            onClick={() => props.extensions.open("mcp")}
           >
             <Icon name="cube" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
-            <span class="min-w-0 truncate">{language.extensionsSummary(props.extensions.counts())}</span>
+            <span class="min-w-0 truncate">
+              {language.plural("session.new.extensions.mcps", props.extensions.counts().mcps)}
+            </span>
+          </button>
+          <button
+            type="button"
+            data-action="prompt-skills"
+            aria-haspopup="dialog"
+            aria-description={language.t("settings.extensions.tab.skills")}
+            class={`${TRIGGER} min-w-0`}
+            onClick={() => props.extensions.open("skill")}
+          >
+            <Icon name="post-skill" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
+            <span class="min-w-0 truncate">
+              {language.plural("session.new.extensions.skills", props.extensions.counts().skills)}
+            </span>
           </button>
         </div>
       </div>

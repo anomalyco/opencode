@@ -66,59 +66,71 @@ export function createNewSessionExtensions(input: { draftID: string; mcp: DraftM
 
 export type NewSessionExtensions = ReturnType<typeof createNewSessionExtensions>
 
-/** Opens the dialog that chooses which MCP servers and skills the draft's session starts with. */
+type Kind = Item["kind"]
+
+/** Opens the dialog that chooses which MCP servers, or which skills, the draft's session starts with. */
 export function useNewSessionExtensionsDialog(input: { extensions: NewSessionExtensions; onDone: () => void }) {
   const dialog = useDialog()
 
   return {
     counts: input.extensions.counts,
-    open: () => void dialog.show(() => <NewSessionExtensionsDialog extensions={input.extensions} />, input.onDone),
+    open: (kind: Kind) =>
+      void dialog.show(() => <NewSessionExtensionsDialog kind={kind} extensions={input.extensions} />, input.onDone),
   }
 }
 
-function NewSessionExtensionsDialog(props: { extensions: NewSessionExtensions }) {
+function NewSessionExtensionsDialog(props: { kind: Kind; extensions: NewSessionExtensions }) {
   const language = useLanguage()
   const [query, setQuery] = createSignal("")
+  const mcp = props.kind === "mcp"
+
+  const items = createMemo(() => props.extensions.items().filter((item) => item.kind === props.kind))
 
   const results = createMemo(() => {
     const current = query().trim()
 
-    if (!current) return props.extensions.items()
+    if (!current) return items()
 
-    return fuzzysort.go(current, props.extensions.items(), { keys: ["name"] }).map((result) => result.obj)
+    return fuzzysort.go(current, items(), { keys: ["name"] }).map((result) => result.obj)
   })
 
   return (
     <Dialog class="command-palette command-palette-compact search-list-dialog mcp-dialog" size="large" fit>
       <div class="sr-only">
-        <DialogTitle>{language.t("session.new.extensions.title")}</DialogTitle>
+        <DialogTitle>{language.t(mcp ? "dialog.mcp.title" : "settings.extensions.tab.skills")}</DialogTitle>
       </div>
       <DialogBody class="command-palette-body">
         <SearchList
           query={query()}
           onQuery={setQuery}
-          placeholder={language.t("session.new.extensions.search.placeholder")}
+          placeholder={language.t(mcp ? "dialog.mcp.search.placeholder" : "session.new.skills.search.placeholder")}
           items={results()}
           key={(item) => item.key}
-          section={(item) => item.kind}
-          header={(item) => language.t(item.kind === "mcp" ? "dialog.mcp.title" : "settings.extensions.tab.skills")}
-          empty={language.t("session.new.extensions.empty")}
+          empty={language.t(
+            items().length > 0
+              ? mcp
+                ? "dialog.mcp.search.empty"
+                : "session.new.skills.search.empty"
+              : mcp
+                ? "dialog.mcp.empty"
+                : "session.new.skills.empty",
+          )}
           onSelect={(item) => props.extensions.toggle(item, !props.extensions.checked(item))}
         >
           {(item, row) => (
             <div {...row} data-option-key={item().key} data-size="compact">
               <span class="mcp-dialog-lead">
-                <span class="mcp-dialog-status" aria-hidden="true">
-                  <Show when={item().kind === "mcp"}>
+                <Show when={mcp}>
+                  <span class="mcp-dialog-status" aria-hidden="true">
                     <span class="mcp-status-dot" data-status={item().status} />
-                  </Show>
-                </span>
+                  </span>
+                </Show>
                 <TruncatedText text={item().name} class="mcp-dialog-name" />
               </span>
               <div class="mcp-trailing" onClick={(event) => event.stopPropagation()}>
                 <Switch
                   checked={props.extensions.checked(item())}
-                  disabled={item().kind === "mcp" && props.extensions.pending()}
+                  disabled={mcp && props.extensions.pending()}
                   onChange={(enabled) => props.extensions.toggle(item(), enabled)}
                 >
                   <span class="sr-only">{item().name}</span>
