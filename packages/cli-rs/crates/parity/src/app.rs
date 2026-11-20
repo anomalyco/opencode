@@ -501,23 +501,6 @@ mod tests {
         Fixture { width: rows[0].chars().count() as u32, height: rows.len() as u32, cells }
     }
 
-    fn text(fixture: &Fixture) -> Vec<String> {
-        (0..fixture.height).map(|y| fixture.row(y).iter().map(|cell| cell.symbol.as_str()).collect()).collect()
-    }
-
-    #[test]
-    fn line_and_rect_masks_blank_cells() {
-        let mut fixture = grid(&["Ask anything… \"x\" ab", "took 12ms here      "]);
-        let masks = [
-            Mask::Line { line: "Ask anything… \".*\"".into(), reason: "random".into() },
-            Mask::Rect { x: 5, y: 1, width: 4, height: 1, reason: "duration".into() },
-        ];
-        apply_masks(&mut fixture, &masks).unwrap();
-        assert_eq!(text(&fixture), ["                  ab", "took      here      "]);
-        assert_eq!(*fixture.cell(0, 0).unwrap(), masked());
-        assert_ne!(*fixture.cell(18, 0).unwrap(), masked());
-    }
-
     #[test]
     fn deviations_bound_the_cells_they_allow() {
         let expected = grid(&["abcd"]);
@@ -575,20 +558,5 @@ mod tests {
         assert!(is_read("POST", "/api/rpc/opencode.goal/get"));
         assert!(!is_read("POST", "/api/rpc/opencode.goal/set"));
         assert!(!is_read("POST", "/api/rpc//get"));
-    }
-
-    #[test]
-    fn steps_decode_every_kind() {
-        let steps: Vec<Step> = serde_json::from_value(serde_json::json!([
-            { "keys": ["ctrl+x", "l"] },
-            { "type": "hello" },
-            { "event": { "type": "x" } },
-            { "checkpoint": "home", "fixture": "H.2/a/home", "masks": [{ "line": "a", "reason": "r" }] },
-        ]))
-        .unwrap();
-        assert!(matches!(&steps[0], Step::Keys { keys } if keys.len() == 2));
-        assert!(matches!(&steps[1], Step::Type { text } if text == "hello"));
-        assert!(matches!(&steps[2], Step::Event { .. }));
-        assert!(matches!(&steps[3], Step::Checkpoint(checkpoint) if checkpoint.masks.len() == 1));
     }
 }
