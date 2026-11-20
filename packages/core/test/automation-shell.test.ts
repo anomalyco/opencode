@@ -231,7 +231,23 @@ const tickCode = (id: Automation.ID) =>
     return yield* automations.get(id)
   })
 
-it.live("scheduled code can fetch with full Code Mode off", () =>
+const approveCodePermission = (action: string, tools: string[], session: Session.Info) =>
+  Instance.Service.use((instances) =>
+    Effect.gen(function* () {
+      const permission = yield* Permission.Service
+      const asks = yield* permission
+        .forSession(session.id)
+        .pipe(
+          Effect.repeat({ until: (asks) => asks.length > 0, schedule: Schedule.spaced("10 millis") }),
+          Effect.timeout("10 seconds"),
+        )
+      expect(asks).toMatchObject([{ action, resources: ["*"], metadata: { unattended: true, tools } }])
+      expect(asks[0]?.save).toBeUndefined()
+      for (const ask of asks) yield* permission.reply({ requestID: ask.id, reply: "once" })
+    }).pipe(instances.provide(session)),
+  )
+
+it.live("scheduled code can fetch after webfetch approval with full Code Mode off", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
       Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("ready") })),
@@ -243,22 +259,26 @@ it.live("scheduled code can fetch with full Code Mode off", () =>
         path.join(directory, "opencode.json"),
         JSON.stringify({
           experimental: { automations: true, full_codemode: false },
-          permission: { execute: "allow", webfetch: "allow" },
+          permission: { execute: "allow", webfetch: "ask" },
         }),
       ),
     )
     const sessions = yield* Session.Service
     const session = yield* sessions.create({ location: { directory } })
     const automations = yield* Automation.Service
-    const created = yield* automations.create({
-      sessionID: session.id,
-      name: "fetch",
-      trigger,
-      action: {
-        type: "code",
-        code: `const res = await fetch(${JSON.stringify(server.url.href)}); return { state: await res.text(), done: true }`,
-      },
-    })
+    const creating = yield* automations
+      .create({
+        sessionID: session.id,
+        name: "fetch",
+        trigger,
+        action: {
+          type: "code",
+          code: `const res = await fetch(${JSON.stringify(server.url.href)}); return { state: await res.text(), done: true }`,
+        },
+      })
+      .pipe(Effect.forkChild)
+    yield* approveCodePermission("webfetch", [], session)
+    const created = yield* Fiber.join(creating)
     expect(yield* tickCode(created.id)).toMatchObject({ status: "done", lastOutcome: "fired", state: "ready" })
   }),
 )
@@ -278,7 +298,6 @@ it.live("scheduled code uses the session files and runs shell after one approval
     yield* Effect.promise(() => Bun.write(path.join(directory, "fixture.txt"), "fixture contents"))
     const sessions = yield* Session.Service
     const session = yield* sessions.create({ location: { directory } })
-    const instances = yield* Instance.Service
     const automations = yield* Automation.Service
     const creating = yield* automations
       .create({
@@ -296,20 +315,7 @@ it.live("scheduled code uses the session files and runs shell after one approval
       })
       .pipe(Effect.forkChild)
 
-    yield* Effect.gen(function* () {
-      const permission = yield* Permission.Service
-      const asks = yield* permission
-        .forSession(session.id)
-        .pipe(
-          Effect.repeat({ until: (asks) => asks.length > 0, schedule: Schedule.spaced("10 millis") }),
-          Effect.timeout("10 seconds"),
-        )
-      expect(asks).toMatchObject([
-        { action: "shell", resources: ["*"], metadata: { unattended: true, tools: ["shell"] } },
-      ])
-      expect(asks[0]?.save).toBeUndefined()
-      for (const ask of asks) yield* permission.reply({ requestID: ask.id, reply: "once" })
-    }).pipe(instances.provide(session))
+    yield* approveCodePermission("shell", ["shell"], session)
 
     const created = yield* Fiber.join(creating)
     expect(yield* tickCode(created.id)).toMatchObject({

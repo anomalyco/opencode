@@ -8,6 +8,17 @@ import { formatLocation, moduleName, parseProgram } from "psychoscript/effect"
  * dynamic bracket access (`tools[name]`), or aliasing/passing `tools` rather than calling `tools.<path>(...)` directly.
  */
 export function scanTools(code: string): Result.Result<ReadonlyArray<string>, Diagnostic> {
+  return scanProgram(code, []).pipe(Result.map((scanned) => scanned.tools))
+}
+
+interface ProgramScan {
+  readonly tools: ReadonlyArray<string>
+  readonly globals: ReadonlyArray<string>
+  readonly modules: ReadonlyArray<string>
+}
+
+/** Scans static tool calls, references to the given globals, and literal module loads. */
+export function scanProgram(code: string, globals: ReadonlyArray<string>): Result.Result<ProgramScan, Diagnostic> {
   if (code.trim().length === 0) {
     return Result.fail({ kind: "ParseError", message: "Code cannot be empty." })
   }
@@ -15,11 +26,13 @@ export function scanTools(code: string): Result.Result<ReadonlyArray<string>, Di
   // A parse failure's kind is always ParseError.
   if (!parsed.ok) return Result.fail(parsed.error as Diagnostic)
 
-  const found = new Set<string>()
+  const tools = new Set<string>()
+  const referenced = new Set<string>()
+  const modules = new Set<string>()
   const scopes: Array<Set<string>> = [collectScope(parsed.program, true)]
   const ancestors: Array<AnyNode> = []
 
-  const isShadowed = () => scopes.some((scope) => scope.has("tools"))
+  const isShadowed = (name: string) => scopes.some((scope) => scope.has(name))
 
   const fail = (node: AnyNode, message: string): Diagnostic => {
     const loc = node.loc?.start ? { line: node.loc.start.line, column: node.loc.start.column + 1 } : undefined
@@ -33,19 +46,29 @@ export function scanTools(code: string): Result.Result<ReadonlyArray<string>, Di
   const visit = (node: AnyNode | null | undefined): Diagnostic | undefined => {
     if (!node) return undefined
 
-    if (node.type === "Identifier" && node.name === "tools" && !isShadowed()) {
-      const parent = ancestors.at(-1)
-      if (!isReferencePosition(node, parent)) return undefined
+    if (
+      node.type === "Identifier" &&
+      (node.name === "tools" || globals.includes(node.name)) &&
+      !isShadowed(node.name) &&
+      isReferencePosition(node, ancestors.at(-1))
+    ) {
+      if (node.name !== "tools") {
+        referenced.add(node.name)
+        return undefined
+      }
       const chain = readStaticToolCall(node, ancestors)
       if (!chain.ok) return fail(chain.node, chain.reason)
-      found.add(chain.path)
+      tools.add(chain.path)
       return undefined
     }
 
     // `import`/`require` of "tools" would reach tools the scan never sees.
     const loaded = loadedModule(node)
-    if (loaded !== undefined && (loaded === null || moduleName(loaded) === "tools")) {
-      return fail(node, "Automation code must call tools directly as tools.<name>(...), not import or require them.")
+    if (loaded !== undefined) {
+      const name = loaded === null ? undefined : moduleName(loaded)
+      if (name === undefined || name === "tools")
+        return fail(node, "Automation code must call tools directly as tools.<name>(...), not import or require them.")
+      modules.add(name)
     }
 
     const pushedScope = enterNodeScope(node)
@@ -61,7 +84,7 @@ export function scanTools(code: string): Result.Result<ReadonlyArray<string>, Di
 
   const diagnostic = visit(parsed.program)
   if (diagnostic) return Result.fail(diagnostic)
-  return Result.succeed(Array.from(found))
+  return Result.succeed({ tools: [...tools], globals: [...referenced], modules: [...modules] })
 }
 
 /** The module an `import` or `require(...)` loads, `null` when it is computed, or `undefined` for other nodes. */
@@ -78,6 +101,12 @@ function loadedModule(node: AnyNode): string | null | undefined {
 
 function isReferencePosition(node: AnyNode, parent: AnyNode | undefined): boolean {
   if (!parent) return true
+  if (
+    parent.type === "ImportSpecifier" ||
+    parent.type === "ImportDefaultSpecifier" ||
+    parent.type === "ImportNamespaceSpecifier"
+  )
+    return false
   if (parent.type === "MemberExpression" && parent.property === node && !parent.computed) return false
   if (parent.type === "Property" && parent.key === node && !parent.computed && !parent.shorthand) return false
   if (parent.type === "MethodDefinition" && parent.key === node && !parent.computed) return false
@@ -183,6 +212,9 @@ function enterNodeScope(node: AnyNode): Set<string> | undefined {
 function collectScope(container: Program | BlockStatement, includeVar: boolean): Set<string> {
   const names = new Set<string>()
   for (const statement of container.body) {
+    if (statement.type === "ImportDeclaration") {
+      for (const specifier of statement.specifiers) names.add(specifier.local.name)
+    }
     if (statement.type === "FunctionDeclaration" && statement.id) names.add(statement.id.name)
     if (statement.type === "ClassDeclaration" && statement.id) names.add(statement.id.name)
     if (statement.type === "VariableDeclaration" && (includeVar || statement.kind !== "var")) {

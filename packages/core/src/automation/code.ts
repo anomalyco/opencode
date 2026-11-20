@@ -61,18 +61,20 @@ export type Outcome =
       readonly invalid?: boolean
     }
 
-/** The tools the program calls, or why it cannot be an automation: it does not parse, or reaches a forbidden tool. */
-function scan(code: string): Result.Result<ReadonlyArray<string>, string> {
-  const scanned = CodeMode.scanTools(code)
+type ProgramScan = Result.Result.Success<ReturnType<typeof CodeMode.scanProgram>>
+
+/** The tools and extension references in the program. */
+function scan(code: string): Result.Result<ProgramScan, string> {
+  const scanned = CodeMode.scanProgram(code, ["fetch", "Bun"])
   if (Result.isFailure(scanned)) return Result.fail(scanned.failure.message)
-  const forbidden = scanned.success.find((path) => FORBIDDEN_TOOLS.has(path))
+  const forbidden = scanned.success.tools.find((path) => FORBIDDEN_TOOLS.has(path))
   if (forbidden !== undefined) return Result.fail(`Tool ${forbidden} cannot be used inside an automation`)
   return Result.succeed(scanned.success)
 }
 
 /**
- * Runs in the creating Session's Location while the user is present: asks once for each tool's permission (and for
- * `execute` unless a tool asked), without saving, so every run can be allowed unattended.
+ * Runs in the creating Session's Location while the user is present: asks once for tool and extension permissions (and for
+ * `execute` if none of those needed approval), without saving, so every run can be allowed unattended.
  */
 export const authorize = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
@@ -81,14 +83,14 @@ export const authorize = Effect.fnUntraced(function* (
   action: Automation.CodeAction,
   invocation?: Invocation,
 ) {
-  const paths = yield* Effect.fromResult(scan(action.code))
+  const scanned = yield* Effect.fromResult(scan(action.code))
   yield* Plugin.awaitActivation
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
   if (invocation && !matchesAuthor(session, agent.info, invocation))
     return yield* Effect.fail("Create the automation with the session's current agent")
-  const actions = (yield* resolveTools(paths)).actions
+  const actions = (yield* resolveCapabilities(scanned)).actions
   const rules = Permission.merge(agent.info?.permissions ?? [], session.permissions ?? [])
   // A rule scoped to some resources (`vault:*: ask`) must prompt too, not only the catch-all `*`.
   const request = (item: string) => ({
@@ -102,7 +104,7 @@ export const authorize = Effect.fnUntraced(function* (
   const all = ["execute", ...actions]
   // Fail fast on any explicit deny before asking the user to approve earlier tools.
   yield* Effect.forEach(all, (item) => permission.assertNotDenied(request(item)), { discard: true })
-  // A tool's approval also covers running the program; with no tool to ask about, `execute` itself must be approved.
+  // A capability's approval also covers running the program; otherwise ask to run `execute` itself.
   const allowed = yield* Effect.forEach(actions, (item) => permission.allows(request(item)))
   yield* Effect.forEach(
     allowed.every(Boolean) ? all : actions,
@@ -110,7 +112,7 @@ export const authorize = Effect.fnUntraced(function* (
       permission.assert({
         ...request(item),
         // No `save`: "always" would save a project-wide allow, while runs are allowed through Unattended.
-        metadata: { automation: name, trigger, unattended: true, code: action.code, tools: [...paths] },
+        metadata: { automation: name, trigger, unattended: true, code: action.code, tools: [...scanned.tools] },
       }),
     { discard: true },
   )
@@ -121,17 +123,24 @@ function scopedRules(rules: Permission.Ruleset, action: string) {
   return rules.filter((rule) => rule.resource !== "*" && Wildcard.match(action, rule.action))
 }
 
-const resolveTools = Effect.fnUntraced(function* (paths: ReadonlyArray<string>) {
-  const mcp = yield* McpTool.Service
+const resolveCapabilities = Effect.fnUntraced(function* (scanned: ProgramScan) {
   const tools = yield* Tool.Service
-  if (paths.length === 0) return { tools, actions: [] }
-  yield* mcp.flush
-  const registered = yield* tools.list()
   const actions = new Set<string>()
-  for (const path of paths) {
-    const found = registered.find((item) => defaultCodeMode(item) && CodeModeTool.qualifiedName(item) === path)
-    if (!found) return yield* Effect.fail(`Unknown Code Mode tool: ${path}`)
-    actions.add(found.options?.permission ?? found.id)
+  if (scanned.tools.length > 0) {
+    const mcp = yield* McpTool.Service
+    yield* mcp.flush
+    const registered = yield* tools.list()
+    for (const path of scanned.tools) {
+      const found = registered.find((item) => defaultCodeMode(item) && CodeModeTool.qualifiedName(item) === path)
+      if (!found) return yield* Effect.fail(`Unknown Code Mode tool: ${path}`)
+      actions.add(found.options?.permission ?? found.id)
+    }
+  }
+  if (scanned.globals.includes("fetch")) actions.add("webfetch")
+  // Bun operations can compute their paths and be called through aliases. Approve the extension's actions
+  // at creation even if the flag is off, so enabling it later doesn't grant unapproved permissions.
+  if (scanned.globals.includes("Bun") || scanned.modules.includes("bun")) {
+    for (const action of ["read", "edit", "glob", "external_directory"]) actions.add(action)
   }
   return { tools, actions: [...actions] }
 })
@@ -147,9 +156,8 @@ export const run = Effect.fnUntraced(
 
     const scanned = scan(action.code)
     if (Result.isFailure(scanned)) return { ok: false as const, error: scanned.failure, invalid: true }
-    const paths = scanned.success
 
-    const resolved = yield* Effect.result(resolveTools(paths))
+    const resolved = yield* Effect.result(resolveCapabilities(scanned.success))
     if (Result.isFailure(resolved)) return { ok: false as const, error: resolved.failure, invalid: true }
 
     const actions = ["execute", ...resolved.success.actions]
@@ -179,7 +187,7 @@ export const run = Effect.fnUntraced(
     const result = yield* resolved.success.tools
       .check({
         code: action.code,
-        tools: paths,
+        tools: scanned.success.tools,
         bindings: { ...bindings, input: bindings },
         permissions: rules,
         limits: CODE_LIMITS,
