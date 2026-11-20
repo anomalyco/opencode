@@ -97,29 +97,29 @@ export const SearchOutput = Schema.Struct({
 })
 export type SearchOutput = typeof SearchOutput.Type
 
-export const ToolDetail = Schema.Struct({
+export const CallDetail = Schema.Struct({
   name: Schema.String,
   status: Schema.String,
   input: Schema.String.pipe(optional),
   output: Schema.String.pipe(optional),
   error: Schema.String.pipe(optional),
 })
-export type ToolDetail = typeof ToolDetail.Type
+export type CallDetail = typeof CallDetail.Type
 
 export const ReadMessage = Schema.Struct({
   messageID: SessionMessage.ID,
   type: Schema.String,
   time: Schema.String,
   text: Schema.String.pipe(optional),
-  tools: Schema.Array(Schema.Union([Schema.String, ToolDetail])).pipe(optional),
+  calls: Schema.Array(Schema.Union([Schema.String, CallDetail])).pipe(optional),
 })
 export type ReadMessage = typeof ReadMessage.Type
 
 export const ReadOutput = Schema.Struct({
   session: SessionSummary,
   messages: Schema.Array(ReadMessage),
-  olderCursor: SessionMessage.ID.pipe(optional),
-  newerCursor: SessionMessage.ID.pipe(optional),
+  older: SessionMessage.ID.pipe(optional),
+  newer: SessionMessage.ID.pipe(optional),
 })
 export type ReadOutput = typeof ReadOutput.Type
 
@@ -139,7 +139,7 @@ export interface ReadInput {
   readonly messageID?: SessionMessage.ID
   readonly direction?: "around" | "before" | "after"
   readonly limit?: number
-  readonly includeTools?: boolean
+  readonly full?: boolean
 }
 
 export interface Interface {
@@ -331,8 +331,8 @@ const readSession = Effect.fnUntraced(function* (
     .pipe(Effect.orDie)
   if (!session) return yield* new SessionNotFoundError({ sessionID: input.sessionID })
 
-  const includeTools = input.includeTools === true
-  const visible = includeTools ? VISIBLE_WITH_SYSTEM : VISIBLE_TYPES
+  const full = input.full === true
+  const visible = full ? VISIBLE_WITH_SYSTEM : VISIBLE_TYPES
   const filter = and(eq(SessionMessageTable.session_id, input.sessionID), inArray(SessionMessageTable.type, visible))
   const limit = clamp(input.limit ?? 7, 1, 50)
   const direction = input.direction ?? "around"
@@ -375,7 +375,7 @@ const readSession = Effect.fnUntraced(function* (
     return formatReadOutput(
       session,
       yield* decodeWindowRows(db, rows),
-      includeTools,
+      full,
       before.length > beforeCount ? rows[0]?.id : undefined,
       after.length > afterCount ? rows.at(-1)?.id : undefined,
     )
@@ -387,7 +387,7 @@ const readSession = Effect.fnUntraced(function* (
     return formatReadOutput(
       session,
       yield* decodeWindowRows(db, page),
-      includeTools,
+      full,
       anchor ? (page[0]?.id ?? anchor.id) : undefined,
       rows.length > limit ? page.at(-1)?.id : undefined,
     )
@@ -398,7 +398,7 @@ const readSession = Effect.fnUntraced(function* (
   return formatReadOutput(
     session,
     yield* decodeWindowRows(db, page),
-    includeTools,
+    full,
     rows.length > limit ? page[0]?.id : undefined,
     anchor ? (page.at(-1)?.id ?? anchor.id) : undefined,
   )
@@ -428,33 +428,33 @@ const decodeWindowRows = Effect.fnUntraced(function* (
 function formatReadOutput(
   session: typeof SessionTable.$inferSelect,
   rows: ReadonlyArray<DecodedRow>,
-  includeTools: boolean,
-  olderCursor: SessionMessage.ID | undefined,
-  newerCursor: SessionMessage.ID | undefined,
+  full: boolean,
+  older: SessionMessage.ID | undefined,
+  newer: SessionMessage.ID | undefined,
 ): ReadOutput {
-  const messages = rows.map((entry) => formatMessage(entry.row, entry.message, includeTools))
+  const messages = rows.map((entry) => formatMessage(entry.row, entry.message, full))
   const out: {
     session: SessionSummary
     messages: ReadMessage[]
-    olderCursor?: SessionMessage.ID
-    newerCursor?: SessionMessage.ID
+    older?: SessionMessage.ID
+    newer?: SessionMessage.ID
   } = { session: toSummary(session), messages }
-  if (olderCursor !== undefined) out.olderCursor = olderCursor
-  if (newerCursor !== undefined) out.newerCursor = newerCursor
+  if (older !== undefined) out.older = older
+  if (newer !== undefined) out.newer = newer
   return out
 }
 
 function formatMessage(
   row: typeof SessionMessageTable.$inferSelect,
   message: SessionMessage.MediaInfo,
-  includeTools: boolean,
+  full: boolean,
 ): ReadMessage {
   const base: {
     messageID: SessionMessage.ID
     type: string
     time: string
     text?: string
-    tools?: Array<string | ToolDetail>
+    calls?: Array<string | CallDetail>
   } = {
     messageID: row.id,
     type: row.type,
@@ -479,7 +479,7 @@ function formatMessage(
   }
   if (message.type === "shell") {
     const raw =
-      includeTools && message.output?.output ? `$ ${message.command}\n${message.output.output}` : `$ ${message.command}`
+      full && message.output?.output ? `$ ${message.command}\n${message.output.output}` : `$ ${message.command}`
     const text = nonEmpty(raw)
     if (text !== undefined) base.text = text
     return base
@@ -490,18 +490,18 @@ function formatMessage(
       .join("\n\n")
     const text = nonEmpty(joined)
     if (text !== undefined) base.text = text
-    const tools = message.content.flatMap((part) =>
-      part.type === "tool" ? [formatTool(part, includeTools)] : [],
+    const calls = message.content.flatMap((part) =>
+      part.type === "tool" ? [formatCall(part, full)] : [],
     )
-    if (tools.length > 0) base.tools = tools
+    if (calls.length > 0) base.calls = calls
     return base
   }
   return base
 }
 
-function formatTool(part: SessionMessage.AssistantTool, includeTools: boolean): string | ToolDetail {
+function formatCall(part: SessionMessage.AssistantTool, full: boolean): string | CallDetail {
   const inputText = part.state.status === "streaming" ? part.state.input : JSON.stringify(part.state.input)
-  if (!includeTools) {
+  if (!full) {
     const args = cap(inputText, TOOL_SUMMARY_INPUT) ?? ""
     const suffix = part.state.status === "error" ? " → error" : ""
     return `${part.name}(${args})${suffix}`

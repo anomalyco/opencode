@@ -323,22 +323,22 @@ describe("SessionSearch", () => {
       const startPage = yield* search.read({ sessionID: ses("a"), direction: "after", limit: 2 })
       expect(startPage.session.title).toBe("Deep session")
       expect(startPage.messages.map((m) => m.messageID)).toEqual([msg("01"), msg("02")])
-      expect(startPage.olderCursor).toBeUndefined()
-      expect(startPage.newerCursor).toBe(msg("02"))
+      expect(startPage.older).toBeUndefined()
+      expect(startPage.newer).toBe(msg("02"))
 
       // Passing a cursor back in the same direction never repeats a message.
       const nextPage = yield* search.read({ sessionID: ses("a"), messageID: msg("02"), direction: "after", limit: 2 })
       expect(nextPage.messages.map((m) => m.messageID)).toEqual([msg("03"), msg("06")])
-      expect(nextPage.newerCursor).toBe(msg("06"))
+      expect(nextPage.newer).toBe(msg("06"))
 
       // Around the compaction message, split evenly.
       const middle = yield* search.read({ sessionID: ses("a"), messageID: msg("03"), limit: 3 })
       expect(middle.messages.map((m) => m.messageID)).toEqual([msg("02"), msg("03"), msg("06")])
-      expect(middle.olderCursor).toBe(msg("02"))
-      expect(middle.newerCursor).toBe(msg("06"))
+      expect(middle.older).toBe(msg("02"))
+      expect(middle.newer).toBe(msg("06"))
       const earlier = yield* search.read({ sessionID: ses("a"), messageID: msg("02"), direction: "before" })
       expect(earlier.messages.map((m) => m.messageID)).toEqual([msg("01")])
-      expect(earlier.olderCursor).toBeUndefined()
+      expect(earlier.older).toBeUndefined()
 
       // Default read (newest) shows compact one-line tool summaries and part text.
       const latest = yield* search.read({ sessionID: ses("a"), limit: 1 })
@@ -347,18 +347,18 @@ describe("SessionSearch", () => {
         messageID: msg("07"),
         type: "assistant",
         text: "answer from part row",
-        tools: ['read({"path":"src/foo.ts"})', 'shell({"command":"false"}) → error'],
+        calls: ['read({"path":"src/foo.ts"})', 'shell({"command":"false"}) → error'],
       })
-      expect(latest.olderCursor).toBe(msg("07"))
-      expect(latest.newerCursor).toBeUndefined()
+      expect(latest.older).toBe(msg("07"))
+      expect(latest.newer).toBeUndefined()
 
       // A limit over 50 is clamped instead of rejected.
       expect((yield* search.read({ sessionID: ses("a"), limit: 500 })).messages).toHaveLength(5)
 
-      // includeTools: true expands tool inputs/outputs/errors and includes system messages.
-      const detailed = yield* search.read({ sessionID: ses("a"), messageID: msg("07"), limit: 5, includeTools: true })
+      // full: true expands each tool call's input, output and error, and includes system messages.
+      const detailed = yield* search.read({ sessionID: ses("a"), messageID: msg("07"), limit: 5, full: true })
       expect(detailed.messages.map((m) => m.messageID)).toEqual([msg("04"), msg("06"), msg("07")])
-      expect(detailed.messages[2]?.tools).toEqual([
+      expect(detailed.messages[2]?.calls).toEqual([
         { name: "read", status: "completed", input: '{"path":"src/foo.ts"}', output: "file body here" },
         { name: "shell", status: "error", input: '{"command":"false"}', error: "exit code 1" },
       ])

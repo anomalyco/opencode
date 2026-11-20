@@ -47,8 +47,8 @@ export const ReadInput = Schema.Struct({
   limit: Schema.optionalKey(Schema.Int).annotate({
     description: "Number of messages. Default 7, at most 50.",
   }),
-  includeTools: Schema.optionalKey(Schema.Boolean).annotate({
-    description: "Include tool inputs, outputs, and system messages. Default false.",
+  full: Schema.optionalKey(Schema.Boolean).annotate({
+    description: "Show each tool call's full input, output and error, and include system messages. Default false.",
   }),
 })
 
@@ -100,7 +100,7 @@ export const Plugin = {
         editor.add({
           name: "read",
           description:
-            'Read messages from one session, including history from before compaction. With messageID (from opencode.session.search), returns messages around it; direction "before" or "after" reads only one side. Without messageID, reads the newest messages, or the oldest with direction "after". Tool calls are shown as one-line summaries unless includeTools is true. To keep reading, pass olderCursor with direction "before" or newerCursor with direction "after" as messageID; pages never repeat.',
+            'Read messages from one session, including history from before compaction. With messageID (from opencode.session.search), returns messages around it; direction "before" or "after" reads only one side. Without messageID, reads the newest messages, or the oldest with direction "after". Tool calls are one-line summaries in calls unless full is true. To keep reading, pass older as messageID with direction "before", or newer with direction "after"; pages never repeat.',
           input: ReadInput,
           output: SessionSearch.ReadOutput,
           options: { namespace: "opencode.session", codemode: true },
