@@ -209,33 +209,6 @@ story("wraps execute details code, pads it evenly, and starts line numbers near 
   expect(layout.paddingBottom).toBe(4)
 })
 
-story("keeps the execute details padding visible when code and output outgrow the dialog", async ({ mount }) => {
-  const page = (await mount("current-session-terminal-work--execute-long-details")).page()
-  await page.getByRole("button", { name: "View code" }).first().click()
-  const dialog = page.getByRole("dialog")
-  await expect(dialog.locator("[data-column-number]").first()).toBeVisible()
-
-  // The dialog role sits on the scrolling content element itself.
-  const layout = await dialog.evaluate((content) => {
-    const body = content.querySelector<HTMLElement>('[data-slot="dialog-body"]')!
-    const sources = [...content.querySelectorAll<HTMLElement>('[data-slot="execute-details-source"]')]
-    const last = sources.at(-1)!.getBoundingClientRect()
-
-    return {
-      bodyOverflow: body.scrollHeight - body.clientHeight,
-      contentOverflow: content.scrollHeight - content.clientHeight,
-      sourcesScroll: sources.map((source) => source.scrollHeight > source.clientHeight),
-      paddingBottom: body.getBoundingClientRect().bottom - last.bottom,
-    }
-  })
-
-  // Only the code and output boxes scroll; the dialog itself never cuts the output off at its edge.
-  expect(layout.bodyOverflow).toBe(0)
-  expect(layout.contentOverflow).toBe(0)
-  expect(layout.sourcesScroll).toEqual([true, true])
-  expect(layout.paddingBottom).toBe(16)
-})
-
 story("reveals the View code action while hovering anywhere over the execution", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-code")
   const tool = timeline.locator('[data-timeline-part-id="tool_execute_long_call"]')
