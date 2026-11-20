@@ -121,6 +121,31 @@ Then add models that use that folder:
 To use one account for every model in a project, set `settings.configDir` on the provider in that project's config
 instead.
 
+## Rotate between accounts
+
+If you have several interchangeable accounts, OpenCode can move to the next one when an account hits its usage limit.
+Sign in to each extra account in its own folder. Your existing login in `~/.claude` can stay as it is:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
+```
+
+Then list the folders:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": { "configDir": ["~/.claude", "~/.claude-1"] },
+    },
+  },
+}
+```
+
+A chat stays on the account that last answered it, and new chats start on the account that worked last. Rotation only
+applies to Claude subscription logins, not to `apiKey` or `authToken`.
+
 ## Limitations
 
 - Claude Code must be installed on the same machine as the OpenCode server. Claude Agent is not available in remote

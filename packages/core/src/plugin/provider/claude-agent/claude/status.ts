@@ -26,6 +26,7 @@ export interface Interface {
 export const make = Effect.fn("ClaudeStatus.make")(function* (
   io: ClaudeIO.Interface,
   connection: () => Effect.Effect<Record<string, string>>,
+  configDirs: () => Effect.Effect<readonly string[]> = () => Effect.succeed([]),
 ) {
   const state = yield* SubscriptionRef.make<State>({ type: "checking" })
   const lock = yield* Semaphore.make(1)
@@ -50,10 +51,13 @@ export const make = Effect.fn("ClaudeStatus.make")(function* (
   }, lock.withPermit)
 
   // A model with its own configDir runs another account, which must not replace the provider's login, prices and models.
+  // Every folder in the provider's list is its own, so those follow the folder a chat last started on.
   const report = Effect.fn("ClaudeStatus.report")(function* (next: State) {
     if (next.type === "ready") {
-      const own = ClaudeQueryOptions.withoutDefaultFolder(yield* connection(), io).CLAUDE_CONFIG_DIR
-      if (next.configDir !== own) return
+      const own = [yield* connection(), ...(yield* configDirs()).map((dir) => ({ CLAUDE_CONFIG_DIR: dir }))].map(
+        (env) => ClaudeQueryOptions.withoutDefaultFolder(env, io).CLAUDE_CONFIG_DIR,
+      )
+      if (!own.some((dir) => dir === next.configDir)) return
     }
     yield* SubscriptionRef.set(state, next)
   })
