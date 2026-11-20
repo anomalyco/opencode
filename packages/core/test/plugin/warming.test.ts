@@ -54,12 +54,19 @@ const run = Effect.fnUntraced(function* (
   cache?: Provider.Cache,
   usage: ReadonlyArray<typeof hit> = [],
   ping = Duration.zero,
+  archived = false,
 ) {
   const warms: number[] = []
   const events = yield* Queue.unbounded<
-    SessionEvent.Execution.Succeeded | SessionEvent.Compaction.Failed | SessionEvent.Deleted
+    | SessionEvent.Execution.Succeeded
+    | SessionEvent.Compaction.Failed
+    | SessionEvent.Deleted
+    | SessionEvent.Archived
   >()
   const hooks = new Map<string, (input: SessionContext) => Effect.Effect<void>>()
+  const currentSession: Session.Info = archived
+    ? { ...session, time: { ...session.time, archived: DateTime.makeUnsafe(0) } }
+    : session
   yield* WarmingPlugin.Plugin.effect(
     host({
       model: {
@@ -70,7 +77,7 @@ const run = Effect.fnUntraced(function* (
       },
       event: { subscribe: () => Stream.fromQueue(events) },
       session: {
-        get: () => Effect.succeed(session),
+        get: () => Effect.succeed(currentSession),
         generate: () =>
           Clock.currentTimeMillis.pipe(
             Effect.map((now) => {
@@ -124,10 +131,13 @@ const run = Effect.fnUntraced(function* (
   const remove = emit(
     Queue.offer(events, { id: Event.ID.create(), created: 0, durable, type: "session.deleted", data: { sessionID } }),
   )
+  const archive = emit(
+    Queue.offer(events, { id: Event.ID.create(), created: 0, durable, type: "session.archived", data: { sessionID } }),
+  )
   /** One whole turn whose response ends right away. */
   const turn = send.pipe(Effect.andThen(end))
   const at = (minutes: number) => TestClock.setTime(minutes * 60_000).pipe(Effect.andThen(Effect.yieldNow))
-  return { warms, send, end, compact, compactionFailed, remove, turn, at }
+  return { warms, send, end, compact, compactionFailed, remove, archive, turn, at }
 })
 
 describe("WarmingPlugin interval", () => {
@@ -307,6 +317,26 @@ describe("WarmingPlugin lifecycle", () => {
       yield* warming.remove
       for (const minutes of [8, 12]) yield* warming.at(minutes)
       expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("stops warming an archived session", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true)
+      yield* warming.turn
+      yield* warming.at(4)
+      yield* warming.archive
+      for (const minutes of [8, 12]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("does not warm a session that is already archived", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, undefined, [], Duration.zero, true)
+      yield* warming.turn
+      for (const minutes of [4, 8]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([])
     }),
   )
 
