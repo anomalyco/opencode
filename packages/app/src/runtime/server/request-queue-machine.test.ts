@@ -13,6 +13,27 @@ import {
 
 const config = { limit: 1, slowLimit: 1, stallMs: 2_000 }
 
+test("MCP discovery and commands use the slow share without changing priority", () => {
+  expect(classifyRequest("GET", new URL("http://localhost/api/command"))).toEqual({
+    bypass: false,
+    slow: true,
+    setup: false,
+    priority: 0,
+  })
+  expect(classifyRequest("POST", new URL("http://localhost/api/mcp/nested"))).toEqual({
+    bypass: false,
+    slow: true,
+    setup: false,
+    priority: 2,
+  })
+  expect(classifyRequest("GET", new URL("http://localhost/api/mcps"))).toEqual({
+    bypass: false,
+    slow: false,
+    setup: false,
+    priority: 0,
+  })
+})
+
 function run(events: readonly RequestQueueEvent[], options = config, from = createRequestQueueState()) {
   return events.reduce<{ state: RequestQueueState; effects: RequestQueueEffect[] }>(
     (acc, event) => {
