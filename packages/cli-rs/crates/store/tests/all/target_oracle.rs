@@ -1,6 +1,6 @@
 //! Compares session target resolution, preparation and outgoing requests to recorded results.
 
-mod common;
+use crate::common;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -13,7 +13,7 @@ use opencode_store::target::{
 };
 use serde_json::{Value, json};
 
-const FIXTURE: &str = include_str!("../../../parity/fixtures/F.8/session-target.json");
+const FIXTURE: &str = include_str!("../../../../parity/fixtures/F.8/session-target.json");
 
 /// The routes of one case, answering as the TS fake server does: the first route whose method,
 /// path, and listed query values match, its replies in order with the last one repeating.

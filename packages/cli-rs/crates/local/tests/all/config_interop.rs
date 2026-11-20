@@ -1,8 +1,6 @@
 //! Compares config edits and shared file contents with the TypeScript client in temporary directories. Set
 //! `OPENCODE_RS_REQUIRE_TS` to fail rather than skip when dependencies are missing.
 
-#![recursion_limit = "512"]
-
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -21,7 +19,7 @@ use opencode_local::{jsonl, lock::Options};
 use serde_json::{Map, Value, json};
 use support::available;
 
-mod support;
+use crate::support;
 
 fn command(args: &[&str], home: Option<&Path>) -> Command {
     let mut command = support::bun("F.5-config.ts", args);

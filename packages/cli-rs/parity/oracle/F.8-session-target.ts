@@ -1,7 +1,7 @@
 // P-ORACLE for crates/store/src/target.rs: runs TypeScript's resolveSessionTarget, createWorktreeLocation, and
 // parseSessionTargetModel over the cases of packages/cli/test/session-target.test.ts and a few more, against a
 // scripted server. Each case records the requests the client sent, what `prepare` saw, and the result or error.
-// Writes parity/fixtures/F.8/session-target.json; crates/store/tests/target_oracle.rs serves the same routes to the
+// Writes parity/fixtures/F.8/session-target.json; crates/store/tests/all/target_oracle.rs serves the same routes to the
 // Rust port and compares.
 import { OpenCode } from "@opencode/client/promise"
 import { records } from "../lib/records"

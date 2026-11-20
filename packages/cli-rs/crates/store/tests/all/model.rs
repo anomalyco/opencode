@@ -11,7 +11,7 @@
 //!
 //! A failure prints its seed, reproduction command and shrunk sequence.
 
-mod common;
+use crate::common;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -1184,7 +1184,7 @@ impl fmt::Display for Found {
         writeln!(f, "seed {} case {}: [{}] {}", self.seed, self.case, self.failure.class, self.failure.message)?;
         writeln!(
             f,
-            "reproduce: MODEL_SEED={} MODEL_LEN={} MODEL_CASES={} cargo test -p opencode-store --test model -- --ignored",
+            "reproduce: MODEL_SEED={} MODEL_LEN={} MODEL_CASES={} cargo test -p opencode-store --test all model:: -- --ignored",
             self.seed,
             self.len,
             self.case + 1

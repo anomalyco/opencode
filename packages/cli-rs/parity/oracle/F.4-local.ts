@@ -1,4 +1,4 @@
-// P-FILE and P-ORACLE helper for F.4, driven by crates/local/tests/interop.rs.
+// P-FILE and P-ORACLE helper for F.4, driven by crates/local/tests/all/interop.rs.
 //
 //   bun F.4-local.ts <ts-root> lock-hold <dir> <key> <staleMs>   acquire, print "acquired", release on a stdin line
 //   bun F.4-local.ts <ts-root> lock-try <dir> <key> <timeoutMs> <staleMs>   print "acquired" or "timeout"

@@ -76,7 +76,7 @@ fn dragging_scrolls_a_wide_diagram() {
 #[test]
 fn markdown_diagrams_match_typescript() {
     let corpus: serde_json::Value =
-        serde_json::from_str(include_str!("../../../parity/fixtures/P.3/message.json")).unwrap();
+        serde_json::from_str(include_str!("../../../../parity/fixtures/P.3/message.json")).unwrap();
     // OpenTUI's Rust Markdown gives prose the syntax theme's `default` color, which `opencode-classic`'s
     // `markdown.text` equals (`parity/deviations/OT-markdown-default-scope.md`).
     let theme = Catalog::default().load("opencode-classic", ThemeMode::Dark).unwrap().theme;

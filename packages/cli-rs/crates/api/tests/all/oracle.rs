@@ -22,7 +22,7 @@ impl Transport for Record {
 }
 
 fn fixture() -> Value {
-    serde_json::from_str(include_str!("../../../parity/fixtures/F.2/requests.json")).unwrap()
+    serde_json::from_str(include_str!("../../../../parity/fixtures/F.2/requests.json")).unwrap()
 }
 
 #[tokio::test]

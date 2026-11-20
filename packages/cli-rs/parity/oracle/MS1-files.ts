@@ -1,5 +1,5 @@
 // P-FILE for the shared state files of the MS1 review (carbon-7) and the MS3/MS4 review (carbon-3), driven by
-// crates/local/tests/shared_files.rs. Run it from <ts-root>/packages/tui with OpenTUI's Solid preload, as
+// crates/local/tests/all/shared_files.rs. Run it from <ts-root>/packages/tui with OpenTUI's Solid preload, as
 // E.2-history.ts runs. Each writing command prints `ready` and waits for one line on stdin, so the Rust
 // side can start writing at the same moment, then writes the way the TypeScript TUI does, with its own
 // `util/persistence` functions:

@@ -12,4 +12,4 @@ applied: a created shell is added or updated, and an exited or deleted shell is 
 1,024 changes. If more arrive, the read publishes the snapshot alone, invalidates itself, and reads again.
 
 **Reason.** The user's decisions O-89 and O-92 (Q1 (a), Q3 (a)): fix in Rust the defects TS shares, and record them
-as deviations. Model test: `store/tests/model.rs` `shells_converge_to_the_server` and the `KNOWN` shell entries.
+as deviations. Model test: `store/tests/all/model.rs` `shells_converge_to_the_server` and the `KNOWN` shell entries.
