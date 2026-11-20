@@ -1736,7 +1736,7 @@ export type ArtifactTime = {
 
 export type ArtifactUpdated = _Event1<"artifact.updated", any>
 
-export type AutomationAction = (AutomationActionPrompt | AutomationActionCode)
+export type AutomationAction = (AutomationActionPrompt | AutomationActionCode | AutomationActionShell)
 
 export type AutomationActionCode = {
     type: "code",
@@ -1744,13 +1744,18 @@ export type AutomationActionCode = {
     args: any,
 }
 
---- What it does: { type: "prompt", prompt, to? } sends a prompt; { type: "code", code, args? } runs Code Mode with no model.
-export type AutomationActionInput = (AutomationPromptActionInput | AutomationCodeActionInput)
+--- What it does: { type: "prompt", prompt, to? } sends a prompt; { type: "code", code, args? } runs Code Mode; { type: "shell", command } runs a fixed shell command.
+export type AutomationActionInput = (AutomationPromptActionInput | AutomationCodeActionInput | AutomationShellActionInput)
 
 export type AutomationActionPrompt = {
     type: "prompt",
     prompt: string,
     to: AutomationTarget,
+}
+
+export type AutomationActionShell = {
+    type: "shell",
+    command: string,
 }
 
 export type AutomationCodeActionInput = {
@@ -1793,6 +1798,11 @@ export type AutomationPromptActionInput = {
     type: "prompt",
     prompt: string,
     to: AutomationTarget?,
+}
+
+export type AutomationShellActionInput = {
+    type: "shell",
+    command: string,
 }
 
 export type AutomationStatus = ("active" | "paused" | "done")
