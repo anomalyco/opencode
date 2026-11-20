@@ -14,7 +14,7 @@ import { Tool } from "@opencode/core/tool"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { Context, Deferred, Effect, Fiber, Layer, Schema, Scope } from "effect"
+import { Context, DateTime, Deferred, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
 
@@ -64,7 +64,7 @@ const harness = Effect.gen(function* () {
           delivery: "queue" as const,
           id: input.id ?? SessionMessage.ID.create(),
           sessionID: input.sessionID,
-          time: { created: 0 },
+          time: { created: DateTime.makeUnsafe(0) },
         }),
       ),
     yield* Scope.make(),
