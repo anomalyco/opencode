@@ -43,7 +43,9 @@ type Template = {
   source: string        // the template's PsychoScript source (see "Template source")
   mode: "step" | "live" // how clients run it; "live" templates are in widgets-live.md (stored versions without a
                         // mode are "step"). A live version hashes program + "\n" + JSON(data) + "\nlive", so the
-                        // mode is part of the content address
+                        // mode is part of the content address; declared capabilities follow as
+                        // "\n" + JSON(capabilities)
+  capabilities?: { https?: { hosts: string[] } }  // live templates only (widgets-live.md, Capabilities)
   builtin: boolean
 }
 ```
@@ -295,6 +297,7 @@ type State = {
   status: "open" | "submitted" | "dismissed"
   response?: unknown                    // the submitted value
   wait: boolean                         // the tool call waits for the answer (see Tools)
+  capabilities?: { https?: { hosts: string[] } }   // the template's, for the client's grant chip
   time: { created: number; responded?: number }   // epoch ms
 }
 ```
@@ -315,7 +318,11 @@ A widget goes `open → submitted` or `open → dismissed`, once. States of a de
 | `send` | `{ sessionID, messageID, callID, value, wake? }` | the `State` (unchanged) | `not_found`, `closed`, `rate_limited` |
 
 ```ts
-type Summary = { name: string; version: string; description: string; data: JSONSchema; mode: "step" | "live"; builtin: boolean }
+type Summary = {
+  name: string; version: string; description: string; data: JSONSchema; mode: "step" | "live"
+  capabilities?: { https?: { hosts: string[] } }   // live templates only
+  builtin: boolean
+}
 type Program = Summary & { source: string; program: string }   // program = prelude + "\n" + source
 ```
 
@@ -382,12 +389,14 @@ input: {
   data?: JSONSchema                // save; top-level `type` must be "object"
   source?: string                  // save
   mode?: "step" | "live"           // save; default "step"
+  capabilities?: { https?: { hosts: string[] } }   // save; live templates only (widgets-live.md, Capabilities)
   example?: object                 // save
 }
 ```
 
 `save` validates the name, checks `example` against the schema, and runs `init` (which renders the first `view`) with
-`example` before storing; a live template is only compiled. The `widget` tool likewise validates data and only
+`example` before storing; a live template is only compiled. `capabilities` are rejected on step templates, and each
+`https.hosts` entry must be a lowercase host name, `*.` plus one, or `*` (1 to 32 entries). The `widget` tool likewise validates data and only
 compiles a live template's program, never running `main`. Built-in names cannot be overwritten. Saving content that already exists (same version) makes
 that version the latest again and updates its description.
 
