@@ -12,7 +12,7 @@ import { makeWorker } from "./fixture/machine-worker"
 import { it } from "./lib/effect"
 import { readInitial, readUpdate } from "./lib/instructions"
 
-const machine = (name: string) => new Machines.Info({ id: Environment.ID.make(name), online: false })
+const machine = (name: string) => new Machines.Info({ id: Environment.ID.make(name), online: false, paired: false })
 
 const flag = (overrides: string) => Flag.node.replace(Flag.testLayer([], { overrides }))
 
@@ -113,15 +113,15 @@ describe("MachineInstructions", () => {
       const worker = yield* makeWorker({ environment: { id }, connect: machines.connect })
       yield* worker.restore
       expect(yield* machines.list()).toEqual([
-        new Machines.Info({ id, online: true, os: "linux", arch: "x64" }),
-        new Machines.Info({ id: pro, online: false }),
+        new Machines.Info({ id, online: true, paired: false, os: "linux", arch: "x64" }),
+        new Machines.Info({ id: pro, online: false, paired: false }),
       ])
       expect(yield* readUpdate(yield* load, initialized)).toEqual(unchanged)
 
       yield* worker.cut
       expect(yield* machines.list()).toEqual([
-        new Machines.Info({ id, online: false }),
-        new Machines.Info({ id: pro, online: false }),
+        new Machines.Info({ id, online: false, paired: false }),
+        new Machines.Info({ id: pro, online: false, paired: false }),
       ])
       expect(yield* readUpdate(yield* load, initialized)).toEqual(unchanged)
     }).pipe(
