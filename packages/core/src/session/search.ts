@@ -16,8 +16,8 @@ import { SessionMessageTable, SessionTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 
-const MAX_SNIPPET_BEFORE = 100
-const MAX_SNIPPET_AFTER = 160
+/** Characters of context on each side of a snippet's match. */
+const SNIPPET_CONTEXT = 120
 const MAX_TEXT = 3_000
 const MAX_TOOL_SUMMARY_INPUT = 120
 const MAX_TOOL_INPUT = 1_000
@@ -354,7 +354,7 @@ const readSession = Effect.fnUntraced(function* (
   const includeTools = input.includeTools === true
   const visible = includeTools ? VISIBLE_WITH_SYSTEM : VISIBLE_TYPES
   const filter = and(eq(SessionMessageTable.session_id, input.sessionID), inArray(SessionMessageTable.type, visible))
-  const limit = clamp(Math.trunc(input.limit ?? 7), 1, 50)
+  const limit = clamp(input.limit ?? 7, 1, 50)
   const direction = input.direction ?? "around"
   const older = (seq: number | undefined, count: number) =>
     db
@@ -673,8 +673,8 @@ function makeSnippet(text: string, query: string) {
           .map((term) => normalized.indexOf(stemPrefix(term)))
           .find((at) => at >= 0)
   const origin = stemmed !== undefined ? (offsets[stemmed] ?? 0) : 0
-  const start = Math.max(0, origin - MAX_SNIPPET_BEFORE)
-  const end = Math.min(text.length, origin + MAX_SNIPPET_AFTER)
+  const start = Math.max(0, origin - SNIPPET_CONTEXT)
+  const end = Math.min(text.length, origin + SNIPPET_CONTEXT)
   const body = text.slice(start, end).replace(/\s+/g, " ").trim()
   return `${start > 0 ? "…" : ""}${body}${end < text.length ? "…" : ""}`
 }

@@ -27,7 +27,7 @@ export const SearchInput = Schema.Struct({
   subagents: Schema.optionalKey(Schema.Boolean).annotate({
     description: "When listing, include subagent sessions (default false). Searches include them by default.",
   }),
-  limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))).annotate({
+  limit: Schema.optionalKey(Schema.Int).annotate({
     description: "Max sessions. Default 5 when searching (max 20), 20 when listing (max 100).",
   }),
   offset: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).annotate({
