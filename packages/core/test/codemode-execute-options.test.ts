@@ -99,7 +99,7 @@ describe("execute timeout and background", () => {
     }),
   )
 
-  it.live("a foreground timeout moves the script to the background", () =>
+  it.live("a foreground timeout moves the script to the background, where it finishes and notifies", () =>
     Effect.gen(function* () {
       const h = yield* harness
       const started = Date.now()
@@ -108,8 +108,10 @@ describe("execute timeout and background", () => {
       expect(elapsed).toBeGreaterThanOrEqual(140)
       expect(elapsed).toBeLessThan(500)
       expect(result.metadata?.jobID).toBeDefined()
+      expect((yield* h.jobs.get(String(result.metadata?.jobID)))?.status).toBe("running")
       yield* Deferred.await(h.notified)
-      expect(h.notices[0]?.metadata).toMatchObject({ state: "completed" })
+      expect(h.notices[0]?.metadata).toMatchObject({ jobID: result.metadata?.jobID, state: "completed" })
+      expect(h.notices[0]?.text).toContain("done")
     }),
   )
 
@@ -122,13 +124,15 @@ describe("execute timeout and background", () => {
     }),
   )
 
-  it.live("a background timeout stops the script", () =>
+  it.live("a background script with a timeout returns at once and is not stopped", () =>
     Effect.gen(function* () {
       const h = yield* harness
-      const result = yield* h.run(context("ses_bg_timeout"), script(5000), { background: true, timeout: 100 })
+      const started = Date.now()
+      const result = yield* h.run(context("ses_bg_timeout"), script(300), { background: true, timeout: 50 })
+      expect(Date.now() - started).toBeLessThan(250)
       yield* Deferred.await(h.notified)
-      expect(h.notices[0]?.metadata).toMatchObject({ jobID: result.metadata?.jobID, state: "error" })
-      expect(h.notices[0]?.text).toContain("Script timed out after 100 ms.")
+      expect(h.notices[0]?.metadata).toMatchObject({ jobID: result.metadata?.jobID, state: "completed" })
+      expect(h.notices[0]?.text).toContain("done")
     }),
   )
 })

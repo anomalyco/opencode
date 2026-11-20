@@ -7,7 +7,6 @@ import { Flag } from "../flag.js"
 import { Job } from "../job.js"
 import { BackgroundResult } from "../session/background-result.js"
 import type { Session } from "../session.js"
-import { Error as ToolError } from "@opencode/schema/tool"
 import type { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
 
@@ -73,20 +72,7 @@ export const make = Effect.fnUntraced(function* (
                     Effect.flatMap((done) => (done ? Effect.void : context.progress({ ...update, background: true }))),
                   ),
                 ),
-            }).pipe(
-              Effect.provideService(Job.BlockingParent, id),
-              // A script started in the background is stopped once it has run for its timeout.
-              (effect) =>
-                options?.background && options.timeout !== undefined
-                  ? Effect.timeoutOrElse(effect, {
-                      duration: Duration.millis(options.timeout),
-                      orElse: () =>
-                        Effect.fail(new ToolError({ message: `Script timed out after ${options.timeout} ms.` })),
-                    })
-                  : effect,
-              Effect.interruptible,
-              Effect.exit,
-            )
+            }).pipe(Effect.provideService(Job.BlockingParent, id), Effect.interruptible, Effect.exit)
             yield* Deferred.done(result, exit)
             if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
             const text = Exit.isFailure(exit)
