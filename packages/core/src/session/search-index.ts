@@ -19,7 +19,7 @@ import { SessionMessage } from "./message.js"
 type DatabaseService = Database.Interface["db"]
 
 /** Bump when the columns, tokenizer, triggers or extracted text change, so {@link ensure} rebuilds. */
-export const Version = 3
+export const Version = 1
 
 export type Layout = "compact" | "text"
 
@@ -354,9 +354,7 @@ const expected = (layout: Layout) => [
 
 const reset = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout) {
   yield* unlink(db)
-  // Includes the earlier draft's tables.
-  for (const name of [...Tables, "session_search_text", "session_search_dirty"])
-    yield* db.run(`DROP TABLE IF EXISTS ${name}`)
+  for (const name of Tables) yield* db.run(`DROP TABLE IF EXISTS ${name}`)
   yield* db.run("CREATE TABLE session_search_queue (source_id TEXT PRIMARY KEY)")
   yield* db.run(Layouts[layout].document)
   yield* db.run(fts("session_search", layout))

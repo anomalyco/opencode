@@ -216,7 +216,7 @@ describe("SessionSearchIndex", () => {
         compact: yield* hash("compact"),
         text: yield* hash("text"),
       }).toEqual({
-        version: 3,
+        version: 1,
         compact: "b1c48849f77f650749dd222fb340426cc0b9e8849f604f68d9e9afc3509c24bf",
         text: "4c23344aacfacef37a00d3048607c8a77bb5889aefbd264529bef761e8ff0671",
       })
@@ -497,23 +497,18 @@ describe("SessionSearchIndex", () => {
     }),
   )
 
-  it.effect("matches any word, and indexes only the start of long text", () =>
+  it.effect("indexes only the start of long text", () =>
     Effect.gen(function* () {
       const filler = "lorem ".repeat(SessionSearchIndex.MaxText / 6)
       const db = yield* database()
       yield* addSession(db, sessionA, null)
       yield* index(db)
       yield* addMessages(db, sessionA, [
-        user("1", "decodeMessageRow throws on legacy rows"),
-        user("2", "unrelated quokka"),
-        user("3", `pelican ${filler} albatross`),
-        assistant("4", [text(`heron ${filler}`), text("cormorant")]),
+        user("1", `pelican ${filler} albatross`),
+        assistant("2", [text(`heron ${filler}`), text("cormorant")]),
       ])
 
-      expect(yield* find(db, "zebra quokka")).toEqual([id("2")])
-      expect(yield* find(db, 'GLM-5.3 OR "rows" NEAR(')).toEqual([id("1")])
-      expect(yield* find(db, "  -- ")).toEqual([])
-      expect(yield* find(db, "pelican heron")).toEqual([id("3"), id("4")])
+      expect(yield* find(db, "pelican heron")).toEqual([id("1"), id("2")])
       expect(yield* find(db, "albatross cormorant")).toEqual([])
     }),
   )

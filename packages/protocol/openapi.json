@@ -17438,6 +17438,9 @@
               "home_memory": {
                 "type": "boolean"
               },
+              "sqlite_fts": {
+                "type": "boolean"
+              },
               "schedules": {
                 "type": "boolean"
               },

@@ -8,8 +8,8 @@ import { SessionSearchIndex } from "./search-index.js"
 export interface Interface {
   /**
    * Waits for {@link start}, then runs the one-time build of existing history until it is done, from its persisted
-   * cursor; triggers keep the index current after that. The server forks it, like `Schedule.run`, so it runs once per
-   * server process and never in a Durable Object. A build that failed before is retried once.
+   * cursor; triggers keep the index current after that. The server forks it, like `Automation.Service.run`, so it runs
+   * once per server process and never in a Durable Object. A build that failed before is retried once.
    */
   readonly run: Effect.Effect<void>
   /** Lets {@link run} go, once a location has the `sqlite_fts` flag on. Later calls do nothing. */
@@ -24,11 +24,11 @@ const BUSY = "1 second"
 /** Rows in a row that fail on their own before the failure is taken to be the database's, not the rows'. */
 const MAX_FAILURES = 3
 
-const whenFree = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+const retryOnBusy = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
   effect.pipe(
     Effect.catchCause((cause) =>
       SessionSearchIndex.isBusy(cause)
-        ? Effect.sleep(BUSY).pipe(Effect.andThen(() => whenFree(effect)))
+        ? Effect.sleep(BUSY).pipe(Effect.andThen(() => retryOnBusy(effect)))
         : Effect.failCause(cause),
     ),
   )
@@ -39,7 +39,7 @@ export const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const started = yield* Latch.make()
     const chunk = (options?: { readonly limit?: number; readonly skip?: boolean }) =>
-      whenFree(
+      retryOnBusy(
         Effect.gen(function* () {
           const now = yield* Clock.currentTimeMillis
           const result = yield* SessionSearchIndex.buildChunk(db, options)
@@ -60,7 +60,7 @@ export const layer = Layer.effect(
           stats.single = Math.max(0, stats.single - 1)
           stats.failures = 0
           if (exit.value.done) {
-            const state = yield* whenFree(SessionSearchIndex.state(db))
+            const state = yield* retryOnBusy(SessionSearchIndex.state(db))
             yield* Effect.logInfo("session search build finished", {
               ms: (yield* Clock.currentTimeMillis) - started,
               chunks: stats.chunks,
@@ -79,7 +79,7 @@ export const layer = Layer.effect(
         }
         stats.failures++
         if (stats.failures >= MAX_FAILURES) {
-          yield* whenFree(SessionSearchIndex.fail(db, Cause.pretty(exit.cause)))
+          yield* retryOnBusy(SessionSearchIndex.fail(db, Cause.pretty(exit.cause)))
           yield* Effect.logError("session search build failed", { cause: exit.cause })
           return "failed" as const
         }
@@ -90,13 +90,13 @@ export const layer = Layer.effect(
 
     const run = Effect.gen(function* () {
       yield* started.await
-      const ensured = yield* whenFree(SessionSearchIndex.ensure(db))
+      const ensured = yield* retryOnBusy(SessionSearchIndex.ensure(db))
       if (ensured.status === "unsupported") {
         yield* Effect.logWarning("session search is not supported by this SQLite", { reason: ensured.reason })
         return
       }
       if (ensured.status !== "ready" || ensured.state.status === "done") return
-      if (ensured.state.status === "failed") yield* whenFree(SessionSearchIndex.retry(db))
+      if (ensured.state.status === "failed") yield* retryOnBusy(SessionSearchIndex.retry(db))
       yield* build
     }).pipe(
       Effect.catchCauseIf(
