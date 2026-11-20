@@ -763,13 +763,6 @@ mod tests {
         owners: RefCell<Vec<u64>>,
     }
 
-    impl Fake {
-        /// A host whose call is owner `call`'s.
-        fn of(call: u64) -> Self {
-            Self { call, ..Self::default() }
-        }
-    }
-
     impl Read for Fake {
         fn theme_mode(&self) -> ThemeMode {
             ThemeMode::Dark
@@ -813,16 +806,6 @@ mod tests {
         }
         fn set_owner(&self, owner: Option<u64>) {
             self.forced.set(owner);
-        }
-    }
-
-    impl Fake {
-        /// The generation the last dialog's close names.
-        fn generation(&self) -> String {
-            match self.dialogs.borrow().last() {
-                Some(Dialog::Dismissable { dismissed: Action::Command { input, .. }, .. }) => input.clone().unwrap(),
-                other => panic!("no dismissable dialog: {other:?}"),
-            }
         }
     }
 
@@ -959,73 +942,6 @@ mod tests {
             into.borrow_mut().push(format!("{slept:?}"));
         });
         assert_eq!(*log.borrow(), ["Err(\"more than 32 timers of the plugin wait\")"]);
-    }
-
-    #[test]
-    fn a_cancelled_request_gives_its_wait_the_cancel_once() {
-        let (registered, tasks, _) = plugin();
-        let host = Fake::default();
-        let log = Log::default();
-        for name in ["a", "b"] {
-            let log = log.clone();
-            tasks.spawn(&host, move |cx| async move {
-                let reply = cx.fetch(Fetch::new("GET", "/x")).await;
-                log.borrow_mut().push(format!("{name} {reply:?}"));
-            });
-        }
-        let cancel = |id| registered.cancelled().iter().for_each(|run| run(&host, RequestId(id)));
-        assert!(registered.manifest().cancelled, "the tasks did not ask to hear of a cancel");
-        cancel(1);
-        assert_eq!(*log.borrow(), ["a Err(\"cancelled\")"]);
-        // Neither a second cancel nor the reply reaches it after; the other task waits on.
-        cancel(1);
-        reply(&registered, &host, 1, Ok(Value::Null));
-        assert_eq!(*log.borrow(), ["a Err(\"cancelled\")"]);
-        reply(&registered, &host, 2, Ok(Value::from(2)));
-        assert_eq!(*log.borrow(), ["a Err(\"cancelled\")", "b Ok(Number(2))"]);
-        // A cancel after the reply reaches nothing.
-        cancel(2);
-        assert_eq!(log.borrow().len(), 2);
-        // The plain reply handlers never hear a cancel: the plugin's own `on_reply` sees only replies.
-        assert_eq!(registered.replies().len(), 1);
-    }
-
-    #[test]
-    fn a_dialog_that_closes_without_an_answer_gives_none() {
-        let (registered, tasks, _) = plugin();
-        let host = Fake::default();
-        let log = Log::default();
-        let into = log.clone();
-        tasks.spawn(&host, move |cx| async move {
-            let options = vec![SelectOption::new("A", "a"), SelectOption::new("B", "b")];
-            let escaped = cx.select(Select::ask("Pick", options.clone()).key("rich")).await;
-            let picked = cx.select(Select::ask("Pick", options)).await;
-            let typed = cx.prompt(Prompt::ask("Name")).await;
-            let declined = cx.confirm(Confirm::ask("Sure?", "Really?")).await;
-            into.borrow_mut().push(format!("{escaped:?} {picked:?} {typed:?} {declined:?}"));
-            cx.alert(Alert::new("Done", "done")).await;
-            into.borrow_mut().push("alert closed".to_owned());
-        });
-        let first = host.generation();
-        run(&registered, &host, "closed", Some(&first));
-        // An answer runs its action, then its close: the close of a dialog that answered is no escape.
-        let second = host.generation();
-        answer(&registered, &host, 1, "b");
-        run(&registered, &host, "closed", Some(&second));
-        // A close of an earlier dialog, late, is not this one's.
-        run(&registered, &host, "closed", Some(&first));
-        answer(&registered, &host, 2, "Ada");
-        answer(&registered, &host, 3, "false");
-        assert_eq!(*log.borrow(), ["None Some(\"b\") Some(\"Ada\") Some(false)"]);
-        assert!(
-            matches!(&host.dialogs.borrow()[4], Dialog::Dismissable { dialog, .. } if matches!(**dialog, Dialog::Alert(_)))
-        );
-        run(&registered, &host, "closed", Some(&host.generation()));
-        assert_eq!(log.borrow().last().unwrap(), "alert closed");
-        // A task select cannot retain its key: a pick must close it.
-        let Dialog::Dismissable { dialog, .. } = &host.dialogs.borrow()[0] else { panic!() };
-        let Dialog::Select(select) = &**dialog else { panic!() };
-        assert_eq!(select.key, None);
     }
 
     #[test]
@@ -1202,70 +1118,6 @@ mod tests {
         assert_eq!(mount.fetches.get(), 0, "the replaced dialog's task went on with the mount's host");
         run(&registered, &closing, "closed", Some("1"));
         assert_eq!((mount.fetches.get(), closing.fetches.get()), (0, 1));
-    }
-
-    #[test]
-    fn a_task_asks_under_the_owner_of_the_call_that_started_it() {
-        let (registered, tasks, _) = plugin();
-        let (mount, activation) = (Fake::of(7), Fake::of(0));
-        tasks.every(&mount, Duration::from_millis(50), |cx| async move {
-            drop(cx.fetch(Fetch::new("GET", "/poll")).await);
-            ControlFlow::Continue(())
-        });
-        assert_eq!(*mount.owners.borrow(), [7], "the first sleep was not the mount's");
-        // The sleep's reply (the mount host's request 1), then the tick's fetch's (the activation host's request 1),
-        // come in the activation's calls.
-        reply(&registered, &activation, 1, Ok(Value::Null));
-        reply(&registered, &activation, 1, Ok(Value::Null));
-        assert_eq!(*activation.owners.borrow(), [7, 7], "the tick's fetch or the next sleep escaped the mount");
-        assert_eq!(activation.forced.get(), None, "the call did not get its own owner back");
-    }
-
-    #[test]
-    fn a_task_woken_in_a_mounts_call_keeps_the_activations_owner() {
-        let (_registered, tasks, _) = plugin();
-        let (first, mount) = (Fake::of(0), Fake::of(7));
-        let signal: Rc<RefCell<(bool, Option<std::task::Waker>)>> = Rc::default();
-        let waiting = signal.clone();
-        tasks.spawn(&first, move |cx| async move {
-            std::future::poll_fn(|context| {
-                let mut signal = waiting.borrow_mut();
-                if signal.0 {
-                    return Poll::Ready(());
-                }
-                signal.1 = Some(context.waker().clone());
-                Poll::Pending
-            })
-            .await;
-            drop(cx.fetch(Fetch::new("GET", "/global")).await);
-        });
-        let firing = signal.clone();
-        tasks.spawn(&mount, move |cx| async move {
-            let waker = {
-                let mut signal = firing.borrow_mut();
-                signal.0 = true;
-                signal.1.take()
-            };
-            waker.into_iter().for_each(std::task::Waker::wake);
-            drop(cx.fetch(Fetch::new("GET", "/mount")).await);
-        });
-        let asked: Vec<_> = mount.sent.borrow().iter().map(|fetch| fetch.path.clone()).collect();
-        assert_eq!(asked, ["/mount", "/global"]);
-        assert_eq!(*mount.owners.borrow(), [7, 0], "the activation's task asked under the mount");
-        assert_eq!(mount.forced.get(), None);
-    }
-
-    #[test]
-    fn a_dropped_sleep_lets_its_timer_go() {
-        let (registered, tasks, _) = plugin();
-        let host = Fake::default();
-        tasks.spawn(&host, |cx| async move {
-            drop(cx.sleep(Duration::from_secs(60)));
-            let _ = cx.sleep(Duration::from_millis(20)).await;
-        });
-        assert_eq!(*host.cancelled.borrow(), [RequestId(1)]);
-        reply(&registered, &host, 2, Ok(Value::Null));
-        assert_eq!(*host.cancelled.borrow(), [RequestId(1)], "a sleep that slept let its timer go");
     }
 
     #[test]

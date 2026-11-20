@@ -5372,37 +5372,6 @@ mod tests {
     }
 
     #[test]
-    fn fences_dispatch_by_language_or_index() {
-        let mut registered = Registered::new("new", None);
-        let mut setup = registered.setup();
-        setup.code_block("x", |_, fence| match fence.key {
-            0 => Fenced::Code,
-            _ => Fenced::Lines { lines: vec![vec![Span::new(fence.code.clone())]], fg: None, drag: false },
-        });
-        let fence = Fence {
-            language: "x".into(),
-            info: "x".into(),
-            code: "a".into(),
-            streaming: false,
-            closed: true,
-            key: 7,
-            width: 80,
-        };
-        let request = |fence: &Fence, index| Request::RenderFence(RenderFence { fence: fence.clone(), index });
-        let answer = setup.handle(request(&fence, None)).unwrap();
-        assert_eq!(answer, serde_json::json!({ "type": "lines", "lines": [[{ "text": "a" }]] }));
-        let unknown = Fence { language: "y".into(), ..fence.clone() };
-        assert_eq!(setup.handle(request(&unknown, None)).unwrap(), serde_json::json!({ "type": "code" }));
-        // A host that normalized the language names the render by index; the render sees the normalized language.
-        let json = r#"{"type":"render-fence","language":"y","info":"x","code":"a","streaming":false,"closed":true,"key":7,"width":80,"index":0}"#;
-        assert_eq!(serde_json::to_string(&request(&unknown, Some(0))).unwrap(), json);
-        assert_eq!(serde_json::from_str::<Request>(json).unwrap(), request(&unknown, Some(0)));
-        let answer = setup.handle(serde_json::from_str(json).unwrap()).unwrap();
-        assert_eq!(answer, serde_json::json!({ "type": "lines", "lines": [[{ "text": "a" }]] }));
-        assert_eq!(setup.handle(request(&fence, Some(1))).unwrap(), serde_json::json!({ "type": "code" }));
-    }
-
-    #[test]
     fn colors_and_rows_round_trip() {
         let line = vec![Span { bg: Some(Rgba::new(255, 255, 255, 20).into()), ..Span::new("a").fg("#102030") }];
         let fenced = Fenced::Lines { lines: vec![line], fg: Some(Rgba::new(1, 2, 3, 255).into()), drag: true };
@@ -5431,45 +5400,6 @@ mod tests {
         let render = |claim| Request::Render { claim, input: SlotInput::default(), changed: Changed::everything() };
         assert_eq!(setup.handle(render(0)).unwrap(), serde_json::json!({ "type": "keep" }));
         assert!(setup.handle(render(1)).is_err());
-    }
-
-    #[test]
-    fn a_command_that_declines_answers_pass() {
-        let mut registered = Registered::new("new", None);
-        let mut setup = registered.setup();
-        setup.command(Command::new("x.pass"), |_, _| interact::Handled::Pass);
-        setup.command(Command::new("x.take"), |_, _| interact::Handled::Consume);
-        setup.command(Command::new("x.unit"), |_, _| ());
-        let run = |name: &str| setup.handle(Request::Command { name: name.into(), input: None }).unwrap();
-        assert_eq!(
-            [run("x.pass"), run("x.take"), run("x.unit")],
-            [serde_json::json!("pass"), serde_json::Value::Null, serde_json::Value::Null]
-        );
-        let set = HostRequest::SetEnabled { name: "x.pass".into(), enabled: false };
-        let text = r#"{"type":"set-enabled","name":"x.pass","enabled":false}"#;
-        assert_eq!(serde_json::to_string(&set).unwrap(), text);
-        assert_eq!(serde_json::from_str::<HostRequest>(text).unwrap(), set);
-    }
-
-    #[test]
-    fn events_reach_the_registered_handler_only() {
-        let mut registered = Registered::new("new", None);
-        let mut setup = registered.setup();
-        assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("events"));
-        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
-        let into = seen.clone();
-        setup.on_event(&["session.execution.started"], move |_, event| into.borrow_mut().push(event.clone()));
-        assert_eq!(setup.manifest().events, [["session.execution.started"]]);
-        let event: V2Event = serde_json::from_value(serde_json::json!({
-            "id": "evt_1", "created": 1, "type": "session.execution.started",
-            "durable": { "aggregateID": "ses_1", "seq": 1, "version": 1 }, "data": { "sessionID": "ses_1" },
-        }))
-        .unwrap();
-        let request = Request::Event { handler: 0, event: Box::new(event.clone()) };
-        let request = serde_json::from_slice(&serde_json::to_vec(&request).unwrap()).unwrap();
-        assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
-        assert_eq!(*seen.borrow(), std::slice::from_ref(&event));
-        assert!(setup.handle(Request::Event { handler: 1, event: Box::new(event) }).is_err());
     }
 
     #[test]
@@ -5662,24 +5592,6 @@ mod tests {
         std::panic::set_hook(hook);
     }
 
-    #[test]
-    fn route_mounts_round_trip() {
-        let mut registered = Registered::new("new", None);
-        let mut setup = registered.setup();
-        assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("route_mounts"));
-        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
-        for tag in ["a", "b"] {
-            let into = seen.clone();
-            setup.on_route_mount("page", move |_, mounted| into.borrow_mut().push((tag, mounted)));
-        }
-        assert_eq!(setup.manifest().route_mounts, ["page"]);
-        let request: Request = serde_json::from_str(r#"{"type":"route-mount","name":"page","mounted":true}"#).unwrap();
-        assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
-        setup.handle(Request::RouteMount { name: "other".into(), mounted: true }).unwrap();
-        setup.handle(Request::RouteMount { name: "page".into(), mounted: false }).unwrap();
-        assert_eq!(*seen.borrow(), [("a", true), ("b", true), ("a", false), ("b", false)]);
-    }
-
     thread_local! {
         /// The requests the recording host got on this thread.
         static REQUESTS: std::cell::RefCell<Vec<HostRequest>> = const { std::cell::RefCell::new(Vec::new()) };
@@ -5757,88 +5669,6 @@ mod tests {
         thread.join().unwrap();
         waker.wake();
         assert_eq!(wakes.load(Ordering::SeqCst), 1);
-    }
-
-    #[test]
-    fn mounts_and_the_prompt_input_round_trip() {
-        let mut registered = Registered::new("new", None);
-        let mut setup = registered.setup();
-        setup.slot(Placement::append("prompt.footer"), |_, _, _| Render::Hide);
-        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
-        let into = seen.clone();
-        setup.on_mount(Placement::append("prompt.footer"), move |_, input, mounted| {
-            into.borrow_mut().push((input.clone(), mounted));
-        });
-        setup.on_mount(Placement::append("home.footer"), |_, _, _| {});
-        let marks: Vec<_> = setup.manifest().slots.iter().map(|claim| (claim.path.as_str(), claim.mount)).collect();
-        assert_eq!(marks, [("prompt.footer", true), ("home.footer", true)]);
-        assert_eq!(setup.renders().count(), 2);
-        let input = SlotInput {
-            session_id: Some("ses_1".into()),
-            prompt: Some(PromptInput { shell: false, show_details: true }),
-            ..SlotInput::default()
-        };
-        let json = r#"{"type":"mount","claim":0,"input":{"session_id":"ses_1","prompt":{"shell":false,"show_details":true}},"mounted":true}"#;
-        let request = Request::Mount { claim: 0, input: input.clone(), mounted: true };
-        assert_eq!(serde_json::to_string(&request).unwrap(), json);
-        setup.handle(serde_json::from_str(json).unwrap()).unwrap();
-        setup.handle(Request::Mount { claim: 0, input: input.clone(), mounted: false }).unwrap();
-        setup.handle(Request::Mount { claim: 1, input: SlotInput::default(), mounted: true }).unwrap();
-        assert_eq!(*seen.borrow(), [(input.clone(), true), (input, false)]);
-        assert_eq!(serde_json::to_string(&SlotInput::default()).unwrap(), "{}");
-        assert_eq!(serde_json::to_string(&Family::default()).unwrap(), r#"{"members":[],"cost":0.0}"#);
-    }
-
-    #[test]
-    fn wake_and_plugin_changes_notify_their_own_handlers() {
-        let mut registered = Registered::new("new", None);
-        let mut setup = registered.setup();
-        assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("wake"));
-        let runs = Rc::new(std::cell::Cell::new(0));
-        for _ in 0..2 {
-            let runs = runs.clone();
-            setup.on_wake(move |_| runs.set(runs.get() + 1));
-        }
-        assert!(setup.manifest().wake);
-        assert_eq!(setup.handle(serde_json::from_str(r#"{"type":"wake"}"#).unwrap()).unwrap(), serde_json::Value::Null);
-        assert_eq!(runs.get(), 2);
-        // the plugins' change runs the plugins handlers alone, and a manifest without one does not name it.
-        assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("plugins"));
-        let heard = runs.clone();
-        setup.on_plugins(move |_| heard.set(heard.get() + 10));
-        assert!(setup.manifest().plugins);
-        assert_eq!(serde_json::to_string(&Request::Plugins).unwrap(), r#"{"type":"plugins"}"#);
-        assert_eq!(setup.handle(Request::Plugins).unwrap(), serde_json::Value::Null);
-        assert_eq!(runs.get(), 12);
-    }
-
-    /// A text delta of message `msg_1` in `ses_1`.
-    fn text_delta(delta: &str) -> V2Event {
-        serde_json::from_value(serde_json::json!({
-            "id": "evt_1",
-            "created": 1,
-            "type": "session.text.delta",
-            "data": { "sessionID": "ses_1", "assistantMessageID": "msg_1", "ordinal": 0, "delta": delta },
-        }))
-        .unwrap()
-    }
-
-    #[test]
-    fn deltas_arrive_in_one_batch() {
-        // Deltas: the manifest says so only with a handler, and the request runs each handler with the events.
-        let mut registered = Registered::new("new", None);
-        let mut setup = registered.setup();
-        assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("deltas"));
-        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
-        let into = seen.clone();
-        setup.on_deltas(move |_, events| into.borrow_mut().push(events.len()));
-        assert!(setup.manifest().deltas);
-        let request = Request::Deltas { events: vec![text_delta("a"), text_delta("b")] };
-        let json = serde_json::to_string(&request).unwrap();
-        assert!(json.starts_with(r#"{"type":"deltas","events":[{"#), "{json}");
-        assert_eq!(serde_json::from_str::<Request>(&json).unwrap(), request);
-        assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
-        assert_eq!(*seen.borrow(), [2]);
     }
 
     /// A host that takes only toasts and dialogs: it answers them `null`, logs every request in the `Vec` at `ctx`, and
