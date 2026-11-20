@@ -6,6 +6,7 @@ import type { EventLog } from "@opencode/schema/event-log"
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
 import { Database } from "./database/database.js"
 import { EventSequenceTable, EventTable } from "./event/sql.js"
+import { SessionMessageTable } from "./session/sql.js"
 import type { Location } from "@opencode/schema/location"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -19,6 +20,29 @@ import { AbsolutePath } from "@opencode/schema/schema"
 export type Subscriber<D extends Event.Definition = Event.Definition> = (event: Event.Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
 
+/**
+ * Highest seq already persisted for an aggregate outside the counter row:
+ * stored events and, for sessions, projected messages. A missing or stale
+ * counter (e.g. a session migrated from V1, whose events were deleted while
+ * its messages remain) must resume above these rows, or the next insert
+ * collides on the projected `UNIQUE(session_id, seq)`.
+ */
+const persistedMax = Effect.fnUntraced(function* (db: Database.Interface["db"], aggregateID: string) {
+  const stored = yield* db
+    .select({ seq: sql<number | null>`max(${EventTable.seq})` })
+    .from(EventTable)
+    .where(eq(EventTable.aggregate_id, aggregateID))
+    .get()
+    .pipe(Effect.orDie)
+  const projected = yield* db
+    .select({ seq: sql<number | null>`max(${SessionMessageTable.seq})` })
+    .from(SessionMessageTable)
+    .where(eq(SessionMessageTable.session_id, aggregateID as SessionID))
+    .get()
+    .pipe(Effect.orDie)
+  return Math.max(stored?.seq ?? -1, projected?.seq ?? -1)
+})
+
 export const latestSequence = Effect.fn("Bus.latestSequence")(function* (
   db: Database.Interface["db"],
   aggregateID: string,
@@ -29,7 +53,7 @@ export const latestSequence = Effect.fn("Bus.latestSequence")(function* (
     .where(eq(EventSequenceTable.aggregate_id, aggregateID))
     .get()
     .pipe(Effect.orDie)
-  return row?.seq ?? -1
+  return Math.max(row?.seq ?? -1, yield* persistedMax(db, aggregateID))
 })
 
 export const reserveSequence = Effect.fn("Bus.reserveSequence")(function* (
@@ -323,7 +347,7 @@ export function configured(options?: Options) {
                           .where(eq(EventSequenceTable.aggregate_id, aggregateID))
                           .get()
                           .pipe(Effect.orDie)
-                        const latest = row?.seq ?? -1
+                        const latest = Math.max(row?.seq ?? -1, yield* persistedMax(db, aggregateID))
                         const encode = () =>
                           Schema.encodeUnknownSync(definition.data)(event.data) as Record<string, unknown>
                         if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
@@ -568,7 +592,7 @@ export function configured(options?: Options) {
                             .where(eq(EventSequenceTable.aggregate_id, aggregateID))
                             .get()
                             .pipe(Effect.orDie)
-                          const firstSeq = (row?.seq ?? -1) + 1
+                          const firstSeq = Math.max(row?.seq ?? -1, yield* persistedMax(db, aggregateID)) + 1
                           const finalSeq = firstSeq + payloads.length - 1
                           const queued = payloads.map((item, index) => ({
                             ...item.event,
