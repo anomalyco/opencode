@@ -195,7 +195,7 @@ describe("SessionSearch", () => {
     }),
   )
 
-  it.effect("folds accents on the query and centers snippets on the match, keeping the original text", () =>
+  it.effect("folds accents on query and centers snippets on accented and stemmed matches while preserving original text", () =>
     Effect.gen(function* () {
       const { search, addSession, addMessages, buildIndex } = yield* setup
       const padding = "filler word ".repeat(60)
@@ -214,9 +214,10 @@ describe("SessionSearch", () => {
       const german = yield* search.search({ query: "strasse" })
       expect(german.results?.[0]?.matches[0]?.snippet).toContain("Straße")
 
-      // "running" still finds "runs" through the index's stemmer; the snippet then starts at the beginning.
+      // Query "running" matches "runs" via Porter stemmer and snippet centers on "runs".
       const stemmed = yield* search.search({ query: "running" })
       expect(stemmed.results?.[0]?.matches[0]?.messageID).toBe(msg("a2"))
+      expect(stemmed.results?.[0]?.matches[0]?.snippet).toContain("runs every evening")
     }),
   )
 

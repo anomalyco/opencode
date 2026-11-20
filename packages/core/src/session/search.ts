@@ -600,8 +600,7 @@ function plainOrQuery(folded: string) {
 
 /**
  * Normalizes `text` the same way FTS5 + `Folds` index it while keeping a map back to original character offsets,
- * so the excerpt centers on an accent-folded match while keeping the original spelling. Without a literal match (say a
- * stemmed one) it starts at the beginning.
+ * so the returned excerpt centers on accented or stemmed matches while preserving the original spelling.
  */
 function makeSnippet(text: string, query: string) {
   const { normalized, offsets } = normalizeWithOffsets(text)
@@ -613,12 +612,27 @@ function makeSnippet(text: string, query: string) {
     ),
   ).toSorted((a, b) => b.length - a.length)
 
-  const at = terms.map((term) => normalized.indexOf(term)).find((index) => index >= 0)
-  const origin = at === undefined ? 0 : (offsets[at] ?? 0)
+  const exact = terms.map((term) => normalized.indexOf(term)).find((at) => at >= 0)
+  const stemmed =
+    exact !== undefined
+      ? exact
+      : terms
+          .map((term) => normalized.indexOf(stemPrefix(term)))
+          .find((at) => at >= 0)
+  const origin = stemmed !== undefined ? (offsets[stemmed] ?? 0) : 0
   const start = Math.max(0, origin - SNIPPET_CONTEXT)
   const end = Math.min(text.length, origin + SNIPPET_CONTEXT)
   const body = text.slice(start, end).replace(/\s+/g, " ").trim()
   return `${start > 0 ? "…" : ""}${body}${end < text.length ? "…" : ""}`
+}
+
+/** Strips common English inflection suffixes (including doubled consonants like `running` -> `run`) for snippet centering. */
+function stemPrefix(term: string) {
+  const stripped = term.replace(/(?:ies|ing|ed|es|s|ly|er|est|tion|ment|ness)$/, (suffix) =>
+    term.length - suffix.length >= 3 ? "" : suffix,
+  )
+  const base = stripped.length >= 4 ? stripped.replace(/([bcdfghjklmnpqrstvwxyz])\1$/, "$1") : stripped
+  return base.slice(0, Math.max(3, base.length))
 }
 
 function normalizeText(value: string) {
