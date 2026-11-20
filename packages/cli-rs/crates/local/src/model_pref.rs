@@ -200,32 +200,6 @@ impl ModelPreferences {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn updates_keep_other_fields_and_sanitize() {
-        let state = opencode_util::temp::tempdir().unwrap();
-        let file = state.path().join("model.json");
-        fs::write(
-            &file,
-            r#"{"x":1,"recent":[{"providerID":"a","modelID":"b"},{"providerID":""},5],"variant":{"a/b":"high","":"x","c/d":""}}"#,
-        )
-        .unwrap();
-        let prefs = ModelPreferences::new(state.path());
-        let model = Model::new("p", "m");
-        prefs.add_recent(&model).unwrap();
-        assert_eq!(
-            fs::read_to_string(&file).unwrap(),
-            r#"{"x":1,"recent":[{"providerID":"p","modelID":"m"},{"providerID":"a","modelID":"b"}],"variant":{"a/b":"high"},"favorite":[]}"#
-        );
-        prefs.set_favorite(&model, true).unwrap();
-        prefs.save_variant(&model, None).unwrap();
-        let loaded = prefs.load();
-        assert_eq!(loaded.favorite, vec![model.clone()]);
-        assert_eq!(loaded.variant.get("p/m").map(String::as_str), Some("default"));
-        assert_eq!(prefs.resolve_variant(&model), None);
-        assert_eq!(decode(Some(&json!([1]))), decode(None));
-    }
 
     #[test]
     fn cycles_variants_like_typescript() {

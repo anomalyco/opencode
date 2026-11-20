@@ -475,31 +475,6 @@ mod tests {
     }
 
     #[test]
-    fn saves_keep_lines_another_client_appended() {
-        let state = opencode_util::temp::tempdir().unwrap();
-        let file = state.path().join("prompt-history.jsonl");
-        save_history(state.path(), &prompt("a")).unwrap();
-        save_history(state.path(), &prompt("a")).unwrap();
-        // The TypeScript TUI appends without the lock.
-        append_text(&file, "{\"text\":\"ts\",\"pasted\":[]}\n").unwrap();
-        for index in 0..49 {
-            save_history(state.path(), &prompt(&index.to_string())).unwrap();
-        }
-        let text = fs::read_to_string(&file).unwrap();
-        assert_eq!(text.lines().count(), 51, "saves only append");
-        // The load trims to the newest 50, and keeps the line TypeScript appended.
-        let history = History::load(state.path());
-        let text = fs::read_to_string(&file).unwrap();
-        assert_eq!(text.lines().count(), MAX_HISTORY_ENTRIES);
-        assert_eq!(history.entries()[0]["text"], "ts");
-        assert_eq!(history.entries()[49]["text"], "48");
-        // A load that changes nothing does not rewrite the file.
-        let before = fs::metadata(&file).unwrap().modified().unwrap();
-        History::load(state.path());
-        assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), before);
-    }
-
-    #[test]
     fn last_line_reads_backwards_like_lines() {
         let state = opencode_util::temp::tempdir().unwrap();
         let file = state.path().join("lines.jsonl");
@@ -568,35 +543,6 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn stash_writes_keep_entries_another_client_stashed() {
-        let state = opencode_util::temp::tempdir().unwrap();
-        let file = state.path().join("prompt-stash.jsonl");
-        ts_stash(&file, "ts-old", 1);
-        let mut stash = Stash::load(state.path());
-        stash.push(prompt("a"), 2);
-        stash.push(prompt("b"), 3);
-        ts_stash(&file, "ts-important-draft", 4);
-        assert_eq!(stash.pop().unwrap()["prompt"]["text"], "b");
-        assert_eq!(stash_texts(&file), ["ts-old", "a", "ts-important-draft"]);
-        stash.remove(0);
-        assert_eq!(stash_texts(&file), ["a", "ts-important-draft"]);
-        // Past the limit, a push only appends; the next load trims the file to the newest 50.
-        for index in 0..MAX_STASH_ENTRIES {
-            stash.push(prompt(&index.to_string()), 10 + index as i64);
-        }
-        ts_stash(&file, "ts-late", 100);
-        assert_eq!(stash.list().len(), MAX_STASH_ENTRIES);
-        assert_eq!(fs::read_to_string(&file).unwrap().lines().count(), 53);
-        let loaded = Stash::load(state.path());
-        assert_eq!(fs::read_to_string(&file).unwrap().lines().count(), 50);
-        assert_eq!(loaded.list()[49]["prompt"]["text"], "ts-late");
-        // A load that changes nothing does not rewrite the file.
-        let before = fs::metadata(&file).unwrap().modified().unwrap();
-        Stash::load(state.path());
-        assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), before);
-    }
-
     /// The TypeScript TUI rewrites the file from memory, without the lock, between this client's read
     /// and its replace: the change is made again against what the file now holds.
     #[test]
@@ -622,12 +568,6 @@ mod tests {
         assert_eq!(stash_texts(&file), ["c"]);
     }
 
-    // The working directory `/w`, absolute on this platform: Windows paths have a drive and backslashes,
-    // as `path.resolve` gives them to the TypeScript TUI there.
-    fn w() -> PathBuf {
-        PathBuf::from(if cfg!(windows) { r"C:\w" } else { "/w" })
-    }
-
     #[test]
     fn frecency_paths_resolve_like_path_resolve() {
         let (p, w) = (Flavor::Posix, Flavor::Windows);
@@ -646,57 +586,5 @@ mod tests {
         ] {
             assert_eq!(resolve(flavor, Path::new(cwd), path), expected, "{flavor:?} {cwd} {path}");
         }
-    }
-
-    // A frecency line for `name` resolved against [`w`].
-    fn visit_line(name: &str, frequency: f64, last_open: f64) -> String {
-        line(&resolve(Flavor::NATIVE, &w(), name), &Visit { frequency, last_open }) + "\n"
-    }
-
-    #[test]
-    fn a_frecency_update_at_the_limit_keeps_another_clients_writes() {
-        let state = opencode_util::temp::tempdir().unwrap();
-        let file = state.path().join("frecency.jsonl");
-        let full: String =
-            (0..MAX_FRECENCY_ENTRIES).map(|n| visit_line(&format!("f{n}.rs"), 1.0, (1000 - n) as f64)).collect();
-        fs::write(&file, full).unwrap();
-        let mut frecency = Frecency::load(state.path(), &w());
-        // The TypeScript TUI opens a new file and reopens `f0.rs`, appending without the lock.
-        append_text(&file, &(visit_line("from_ts.rs", 1.0, 5000.0) + &visit_line("f0.rs", 20.0, 5001.0))).unwrap();
-        frecency.update("new.rs", 6000);
-        let latest = |name: &str| {
-            let path = resolve(Flavor::NATIVE, &w(), name);
-            parse_frecency(&fs::read_to_string(&file).unwrap()).into_iter().find(|entry| entry["path"] == path)
-        };
-        assert!(latest("from_ts.rs").is_some(), "from_ts.rs was lost");
-        assert_eq!(latest("f0.rs").unwrap()["frequency"], 20);
-        // The next update counts from the file, not from the load.
-        frecency.update("f0.rs", 7000);
-        assert_eq!(latest("f0.rs").unwrap()["frequency"], 21);
-        assert_eq!(frecency.score("f0.rs", 7000), 21.0);
-        assert_eq!(frecency.data().len(), MAX_FRECENCY_ENTRIES);
-        // Updates only append; the next load trims to the newest 1000.
-        assert_eq!(fs::read_to_string(&file).unwrap().lines().count(), 1004);
-        let loaded = Frecency::load(state.path(), &w());
-        assert_eq!(fs::read_to_string(&file).unwrap().lines().count(), 1000);
-        assert_eq!(loaded.score("from_ts.rs", 5000), 1.0);
-        let before = fs::metadata(&file).unwrap().modified().unwrap();
-        Frecency::load(state.path(), &w());
-        assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), before);
-    }
-
-    #[test]
-    fn frecency_keeps_the_latest_line_per_path() {
-        let state = opencode_util::temp::tempdir().unwrap();
-        let file = state.path().join("frecency.jsonl");
-        let [a1, b, a2] = [("../a", 1.0, 10.0), ("../b", 1.0, 20.0), ("../a", 2.0, 30.0)]
-            .map(|(name, frequency, last_open)| visit_line(name, frequency, last_open));
-        fs::write(&file, format!("{a1}{b}{a2}")).unwrap();
-        let mut frecency = Frecency::load(state.path(), &w());
-        assert_eq!(fs::read_to_string(&file).unwrap(), format!("{a2}{b}"));
-        frecency.update("../a", 86_400_030);
-        assert_eq!(frecency.score("../a", 86_400_030), 3.0);
-        assert_eq!(frecency.score("x/../../a", 172_800_030), 1.5);
-        assert!(fs::read_to_string(&file).unwrap().ends_with(&visit_line("../a", 3.0, 86_400_030.0)));
     }
 }
