@@ -220,15 +220,21 @@ function placeFact(tool: Tool, id: string, read: Reads): PlaceFact {
   }
 }
 
-// A script reports the files it changed once it finishes in the foreground; one moved to the background has none.
-// Its metadata is read only then, so a running script's progress reports never reach placement.
-// Entries that don't decode are dropped here, so every reader numbers the changes alike.
+// Whether a script that fails or is stopped keeps the changes it made, which really happened.
+const keepFailedScriptChanges = true
+
+// A script reports the files it changes as it runs and when it ends in the foreground; one moved to the background has
+// none. Placement reads only their count, so progress reports that add no change never move it. Entries that don't
+// decode are dropped here, so every reader numbers the changes alike.
 function scriptChanges(tool: Tool, read: Reads) {
-  if (tool.state.status !== "completed") return []
+  const status = tool.state.status
+
+  if (status !== "running" && status !== "completed" && !(status === "error" && keepFailedScriptChanges)) return []
   const metadata = read.metadata()
   const script = Option.getOrUndefined(decodeScript(metadata))
 
-  if (script?.background === true || script?.jobID !== undefined) return []
+  // Until a script finishes, its background flag says only that it can move there: one stopped or declined keeps it.
+  if (script?.jobID !== undefined || (status === "completed" && script?.background === true)) return []
 
   return Option.getOrElse(decodeFiles(metadata.files), () => [])
     .flatMap((file) => Option.toArray(decodeFile(file)))
@@ -274,7 +280,7 @@ function toolFacts(tool: Tool, id: string): Fact[] {
     return [
       call,
       // One fact per change, in order: a script can change the same file more than once.
-      ...scriptChanges(tool, read).map((file, index) => scriptFileFactOf(file, index, id)),
+      ...scriptChanges(tool, read).map((file, index) => scriptFileFactOf(file, index, id, state.status)),
     ]
 
   if (fact.mode !== "edit") return [call]
@@ -454,8 +460,20 @@ export function scriptFilePartID(scriptID: string, index: number, path: string) 
   return `${scriptID}:file:${index}:${path}`
 }
 
-function scriptFileFactOf(file: Parameters<typeof fileFact>[0], index: number, by: string): FileFact {
-  return { ...fileFact(file, by, "completed", "script"), id: `${by}:file:${index}:${file.file}` }
+function scriptFileFactOf(
+  file: Parameters<typeof fileFact>[0],
+  index: number,
+  by: string,
+  status: Tool["state"]["status"],
+): FileFact {
+  return { ...fileFact(file, by, status, "script"), id: `${by}:file:${index}:${file.file}` }
+}
+
+const fileFactKeys = ["id", "path", "status", "additions", "deletions", "change", "patch", "by", "via"] as const
+
+/** Whether two reads of a change show the same: a script's changes never change once made, only its status does. */
+export function sameFileFact(previous: FileFact, next: FileFact) {
+  return fileFactKeys.every((key) => previous[key] === next[key])
 }
 
 const scriptFilePart = /^(.*?):file:(\d+):/
@@ -471,5 +489,5 @@ export function scriptFileFact(content: readonly Content[], messageID: string, p
   if (tool?.type !== "tool") return undefined
   const file = scriptChanges(tool, reads(tool))[Number(index)]
 
-  return file ? scriptFileFactOf(file, Number(index), `${messageID}:${scriptID}`) : undefined
+  return file ? scriptFileFactOf(file, Number(index), `${messageID}:${scriptID}`, tool.state.status) : undefined
 }

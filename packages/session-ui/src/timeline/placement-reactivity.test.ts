@@ -19,6 +19,6 @@ describe.skipIf(isServer)("current timeline placement reactivity", () => {
         }).rows,
     )
 
-    expect(runs).toEqual({ streamed: 0, moved: 1, scripted: 1 })
+    expect(runs).toEqual({ streamed: 0, moved: 1, changed: [1, 1], scripted: 1 })
   })
 })

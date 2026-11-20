@@ -28,7 +28,7 @@ export class Service extends Context.Service<Service, Collector>()("@opencode/Co
 
 // Each change is kept as it arrives, within the budget: past MAX_FILES it is dropped, and past the patch budget it
 // keeps only its counts.
-export const make = () => {
+export const make = (changed: Effect.Effect<unknown> = Effect.void) => {
   const entries: File[] = []
   let budget = MAX_PATCH_BYTES
   return {
@@ -40,14 +40,18 @@ export const make = () => {
       budget -= size
       entries.push(change)
     },
-    files: (): ReadonlyArray<File> => entries,
+    files: (): ReadonlyArray<File> => entries.slice(),
+    /** Reports the changes recorded so far, as the program runs. */
+    changed,
   }
 }
 
 /** Records a change when the run has a collector. */
 export const record = (change: File) =>
-  Effect.map(Effect.serviceOption(Service), (found) => {
-    if (Option.isSome(found)) found.value.record(change)
+  Effect.flatMap(Effect.serviceOption(Service), (found) => {
+    if (Option.isNone(found)) return Effect.void
+    found.value.record(change)
+    return found.value.changed
   })
 
 /**
@@ -118,4 +122,8 @@ export const changes = (tool: string, input: unknown, result: Result): ReadonlyA
 
 /** Runs an inner tool call and records the changes its result reports. */
 export const around = <E, R>(collector: Collector, tool: string, input: unknown, effect: Effect.Effect<Result, E, R>) =>
-  Effect.tap(effect, (result) => Effect.sync(() => changes(tool, input, result).forEach(collector.record)))
+  Effect.tap(effect, (result) => {
+    const found = changes(tool, input, result)
+    found.forEach(collector.record)
+    return found.length > 0 ? collector.changed : Effect.void
+  })
