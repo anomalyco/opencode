@@ -1,6 +1,6 @@
-// Runs each case of mini's transcript property test through TypeScript's createSessionTransport and prints the
-// commits it appends and the footer's phase, status and usage after the hydration and each event.
-// Usage: bun M.6-transcript.ts <cases.json>
+// A helper of mini's transcript property test, which writes no fixture: runs each case through TypeScript's
+// createSessionTransport and prints the commits it appends and the footer's phase, status and usage after the
+// hydration and each event. Usage: bun M.6-transcript.ts <cases.json>; with no argument it does nothing.
 import { createSessionTransport } from "../../../tui/src/mini/stream-v2.transport"
 
 const realSetTimeout = globalThis.setTimeout
@@ -118,6 +118,7 @@ async function run(input: any) {
   return { commits, states }
 }
 
+if (!process.argv[2]) process.exit(0)
 const results = []
-for (const input of await Bun.file(process.argv[2]!).json()) results.push(await run(input))
+for (const input of await Bun.file(process.argv[2]).json()) results.push(await run(input))
 process.stdout.write(JSON.stringify(results))
