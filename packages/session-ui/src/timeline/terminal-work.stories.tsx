@@ -8,6 +8,7 @@ import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybo
 import {
   STORY_TIME,
   executeCodeDocument,
+  executeLongDetailsDocument,
   expandedShellDocument,
   recoveryDocument,
   standaloneShellCompletedDocument,
@@ -186,6 +187,18 @@ export const ExecuteCode = {
       title="Execute code"
       description="Each Code Mode execution lists the tools its script called."
       document={executeCodeDocument}
+      width="786px"
+      shellToolDefaultOpen
+    />
+  ),
+}
+
+export const ExecuteLongDetails = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Execute long details"
+      description="A script and output taller than the details dialog scroll inside it and keep the dialog's bottom padding."
+      document={executeLongDetailsDocument}
       width="786px"
       shellToolDefaultOpen
     />
