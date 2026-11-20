@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use std::hash::{DefaultHasher, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -15,7 +15,7 @@ use opentui::testing::TestApp;
 use opencode_plugin_abi::types::{ModelRef, SessionInfo, SessionMessageInfo};
 
 use super::*;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use crate::Source;
 use crate::{Entry, abi};
 
@@ -323,7 +323,7 @@ impl Host for TestHost {
     }
 }
 
-#[cfg_attr(not(feature = "native"), allow(dead_code))]
+#[cfg_attr(not(native), allow(dead_code))]
 impl TestHost {
     /// Calls the event handlers with `event`, as the host's event loop would.
     pub fn emit(&self, event: &abi::types::V2Event) {
@@ -389,7 +389,7 @@ pub(crate) fn host() -> Rc<TestHost> {
 }
 
 /// Routes the app's keys to `host`'s keymap before any widget, as the TUI does (`route_keys`).
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub(crate) fn route_keys(host: &Rc<TestHost>) {
     let weak = Rc::downgrade(host);
     host.app.on_key_capture(move |cx, key| {
@@ -420,7 +420,7 @@ pub(crate) fn entry<'a>(entries: &'a [Entry], target: &str) -> &'a Entry {
 /// A backend whose builds are text: `id=<id>` loads a plugin with a `fake` fence that draws nothing, anything
 /// else fails with that text.
 #[derive(Default)]
-#[cfg(feature = "native")]
+#[cfg(native)]
 struct Fake {
     loads: Cell<usize>,
     /// Active instances: setup adds one, deactivation removes it.
@@ -431,7 +431,7 @@ struct Fake {
     during: RefCell<Option<Box<dyn Fn()>>>,
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 impl Backend for Fake {
     fn load(
         &self,
@@ -552,7 +552,7 @@ fn a_verbatim_path_is_handed_on_plain() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn reconcile_loads_reloads_keeps_and_unloads() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -640,7 +640,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -661,7 +661,7 @@ fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_build_refused_for_a_taken_id_loads_once_the_id_is_free() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -687,7 +687,7 @@ fn a_build_refused_for_a_taken_id_loads_once_the_id_is_free() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_running_plugin_takes_the_id_it_waited_for_once_the_owner_is_removed() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -720,7 +720,7 @@ fn a_running_plugin_takes_the_id_it_waited_for_once_the_owner_is_removed() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_refused_build_loads_once_the_owner_takes_another_id() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -745,17 +745,17 @@ fn a_refused_build_loads_once_the_owner_takes_another_id() {
 }
 
 #[cfg(target_os = "linux")]
-#[cfg(feature = "native")]
+#[cfg(native)]
 const ONE: &str = "./one.so";
 #[cfg(target_os = "macos")]
-#[cfg(feature = "native")]
+#[cfg(native)]
 const ONE: &str = "./one.dylib";
 #[cfg(windows)]
-#[cfg(feature = "native")]
+#[cfg(native)]
 const ONE: &str = "./one.dll";
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn directives_after_an_entry_disable_an_external_plugin() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -820,7 +820,7 @@ pub(crate) fn logged() -> &'static std::sync::Mutex<Vec<String>> {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn only_a_target_without_a_native_build_is_logged_as_skipped() {
     let warnings = logged();
     let root = opencode_util::temp::tempdir().unwrap();
@@ -844,7 +844,7 @@ fn only_a_target_without_a_native_build_is_logged_as_skipped() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn changed_plugin_entries_reconcile_while_running() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -935,14 +935,14 @@ impl Project {
     /// [`Project::loader`] that opens native builds with a [`Fake`], in a build that has native plugins.
     #[cfg(any(not(feature = "ts"), not(luau)))]
     fn built(&self, configured: Vec<Configured>) -> Loader {
-        #[cfg(feature = "native")]
+        #[cfg(native)]
         return self.native(Rc::new(Fake::default()), configured);
-        #[cfg(not(feature = "native"))]
+        #[cfg(not(native))]
         return self.loader(configured);
     }
 
     /// [`Project::loader`] that opens native builds with `backend`.
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     fn native(&self, backend: Rc<dyn Backend>, configured: Vec<Configured>) -> Loader {
         self.loader(configured).with_native(backend)
     }
@@ -958,25 +958,25 @@ fn asked(host: &TestHost) -> Vec<String> {
 }
 
 /// The user's answer on the build of `target` the loader holds back now, as the plugin manager gives it.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn answer(loader: &Loader, target: &str, decision: approval::Decision) -> bool {
     let shown = loader.held(target).and_then(Result::ok).expect("a build is held back");
     decide(loader, target, &shown, decision).unwrap()
 }
 
 /// The user's `decision` on `shown`, checked against the disk as the host checks it once the answer came.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn decide(loader: &Loader, target: &str, shown: &Artifact, decision: approval::Decision) -> Result<bool, String> {
     loader.decide(target, shown, decision, loader.found(target).map(super::Found::identify))
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn library(target: &str) -> std::path::PathBuf {
     std::path::Path::new(target).join(entry_file())
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_project_plugin_waits_for_an_approval_of_its_artifact() {
     let project = Project::new();
     write(&project.config().join(format!("plugins/global/{}", entry_file())), "id=global");
@@ -1036,7 +1036,7 @@ fn a_project_plugin_waits_for_an_approval_of_its_artifact() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn an_answer_records_nothing_for_a_build_replaced_while_it_was_asked() {
     for decision in [approval::Decision::Approved, approval::Decision::Declined] {
         let project = Project::new();
@@ -1060,7 +1060,7 @@ fn an_answer_records_nothing_for_a_build_replaced_while_it_was_asked() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn an_answer_before_the_watcher_saves_nothing_for_a_changed_build() {
     for decision in [approval::Decision::Approved, approval::Decision::Declined] {
         let project = Project::new();
@@ -1087,7 +1087,7 @@ fn an_answer_before_the_watcher_saves_nothing_for_a_changed_build() {
 
 #[cfg(unix)]
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
     let project = Project::new();
     let (a, b) = (project.root.path().join("a"), project.root.path().join("b"));
@@ -1111,7 +1111,7 @@ fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_build_that_names_a_project_dependency_is_refused_before_it_opens() {
     let project = Project::new();
     let target = project.plugin("proj", "id=proj");
@@ -1136,7 +1136,7 @@ fn a_build_that_names_a_project_dependency_is_refused_before_it_opens() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_build_the_crash_record_cannot_name_is_not_opened() {
     let project = Project::new();
     let deep = ["a", "b", "c"].iter().fold(project.root.path().to_path_buf(), |path, part| path.join(part.repeat(200)));
@@ -1156,7 +1156,7 @@ fn a_build_the_crash_record_cannot_name_is_not_opened() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_same_build_with_a_long_id_loads_again_after_it_comes_back() {
     let project = Project::new();
     let library = project.config().join(format!("plugins/long/{}", entry_file()));
@@ -1182,7 +1182,7 @@ fn the_same_build_with_a_long_id_loads_again_after_it_comes_back() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_build_whose_quarantine_cannot_be_read_is_not_opened() {
     let project = Project::new();
     write(&project.config().join(format!("plugins/global/{}", entry_file())), "id=global");
@@ -1212,7 +1212,7 @@ fn a_build_whose_quarantine_cannot_be_read_is_not_opened() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_failure_after_a_pending_spell_is_told_again() {
     let project = Project::new();
     let target = project.plugin("proj", "boom");
@@ -1235,7 +1235,7 @@ fn a_failure_after_a_pending_spell_is_told_again() {
 
 #[cfg(unix)]
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn an_approval_names_its_directory_and_the_real_path() {
     let project = Project::new();
     let real = project.root.path().join("real");
@@ -1263,7 +1263,7 @@ fn an_approval_names_its_directory_and_the_real_path() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_project_plugin_named_in_cli_json_needs_no_approval() {
     let project = Project::new();
     let target = project.plugin("proj", "id=proj");
@@ -1286,7 +1286,7 @@ fn a_project_plugin_named_in_cli_json_needs_no_approval() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_pending_plugin_replaces_no_built_in_and_takes_no_id() {
     let project = Project::new();
     let target = project.plugin("proj", "id=b");
@@ -1313,7 +1313,7 @@ fn root() -> bool {
 
 #[cfg(unix)]
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_project_plugin_that_cannot_be_read_stops_quietly() {
     if root() {
         return;
@@ -1341,7 +1341,7 @@ fn a_project_plugin_that_cannot_be_read_stops_quietly() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_library_over_the_limit_is_not_read() {
     let project = Project::new();
     let target = project.plugin("proj", "");
@@ -1359,7 +1359,7 @@ fn a_library_over_the_limit_is_not_read() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_project_library_gone_in_the_middle_of_a_reconcile_stops_its_plugin() {
     let project = Project::new();
     let target = project.plugin("b", "id=b");
@@ -1531,7 +1531,7 @@ fn a_store_the_project_could_reach_is_not_used() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn bytes_changed_after_the_hash_are_refused() {
     let project = Project::new();
     let target = project.plugin("proj", "id=a");
@@ -1574,7 +1574,7 @@ fn the_store_is_a_private_regular_file() {
 
 #[cfg(unix)]
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_link_retargeted_while_it_is_hashed_is_not_identified() {
     let project = Project::new();
     let (a, b) = (project.root.path().join("a"), project.root.path().join("b"));
@@ -1595,7 +1595,7 @@ fn a_link_retargeted_while_it_is_hashed_is_not_identified() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn an_approved_build_rewritten_while_it_loads_is_held_back() {
     let project = Project::new();
     let target = project.plugin("proj", "id=a");
@@ -1615,7 +1615,7 @@ fn an_approved_build_rewritten_while_it_loads_is_held_back() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_build_another_client_approved_replaces_the_running_one() {
     let project = Project::new();
     let target = project.plugin("proj", "id=a");
@@ -1656,7 +1656,7 @@ fn a_save_waits_for_a_lock_held_briefly() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_cli_json_entry_for_a_global_library_is_another_target() {
     let project = Project::new();
     let global = project.global();
@@ -1672,7 +1672,7 @@ fn a_cli_json_entry_for_a_global_library_is_another_target() {
 }
 
 /// The digest the loader gives a build of `text` without options.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn build_of(text: &str) -> String {
     let mut hasher = DefaultHasher::new();
     hasher.write(text.as_bytes());
@@ -1681,7 +1681,7 @@ fn build_of(text: &str) -> String {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_crashed_build_is_never_opened_until_enabled_or_rebuilt() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -1733,7 +1733,7 @@ fn a_crashed_build_is_never_opened_until_enabled_or_rebuilt() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_held_build_is_released_by_its_key_and_only_once_recorded() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -1775,7 +1775,7 @@ fn a_held_build_is_released_by_its_key_and_only_once_recorded() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn safe_mode_opens_no_external_library() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -1807,7 +1807,7 @@ fn safe_mode_opens_no_external_library() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn an_unsupervised_client_opens_no_external_library() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -1831,7 +1831,7 @@ fn an_unsupervised_client_opens_no_external_library() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_native_build_among_the_targets_wants_a_parent() {
     let root = opencode_util::temp::tempdir().unwrap();
     let (config, cwd) = (root.path().join("config"), root.path().join("work"));
@@ -1847,7 +1847,7 @@ fn a_native_build_among_the_targets_wants_a_parent() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_crashed_project_build_is_held_in_one_row() {
     let project = Project::new();
     let target = project.plugin("proj", "id=proj");
@@ -2052,7 +2052,7 @@ fn a_server_part_inside_the_project_is_the_projects() {
 #[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
     let project = Project::new();
     let sibling = project.root.path().join("sibling-plugin");
@@ -2077,7 +2077,7 @@ fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
 
 #[cfg(feature = "ts")]
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_server_reported_native_build_never_loads() {
     let project = Project::new();
     let elsewhere = project.root.path().join("elsewhere").join("native");
@@ -2366,13 +2366,13 @@ fn a_build_without_luau_says_it_has_no_luau_plugin_support() {
 /// native plugins, which never asks about one.
 #[cfg(any(not(feature = "ts"), not(luau)))]
 fn native_project_status() -> Status {
-    match cfg!(feature = "native") {
+    match cfg!(native) {
         true => Status::Pending,
         false => Status::Skipped(crate::SKIPPED_NO_NATIVE.to_owned()),
     }
 }
 
-#[cfg(not(feature = "native"))]
+#[cfg(not(native))]
 #[test]
 fn a_build_without_native_skips_every_library_and_opens_none() {
     let project = Project::new();
@@ -2405,7 +2405,7 @@ pub(crate) fn fence_view(host: &dyn Host, registry: &crate::Registry, text: &str
 
 /// Native example `example`, whose library is `lib`, built with `features` into the target directory every native
 /// example shares.
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub(crate) fn build_example(example: &str, lib: &str, features: &str) -> Vec<u8> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let target = root.join("../../target/sample-plugin");
@@ -2427,7 +2427,7 @@ pub(crate) fn build_example(example: &str, lib: &str, features: &str) -> Vec<u8>
 /// warnings that need the optimizer, such as `-Wformat-truncation`), and every warning an error; `None` without a C
 /// compiler, unless `OPENCODE_RS_REQUIRE_CC` asks for one.
 #[cfg(unix)]
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub(crate) fn cc(source: &str, flags: &[&str]) -> Option<Vec<u8>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let dir = opencode_util::temp::tempdir().unwrap();

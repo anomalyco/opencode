@@ -114,9 +114,9 @@ pub enum Carrier {
 }
 
 /// The carriers a plugin of the one API runs on: linked, and on the C ABI in a build with the `native` feature.
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub const CARRIERS: [Carrier; 2] = [Carrier::Linked, Carrier::Abi];
-#[cfg(not(feature = "native"))]
+#[cfg(not(native))]
 pub const CARRIERS: [Carrier; 1] = [Carrier::Linked];
 
 pub fn builtin(carrier: Carrier, plugin: abi::Plugin) -> opencode_plugin::Builtin {
@@ -301,10 +301,10 @@ fn surface_mounts_hold_their_properties() {
     }
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 struct Equal;
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 impl Model for Equal {
     type Command = Command;
 
@@ -348,7 +348,7 @@ impl Model for Equal {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn both_carriers_give_equal_frames_and_call_logs() {
     model::check(&Equal, 24, 24);
 }
@@ -486,7 +486,7 @@ fn parts(setup: &mut abi::Setup) -> Result<(), String> {
 #[test]
 fn a_part_output_shows_the_transcripts_own_text() {
     for (root, carrier) in [(false, Carrier::Linked), (true, Carrier::Linked), (true, Carrier::Abi)] {
-        if carrier == Carrier::Abi && !cfg!(feature = "native") {
+        if carrier == Carrier::Abi && !cfg!(native) {
             continue;
         }
         part_output(root, carrier);
@@ -616,7 +616,7 @@ fn a_kept_output_is_admitted_as_one_written_out() {
         (frames, PART_VIEWS.get())
     };
     for (root, carrier) in [(false, Carrier::Linked), (false, Carrier::Abi), (true, Carrier::Linked)] {
-        if carrier == Carrier::Abi && !cfg!(feature = "native") {
+        if carrier == Carrier::Abi && !cfg!(native) {
             continue;
         }
         let (kept, views) = run(true, root, carrier);
@@ -1183,7 +1183,7 @@ thread_local! {
 }
 
 /// A route of cards, each memoized on its value; a command bumps the first card, another changes nothing.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn cards(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::new(name);
     setup.command(command("cards.bump"), |_, _| CARDS.with(|cards| cards.set((cards.get().0, cards.get().1 + 1))));
@@ -1204,7 +1204,7 @@ fn cards(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 /// What crossed the C ABI while `step` ran, on the route of `test.cards` with `count` cards.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn crossed_by(count: usize, step: impl FnOnce(&Harness)) -> opencode_plugin::loader::native::Crossed {
     CARDS.with(|cards| cards.set((count, 0)));
     let deps = Deps {
@@ -1222,7 +1222,7 @@ fn crossed_by(count: usize, step: impl FnOnce(&Harness)) -> opencode_plugin::loa
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_revision_crosses_bytes_that_follow_the_change() {
     let run = |count, command: &'static str| {
         crossed_by(count, move |harness| {
@@ -1464,7 +1464,7 @@ fn a_failed_plugins_route_says_it_failed() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn leaving_a_surface_unmounts_it_in_the_library() {
     let harness = open_tui(Carrier::Abi);
     harness.tui.navigate(route());
@@ -1550,7 +1550,7 @@ enum DialogCarrier {
 fn dialog_carriers() -> Vec<DialogCarrier> {
     vec![
         DialogCarrier::Native(Carrier::Linked),
-        #[cfg(feature = "native")]
+        #[cfg(native)]
         DialogCarrier::Native(Carrier::Abi),
         #[cfg(luau)]
         DialogCarrier::Luau,
@@ -1761,9 +1761,9 @@ fn a_dialog_surface_takes_the_focus_inside_it_only_and_closes_on_ctrl_c() {
 }
 
 /// Native carriers used for dialog-surface assertions.
-#[cfg(feature = "native")]
+#[cfg(native)]
 const DIALOG_NATIVE: [DialogCarrier; 2] = [DialogCarrier::Native(Carrier::Linked), DialogCarrier::Native(Carrier::Abi)];
-#[cfg(not(feature = "native"))]
+#[cfg(not(native))]
 const DIALOG_NATIVE: [DialogCarrier; 1] = [DialogCarrier::Native(Carrier::Linked)];
 
 /// The probe's running activation, as the host names it.

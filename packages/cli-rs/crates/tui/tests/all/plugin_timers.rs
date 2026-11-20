@@ -54,9 +54,9 @@ enum Carrier {
 
 #[test]
 fn a_ticking_plugin_that_changes_nothing_makes_no_frame() {
-    #[cfg_attr(not(any(luau, feature = "native")), allow(unused_mut))]
+    #[cfg_attr(not(any(luau, native)), allow(unused_mut))]
     let mut carriers = vec![Carrier::InProcess];
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     carriers.push(Carrier::CAbi);
     #[cfg(luau)]
     carriers.push(Carrier::Luau);
@@ -196,9 +196,9 @@ end)
 
 #[test]
 fn an_every_a_mount_started_ends_with_that_mount() {
-    #[cfg_attr(not(any(luau, feature = "native")), allow(unused_mut))]
+    #[cfg_attr(not(any(luau, native)), allow(unused_mut))]
     let mut carriers = vec![Carrier::InProcess];
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     carriers.push(Carrier::CAbi);
     #[cfg(luau)]
     carriers.push(Carrier::Luau);
@@ -334,7 +334,7 @@ fn dropped_sleeps(setup: &mut abi::Setup) -> Result<(), String> {
 #[test]
 fn dropped_sleeps_hold_no_timer() {
     for carrier in [Carrier::InProcess, Carrier::CAbi] {
-        if matches!(carrier, Carrier::CAbi) && !cfg!(feature = "native") {
+        if matches!(carrier, Carrier::CAbi) && !cfg!(native) {
             continue;
         }
         SLEPT.with_borrow_mut(Vec::clear);

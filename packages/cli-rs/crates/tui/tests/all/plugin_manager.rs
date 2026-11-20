@@ -2,19 +2,19 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
 use opencode_plugin::abi::{self, Command};
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::loader::Backend;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::loader::native::loopback_described;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::loader::{Loader, entry_file};
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::{Definition, ErrorFn, Host};
 use opencode_tui::plugins::host::host;
 use opencode_tui::plugins::manager::ID;
@@ -130,7 +130,7 @@ fn a_disabled_manager_holds_nothing_and_matches_one_never_enabled_on() {
 
 /// A build without the `native` feature lists a configured library as skipped, says why in `/plugins`, and opens
 /// nothing of it.
-#[cfg(not(feature = "native"))]
+#[cfg(not(native))]
 #[test]
 fn a_build_without_native_lists_a_library_as_skipped() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -302,10 +302,10 @@ fn a_plugin_hears_each_change_of_the_plugin_list_once_on() {
 
 /// The builds of a plugin that takes the manager's ID, through the C ABI's byte shims: its `/plugins` shows an alert,
 /// and its command panics.
-#[cfg(feature = "native")]
+#[cfg(native)]
 struct Shadow;
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 impl Backend for Shadow {
     fn load(
         &self,
@@ -339,7 +339,7 @@ thread_local! {
     static SHADOW_FAILS: Cell<bool> = const { Cell::new(false) };
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn fail_shadow(harness: &Harness) {
     harness.dispatch("shadow.boom");
     settle(harness);
@@ -353,19 +353,19 @@ fn fail_shadow(harness: &Harness) {
     assert_eq!(harness.tui.dialogs.key().as_deref(), Some("host.plugins"));
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn manager_status(harness: &Harness) -> opencode_plugin::Status {
     let key = opencode_plugin::Entry::plugin_key(ID);
     harness.tui.plugins.entries().into_iter().find(|entry| entry.key == key).unwrap().status
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_host_lists_the_plugins_while_the_manager_has_failed() {
     carriers(the_host_lists_the_plugins_while_the_manager_has_failed_on);
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
     let (harness, _) = open_with(serde_json::json!({ "plugins": ["./broken.ts"] }), vec![crash().into()]);
     harness.dispatch("crash.boom");
@@ -465,7 +465,7 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
 }
 
 /// A built-in whose command panics.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn crash() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.command(Command::new("crash.boom"), |_, _| -> () { panic!("crash") });
@@ -475,10 +475,10 @@ fn crash() -> abi::Plugin {
 }
 
 /// The builds of a plugin `test.ext`, through the C ABI's byte shims.
-#[cfg(feature = "native")]
+#[cfg(native)]
 struct Ext;
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 impl Backend for Ext {
     fn load(
         &self,
@@ -495,12 +495,12 @@ impl Backend for Ext {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_failed_built_in_shows_and_a_plugin_is_found_by_its_target() {
     carriers(a_failed_built_in_shows_and_a_plugin_is_found_by_its_target_on);
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_failed_built_in_shows_and_a_plugin_is_found_by_its_target_on() {
     let (harness, _) = open_with(serde_json::json!({}), vec![crash().into()]);
     harness.dispatch("crash.boom");
@@ -535,10 +535,10 @@ fn a_failed_built_in_shows_and_a_plugin_is_found_by_its_target_on() {
 }
 
 /// The builds of a plugin that takes `0`'s ID, through the C ABI's byte shims; its setup does nothing.
-#[cfg(feature = "native")]
+#[cfg(native)]
 struct Named(&'static str);
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 impl Backend for Named {
     fn load(
         &self,
@@ -561,7 +561,7 @@ impl Backend for Named {
 
 /// A build of a plugin of ID `id`, which crashed the client last time, held back as the client starts again; and its
 /// target. The loader's digest of the bytes `[1]` with no options names the build.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn held_crash(harness: &Harness, id: &'static str) -> (Rc<Loader>, String, opencode_util::temp::TempDir) {
     use std::hash::Hasher;
     let root = opencode_util::temp::tempdir().unwrap();
@@ -594,12 +594,12 @@ fn status_of(harness: &Harness, key: &str) -> Option<(opencode_plugin::Status, b
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_held_build_that_shares_an_id_is_a_row_of_its_own() {
     carriers(a_held_build_that_shares_an_id_is_a_row_of_its_own_on);
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_held_build_that_shares_an_id_is_a_row_of_its_own_on() {
     let (harness, _) = open(&[]);
     let (loader, target, _root) = held_crash(&harness, "opencode.stats");
@@ -638,7 +638,7 @@ thread_local! {
     static READ: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn reader() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let read = |host: &dyn abi::Read| READ.set(serde_json::to_string(&host.plugins()).unwrap());
@@ -650,7 +650,7 @@ fn reader() -> abi::Plugin {
 }
 
 /// Plugins whose setup fails, and whose command panics, each with a private marker.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn secrets() -> [abi::Plugin; 2] {
     fn setup(_: &mut abi::Setup) -> Result<(), String> {
         Err("SECRET-setup /home/user/.token".to_owned())
@@ -662,10 +662,10 @@ fn secrets() -> [abi::Plugin; 2] {
     [abi::Plugin { id: "test.setup", setup }, abi::Plugin { id: "test.run", setup: run }]
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 struct Unloadable;
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 impl Backend for Unloadable {
     fn load(
         &self,
@@ -679,7 +679,7 @@ impl Backend for Unloadable {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_plugin_list_holds_no_error_text() {
     for abi in crate::support::LOOPBACK {
         let (harness, _) = open(&[]);
@@ -879,7 +879,7 @@ thread_local! {
 
 /// A plugin whose keyless select has a row that toggles the plugin of the target its command is given, and actions and
 /// keys the host cannot bind or must not let it take.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn picker() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.command(Command::new("picker.picked"), |_, _| {
@@ -915,12 +915,12 @@ fn picker() -> abi::Plugin {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_select_cannot_break_or_take_the_hosts_keys() {
     carriers(a_select_cannot_break_or_take_the_hosts_keys_on);
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_select_cannot_break_or_take_the_hosts_keys_on() {
     let (harness, _) = open_with(serde_json::json!({ "keybinds": { "plugins.toggle": "ctrl+t" } }), Vec::new());
     opencode_tui::plugins::host::add(&harness.tui, picker().into());

@@ -896,7 +896,7 @@ fn a_turn_too_short_to_see_running_loads_the_diff_again() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_mark_at_1000_files_costs_one_pass_on_both_carriers() {
     for abi in crate::support::LOOPBACK {
         let h = route_on(1000, 4, 200, 58, abi);
@@ -914,7 +914,7 @@ fn a_mark_at_1000_files_costs_one_pass_on_both_carriers() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_view_toggle_without_room_for_split_costs_no_view() {
     for abi in crate::support::LOOPBACK {
         let h = route_on(40, 4, 48, 28, abi);

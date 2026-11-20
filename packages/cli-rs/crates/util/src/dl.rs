@@ -1,17 +1,13 @@
 //! Shared libraries opened at run time: `dlopen`, `dlsym` and `dlclose` with `RTLD_LAZY | RTLD_LOCAL` on Unix,
 //! `LoadLibraryExW` (without the current directory and `PATH` in its search, `win::load_library`), `GetProcAddress`
-//! and `FreeLibrary` on Windows. Errors are the loader's own message, with the path or symbol on Windows. Elsewhere
-//! opening fails.
+//! and `FreeLibrary` on Windows. Errors are the loader's own message, with the path or symbol on Windows. Elsewhere,
+//! and in a static musl build, opening fails.
+//!
+//! A static musl executable (the shipped musl builds, O-188) has no dynamic loader, so it opens nothing: the build
+//! scripts of opencode-plugin, opencode-tui and opencode-cli compile native plugins out there (`cfg(native)`), and the
+//! editor context's SQLite is not found, as on a machine without it.
 
 #![allow(unsafe_code)]
-
-// A static musl executable has no dynamic loader, so `dlopen` would fail for every plugin library. Without native plugins
-// (the `native` feature) nothing needs one: the editor context's SQLite then is not found, as on a machine without it.
-#[cfg(all(feature = "native", target_env = "musl", target_feature = "crt-static"))]
-compile_error!(
-    "build musl with `-C target-feature=-crt-static` (packages/cli-rs/.cargo/config.toml sets it unless RUSTFLAGS \
-     replaces it): a static musl executable cannot load native plugins"
-);
 
 use std::ffi::{CString, OsStr, c_void};
 use std::ptr::NonNull;
@@ -63,7 +59,7 @@ impl Drop for Library {
 }
 
 // The platform calls. Their callers above state why each call is sound.
-#[cfg(unix)]
+#[cfg(all(unix, not(all(target_env = "musl", target_feature = "crt-static"))))]
 mod sys {
     use std::ffi::{CStr, CString, OsStr, c_void};
     use std::ptr::NonNull;
@@ -123,12 +119,16 @@ mod sys {
     }
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(any(all(unix, not(all(target_env = "musl", target_feature = "crt-static"))), windows)))]
 mod sys {
     use std::ffi::{CStr, OsStr, c_void};
     use std::ptr::NonNull;
 
-    const UNSUPPORTED: &str = "shared libraries are not supported on this platform";
+    const UNSUPPORTED: &str = if cfg!(target_env = "musl") {
+        "a static musl build cannot load shared libraries"
+    } else {
+        "shared libraries are not supported on this platform"
+    };
 
     pub unsafe fn open(_: &OsStr) -> Result<NonNull<c_void>, String> {
         Err(UNSUPPORTED.to_owned())
@@ -141,7 +141,7 @@ mod sys {
     pub unsafe fn close(_: NonNull<c_void>) {}
 }
 
-#[cfg(all(test, any(target_os = "linux", windows)))]
+#[cfg(all(test, any(all(target_os = "linux", target_env = "gnu"), windows)))]
 mod tests {
     use super::Library;
 

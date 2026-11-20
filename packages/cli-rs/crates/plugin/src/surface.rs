@@ -60,7 +60,7 @@ pub(crate) type Commands = Rc<dyn Fn(&Weak<()>) -> Vec<opencode_ui::keymap::TuiC
 static CONTENT: AtomicU64 = AtomicU64::new(1);
 
 /// The handle the next content gets, for a view in a library, which numbers its content from it.
-#[cfg_attr(not(any(feature = "native", feature = "ts")), allow(dead_code))]
+#[cfg_attr(not(any(native, feature = "ts")), allow(dead_code))]
 pub(crate) fn next_content() -> u64 {
     CONTENT.load(Ordering::Relaxed)
 }
@@ -78,7 +78,7 @@ pub(crate) fn generation() -> u64 {
 }
 
 /// A library numbered `count` handles from [`next_content`]: none is given again.
-#[cfg_attr(not(any(feature = "native", feature = "ts")), allow(dead_code))]
+#[cfg_attr(not(any(native, feature = "ts")), allow(dead_code))]
 pub(crate) fn took_content(from: u64, count: u64) {
     CONTENT.fetch_max(from.saturating_add(count), Ordering::Relaxed);
 }
@@ -136,11 +136,11 @@ pub(crate) struct Viewing<'a> {
     pub give: &'a mut dyn FnMut(ContentRef, Vec<u8>),
     pub release: &'a mut dyn FnMut(ContentRef),
     /// The keyed nodes the mount's tree holds at a key and under it, which a [`Node::Keep`] of the key holds again.
-    #[cfg_attr(not(any(feature = "native", feature = "ts")), allow(dead_code))]
+    #[cfg_attr(not(any(native, feature = "ts")), allow(dead_code))]
     pub kept: &'a dyn Fn(&str) -> usize,
     /// The values a library's memo table held after the mount's last view: a claim's view that returns no tree drops
     /// only what it staged, so its table holds no more.
-    #[cfg_attr(not(feature = "native"), allow(dead_code))]
+    #[cfg_attr(not(native), allow(dead_code))]
     pub held: usize,
     /// The height a solve laid the mount's root out at, 0 included; `None` before the first, when the input's size is
     /// the screen's stand-in.

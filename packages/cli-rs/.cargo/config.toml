@@ -13,14 +13,7 @@ OPENTUI_LIB_HINT = { value = "run `bun run opentui:native` in packages/cli-rs, o
 # warns that it ignores it.
 LUAU_CXXFLAGS = { value = "-g1", force = false }
 
-# musl links its C library dynamically (O-164): a static musl executable cannot dlopen, and the client loads native
-# plugin libraries. Rust's musl targets default to crt-static. The Linux builds link with Zig (cargo zigbuild), which
-# links musl statically unless its driver gets `-dynamic`; a gcc link reads that flag as debug letters and warns. A
-# RUSTFLAGS set in the shell replaces these, so crates/util/src/dl.rs also refuses to compile a crt-static musl build
-# with native plugins. A build without them (`--no-default-features --features ts,luau`) may be static: target rustflags
-# cannot depend on features, so it sets `RUSTFLAGS="-C target-feature=+crt-static"`, which replaces these.
-[target.x86_64-unknown-linux-musl]
-rustflags = ["-C", "target-feature=-crt-static", "-C", "link-arg=-dynamic"]
-
-[target.aarch64-unknown-linux-musl]
-rustflags = ["-C", "target-feature=-crt-static", "-C", "link-arg=-dynamic"]
+# The musl targets have no rustflags: they link statically, with Rust's default crt-static, and Zig (cargo zigbuild)
+# links musl statically by default too. A static executable has no dynamic loader, so the build scripts of
+# opencode-plugin, opencode-tui and opencode-cli compile native plugins out there (`cfg(native)`). O-188 supersedes
+# O-164's dynamic musl link.

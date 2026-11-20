@@ -33,7 +33,7 @@ impl Artifact {
     /// Opens the library `file` of plugin directory `target` once and hashes what it reads. The returned handle is the
     /// file that was hashed, for [`Artifact::bytes`]. An error when the file is not a regular file, is over [`LIMIT`],
     /// or its name led to another file by the time it was read.
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     pub fn open(target: &Path, file: &Path) -> Result<(Self, File), String> {
         let error = |error: std::io::Error| format!("{}: {error}", file.display());
         let path = std::fs::canonicalize(file).map_err(error)?;
@@ -139,7 +139,7 @@ impl Artifact {
 
     /// The bytes of `handle`, the file [`Artifact::open`] hashed, once they are checked to be the ones it hashed: what
     /// is loaded is what was approved.
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     pub fn bytes(&self, handle: &mut File) -> Result<Vec<u8>, String> {
         let error = |error: std::io::Error| format!("{}: {error}", self.path.display());
         std::io::Seek::rewind(handle).map_err(error)?;
@@ -315,7 +315,7 @@ impl<R: Read, W: std::io::Write> Read for Tee<'_, R, W> {
     }
 }
 
-#[cfg(all(test, feature = "native"))]
+#[cfg(all(test, native))]
 thread_local! {
     /// Runs in [`Artifact::open`] once the file is hashed, to change the disk at that moment.
     pub(crate) static AFTER_HASH: RefCell<Option<Box<dyn Fn()>>> = RefCell::new(None);

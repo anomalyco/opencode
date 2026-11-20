@@ -1,29 +1,29 @@
 //! Load external libraries into a real TUI and exercise rendering, reload, faults, and storage.
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 use crate::support::deref_harness;
 use crate::support::{self, Fake, Harness};
 
 use std::cell::{Cell, RefCell};
-#[cfg(feature = "native")]
+#[cfg(native)]
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
 use std::sync::Arc;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use std::sync::Mutex;
 use std::time::Duration;
 
 use opencode_plugin::abi;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::loader::entry_file;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_tui::plugins::host::{External, external};
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
 /// The sample plugin (`crates/plugin/examples/sample`) built with `features`, once per test run.
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub(crate) fn build(features: &str) -> Vec<u8> {
     static BUILT: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
     let mut built = BUILT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -76,22 +76,22 @@ fn messages(text: &str) -> Value {
     ])
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub(crate) struct Plugins {
     harness: Harness,
     pub(crate) plugin: std::path::PathBuf,
     _root: opencode_util::temp::TempDir,
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 deref_harness!(Plugins);
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub(crate) fn open(route: Route, text: &str, build: &[u8]) -> Plugins {
     open_with(route, text, build, |_| None)
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn open_with(
     route: Route,
     text: &str,
@@ -114,12 +114,12 @@ fn open_with(
     Plugins { harness, plugin, _root: root }
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn session_route() -> Route {
     support::session_route("ses_p")
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 impl Plugins {
     fn status(&self) -> opencode_plugin::Status {
         let target = self.plugin.to_string_lossy();
@@ -128,7 +128,7 @@ impl Plugins {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_sample_renders_in_the_transcript_and_reloads_on_change() {
     let h = open(session_route(), "Here:\n\n```sample\nhello plugin\n```", &build(""));
     let screen = h.wait_for("SAMPLE v1 HELLO PLUGIN");
@@ -140,7 +140,7 @@ fn the_sample_renders_in_the_transcript_and_reloads_on_change() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_sample_claims_the_home_footer_and_runs_its_command() {
     let h = open(Route::Home, "", &build(""));
     h.wait_for("sample plugin v1: home.footer");
@@ -161,7 +161,7 @@ fn the_sample_claims_the_home_footer_and_runs_its_command() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn an_external_claim_draws_again_on_a_change_batch() {
     let h = open(Route::Home, "", &build("still"));
     h.wait_for("home.footer, 0 hellos");
@@ -177,7 +177,7 @@ fn an_external_claim_draws_again_on_a_change_batch() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_panicking_plugin_shows_as_failed_in_the_plugin_manager() {
     let h = open(session_route(), "Crash:\n\n```sample-panic\nboom\n```", &build(""));
     // The fence falls back to the code view and the TUI keeps running.
@@ -200,7 +200,7 @@ fn a_panicking_plugin_shows_as_failed_in_the_plugin_manager() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_panicking_command_is_caught_and_enabling_restarts_the_plugin() {
     let h = open(Route::Home, "", &build(""));
     h.wait_for("sample plugin v1: home.footer");
@@ -226,7 +226,7 @@ fn a_panicking_command_is_caught_and_enabling_restarts_the_plugin() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_major_abi_mismatch_is_refused_with_its_reason() {
     let h = open(Route::Home, "", &build("major-3"));
     let opencode_plugin::Status::Failed(error) = h.status() else {
@@ -244,7 +244,7 @@ fn a_major_abi_mismatch_is_refused_with_its_reason() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_plugin_stores_an_array() {
     let h =
         open_with(Route::Home, "", &build(""), |root| support::roots(support::home_paths(&root.join("home")), "test"));
@@ -261,7 +261,7 @@ fn a_plugin_stores_an_array() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_project_plugin_runs_once_approved_and_the_approval_is_kept() {
     let root = opencode_util::temp::tempdir().unwrap();
     project_plugin(root.path(), "sample", &build(""));
@@ -292,7 +292,7 @@ fn a_project_plugin_runs_once_approved_and_the_approval_is_kept() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_state_directory_inside_the_project_keeps_no_decision() {
     let root = opencode_util::temp::tempdir().unwrap();
     project_plugin(root.path(), "sample", &build(""));
@@ -322,13 +322,13 @@ fn a_state_directory_inside_the_project_keeps_no_decision() {
     open().wait_for("Plugin needs approval");
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn project_tui(root: &Path) -> Harness {
     project_tui_at(root, &root.join("home"))
 }
 
 /// [`project_tui`] with the home directory `home`, which holds the state directory.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn project_tui_at(root: &Path, home: &Path) -> Harness {
     let roots = support::roots(support::home_paths(home), "test");
     let harness =
@@ -338,7 +338,7 @@ fn project_tui_at(root: &Path, home: &Path) -> Harness {
 }
 
 #[cfg(unix)]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn project_tui_logged(root: &Path) -> (Harness, support::Log) {
     let fake = fake(String::new());
     let log = fake.log();
@@ -348,7 +348,7 @@ fn project_tui_logged(root: &Path) -> (Harness, support::Log) {
     (harness, log)
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn project_plugin(root: &Path, name: &str, library: &[u8]) {
     let dir = root.join("work/.opencode/plugins").join(name);
     std::fs::create_dir_all(&dir).unwrap();
@@ -357,7 +357,7 @@ fn project_plugin(root: &Path, name: &str, library: &[u8]) {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn nothing_of_a_project_plugin_is_mapped_before_it_is_approved() {
     let witness = std::env::temp_dir().join(format!("opencode-sample-witness-{}", std::process::id()));
     let _ = std::fs::remove_file(&witness);
@@ -390,7 +390,7 @@ fn nothing_of_a_project_plugin_is_mapped_before_it_is_approved() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_list_comes_back_on_the_row_that_was_asked_about() {
     let root = opencode_util::temp::tempdir().unwrap();
     project_plugin(root.path(), "first", &build(""));
@@ -413,7 +413,7 @@ fn the_list_comes_back_on_the_row_that_was_asked_about() {
 
 /// A plugin whose command panics.
 #[cfg(unix)]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn boom() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.command(abi::Command::new("boom.boom"), |_, _| -> () { panic!("boom") });
@@ -424,7 +424,7 @@ fn boom() -> abi::Plugin {
 
 #[cfg(unix)]
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_list_comes_back_as_the_plugins_are_after_the_question() {
     use std::os::unix::fs::PermissionsExt;
     for answer in ["escape", "unsaved", "filtered"] {
@@ -471,7 +471,7 @@ fn the_list_comes_back_as_the_plugins_are_after_the_question() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_plugin_that_fails_to_load_shows_a_toast_and_the_footer_counts_it() {
     let h = open(Route::Home, "", &build("major-3"));
     let screen = h.wait_for("Plugin failed:");
@@ -479,14 +479,14 @@ fn a_plugin_that_fails_to_load_shows_a_toast_and_the_footer_counts_it() {
     h.wait_for("⊙ 1 plugin failed");
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) {
     let next = path.with_extension("next");
     std::fs::write(&next, bytes).unwrap();
     std::fs::rename(next, path).unwrap();
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn print_excerpt(title: &str, screen: &str) {
     println!("----- {title} -----");
     for line in screen.lines().filter(|line| !line.trim().is_empty()) {
@@ -795,7 +795,7 @@ fn an_event_handler_renders_its_plugins_claims_again() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_failed_setup_is_offered_to_enable_and_the_open_manager_follows_a_reload() {
     let h = open(Route::Home, "", &build("setup-fails"));
     let screen = h.wait_for("Plugin failed:");
@@ -946,7 +946,7 @@ fn a_storage_write_made_on_exit_reaches_the_disk() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn toggling_a_plugin_frees_the_view_and_the_manager() {
     let h = open(session_route(), "Here:\n\n```sample\nhello plugin\n```", &build("still"));
     h.wait_for("SAMPLE v1 HELLO PLUGIN");
@@ -1198,7 +1198,7 @@ fn a_panel_shown_again_under_its_key_takes_its_footer_and_bareness() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn an_app_claim_shows_under_every_route() {
     let h = open(Route::Home, "Done here.", &build("app"));
     let last =
@@ -1218,7 +1218,7 @@ fn an_app_claim_shows_under_every_route() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_panic_turns_the_fences_already_drawn_back_into_code() {
     let h = open(session_route(), "Here:\n\n```sample\nhello plugin\n```", &build("still"));
     h.wait_for("SAMPLE v1 HELLO PLUGIN");
@@ -1228,7 +1228,7 @@ fn a_panic_turns_the_fences_already_drawn_back_into_code() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_plugins_change_in_cli_json_reconciles_while_running() {
     let h = open(Route::Home, "", &build(""));
     h.wait_for("sample plugin v1: home.footer");
@@ -1246,7 +1246,7 @@ fn a_plugins_change_in_cli_json_reconciles_while_running() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_dev_library_survives_a_settings_edit() {
     let root = opencode_util::temp::tempdir().unwrap();
     let dev = root.path().join("crate").join("target").join("opencode-dev");
@@ -1352,7 +1352,7 @@ fn storage_keys_of_dotted_ids_and_keys_keep_apart() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_failed_dev_build_says_so() {
     let root = opencode_util::temp::tempdir().unwrap();
     let dev = root.path().join("crate").join("target").join("opencode-dev");

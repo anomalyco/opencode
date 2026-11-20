@@ -84,7 +84,7 @@ enum Place {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Carrier {
     InProcess,
-    #[cfg_attr(not(feature = "native"), allow(dead_code))]
+    #[cfg_attr(not(native), allow(dead_code))]
     CAbi,
     Pipe,
     #[cfg(luau)]
@@ -210,7 +210,7 @@ fn request_ownership_in_process() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn request_ownership_through_the_c_abi() {
     table(Carrier::CAbi);
 }
@@ -228,9 +228,9 @@ fn request_ownership_in_luau() {
 
 #[test]
 fn a_task_parked_on_its_mounts_fetch_goes_on_once_cancelled() {
-    #[cfg_attr(not(any(luau, feature = "native")), allow(unused_mut))]
+    #[cfg_attr(not(any(luau, native)), allow(unused_mut))]
     let mut carriers = vec![Carrier::InProcess];
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     carriers.push(Carrier::CAbi);
     #[cfg(luau)]
     carriers.push(Carrier::Luau);

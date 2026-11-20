@@ -3,18 +3,15 @@
 
 // A build with no carrier of external plugins (no `ts`, `luau` or `native`) lists every target as skipped: what loads
 // one goes unused.
-#![cfg_attr(
-    not(any(feature = "native", feature = "ts", feature = "luau")),
-    allow(dead_code, unused_imports, unused_variables)
-)]
+#![cfg_attr(not(any(native, feature = "ts", feature = "luau")), allow(dead_code, unused_imports, unused_variables))]
 
 pub mod approval;
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub mod deps;
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub mod native;
 pub mod npm;
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub mod quarantine;
 pub(crate) mod requests;
 
@@ -36,11 +33,11 @@ pub fn entry_file() -> String {
 }
 
 /// A build to open: its digest, its bytes and its raw quarantine, read through one descriptor.
-#[cfg(feature = "native")]
+#[cfg(native)]
 type Build = (u64, Vec<u8>, Option<Vec<u8>>);
 
 /// Loads native builds.
-#[cfg(feature = "native")]
+#[cfg(native)]
 pub trait Backend {
     /// Loads the build `library`, read from the file `source`, against `host`, returning the definition, not yet
     /// active, and its failure while it runs. Setup runs with `options` (JSON text) on each activation, not here. An
@@ -155,7 +152,7 @@ struct Seen {
 
 pub struct Loader {
     /// What opens native builds ([`Loader::with_native`]): without it a library is skipped.
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     backend: Option<Rc<dyn Backend>>,
     /// The global config directory, whose `plugins` directory is always searched and which relative
     /// `plugins` paths start from (TS `path.dirname(config.path)`).
@@ -235,7 +232,7 @@ pub const STARTING: &str = "starting on the JS host";
 impl Loader {
     pub fn new(config_dir: PathBuf, cwd: PathBuf, configured: Vec<Configured>) -> Self {
         Self {
-            #[cfg(feature = "native")]
+            #[cfg(native)]
             backend: None,
             config_dir,
             cwd,
@@ -260,7 +257,7 @@ impl Loader {
     }
 
     /// Opens the native builds with `backend`.
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     pub fn with_native(self, backend: Rc<dyn Backend>) -> Self {
         Self { backend: Some(backend), ..self }
     }
@@ -697,7 +694,7 @@ impl Loader {
             });
         };
         // A build without the `native` feature, or one `OPENCODE_PLUGIN_NATIVE` turned off, opens no library.
-        #[cfg(feature = "native")]
+        #[cfg(native)]
         if let Some(backend) = self.backend.clone() {
             return self.library(host, registry, target, &*backend, &file, listed);
         }
@@ -706,7 +703,7 @@ impl Loader {
     }
 
     /// Loads the native build `file` of `target` with `backend`, once it is admitted.
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     fn library(
         &self,
         host: &Rc<dyn Host>,
@@ -1062,9 +1059,9 @@ impl Loader {
             return Some(Found::Tree(dir.clone()));
         }
         let identified = known.library().ok_or_else(|| format!("{}: no build", known.target)).and_then(|file| {
-            #[cfg(not(feature = "native"))]
+            #[cfg(not(native))]
             return Err(format!("{}: {}", file.display(), crate::SKIPPED_NATIVE));
-            #[cfg(feature = "native")]
+            #[cfg(native)]
             return Artifact::open(known.local.as_deref().unwrap_or(&file), &file).map(|(artifact, _)| artifact);
         });
         Some(Found::Build(identified))
@@ -1072,7 +1069,7 @@ impl Loader {
 
     /// Checks approval and crash policy before loading a native build. Returns the digest, bytes and quarantine from
     /// one descriptor; a held or unchanged build is not opened.
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     fn admit(
         &self,
         host: &Rc<dyn Host>,

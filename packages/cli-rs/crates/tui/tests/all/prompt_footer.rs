@@ -148,7 +148,7 @@ fn the_busy_footer_shrinks_on_a_narrow_terminal() {
 }
 
 /// The cells of the footer with the goal, of its panel, and of the panel after `p`, and the commands sent.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn goal_frames(loopback: bool) -> (Vec<Vec<opentui::testing::Cell>>, Vec<Option<Value>>) {
     let server = Gated::new(true);
     let h = mount(&server, 100, loopback, true);
@@ -172,7 +172,7 @@ fn goal_frames(loopback: bool) -> (Vec<Vec<opentui::testing::Cell>>, Vec<Option<
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_goal_panel_acts_the_same_through_the_c_abi_loopback() {
     let direct = goal_frames(false);
     let texts: Vec<_> = direct.1.iter().map(|body| body.as_ref().unwrap()["text"].clone()).collect();

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use opencode_api::client::Auth;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_api::generated::SessionID;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_plugin::abi;
@@ -130,7 +130,7 @@ fn mount(server: &Server, plugins: &[&str]) -> Harness {
 
 /// The poster's cells as `/stats` opens it from the session, twice, going back with escape in between. With
 /// `loopback`, stats runs through the byte shims of the C ABI.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn stats_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
     let server = Server::new(true);
     let h = mount(&server, if loopback { &["-opencode.stats"] } else { &[] });
@@ -158,7 +158,7 @@ fn stats_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn stats_goes_back_with_escape_and_fetches_afresh_the_same_through_the_c_abi_loopback() {
     let direct = stats_frames(false);
     assert_eq!(direct[0], direct[1]);

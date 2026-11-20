@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use opencode_api::memory::Memory;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::abi;
 use opencode_plugin::loader::entry_file;
 use opencode_tui::plugins::host::{External, external_with};
@@ -101,7 +101,7 @@ deref_harness!(Port);
 /// Example library or pinned package to load into the test TUI.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Carrier<'a> {
-    #[cfg_attr(not(feature = "native"), allow(dead_code))]
+    #[cfg_attr(not(native), allow(dead_code))]
     Example(&'a str),
     Npm(&'a str),
 }
@@ -745,7 +745,7 @@ fn the_published_session_usage_pages_the_children_one_parent_at_a_time() {
 // Expected: the author's fixture loads into the TUI: its sidebar counter shows and counts a click, and its toast follows
 // a finished session.
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_author_fixture_counts_and_toasts_a_finished_session() {
     let h = open_as(&[Carrier::Example("author")], 170, |_| None, false, None).unwrap();
     h.wait_for("Counted 0");
@@ -762,7 +762,7 @@ fn the_author_fixture_counts_and_toasts_a_finished_session() {
 
 // --- Dialog::Select on both paths
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn picking(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::new(name);
     setup.command(command("probe.pick"), |host, _| {
@@ -788,7 +788,7 @@ fn picking(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 /// The select's cells as it opens, and the toast after a move down and enter.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn picked(loopback: bool) -> (Vec<opentui::testing::Cell>, String) {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let definition = match loopback {
@@ -818,7 +818,7 @@ fn picked(loopback: bool) -> (Vec<opentui::testing::Cell>, String) {
 // picking one closes it and runs the action with the value as its input; the same cells and pick through the C ABI's
 // byte shims (`Loopback`).
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_select_dialog_picks_the_same_through_the_c_abi_loopback() {
     let direct = picked(false);
     assert!(direct.1.contains("picked c"), "{}", direct.1);

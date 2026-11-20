@@ -58,7 +58,7 @@ fn sounds_off_creates_no_engine() {
 /// The screen after a permission request, which plays a sound, and a failure of a session that is not on screen,
 /// which toasts with an "Open" action. With `loopback`, the notifications plugin is wired through the byte shims of
 /// the C ABI (`Loopback`), where its events and effects cross as JSON, instead of running in process.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn notified(loopback: bool) -> String {
     let config =
         r#"{"animations":false,"attention":{"sound":true,"volume":0.5},"plugins":["-opencode.notifications"]}"#;
@@ -90,7 +90,7 @@ fn notified(loopback: bool) -> String {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn notifications_act_the_same_through_the_c_abi_loopback() {
     let screen = notified(true);
     assert!(screen.contains("Session failed") && screen.contains("Open"), "{screen}");

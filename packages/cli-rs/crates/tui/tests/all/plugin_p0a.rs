@@ -15,14 +15,14 @@ pub(crate) mod probe;
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Carrier {
     Linked,
-    #[cfg_attr(not(feature = "native"), allow(dead_code))]
+    #[cfg_attr(not(native), allow(dead_code))]
     Loopback,
 }
 
 /// The C ABI's loopback only in a build with the `native` feature, which has it.
-#[cfg(feature = "native")]
+#[cfg(native)]
 const CARRIERS: [Carrier; 2] = [Carrier::Linked, Carrier::Loopback];
-#[cfg(not(feature = "native"))]
+#[cfg(not(native))]
 const CARRIERS: [Carrier; 1] = [Carrier::Linked];
 
 fn add(h: &Harness, carrier: Carrier) {
@@ -582,7 +582,7 @@ fn a_styled_box_draws_the_same_on_both_carriers() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_sample_library_confirms_and_edits_the_composer() {
     let h = crate::plugins::open(Route::Home, "", &crate::plugins::build("p0a"));
     h.wait_for("sample plugin v1: home.footer");

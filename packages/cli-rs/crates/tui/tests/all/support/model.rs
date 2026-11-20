@@ -106,9 +106,9 @@ pub fn check<M: Model>(model: &M, seeds: u64, steps: usize) {
 /// Runs `commands` under the C ABI's protocol machine: the model's own failure, else a broken rule of the protocol.
 /// A build without the `native` feature has no C ABI, and runs the model alone.
 fn run<M: Model>(model: &M, commands: &[M::Command]) -> Option<Failure> {
-    #[cfg(not(feature = "native"))]
+    #[cfg(not(native))]
     return model.run(commands);
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     {
         let (failure, broken) = opencode_plugin::conformance::checked(|| model.run(commands));
         failure.or_else(|| {
