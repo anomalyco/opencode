@@ -439,11 +439,12 @@ impl Host for Tui {
             // Written beside it and renamed over it: a scan never reads half a file, a failed write keeps the old
             // one, and a symlink there is replaced, not followed.
             let temporary = themes.join(format!(".{file}.tmp"));
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+            let bytes = serde_json::to_vec_pretty(&theme).unwrap_or_default();
             let written = std::fs::create_dir_all(&themes)
-                .and_then(|()| std::fs::write(&temporary, serde_json::to_vec_pretty(&theme).unwrap_or_default()))
-                .and_then(|()| opencode_util::busy::rename(&temporary, &themes.join(&file)));
+                .and_then(|()| opencode_util::busy::replace(&themes.join(&file), &temporary, &options, &bytes));
             if let Err(error) = written {
-                let _ = std::fs::remove_file(&temporary);
                 log::error!("Failed to install theme {file}: {error}");
             }
         });

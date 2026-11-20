@@ -186,7 +186,7 @@ fn rewrite(file: &Path, mut change: impl FnMut(&str) -> Option<String>) -> io::R
             if !unchanged(file, old.is_some().then_some(&bytes))? {
                 return Ok(false);
             }
-            opencode_util::busy::rename(&temp, file).map(|()| true)
+            opencode_util::busy::rename_synced(&temp, file).map(|()| true)
         });
         if !matches!(replaced, Ok(true)) {
             let _ = fs::remove_file(&temp);

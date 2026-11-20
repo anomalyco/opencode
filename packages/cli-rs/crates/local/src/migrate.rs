@@ -49,7 +49,6 @@ pub fn run(file: &Path, config: &Path, state: &Path) -> io::Result<Option<Migrat
 fn persist(file: &Path, text: &str, info: Value) -> Migration {
     let temp = Path::new(&format!("{}.{}.{}.tmp", file.display(), std::process::id(), crate::id::v4())).to_path_buf();
     let cause = cli_config::write_private(file, &temp, text).err();
-    let _ = fs::remove_file(&temp);
     Migration { info, cause }
 }
 

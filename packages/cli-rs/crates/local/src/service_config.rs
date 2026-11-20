@@ -340,7 +340,7 @@ impl ServiceConfig {
         self.write(&map)
     }
 
-    // A temporary file and a rename, mode 0600 for a new file, `JSON.stringify(value, null, 2)`.
+    // A synced temporary file and a rename, mode 0600 for a new file, `JSON.stringify(value, null, 2)`.
     fn write(&self, map: &Map<String, Value>) -> io::Result<()> {
         let dir = self.file.parent().unwrap_or(Path::new("."));
         fs::create_dir_all(dir)?;
@@ -350,9 +350,8 @@ impl ServiceConfig {
         #[cfg(unix)]
         std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
         let body = serde_json::to_string_pretty(map).expect("config serializes") + "\n";
-        io::Write::write_all(&mut options.open(&temp)?, body.as_bytes())?;
         // Windows fails a rename onto a file another process has open; retry as TypeScript does.
-        opencode_util::busy::rename(&temp, &self.file)
+        opencode_util::busy::replace(&self.file, &temp, &options, body.as_bytes())
     }
 
     /// The private credential, created once and kept across restarts; `Some` replaces it.

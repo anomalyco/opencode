@@ -149,10 +149,7 @@ fn publish(file: &Path, info: &Registration, handoff: Value) -> std::io::Result<
     options.write(true).create_new(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    let result = std::io::Write::write_all(&mut options.open(&temporary)?, text.as_bytes())
-        .and_then(|()| opencode_util::busy::rename(&temporary, &sidecar(file)));
-    let _ = std::fs::remove_file(&temporary);
-    result
+    opencode_util::busy::replace(&sidecar(file), &temporary, &options, text.as_bytes())
 }
 
 // A whole number as JSON.stringify writes it, without `.0`.
