@@ -611,6 +611,30 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
+  it.effect("omits template contents from text without dropping following content", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response(
+            '<p>Before</p><template id="card"><div>Hidden<template>Nested</template><span>Also hidden</span></div></template><p>After</p>',
+            { headers: { "content-type": "text/html" } },
+          ),
+        )
+      const registry = yield* Tool.Service
+      const url = "https://1.1.1.1/template"
+
+      expect(yield* executeTool(registry, call({ url, format: "markdown" }))).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "Before\n\nAfter" }],
+      })
+      expect(yield* executeTool(registry, call({ url, format: "text" }))).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "BeforeAfter" }],
+      })
+    }),
+  )
+
   it.effect("converts deeply nested HTML without overflowing", () =>
     Effect.gen(function* () {
       reset()

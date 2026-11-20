@@ -197,7 +197,8 @@ export function extractTextFromHTML(html: string) {
   let skipDepth = 0
   const parser = new Parser({
     onopentag(name) {
-      if (skipDepth > 0 || ["script", "style", "noscript", "iframe", "object", "embed"].includes(name)) skipDepth++
+      if (skipDepth > 0 || ["script", "style", "noscript", "iframe", "object", "embed", "template"].includes(name))
+        skipDepth++
     },
     ontext(input) {
       if (skipDepth === 0) text += input
