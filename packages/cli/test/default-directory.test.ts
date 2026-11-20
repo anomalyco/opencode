@@ -5,11 +5,11 @@ import path from "node:path"
 
 describe("default command directory", () => {
   test("shows help instead of ENOENT for a missing directory", async () => {
-    const result = await cli(["login"])
+    const result = await cli(["missing-directory-not-a-command"])
 
     expect(result.exitCode).toBe(1)
     expect(result.stdout).toContain("opencode <subcommand> [flags] [<directory>]")
-    expect(result.stdout + result.stderr).toContain('No directory or command named "login"')
+    expect(result.stdout + result.stderr).toContain('No directory or command named "missing-directory-not-a-command"')
     expect(result.stdout + result.stderr).not.toContain("ENOENT")
   })
 

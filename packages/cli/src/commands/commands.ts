@@ -57,6 +57,18 @@ const PermissionParams = {
   ),
 }
 
+const LoginParams = {
+  target: Argument.String("target").pipe(
+    Argument.withDescription("Integration ID, name, or well-known provider URL"),
+    Argument.optional,
+  ),
+  method: Flag.String("method").pipe(Flag.withDescription("Authentication method ID"), Flag.optional),
+  answer: Flag.String("answer").pipe(
+    Flag.withDescription("Provider form answer (key=value; repeat for multiple fields)"),
+    Flag.atMost(100),
+  ),
+}
+
 const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
   description: "OpenCode command line interface",
   params: {
@@ -188,17 +200,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         }),
         Spec.make("login", {
           description: "connect an integration",
-          params: {
-            target: Argument.String("target").pipe(
-              Argument.withDescription("Integration ID, name, or well-known provider URL"),
-              Argument.optional,
-            ),
-            method: Flag.String("method").pipe(Flag.withDescription("Authentication method ID"), Flag.optional),
-            answer: Flag.String("answer").pipe(
-              Flag.withDescription("Provider form answer (key=value; repeat for multiple fields)"),
-              Flag.atMost(100),
-            ),
-          },
+          params: LoginParams,
         }),
         Spec.make("logout", {
           description: "log out of a saved account",
@@ -245,6 +247,12 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           },
         }),
       ],
+    }),
+    Spec.make("login", {
+      description: "Connect an integration (alias for auth login)",
+      hidden: true,
+      globalFlags: ServerFlags,
+      params: LoginParams,
     }),
     Spec.make("mcp", {
       description: "Manage MCP (Model Context Protocol) servers",

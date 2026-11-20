@@ -62,6 +62,7 @@ const Handlers = Runtime.handlers(Commands, {
     import: () => import("./commands/handlers/auth/import"),
     switch: () => import("./commands/handlers/auth/switch"),
   },
+  login: () => import("./commands/handlers/auth/login"),
   debug: {
     agents: () => import("./commands/handlers/debug/agents"),
     config: () => import("./commands/handlers/debug/config"),
