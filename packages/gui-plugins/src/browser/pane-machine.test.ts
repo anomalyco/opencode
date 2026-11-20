@@ -332,6 +332,16 @@ describe("tabs", () => {
     })
     expect(binding.focusedTabID).toBe(tabA)
     expect(crashed.effects).toContainEqual({ type: "abort-requests", binding: "b1", requestIDs: ["req_1"] })
+    // The agent's requests on the tab are aborted with why its page ended, when the page says.
+    const ended = { cause: "renderer-gone", reason: "oom", exitCode: -536870904 } as const
+    expect(
+      play(
+        liveDashboard(),
+        on({ type: "request.started", requestID: "req_1" }),
+        on({ type: "request.targeted", requestID: "req_1", tabID: tabA }),
+        on({ type: "tab.crashed", tabID: tabA, attempt: 1, ended }),
+      ).effects.find((effect) => effect.type === "abort-requests"),
+    ).toEqual({ type: "abort-requests", binding: "b1", requestIDs: ["req_1"], ended })
     expect(crashed.effects).toContainEqual({ type: "release-pages", binding: "b1", attempts: [1] })
     expect(crashed.effects).toContainEqual({
       type: "save-restore",

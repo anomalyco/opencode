@@ -2,6 +2,7 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import { CAPTURE_DEADLINE_MS, FULL_PAGE_DEADLINE_MS } from "./capture"
 import { FileVerificationError } from "./file-verification"
 import { NavigationDeadlineError } from "./navigation-deadline"
+import { exitCodeHex, type PageEnd } from "./page-log"
 
 /** A failure the server acts on by its code, such as a wait whose condition never held. */
 export class CodedError extends Error {
@@ -11,6 +12,55 @@ export class CodedError extends Error {
     options?: ErrorOptions,
   ) {
     super(message, options)
+  }
+}
+
+/**
+ * What an agent's command hears when the page of its tab stopped under it: why, as the desktop log has it, and how to
+ * go on. The tab stays, unloaded, with `page_crashed` as its load error.
+ */
+export class PageEndedError extends Error {
+  constructor(readonly end: PageEnd) {
+    super(`${pageEnded(end)} Reload the tab with browser.reload({tabID}) and inspect its state before repeating anything; the desktop log has the details.`)
+  }
+}
+
+function pageEnded(end: PageEnd) {
+  switch (end.cause) {
+    case "renderer-gone":
+      return `This tab's page process ended: ${processGone(end.reason)} (exit code ${end.exitCode}${process.platform === "win32" ? `, ${exitCodeHex(end.exitCode)}` : ""}).`
+    case "target-crashed":
+      return "This tab's page process ended: Chromium reported a crash."
+    case "debugger-detached":
+      return `This tab's page was stopped: the desktop lost its debugger connection to it (${end.reason.slice(0, 100)}).`
+    case "setup-failed":
+      return "This tab's page was stopped: it did not become ready."
+    case "frame-unprepared":
+      return "This tab's page was stopped: one of its frames could not be prepared."
+    case "passkeys-unrestricted":
+      return "This tab's page was stopped: passkeys could not be turned off for it, which a tab the agent drives requires."
+  }
+}
+
+/** Electron's reason for a process that is gone, in words. */
+function processGone(reason: string) {
+  switch (reason) {
+    case "crashed":
+      return "it crashed"
+    case "oom":
+      return "out of memory"
+    case "killed":
+      return "it was killed"
+    case "abnormal-exit":
+      return "it exited abnormally"
+    case "launch-failed":
+      return "it failed to start"
+    case "integrity-failure":
+      return "it failed a code integrity check"
+    case "clean-exit":
+      return "it exited"
+    default:
+      return reason.slice(0, 100)
   }
 }
 
