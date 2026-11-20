@@ -44,9 +44,6 @@ const FORBIDDEN_TOOLS = new Set([
   "automation.resume",
   "automation.delete",
   "opencode.session.move",
-  "opencode.session.rename",
-  "opencode.worktree_create",
-  "opencode.worktree_remove",
 ])
 
 export interface RunInput {

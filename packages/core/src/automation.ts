@@ -451,11 +451,8 @@ const layer = Layer.effect(
       event?: AutomationEvent.Message,
     ) {
       const run = row.run_count + 1
-      const late = now - (row.next_due_at ?? now) >= LATE_AFTER
       const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
       if (!owner) return yield* pauseWith(row, now, "The session that authorized this command no longer exists")
-      if (owner.projectID !== row.project_id || owner.location.directory !== row.directory)
-        return yield* pauseWith(row, now, "The session that authorized this command moved")
 
       const admitted = yield* Deferred.make<void, FileSystem.DirectoryNotFoundError>()
       yield* Effect.gen(function* () {
@@ -485,7 +482,7 @@ const layer = Layer.effect(
         yield* db
           .update(AutomationTable)
           .set({
-            last_outcome: captured?.exit === 0 ? (late ? "late" : "fired") : "failed",
+            last_outcome: captured?.exit === 0 ? "fired" : "failed",
             last_output: AutomationCode.boundedOutput(output),
             time_updated: yield* Clock.currentTimeMillis,
           })
