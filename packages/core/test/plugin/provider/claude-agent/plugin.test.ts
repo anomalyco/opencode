@@ -165,6 +165,45 @@ describe("ClaudeAgentPlugin models", () => {
     }),
   )
 
+  it.live("keeps every saved model ID usable when Claude Code lists a model under another name", () =>
+    Effect.gen(function* () {
+      const store = yield* storage
+      yield* store.set("models", {
+        models: [
+          // The recorded list calls this model `fable`
+          { id: "claude-fable-5-1", name: "Fable 5.1", efforts: [], resolvedModel: "claude-fable-5-1" },
+          // and lists Sonnet 5 under its own ID, next to a `sonnet` that has moved to a newer version
+          { id: "sonnet", name: "Sonnet 5", efforts: [], resolvedModel: "claude-sonnet-5" },
+          { id: "claude-retired", name: "Retired", efforts: [] },
+        ],
+      })
+      const claude = FakeClaude.make([FakeClaude.expectStartup()])
+      yield* addPlugin(FakeIO.make({ claude }))
+      yield* connect
+      const models = yield* eventually(claudeModels, (models) => models.some((model) => model.id === "haiku"))
+      expect(find(models, "claude-fable-5-1").status).toBe("active")
+      expect(find(models, "fable").status).toBe("deprecated")
+      expect(find(models, "claude-sonnet-5").status).toBe("active")
+      expect(find(models, "claude-retired").status).toBe("deprecated")
+      claude.check()
+    }),
+  )
+
+  it.live("keeps the IDs another project folder saved after this one loaded", () =>
+    Effect.gen(function* () {
+      const store = yield* storage
+      const haiku = { id: "haiku", name: "Haiku", efforts: [] }
+      yield* store.set("models", { models: [haiku] })
+      const claude = FakeClaude.make([FakeClaude.expectStartup()])
+      yield* addPlugin(FakeIO.make({ claude }))
+      yield* store.set("models", { models: [haiku, { id: "claude-elsewhere", name: "Elsewhere", efforts: [] }] })
+      yield* connect
+      const models = yield* eventually(claudeModels, (models) => models.some((model) => model.id === "sonnet"))
+      expect(find(models, "claude-elsewhere").status).toBe("deprecated")
+      claude.check()
+    }),
+  )
+
   it.live("starts with the saved list and its prices without running claude", () =>
     Effect.gen(function* () {
       const store = yield* storage
