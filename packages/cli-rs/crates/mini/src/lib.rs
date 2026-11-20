@@ -11,6 +11,8 @@ use opencode_util::error;
 pub mod footers;
 mod prelude;
 pub mod prompt;
+#[cfg(test)]
+mod props;
 pub mod replay;
 pub mod scrollback;
 pub mod settings;
