@@ -18,6 +18,7 @@ import {
   DEFAULT_TAB_GROUPS_STATE,
   nextManualGroupColor,
   reconcileManualAssignments,
+  rememberAutoGroups,
   type ComputedTabGroup,
   type ResolvedTabMeta,
   type TabGroupsState,
@@ -259,6 +260,36 @@ describe("tab-groups", () => {
       expect(byKey[`server:${SERVER_A}`]).toBe(colorMapForward[`server:${SERVER_A}`])
       expect(byKey[`server:${SERVER_C}`]).toBe(colorMapForward[`server:${SERVER_C}`])
     }
+  })
+
+  test("keeps automatic group order and colors when tabs close", () => {
+    const project = (id: string) => ({ projectID: id, projectName: id })
+    const one = meta(sessionTab(SERVER_A, "ses_1"), project("proj_api"))
+    const two = meta(sessionTab(SERVER_A, "ses_2"), project("proj_web"))
+    const three = meta(sessionTab(SERVER_A, "ses_3"), project("proj_api"))
+    const four = meta(sessionTab(SERVER_A, "ses_4"), project("proj_docs"))
+    const five = meta(sessionTab(SERVER_A, "ses_5"), project("proj_cli"))
+
+    const build = (items: ResolvedTabMeta[], state: TabGroupsState) =>
+      buildComputedTabGroups({ items, state, mode: "project", serverCount: 1, query: "", labels })!
+
+    const view = (groups: ComputedTabGroup[]) => groups.map((group) => [group.key, group.color])
+
+    // The provider remembers each group as it first renders, then the user closes tabs one at a time.
+    const opened = build([one, two, three, four, five], DEFAULT_TAB_GROUPS_STATE)
+    const state = { ...DEFAULT_TAB_GROUPS_STATE, ...rememberAutoGroups(opened, DEFAULT_TAB_GROUPS_STATE) }
+    const before = view(opened)
+
+    // Closing the first tab leaves proj_web's tab ahead of proj_api's in tab order.
+    expect(view(build([two, three, four, five], state))).toEqual(before)
+    // Closing proj_api's last tab removes its group and nothing else.
+    expect(view(build([two, four, five], state))).toEqual(before.filter(([key]) => key !== "project:proj_api"))
+    expect(rememberAutoGroups(build([two, four, five], state), state)).toBeUndefined()
+
+    // A recolor override still wins, and the remembered default comes back once it is cleared.
+    const recolored = build([two, four], { ...state, overrides: { "project:proj_web": { color: "gray" } } })
+    expect(recolored[0]?.color).toBe("gray")
+    expect(recolored[0]?.defaultColor).toBe(opened[1]?.color)
   })
 
   test("renders manual groups inline alongside ungrouped tabs when automatic grouping is none", () => {
