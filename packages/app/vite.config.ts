@@ -1,6 +1,6 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { fileURLToPath } from "node:url"
-import { defineConfig, type Plugin } from "vite"
+import { defineConfig, type Plugin, type UserConfig } from "vite"
 import desktopPlugin, { channel } from "./vite.js"
 import { icons } from "./vite.icons"
 import { serviceWorker } from "./vite.pwa"
@@ -31,7 +31,21 @@ const basePath: Plugin = {
   },
 }
 
+// The e2e build also emits the fixture pages the tests open beside the app.
+const testFixtureInput = [
+  "index.html",
+  "e2e/utils/settings-wsl.html",
+  "e2e/utils/app-direction.html",
+  "e2e/utils/windows-menu.html",
+]
+
+const build: UserConfig["build"] = { assetsDir: "_assets", target: "esnext", sourcemap: true }
+
+if (process.env.VITE_OPENCODE_TEST_FIXTURES === "1") build.rolldownOptions = { input: testFixtureInput }
+
 export default defineConfig({
+  // SAFETY: the plugins are typed against the different Vite versions their packages depend on, but all of them only
+  // use hooks this Vite runs.
   plugins: [
     basePath,
     desktopPlugin,
@@ -44,21 +58,5 @@ export default defineConfig({
     allowedHosts: true,
     port: 3000,
   },
-  build: {
-    ...(process.env.VITE_OPENCODE_TEST_FIXTURES === "1"
-      ? {
-          rolldownOptions: {
-            input: [
-              "index.html",
-              "e2e/utils/settings-wsl.html",
-              "e2e/utils/app-direction.html",
-              "e2e/utils/windows-menu.html",
-            ],
-          },
-        }
-      : {}),
-    assetsDir: "_assets",
-    target: "esnext",
-    sourcemap: true,
-  },
+  build,
 })
