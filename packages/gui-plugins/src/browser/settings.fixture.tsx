@@ -92,7 +92,7 @@ export function mountBrowserSettings(input: { ui: Ui; target?: string; extension
   const t = (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>
     (messages.get(key) ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(params?.[name] ?? ""))
 
-  const [preferences, setPreferences] = createStore<{ links: boolean; welcomed: boolean; advanced?: boolean; agentPages?: boolean; importHistory?: boolean }>({
+  const [preferences, setPreferences] = createStore<{ links: boolean; welcomed: boolean; advanced?: boolean; agentPages?: boolean }>({
     links: true,
     welcomed: true,
   })

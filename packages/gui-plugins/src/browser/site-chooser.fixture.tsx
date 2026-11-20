@@ -13,8 +13,7 @@ import { SignInOffer } from "./import-prompt"
 /**
  * What main answers the dialog: how many made-up sites the first profile has (or why it has none), whether the
  * listing waits for the test, whether an import brings everything or (`partial`) leaves a cookie behind, and the page's site it opens for (`site`).
- * `pages` is how many pages of history an import that asks for history brings, and `history` false is the person's
- * setting that an import brings none.
+ * `pages` is how many pages of history an import that asks for history brings.
  */
 export type SiteScenario = {
   /** The dialog opens with its site list shown, as where the person asked to choose sites. */
@@ -27,7 +26,6 @@ export type SiteScenario = {
   readonly empty?: boolean
   readonly site?: { readonly name: string; readonly choose: boolean }
   readonly pages?: number
-  readonly history?: boolean
 }
 
 const sources: ProfileSource[] = [
@@ -60,7 +58,7 @@ function siteList(count: number): SiteList {
 // Component-test fixture: the real import dialog, with jobs of its own, in the real dialog host, and main's browser
 // profile faked at its Ipc. It records each import main receives and each list it reads in an element beside the
 // dialog, so the test reads what would be imported, and whether the dialog closed.
-export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direction?: "ltr" | "rtl"; offer?: boolean }) {
+export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direction?: "ltr" | "rtl"; offer?: boolean; card?: boolean }) {
   const host = document.createElement("main")
   host.dataset.testid = "site-chooser-fixture"
   host.dir = input.direction ?? "ltr"
@@ -78,7 +76,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     (messages.get(key) ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(params?.[name] ?? ""))
 
   const [store, setStore] = createStore<{
-    imports: { source: string; profile: string; sites?: readonly string[]; history?: boolean }[]
+    imports: { source: string; profile: string; sites?: readonly string[]; cookies?: boolean; history?: boolean }[]
     reads: string[]
     closed: boolean
     imported: number
@@ -101,10 +99,10 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
 
       return input.scenario.sites === "locked" ? { type: "failed", reason: "locked" } : siteList(input.scenario.sites)
     },
-    importBrowser: async (request: { source: string; profile: string; sites?: readonly string[]; history?: boolean }): Promise<ImportResult> => {
+    importBrowser: async (request: { source: string; profile: string; sites?: readonly string[]; cookies?: boolean; history?: boolean }): Promise<ImportResult> => {
       setStore("imports", (items) => [...items, request])
-      // Without a list of sites, main imports the whole profile.
-      const count = (request.sites?.length ?? 5) * 2
+      // Without a list of sites, main imports the whole profile; without cookies, only its history.
+      const count = request.cookies === false ? 0 : (request.sites?.length ?? 5) * 2
 
       return {
         type: "imported",
@@ -134,7 +132,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     use: () => live,
     signal: controller.signal,
     desktop: { os: "windows" },
-    stores: { preferences: { value: { links: true, welcomed: !input.offer, importHistory: input.scenario.history }, set() {} } },
+    stores: { preferences: { value: { links: true, welcomed: !input.offer }, set() {} } },
     layout: { settings() {} },
     dialogs: { open: () => ({ close() {} }) },
   }
@@ -150,8 +148,11 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     if (input.offer)
       return (
         <PluginContext.Provider value={plugin}>
-          <SignInOffer variant="bar" imported={() => setStore("imported", (count) => count + 1)} closed={() => setStore("closes", (count) => count + 1)} />
-          <ol data-testid="site-chooser-imports" data-closes={store.closes} data-imported={store.imported} />
+          <SignInOffer variant={input.card ? "card" : "bar"} imported={() => setStore("imported", (count) => count + 1)} closed={() => setStore("closes", (count) => count + 1)} />
+          {/* Out of the layout: the offer is measured and pictured where it is. */}
+          <ol hidden data-testid="site-chooser-imports" data-closes={store.closes} data-imported={store.imported}>
+            <For each={store.imports}>{(item) => <li>{JSON.stringify(item)}</li>}</For>
+          </ol>
         </PluginContext.Provider>
       )
 

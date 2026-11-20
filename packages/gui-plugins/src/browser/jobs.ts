@@ -53,10 +53,6 @@ export function createProfileJobs(
   const [state, setState] = createSignal(initialJobsState)
   const [version, setVersion] = createSignal(0)
   const mac = ctx.desktop?.os === "macos"
-  // Counts are grouped for the app's language: 4,210.
-  const grouped = (value: number) => new Intl.NumberFormat(ctx.locale.locale()).format(value)
-  // An import brings the other browser's history too, unless the person turned that off in Settings.
-  const importsHistory = () => preferences.value.importHistory !== false
   // Each running job's call and timer, by attempt.
   const handles = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
@@ -114,7 +110,7 @@ export function createProfileJobs(
       controller,
       timer: setTimeout(() => dispatch({ type: "timed-out", attempt }), effect.timeoutMs),
     })
-    void perform(current, effect.job, untrack(importsHistory), AbortSignal.any([ctx.signal, controller.signal])).then(
+    void perform(current, effect.job, AbortSignal.any([ctx.signal, controller.signal])).then(
       (outcome) => dispatch({ type: "finished", attempt, outcome }),
       () => dispatch({ type: "failed", attempt }),
     )
@@ -154,18 +150,15 @@ export function createProfileJobs(
   const keychain = (job: Job) => mac && source(job)?.engine === "chromium"
 
   /**
-   * The one line for a clean import: the cookies, and with them the pages of history when any came, from the browser
-   * when the surface names it. It alone picks the plural of both counts, so no surface joins count phrases.
+   * The one line for an import that lost nothing. An import from a browser says what came, in words: sign-ins,
+   * history, both, or nothing. A cookie file names no browser and brings only cookies, which it counts.
    */
   const imported = (result: Extract<ImportResult, { type: "imported" }>, browser?: string) => {
-    const number = grouped(result.imported)
-    const pages = result.pages ? ctx.plural("history.pages", result.pages, { number: grouped(result.pages) }) : undefined
+    if (!browser) return ctx.plural("signins.imported", result.imported)
 
-    if (pages && browser) return ctx.plural("signins.imported.history.from", result.imported, { number, pages, browser })
+    if (result.imported > 0) return ctx.t(result.pages ? "signins.imported.history.from" : "signins.imported.from", { browser })
 
-    if (pages) return ctx.plural("signins.imported.history", result.imported, { number, pages })
-
-    return browser ? ctx.plural("signins.imported.from", result.imported, { browser }) : ctx.plural("signins.imported", result.imported)
+    return ctx.t(result.pages ? "signins.imported.history.only.from" : "signins.imported.none.from", { browser })
   }
 
   /** What to say about a finished job; undefined for one whose result the surface already shows. */
@@ -230,11 +223,10 @@ export function createProfileJobs(
 
     const loss = importLoss(result)
 
-    if (loss?.reason === "other")
-      return {
-        text: ctx.plural("signins.imported.incomplete", result.imported, { omitted: loss.count }),
-        error: result.imported === 0,
-      }
+    // A cookie file is cookies and says so in counts: how many came, and how many did not. A browser's import counts
+    // them only when none came.
+    if (loss?.reason === "other" && (result.imported === 0 || finished.job.type === "import-file"))
+      return { text: ctx.plural("signins.imported.incomplete", result.imported, { omitted: loss.count }), error: result.imported === 0 }
 
     if (result.imported === 0 && loss)
       return {
@@ -242,16 +234,14 @@ export function createProfileJobs(
         error: true,
       }
 
-    // Chrome and Edge on Windows mix readable cookies with app-bound ones: say what was left behind and what to do.
+    // Some sign-ins stayed behind, as Chrome's and Edge's app-bound ones on Windows do: their sites open signed out.
     if (loss)
       return {
-        text: browser
-          ? ctx.plural("signins.imported.partial.named", result.imported, { browser, protected: result.protected })
-          : ctx.plural("signins.imported.partial", result.imported, { protected: result.protected }),
+        text: browser ? ctx.t("signins.imported.partial.named", { browser }) : ctx.t("signins.imported.partial"),
         error: false,
       }
 
-    return { text: imported(result), error: result.imported === 0 }
+    return { text: imported(result, browser), error: result.imported === 0 && !result.pages }
   }
 
   return {
@@ -270,10 +260,8 @@ export function createProfileJobs(
     },
     last: () => lastFinished(state()),
     describe,
-    /** The one line that confirms a clean import by name: "Imported 613 cookies and 4,210 pages from Helium". */
+    /** The one line that says what a browser's import brought: "Imported sign-ins and history from Helium". */
     imported,
-    /** Whether an import brings the other browser's history too; the person can turn that off in Settings. */
-    importsHistory,
     /** What to say while a job runs: on macOS, what the Keychain prompt in front of the window asks, and how to answer. */
     notice: (): JobMessage | undefined => {
       const job = runningJob(state())
@@ -305,15 +293,18 @@ export function createProfileJobs(
   }
 }
 
-/** Runs one job against main and says how it ended. With `history`, an import from a browser brings its history too. */
-async function perform(client: Client, job: Job, history: boolean, signal: AbortSignal): Promise<Outcome> {
+/** Runs one job against main and says how it ended. */
+async function perform(client: Client, job: Job, signal: AbortSignal): Promise<Outcome> {
   if ("token" in job && job.token) return { type: "installed", result: await client.install({ kind: "approve", token: job.token }, { signal }) }
 
   switch (job.type) {
     case "import-browser":
       return {
         type: "imported",
-        result: await client.importBrowser({ source: job.source, profile: job.profile, sites: job.sites, history }, { signal }),
+        result: await client.importBrowser(
+          { source: job.source, profile: job.profile, sites: job.sites, cookies: job.signins !== false, history: job.history !== false },
+          { signal },
+        ),
       }
     case "import-file":
       return { type: "imported", result: await client.importFile({ path: job.path }, { signal }) }

@@ -63,5 +63,5 @@ export async function madeUpFirefox() {
   place.run("https://github.com/redirect", "A redirect hop", 5, 1, 0, visited(1))
   places.close()
 
-  return { home, env }
+  return { home, env, profile: path.join(root, "Profiles", "work.default") }
 }

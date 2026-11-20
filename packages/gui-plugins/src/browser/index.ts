@@ -10,14 +10,12 @@ import en from "./i18n/en"
  * - `agentPages`: previews and the tabs the agent opens or focuses can open the pane and select their tab; defaults to true. Activity marks are independent.
  * - `advanced`: Settings › Browser shows its Advanced section open; closed until the person opens it.
  * - `welcomed`: the user imported sign-ins or declined the pane's offer, so the pane stops offering.
- * - `importHistory`: an import from another browser brings its browsing history too; defaults to true.
  */
 const Preferences = Schema.Struct({
   links: Schema.Boolean,
   welcomed: Schema.Boolean,
   agentPages: Schema.optionalKey(Schema.Boolean),
   advanced: Schema.optionalKey(Schema.Boolean),
-  importHistory: Schema.optionalKey(Schema.Boolean),
 })
 
 export default Plugin.define({

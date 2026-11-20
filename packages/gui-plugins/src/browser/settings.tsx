@@ -15,9 +15,9 @@ import { showToast } from "@opencode/ui/toast"
 import type { Job } from "./jobs-machine"
 
 /**
- * Settings › Browser: importing sign-ins, the extensions the profile runs and whether links open in the pane; then,
- * under Advanced, sharing with remote servers, the agent's pages, whether an import brings history, the cookie-file
- * import, site permissions and stored data. Every action goes through the jobs machine, so one runs at a time and
+ * Settings › Browser: importing from another browser, the extensions the profile runs and whether links open in the
+ * pane; then, under Advanced, sharing with remote servers, the agent's pages, the cookie-file import, site permissions
+ * and stored data. Every action goes through the jobs machine, so one runs at a time and
  * each says how it ended beside the control that started it.
  */
 export default function BrowserSettings(props: { target?: string }) {
@@ -85,10 +85,7 @@ export default function BrowserSettings(props: { target?: string }) {
   // one closed "Advanced" section.
   return (
     <ui.SettingsLayout title={ctx.t("settings.title")}>
-      <ui.SettingsSection
-        title={ctx.t("settings.import.title")}
-        footer={<Note>{ctx.t(jobs.importsHistory() ? "settings.import.note.history" : "settings.import.note")}</Note>}
-      >
+      <ui.SettingsSection title={ctx.t("settings.import.title")}>
         <Show when={jobs.unsaved()}>
           {(message) => (
             <ui.SettingsRow
@@ -226,22 +223,6 @@ export default function BrowserSettings(props: { target?: string }) {
               onChange={(agentPages) =>
                 preferences.update((draft) => {
                   draft.agentPages = agentPages
-                })
-              }
-            />
-          </ui.SettingsRow>
-          <ui.SettingsRow
-            id="settings-browser-history"
-            title={ctx.t("settings.history.title")}
-            description={ctx.t("settings.history.description")}
-          >
-            <ui.Switch
-              label={ctx.t("settings.history.title")}
-              hideLabel
-              checked={jobs.importsHistory()}
-              onChange={(importHistory) =>
-                preferences.update((draft) => {
-                  draft.importHistory = importHistory
                 })
               }
             />

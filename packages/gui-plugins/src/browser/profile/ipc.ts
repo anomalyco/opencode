@@ -217,15 +217,19 @@ export const BrowserProfile = Ipc.define({
     /** The sites a browser profile has cookies for; see `SiteList`. Only the window's import dialog asks. */
     sites: { input: Schema.Struct(SourceProfile), output: SiteList },
     /**
-     * Imports a browser profile's cookies: all of them, or with `sites` only those of the sites `sites` returned that
-     * the user chose. Cookies already in the profile stay, so a later import adds more sites. With `history`, the
-     * profile's browsing history comes too, for the address field to complete from: all of it, or the chosen sites'.
+     * Imports from a browser profile what the person ticked in the import dialog: its cookies, its browsing history,
+     * or both; all of each, or with `sites` only those of the sites `sites` returned that the user chose.
+     * - Cookies come unless `cookies` is false. Cookies already in the profile stay, so a later import adds more
+     *   sites. With `cookies` false none is read or written, and the other browser's cookie key is not asked for.
+     * - With `history`, the profile's browsing history comes, for the address field to complete from, and the
+     *   result's `pages` counts it. Without it no page is read and the history store is not opened.
      */
     importBrowser: {
       input: Schema.Struct({
         ...SourceProfile,
         sites: Schema.optional(Schema.Array(text(255)).check(Schema.isMaxLength(100_000))),
         history: Schema.optional(Schema.Boolean),
+        cookies: Schema.optional(Schema.Boolean),
       }),
       output: ImportResult,
     },

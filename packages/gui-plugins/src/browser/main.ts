@@ -8,7 +8,7 @@ import type { Profile } from "./profile"
 import { RefsStore } from "./refs"
 import { viewportToolbarAvailable } from "./viewport-toolbar-machine"
 import { BrowserPane } from "./ipc"
-import { BrowserProfile } from "./profile/ipc"
+import { BrowserProfile, type ImportResult } from "./profile/ipc"
 import { BrowserSites, createSitePermissions } from "./site-permissions"
 import { createSystemMedia } from "./system-media"
 import { createHandlePath } from "./disk"
@@ -25,6 +25,9 @@ type LoadedProfile = { profile?: Promise<Profile>; value?: Profile }
 
 /** The history store's opening while it runs, and the store once it is open. */
 type OpenedHistory = { store?: Promise<HistoryStore> }
+
+/** What an import that leaves the sign-ins behind brought of them: nothing, and nothing was lost. */
+const NO_COOKIES: ImportResult = { type: "imported", imported: 0, skipped: 0, protected: 0, failed: 0 }
 
 const setup: Plugin.MainSetup = (ctx) => {
   let paneState = createMainPaneState<Pane>()
@@ -282,7 +285,9 @@ const setup: Plugin.MainSetup = (ctx) => {
     importBrowser: (input) =>
       serial(async () => {
         const current = await profile()
-        const result = await current.importBrowser(input.source, input.profile, input.sites)
+        // Without sign-ins no cookie is read or written, so the other browser's cookie key is never asked for either:
+        // no Keychain or key-store prompt. Without history its pages are not read and the history store is not opened.
+        const result = input.cookies === false ? NO_COOKIES : await current.importBrowser(input.source, input.profile, input.sites)
 
         if (result.type !== "imported" || !input.history) return result
 

@@ -58,17 +58,18 @@ story("a search that lands inside Advanced opens it once, and the person's toggl
   await expect(view.advanced).toHaveAttribute("aria-expanded", "false")
 })
 
-story("an import brings history until the person turns that off under Advanced, and the import note says which", async ({ page }) => {
-  const view = await open(page, { target: "settings-browser-history" })
-  const history = view.root.getByRole("switch", { name: "Import browsing history" })
+story("no setting decides what an import brings: the import section has its browsers and no note, and Advanced no switch for it", async ({ page }) => {
+  const view = await open(page, { target: "settings-browser-remote", extensions: true })
+  const section = view.root.getByRole("region", { name: "Import from another browser", exact: true })
 
+  // The section is its title and one row per browser, whose button opens the import dialog with its two boxes.
+  await expect(section.getByRole("button", { name: "Import…", exact: true })).toHaveCount(2)
+  await expect(section.locator("p")).toHaveCount(0)
   await expect(view.advanced).toHaveAttribute("aria-expanded", "true")
-  await expect(history).toBeChecked()
-  await expect(view.root.getByText("Copies cookies and history. The other browser keeps its own.")).toBeVisible()
-
-  await history.click({ force: true })
-  await expect(view.stored).toContainText('"importHistory":false')
-  await expect(view.root.getByText("Copies cookies only. The other browser keeps its own.")).toBeVisible()
+  // Advanced holds two switches, neither of them about importing.
+  await expect(view.root.getByRole("switch")).toHaveCount(3)
+  await expect(view.root.getByRole("switch", { name: /history/i })).toHaveCount(0)
+  await expect(view.stored).not.toContainText("importHistory")
 })
 
 story("a sign-out that left the history behind says so in its row, and still forgets the window's last pages", async ({ page }) => {

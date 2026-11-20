@@ -5,7 +5,6 @@ import type { ExtensionCompatibility, InstallResult } from "./profile/ipc"
 export const ADVANCED_ENTRIES = [
   "settings-browser-remote",
   "settings-browser-agent-pages",
-  "settings-browser-history",
   "settings-browser-sites",
   "settings-browser-cookies",
 ]
