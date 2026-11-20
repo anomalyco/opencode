@@ -20,10 +20,19 @@ function view(state, data) {
     ui.text(data.title, { style: "title" }),
     state.path.length > 0 &&
       ui.row({ gap: 1, align: "center" }, [
-        ui.button("back", "Back", { variant: "secondary" }),
+        ui.button("Back", {
+          variant: "secondary",
+          onPress: (state) => ({ path: state.path.slice(0, -1), selected: state.path[state.path.length - 1] }),
+        }),
         ui.text(trail(data, state.path).join(" › "), { style: "caption", tone: "muted" }),
       ]),
-    ui.canvas({ id: "treemap", height: HEIGHT, fps: 60, duration: INTRO, alt: summary(data, node) }),
+    ui.canvas({
+      onPointer: (state, p) => tap(state, data, p),
+      height: HEIGHT,
+      fps: 60,
+      duration: INTRO,
+      alt: summary(data, node),
+    }),
     ui.text(
       picked
         ? picked.label +
@@ -39,22 +48,29 @@ function view(state, data) {
     ),
     data.choose &&
       ui.row({ gap: 1 }, [
-        ui.button("choose", picked ? "Choose " + picked.label : "Choose", { variant: "primary", disabled: !picked }),
+        ui.button(picked ? "Choose " + picked.label : "Choose", {
+          onPress: (state) => choose(state, data),
+          variant: "primary",
+          disabled: !picked,
+        }),
       ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "back") return { path: state.path.slice(0, -1), selected: state.path[state.path.length - 1] }
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
+function choose(state, data) {
+  if (state.selected !== null) {
     const picked = focus(data, state.path).children[state.selected]
-    return submit(
-      { label: picked.label, value: total(picked), path: [...trail(data, state.path).slice(1), picked.label] },
-      state,
-    )
+    return submit({
+      label: picked.label,
+      value: total(picked),
+      path: [...trail(data, state.path).slice(1), picked.label],
+    })
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
   const hit = locate(layout(data, state, pointer.width, pointer.height), pointer.x, pointer.y)
   if (!hit) return { ...state, selected: null }
   const child = focus(data, state.path).children[hit.index]

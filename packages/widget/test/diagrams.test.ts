@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   builtins,
+  type Button,
   type Canvas,
   type Command,
   type Frame,
@@ -29,7 +30,11 @@ const start = async (name: string, data: unknown) => {
 const nodes = (node: Node): Node[] => [node, ...("children" in node ? node.children.flatMap(nodes) : [])]
 const canvases = (view: Node) => nodes(view).filter((node): node is Canvas => node.type === "canvas")
 const texts = (view: Node) => nodes(view).flatMap((node) => (node.type === "text" ? [node.text] : []))
-const button = (view: Node, id: string) => nodes(view).find((node) => node.type === "button" && node.id === id)
+// The button whose label starts with `label`, and a press on it: ids come from the prelude, so tests find nodes.
+const button = (view: Node, label: string) =>
+  nodes(view).find((node): node is Button => node.type === "button" && node.label.startsWith(label))
+const press = (session: WidgetSession, label: string) =>
+  session.dispatch({ id: button(session.view, label)?.id ?? "missing", type: "press" })
 
 const WIDTH = 600
 const frame = (canvas: Canvas, t: number, width = WIDTH): Frame => ({
@@ -55,7 +60,7 @@ const tap = async (session: WidgetSession, x: number, y: number) => {
   return session.dispatch({ id: canvas.id ?? "", type: "pointer", value: { kind: "up", ...value } })
 }
 
-const choose = async (session: WidgetSession) => (await session.dispatch({ id: "choose", type: "press" })).submit
+const choose = async (session: WidgetSession) => (await press(session, "Choose")).submit
 
 // Where a text command with this string is drawn, to tap what it labels.
 const label = (commands: ReadonlyArray<Command>, text: string) => {
@@ -91,7 +96,7 @@ describe("every diagram", () => {
         }
       }
       // With choose, the button starts disabled until something is selected.
-      expect(button(session.view, "choose")).toMatchObject({ disabled: true })
+      expect(button(session.view, "Choose")).toMatchObject({ disabled: true })
       expect(await choose(session)).toBeUndefined()
     })
   }
@@ -125,14 +130,14 @@ test("scatter: press reads the nearest point, legend hides a series, choose", as
   const canvas = canvases(session.view)[0]
   // "checkout" (300 KB, 820 ms) sits at about (448, 76).
   const down = await session.dispatch({
-    id: "scatter",
+    id: canvas.id!,
     type: "pointer",
     value: { kind: "down", x: 452, y: 80, width: WIDTH, height: canvas.height },
   })
   expect(down.state).toMatchObject({ active: { series: 1, index: 4 }, down: true })
   expect(canvases(session.view)[0].duration).toBeUndefined()
   await session.dispatch({
-    id: "scatter",
+    id: canvas.id!,
     type: "pointer",
     value: { kind: "up", x: 452, y: 80, width: WIDTH, height: canvas.height },
   })
@@ -226,7 +231,7 @@ test("treemap: drill into a block, select, back, choose", async () => {
   expect(texts(session.view)).toContain("repo › packages")
   expect(texts(session.view)).toContain("core: 42 MB (35.6% of packages)")
   expect(await choose(session)).toEqual({ label: "core", value: 42, path: ["packages", "core"] })
-  await session.dispatch({ id: "back", type: "press" })
+  await press(session, "Back")
   expect(session.state).toEqual({ path: [], selected: 0 })
   const docs = label(await drawn(session), "docs")
   await tap(session, docs.x + 4, docs.y)
@@ -431,19 +436,25 @@ test("table: aligned monospace rows, sort, sparklines, select a row, choose", as
     "GET /search    120,900  210 ms   0.30%",
     "PUT /profile     8,800   95 ms   0.05%",
   ])
-  await session.dispatch({ id: "sort:1", type: "press" })
+  await press(session, "Requests")
   expect(rows().map((row) => row.split("  ")[0].trim())).toEqual([
     "GET /users",
     "GET /search",
     "POST /orders",
     "PUT /profile",
   ])
-  expect(button(session.view, "sort:1")).toMatchObject({ label: "Requests ↓", variant: "primary" })
-  await session.dispatch({ id: "sort:1", type: "press" })
+  expect(button(session.view, "Requests")).toMatchObject({ label: "Requests ↓", variant: "primary" })
+  await press(session, "Requests")
   expect(rows()[0].startsWith("PUT /profile")).toBe(true)
-  await session.dispatch({ id: "sort:0", type: "press" })
+  await press(session, "Endpoint")
   expect(rows()[0].startsWith("GET /search")).toBe(true)
-  expect(canvases(session.view).map((canvas) => canvas.id)).toEqual(["spark:2", "spark:0", "spark:1", "spark:3"])
+  // Rows are keyed by their index in the data, so sorting keeps each row's (and its sparkline's) id.
+  expect(canvases(session.view).map((canvas) => canvas.id)).toEqual([
+    "0/:2/0/:spark2",
+    "0/:0/0/:spark0",
+    "0/:1/0/:spark1",
+    "0/:3/0/:spark3",
+  ])
   const spark = canvases(session.view)[1]
   expect(spark).toMatchObject({ width: 96, height: 22, alt: "7d requests: 20, 22, 25, 24, 27, 30, 34" })
   const first = (await session.draw(frame(spark, 0))).commands
@@ -453,8 +464,9 @@ test("table: aligned monospace rows, sort, sparklines, select a row, choose", as
   expect(line(first)?.[1]).toHaveLength(1)
   expect(line(end)?.[1]).toHaveLength(7)
   expect(end.filter((command) => command[0] === "circle")).toHaveLength(1)
-  await session.dispatch({ id: "row:2", type: "press" })
-  expect(button(session.view, "choose")).toMatchObject({ label: "Choose GET /search", disabled: false })
+  const row = nodes(session.view).find((node) => node.type === "card" && node.id?.endsWith("/:2"))
+  await session.dispatch({ id: row?.type === "card" ? (row.id ?? "") : "", type: "press" })
+  expect(button(session.view, "Choose")).toMatchObject({ label: "Choose GET /search", disabled: false })
   expect(await choose(session)).toEqual({
     index: 2,
     row: { Endpoint: "GET /search", Requests: 120900, p95: 210, Errors: 0.3 },

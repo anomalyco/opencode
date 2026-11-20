@@ -15,7 +15,7 @@ function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
     ui.canvas({
-      id: "sequence",
+      onPointer: (state, p) => tap(state, data, p),
       height: HEAD + 14 + data.messages.length * ROW + 8,
       fps: 60,
       duration: intro(data),
@@ -26,17 +26,23 @@ function view(state, data) {
       tone: picked ? "default" : "muted",
     }),
     data.choose &&
-      ui.row({ gap: 1 }, [ui.button("choose", "Choose message", { variant: "primary", disabled: !picked })]),
+      ui.row({ gap: 1 }, [
+        ui.button("Choose message", { onPress: (state) => choose(state, data), variant: "primary", disabled: !picked }),
+      ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
+function choose(state, data) {
+  if (state.selected !== null) {
     const message = data.messages[state.selected]
-    return submit({ index: state.selected, from: message.from, to: message.to, label: message.label }, state)
+    return submit({ index: state.selected, from: message.from, to: message.to, label: message.label })
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const hit = locate(data, event.value.y)
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
+  const hit = locate(data, pointer.y)
   return { ...state, selected: hit === state.selected ? null : hit }
 }
 

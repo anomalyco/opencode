@@ -76,7 +76,7 @@ export interface WidgetSession {
   readonly state: unknown
   readonly view: Node
   /**
-   * Runs `update` for one event. Events run one at a time in dispatch order. On failure it rejects with a `StepError`
+   * Runs one event through the prelude (the handler of the node with that id, or a hook). Events run one at a time in dispatch order. On failure it rejects with a `StepError`
    * and the session keeps its previous state and view.
    */
   readonly dispatch: (event: WidgetEvent) => Promise<StepOutput>

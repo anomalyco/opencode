@@ -69,7 +69,6 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
   // Lines in the template source, so a position past it (in the appended entry) isn't reported as the template's.
   const source = { lines: 0 }
 
-
   const status = () => (props.message.status === "open" ? (store.sent ?? "open") : props.message.status)
   const interactive = () => status() === "open" && !store.sending && session() !== undefined
   const active = () =>
@@ -126,12 +125,12 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
       .catch((error) => {
         if (session() !== current) return
         setStore("error", stepMessage(error))
-        report("update", error)
+        report("event", error)
       })
   }
 
   // The server never runs templates, so a failing step goes back to the agent, which can fix the template.
-  function report(phase: "init" | "update", error: unknown) {
+  function report(phase: "init" | "event", error: unknown) {
     if (!(error instanceof StepError) || status() !== "open") return
     void backend
       .report({ widget: props.message, error: { phase, ...stepPosition(error.message, source.lines) } })

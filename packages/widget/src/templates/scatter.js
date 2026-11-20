@@ -15,7 +15,7 @@ function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
     ui.canvas({
-      id: "scatter",
+      onPointer: (state, p) => tap(state, data, p),
       height: HEIGHT,
       fps: 60,
       duration: state.down ? undefined : INTRO,
@@ -25,17 +25,22 @@ function view(state, data) {
       style: "caption",
       tone: picked ? "default" : "muted",
     }),
-    data.choose && ui.row({ gap: 1 }, [ui.button("choose", "Choose point", { variant: "primary", disabled: !picked })]),
+    data.choose &&
+      ui.row({ gap: 1 }, [
+        ui.button("Choose point", { onPress: (state) => choose(state, data), variant: "primary", disabled: !picked }),
+      ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.active) {
+function choose(state, data) {
+  if (state.active) {
     const point = data.series[state.active.series].points[state.active.index]
-    return submit({ series: data.series[state.active.series].label, index: state.active.index, ...point }, state)
+    return submit({ series: data.series[state.active.series].label, index: state.active.index, ...point })
   }
-  if (event.type !== "pointer") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
   const box = layout(data, state, pointer.width, pointer.height)
   const entry = legendAt(box, pointer.x, pointer.y)
   if (entry !== null) {
@@ -75,7 +80,7 @@ function draw(state, data, frame) {
   return g.commands
 }
 
-// Geometry shared by draw and update: the plot area, both ranges and the bubble scale.
+// Geometry shared by draw and tap: the plot area, both ranges and the bubble scale.
 function layout(data, state, width, height) {
   const shown = data.series.filter((_, at) => !state.hidden.includes(at))
   const points = (shown.length ? shown : data.series).flatMap((series) => series.points)

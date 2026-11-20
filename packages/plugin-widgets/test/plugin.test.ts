@@ -16,9 +16,8 @@ const confirm = builtins.find((template) => template.name === "confirm")!
 const confirmData = { title: "Ship it?", message: "Deploys main." }
 
 const pickerSource = `function view(state, data) {
-  return ui.column({}, data.items.map((item) => ui.button(item, item)))
-}
-function update(state, event) { return submit({ picked: event.id }, state) }`
+  return ui.column({}, data.items.map((item) => ui.button(item, { onPress: () => submit({ picked: item }) })))
+}`
 const pickerSchema = {
   type: "object",
   properties: { items: { type: "array", items: { type: "string" }, minItems: 1 } },
@@ -149,10 +148,7 @@ describe("widget templates", () => {
 
 describe("live templates", () => {
   const liveSource = `async function main(data) {
-  while (true) {
-    const event = await widget.event()
-    if (event.id === "stop") return widget.submit({ stopped: true })
-  }
+  widget.render(ui.button("Stop", { onPress: () => widget.submit({ stopped: true }) }))
   throw new Error("never runs on the server")
 }`
 
@@ -441,7 +437,7 @@ describe("error reports", () => {
         ])
         // The same error from another client, and a new one within the window, are dropped.
         yield* fake.call("report", { ...call, error, client: "tui" })
-        yield* fake.call("report", { ...call, error: { phase: "update", message: "boom" }, client: "tui" })
+        yield* fake.call("report", { ...call, error: { phase: "event", message: "boom" }, client: "tui" })
         expect(fake.synthetic).toHaveLength(1)
 
         yield* fake.call("respond", { ...call, response: { dismiss: true } })

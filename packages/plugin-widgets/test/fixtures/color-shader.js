@@ -12,10 +12,13 @@ function init() {
 function view(state) {
   return ui.column({ gap: 1 }, [
     ui.shader(WGSL, { height: 160, values: [state.speed], alt: "Shifting colors" }),
-    ui.slider("speed", { label: "Speed", value: state.speed, min: 0, max: 3, step: 0.1 }),
+    ui.slider({
+      label: "Speed",
+      value: state.speed,
+      min: 0,
+      max: 3,
+      step: 0.1,
+      onChange: (state, speed) => ({ speed }),
+    }),
   ])
-}
-function update(state, event) {
-  if (event.type !== "change" || event.id !== "speed") return state
-  return { speed: event.value }
 }

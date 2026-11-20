@@ -24,7 +24,13 @@ function view(state, data) {
   const picked = state.selected === null ? null : cell(state, data, state.selected)
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
-    ui.canvas({ id: "heatmap", height: height(state, data), fps: 60, duration: INTRO, alt: summary(state, data) }),
+    ui.canvas({
+      onPointer: (state, p) => tap(state, data, p),
+      height: height(state, data),
+      fps: 60,
+      duration: INTRO,
+      alt: summary(state, data),
+    }),
     ui.text(
       picked
         ? picked.name + ": " + (picked.value === null ? "no data" : amount(picked.value, data.unit))
@@ -36,23 +42,29 @@ function view(state, data) {
     ),
     data.choose &&
       ui.row({ gap: 1 }, [
-        ui.button("choose", "Choose cell", { variant: "primary", disabled: !picked || picked.value === null }),
+        ui.button("Choose cell", {
+          onPress: (state) => choose(state, data),
+          variant: "primary",
+          disabled: !picked || picked.value === null,
+        }),
       ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
+function choose(state, data) {
+  if (state.selected !== null) {
     const picked = cell(state, data, state.selected)
     return submit(
       data.layout === "calendar"
         ? { date: picked.name, value: picked.value }
         : { row: data.rows[picked.row], column: data.columns[picked.column], value: picked.value },
-      state,
     )
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
   const hit = locate(state, data, layout(state, data, pointer.width, pointer.height), pointer.x, pointer.y)
   return { ...state, selected: hit === state.selected ? null : hit }
 }
@@ -117,7 +129,7 @@ function cell(state, data, key) {
   return { ...item, name }
 }
 
-// Geometry shared by draw and update: matrix cells fill the width; calendar cells are squares.
+// Geometry shared by draw and tap: matrix cells fill the width; calendar cells are squares.
 function layout(state, data, width, height) {
   const calendar = data.layout === "calendar"
   const rows = calendar ? 7 : data.rows.length

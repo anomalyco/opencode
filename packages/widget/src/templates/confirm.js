@@ -3,15 +3,11 @@ function view(state, data) {
     ui.text(data.title, { style: "title" }),
     ui.markdown(data.message),
     ui.row({ gap: 1, align: "center" }, [
-      ui.button("confirm", data.confirmLabel || "Confirm", { variant: data.danger ? "danger" : "primary" }),
-      ui.button("cancel", data.cancelLabel || "Cancel", { variant: "secondary" }),
+      ui.button(data.confirmLabel || "Confirm", {
+        variant: data.danger ? "danger" : "primary",
+        onPress: () => submit({ confirmed: true }),
+      }),
+      ui.button(data.cancelLabel || "Cancel", { variant: "secondary", onPress: () => submit({ confirmed: false }) }),
     ]),
   ])
-}
-
-function update(state, event) {
-  if (event.type !== "press") return state
-  if (event.id === "confirm") return submit({ confirmed: true }, state)
-  if (event.id === "cancel") return submit({ confirmed: false }, state)
-  return state
 }

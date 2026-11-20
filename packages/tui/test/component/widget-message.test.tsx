@@ -109,18 +109,17 @@ test("the built-in live minigame shows the desktop and mobile fallback", async (
 })
 
 test("a failing step is reported to the agent", async () => {
-  const source =
-    'function view() {\n  return ui.button("go", "Go")\n}\nfunction update() {\n  throw new Error("boom")\n}'
+  const source = 'function view() {\n  return ui.button("Go", { onPress: () => { throw new Error("boom") } })\n}'
   using setup = await render("confirm", { program: async () => ({ program: program(source), mode: "step" }) })
   await frame(setup, (current) => current.includes("Go"))
   setup.mockInput.pressTab()
   setup.mockInput.pressEnter()
   await frame(setup, (current) => current.includes("boom"))
-  expect(setup.reports).toEqual([{ phase: "update", message: "Error: boom" }])
+  expect(setup.reports).toEqual([{ phase: "event", message: "Error: boom" }])
 })
 
 test("a template that fails to load is reported, with no position past the template's source", async () => {
-  const source = 'function view() {\n  return ui.text("x")\n}\nfunction update( {\n}'
+  const source = 'function view() {\n  return ui.text("x")\n}\nfunction helper( {\n}'
   using setup = await render("confirm", { program: async () => ({ program: program(source), mode: "step" }) })
   await frame(setup, (current) => current.includes("Widget failed to load"))
   expect(setup.reports).toEqual([

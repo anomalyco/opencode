@@ -14,7 +14,7 @@ function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
     ui.canvas({
-      id: "chart",
+      onPointer: (state, p) => tap(state, data, p),
       height: HEIGHT,
       fps: 60,
       duration: state.down ? undefined : INTRO,
@@ -31,14 +31,12 @@ function view(state, data) {
   ])
 }
 
-function update(state, event, data) {
-  if (event.type !== "pointer") return state
-  const pointer = event.value
+function tap(state, data, pointer) {
   const hit = locate(data, layout(data, pointer.width, pointer.height), pointer.x, pointer.y)
   if (pointer.kind !== "up") return { active: hit ?? state.active, down: true }
   if (data.choose && hit) {
     const picked = point(data, hit)
-    return submit({ series: picked.series, index: hit.index, value: picked.value }, { active: hit, down: false })
+    return submit({ series: picked.series, index: hit.index, value: picked.value })
   }
   return { active: hit, down: false }
 }
@@ -56,7 +54,7 @@ function draw(state, data, frame) {
   return g.commands
 }
 
-// Geometry shared by draw and update: the plot area, the value range and the slots of each index.
+// Geometry shared by draw and tap: the plot area, the value range and the slots of each index.
 function layout(data, width, height) {
   const count = Math.max(1, ...data.series.map((series) => series.values.length))
   const values = data.series.flatMap((series) => series.values)

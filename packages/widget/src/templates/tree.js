@@ -28,7 +28,7 @@ function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
     ui.canvas({
-      id: "tree",
+      onPointer: (state, p) => tap(state, data, p),
       height: data.orientation === "down" ? tree.depth * LEVEL + 8 : Math.max(60, tree.leaves * ROW + 8),
       fps: 60,
       duration: intro(tree),
@@ -40,7 +40,8 @@ function view(state, data) {
     }),
     data.choose &&
       ui.row({ gap: 1 }, [
-        ui.button("choose", picked ? "Choose " + picked.node.label : "Choose", {
+        ui.button(picked ? "Choose " + picked.node.label : "Choose", {
+          onPress: (state) => choose(state, data),
           variant: "primary",
           disabled: !picked,
         }),
@@ -48,13 +49,16 @@ function view(state, data) {
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
+function choose(state, data) {
+  if (state.selected !== null) {
     const picked = layout(data, state).items.find((item) => item.key === state.selected)
-    return submit({ label: picked.node.label, path: trail(data, picked.key), note: picked.node.note }, state)
+    return submit({ label: picked.node.label, path: trail(data, picked.key), note: picked.node.note })
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
   const tree = layout(data, state)
   const hit = locate(data, tree, place(data, tree, pointer.width), pointer.x, pointer.y)
   if (!hit) return { ...state, selected: null }

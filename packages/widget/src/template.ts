@@ -3,7 +3,7 @@ import type { JSONSchema } from "./json-schema.js"
 import { version } from "./program.js"
 import { backdrop, chart, confirm, form, minigame, suggestions } from "./source.js"
 
-/** `step` (default): short init/update/view/draw steps. `live`: one long-running `main(data)` (widgets-live.md). */
+/** `step` (default): short init/view/draw steps, events through handlers on nodes. `live`: one long-running `main(data)` (widgets-live.md). */
 export type Mode = "step" | "live"
 
 /**

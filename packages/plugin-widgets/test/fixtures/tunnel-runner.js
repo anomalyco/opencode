@@ -59,22 +59,21 @@ async function main(data) {
       ui.column({ gap: 1, fullscreen: true }, [
         ui.row({ gap: 2 }, [ui.text(data.title ?? "Tunnel runner", { style: "title" }), ui.text("Score " + run.score)]),
         ui.shader(WGSL, {
-          id: "tunnel",
           height: 280,
           fill: true,
           values: [run.y, run.distance, run.next - run.distance, run.score, run.alive ? 1 : 0],
           alt: "A neon tunnel runner: tap to jump the barriers",
+          onPointer: (p) => {
+            if (p.kind === "down" && run.y === 0) run.vy = JUMP
+          },
         }),
       ]),
     )
   const end = widget.now() + (data.seconds ?? 45) * 1000
   show()
   while (run.alive && widget.now() < end) {
-    const next = await widget.next({ frame: true, timeout: end - widget.now() })
-    if (next.type === "event" && next.event.type === "pointer" && next.event.id === "tunnel" && next.event.value.kind === "down" && run.y === 0)
-      run.vy = JUMP
-    if (next.type !== "frame") continue
-    const dt = Math.min(next.frame.dt, 0.05)
+    const frame = await widget.frame()
+    const dt = Math.min(frame.dt, 0.05)
     run.vy += GRAVITY * dt
     run.y = Math.max(0, run.y + run.vy * dt)
     if (run.y === 0) run.vy = Math.max(0, run.vy)
@@ -94,12 +93,10 @@ async function main(data) {
       ui.text(run.alive ? "Time's up: " + run.score + " barriers" : "Crashed after " + run.score + " barriers", {
         style: "title",
       }),
-      ui.button("done", "Submit score", { variant: "primary" }),
+      ui.button("Submit score", {
+        variant: "primary",
+        onPress: () => widget.submit({ score: run.score, distance: Math.round(run.distance) }),
+      }),
     ]),
   )
-  while (true) {
-    const event = await widget.event()
-    if (event.type === "press" && event.id === "done") break
-  }
-  widget.submit({ score: run.score, distance: Math.round(run.distance) })
 }
