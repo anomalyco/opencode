@@ -648,6 +648,8 @@ enum Item {
 struct Text {
     items: Vec<Item>,
     shell: bool,
+    /// A paste was collapsed since the prompt was last reset; the prompt keeps its part.
+    rich: bool,
 }
 
 impl Text {
@@ -687,10 +689,20 @@ struct Reference {
 }
 
 impl Reference {
-    /// Deletes the selection. OpenTUI's selection takes the item at its far end too, as the TypeScript textarea's does.
+    /// Where a selection from `anchor` ends. OpenTUI's selection takes the item at its far end too, as the TypeScript
+    /// textarea's does, unless that ends the line.
+    fn selection_end(&self, anchor: usize) -> usize {
+        let far = anchor.max(self.cursor);
+        match self.now.items.get(far) {
+            None | Some(Item::Char('\n')) => far,
+            Some(_) => far + 1,
+        }
+    }
+
     fn take_selection(&mut self) -> bool {
-        let Some(anchor) = self.anchor.take() else { return false };
-        let (start, end) = (anchor.min(self.cursor), (anchor.max(self.cursor) + 1).min(self.now.items.len()));
+        let Some(anchor) = self.anchor else { return false };
+        let (start, end) = (anchor.min(self.cursor), self.selection_end(anchor));
+        self.anchor = None;
         self.now.items.drain(start..end);
         self.cursor = start;
         start != end
@@ -701,6 +713,12 @@ impl Reference {
         for item in items {
             self.now.items.insert(self.cursor, item);
             self.cursor += 1;
+        }
+    }
+
+    fn record(&mut self) {
+        if self.history.last() != Some(&self.now) {
+            self.history.push(self.now.clone());
         }
     }
 
@@ -740,6 +758,8 @@ impl Reference {
             Edit::Key("right") => chip(Some(self.cursor)) || chip(Some(self.cursor + 1)),
             Edit::Key("delete") => chip(Some(self.cursor)),
             Edit::Key("up" | "down") => self.now.items.contains(&Item::Char('\n')) || self.now.shown().len() > 100,
+            // Ctrl+C on an empty prompt exits.
+            Edit::Key("ctrl+c") => self.now.items.is_empty() && !self.now.shell,
             _ => chips && self.anchor.is_some(),
         }
     }
@@ -762,7 +782,7 @@ impl Reference {
                 self.cursor = anchor.min(self.cursor)
             }
             Edit::Key("right" | "ctrl+e") if let Some(anchor) = self.anchor.take() => {
-                self.cursor = (anchor.max(self.cursor) + 1).min(end);
+                self.cursor = self.selection_end(anchor);
             }
             Edit::Key("left") => self.cursor = self.cursor.saturating_sub(1),
             Edit::Key("right") => self.cursor = (self.cursor + 1).min(end),
@@ -805,6 +825,17 @@ impl Reference {
             // An Up that finds no entry falls through to a move, which ends the selection; a Down opens the composer.
             Edit::Key("up") => (self.anchor, ()) = (None, self.step(-1)),
             Edit::Key("down") => self.step(1),
+            Edit::Key("shift+return") => self.insert([Item::Char('\n')]),
+            Edit::Key("ctrl+c") if self.now.shell && self.now.items.is_empty() => self.now.shell = false,
+            Edit::Key("ctrl+c") => {
+                // Long or rich prompts go to history first.
+                if self.now.shown().trim().chars().count() >= 20 || self.now.rich {
+                    self.record();
+                }
+                (self.index, self.draft) = (0, None);
+                let shell = self.now.shell;
+                self.restore(Text { shell, ..Text::default() }, false);
+            }
             Edit::Key(key) => unreachable!("{key}"),
             Edit::Paste(text) => {
                 let lines = text.matches('\n').count() + 1;
@@ -825,15 +856,14 @@ impl Reference {
                     return;
                 }
                 self.insert([Item::Chip(format!("[Pasted ~{lines} lines]"), text.clone()), Item::Char(' ')]);
+                self.now.rich = true;
             }
             Edit::Submit => {
                 if self.now.shown().trim().is_empty() {
                     return;
                 }
                 self.sent.push((self.now.shell, self.now.expanded()));
-                if self.history.last() != Some(&self.now) {
-                    self.history.push(self.now.clone());
-                }
+                self.record();
                 (self.index, self.draft) = (0, None);
                 self.restore(Text::default(), false);
             }
@@ -844,7 +874,7 @@ impl Reference {
                 self.stash.push(self.now.clone());
                 (self.index, self.draft) = (0, None);
                 let shell = self.now.shell;
-                self.restore(Text { items: Vec::new(), shell }, false);
+                self.restore(Text { shell, ..Text::default() }, false);
             }
             Edit::Pop => {
                 let Some(mut text) = self.stash.pop() else { return };
@@ -859,8 +889,21 @@ impl Reference {
 struct PromptModel;
 
 const TYPED: &[&str] = &["a", "b", "z", "é", "日", "👍", " ", "ab", "!"];
-const KEYS: &[&str] =
-    &["left", "right", "shift+left", "shift+right", "ctrl+a", "ctrl+e", "backspace", "delete", "escape", "up", "down"];
+const KEYS: &[&str] = &[
+    "left",
+    "right",
+    "shift+left",
+    "shift+right",
+    "ctrl+a",
+    "ctrl+e",
+    "backspace",
+    "delete",
+    "escape",
+    "up",
+    "down",
+    "shift+return",
+    "ctrl+c",
+];
 
 impl Model for PromptModel {
     type Command = Edit;
@@ -976,5 +1019,5 @@ fn a_paste_over_a_selection_sends_the_pasted_text() {
 /// text, cursor and mode, and what it sent, as a reference prompt has them.
 #[test]
 fn any_edit_sequence_matches_the_reference_prompt() {
-    model::check(&PromptModel, 4, 24);
+    model::check(&PromptModel, 8, 24);
 }
