@@ -1,4 +1,5 @@
 import { createBrowserDraftStore } from "@/runtime/persistence/drafts"
+import { basePath } from "./base-path"
 import type { Platform } from "./platform"
 
 export function createWebPlatform(version: string) {
@@ -57,5 +58,5 @@ function getCurrentServerUrl() {
     return `http://${host}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
   }
 
-  return location.origin
+  return location.origin + basePath()
 }
