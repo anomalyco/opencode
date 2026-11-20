@@ -2,8 +2,7 @@
 
 Agents show interactive widgets in a session: suggestion cards with image carousels, forms with sliders, checkboxes and
 selects, confirmations. A widget is a PsychoScript program from a named template plus JSON data. The server stores
-templates; the agent posts a widget message into the session history; every client (TUI, app/desktop, mobile, Rune
-desktop) downloads the template program, runs it in its own PsychoScript interpreter, and renders the JSON view tree it
+templates; the agent posts a widget message into the session history; every client (TUI, Rune desktop) downloads the template program, runs it in its own PsychoScript interpreter, and renders the JSON view tree it
 returns with native components. A submission goes back to the agent as the next prompt.
 
 This document is the contract between the server, the shared TypeScript runtime and every client. Change it here first.
@@ -15,9 +14,10 @@ This document is the contract between the server, the shared TypeScript runtime 
 | Widget runtime (prelude, node schema, `WidgetSession`, built-in templates) | `packages/widget` (`@opencode/widget`) | runtime |
 | Widget message, events, template store, `widget` and `widget_template` tools, HTTP API | `packages/schema`, `packages/core`, `packages/protocol`, `packages/server`, `packages/client` | core |
 | TUI renderer | `packages/tui` | tui |
-| App / desktop (Electron) renderer | `packages/app`, `packages/session-ui` | app |
-| Mobile renderer | `anomalyco/mobilecode` | mobile |
-| Rune desktop renderer (Rust PsychoScript) | `anomalyco/rune-desktop` | rune |
+| Rune desktop renderer (Rust PsychoScript) | `anomalyco/rune-desktop` (`crates/opencode-widget` runner, `crates/opencode-widget-view` renderer) | rune |
+
+Clients in scope: TUI and Rune desktop. Web/Electron is out. Mobile (native iOS/Android, no JavaScript) comes later by
+embedding the Rune renderer and the Rust runner.
 
 PsychoScript itself (`anomalyco/psychoscript`) does not change: its repo holds only the language. The widget
 "extension" is the prelude and the step ABI below, layered on the stock interpreter, with no host functions besides

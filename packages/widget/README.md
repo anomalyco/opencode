@@ -24,7 +24,7 @@ or `invalid`); keep the previous state and view and show the message inline.
 
 ## ABI for other clients
 
-1. Fetch `GET /widget/template/{name}/{version}` once and cache it forever by `name@version`. Its `program` field is
+1. Fetch `GET /api/experimental/widget/template/{name}/{version}` (body wrapped in `{ data }`) once and cache it forever by `name@version`. Its `program` field is
    the full program (prelude + template); you never need a prelude of your own.
 2. Compile, once per program, this PsychoScript source:
 
@@ -51,7 +51,7 @@ or `invalid`); keep the previous state and view and show the message inline.
 
    The run returns `{ state, view, submit?, dismiss? }`. Keep `state` and pass it back with the next event; render
    `view`. `submit` present (it may be `null`): send `{ value: submit }` to
-   `POST /session/{sessionID}/widget/{messageID}/respond`. `dismiss: true`: send `{ dismiss: true }`.
+   `POST /api/experimental/session/{sessionID}/widget/{messageID}/respond`. `dismiss: true`: send `{ dismiss: true }`.
 
 4. Validate `view` against the node set in the spec. Drop nodes of unknown `type` from `children` (render nothing, log
    a warning) and ignore unknown props. A failed step (throw, timeout, invalid view) keeps the previous state and view

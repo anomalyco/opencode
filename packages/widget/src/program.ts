@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { prelude } from "./source.js"
 import type { JSONSchema } from "./json-schema.js"
 
@@ -13,7 +14,7 @@ export function program(source: string) {
  * covers the prelude because clients cache the served program by `name@version` forever.
  */
 export function version(source: string, data: JSONSchema) {
-  return new Bun.CryptoHasher("sha256")
+  return createHash("sha256")
     .update(program(source) + "\n" + JSON.stringify(data))
     .digest("hex")
     .slice(0, 16)
