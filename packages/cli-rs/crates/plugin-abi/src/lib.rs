@@ -4516,7 +4516,11 @@ impl Registered {
             // 0 names no request, so no handler hears a reply to it.
             Request::Reply { id: RequestId(0), .. } => Err("the host sent a reply to request ID 0".to_owned()),
             Request::Reply { id, result } => {
-                self.replies.iter().for_each(|run| run(&self.host, id, result.clone()));
+                // The last handler takes the reply and the others a copy, as on the linked path.
+                if let Some((last, rest)) = self.replies.split_last() {
+                    rest.iter().for_each(|run| run(&self.host, id, result.clone()));
+                    last(&self.host, id, result);
+                }
                 Ok(serde_json::Value::Null)
             }
             Request::Mount { claim, input, mounted } => {

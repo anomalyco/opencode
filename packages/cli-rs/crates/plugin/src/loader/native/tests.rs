@@ -847,6 +847,45 @@ fn a_slow_reply_across_a_disable_delivers_nothing() {
     }
 }
 
+/// A plugin that fetches on `x.fetch` and has three reply handlers, each of which toasts its number and the reply.
+fn replying_thrice(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command::new("x.fetch"), |host, _| {
+        let _ = host.try_fetch(abi::Fetch::new("GET", "/page"));
+    });
+    for handler in 1..=3 {
+        setup.on_reply(move |host, _, result| {
+            let message = format!("{handler}: {}", result.map_or_else(|error| error, |value| value.to_string()));
+            host.toast(abi::Toast::new(abi::Variant::Info, message));
+        });
+    }
+    Ok(())
+}
+
+#[test]
+fn every_reply_handler_gets_the_whole_reply_in_process_and_through_the_library() {
+    let host = host();
+    let registries = [
+        Registry::define(vec![abi::Plugin { id: "thrice", setup: replying_thrice }.into()], []),
+        loopback(&host, abi::export_plugin!(@loopback "thrice", replying_thrice)),
+    ];
+    let page =
+        serde_json::json!({ "data": [{ "id": "msg_1", "tokens": { "cache": { "read": 2 } } }, null], "cursor": {} });
+    for registry in registries {
+        registry.activate(&dynamic(&host));
+        for reply in [Ok(page.clone()), Err("UnexpectedStatus: 500".to_owned())] {
+            host.keymap().dispatch("x.fetch", None);
+            host.app.advance(Duration::from_millis(1));
+            let (_, deliver) = host.fetches.borrow_mut().remove(0);
+            deliver(reply.clone());
+            host.app.advance(Duration::from_millis(1));
+            let said = reply.map_or_else(|error| error, |value| value.to_string());
+            let toasts: Vec<String> = host.toasts.borrow_mut().drain(..).map(|toast| toast.message).collect();
+            assert_eq!(toasts, [1, 2, 3].map(|handler| format!("{handler}: {said}")));
+        }
+        registry.set_active(&dynamic(&host), "thrice", false);
+    }
+}
+
 /// The sample's prompt footer claim, compiled in rather than loaded.
 #[path = "../../../examples/sample/src/prompt.rs"]
 mod sample_prompt;
