@@ -87,7 +87,8 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
         })
         .collect();
     let call = Call { generation: cx.mount.generation, full: cx.input.full, bad, built };
-    let shade = palette.then(|| cx.input.palette.get("text.muted")).flatten();
+    // `text.base` differs between the default theme's modes; its `text.muted` is the same gray in both.
+    let shade = palette.then(|| cx.input.palette.get("text.base")).flatten();
     board(|board| {
         board.calls.push(call);
         if let Some(shade) = shade {
