@@ -385,7 +385,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (event.error !== undefined) noteFailure(event.error, undefined)
 
-      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error, placed: event.placed })
+      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error, held: event.held, placed: event.placed })
     }
 
     if (event.type === "embed")

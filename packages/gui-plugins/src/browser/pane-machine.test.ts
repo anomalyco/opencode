@@ -4,6 +4,7 @@ import { createDocumentState, documentTab, transitionDocument } from "./page-mac
 import { invalidReply, wireOutcome, wireState } from "./wire"
 import { SessionNotFoundError } from "@opencode/protocol/errors"
 import {
+  LISTING_DEADLINE_MS,
   attachmentFailure,
   createPaneState,
   decodeControl,
@@ -450,18 +451,52 @@ describe("focus", () => {
 describe("position", () => {
   const id = (n: number) => Browser.TabID.make(`tab_00000000-0000-0000-0000-00000000001${n}`)
   const [a, b, c, x, y, z] = [1, 2, 3, 4, 5, 6].map(id)
+  const address = "https://docs.example/guide"
+
+  // What a new tab's page reports, in order, as measured in Electron: its load starts, its document commits under
+  // Chromium's name for it, the document names itself, and the load ends.
+  const started = (tabID: Browser.TabID): Browser.Tab => ({ ...tab(tabID, "about:blank"), loading: true })
+  const committed = (tabID: Browser.TabID): Browser.Tab => ({ ...tab(tabID, address, "docs.example/guide", 1), loading: true })
+  const titled = (tabID: Browser.TabID): Browser.Tab => ({ ...tab(tabID, address, "Guide", 1), loading: true })
+  const ended = (tabID: Browser.TabID, title = "Guide"): Browser.Tab => tab(tabID, address, title, 1)
 
   type Step =
     /** A tab opens: from `from`'s page or link, behind it or in `front`; with no `from`, by "+" or the agent. */
     | { readonly open: Browser.TabID; readonly from?: Browser.TabID; readonly front?: boolean }
+    /** The tab's page reports itself. */
+    | { readonly report: Browser.Tab }
+    /** The tab has waited `LISTING_DEADLINE_MS` for a name, or its page asks the person something. */
+    | { readonly due: Browser.TabID }
     /** The person selects a tab in the strip. */
     | { readonly select: Browser.TabID }
+    /** The pane brings a tab to the front for something other than the person's selection. */
+    | { readonly focus: Browser.TabID }
     | { readonly close: Browser.TabID }
     /** The person types an address into a tab. */
     | { readonly address: Browser.TabID }
 
+  // A tab opened from `from`, whose page then loads and names itself.
+  const named = (tabID: Browser.TabID, from: Browser.TabID, front = false): Step[] => [
+    { open: tabID, from, front },
+    { report: started(tabID) },
+    { report: committed(tabID) },
+    { report: titled(tabID) },
+  ]
+
+  const attempt = (state: PaneState, tabID: Browser.TabID) => {
+    const slot = entry(state).tabs.get(tabID)
+
+    return slot?.status === "live" ? slot.attempt : -1
+  }
+
   const event = (state: PaneState, step: Step): BindingEvent => {
+    if ("report" in step) return { type: "tab.published", tabID: step.report.id, attempt: attempt(state, step.report.id), tab: step.report }
+
+    if ("due" in step) return { type: "tab.due", tabID: step.due, attempt: attempt(state, step.due) }
+
     if ("select" in step) return { type: "tab.focused", tabID: step.select, fromStrip: true }
+
+    if ("focus" in step) return { type: "tab.focused", tabID: step.focus }
 
     if ("close" in step) return { type: "tab.closed", tabID: step.close }
 
@@ -476,90 +511,171 @@ describe("position", () => {
     }
   }
 
-  // Three tabs with B in front, then the steps: the order the binding lists, and where each report placed a new tab.
+  // Three tabs with B in front, then the steps. `strip`: the tabs the window's strip is told to show, at the end.
+  // `placed`: each tab the strip was told to add beside another, with that other, in the order they were shown.
   const run = (steps: readonly Step[]) => {
     const start = attached({ tabs: [a, b, c].map((tabID) => tab(tabID, dashboard)), focusedTabID: b })
-    const none: { readonly tabID: Browser.TabID; readonly after: Browser.TabID }[] = []
+    const none: (readonly Browser.TabID[])[] = []
+    const reports: Extract<PaneEffect, { type: "report" }>["event"][] = []
 
     const end = steps.reduce(
       (last, step) => {
         const next = transitionPane(last.state, on(event(last.state, step)))
-        // The pane brings a tab that opened in front to the front itself; that is not the person's selection.
-        const state = "open" in step && step.front ? transitionPane(next.state, on({ type: "tab.focused", tabID: step.open })).state : next.state
 
         return {
-          state,
-          placed: [...last.placed, ...next.effects.flatMap((effect) => (effect.type === "report" && effect.event.placed ? [effect.event.placed] : []))],
+          state: next.state,
+          placed: [...last.placed, ...next.effects.flatMap((effect) => (effect.type === "report" && effect.event.placed ? [[effect.event.placed.tabID, effect.event.placed.after]] : []))],
+          reports: [...last.reports, ...next.effects.flatMap((effect) => (effect.type === "report" ? [effect.event] : []))],
         }
       },
-      { state: start, placed: none },
+      { state: start, placed: none, reports },
     )
 
-    return { order: Array.from(entry(end.state).tabs.keys()), placed: end.placed.map((item) => [item.tabID, item.after]) }
+    const last = end.reports.at(-1)
+
+    return {
+      strip: last?.state?.tabs.flatMap((item) => (last.held?.includes(item.id) ? [] : [item.id])) ?? [a, b, c],
+      placed: end.placed,
+      front: entry(end.state).focusedTabID,
+    }
   }
 
-  const rows: readonly (readonly [name: string, steps: readonly Step[], order: readonly Browser.TabID[], placed: readonly (readonly Browser.TabID[])[]])[] = [
-    ["a tab a link opens behind stands right after the tab it came from", [{ open: x, from: b }], [a, b, x, c], [[x, b]]],
+  type Row = readonly [name: string, steps: readonly Step[], strip: readonly Browser.TabID[], placed: readonly (readonly Browser.TabID[])[], front?: Browser.TabID]
+
+  // When the strip shows a tab a link opened: once, with the label it keeps.
+  const shown: readonly Row[] = [
+    ["a tab a link opens is not shown when it opens", [{ open: x, from: b }], [a, b, c], []],
+    ["nor while its load starts and its document has only Chromium's name", [{ open: x, from: b }, { report: started(x) }, { report: committed(x) }], [a, b, c], []],
+    ["it is shown once its document names itself, right after the tab it came from", named(x, b), [a, b, x, c], [[x, b]]],
+    ["and not again as its load ends", [...named(x, b), { report: ended(x) }], [a, b, x, c], [[x, b]]],
+    [
+      "a document with no title is shown when its load ends, under Chromium's name",
+      [{ open: x, from: b }, { report: started(x) }, { report: committed(x) }, { report: ended(x, "docs.example/guide") }],
+      [a, b, x, c],
+      [[x, b]],
+    ],
+    [
+      "a load that fails is shown once it has its name, a moment after its error",
+      [{ open: x, from: b }, { report: started(x) }, { report: { ...ended(x, ""), loadError: "ERR_CONNECTION_REFUSED" } }, { report: { ...ended(x, "docs.example/guide"), loadError: "ERR_CONNECTION_REFUSED" } }],
+      [a, b, x, c],
+      [[x, b]],
+    ],
+    [
+      "a load that ends with no document, as for a refused address, is shown as a new tab",
+      [{ open: x, from: b }, { report: started(x) }, { report: tab(x, "about:blank") }],
+      [a, b, x, c],
+      [[x, b]],
+    ],
+    ["a page with no name after the deadline, or one that asks the person something first, is shown without one", [{ open: x, from: b }, { report: started(x) }, { due: x }], [a, b, x, c], [[x, b]]],
+    ["a deadline that passes after the tab was shown shows nothing again", [...named(x, b), { due: x }], [a, b, x, c], [[x, b]]],
+    ["a tab that closes before its page has a name is never shown", [{ open: x, from: b }, { report: started(x) }, { close: x }, { due: x }], [a, b, c], []],
+    ["a tab opened in front takes the pane when it is shown, not before", [{ open: x, from: b, front: true }, { report: started(x) }, { report: committed(x) }], [a, b, c], [], b],
+    ["a tab opened in front takes the pane when it is shown", named(x, b, true), [a, b, x, c], [[x, b]], x],
+    [
+      "but not when the person has gone to another tab meanwhile",
+      [{ open: x, from: b, front: true }, { report: started(x) }, { select: a }, { report: committed(x) }, { report: titled(x) }],
+      [a, b, x, c],
+      [[x, b]],
+      a,
+    ],
+    ["a tab the pane brings to the front before it has a name is shown first", [{ open: x, from: b }, { focus: x }], [a, b, x, c], [[x, b]], x],
+    [
+      "two opened behind whose pages are named in reverse order are each shown once, in the order they were opened",
+      [{ open: x, from: b }, { open: y, from: b }, { report: started(x) }, { report: started(y) }, { report: committed(y) }, { report: titled(y) }, { report: committed(x) }, { report: titled(x) }],
+      [a, b, x, y, c],
+      [[y, b], [x, b]],
+    ],
+    [
+      "three opened behind and named last to first",
+      [{ open: x, from: b }, { open: y, from: b }, { open: z, from: b }, ...[z, y, x].flatMap((tabID) => [{ report: started(tabID) }, { report: committed(tabID) }, { report: titled(tabID) }])],
+      [a, b, x, y, z, c],
+      [[z, b], [y, b], [x, b]],
+    ],
+  ]
+
+  // Where it stands: Chrome's rule (tab-openers.ts). Each tab's page is named before the next step.
+  const placed: readonly Row[] = [
     [
       "several opened behind in a row stand in the order they were opened",
-      [{ open: x, from: b }, { open: y, from: b }, { open: z, from: b }],
+      [...named(x, b), ...named(y, b), ...named(z, b)],
       [a, b, x, y, z, c],
       [[x, b], [y, x], [z, y]],
     ],
     [
       "a tab that opens in front stands right after the tab it came from, before those opened behind",
-      [{ open: x, from: b }, { open: y, from: b }, { open: z, from: b, front: true }],
+      [...named(x, b), ...named(y, b), ...named(z, b, true)],
       [a, b, z, x, y, c],
       [[x, b], [y, x], [z, b]],
+      z,
     ],
     [
       "a tab opened from a tab that was opened behind joins the same row",
-      [{ open: x, from: b }, { select: x }, { open: y, from: x }, { select: b }, { open: z, from: b }],
+      [...named(x, b), { select: x }, ...named(y, x), { select: b }, ...named(z, b)],
       [a, b, x, y, z, c],
       [[x, b], [y, x], [z, y]],
     ],
     [
       "looking at an unrelated tab from the opener and coming back keeps the row, as in Chrome",
-      [{ open: x, from: b }, { select: a }, { select: b }, { open: y, from: b }],
+      [...named(x, b), { select: a }, { select: b }, ...named(y, b)],
       [a, b, x, y, c],
       [[x, b], [y, x]],
     ],
     [
       "going from a tab the row opened to an unrelated tab ends the row",
-      [{ open: x, from: b }, { select: x }, { select: a }, { select: b }, { open: y, from: b }],
+      [...named(x, b), { select: x }, { select: a }, { select: b }, ...named(y, b)],
       [a, b, y, x, c],
       [[x, b], [y, b]],
     ],
     [
       "a tab opened in front ends the rows before it",
-      [{ open: x, from: b }, { open: y, from: b, front: true }, { select: b }, { open: z, from: b }],
+      [...named(x, b), ...named(y, b, true), { select: b }, ...named(z, b)],
       [a, b, y, z, x, c],
       [[x, b], [y, b], [z, y]],
     ],
     [
       "what a closed tab opened counts as opened by that tab's own opener",
-      [{ open: x, from: b }, { select: x }, { open: y, from: x }, { close: x }, { select: b }, { open: z, from: b }],
+      [...named(x, b), { select: x }, ...named(y, x), { close: x }, { select: b }, ...named(z, b)],
       [a, b, y, z, c],
       [[x, b], [y, x], [z, y]],
     ],
-    ["a tab whose opener closed meanwhile goes to the end", [{ close: b }, { open: x, from: b }], [a, c, x], []],
-    ['a tab the person adds with "+", or the agent opens, goes to the end', [{ open: x, from: b }, { open: y }], [a, b, x, c, y], [[x, b]]],
+    ["a tab whose opener closed meanwhile goes to the end, at once", [{ close: b }, { open: x, from: b }, { focus: x }], [a, c, x], [], x],
+    ['a tab the person adds with "+", or the agent opens, goes to the end, at once', [...named(x, b), { open: y }, { focus: y }], [a, b, x, c, y], [[x, b]], y],
     [
       "an address typed into a tab ends the row",
-      [{ open: x, from: b }, { address: b }, { open: y, from: b }],
+      [...named(x, b), { address: b }, ...named(y, b)],
       [a, b, y, x, c],
       [[x, b], [y, b]],
     ],
     [
       "but not the first address typed into a new tab at the end, a quick look-up",
-      [{ open: x, from: b }, { open: y }, { address: y }, { open: z, from: b }],
+      [...named(x, b), { open: y }, { focus: y }, { address: y }, { select: b }, ...named(z, b)],
       [a, b, x, z, c, y],
       [[x, b], [z, x]],
     ],
   ]
 
-  test.each(rows)("%s", (_name, steps, order, placed) => {
-    expect(run(steps)).toEqual({ order: [...order], placed: placed.map((item) => [...item]) })
+  test.each([...shown, ...placed])("%s", (_name, steps, strip, placed, front = b) => {
+    expect(run(steps)).toEqual({ strip: [...strip], placed: placed.map((item) => [...item]), front })
+  })
+
+  test("a tab opened in front asks the window to select it only with the report that shows it", () => {
+    const start = attached({ tabs: [a, b, c].map((tabID) => tab(tabID, dashboard)), focusedTabID: b })
+    const [open, ...reports] = named(x, b, true)
+    const focus: PaneEffect = { type: "emit", binding: "b1", event: { type: "focus", tabID: x } }
+    const waiting = play(start, on(event(start, open)), ...reports.slice(0, 2).map((step) => on(event(transitionPane(start, on(event(start, open))).state, step))))
+    expect(waiting.effects).not.toContainEqual(focus)
+    // The report first, so the strip has the tab it is asked to select.
+    const shown = transitionPane(waiting.state, on(event(waiting.state, reports[2])))
+    expect(shown.effects.map((effect) => effect.type)).toEqual(["save-restore", "report", "emit"])
+    expect(shown.effects.at(-1)).toEqual(focus)
+  })
+
+  test("the agent's inventory lists a tab a link opened at once, and the deadline is asked for once", () => {
+    const start = attached({ tabs: [a, b, c].map((tabID) => tab(tabID, dashboard)), focusedTabID: b })
+    const opened = transitionPane(start, on(event(start, { open: x, from: b })))
+    expect(selectInventory(entry(opened.state), "agent").tabs.map((item) => item.id)).toEqual([a, b, x, c])
+    expect(opened.effects.filter((effect) => effect.type === "await-name")).toEqual([{ type: "await-name", binding: "b1", tabID: x, attempt: 1, ms: LISTING_DEADLINE_MS }])
+    expect(opened.effects.flatMap((effect) => (effect.type === "report" ? [effect.event.held] : []))).toEqual([[x]])
   })
 
   test("a tab the binding lists already keeps its place when its page loads again", () => {

@@ -181,8 +181,11 @@ export const PaneEvent = Schema.Union([
     type: Schema.Literal("state"),
     state: Schema.NullOr(Browser.State),
     error: Schema.optionalKey(Schema.String),
-    // With the inventory that first lists a tab a page or link opened: the tab it stands after, as in Chrome. The
-    // window's strip holds other panels' tabs too, so it adds the tab there instead of at its end.
+    // Tabs a link opened whose pages have no name yet. The strip sizes a tab by its label, so it shows each one only
+    // once it leaves this list, with the label it keeps.
+    held: Schema.optionalKey(Schema.Array(Browser.TabID)),
+    // With the report that first shows such a tab: the tab it stands after, as in Chrome. The window's strip holds
+    // other panels' tabs too, so it adds the tab there instead of at its end.
     placed: Schema.optionalKey(Schema.Struct({ tabID: Browser.TabID, after: Browser.TabID })),
   }),
   // A tab's page exists; the renderer lays it out through this host embed.

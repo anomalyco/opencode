@@ -36,13 +36,17 @@ const blocked = (url: string, owner: string): Outcome => ({ tabs: [], notices: [
 test(
   "the person's middle-click and modified clicks on a link open tabs as in Chrome, a tab left with nothing to show closes, and the agent's and a page's own stay blocked pop-ups, right after a press too",
   async () => {
-    const result: Record<string, Outcome> & { agent: Outcome & { refusal?: string }; platform: string; afterPress: object[] } = JSON.parse(
+    const result: Record<string, Outcome> & { agent: Outcome & { refusal?: string }; platform: string; afterPress: object[]; reports: string[] } = JSON.parse(
       await runElectronFixture({ fixture: path.join(import.meta.dir, "electron-links.fixture.ts") }),
     )
 
     // A middle-click, and a Ctrl+click (Cmd+click on macOS): a new tab behind the current one, with no opener and no
     // notice. Enter on the focused link with the same modifier is the same.
     expect(result.middle).toEqual(behind("/target?plain"))
+    // What that tab's page published on the way: its load starts on the blank document, its document commits under
+    // Chromium's name for it (its address), it names itself, and its load ends. The pane shows the strip the tab at
+    // the third step, with the label it keeps (`named` in pane-machine.ts, whose table replays this sequence).
+    expect(result.reports).toEqual(["untitled loading about:blank", "/target?plain loading /target?plain", "Target loading /target?plain", "Target loaded /target?plain"])
     expect(result.modified).toEqual(behind("/target?plain"))
     expect(result.key).toEqual(behind("/target?plain"))
     // With Shift as well, the new tab opens in front.

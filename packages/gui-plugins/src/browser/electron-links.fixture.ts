@@ -210,7 +210,14 @@ void electron.app.whenReady().then(async () => {
   const made = { count: 0 }
 
   // What the page asked the pane for: each tab with whether it stays behind the current one, and each notice.
-  type Opened = { readonly background: boolean; readonly owner: string; closed: boolean; readonly notices: RefusalNotice[] }
+  type Opened = {
+    readonly background: boolean
+    readonly owner: string
+    closed: boolean
+    readonly notices: RefusalNotice[]
+    /** What its page published, in order: its title, whether it loads, and its address. */
+    readonly reports: string[]
+  }
 
   const opened: Opened[] = []
   const tabs = new Map<Opened, Page>()
@@ -237,11 +244,19 @@ void electron.app.whenReady().then(async () => {
         },
         refused: popup.refused,
       },
-      publish: () => undefined,
+      publish: () => {
+        const tab = popup && tabs.get(popup.tab)?.state()
+
+        // The pane lists a tab a link opened once its page has a name (`named` in pane-machine.ts), read from these.
+        if (!tab) return
+        const report = [tab.title.replace(`127.0.0.1:${port}`, "") || "untitled", tab.loading ? "loading" : "loaded", tab.url.replace(origin, "")].join(" ")
+
+        if (popup.tab.reports.at(-1) !== report) popup.tab.reports.push(report)
+      },
       refused: (notice) => (popup ? popup.tab.notices : notices).push(notice),
       fail: () => undefined,
       popup: (options, background, child, refused) => {
-        const tab: Opened = { background, owner: activityOwner(child), closed: false, notices: [] }
+        const tab: Opened = { background, owner: activityOwner(child), closed: false, notices: [], reports: [] }
         const page = make(child, { options, tab, refused })
         opened.push(tab)
         tabs.set(tab, page)
@@ -426,6 +441,7 @@ void electron.app.whenReady().then(async () => {
   })
   const modifier = process.platform === "darwin" ? "meta" : "control"
   const middle = await press(0, "middle")
+  const reports = opened[0]?.reports
   const modified = await press(0, "left", [modifier])
   const modifiedShift = await press(0, "left", [modifier, "shift"])
   const middleShift = await press(0, "middle", ["shift"])
@@ -463,7 +479,7 @@ void electron.app.whenReady().then(async () => {
       for (const delay of [50, 500, 2000]) afterwards.push(await pressThenWait(row, kind, delay))
 
   process.stdout.write(
-    `${JSON.stringify({ platform: process.platform, middle, modified, modifiedShift, middleShift, shift, blank, blankMiddle, mail, mailMiddle, nothing, opener, openerMiddle, key, download, blankDownload, mailRedirect, refusedRedirect, thenDownload: thenDownloaded, agent, agentDownload, reclaimed, synthetic: synthesized, timer, afterPress: afterwards })}\n`,
+    `${JSON.stringify({ platform: process.platform, reports, middle, modified, modifiedShift, middleShift, shift, blank, blankMiddle, mail, mailMiddle, nothing, opener, openerMiddle, key, download, blankDownload, mailRedirect, refusedRedirect, thenDownload: thenDownloaded, agent, agentDownload, reclaimed, synthetic: synthesized, timer, afterPress: afterwards })}\n`,
   )
   await page.dispose()
   server.closeAllConnections()
