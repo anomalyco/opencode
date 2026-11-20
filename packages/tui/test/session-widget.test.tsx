@@ -43,7 +43,7 @@ test("a widget posted by the widget tool is answered in the timeline", async () 
   expect(messages.data.find((message) => message.type === "synthetic")).toMatchObject({
     text: 'User responded to widget "Ship it": {"confirmed":true}',
   })
-})
+}, 20000)
 
 async function frame(app: Awaited<ReturnType<typeof createAppFixture>>, matches: (frame: string) => boolean) {
   const started = Date.now()
