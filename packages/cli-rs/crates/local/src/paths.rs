@@ -30,13 +30,14 @@ impl Paths {
     }
 
     /// Empty XDG values are unset. `OPENCODE_CONFIG_DIR` replaces only config; locks and registration stay in state.
+    /// Roots are joined and normalized as `path.join` does, because the lock of a file is keyed by its path text.
     pub fn from_vars(var: impl Fn(&str) -> Option<OsString>) -> io::Result<Self> {
         let set = |name: &str| var(name).filter(|value| !value.is_empty()).map(PathBuf::from);
         let home = home_dir(Flavor::NATIVE, &var).ok_or_else(|| {
             io::Error::new(io::ErrorKind::NotFound, "cannot find the home directory: HOME is not set")
         })?;
         let root = |name: &str, fallback: &[&str]| {
-            set(name).unwrap_or_else(|| fallback.iter().fold(home.clone(), |path, part| path.join(part))).join(APP)
+            join(&set(name).unwrap_or_else(|| fallback.iter().fold(home.clone(), |path, part| path.join(part))), APP)
         };
         let data = root("XDG_DATA_HOME", &[".local", "share"]);
         let cache = root("XDG_CACHE_HOME", &[".cache"]);
@@ -48,7 +49,7 @@ impl Paths {
             bin: cache.join("bin"),
             log: data.join("log"),
             repos: data.join("repos"),
-            tmp: tmpdir(Flavor::NATIVE, &var).join(APP),
+            tmp: join(&tmpdir(Flavor::NATIVE, &var), APP),
             data,
             cache,
             config,
@@ -58,6 +59,14 @@ impl Paths {
 
     pub fn locks(&self) -> PathBuf {
         self.state.join("locks")
+    }
+}
+
+/// `path.join(base, part)`. A path that is not Unicode is only joined, rather than becoming another directory.
+pub(crate) fn join(base: &Path, part: &str) -> PathBuf {
+    match base.to_str() {
+        Some(text) => PathBuf::from(Flavor::NATIVE.join(&[text, part])),
+        None => base.join(part),
     }
 }
 
@@ -209,6 +218,15 @@ mod tests {
         }
         assert_eq!(tmpdir(Flavor::Posix, &lookup(&[("TEMP", "C:\\Temp")])), PathBuf::from("C:\\Temp"));
         assert_eq!(tmpdir(Flavor::Posix, &lookup(&[])), PathBuf::from("/tmp"));
+    }
+
+    // The lock keys TypeScript derives from these with `path.join`.
+    #[test]
+    fn roots_normalize_as_path_join() {
+        let p = paths(&[("HOME", "/h"), ("XDG_STATE_HOME", "/x/y/..//s/./")]);
+        let native = |path: &str| PathBuf::from(if cfg!(windows) { path.replace('/', "\\") } else { path.to_owned() });
+        assert_eq!(p.state, native("/x/s/opencode"));
+        assert_eq!(join(Path::new("./c//d"), "cli.json"), native("c/d/cli.json"));
     }
 
     #[test]

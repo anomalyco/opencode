@@ -506,7 +506,8 @@ impl CliConfig {
     /// The config of `paths`, with `content` as the overlay. An empty or invalid overlay is ignored.
     pub fn with_content(paths: &Paths, content: Option<&str>) -> Self {
         Self {
-            file: paths.config.join("cli.json"),
+            // TS keys the file's lock by `path.join(config, "cli.json")`.
+            file: crate::paths::join(&paths.config, "cli.json"),
             config: paths.config.clone(),
             state: paths.state.clone(),
             content: content.filter(|text| !text.is_empty()).and_then(decode_text).map(|info| info.to_value()),
