@@ -340,6 +340,9 @@ prompt: an idle Session starts a turn, a busy one takes them at its next step.
 show them as one quiet line (`◈ <description>` in the TUI). `<label>` is the title, or the template name. A send with
 `wake: false` is admitted without waking (`resume: false`): it stays pending and the model sees it with the next turn.
 
+Waiting tool calls and the lock that serializes respond and send live in the server process, shared by every Location
+and plugin reload in it; this assumes one server process per database, like the goal plugin.
+
 Respond writes the state first and then admits the message. These are two writes without a transaction: if the server
 dies between them, the widget shows as answered but the model never hears of it (the user can say so in the prompt).
 Respond and send for one process are serialized, so a widget is answered once.
