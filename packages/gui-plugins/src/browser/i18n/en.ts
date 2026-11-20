@@ -176,6 +176,7 @@ export default {
   "signins.failed.locked.named":
     "Quit {{browser}} and try again.",
   "signins.failed.read": "Could not read this browser's data. Close it and try again.",
+  "signins.failed.read.file": "Could not read this file.",
   "signins.failed.format": "This is not a cookie file.",
   "signins.failed.storage": "OpenCode cannot save sign-ins on this computer.",
   "signins.keychain":

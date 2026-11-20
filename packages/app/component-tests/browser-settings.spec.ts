@@ -12,7 +12,7 @@ const modules = {
 // a settings search or the command palette is revealing.
 async function open(
   page: Page,
-  options?: { target?: string; extensions?: boolean; installed?: boolean; historyKept?: boolean; file?: { imported: number; failed: number } },
+  options?: { target?: string; extensions?: boolean; installed?: boolean; historyKept?: boolean; file?: { imported: number; failed: number } | "unreadable" },
 ) {
   await page.evaluate(
     async (input) => {
@@ -95,6 +95,8 @@ for (const [name, file, line] of [
   ["a cookie file that came whole", { imported: 12, failed: 0 }, "Imported 12 cookies."],
   ["a cookie file that lost some", { imported: 12, failed: 3 }, "Imported 12 cookies, 3 skipped."],
   ["a cookie file that brought one", { imported: 1, failed: 1 }, "Imported 1 cookie, 1 skipped."],
+  // No browser's data, and no browser to close: the line is about the file.
+  ["a cookie file that cannot be read", "unreadable", "Could not read this file."],
 ] as const)
   story(`${name} says so in its row: ${line}`, async ({ page }) => {
     const view = await open(page, { target: "settings-browser-cookies", file })

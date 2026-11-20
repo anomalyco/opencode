@@ -14,6 +14,7 @@ type SiteScenario = {
   pages?: number
   none?: boolean
   keychain?: boolean
+  unreadable?: boolean
 }
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
@@ -545,6 +546,14 @@ story("the import dialog stays open to say that the browser locks its sign-ins f
 
   await view.importButton.click()
   await expect(view.dialog.getByRole("alert")).toHaveText("Google Chrome locks its sign-ins from other apps. Sign in here instead.")
+  await expect(view.record).toHaveAttribute("data-closed", "false")
+})
+
+story("a browser whose data cannot be read says so about the browser, with what to do", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false, unreadable: true })
+
+  await view.importButton.click()
+  await expect(view.dialog.getByRole("alert")).toHaveText("Could not read this browser's data. Close it and try again.")
   await expect(view.record).toHaveAttribute("data-closed", "false")
 })
 

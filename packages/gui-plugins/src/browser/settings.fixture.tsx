@@ -78,14 +78,14 @@ const sampleExtensionEntries: readonly (readonly [string, readonly SampleExtensi
 // which stays set for the whole visit, as the host leaves it. With `extensions`, Chromium browsers and their extensions
 // are populated so the real Add an extension dialog can be driven end to end. `historyKept` is a sign-out that left
 // main's history behind: its file could not be removed. `file` is what importing the cookie file the person picks
-// brings: how many cookies came and how many could not be imported.
+// brings: how many cookies came and how many could not be imported, or that the file could not be read.
 export function mountBrowserSettings(input: {
   ui: Ui
   target?: string
   extensions?: boolean
   installed?: boolean
   historyKept?: boolean
-  file?: { imported: number; failed: number }
+  file?: { imported: number; failed: number } | "unreadable"
 }) {
   const host = document.createElement("main")
   host.dataset.testid = "browser-settings-fixture"
@@ -135,7 +135,11 @@ export function mountBrowserSettings(input: {
     sources: async () => (input.extensions ? [...sampleSources] : []),
     summary: async () => ({ cookies: 0, persistent: true }),
     clear: async () => ({ history: !input.historyKept }),
-    importFile: async (): Promise<ImportResult> => ({ type: "imported", imported: input.file?.imported ?? 0, skipped: 0, protected: 0, failed: input.file?.failed ?? 0 }),
+    importFile: async (): Promise<ImportResult> => {
+      if (input.file === "unreadable") return { type: "failed", reason: "read" }
+
+      return { type: "imported", imported: input.file?.imported ?? 0, skipped: 0, protected: 0, failed: input.file?.failed ?? 0 }
+    },
     browserExtensions: async (request: { source: string; profile: string }) =>
       input.extensions
         ? (sampleExtensions.get(request.source) ?? []).map((item) => ({

@@ -26,6 +26,8 @@ export type SiteScenario = {
   readonly empty?: boolean
   readonly site?: { readonly name: string; readonly choose: boolean }
   readonly pages?: number
+  /** The browser's files could not be read when the import ran. */
+  readonly unreadable?: boolean
   /** No cookie could be brought: the import counts none, whatever it lost. */
   readonly none?: boolean
   /** The app runs on macOS, where a Chromium browser's import waits at the Keychain prompt: this one waits for the test. */
@@ -111,6 +113,8 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
       setStore("imports", (items) => [...items, request])
 
       if (input.scenario.keychain) await held.promise
+
+      if (input.scenario.unreadable) return { type: "failed", reason: "read" }
       // Without a list of sites, main imports the whole profile; without cookies, only its history.
       const count = request.cookies === false || input.scenario.none ? 0 : (request.sites?.length ?? 5) * 2
 

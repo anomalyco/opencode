@@ -219,6 +219,10 @@ export function createProfileJobs(
     if (result.type === "failed" && result.reason === "key" && browser && keychain(finished.job))
       return { text: ctx.t("signins.failed.keychain", { browser }), error: true }
 
+    // A cookie file that cannot be read is no browser's data, and there is no browser to close.
+    if (result.type === "failed" && result.reason === "read" && finished.job.type === "import-file")
+      return { text: ctx.t("signins.failed.read.file"), error: true }
+
     if (result.type === "failed") return { text: ctx.t(`signins.failed.${result.reason}`), error: true }
 
     const loss = importLoss(result)
