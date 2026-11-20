@@ -11,7 +11,7 @@ import { ConfigModel } from "./model.js"
 export class Settings extends Schema.Class<Settings>("ConfigConsoleMemory.Settings")({
   url: Schema.String.pipe(optional).annotate({
     description:
-      "Base URL of a memory endpoint to use instead of the Console workspace's: memory's config check, /api/memory requests and evidence go there, with no Console sign-in needed",
+      "Base URL of a memory endpoint to use instead of the Console workspace's: every /api/memory request and evidence goes there, with no Console sign-in needed",
   }),
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional).annotate({
     description:

@@ -638,6 +638,8 @@ describe("OpencodePlugin memory", () => {
       withConsole((endpoint) =>
         Effect.gen(function* () {
           const secret = "mem-secret-7f3a"
+          // Like the memory Worker, the endpoint offers no OpenCode config.
+          endpoint.state.memory = false
           const logged = new Array<string>()
           const logger = Logger.map(Logger.formatJson, (line) => {
             logged.push(line)
@@ -673,7 +675,9 @@ describe("OpencodePlugin memory", () => {
 
           // Memory's config check, the injection and search all went to the endpoint, each with its header.
           const paths = endpoint.state.keys.map((item) => item.path)
-          expect(paths).toEqual(expect.arrayContaining(["/api/v2/config", "/api/memory/inject", "/api/memory/search"]))
+          expect(paths).toEqual(expect.arrayContaining(["/api/memory/inject", "/api/memory/search"]))
+          // The configured url and headers are the declaration: no config is asked for first.
+          expect(paths).not.toContain("/api/v2/config")
           expect(endpoint.state.keys.every((item) => item.key === secret)).toBe(true)
           // Decisions are OpenCode's to ask, with the user's own credentials, never the endpoint's.
           expect(judge.asked.map((item) => item.model)).toContain("opencode/jev-1.13")

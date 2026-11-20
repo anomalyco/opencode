@@ -501,8 +501,8 @@ works without a Console sign-in.
 }
 ```
 
-- Every memory request goes to that endpoint, its config check, `/api/memory`
-  and evidence included.
+- Every memory request goes to that endpoint, `/api/memory` and evidence
+  included. The URL and headers are all it needs: nothing is asked first.
 - The headers go only to that endpoint, take `{env:…}` and `{file:…}`, and are
   never logged.
 - Decisions still go to the decision model above, with your own credentials for

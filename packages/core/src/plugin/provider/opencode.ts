@@ -368,42 +368,19 @@ export const OpencodePlugin = define<
         if (setting === false) return yield* memory.sync(undefined)
         if (typeof setting === "object" && setting.url !== undefined)
           return yield* memory.sync(
-            (yield* flags.enabled("console_memory")) ? yield* endpoint(setting.url, setting.headers ?? {}) : undefined,
+            (yield* flags.enabled("console_memory")) ? endpoint(setting.url, setting.headers ?? {}) : undefined,
           )
         yield* memory.sync(yield* member(offered))
       }).pipe(Effect.catch((cause) => Effect.logWarning("failed to connect the workspace's memory", { cause }))),
     )
     /**
-     * The installation's own memory endpoint, when its config check offers memory as Console's does. Its headers are
-     * the endpoint's credential: they go out with its requests and nowhere else, never into a log.
+     * The installation's own memory endpoint: the url and headers config names are its declaration. Its headers are the
+     * endpoint's credential: they go out with its requests and nowhere else, never into a log.
      */
-    const endpoint = (url: string, headers: Readonly<Record<string, string>>) =>
-      Effect.gen(function* () {
-        const server = url.replace(/\/+$/, "")
-        const offers = yield* HttpClient.withScope(http)
-          .execute(
-            HttpClientRequest.get(`${server}/api/v2/config`).pipe(
-              HttpClientRequest.acceptJson,
-              HttpClientRequest.setHeaders(headers),
-            ),
-          )
-          .pipe(
-            Effect.map((response) => response.headers[OpencodeMemory.header] !== undefined),
-            Effect.scoped,
-            Effect.timeout("10 seconds"),
-            Effect.orElseSucceed(() => false),
-          )
-        if (offers)
-          return {
-            key: `endpoint:${server}`,
-            server,
-            headers: Effect.succeed(headers),
-          } satisfies OpencodeWatches.Console
-        yield* Effect.logWarning("the configured memory endpoint doesn't offer memory", {
-          endpoint: URL.parse(server)?.origin ?? "not a URL",
-        })
-        return undefined
-      })
+    const endpoint = (url: string, headers: Readonly<Record<string, string>>): OpencodeWatches.Console => {
+      const server = url.replace(/\/+$/, "")
+      return { key: `endpoint:${server}`, server, headers: Effect.succeed(headers) }
+    }
     // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
     // and stops when either no longer holds.
     const syncWatches = (connection: ActiveConnection) =>
