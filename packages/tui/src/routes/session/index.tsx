@@ -56,6 +56,7 @@ import {
   primitiveInputSummary,
   toolDisplayContent,
   toolDisplayMetadata,
+  widgetTemplateLine,
   type ExecuteCall,
 } from "../../util/tool-display"
 import { DialogExecute } from "./dialog-execute"
@@ -2694,6 +2695,9 @@ function ToolPart(props: { part: SessionMessageAssistantTool; messageID: string;
       <Match when={display() === "skill"}>
         <Skill {...toolprops} />
       </Match>
+      <Match when={display() === "widget_template"}>
+        <WidgetTemplate {...toolprops} />
+      </Match>
       <Match when={true}>
         <GenericTool {...toolprops} />
       </Match>
@@ -3761,6 +3765,15 @@ function Skill(props: ToolProps) {
   return (
     <InlineTool icon="→" pending="Loading skill…" complete={name()} part={props.part}>
       Skill "{name()}"
+    </InlineTool>
+  )
+}
+
+// One quiet line per template call; the source stays out of the transcript (the result has short metadata).
+function WidgetTemplate(props: ToolProps) {
+  return (
+    <InlineTool icon="◈" pending="Writing widget template…" complete={props.metadata.action} part={props.part}>
+      {widgetTemplateLine(props.input, props.metadata)}
     </InlineTool>
   )
 }

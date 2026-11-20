@@ -94,6 +94,12 @@ test.each([100, 44])("suggestions render cards and page carousels at width %i", 
   expect(first).toContain("1/2")
 })
 
+test("a superseded widget is one line pointing to its replacement", async () => {
+  using setup = await render("confirm", { status: "superseded" })
+  const current = await frame(setup, (current) => current.includes("Updated below"))
+  expect(current).not.toContain("Confirm")
+})
+
 test("a live widget points to desktop and mobile instead of running", async () => {
   using setup = await render("confirm", { program: async () => ({ program: "", mode: "live" }) })
   const current = await frame(setup, (current) => current.includes("Open this widget on desktop or mobile."))

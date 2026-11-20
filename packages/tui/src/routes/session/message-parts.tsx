@@ -35,6 +35,7 @@ const toolDisplays = new Set([
   "question",
   "skill",
   "widget",
+  "widget_template",
 ])
 
 export function toolDisplay(tool: string) {

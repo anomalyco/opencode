@@ -186,6 +186,9 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
           {title()}
         </text>
         <Switch>
+          <Match when={props.message.status === "superseded"}>
+            <text fg={theme.text.muted}>Updated below</text>
+          </Match>
           <Match when={store.failure}>
             {(failure) => (
               <text fg={theme.text.feedback.error.base} wrapMode="word">
