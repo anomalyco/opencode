@@ -40,6 +40,8 @@ const libc = lazy(() => {
   }
 })
 
+let inotifyWatches = 0
+
 function inotifyAvailable() {
   const symbols = libc()
   if (!symbols) return true
@@ -282,7 +284,8 @@ function subscribeDirectory(
       Effect.as(undefined),
     )
   }
-  if (backend === "inotify" && !inotifyAvailable()) {
+  // Parcel shares one inotify backend per process, so only the first live directory watch needs a new instance.
+  if (backend === "inotify" && inotifyWatches === 0 && !inotifyAvailable()) {
     return Effect.logWarning(
       "file watching disabled: cannot create an inotify instance; the fs.inotify.max_user_instances limit is likely reached",
       { directory },
@@ -296,7 +299,16 @@ function subscribeDirectory(
   // so the array handed to native code must never be the mutable original.
   const pending = native.subscribe(directory, callback, { ignore: [...ignore], backend })
   return Effect.promise(() => pending).pipe(
-    Effect.map((subscription) => ({ unsubscribe: () => subscription.unsubscribe(), backend })),
+    Effect.map((subscription) => {
+      if (backend === "inotify") inotifyWatches++
+      return {
+        unsubscribe: () =>
+          subscription.unsubscribe().finally(() => {
+            if (backend === "inotify") inotifyWatches--
+          }),
+        backend,
+      }
+    }),
     // Interruption (including the timeout below) abandons the pending native
     // subscription, so close it once it eventually resolves.
     Effect.onInterrupt(() =>
