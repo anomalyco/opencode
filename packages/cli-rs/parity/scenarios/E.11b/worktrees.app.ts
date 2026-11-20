@@ -25,7 +25,8 @@ export default defineApp({
     { keys: ["down", "ctrl+d"] },
     { checkpoint: "marked", until: "again to confirm" },
     { keys: ["down", "ctrl+a"] },
-    { checkpoint: "name", until: "Name worktree" },
+    // The name prompt has one-row gaps since #64944, so the home placeholder shows below it.
+    { checkpoint: "name", until: "Name worktree", masks: placeholder },
     { type: "My Spike" },
     { keys: ["enter"] },
     { checkpoint: "staged", until: "(new worktree)", masks: placeholder },
