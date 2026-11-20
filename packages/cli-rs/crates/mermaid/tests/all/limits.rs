@@ -39,3 +39,16 @@ fn a_side_route_on_one_row_ends() {
                   Dirty --> Clean: save\n    }\n  }\n  Session --> [*]\n  Clean😀 --> Dirty: edit\n  Clean --> Dirty: edit";
     assert!(matches!(render(source, 80, &palette()), Rendered::Diagram(_)));
 }
+
+/// A subgraph or composite state inside one of the same ID, even by way of another group, is a syntax error, not a
+/// group nested without end.
+#[test]
+fn groups_nested_in_themselves_are_errors() {
+    for source in [
+        "flowchart LR\n  subgraph Outer\n    subgraph Outer\n      A\n    end\n  end",
+        "flowchart LR\n  subgraph Y\n    subgraph X\n      A\n    end\n  end\n  subgraph X\n    subgraph Y\n      B\n    end\n  end",
+        "stateDiagram-v2\n  state X {\n    state X {\n      A --> B\n    }\n  }",
+    ] {
+        assert!(matches!(render(source, 80, &palette()), Rendered::Syntax { .. }), "{source}");
+    }
+}

@@ -127,6 +127,10 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
         }
         if let Some(captures) = COMPOSITE.captures(line) {
             let id = captures[2].to_string();
+            let groups = composites.iter().map(|composite| (composite.id.as_str(), composite.parent_id.as_deref()));
+            if crate::core::nests_in_itself(&id, parent, groups) {
+                return Err(error(source.number, line, "A composite state cannot be nested in itself"));
+            }
             composites.push(Composite {
                 label: decode(captures.get(1).map_or(id.as_str(), |m| m.as_str())),
                 id: id.clone(),
