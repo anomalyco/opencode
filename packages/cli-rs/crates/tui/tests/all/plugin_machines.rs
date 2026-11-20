@@ -5,23 +5,23 @@ use crate::support::{self, Harness};
 
 use std::cell::Cell;
 use std::collections::BTreeSet;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
 use opencode_api::memory::{Memory, Route as MemoryRoute};
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::abi;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::loader::Backend;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::loader::native::loopback_described;
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::loader::{Loader, entry_file};
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::{Definition, ErrorFn, Host};
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_tui::plugins::host::host;
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
@@ -34,12 +34,12 @@ thread_local! {
     static ABI: Cell<bool> = const { Cell::new(false) };
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn other(_: &mut abi::Setup) -> Result<(), String> {
     Err("other setup fails as it loads".to_owned())
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn life(setup: &mut abi::Setup) -> Result<(), String> {
     if ARMED.replace(false) {
         return Err("life setup armed to throw".to_owned());
@@ -102,10 +102,10 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
 
 /// The twins' builds, through the C ABI's byte shims: a build in `parity.other` is `other`, every other `life`, and a
 /// new file is a reload.
-#[cfg(feature = "native")]
+#[cfg(native)]
 struct Builds;
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 impl Backend for Builds {
     fn load(
         &self,
@@ -121,7 +121,7 @@ impl Backend for Builds {
     }
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 struct Life {
     harness: Harness,
     loader: Rc<Loader>,
@@ -130,7 +130,7 @@ struct Life {
     _root: opencode_util::temp::TempDir,
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 impl Life {
     /// The life plugin in the config's plugins directory, or with `project` in the project's, where it waits for
     /// approval (rich-plugins 3.9); with `failing`, its setup fails as it first loads, and so does the distractor's
@@ -264,7 +264,7 @@ impl Life {
     }
 }
 
-#[cfg(feature = "native")]
+#[cfg(native)]
 impl Life {
     fn act_manager(&self, action: &str) {
         match action {
@@ -550,14 +550,14 @@ fn replay(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Optio
     if machine == &CORPUS["machines"]["viewer"] {
         return replay_viewer(machine, path, known);
     }
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     return replay_life(machine, path, known);
-    #[cfg(not(feature = "native"))]
+    #[cfg(not(native))]
     unreachable!("the plugin life runs an external plugin, which a build without the native feature does not load")
 }
 
 /// [`replay`] of the machines that run the plugin life.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn replay_life(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Option<String> {
     let views = machine == &CORPUS["machines"]["views"];
     let life = Life::open(machine == &CORPUS["machines"]["project"], views);
@@ -658,28 +658,28 @@ fn check(name: &str, paths: impl IntoIterator<Item = Vec<&'static str>>, rows: &
 static CORPUS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| serde_json::from_str(MACHINES).unwrap());
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_plugin_life_follows_the_shared_fixture() {
     let life = &CORPUS["machines"]["life"];
     check("life", traces(&CORPUS, life, false), &[&life["xfail"]]).check();
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_plugin_life_follows_the_shared_fixture_on_walks() {
     let life = &CORPUS["machines"]["life"];
     check("life", traces(&CORPUS, life, true), &[&life["xfail"]]);
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_project_plugin_follows_the_shared_fixture() {
     let project = &CORPUS["machines"]["project"];
     check("project", traces(&CORPUS, project, false), &[&project["xfail"]]).check();
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_plugin_life_recovers_from_a_dropped_repeated_or_swapped_action() {
     check(
         "life",
@@ -698,14 +698,14 @@ fn cycles(name: &str) -> Vec<Vec<&'static str>> {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_plugin_manager_keys_follow_the_shared_fixture() {
     let manager = &CORPUS["machines"]["manager"];
     check("manager", traces(&CORPUS, manager, false), &[&manager["xfail"]]).check();
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_plugin_manager_keys_follow_the_shared_fixture_on_walks_and_faults() {
     let manager = &CORPUS["machines"]["manager"];
     check("manager", traces(&CORPUS, manager, true), &[&manager["xfail"]]);
@@ -713,7 +713,7 @@ fn the_plugin_manager_keys_follow_the_shared_fixture_on_walks_and_faults() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_plugin_manager_views_follow_the_shared_fixture() {
     let views = &CORPUS["machines"]["views"];
     for abi in crate::support::LOOPBACK {
@@ -723,7 +723,7 @@ fn the_plugin_manager_views_follow_the_shared_fixture() {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_plugin_manager_views_follow_the_shared_fixture_on_walks_and_faults() {
     let views = &CORPUS["machines"]["views"];
     for abi in crate::support::LOOPBACK {

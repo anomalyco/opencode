@@ -269,7 +269,7 @@ fn only_the_tui_gets_a_parent() {
 
 #[test]
 // `plugin dev` loads a native build, which a build without the `native` feature refuses.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn plugin_dev_runs_under_a_parent_and_restarts_into_itself() {
     let runs = |line: &[&str]| tui(&os(line)).is_some();
     let verdicts = [

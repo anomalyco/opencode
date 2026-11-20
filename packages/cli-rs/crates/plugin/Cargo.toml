@@ -32,8 +32,8 @@ ts = []
 luau = ["dep:mlua"]
 # Native plugin libraries, opened in process over the C ABI (native-feature): the loader's library path, the C ABI's
 # carrier, the conformance harness, macOS quarantine and the library half of approvals. Disable it at runtime with
-# `OPENCODE_PLUGIN_NATIVE=0`.
-native = ["opencode-plugin-abi/c-abi", "opencode-util/native"]
+# `OPENCODE_PLUGIN_NATIVE=0`. A static musl build compiles them out anyway (build.rs's `cfg(native)`, O-188).
+native = ["opencode-plugin-abi/c-abi"]
 
 [target.'cfg(unix)'.dependencies]
 # Who owns the approvals file, and opening it without following a link.

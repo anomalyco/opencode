@@ -12,9 +12,6 @@ workspace = true
 [features]
 # `hash`, on the `ring` that TLS already links; crates without it do not compile `ring`.
 ring = ["dep:ring"]
-# A build that loads native plugin libraries (opencode-plugin's `native`): `dl` then refuses a static musl build, which
-# cannot `dlopen` them. Without it a static musl build compiles, and `dl` fails to open anything at run time.
-native = []
 
 [dependencies]
 libc.workspace = true

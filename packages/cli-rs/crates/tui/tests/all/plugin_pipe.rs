@@ -339,9 +339,9 @@ fn compare_twin(
         seen
     };
     let linked = run(None, Carrier::Linked);
-    #[cfg_attr(not(feature = "native"), allow(unused_mut))]
+    #[cfg_attr(not(native), allow(unused_mut))]
     let mut others = vec![("pipe", run(Some(config), Carrier::Linked))];
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     others.push(("abi", run(None, Carrier::Abi)));
     for (carrier, trace) in others {
         assert_eq!(trace.len(), linked.len(), "{carrier} checkpoints");

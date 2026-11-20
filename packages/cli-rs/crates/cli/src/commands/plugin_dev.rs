@@ -67,7 +67,7 @@ pub fn take(args: &[String]) -> Option<error::Result<Native>> {
         return None;
     };
     // They build and load a native plugin library, which a build without the `native` feature cannot open.
-    if !cfg!(feature = "native") && matches!(*command, "dev" | "test") {
+    if !cfg!(native) && matches!(*command, "dev" | "test") {
         return Some(Err(err!("plugin {command}: {}", opencode_plugin::SKIPPED_NO_NATIVE)));
     }
     match *command {
@@ -344,7 +344,7 @@ pub fn test(test: &Test, out: &mut impl Write) -> error::Result<()> {
 }
 
 /// `plugin test --conformance`: a line a transcript, and an error naming those the library failed.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn conformance(library: &Path, out: &mut impl Write) -> error::Result<()> {
     let outcomes = opencode_plugin::conformance::check_library(library).map_err(|error| err!("{error}"))?;
     let mut failed = Vec::new();
@@ -369,7 +369,7 @@ fn conformance(library: &Path, out: &mut impl Write) -> error::Result<()> {
 }
 
 /// The transcripts cross the C ABI, which a build without the `native` feature does not have.
-#[cfg(not(feature = "native"))]
+#[cfg(not(native))]
 fn conformance(_: &Path, _: &mut impl Write) -> error::Result<()> {
     Err(err!("{}", opencode_plugin::SKIPPED_NO_NATIVE))
 }
@@ -442,7 +442,7 @@ mod tests {
         take(&args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>())
     }
 
-    #[cfg(not(feature = "native"))]
+    #[cfg(not(native))]
     #[test]
     fn a_build_without_native_refuses_the_native_plugin_commands() {
         assert!(line(&["plugin", "list"]).is_none());
@@ -453,7 +453,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     #[test]
     fn the_native_plugin_commands_are_taken_before_the_parser() {
         assert!(line(&["plugin", "list"]).is_none());
@@ -649,7 +649,7 @@ mod tests {
     }
 
     /// The board example built as cargo builds it, found among cargo's own messages.
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     fn board() -> PathBuf {
         let manifest =
             std::fs::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/board/Cargo.toml"))
@@ -665,7 +665,7 @@ mod tests {
         artifact(&String::from_utf8_lossy(&output.stdout), &manifest).unwrap()
     }
 
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     #[test]
     fn plugin_test_fails_for_what_it_cannot_show() {
         let dir = opencode_util::temp::tempdir().unwrap();
@@ -709,7 +709,7 @@ mod tests {
     // Expected (Pc): `plugin test --conformance` passes the conformance plugin written in C, a line a transcript, also
     // as a host of a later minor; and fails a library that is another plugin, naming the transcripts it failed, after
     // their lines.
-    #[cfg(all(unix, feature = "native"))]
+    #[cfg(all(unix, native))]
     #[test]
     fn plugin_test_conformance_replays_the_transcripts() {
         let dir = opencode_util::temp::tempdir().unwrap();

@@ -4,7 +4,7 @@
 
 // A build with neither the C ABI nor the JS host has no plugin that sends requests: only the replies and the cancels of
 // the linked plugins' fetches are used.
-#![cfg_attr(not(any(feature = "native", feature = "ts")), allow(dead_code))]
+#![cfg_attr(not(any(native, feature = "ts")), allow(dead_code))]
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};

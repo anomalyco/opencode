@@ -78,7 +78,7 @@ fn stream(harness: &Harness, count: u64) {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_streamed_delta_does_no_work_in_the_built_ins() {
     stream(&session(&[], Vec::new()), 20);
     let crossed = stream_crossed(&history(0, true), 20);
@@ -86,7 +86,7 @@ fn a_streamed_delta_does_no_work_in_the_built_ins() {
 }
 
 /// `ses_a` with `turns` question and answer pairs before, each answer with its tokens, on the C ABI carrier when `abi`.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn history(turns: u64, abi: bool) -> Harness {
     let messages: Vec<Value> = (1..=turns)
         .rev()
@@ -124,7 +124,7 @@ fn history(turns: u64, abi: bool) -> Harness {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn a_streamed_delta_crosses_the_same_bytes_at_any_history() {
     let per_delta = |turns| {
         let harness = history(turns, true);
@@ -140,7 +140,7 @@ fn a_streamed_delta_crosses_the_same_bytes_at_any_history() {
 }
 
 /// What crossed the C ABI while `count` deltas streamed into a reply of `ses_a`.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn stream_crossed(harness: &Harness, count: u64) -> opencode_plugin::loader::native::Crossed {
     let id = "msg_live";
     let started = json!({ "sessionID": "ses_a", "assistantMessageID": id, "agent": "build",
@@ -685,7 +685,7 @@ fn a_kept_root_keeps_what_the_mount_holds() {
 #[test]
 fn a_kept_root_takes_a_new_theme() {
     for (abi, hide) in [(false, false), (true, false), (false, true)] {
-        if abi && !cfg!(feature = "native") {
+        if abi && !cfg!(native) {
             continue;
         }
         HIDE.set(hide);

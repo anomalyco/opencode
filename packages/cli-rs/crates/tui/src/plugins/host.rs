@@ -13,7 +13,7 @@ use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_plugin::abi;
 use opencode_plugin::loader::approval::{self, Approvals, Artifact, Decision};
-#[cfg(feature = "native")]
+#[cfg(native)]
 use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Configured, Loader, ServerPart};
 use opencode_plugin::node::{abi_mode, assign, refill, theme_color};
@@ -1184,10 +1184,10 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
 fn builtins(external: Vec<Builtin>, abi: bool) -> Vec<Builtin> {
     // On the other carrier each plugin's calls cross the C ABI's byte shims ([`Builtin::Abi`]), which a build without
     // the `native` feature does not have.
-    #[cfg(not(feature = "native"))]
+    #[cfg(not(native))]
     let _ = abi;
     let carried = |builtin: Builtin| match builtin {
-        #[cfg(feature = "native")]
+        #[cfg(native)]
         Builtin::Plugin(plugin) if abi => Builtin::Abi(plugin),
         builtin => builtin,
     };
@@ -1529,7 +1529,7 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
     let entries = configured(tui, tui.plugins.skipped());
     let project = opencode_plugin::loader::project_root(&external.cwd);
     let loader = Loader::new(external.config_dir, external.cwd, entries);
-    #[cfg(feature = "native")]
+    #[cfg(native)]
     let loader = match opencode_plugin::native_enabled() {
         true => loader.with_native(Rc::new(Native)),
         false => loader,

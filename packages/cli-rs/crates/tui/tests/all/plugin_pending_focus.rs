@@ -18,7 +18,7 @@ thread_local! {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Carrier {
     Linked,
-    #[cfg_attr(not(feature = "native"), allow(dead_code))]
+    #[cfg_attr(not(native), allow(dead_code))]
     CAbi,
     #[cfg(luau)]
     Luau,
@@ -27,7 +27,7 @@ enum Carrier {
 fn carriers() -> Vec<Carrier> {
     vec![
         Carrier::Linked,
-        #[cfg(feature = "native")]
+        #[cfg(native)]
         Carrier::CAbi,
         #[cfg(luau)]
         Carrier::Luau,

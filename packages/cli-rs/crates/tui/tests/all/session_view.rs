@@ -336,7 +336,7 @@ fn a_catalog_read_inside_the_messages_visitor_loads_after_the_render() {
 
 /// The frames of the sidebar's context and limit sections while a session's replies end. With `loopback`, the
 /// sections are wired through the byte shims of the C ABI (`Loopback`) instead of running in process.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     let others = ["-opencode.sidebar.mcp", "-opencode.sidebar.todo"];
     let plugins: Vec<&str> = if loopback {
@@ -383,7 +383,7 @@ fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_sidebar_sections_draw_the_same_through_the_c_abi_loopback() {
     assert_eq!(sidebar_frames(true), sidebar_frames(false));
 }

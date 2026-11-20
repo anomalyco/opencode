@@ -463,7 +463,7 @@ impl Wake {
     }
 
     /// Whether a [`Woken`] is on its way to the UI thread.
-    #[cfg(all(test, feature = "native"))]
+    #[cfg(all(test, native))]
     pub(crate) fn pending(&self) -> bool {
         self.state.load(Ordering::Acquire) & POSTED != 0
     }

@@ -205,7 +205,7 @@ fn the_sections_let_go_of_their_settings_listeners() {
 /// The frames of the sidebar as mounted, after a click folds the MCP list, and after one opens it again. With
 /// `loopback`, the MCP section is wired through the byte shims of the C ABI (`Loopback`) instead of running in
 /// process.
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn mcp_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     let h = mount(if loopback { &["-opencode.sidebar.mcp"] } else { &[] }, false);
     if loopback {
@@ -233,7 +233,7 @@ fn mcp_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
 }
 
 #[test]
-#[cfg(feature = "native")]
+#[cfg(native)]
 fn the_mcp_section_acts_the_same_through_the_c_abi_loopback() {
     assert_eq!(mcp_frames(true), mcp_frames(false));
 }
