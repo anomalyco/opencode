@@ -1682,6 +1682,12 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "order ses_1",
         &[Op::Enqueue(1), Op::Withdraw(1, 0), Op::Deliver(1), Op::SyncPending(1), Op::Reconnect],
     ),
+    // A prompt another client admitted while the stream was down never showed: its delivery found no row to move.
+    (
+        "delivery of a prompt missed in a reconnect",
+        "transcript ses_1",
+        &[Op::Enqueue(1), Op::Reconnect, Op::SyncMessages(1), Op::Promote(1, 1)],
+    ),
 ];
 
 const OPEN: &[(&str, &str, &[Op])] = &[

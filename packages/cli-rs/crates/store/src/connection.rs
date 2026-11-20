@@ -203,7 +203,7 @@ impl State {
             V2Event::SessionArchived(event) => self.on_archived(&event.data.session_id, Some(event.created)),
             V2Event::SessionUnarchived(event) => self.on_archived(&event.data.session_id, None),
             V2Event::SessionMoved(event) => self.on_moved(event),
-            V2Event::SessionInboxDelivered(event) => self.on_inbox_delivered(event),
+            V2Event::SessionInboxDelivered(event) => return self.on_inbox_delivered(event),
             V2Event::SessionInboxDeliveryChanged(event) => self.on_inbox_delivery_changed(&event.data),
             V2Event::SessionInboxCancelled(event) => self.on_inbox_cancelled(&event.data),
             V2Event::SessionInboxEnqueued(event) => self.on_inbox_enqueued(event),
