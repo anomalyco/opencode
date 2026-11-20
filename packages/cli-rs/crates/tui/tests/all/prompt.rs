@@ -653,24 +653,13 @@ struct Text {
 }
 
 impl Text {
-    fn shown(&self) -> String {
-        self.items
-            .iter()
-            .map(|item| match item {
-                Item::Char(c) => c.to_string(),
-                Item::Chip(label, _) => label.clone(),
-            })
-            .collect()
-    }
-
-    fn expanded(&self) -> String {
-        self.items
-            .iter()
-            .map(|item| match item {
-                Item::Char(c) => c.to_string(),
-                Item::Chip(_, text) => text.clone(),
-            })
-            .collect()
+    /// The text with each chip as its label, or as its pasted text.
+    fn text(&self, shown: bool) -> String {
+        let item = |item: &Item| match item {
+            Item::Char(c) => c.to_string(),
+            Item::Chip(label, text) => if shown { label } else { text }.clone(),
+        };
+        self.items.iter().map(item).collect()
     }
 }
 
@@ -734,8 +723,8 @@ impl Reference {
             return;
         }
         let at = |index: i64| &self.history[(self.history.len() as i64 + index) as usize];
-        let input = self.now.shown();
-        if self.index < 0 && !input.is_empty() && at(self.index).shown() != input {
+        let input = self.now.text(true);
+        if self.index < 0 && !input.is_empty() && at(self.index).text(true) != input {
             return;
         }
         if self.index == 0 {
@@ -757,7 +746,7 @@ impl Reference {
             Edit::Key("left") => chip(self.cursor.checked_sub(1)),
             Edit::Key("right") => chip(Some(self.cursor)) || chip(Some(self.cursor + 1)),
             Edit::Key("delete") => chip(Some(self.cursor)),
-            Edit::Key("up" | "down") => self.now.items.contains(&Item::Char('\n')) || self.now.shown().len() > 100,
+            Edit::Key("up" | "down") => self.now.items.contains(&Item::Char('\n')) || self.now.text(true).len() > 100,
             // Ctrl+C on an empty prompt exits.
             Edit::Key("ctrl+c") => self.now.items.is_empty() && !self.now.shell,
             _ => chips && self.anchor.is_some(),
@@ -829,7 +818,7 @@ impl Reference {
             Edit::Key("ctrl+c") if self.now.shell && self.now.items.is_empty() => self.now.shell = false,
             Edit::Key("ctrl+c") => {
                 // Long or rich prompts go to history first.
-                if self.now.shown().trim().chars().count() >= 20 || self.now.rich {
+                if self.now.text(true).trim().chars().count() >= 20 || self.now.rich {
                     self.record();
                 }
                 (self.index, self.draft) = (0, None);
@@ -859,10 +848,10 @@ impl Reference {
                 self.now.rich = true;
             }
             Edit::Submit => {
-                if self.now.shown().trim().is_empty() {
+                if self.now.text(true).trim().is_empty() {
                     return;
                 }
-                self.sent.push((self.now.shell, self.now.expanded()));
+                self.sent.push((self.now.shell, self.now.text(false)));
                 self.record();
                 (self.index, self.draft) = (0, None);
                 self.restore(Text::default(), false);
@@ -911,8 +900,8 @@ impl Model for PromptModel {
     fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Edit> {
         (0..steps)
             .map(|_| match rng.below(100) {
-                0..30 => Edit::Type(*rng.pick(TYPED)),
-                30..65 => Edit::Key(*rng.pick(KEYS)),
+                0..30 => Edit::Type(rng.pick(TYPED)),
+                30..65 => Edit::Key(rng.pick(KEYS)),
                 65..75 => Edit::Paste(
                     rng.pick(&[
                         "xy".to_owned(),
@@ -966,7 +955,7 @@ impl Model for PromptModel {
             }
             reference.apply(edit);
             let textarea = setup.textarea();
-            let shown = reference.now.shown();
+            let shown = reference.now.text(true);
             if textarea.text() != shown {
                 return fail("text", format!("the prompt shows {:?}, the model {shown:?}", textarea.text()));
             }
