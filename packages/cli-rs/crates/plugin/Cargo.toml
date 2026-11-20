@@ -13,7 +13,7 @@ workspace = true
 opentui.workspace = true
 opencode-ui.workspace = true
 log.workspace = true
-opencode-plugin-abi = { workspace = true, features = ["c-abi"] }
+opencode-plugin-abi.workspace = true
 opencode-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -26,10 +26,14 @@ mlua = { workspace = true, optional = true }
 
 [features]
 # Disable the JS host at runtime with `OPENCODE_PLUGIN_JS=0`.
-default = ["ts", "luau"]
+default = ["ts", "luau", "native"]
 ts = []
 # Disable Luau at runtime with `OPENCODE_PLUGIN_LUAU=0`.
 luau = ["dep:mlua"]
+# Native plugin libraries, opened in process over the C ABI (native-feature): the loader's library path, the C ABI's
+# carrier, the conformance harness, macOS quarantine and the library half of approvals. Disable it at runtime with
+# `OPENCODE_PLUGIN_NATIVE=0`.
+native = ["opencode-plugin-abi/c-abi", "opencode-util/native"]
 
 [target.'cfg(unix)'.dependencies]
 # Who owns the approvals file, and opening it without following a link.

@@ -2044,6 +2044,7 @@ thread_local! {
 }
 
 /// A canvas in the home footer whose draw returns 2 MiB that start with [`HUGE`], twice the bytes one list may have.
+#[cfg(feature = "native")]
 fn huge_setup(setup: &mut abi::Setup) -> Result<(), String> {
     let place = v2::Place::Slot(abi::Placement::append("home.footer.status"));
     let view = |_: &mut v2::View<'_>| {
@@ -2062,6 +2063,7 @@ fn huge_setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_draw_past_a_lists_bytes_is_over_and_not_copied() {
     for carrier in crate::plugin_surface::CARRIERS {
         for (first, over) in [(list::VERSION, true), (0, false)] {

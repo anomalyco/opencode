@@ -4,6 +4,7 @@ mod activation;
 pub mod behave;
 pub mod canvas;
 pub mod claim;
+#[cfg(feature = "native")]
 pub mod conformance;
 pub mod contain;
 pub mod facts;
@@ -342,6 +343,7 @@ pub enum Builtin {
     Plugin(abi::Plugin),
     /// The same plugin through the byte shims of the C ABI, as a loaded library runs: its other carrier, for the tests
     /// that compare the two (`carrier-equal`).
+    #[cfg(feature = "native")]
     Abi(abi::Plugin),
 }
 
@@ -383,6 +385,7 @@ impl Definition {
     }
 
     /// Marks an external plugin loaded from `target`; `error` reports its failure while it is active.
+    #[cfg_attr(not(any(feature = "native", feature = "ts", feature = "luau")), allow(dead_code))]
     pub(crate) fn external(mut self, target: impl Into<String>, error: ErrorFn) -> Self {
         self.target = Some(target.into());
         self.error = Some(error);
@@ -390,6 +393,7 @@ impl Definition {
     }
 
     /// Names the build of an external plugin.
+    #[cfg_attr(not(any(feature = "native", feature = "ts", feature = "luau")), allow(dead_code))]
     pub(crate) fn digest(mut self, digest: u64) -> Self {
         self.digest = Some(format!("{digest:016x}"));
         self
@@ -410,6 +414,7 @@ impl From<Builtin> for Definition {
     fn from(builtin: Builtin) -> Self {
         match builtin {
             Builtin::Plugin(plugin) => in_process(plugin),
+            #[cfg(feature = "native")]
             Builtin::Abi(plugin) => loader::native::carried(plugin),
         }
     }
@@ -819,9 +824,9 @@ struct Scope {
     external: bool,
 }
 
-/// A linked plugin's replies and cancels, on the C ABI's path ([`loader::native::reply_to`]), so that a mount's close
+/// A linked plugin's replies and cancels, on the C ABI's path ([`loader::requests::reply_to`]), so that a mount's close
 /// cancels its requests the same way on both.
-impl loader::native::Answers for Scope {
+impl loader::requests::Answers for Scope {
     fn live(&self) -> bool {
         !self.activation.disposed()
     }
@@ -1517,7 +1522,7 @@ impl abi::Host for Scoped<'_> {
             if let Some(activation) = activation.upgrade() {
                 activation.cancel_timer(id);
             }
-            loader::native::forget(id);
+            loader::requests::forget(id);
         });
     }
 
@@ -1755,12 +1760,12 @@ impl Scoped<'_> {
             return Err(REFUSED.to_owned());
         }
         let id = next_request();
-        let scope: Weak<dyn loader::native::Answers> = Rc::downgrade(self.scope) as Weak<Scope>;
+        let scope: Weak<dyn loader::requests::Answers> = Rc::downgrade(self.scope) as Weak<Scope>;
         // A request a mount's call asked for ends with the mount, as over the C ABI: one whose mount closed first is
         // cancelled, and a reply for a mount that closed, also one opened again since, is dropped.
         let mount = self.scope.owners.owning();
         self.defer_reserved(move |host| {
-            loader::native::reply_to(&scope, host, id, mount, move |host, reply| send(host, id, reply));
+            loader::requests::reply_to(&scope, host, id, mount, move |host, reply| send(host, id, reply));
         });
         Ok(id)
     }
@@ -2336,6 +2341,7 @@ impl Setup<'_> {
     }
 
     /// Renders Markdown fences of `language`.
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     pub(crate) fn code_block(
         &mut self,
         language: impl Into<String>,
@@ -2470,6 +2476,22 @@ pub const SKIPPED_NO_LUAU: &str =
 /// Why a TypeScript plugin is not loaded when no JS host runs: [`SKIPPED_JS_OFF`], or [`SKIPPED_NO_TS`] in a build without
 /// the `ts` feature, which has none to turn on.
 pub const SKIPPED_OFF: &str = if cfg!(feature = "ts") { SKIPPED_JS_OFF } else { SKIPPED_NO_TS };
+/// Why a native plugin library is not loaded when `OPENCODE_PLUGIN_NATIVE` turned native plugins off.
+pub const SKIPPED_NATIVE_OFF: &str =
+    "native plugins load in process, which OPENCODE_PLUGIN_NATIVE turns off: unset it to load them";
+/// Why a native plugin library is not loaded in a build without the `native` feature, which cannot open one.
+pub const SKIPPED_NO_NATIVE: &str =
+    "this build of opencode-native has no native plugin support (built without the native feature)";
+/// Why a native plugin library is not loaded: [`SKIPPED_NATIVE_OFF`], or [`SKIPPED_NO_NATIVE`] in a build without the
+/// `native` feature, which has nothing to turn on.
+pub const SKIPPED_NATIVE: &str = if cfg!(feature = "native") { SKIPPED_NATIVE_OFF } else { SKIPPED_NO_NATIVE };
+
+/// Native plugin libraries load unless `OPENCODE_PLUGIN_NATIVE` is `0`, `false` or `off`, and never in a build without the
+/// `native` feature.
+pub fn native_enabled() -> bool {
+    cfg!(feature = "native") && !turned_off(std::env::var_os("OPENCODE_PLUGIN_NATIVE").as_deref())
+}
+
 /// Why a TypeScript plugin is not loaded when no Bun runs the JS host: neither the local server's opencode binary nor
 /// `bun` on the path.
 pub const SKIPPED_NO_BUN: &str = "TypeScript TUI plugins run on the JS host, which needs Bun: neither the server's opencode nor bun on the path runs it; install Bun 1.4 or newer, or set OPENCODE_BUN to its absolute path";

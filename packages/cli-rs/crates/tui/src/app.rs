@@ -32,7 +32,8 @@ pub struct Deps {
     /// Renderer plugins in registration order: Mermaid, then LaTeX. The shell receives them from the caller to avoid
     /// depending on the renderers.
     pub builtins: Vec<opencode_plugin::Builtin>,
-    /// Run built-ins through the native plugin ABI for carrier comparison tests.
+    /// Run built-ins through the native plugin ABI for carrier comparison tests. A build without the `native` feature has
+    /// no such carrier and runs them in process.
     pub abi_builtins: bool,
 }
 

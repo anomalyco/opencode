@@ -104,12 +104,18 @@ pub fn check<M: Model>(model: &M, seeds: u64, steps: usize) {
 }
 
 /// Runs `commands` under the C ABI's protocol machine: the model's own failure, else a broken rule of the protocol.
+/// A build without the `native` feature has no C ABI, and runs the model alone.
 fn run<M: Model>(model: &M, commands: &[M::Command]) -> Option<Failure> {
-    let (failure, broken) = opencode_plugin::conformance::checked(|| model.run(commands));
-    failure.or_else(|| {
-        let broken = broken.filter(|_| !skipped("abi-protocol"))?;
-        Some(Failure { property: "abi-protocol", site: "abi-protocol", step: commands.len(), detail: broken })
-    })
+    #[cfg(not(feature = "native"))]
+    return model.run(commands);
+    #[cfg(feature = "native")]
+    {
+        let (failure, broken) = opencode_plugin::conformance::checked(|| model.run(commands));
+        failure.or_else(|| {
+            let broken = broken.filter(|_| !skipped("abi-protocol"))?;
+            Some(Failure { property: "abi-protocol", site: "abi-protocol", step: commands.len(), detail: broken })
+        })
+    }
 }
 
 /// The shrinker keeps a candidate only when it fails the same check site: two checks of one property can fail for two

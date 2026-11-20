@@ -2,13 +2,19 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
+#[cfg(feature = "native")]
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
 use opencode_plugin::abi::{self, Command};
+#[cfg(feature = "native")]
+use opencode_plugin::loader::Backend;
+#[cfg(feature = "native")]
 use opencode_plugin::loader::native::loopback_described;
-use opencode_plugin::loader::{Backend, Loader, entry_file};
+#[cfg(feature = "native")]
+use opencode_plugin::loader::{Loader, entry_file};
+#[cfg(feature = "native")]
 use opencode_plugin::{Definition, ErrorFn, Host};
 use opencode_tui::plugins::host::host;
 use opencode_tui::plugins::manager::ID;
@@ -23,7 +29,7 @@ thread_local! {
 
 /// Runs `test` with the built-ins linked, then across the C ABI's byte shims.
 fn carriers(test: fn()) {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         ABI.set(abi);
         test();
     }
@@ -120,6 +126,34 @@ fn a_disabled_manager_holds_nothing_and_matches_one_never_enabled_on() {
     toggle(&harness, ID, true);
     harness.dispatch("plugins.list");
     harness.wait_for("show internal");
+}
+
+/// A build without the `native` feature lists a configured library as skipped, says why in `/plugins`, and opens
+/// nothing of it.
+#[cfg(not(feature = "native"))]
+#[test]
+fn a_build_without_native_lists_a_library_as_skipped() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let library = root.path().join(format!("probe.{}", std::env::consts::DLL_EXTENSION));
+    std::fs::write(&library, b"never opened").unwrap();
+    let target = library.to_string_lossy().into_owned();
+    let (harness, _) = open(&[&target]);
+    let external = opencode_tui::plugins::host::External {
+        config_dir: root.path().join("config"),
+        cwd: root.path().to_path_buf(),
+        dev: Vec::new(),
+    };
+    opencode_tui::plugins::host::external(&harness.tui, external);
+    settle(&harness);
+    let entry = harness.tui.plugins.entries().into_iter().find(|entry| entry.target.as_deref() == Some(&*target));
+    let skipped = opencode_plugin::Status::Skipped(opencode_plugin::SKIPPED_NO_NATIVE.to_owned());
+    assert_eq!(entry.map(|entry| entry.status), Some(skipped));
+    let toast = harness.wait_for("1 plugin not loaded");
+    assert!(!toast.contains("TypeScript"), "{toast}");
+    harness.dispatch("plugins.list");
+    harness.wait_for("probe");
+    harness.app.press("enter");
+    harness.wait_for("no native plugin support");
 }
 
 #[test]
@@ -268,8 +302,10 @@ fn a_plugin_hears_each_change_of_the_plugin_list_once_on() {
 
 /// The builds of a plugin that takes the manager's ID, through the C ABI's byte shims: its `/plugins` shows an alert,
 /// and its command panics.
+#[cfg(feature = "native")]
 struct Shadow;
 
+#[cfg(feature = "native")]
 impl Backend for Shadow {
     fn load(
         &self,
@@ -303,6 +339,7 @@ thread_local! {
     static SHADOW_FAILS: Cell<bool> = const { Cell::new(false) };
 }
 
+#[cfg(feature = "native")]
 fn fail_shadow(harness: &Harness) {
     harness.dispatch("shadow.boom");
     settle(harness);
@@ -316,16 +353,19 @@ fn fail_shadow(harness: &Harness) {
     assert_eq!(harness.tui.dialogs.key().as_deref(), Some("host.plugins"));
 }
 
+#[cfg(feature = "native")]
 fn manager_status(harness: &Harness) -> opencode_plugin::Status {
     let key = opencode_plugin::Entry::plugin_key(ID);
     harness.tui.plugins.entries().into_iter().find(|entry| entry.key == key).unwrap().status
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn the_host_lists_the_plugins_while_the_manager_has_failed() {
     carriers(the_host_lists_the_plugins_while_the_manager_has_failed_on);
 }
 
+#[cfg(feature = "native")]
 fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
     let (harness, _) = open_with(serde_json::json!({ "plugins": ["./broken.ts"] }), vec![crash().into()]);
     harness.dispatch("crash.boom");
@@ -335,7 +375,7 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
     let dir = config.join("plugins").join("manager");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join(entry_file()), [1]).unwrap();
-    let loader = Rc::new(Loader::new(Rc::new(Shadow), config, root.path().to_path_buf(), Vec::new()));
+    let loader = Rc::new(Loader::new(config, root.path().to_path_buf(), Vec::new()).with_native(Rc::new(Shadow)));
     harness.tui.plugins.set_loader(loader.clone());
     loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
     settle(&harness);
@@ -425,6 +465,7 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
 }
 
 /// A built-in whose command panics.
+#[cfg(feature = "native")]
 fn crash() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.command(Command::new("crash.boom"), |_, _| -> () { panic!("crash") });
@@ -434,8 +475,10 @@ fn crash() -> abi::Plugin {
 }
 
 /// The builds of a plugin `test.ext`, through the C ABI's byte shims.
+#[cfg(feature = "native")]
 struct Ext;
 
+#[cfg(feature = "native")]
 impl Backend for Ext {
     fn load(
         &self,
@@ -452,10 +495,12 @@ impl Backend for Ext {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_failed_built_in_shows_and_a_plugin_is_found_by_its_target() {
     carriers(a_failed_built_in_shows_and_a_plugin_is_found_by_its_target_on);
 }
 
+#[cfg(feature = "native")]
 fn a_failed_built_in_shows_and_a_plugin_is_found_by_its_target_on() {
     let (harness, _) = open_with(serde_json::json!({}), vec![crash().into()]);
     harness.dispatch("crash.boom");
@@ -478,7 +523,7 @@ fn a_failed_built_in_shows_and_a_plugin_is_found_by_its_target_on() {
     let dir = config.join("plugins").join("ext-dir");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join(entry_file()), [1]).unwrap();
-    let loader = Rc::new(Loader::new(Rc::new(Ext), config, root.path().to_path_buf(), Vec::new()));
+    let loader = Rc::new(Loader::new(config, root.path().to_path_buf(), Vec::new()).with_native(Rc::new(Ext)));
     harness.tui.plugins.set_loader(loader.clone());
     loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
     settle(&harness);
@@ -490,8 +535,10 @@ fn a_failed_built_in_shows_and_a_plugin_is_found_by_its_target_on() {
 }
 
 /// The builds of a plugin that takes `0`'s ID, through the C ABI's byte shims; its setup does nothing.
+#[cfg(feature = "native")]
 struct Named(&'static str);
 
+#[cfg(feature = "native")]
 impl Backend for Named {
     fn load(
         &self,
@@ -514,6 +561,7 @@ impl Backend for Named {
 
 /// A build of a plugin of ID `id`, which crashed the client last time, held back as the client starts again; and its
 /// target. The loader's digest of the bytes `[1]` with no options names the build.
+#[cfg(feature = "native")]
 fn held_crash(harness: &Harness, id: &'static str) -> (Rc<Loader>, String, opencode_util::temp::TempDir) {
     use std::hash::Hasher;
     let root = opencode_util::temp::tempdir().unwrap();
@@ -533,7 +581,7 @@ fn held_crash(harness: &Harness, id: &'static str) -> (Rc<Loader>, String, openc
         reason: "crashed the client in `run-command` and is disabled".to_owned(),
     };
     harness.tui.plugins.set_crashed(vec![crashed], |_| Ok(()));
-    let loader = Rc::new(Loader::new(Rc::new(Named(id)), config, root.path().to_path_buf(), Vec::new()));
+    let loader = Rc::new(Loader::new(config, root.path().to_path_buf(), Vec::new()).with_native(Rc::new(Named(id))));
     harness.tui.plugins.set_loader(loader.clone());
     loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
     settle(harness);
@@ -546,10 +594,12 @@ fn status_of(harness: &Harness, key: &str) -> Option<(opencode_plugin::Status, b
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_held_build_that_shares_an_id_is_a_row_of_its_own() {
     carriers(a_held_build_that_shares_an_id_is_a_row_of_its_own_on);
 }
 
+#[cfg(feature = "native")]
 fn a_held_build_that_shares_an_id_is_a_row_of_its_own_on() {
     let (harness, _) = open(&[]);
     let (loader, target, _root) = held_crash(&harness, "opencode.stats");
@@ -588,6 +638,7 @@ thread_local! {
     static READ: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
+#[cfg(feature = "native")]
 fn reader() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let read = |host: &dyn abi::Read| READ.set(serde_json::to_string(&host.plugins()).unwrap());
@@ -599,6 +650,7 @@ fn reader() -> abi::Plugin {
 }
 
 /// Plugins whose setup fails, and whose command panics, each with a private marker.
+#[cfg(feature = "native")]
 fn secrets() -> [abi::Plugin; 2] {
     fn setup(_: &mut abi::Setup) -> Result<(), String> {
         Err("SECRET-setup /home/user/.token".to_owned())
@@ -610,8 +662,10 @@ fn secrets() -> [abi::Plugin; 2] {
     [abi::Plugin { id: "test.setup", setup }, abi::Plugin { id: "test.run", setup: run }]
 }
 
+#[cfg(feature = "native")]
 struct Unloadable;
 
+#[cfg(feature = "native")]
 impl Backend for Unloadable {
     fn load(
         &self,
@@ -625,12 +679,13 @@ impl Backend for Unloadable {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn the_plugin_list_holds_no_error_text() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let (harness, _) = open(&[]);
         let read = match abi {
             false => opencode_plugin::Builtin::Plugin(reader()),
-            true => opencode_plugin::Builtin::Abi(reader()),
+            true => crate::support::abi_builtin(reader()),
         };
         opencode_tui::plugins::host::add(&harness.tui, read.into());
         for plugin in secrets() {
@@ -643,7 +698,8 @@ fn the_plugin_list_holds_no_error_text() {
         let dir = config.join("plugins").join("unloadable");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(entry_file()), [1]).unwrap();
-        let loader = Rc::new(Loader::new(Rc::new(Unloadable), config, root.path().to_path_buf(), Vec::new()));
+        let loader =
+            Rc::new(Loader::new(config, root.path().to_path_buf(), Vec::new()).with_native(Rc::new(Unloadable)));
         harness.tui.plugins.set_loader(loader.clone());
         loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
         settle(&harness);
@@ -762,7 +818,7 @@ fn quiet(id: &'static str) -> abi::Plugin {
 
 #[test]
 fn toggles_in_one_filtered_open_reach_the_selected_plugin_alone() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let deps = Deps { route: Route::Home, abi_builtins: abi, ..support::deps(Arc::new(support::empty())) };
         let harness = support::mount(100, 30, deps);
         for id in ["test.a", "test.b"] {
@@ -823,6 +879,7 @@ thread_local! {
 
 /// A plugin whose keyless select has a row that toggles the plugin of the target its command is given, and actions and
 /// keys the host cannot bind or must not let it take.
+#[cfg(feature = "native")]
 fn picker() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.command(Command::new("picker.picked"), |_, _| {
@@ -858,10 +915,12 @@ fn picker() -> abi::Plugin {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_select_cannot_break_or_take_the_hosts_keys() {
     carriers(a_select_cannot_break_or_take_the_hosts_keys_on);
 }
 
+#[cfg(feature = "native")]
 fn a_select_cannot_break_or_take_the_hosts_keys_on() {
     let (harness, _) = open_with(serde_json::json!({ "keybinds": { "plugins.toggle": "ctrl+t" } }), Vec::new());
     opencode_tui::plugins::host::add(&harness.tui, picker().into());
@@ -871,7 +930,7 @@ fn a_select_cannot_break_or_take_the_hosts_keys_on() {
     let dir = config.join("plugins").join("ext-dir");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join(entry_file()), [1]).unwrap();
-    let loader = Rc::new(Loader::new(Rc::new(Ext), config, root.path().to_path_buf(), Vec::new()));
+    let loader = Rc::new(Loader::new(config, root.path().to_path_buf(), Vec::new()).with_native(Rc::new(Ext)));
     harness.tui.plugins.set_loader(loader.clone());
     loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
     settle(&harness);
@@ -1112,11 +1171,11 @@ fn panicky() -> abi::Plugin {
 
 #[test]
 fn a_panicking_plugin_list_handler_fails_its_plugin() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let (harness, _) = open(&[]);
         let plugin = match abi {
             false => opencode_plugin::Builtin::Plugin(panicky()),
-            true => opencode_plugin::Builtin::Abi(panicky()),
+            true => crate::support::abi_builtin(panicky()),
         };
         opencode_tui::plugins::host::add(&harness.tui, plugin.into());
         opencode_tui::plugins::host::add(&harness.tui, quiet("test.a").into());

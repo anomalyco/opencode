@@ -286,7 +286,7 @@ impl World {
             std::fs::write(dir.join(entry_file()), [build]).unwrap();
             let approvals = Approvals::open(root.path().join("state").join(approval::FILE), &work);
             assert_eq!(approvals.unsaved(), None);
-            let loader = Loader::new(Rc::new(Builds), root.path().join("config"), work, Vec::new());
+            let loader = Loader::new(root.path().join("config"), work, Vec::new()).with_native(Rc::new(Builds));
             let loader = Rc::new(loader.with_approvals(approvals));
             harness.tui.plugins.set_loader(loader.clone());
             loader.reconcile(&host(&harness.tui), &harness.tui.plugins);

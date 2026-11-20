@@ -2621,9 +2621,9 @@ pub(crate) fn evaluate(
     request: &HostRequest,
 ) -> serde_json::Value {
     // The storage keys its manifest declares, which a watched read of storage names.
-    let mut ctx = crate::loader::native::Ctx::new(host.clone(), id, keys);
+    let mut ctx = crate::loader::requests::Ctx::new(host.clone(), id, keys);
     (ctx.read_only, ctx.owners) = (true, owners);
-    match crate::loader::native::handle(&mut ctx, request.clone()) {
+    match crate::loader::requests::handle(&mut ctx, request.clone()) {
         // A stored value is JSON text: its snapshot carries the JSON itself, not the text quoted again, which escaped
         // each quote and backslash once more and could double its size past what the JS host takes. The layer reads
         // either.

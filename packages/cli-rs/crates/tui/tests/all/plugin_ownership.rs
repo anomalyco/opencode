@@ -84,6 +84,7 @@ enum Place {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Carrier {
     InProcess,
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     CAbi,
     Pipe,
     #[cfg(luau)]
@@ -209,6 +210,7 @@ fn request_ownership_in_process() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn request_ownership_through_the_c_abi() {
     table(Carrier::CAbi);
 }
@@ -226,8 +228,10 @@ fn request_ownership_in_luau() {
 
 #[test]
 fn a_task_parked_on_its_mounts_fetch_goes_on_once_cancelled() {
-    #[cfg_attr(not(luau), allow(unused_mut))]
-    let mut carriers = vec![Carrier::InProcess, Carrier::CAbi];
+    #[cfg_attr(not(any(luau, feature = "native")), allow(unused_mut))]
+    let mut carriers = vec![Carrier::InProcess];
+    #[cfg(feature = "native")]
+    carriers.push(Carrier::CAbi);
     #[cfg(luau)]
     carriers.push(Carrier::Luau);
     for carrier in carriers {
@@ -242,8 +246,8 @@ fn parked(carrier: Carrier) {
     let host = opencode_tui::plugins::host::host(&h.tui);
     let definition = match carrier {
         Carrier::CAbi => {
-            let entries = abi::export_plugin!(@loopback "test.parked", parked_plugin);
-            opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+            let entries = crate::support::loopback_entries!("test.parked", parked_plugin);
+            crate::support::loopback(&host, entries).unwrap().0
         }
         #[cfg(luau)]
         Carrier::Luau => {
@@ -342,7 +346,7 @@ end)
 
 #[test]
 fn a_task_a_mount_wakes_keeps_the_activations_owner() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (fake, gate, served, asked) = held();
         PARKED.with_borrow_mut(Vec::clear);
         WOKEN.with_borrow_mut(|woken| *woken = (false, None));
@@ -350,8 +354,8 @@ fn a_task_a_mount_wakes_keeps_the_activations_owner() {
         let host = opencode_tui::plugins::host::host(&h.tui);
         let definition = match loopback {
             true => {
-                let entries = abi::export_plugin!(@loopback "test.woken", woken_plugin);
-                opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+                let entries = crate::support::loopback_entries!("test.woken", woken_plugin);
+                crate::support::loopback(&host, entries).unwrap().0
             }
             false => abi::Plugin { id: "test.woken", setup: woken_plugin }.into(),
         };
@@ -809,8 +813,8 @@ impl Probe {
         let host = opencode_tui::plugins::host::host(&harness.tui);
         let definition = match carrier {
             Carrier::CAbi => {
-                let entries = abi::export_plugin!(@loopback "test.probe", probe);
-                opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+                let entries = crate::support::loopback_entries!("test.probe", probe);
+                crate::support::loopback(&host, entries).unwrap().0
             }
             _ => abi::Plugin { id: "test.probe", setup: probe }.into(),
         };

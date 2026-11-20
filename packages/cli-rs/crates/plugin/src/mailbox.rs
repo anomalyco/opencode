@@ -141,6 +141,7 @@ impl Mailbox {
 
     /// [`Mailbox::put`] of JSON text from the C ABI. A closed or full mailbox answers before the text is read; text
     /// that is not JSON, or a key that is not UTF-8, is [`abi::ERROR`].
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     pub fn put_json(&self, key: &[u8], message: &[u8]) -> i32 {
         let Ok(key) = std::str::from_utf8(key) else { return abi::ERROR };
         {
@@ -169,6 +170,7 @@ impl Mailbox {
         }
     }
 
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     fn refuse_full(&self) -> i32 {
         self.state().refused += 1;
         abi::FULL

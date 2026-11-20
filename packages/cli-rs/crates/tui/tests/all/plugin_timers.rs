@@ -54,8 +54,10 @@ enum Carrier {
 
 #[test]
 fn a_ticking_plugin_that_changes_nothing_makes_no_frame() {
-    #[cfg_attr(not(luau), allow(unused_mut))]
-    let mut carriers = vec![Carrier::InProcess, Carrier::CAbi];
+    #[cfg_attr(not(any(luau, feature = "native")), allow(unused_mut))]
+    let mut carriers = vec![Carrier::InProcess];
+    #[cfg(feature = "native")]
+    carriers.push(Carrier::CAbi);
     #[cfg(luau)]
     carriers.push(Carrier::Luau);
     for carrier in carriers {
@@ -69,8 +71,8 @@ fn ticks_without_frames(carrier: Carrier) {
     let host = opencode_tui::plugins::host::host(&h.tui);
     let definition = match carrier {
         Carrier::CAbi => {
-            let entries = abi::export_plugin!(@loopback "test.tick", ticking);
-            opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+            let entries = crate::support::loopback_entries!("test.tick", ticking);
+            crate::support::loopback(&host, entries).unwrap().0
         }
         #[cfg(luau)]
         Carrier::Luau => {
@@ -194,8 +196,10 @@ end)
 
 #[test]
 fn an_every_a_mount_started_ends_with_that_mount() {
-    #[cfg_attr(not(luau), allow(unused_mut))]
-    let mut carriers = vec![Carrier::InProcess, Carrier::CAbi];
+    #[cfg_attr(not(any(luau, feature = "native")), allow(unused_mut))]
+    let mut carriers = vec![Carrier::InProcess];
+    #[cfg(feature = "native")]
+    carriers.push(Carrier::CAbi);
     #[cfg(luau)]
     carriers.push(Carrier::Luau);
     for carrier in carriers {
@@ -204,8 +208,8 @@ fn an_every_a_mount_started_ends_with_that_mount() {
         let host = opencode_tui::plugins::host::host(&h.tui);
         let definition = match carrier {
             Carrier::CAbi => {
-                let entries = abi::export_plugin!(@loopback "test.tick", every_of_a_mount);
-                opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+                let entries = crate::support::loopback_entries!("test.tick", every_of_a_mount);
+                crate::support::loopback(&host, entries).unwrap().0
             }
             #[cfg(luau)]
             Carrier::Luau => {
@@ -330,6 +334,9 @@ fn dropped_sleeps(setup: &mut abi::Setup) -> Result<(), String> {
 #[test]
 fn dropped_sleeps_hold_no_timer() {
     for carrier in [Carrier::InProcess, Carrier::CAbi] {
+        if matches!(carrier, Carrier::CAbi) && !cfg!(feature = "native") {
+            continue;
+        }
         SLEPT.with_borrow_mut(Vec::clear);
         let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
         h.app.idle(Duration::from_secs(3));
@@ -337,8 +344,8 @@ fn dropped_sleeps_hold_no_timer() {
         let host = opencode_tui::plugins::host::host(&h.tui);
         let definition = match carrier {
             Carrier::CAbi => {
-                let entries = abi::export_plugin!(@loopback "test.dropped", dropped_sleeps);
-                opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+                let entries = crate::support::loopback_entries!("test.dropped", dropped_sleeps);
+                crate::support::loopback(&host, entries).unwrap().0
             }
             _ => abi::Plugin { id: "test.dropped", setup: dropped_sleeps }.into(),
         };

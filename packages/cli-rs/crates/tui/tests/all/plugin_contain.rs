@@ -216,7 +216,7 @@ impl World {
             frame: Rc::new(move || app.frame_number()),
         };
         CURRENT.set(Some(current.clone()));
-        let loader = Loader::new(Rc::new(Builds), config, root.path().to_path_buf(), Vec::new());
+        let loader = Loader::new(config, root.path().to_path_buf(), Vec::new()).with_native(Rc::new(Builds));
         loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
         let mut world = Self { harness, current, opened: Vec::new(), loader, _root: root };
         world.opened = world.drain();

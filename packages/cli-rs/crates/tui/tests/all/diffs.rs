@@ -69,7 +69,7 @@ thread_local! {
 
 /// Runs `row` with the built-ins linked, then on the C ABI's byte shims: 4.9's scenarios on both carriers.
 fn on_both(row: impl Fn()) {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         eprintln!("the {} carrier", if abi { "C ABI" } else { "linked" });
         ABI.with(|cell| cell.set(abi));
         row();
@@ -345,7 +345,7 @@ fn the_viewer_runs_on_both_carriers() {
         file("src/lib.rs", "@@ -1 +1 @@\n-old\n+new\n", "modified"),
         file("src/util.rs", "@@ -1 +1 @@\n-old\n+new\n", "modified"),
     ]);
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let h = mount_on(support::session_route("ses_a"), diff.clone(), 140, 30, abi);
         h.wait_for("Review");
         h.tui.keymap.dispatch("diff.open", None);
@@ -875,7 +875,7 @@ fn the_docked_footer_follows_the_panels_focus() {
 
 #[test]
 fn a_turn_too_short_to_see_running_loads_the_diff_again() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let diff = json!({
             "file": "src/main.rs", "patch": "@@ -1 +1 @@\n-old\n+new\n", "additions": 1, "deletions": 1,
             "status": "modified",
@@ -896,8 +896,9 @@ fn a_turn_too_short_to_see_running_loads_the_diff_again() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_mark_at_1000_files_costs_one_pass_on_both_carriers() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let h = route_on(1000, 4, 200, 58, abi);
         let (work, crossed) = (reconcile::work(), opencode_plugin::loader::native::crossed());
         h.keys(&["m"]);
@@ -913,8 +914,9 @@ fn a_mark_at_1000_files_costs_one_pass_on_both_carriers() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn the_view_toggle_without_room_for_split_costs_no_view() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let h = route_on(40, 4, 48, 28, abi);
         let (work, crossed) = (reconcile::work(), opencode_plugin::loader::native::crossed());
         h.keys(&["v"]);
@@ -927,7 +929,7 @@ fn the_view_toggle_without_room_for_split_costs_no_view() {
 
 #[test]
 fn a_mark_after_a_wheel_step_keeps_the_other_cards() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let h = route_on(100, 4, 120, 30, abi);
         let entries = || opencode_plugin::surface::ledger_of("opencode.diffs").memo_entries;
         let before = entries();
@@ -958,7 +960,7 @@ fn a_hash_in_a_file_name_is_part_of_it() {
         h.wait_for("≡ f#1.rs");
         h
     };
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let h = open(abi);
         h.keys(&["end", "m"]);
         assert_eq!(h.reviewed(), ["f#1.rs"], "m on the card at the top (C ABI: {abi})");
@@ -1004,7 +1006,7 @@ fn image_route(bytes: Vec<u8>, abi: bool) -> Diffs {
 fn an_image_the_host_cannot_decode_says_so() {
     let mut header = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
     header.extend(3u32.to_be_bytes().into_iter().chain(4u32.to_be_bytes()));
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let h = image_route(header.clone(), abi);
         h.wait_for("Could not decode image");
         let screen = h.settle();
@@ -1019,7 +1021,7 @@ fn the_image_preview_ends_with_the_viewer() {
     )
     .unwrap();
     let preview = Some("opencode.diffs/images".to_owned());
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         for replaced in [false, true] {
             let h = image_route(png.clone(), abi);
             // The image is read after the route draws: "Loading image…" until it comes.

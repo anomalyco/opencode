@@ -1,6 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
+#[cfg(feature = "native")]
 use std::hash::{DefaultHasher, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -14,7 +15,9 @@ use opentui::testing::TestApp;
 use opencode_plugin_abi::types::{ModelRef, SessionInfo, SessionMessageInfo};
 
 use super::*;
-use crate::{Entry, Source, abi};
+#[cfg(feature = "native")]
+use crate::Source;
+use crate::{Entry, abi};
 
 /// An event handler of [`Host::on_event`].
 type Handler = Rc<dyn Fn(&abi::types::V2Event)>;
@@ -320,6 +323,7 @@ impl Host for TestHost {
     }
 }
 
+#[cfg_attr(not(feature = "native"), allow(dead_code))]
 impl TestHost {
     /// Calls the event handlers with `event`, as the host's event loop would.
     pub fn emit(&self, event: &abi::types::V2Event) {
@@ -385,6 +389,7 @@ pub(crate) fn host() -> Rc<TestHost> {
 }
 
 /// Routes the app's keys to `host`'s keymap before any widget, as the TUI does (`route_keys`).
+#[cfg(feature = "native")]
 pub(crate) fn route_keys(host: &Rc<TestHost>) {
     let weak = Rc::downgrade(host);
     host.app.on_key_capture(move |cx, key| {
@@ -415,6 +420,7 @@ pub(crate) fn entry<'a>(entries: &'a [Entry], target: &str) -> &'a Entry {
 /// A backend whose builds are text: `id=<id>` loads a plugin with a `fake` fence that draws nothing, anything
 /// else fails with that text.
 #[derive(Default)]
+#[cfg(feature = "native")]
 struct Fake {
     loads: Cell<usize>,
     /// Active instances: setup adds one, deactivation removes it.
@@ -425,6 +431,7 @@ struct Fake {
     during: RefCell<Option<Box<dyn Fn()>>>,
 }
 
+#[cfg(feature = "native")]
 impl Backend for Fake {
     fn load(
         &self,
@@ -545,6 +552,7 @@ fn a_verbatim_path_is_handed_on_plain() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn reconcile_loads_reloads_keeps_and_unloads() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -558,7 +566,8 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     let registry = Registry::define(Vec::new(), [file.to_str().unwrap(), "@acme/tui"]);
     let fake = Rc::new(Fake::default());
     let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
-    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), configured);
+    let loader =
+        Loader::new(config.clone(), root.path().to_path_buf(), configured).with_native(fake.clone() as Rc<dyn Backend>);
     let lib_target = lib_dir.to_string_lossy().into_owned();
     let file_target = file.to_string_lossy().into_owned();
     let ts_target = ts_dir.to_string_lossy().into_owned();
@@ -631,6 +640,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -639,8 +649,8 @@ fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
     write(&config.join(format!("plugins/c/{}", entry_file())), "not a library");
     let host = host();
     let registry = Registry::define(Vec::new(), []);
-    let loader =
-        Loader::new(Rc::new(Fake::default()) as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    let loader = Loader::new(config.clone(), root.path().to_path_buf(), Vec::new())
+        .with_native(Rc::new(Fake::default()) as Rc<dyn Backend>);
     loader.reconcile(&dynamic(&host), &registry);
     let entries = registry.entries();
     let target = |name: &str| config.join("plugins").join(name).to_string_lossy().into_owned();
@@ -651,6 +661,7 @@ fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_build_refused_for_a_taken_id_loads_once_the_id_is_free() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -658,8 +669,8 @@ fn a_build_refused_for_a_taken_id_loads_once_the_id_is_free() {
     write(&config.join(format!("plugins/b/{}", entry_file())), "id=same");
     let host = host();
     let registry = Registry::define(Vec::new(), []);
-    let loader =
-        Loader::new(Rc::new(Fake::default()) as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    let loader = Loader::new(config.clone(), root.path().to_path_buf(), Vec::new())
+        .with_native(Rc::new(Fake::default()) as Rc<dyn Backend>);
     loader.reconcile(&dynamic(&host), &registry);
     let target = |name: &str| config.join("plugins").join(name).to_string_lossy().into_owned();
     assert_eq!(
@@ -676,6 +687,7 @@ fn a_build_refused_for_a_taken_id_loads_once_the_id_is_free() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_running_plugin_takes_the_id_it_waited_for_once_the_owner_is_removed() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -684,8 +696,8 @@ fn a_running_plugin_takes_the_id_it_waited_for_once_the_owner_is_removed() {
     write(&file("b"), "id=y");
     let host = host();
     let registry = Registry::define(Vec::new(), []);
-    let loader =
-        Loader::new(Rc::new(Fake::default()) as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    let loader = Loader::new(config.clone(), root.path().to_path_buf(), Vec::new())
+        .with_native(Rc::new(Fake::default()) as Rc<dyn Backend>);
     loader.reconcile(&dynamic(&host), &registry);
     write(&file("b"), "id=x");
     loader.reconcile(&dynamic(&host), &registry);
@@ -708,6 +720,7 @@ fn a_running_plugin_takes_the_id_it_waited_for_once_the_owner_is_removed() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_refused_build_loads_once_the_owner_takes_another_id() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -716,8 +729,8 @@ fn a_refused_build_loads_once_the_owner_takes_another_id() {
     write(&file("b"), "id=x");
     let host = host();
     let registry = Registry::define(Vec::new(), []);
-    let loader =
-        Loader::new(Rc::new(Fake::default()) as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    let loader = Loader::new(config.clone(), root.path().to_path_buf(), Vec::new())
+        .with_native(Rc::new(Fake::default()) as Rc<dyn Backend>);
     loader.reconcile(&dynamic(&host), &registry);
     write(&file("a"), "id=other");
     assert!(loader.reconcile(&dynamic(&host), &registry));
@@ -732,13 +745,17 @@ fn a_refused_build_loads_once_the_owner_takes_another_id() {
 }
 
 #[cfg(target_os = "linux")]
+#[cfg(feature = "native")]
 const ONE: &str = "./one.so";
 #[cfg(target_os = "macos")]
+#[cfg(feature = "native")]
 const ONE: &str = "./one.dylib";
 #[cfg(windows)]
+#[cfg(feature = "native")]
 const ONE: &str = "./one.dll";
 
 #[test]
+#[cfg(feature = "native")]
 fn directives_after_an_entry_disable_an_external_plugin() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -747,11 +764,11 @@ fn directives_after_an_entry_disable_an_external_plugin() {
     let host = host();
     let registry = Registry::define(Vec::new(), ["-one", ONE, "-two", "-*", "two"]);
     let loader = Loader::new(
-        Rc::new(Fake::default()) as Rc<dyn Backend>,
         config.clone(),
         root.path().to_path_buf(),
         vec![Configured { target: ONE.to_owned(), options: None }],
-    );
+    )
+    .with_native(Rc::new(Fake::default()) as Rc<dyn Backend>);
     loader.reconcile(&dynamic(&host), &registry);
     let entries = registry.entries();
     let status = |id: &str| entries.iter().find(|entry| entry.id == id).unwrap().status.clone();
@@ -768,7 +785,7 @@ fn watch_dirs_cover_a_plugins_directory_made_later() {
     let cwd = project.join("a");
     fs::create_dir_all(project.join(".git")).unwrap();
     fs::create_dir_all(&cwd).unwrap();
-    let loader = Loader::new(Rc::new(Fake::default()), config, cwd.clone(), Vec::new());
+    let loader = Loader::new(config, cwd.clone(), Vec::new());
     let dirs = loader.watch_dirs();
     assert!(dirs.contains(&cwd) && dirs.contains(&project), "{dirs:?}");
     fs::create_dir_all(cwd.join(".opencode")).unwrap();
@@ -803,6 +820,7 @@ pub(crate) fn logged() -> &'static std::sync::Mutex<Vec<String>> {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn only_a_target_without_a_native_build_is_logged_as_skipped() {
     let warnings = logged();
     let root = opencode_util::temp::tempdir().unwrap();
@@ -812,8 +830,8 @@ fn only_a_target_without_a_native_build_is_logged_as_skipped() {
     let (native, typescript) = (file.to_string_lossy().into_owned(), format!("{}/typescript.ts", config.display()));
     let registry = Registry::define(Vec::new(), [native.as_str(), typescript.as_str()]);
     let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
-    let loader =
-        Loader::new(Rc::new(Fake::default()) as Rc<dyn Backend>, config, root.path().to_path_buf(), configured);
+    let loader = Loader::new(config, root.path().to_path_buf(), configured)
+        .with_native(Rc::new(Fake::default()) as Rc<dyn Backend>);
     loader.reconcile(&dynamic(&host()), &registry);
     let skipped: Vec<String> = warnings
         .lock()
@@ -826,6 +844,7 @@ fn only_a_target_without_a_native_build_is_logged_as_skipped() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn changed_plugin_entries_reconcile_while_running() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -837,7 +856,8 @@ fn changed_plugin_entries_reconcile_while_running() {
     registry.activate(&dynamic(&host));
     let fake = Rc::new(Fake::default());
     let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
-    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config, root.path().to_path_buf(), configured);
+    let loader =
+        Loader::new(config, root.path().to_path_buf(), configured).with_native(fake.clone() as Rc<dyn Backend>);
     assert!(loader.reconcile(&dynamic(&host), &registry));
     assert_eq!(fake.active.get(), 1);
     let status = |id: &str| registry.entries().into_iter().find(|entry| entry.id == id).map(|entry| entry.status);
@@ -908,8 +928,23 @@ impl Project {
         approvals
     }
 
-    fn loader(&self, backend: Rc<dyn Backend>, configured: Vec<Configured>) -> Loader {
-        Loader::new(backend, self.config(), self.repo(), configured).with_approvals(self.approvals())
+    fn loader(&self, configured: Vec<Configured>) -> Loader {
+        Loader::new(self.config(), self.repo(), configured).with_approvals(self.approvals())
+    }
+
+    /// [`Project::loader`] that opens native builds with a [`Fake`], in a build that has native plugins.
+    #[cfg(any(not(feature = "ts"), not(luau)))]
+    fn built(&self, configured: Vec<Configured>) -> Loader {
+        #[cfg(feature = "native")]
+        return self.native(Rc::new(Fake::default()), configured);
+        #[cfg(not(feature = "native"))]
+        return self.loader(configured);
+    }
+
+    /// [`Project::loader`] that opens native builds with `backend`.
+    #[cfg(feature = "native")]
+    fn native(&self, backend: Rc<dyn Backend>, configured: Vec<Configured>) -> Loader {
+        self.loader(configured).with_native(backend)
     }
 }
 
@@ -923,27 +958,31 @@ fn asked(host: &TestHost) -> Vec<String> {
 }
 
 /// The user's answer on the build of `target` the loader holds back now, as the plugin manager gives it.
+#[cfg(feature = "native")]
 fn answer(loader: &Loader, target: &str, decision: approval::Decision) -> bool {
     let shown = loader.held(target).and_then(Result::ok).expect("a build is held back");
     decide(loader, target, &shown, decision).unwrap()
 }
 
 /// The user's `decision` on `shown`, checked against the disk as the host checks it once the answer came.
+#[cfg(feature = "native")]
 fn decide(loader: &Loader, target: &str, shown: &Artifact, decision: approval::Decision) -> Result<bool, String> {
     loader.decide(target, shown, decision, loader.found(target).map(super::Found::identify))
 }
 
+#[cfg(feature = "native")]
 fn library(target: &str) -> std::path::PathBuf {
     std::path::Path::new(target).join(entry_file())
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_project_plugin_waits_for_an_approval_of_its_artifact() {
     let project = Project::new();
     write(&project.config().join(format!("plugins/global/{}", entry_file())), "id=global");
     let target = project.plugin("proj", "id=proj");
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     let status = || entry(&registry.entries(), &target).status.clone();
 
     assert!(loader.reconcile(&dynamic(&host), &registry));
@@ -957,7 +996,7 @@ fn a_project_plugin_waits_for_an_approval_of_its_artifact() {
     assert!(loader.reconcile(&dynamic(&host), &registry));
     assert_eq!((status(), fake.loads.get(), fake.active.get()), (Status::Active, 2, 2));
     assert_eq!(loader.held(&target), None);
-    let fresh = project.loader(Rc::new(Fake::default()), Vec::new());
+    let fresh = project.native(Rc::new(Fake::default()), Vec::new());
     let other = Registry::define(Vec::new(), []);
     fresh.reconcile(&dynamic(&host), &other);
     assert_eq!(entry(&other.entries(), &target).status, Status::Active);
@@ -972,7 +1011,7 @@ fn a_project_plugin_waits_for_an_approval_of_its_artifact() {
     assert!(answer(&loader, &target, approval::Decision::Declined));
     assert!(loader.reconcile(&dynamic(&host), &registry));
     assert_eq!(status(), Status::Declined);
-    let fresh = project.loader(Rc::new(Fake::default()), Vec::new());
+    let fresh = project.native(Rc::new(Fake::default()), Vec::new());
     fresh.reconcile(&dynamic(&host), &Registry::define(Vec::new(), []));
     assert_eq!((asked(&host).len(), fake.loads.get()), (2, 2));
 
@@ -997,12 +1036,13 @@ fn a_project_plugin_waits_for_an_approval_of_its_artifact() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn an_answer_records_nothing_for_a_build_replaced_while_it_was_asked() {
     for decision in [approval::Decision::Approved, approval::Decision::Declined] {
         let project = Project::new();
         let target = project.plugin("proj", "id=a");
         let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-        let loader = project.loader(fake.clone(), Vec::new());
+        let loader = project.native(fake.clone(), Vec::new());
         loader.reconcile(&dynamic(&host), &registry);
         let shown = loader.held(&target).unwrap().unwrap();
         write(&library(&target), "id=b");
@@ -1020,12 +1060,13 @@ fn an_answer_records_nothing_for_a_build_replaced_while_it_was_asked() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn an_answer_before_the_watcher_saves_nothing_for_a_changed_build() {
     for decision in [approval::Decision::Approved, approval::Decision::Declined] {
         let project = Project::new();
         let target = project.plugin("proj", "id=a");
         let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-        let loader = project.loader(fake.clone(), Vec::new());
+        let loader = project.native(fake.clone(), Vec::new());
         loader.reconcile(&dynamic(&host), &registry);
         let shown = loader.held(&target).unwrap().unwrap();
         write(&library(&target), "id=b");
@@ -1046,6 +1087,7 @@ fn an_answer_before_the_watcher_saves_nothing_for_a_changed_build() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(feature = "native")]
 fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
     let project = Project::new();
     let (a, b) = (project.root.path().join("a"), project.root.path().join("b"));
@@ -1056,7 +1098,7 @@ fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
     std::os::unix::fs::symlink(&a, plugins.join("p")).unwrap();
     let target = plugins.join("p").to_string_lossy().into_owned();
     let (host, registry) = (host(), Registry::define(Vec::new(), []));
-    let loader = project.loader(Rc::new(Fake::default()), Vec::new());
+    let loader = project.native(Rc::new(Fake::default()), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     let shown = loader.held(&target).unwrap().unwrap();
     fs::remove_file(plugins.join("p")).unwrap();
@@ -1069,6 +1111,7 @@ fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_build_that_names_a_project_dependency_is_refused_before_it_opens() {
     let project = Project::new();
     let target = project.plugin("proj", "id=proj");
@@ -1076,7 +1119,7 @@ fn a_build_that_names_a_project_dependency_is_refused_before_it_opens() {
     let elf = deps::elf64(&["libc.so.6"], Some("lib"));
     fs::write(project.config().join(format!("plugins/global/{}", entry_file())), elf).unwrap();
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     let global = project.global().to_string_lossy().into_owned();
     let Status::Failed(error) = entry(&registry.entries(), &global).status.clone() else { panic!() };
@@ -1093,6 +1136,7 @@ fn a_build_that_names_a_project_dependency_is_refused_before_it_opens() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_build_the_crash_record_cannot_name_is_not_opened() {
     let project = Project::new();
     let deep = ["a", "b", "c"].iter().fold(project.root.path().to_path_buf(), |path, part| path.join(part.repeat(200)));
@@ -1102,7 +1146,7 @@ fn a_build_the_crash_record_cannot_name_is_not_opened() {
     let dir = opencode_util::temp::tempdir().unwrap();
     registry.monitor().attach(std::sync::Arc::new(crate::contain::Record::create(dir.path()).unwrap())).unwrap();
     let target = deep.to_string_lossy().into_owned();
-    let loader = project.loader(fake.clone(), vec![Configured { target: target.clone(), options: None }]);
+    let loader = project.native(fake.clone(), vec![Configured { target: target.clone(), options: None }]);
     loader.reconcile(&dynamic(&host), &registry);
     let Status::Failed(error) = entry(&registry.entries(), &target).status.clone() else { panic!() };
     assert!(error.contains("crash guard cannot name this build"), "{error}");
@@ -1112,6 +1156,7 @@ fn a_build_the_crash_record_cannot_name_is_not_opened() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn the_same_build_with_a_long_id_loads_again_after_it_comes_back() {
     let project = Project::new();
     let library = project.config().join(format!("plugins/long/{}", entry_file()));
@@ -1121,7 +1166,7 @@ fn the_same_build_with_a_long_id_loads_again_after_it_comes_back() {
     let dir = opencode_util::temp::tempdir().unwrap();
     registry.monitor().attach(std::sync::Arc::new(crate::contain::Record::create(dir.path()).unwrap())).unwrap();
     let target = project.config().join("plugins").join("long").to_string_lossy().into_owned();
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     assert_eq!(entry(&registry.entries(), &target).status, Status::Active, "the first load");
     // Its activation names its slot with its ID, as a native or linked setup does (`Setup::artifact`); the record
@@ -1137,11 +1182,12 @@ fn the_same_build_with_a_long_id_loads_again_after_it_comes_back() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_build_whose_quarantine_cannot_be_read_is_not_opened() {
     let project = Project::new();
     write(&project.config().join(format!("plugins/global/{}", entry_file())), "id=global");
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     let global = project.global().to_string_lossy().into_owned();
     quarantine::fail_next_read(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
     loader.reconcile(&dynamic(&host), &registry);
@@ -1154,7 +1200,7 @@ fn a_build_whose_quarantine_cannot_be_read_is_not_opened() {
     let project = Project::new();
     let target = project.plugin("proj", "id=proj");
     let (registry, fake) = (Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     assert!(answer(&loader, &target, approval::Decision::Approved));
     quarantine::fail_next_read(std::io::Error::other("an I/O error"));
@@ -1166,11 +1212,12 @@ fn a_build_whose_quarantine_cannot_be_read_is_not_opened() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_failure_after_a_pending_spell_is_told_again() {
     let project = Project::new();
     let target = project.plugin("proj", "boom");
     let (host, registry) = (host(), Registry::define(Vec::new(), []));
-    let loader = project.loader(Rc::new(Fake::default()), Vec::new());
+    let loader = project.native(Rc::new(Fake::default()), Vec::new());
     let failed = || {
         let title = format!("Plugin failed: {target}");
         host.toasts.borrow().iter().filter(|toast| toast.title.as_deref() == Some(&*title)).count()
@@ -1188,6 +1235,7 @@ fn a_failure_after_a_pending_spell_is_told_again() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(feature = "native")]
 fn an_approval_names_its_directory_and_the_real_path() {
     let project = Project::new();
     let real = project.root.path().join("real");
@@ -1196,7 +1244,7 @@ fn an_approval_names_its_directory_and_the_real_path() {
     fs::create_dir_all(&plugins).unwrap();
     std::os::unix::fs::symlink(&real, plugins.join("a")).unwrap();
     let (host, registry) = (host(), Registry::define(Vec::new(), []));
-    let loader = project.loader(Rc::new(Fake::default()), Vec::new());
+    let loader = project.native(Rc::new(Fake::default()), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     let a = plugins.join("a").to_string_lossy().into_owned();
     assert_eq!(loader.held(&a).unwrap().unwrap().path, fs::canonicalize(real.join(entry_file())).unwrap());
@@ -1215,6 +1263,7 @@ fn an_approval_names_its_directory_and_the_real_path() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_project_plugin_named_in_cli_json_needs_no_approval() {
     let project = Project::new();
     let target = project.plugin("proj", "id=proj");
@@ -1227,7 +1276,7 @@ fn a_project_plugin_named_in_cli_json_needs_no_approval() {
     for spelling in spellings {
         let (host, registry) = (host(), Registry::define(Vec::new(), [spelling.as_str()]));
         let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
-        let loader = project.loader(Rc::new(Fake::default()), configured);
+        let loader = project.native(Rc::new(Fake::default()), configured);
         loader.reconcile(&dynamic(&host), &registry);
         let entries = registry.entries();
         assert_eq!(entry(&entries, &spelling).status, Status::Active, "{spelling}");
@@ -1237,6 +1286,7 @@ fn a_project_plugin_named_in_cli_json_needs_no_approval() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_pending_plugin_replaces_no_built_in_and_takes_no_id() {
     let project = Project::new();
     let target = project.plugin("proj", "id=b");
@@ -1244,7 +1294,7 @@ fn a_pending_plugin_replaces_no_built_in_and_takes_no_id() {
     let host = host();
     let registry = Registry::define(vec![Definition::new("b", |_| {})], []);
     registry.activate(&dynamic(&host));
-    let loader = project.loader(Rc::new(Fake::default()), Vec::new());
+    let loader = project.native(Rc::new(Fake::default()), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     let entries = registry.entries();
     assert_eq!(
@@ -1263,6 +1313,7 @@ fn root() -> bool {
 
 #[cfg(unix)]
 #[test]
+#[cfg(feature = "native")]
 fn a_project_plugin_that_cannot_be_read_stops_quietly() {
     if root() {
         return;
@@ -1271,7 +1322,7 @@ fn a_project_plugin_that_cannot_be_read_stops_quietly() {
     let project = Project::new();
     let target = project.plugin("proj", "id=proj");
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     assert!(answer(&loader, &target, approval::Decision::Approved));
     loader.reconcile(&dynamic(&host), &registry);
@@ -1290,6 +1341,7 @@ fn a_project_plugin_that_cannot_be_read_stops_quietly() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_library_over_the_limit_is_not_read() {
     let project = Project::new();
     let target = project.plugin("proj", "");
@@ -1298,7 +1350,7 @@ fn a_library_over_the_limit_is_not_read() {
     write(&global.join(entry_file()), "");
     fs::File::options().write(true).open(global.join(entry_file())).unwrap().set_len(approval::LIMIT + 1).unwrap();
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     assert!(loader.held(&target).unwrap().unwrap_err().contains("larger than 512 MiB"));
     let Status::Failed(error) = entry(&registry.entries(), &global.to_string_lossy()).status.clone() else { panic!() };
@@ -1307,11 +1359,12 @@ fn a_library_over_the_limit_is_not_read() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_project_library_gone_in_the_middle_of_a_reconcile_stops_its_plugin() {
     let project = Project::new();
     let target = project.plugin("b", "id=b");
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     assert!(answer(&loader, &target, approval::Decision::Approved));
     loader.reconcile(&dynamic(&host), &registry);
@@ -1478,6 +1531,7 @@ fn a_store_the_project_could_reach_is_not_used() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn bytes_changed_after_the_hash_are_refused() {
     let project = Project::new();
     let target = project.plugin("proj", "id=a");
@@ -1520,6 +1574,7 @@ fn the_store_is_a_private_regular_file() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(feature = "native")]
 fn a_link_retargeted_while_it_is_hashed_is_not_identified() {
     let project = Project::new();
     let (a, b) = (project.root.path().join("a"), project.root.path().join("b"));
@@ -1540,11 +1595,12 @@ fn a_link_retargeted_while_it_is_hashed_is_not_identified() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn an_approved_build_rewritten_while_it_loads_is_held_back() {
     let project = Project::new();
     let target = project.plugin("proj", "id=a");
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     assert!(answer(&loader, &target, approval::Decision::Approved));
     let file = library(&target);
@@ -1559,18 +1615,19 @@ fn an_approved_build_rewritten_while_it_loads_is_held_back() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_build_another_client_approved_replaces_the_running_one() {
     let project = Project::new();
     let target = project.plugin("proj", "id=a");
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     assert!(answer(&loader, &target, approval::Decision::Approved));
     loader.reconcile(&dynamic(&host), &registry);
     assert_eq!(entry(&registry.entries(), &target).id, "a");
     // The other client sees the new build first, and approves it.
     write(&library(&target), "id=b");
-    let other = project.loader(Rc::new(Fake::default()), Vec::new());
+    let other = project.native(Rc::new(Fake::default()), Vec::new());
     other.reconcile(&dynamic(&host), &Registry::define(Vec::new(), []));
     assert!(answer(&other, &target, approval::Decision::Approved));
     loader.reconcile(&dynamic(&host), &registry);
@@ -1599,6 +1656,7 @@ fn a_save_waits_for_a_lock_held_briefly() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_cli_json_entry_for_a_global_library_is_another_target() {
     let project = Project::new();
     let global = project.global();
@@ -1606,7 +1664,7 @@ fn a_cli_json_entry_for_a_global_library_is_another_target() {
     let file = global.join(entry_file()).to_string_lossy().into_owned();
     let (host, registry) = (host(), Registry::define(Vec::new(), [file.as_str()]));
     let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
-    let loader = project.loader(Rc::new(Fake::default()), configured);
+    let loader = project.native(Rc::new(Fake::default()), configured);
     loader.reconcile(&dynamic(&host), &registry);
     let entries = registry.entries();
     assert_eq!(entry(&entries, &global.to_string_lossy()).status, Status::Active);
@@ -1614,6 +1672,7 @@ fn a_cli_json_entry_for_a_global_library_is_another_target() {
 }
 
 /// The digest the loader gives a build of `text` without options.
+#[cfg(feature = "native")]
 fn build_of(text: &str) -> String {
     let mut hasher = DefaultHasher::new();
     hasher.write(text.as_bytes());
@@ -1622,6 +1681,7 @@ fn build_of(text: &str) -> String {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_crashed_build_is_never_opened_until_enabled_or_rebuilt() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -1644,8 +1704,8 @@ fn a_crashed_build_is_never_opened_until_enabled_or_rebuilt() {
             seen.borrow_mut().push(entry.clone());
             Ok(())
         });
-        let loader =
-            Loader::new(fake.clone() as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+        let loader = Loader::new(config.clone(), root.path().to_path_buf(), Vec::new())
+            .with_native(fake.clone() as Rc<dyn Backend>);
         (host, fake, registry, loader, forgotten)
     };
     let listed = |registry: &Registry| entry(&registry.entries(), &target).clone();
@@ -1673,6 +1733,7 @@ fn a_crashed_build_is_never_opened_until_enabled_or_rebuilt() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_held_build_is_released_by_its_key_and_only_once_recorded() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -1692,7 +1753,8 @@ fn a_held_build_is_released_by_its_key_and_only_once_recorded() {
     let refused = refuse.clone();
     registry
         .set_crashed(vec![crashed], move |_| if refused.get() { Err("the disk is full".to_owned()) } else { Ok(()) });
-    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    let loader =
+        Loader::new(config.clone(), root.path().to_path_buf(), Vec::new()).with_native(fake.clone() as Rc<dyn Backend>);
     loader.reconcile(&dynamic(&host), &registry);
     let entries = registry.entries();
     let keys: Vec<(&str, &str)> = entries.iter().map(|entry| (entry.key.as_str(), entry.id.as_str())).collect();
@@ -1713,6 +1775,7 @@ fn a_held_build_is_released_by_its_key_and_only_once_recorded() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn safe_mode_opens_no_external_library() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -1725,7 +1788,8 @@ fn safe_mode_opens_no_external_library() {
     let registry = Registry::define(vec![builtin], []);
     registry.activate(&dynamic(&host));
     registry.set_safe();
-    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config.clone(), root.path().to_path_buf(), Vec::new());
+    let loader =
+        Loader::new(config.clone(), root.path().to_path_buf(), Vec::new()).with_native(fake.clone() as Rc<dyn Backend>);
     loader.reconcile(&dynamic(&host), &registry);
     let status = |name: &str| entry(&registry.entries(), &target(name)).status.clone();
     assert_eq!((status("one"), status("two"), fake.loads.get()), (Status::Inactive, Status::Inactive, 0));
@@ -1743,6 +1807,7 @@ fn safe_mode_opens_no_external_library() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn an_unsupervised_client_opens_no_external_library() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -1751,7 +1816,8 @@ fn an_unsupervised_client_opens_no_external_library() {
     let (host, fake) = (host(), Rc::new(Fake::default()));
     let registry = Registry::define(Vec::new(), []);
     registry.set_unsupervised("restart opencode-native to run it");
-    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::new());
+    let loader =
+        Loader::new(config, root.path().to_path_buf(), Vec::new()).with_native(fake.clone() as Rc<dyn Backend>);
     loader.reconcile(&dynamic(&host), &registry);
     let listed = entry(&registry.entries(), &target).clone();
     assert_eq!(
@@ -1765,6 +1831,7 @@ fn an_unsupervised_client_opens_no_external_library() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_native_build_among_the_targets_wants_a_parent() {
     let root = opencode_util::temp::tempdir().unwrap();
     let (config, cwd) = (root.path().join("config"), root.path().join("work"));
@@ -1780,11 +1847,12 @@ fn a_native_build_among_the_targets_wants_a_parent() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_crashed_project_build_is_held_in_one_row() {
     let project = Project::new();
     let target = project.plugin("proj", "id=proj");
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     let shown = loader.held(&target).and_then(Result::ok).expect("a build is held back");
     assert!(answer(&loader, &target, approval::Decision::Approved));
@@ -1800,7 +1868,7 @@ fn a_crashed_project_build_is_held_in_one_row() {
     };
     let (registry, fake) = (Registry::define(Vec::new(), []), Rc::new(Fake::default()));
     registry.set_crashed(vec![crashed], |_| Ok(()));
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     let rows = |registry: &Registry| -> Vec<Status> {
         let entries = registry.entries();
         entries
@@ -1817,7 +1885,7 @@ fn a_crashed_project_build_is_held_in_one_row() {
 
     let (registry, fake) = (Registry::define(Vec::new(), []), Rc::new(Fake::default()));
     registry.set_safe();
-    let loader = project.loader(fake.clone(), Vec::new());
+    let loader = project.native(fake.clone(), Vec::new());
     loader.reconcile(&dynamic(&host), &registry);
     assert_eq!(rows(&registry), [Status::Pending]);
     assert!(answer(&loader, &target, approval::Decision::Approved));
@@ -1886,7 +1954,7 @@ fn a_typescript_plugins_subdirectories_are_watched() {
     write(&dir.join("node_modules/dep/index.js"), "\n");
     let host = host();
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
-    let loader = project.loader(Rc::new(Fake::default()), Vec::new()).with_scripts(scripts);
+    let loader = project.loader(Vec::new()).with_scripts(scripts);
     let watched = loader.watch_dirs();
     assert!(watched.contains(&dir.join("src")) && watched.contains(&dir.join("src/deep")), "{watched:?}");
     assert!(!watched.iter().any(|watched| watched.starts_with(dir.join("node_modules"))), "{watched:?}");
@@ -1901,7 +1969,7 @@ fn a_project_typescript_plugin_named_through_a_link_is_listed_once() {
     let link = project.root.path().join("link");
     std::os::unix::fs::symlink(&dir, &link).unwrap();
     let configured = vec![Configured { target: link.to_string_lossy().into_owned(), options: None }];
-    let targets = project.loader(Rc::new(Fake::default()), configured).targets();
+    let targets = project.loader(configured).targets();
     let named: Vec<(&str, bool)> = targets.iter().map(|target| (target.target.as_str(), target.project)).collect();
     assert_eq!(named, [(link.to_str().unwrap(), false)]);
 }
@@ -1925,7 +1993,7 @@ fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
     let first = install("tui-pkg@1.0.0", "10", "tui-pkg");
     let part = install("@s/part@latest", "3", "@s/part");
     let configured = vec![Configured { target: "tui-pkg@1.0.0".into(), options: None }];
-    let off = project.loader(Rc::new(Fake::default()), configured.clone()).with_npm(cache.clone());
+    let off = project.loader(configured.clone()).with_npm(cache.clone());
     let parts = || {
         vec![
             ServerPart::Package { spec: "@s/part".into(), id: None },
@@ -1936,7 +2004,7 @@ fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
     assert_eq!(off.targets().into_iter().map(|target| target.local).collect::<Vec<_>>(), [None]);
     let host = host();
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
-    let loader = project.loader(Rc::new(Fake::default()), configured).with_npm(cache.clone()).with_scripts(scripts);
+    let loader = project.loader(configured).with_npm(cache.clone()).with_scripts(scripts);
     loader.set_server(parts(), vec!["@s/part".into()]);
     let resolved = |loader: &Loader| {
         loader.targets().into_iter().map(|target| (target.target, target.local, target.project)).collect::<Vec<_>>()
@@ -1968,7 +2036,7 @@ fn a_server_part_inside_the_project_is_the_projects() {
     write(&cached.join("tui.ts"), "export default {}\n");
     let host = host();
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
-    let loader = project.loader(Rc::new(Fake::default()), Vec::new()).with_npm(cache).with_scripts(scripts);
+    let loader = project.loader(Vec::new()).with_npm(cache).with_scripts(scripts);
     let parts = [&link, &other].map(|path| path.to_string_lossy().into_owned());
     let server = [&parts[0], &parts[1]].map(|path| ServerPart::Local { path: path.clone(), id: None });
     loader.set_server(
@@ -1984,6 +2052,7 @@ fn a_server_part_inside_the_project_is_the_projects() {
 #[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
+#[cfg(feature = "native")]
 fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
     let project = Project::new();
     let sibling = project.root.path().join("sibling-plugin");
@@ -1993,7 +2062,7 @@ fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
     std::os::unix::fs::symlink(&sibling, &link).unwrap();
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
-    let loader = project.loader(fake.clone(), Vec::new()).with_scripts(scripts);
+    let loader = project.native(fake.clone(), Vec::new()).with_scripts(scripts);
     let target = link.to_string_lossy().into_owned();
     let state = || (entry(&registry.entries(), &target).status.clone(), fake.loads.get());
     loader.reconcile(&dynamic(&host), &registry);
@@ -2008,13 +2077,14 @@ fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
 
 #[cfg(feature = "ts")]
 #[test]
+#[cfg(feature = "native")]
 fn a_server_reported_native_build_never_loads() {
     let project = Project::new();
     let elsewhere = project.root.path().join("elsewhere").join("native");
     write(&elsewhere.join(entry_file()), "id=native");
     let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
-    let loader = project.loader(fake.clone(), Vec::new()).with_scripts(scripts);
+    let loader = project.native(fake.clone(), Vec::new()).with_scripts(scripts);
     let path = elsewhere.to_string_lossy().into_owned();
     let library = elsewhere.join(entry_file()).to_string_lossy().into_owned();
     let parts =
@@ -2045,7 +2115,7 @@ fn only_the_users_own_configuration_vouches_for_a_server_part() {
     let host = host();
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
     let configured = vec![Configured { target: "cli-pkg@2.0.0".into(), options: None }];
-    let loader = project.loader(Rc::new(Fake::default()), configured).with_npm(cache).with_scripts(scripts);
+    let loader = project.loader(configured).with_npm(cache).with_scripts(scripts);
     let package = |spec: &str| ServerPart::Package { spec: spec.into(), id: None };
     let local = |path: &Path| ServerPart::Local { path: path.to_string_lossy().into_owned(), id: None };
     let parts = vec![
@@ -2089,7 +2159,7 @@ fn server_loader(project: &Project, configured: Vec<Configured>, specs: &[&str])
         );
     }
     let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host()));
-    project.loader(Rc::new(Fake::default()), configured).with_npm(cache).with_scripts(scripts)
+    project.loader(configured).with_npm(cache).with_scripts(scripts)
 }
 
 /// Whether each target needs approval, by target.
@@ -2254,7 +2324,7 @@ fn a_typescript_plugin_without_bun_says_bun_is_missing() {
     let scripts = crate::pipe::Scripts::new(config, &dynamic(&host));
     for (scripts, reason) in [(Some(scripts), crate::SKIPPED_NO_BUN), (None, crate::SKIPPED_JS_OFF)] {
         let registry = Registry::define(Vec::new(), []);
-        let loader = project.loader(Rc::new(Fake::default()), Vec::new());
+        let loader = project.loader(Vec::new());
         let loader = match scripts {
             Some(scripts) => loader.with_scripts(scripts),
             None => loader,
@@ -2271,13 +2341,12 @@ fn a_build_without_ts_says_it_has_no_typescript_plugin_support() {
     write(&project.global().join("tui.ts"), "export default {}\n");
     let native = project.plugin("native", "id=native");
     let configured = vec![Configured { target: "tui-pkg@1.0.0".into(), options: None }];
-    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let loader = project.loader(fake.clone(), configured);
-    loader.reconcile(&dynamic(&host), &registry);
+    let (host, registry) = (host(), Registry::define(Vec::new(), []));
+    project.built(configured).reconcile(&dynamic(&host), &registry);
     let skipped = Status::Skipped(crate::SKIPPED_NO_TS.to_owned());
     assert_eq!(entry(&registry.entries(), &project.global().to_string_lossy()).status, skipped);
     assert_eq!(entry(&registry.entries(), "tui-pkg@1.0.0").status, skipped);
-    assert_eq!(entry(&registry.entries(), &native).status, Status::Pending);
+    assert_eq!(entry(&registry.entries(), &native).status, native_project_status());
 }
 
 #[cfg(not(luau))]
@@ -2287,10 +2356,40 @@ fn a_build_without_luau_says_it_has_no_luau_plugin_support() {
     write(&project.global().join("plugin.toml"), "id = \"hello\"\n");
     let native = project.plugin("native", "id=native");
     let (host, registry) = (host(), Registry::define(Vec::new(), []));
-    project.loader(Rc::new(Fake::default()), Vec::new()).reconcile(&dynamic(&host), &registry);
+    project.built(Vec::new()).reconcile(&dynamic(&host), &registry);
     let skipped = Status::Skipped(crate::SKIPPED_NO_LUAU.to_owned());
     assert_eq!(entry(&registry.entries(), &project.global().to_string_lossy()).status, skipped);
-    assert_eq!(entry(&registry.entries(), &native).status, Status::Pending);
+    assert_eq!(entry(&registry.entries(), &native).status, native_project_status());
+}
+
+/// What a project's native build is listed as before anything opens it: held for approval, or skipped in a build without
+/// native plugins, which never asks about one.
+#[cfg(any(not(feature = "ts"), not(luau)))]
+fn native_project_status() -> Status {
+    match cfg!(feature = "native") {
+        true => Status::Pending,
+        false => Status::Skipped(crate::SKIPPED_NO_NATIVE.to_owned()),
+    }
+}
+
+#[cfg(not(feature = "native"))]
+#[test]
+fn a_build_without_native_skips_every_library_and_opens_none() {
+    let project = Project::new();
+    let native = project.plugin("native", "id=native");
+    write(&project.global().join(entry_file()), "id=global");
+    let global = project.global().to_string_lossy().into_owned();
+    let configured = vec![Configured { target: "./elsewhere/plugin.so".into(), options: None }];
+    let (host, registry) = (host(), Registry::define(Vec::new(), []));
+    let loader = project.loader(configured);
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    let skipped = Status::Skipped(crate::SKIPPED_NO_NATIVE.to_owned());
+    assert_eq!(entry(&registry.entries(), &native).status, skipped, "a project's build is not asked about");
+    assert_eq!(entry(&registry.entries(), &global).status, skipped);
+    assert!(asked(&host).is_empty() && loader.held(&native).is_none());
+    assert!(matches!(loader.found(&native), Some(Found::Build(Err(error))) if error.contains("native feature")));
+    assert!(!has_native_build(&project.config(), &project.repo(), &[]), "no crash guard for a library");
+    assert!(!loader.reconcile(&dynamic(&host), &registry), "a second reconcile changes nothing");
 }
 
 /// `text` as the transcript draws Markdown: in the host's theme, with the registry's fence renderers.
@@ -2306,6 +2405,7 @@ pub(crate) fn fence_view(host: &dyn Host, registry: &crate::Registry, text: &str
 
 /// Native example `example`, whose library is `lib`, built with `features` into the target directory every native
 /// example shares.
+#[cfg(feature = "native")]
 pub(crate) fn build_example(example: &str, lib: &str, features: &str) -> Vec<u8> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let target = root.join("../../target/sample-plugin");
@@ -2327,6 +2427,7 @@ pub(crate) fn build_example(example: &str, lib: &str, features: &str) -> Vec<u8>
 /// warnings that need the optimizer, such as `-Wformat-truncation`), and every warning an error; `None` without a C
 /// compiler, unless `OPENCODE_RS_REQUIRE_CC` asks for one.
 #[cfg(unix)]
+#[cfg(feature = "native")]
 pub(crate) fn cc(source: &str, flags: &[&str]) -> Option<Vec<u8>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let dir = opencode_util::temp::tempdir().unwrap();

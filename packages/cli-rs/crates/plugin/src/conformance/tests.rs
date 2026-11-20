@@ -127,7 +127,7 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
                         let stated = features.as_ref().map(|features| {
                             &*Vec::leak(serde_json::to_vec(features).unwrap_or_else(|_| b"[]".to_vec()))
                         });
-                        native::STATED.set(stated);
+                        crate::loader::requests::STATED.set(stated);
                         let loaded = load_plugin(&host, load, options);
                         match loaded {
                             Ok((definition, error)) => {
@@ -212,7 +212,7 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
         },
     );
     NOW.set(Duration::ZERO);
-    native::STATED.set(None);
+    crate::loader::requests::STATED.set(None);
     Rc::try_unwrap(recorder).map(RefCell::into_inner).unwrap_or_default().into_entries()
 }
 
@@ -486,13 +486,13 @@ fn a_library_may_ask_stopped_and_report_on_the_ui_thread() {
 fn fenced_with(load: &Load<'_>, features: &'static [u8]) -> String {
     let host = host();
     let registry = Registry::define(Vec::new(), []);
-    native::STATED.set(Some(features));
+    crate::loader::requests::STATED.set(Some(features));
     let (definition, error) = load_plugin(&host, load, None).unwrap();
     registry.load(&dynamic(&host), definition.external(TARGET, error));
     let view = fence_view(&*host, &registry, "```conf-fence\nhello\n```\n");
     host.app().root().add(&view);
     host.app.render();
-    native::STATED.set(None);
+    crate::loader::requests::STATED.set(None);
     host.app.text()
 }
 

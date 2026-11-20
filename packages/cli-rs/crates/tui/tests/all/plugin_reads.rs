@@ -222,11 +222,9 @@ fn home_on(
     // (memory reclaim, swap), which is no wait on a run queue, would fail the reader. A call here takes no time.
     let now = std::time::Instant::now();
     h.tui.plugins.monitor().set_clock(move || now);
-    let create = abi::export_plugin!(@loopback "p0b", reader);
+    let create = crate::support::loopback_entries!("p0b", reader);
     let definition = match loopback {
-        true => {
-            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), create).unwrap().0
-        }
+        true => crate::support::loopback(&opencode_tui::plugins::host::host(&h.tui), create).unwrap().0,
         false => abi::Plugin { id: "p0b", setup: reader }.into(),
     };
     opencode_tui::plugins::host::add(&h.tui, definition);
@@ -235,7 +233,7 @@ fn home_on(
 
 #[test]
 fn a_claim_reads_its_width_the_theme_and_the_keymap() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 100, json!({}));
         let screen = h.wait_for("p0b w100 opencode [] ctrl+p true  0 d: x:-");
         let row = screen.lines().position(|line| line.contains("p0b w100")).unwrap();
@@ -253,7 +251,7 @@ fn a_claim_reads_its_width_the_theme_and_the_keymap() {
 // Control characters can terminate OSC 8 hyperlinks and must not reach the terminal.
 #[test]
 fn a_link_with_a_control_character_is_dropped() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 140, json!({}));
         let screen = h.wait_for("p0b w140 ");
         let row = screen.lines().position(|line| line.contains("p0b w140")).unwrap();
@@ -274,7 +272,7 @@ fn a_link_with_a_control_character_is_dropped() {
 
 #[test]
 fn a_claim_follows_the_pending_keys() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 120, json!({}));
         h.wait_for("p0b w120 ");
         h.wait_for(" c1 ds1 ");
@@ -287,7 +285,7 @@ fn a_claim_follows_the_pending_keys() {
 
 #[test]
 fn tabs_open_move_and_close_as_ts_does() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 120, json!({ "tabs": { "enabled": true } }));
         h.wait_for("p0b w120 ");
         h.tui.keymap.dispatch("p0b.close", None);
@@ -330,7 +328,7 @@ fn verbs_in_one_call_see_the_earlier_ones() {
             MemoryRoute::json("GET", "/api/provider", 200, &list(json!([]))),
         ]
     };
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home_on(loopback, 160, json!({ "tabs": { "enabled": true } }), catalog());
         h.wait_for("p0b w160 ");
         let selected = || h.tui.local.selection().map(|selection| (selection.model.model_id, selection.variant));
@@ -358,7 +356,7 @@ fn verbs_in_one_call_see_the_earlier_ones() {
 
 #[test]
 fn close_takes_the_tab_id_and_move_a_child() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 120, json!({ "tabs": { "enabled": true } }));
         h.wait_for("p0b w120 ");
         h.tui.navigate(Route::Session { id: SessionID("ses_c".to_owned()) });
@@ -371,7 +369,7 @@ fn close_takes_the_tab_id_and_move_a_child() {
 
 #[test]
 fn a_plugin_selects_a_theme_it_knows() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 120, json!({}));
         h.wait_for("p0b w120 opencode");
         h.tui.keymap.dispatch("p0b.theme", Some("nord"));
@@ -385,7 +383,7 @@ fn a_plugin_selects_a_theme_it_knows() {
 
 #[test]
 fn a_plugin_installs_a_theme() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, root) = home(loopback, 140, json!({}));
         h.wait_for("p0b w140 opencode");
         h.tui.keymap.dispatch("p0b.install", Some("../p0b-theme"));
@@ -405,7 +403,7 @@ fn a_plugin_installs_a_theme() {
 
 #[test]
 fn installs_land_in_order_and_select_at_once() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 140, json!({}));
         h.wait_for("p0b w140 opencode");
         h.tui.keymap.dispatch("p0b.script", Some("install p0b-new;theme p0b-new;installbad p0b-bad;theme p0b-bad"));
@@ -445,7 +443,7 @@ fn installs_land_in_order_and_select_at_once() {
 
 #[test]
 fn a_claim_hears_of_tabs_keymap_and_theme_changes() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, root) = home(loopback, 160, json!({ "tabs": { "enabled": true } }));
         h.wait_for("p0b w160 ");
         h.tui.keymap.dispatch("p0b.script", Some("open ses_a;open ses_b"));
@@ -484,7 +482,7 @@ fn a_claim_hears_of_tabs_keymap_and_theme_changes() {
 
 #[test]
 fn a_call_reads_one_snapshot() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 160, json!({ "tabs": { "enabled": true } }));
         h.wait_for("p0b w160 ");
         // The call below waits 200 ms on purpose; the harness charges a call no time.
@@ -539,7 +537,7 @@ fn tabs_read_their_metadata() {
             MemoryRoute::json("GET", "/api/session/ses_b", 200, &json!({ "data": failed })),
         ]
     };
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, memory, _root) = home_on(loopback, 160, json!({ "tabs": { "enabled": true } }), routes());
         h.wait_for("p0b w160 ");
         h.tui.keymap.dispatch("p0b.script", Some("open ses_a;open ses_b"));
@@ -576,7 +574,7 @@ fn tabs_read_their_metadata() {
 
 #[test]
 fn keymap_reads_have_every_field() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 160, json!({}));
         h.wait_for("p0b w160 ");
         h.app.press("ctrl+x");
@@ -645,7 +643,7 @@ fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
 
 #[test]
 fn deltas_reach_the_plugin() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, memory, _root) = home(loopback, 120, json!({}));
         h.wait_for("p0b w120 ");
         for (ordinal, delta) in ["he", "ll", "o"].iter().enumerate() {
@@ -664,7 +662,7 @@ fn deltas_reach_the_plugin() {
 
 #[test]
 fn deltas_reach_the_plugin_once_a_frame() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 120, json!({}));
         h.wait_for("p0b w120 ");
         let delta = |ordinal: usize, delta: &str| -> opencode_api::generated::V2Event {
@@ -686,7 +684,7 @@ fn deltas_reach_the_plugin_once_a_frame() {
 
 #[test]
 fn a_plugin_reads_and_clears_the_selection() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 120, json!({}));
         let screen = h.wait_for("p0b w120 ");
         let row = screen.lines().position(|line| line.contains("p0b w120")).unwrap() as u16;
@@ -701,7 +699,7 @@ fn a_plugin_reads_and_clears_the_selection() {
 
 #[test]
 fn an_xlarge_panel_opens_xlarge() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 140, json!({}));
         h.wait_for("p0b w140 ");
         h.tui.keymap.dispatch("p0b.wide", None);
@@ -713,7 +711,7 @@ fn an_xlarge_panel_opens_xlarge() {
 #[cfg(unix)]
 #[test]
 fn a_program_runs_in_the_foreground_and_its_exit_code_comes_back() {
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         let (h, _memory, _root) = home(loopback, 120, json!({}));
         h.wait_for("p0b w120 ");
         h.tui.keymap.dispatch("p0b.run", Some("exit 3"));
