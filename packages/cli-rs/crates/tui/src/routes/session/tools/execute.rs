@@ -3,7 +3,8 @@
 use opencode_api::generated::SessionMessageAssistantTool;
 use opencode_ui::tool_info::{ExecuteCall, ExecuteStatus, execute_call_summary, execute_calls};
 
-use super::dispatch::{ICON_WIDTH, Inline, InlineTool, Props, Status, content_width};
+use super::dispatch::{BlockTool, ICON_WIDTH, Inline, InlineTool, Props, Status, content_width};
+use super::patch::{self, File};
 use crate::dialogs::execute::{self, Live};
 use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
@@ -21,6 +22,11 @@ struct Inner {
     rows: RefCell<Vec<Call>>,
     output: View,
     shown_output: RefCell<Option<String>>,
+    /// The files the script changed, one block per change, in order.
+    files: View,
+    file_blocks: RefCell<Vec<BlockTool>>,
+    shown_files: RefCell<Option<ShownFiles>>,
+    paints: Paints,
     /// The call as the row last saw it, which the dialog opens with.
     part: RefCell<Option<SessionMessageAssistantTool>>,
     /// The open dialog, which follows the call while it runs.
@@ -32,7 +38,9 @@ impl Execute {
         let inline = InlineTool::new(cx);
         let calls = View::new(cx.app).column();
         let output = View::new(cx.app).column().padding_edge(Edge::Left, 3).visible(false);
-        let root = View::new(cx.app).column().shrink(0.0).child(inline.root()).child(&calls).child(&output);
+        let files = View::new(cx.app).column().gap(1).margin_edge(Edge::Top, 1).visible(false);
+        let root =
+            View::new(cx.app).column().shrink(0.0).child(inline.root()).child(&calls).child(&output).child(&files);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
             theme: cx.tui.live_theme(),
@@ -42,6 +50,10 @@ impl Execute {
             rows: RefCell::default(),
             output,
             shown_output: RefCell::default(),
+            files,
+            file_blocks: RefCell::default(),
+            shown_files: RefCell::default(),
+            paints: Paints::default(),
             part: RefCell::default(),
             dialog: RefCell::default(),
         });
@@ -63,9 +75,13 @@ impl Execute {
         &self.0.root
     }
 
-    pub fn restyle(&self, _cx: &Context<'_>) {
+    pub fn restyle(&self, cx: &Context<'_>) {
         let inner = &self.0;
         inner.inline.restyle();
+        for block in inner.file_blocks.borrow().iter() {
+            block.restyle();
+        }
+        inner.paints.restyle(cx.theme);
         for row in inner.rows.borrow().iter() {
             row.0.paint_border();
             row.0.paint();
@@ -142,11 +158,36 @@ impl Execute {
             *inner.shown_output.borrow_mut() = preview;
         }
 
+        // One block per change a script made, in order, also while it runs. A change past the size cap or to a binary
+        // file has no patch. Its error and permission request stay on its own row, so its changes take no part.
+        let files = patch::parse_script_changes(props.metadata.get("files"));
+        let (view, wrap) = patch::diff_layout(cx, content_width(cx));
+        let shown = ShownFiles { files, view, wrap, width: content_width(cx) };
+        if inner.shown_files.borrow().as_ref() != Some(&shown) {
+            inner.files.clear();
+            inner.paints.clear();
+            let blocks = patch::file_blocks(cx, &shown.files, view, wrap, false, shown.width, &inner.paints);
+            for block in &blocks {
+                inner.files.add(block.root());
+            }
+            inner.files.visible(!blocks.is_empty());
+            *inner.file_blocks.borrow_mut() = blocks;
+            *inner.shown_files.borrow_mut() = Some(shown);
+        }
+
         *inner.part.borrow_mut() = Some(props.part.clone());
         if let Some(dialog) = inner.dialog.borrow().upgrade() {
             dialog.set(props.part.clone());
         }
     }
+}
+
+#[derive(PartialEq)]
+struct ShownFiles {
+    files: Vec<File>,
+    view: opentui::widget::DiffView,
+    wrap: WrapMode,
+    width: i64,
 }
 
 struct Call(Rc<CallInner>);
