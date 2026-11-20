@@ -279,7 +279,7 @@ pub fn schema() -> Value {
             "Absolute",
             object!(Absolute, "Where an absolute node sits: cells from its parent's edges, and its paint order.", { } {
                 top: nullable(int16()), right: nullable(int16()), bottom: nullable(int16()), left: nullable(int16()),
-                z: json!({ "type": "integer" }),
+                z: int32(),
             }),
         ),
         (
