@@ -964,6 +964,14 @@ impl Model for PromptModel {
     }
 }
 
+/// A paste over a selection marks its own label, so the prompt sends the pasted text.
+#[test]
+fn a_paste_over_a_selection_sends_the_pasted_text() {
+    let paste = Edit::Paste("l1\nl2\nl3".to_owned());
+    let edits = [Edit::Type("a"), Edit::Key("up"), Edit::Key("shift+right"), paste, Edit::Submit];
+    assert_eq!(PromptModel.run(&edits), None);
+}
+
 /// Random typing, cursor moves, selections, pastes, history steps, shell mode, the stash and submits leave the prompt's
 /// text, cursor and mode, and what it sent, as a reference prompt has them.
 #[test]
