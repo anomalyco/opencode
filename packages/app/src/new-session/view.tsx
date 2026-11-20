@@ -38,7 +38,8 @@ import {
   type CheckoutLabelEvent,
 } from "./workspace/checkout-machine"
 import { BaseBranchPicker } from "./workspace/selector"
-import type { useNewSessionExtensionsDialog } from "./extensions-dialog"
+import type { NewSessionExtensionList } from "./extensions/controller"
+import type { useNewSessionExtensionsDialog } from "./extensions/dialog"
 import { NewSessionBrickBreaker } from "./brick-breaker"
 import { NewSessionPinBoard } from "./pin-board"
 import { NewSessionWordmark } from "./wordmark"
@@ -59,6 +60,8 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
   location: ReturnType<typeof useNewSessionLocationDialog>
+  mcps: NewSessionExtensionList
+  skills: NewSessionExtensionList
   extensions: ReturnType<typeof useNewSessionExtensionsDialog>
 }) {
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
@@ -125,7 +128,10 @@ export function NewSessionView(props: {
                       onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
                       onProjects={() => location()}
                       onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
-                      extensions={props.extensions}
+                      mcps={props.mcps}
+                      skills={props.skills}
+                      onMcps={() => props.extensions("mcp")}
+                      onSkills={() => props.extensions("skill")}
                     />
                   )}
                 </Show>
@@ -204,7 +210,10 @@ function NewSessionLocation(props: {
   onboarding: boolean
   onProjects: () => void
   onWorktree?: () => void
-  extensions: ReturnType<typeof useNewSessionExtensionsDialog>
+  mcps: NewSessionExtensionList
+  skills: NewSessionExtensionList
+  onMcps: () => void
+  onSkills: () => void
 }) {
   const language = useLanguage()
   const command = useCommand()
@@ -385,12 +394,10 @@ function NewSessionLocation(props: {
             aria-haspopup="dialog"
             aria-description={language.t("dialog.mcp.title")}
             class={`${TRIGGER} min-w-0`}
-            onClick={() => props.extensions.open("mcp")}
+            onClick={props.onMcps}
           >
             <Icon name="mcp" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
-            <span class="min-w-0 truncate">
-              {language.plural("session.new.extensions.mcps", props.extensions.counts().mcps)}
-            </span>
+            <span class="min-w-0 truncate">{language.plural("session.new.extensions.mcps", props.mcps.count())}</span>
           </button>
           <button
             type="button"
@@ -398,11 +405,11 @@ function NewSessionLocation(props: {
             aria-haspopup="dialog"
             aria-description={language.t("settings.extensions.tab.skills")}
             class={`${TRIGGER} min-w-0`}
-            onClick={() => props.extensions.open("skill")}
+            onClick={props.onSkills}
           >
             <Icon name="post-skill" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
             <span class="min-w-0 truncate">
-              {language.plural("session.new.extensions.skills", props.extensions.counts().skills)}
+              {language.plural("session.new.extensions.skills", props.skills.count())}
             </span>
           </button>
         </div>
