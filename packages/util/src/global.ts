@@ -74,9 +74,19 @@ const acquire = (input: Partial<Interface>) =>
     return Service.of({ ...service, tmp: input.tmp ?? canonicalTmp })
   })
 
+export function configDirOverrideWarning(override: string | undefined, base: string): string | undefined {
+  if (!override || override === base) return undefined
+  return `OPENCODE_CONFIG_DIR=${override} replaces the global config directory ${base}; providers, permissions, instructions, and commands from ${base} will not apply. Use OPENCODE_CONFIG for an additive overlay, or unset OPENCODE_CONFIG_DIR to use ${base} instead.`
+}
+
 const layer = Layer.effect(
   Service,
-  Effect.suspend(() => acquire({ config: process.env.OPENCODE_CONFIG_DIR ?? Path.config })),
+  Effect.gen(function* () {
+    const override = process.env.OPENCODE_CONFIG_DIR
+    const warning = configDirOverrideWarning(override, Path.config)
+    if (warning) yield* Effect.logWarning(warning)
+    return yield* acquire({ config: override ?? Path.config })
+  }),
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })
