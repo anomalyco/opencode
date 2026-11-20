@@ -5,7 +5,6 @@ export default {
   "usage.usage": "გამოყენება",
   "usage.cost": "ღირებულება",
   "usage.view": "კონტექსტის გამოყენების ნახვა",
-  "systemPrompt.title": "სისტემის მოთხოვნა",
   "rawMessages.title": "დაუმუშავებელი შეტყობინებები",
   "export.session": "ექსპორტის სესია",
   "stats.session": "სესია",

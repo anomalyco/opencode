@@ -189,7 +189,7 @@ export function McpDialog(props: {
                   ref={backRef}
                   type="button"
                   autofocus
-                  class="flex size-5 shrink-0 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+                  class="flex size-5 shrink-0 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
                   onClick={back}
                   aria-label={language.t("common.goBack")}
                 >

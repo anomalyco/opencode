@@ -57,6 +57,17 @@
   outline: none;
 }
 
+@media (forced-colors: active) {
+  .search-list-row:is([data-active], :focus-visible) {
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .search-list-row:is([data-active], :focus-visible) * {
+    color: inherit;
+  }
+}
+
 .search-list-row-text {
   display: flex;
   min-width: 0;
@@ -329,9 +340,15 @@
   [data-component="text-input-v2"],
   [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
     border-radius: 0;
-    outline: 0;
     background: transparent;
     box-shadow: none;
+  }
+
+  @media (forced-colors: none) {
+    [data-component="text-input-v2"],
+    [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
+      outline: 0;
+    }
   }
 
   [data-slot="text-input-v2-value"] {

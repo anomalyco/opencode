@@ -207,9 +207,17 @@
       text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
       text-underline-offset: 2px;
       cursor: pointer;
+      /* Focus scrolls a link in a folded message clear of the 40px fade. */
+      scroll-margin-block-end: 40px;
 
       &:hover {
         text-decoration-color: currentColor;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--v2-border-border-focus);
+        outline-offset: 2px;
+        border-radius: 2px;
       }
     }
 
@@ -217,9 +225,12 @@
   }
 
   /* A folded message is laid out whole and clipped, so copy, select-all and assistive tech still get all of it. Its
-     last lines fade out (a mask, not a crop) into the toggle. Opening and closing are instant. */
+     last lines fade out (a mask, not a crop) into the toggle. Opening and closing are instant. The inline padding,
+     taken back by the margin, is room for a link's focus ring at the start and end of a line. */
   [data-slot="user-message-fold"] {
     overflow: hidden;
+    padding-inline: 5px;
+    margin-inline: -5px;
 
     /* unicode-bidi isn't inherited, and each paragraph of mixed LTR and RTL text takes its own direction. */
     > div {
@@ -262,7 +273,7 @@
     }
 
     &:focus-visible {
-      outline: 1px solid var(--v2-text-text-accent);
+      outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
       border-radius: 4px;
     }
@@ -1013,8 +1024,9 @@
     }
 
     &:focus-visible {
-      outline: 1px solid var(--v2-text-text-accent);
+      outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
+      border-radius: 4px;
     }
   }
 
@@ -1113,6 +1125,8 @@
   gap: 16px;
   width: 100%;
   min-width: 0;
+  /* Code and output share the dialog's height and scroll in their own boxes, so the bottom padding always shows. */
+  min-height: 0;
   padding: 0 16px 16px;
 
   [data-slot="execute-details-section"] {
@@ -1120,6 +1134,7 @@
     flex-direction: column;
     gap: 6px;
     min-width: 0;
+    min-height: 0;
   }
 
   [data-slot="execute-details-section-header"] {
@@ -1226,8 +1241,9 @@
   }
 
   &:focus-visible {
-    outline: 1px solid var(--v2-text-text-accent);
+    outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 

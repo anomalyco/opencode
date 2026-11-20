@@ -1,6 +1,7 @@
 export * as Job from "./job.js"
 
 import { Schema } from "effect"
+import { ephemeral, inventory } from "./event.js"
 import { optional } from "./schema.js"
 import { SessionID } from "./session-id.js"
 
@@ -72,3 +73,7 @@ export const Info = Schema.Union([Shell, Subagent, Image, Video, CodeMode]).pipe
   Schema.annotate({ identifier: "Job.Info" }),
 )
 export type Info = typeof Info.Type
+
+/** A background job started, moved to the background, or ended. Experimental: may change without compatibility guarantees. */
+const Updated = ephemeral({ type: "experimental.job.updated", schema: { info: Info } })
+export const Event = { Updated, Definitions: inventory(Updated) }

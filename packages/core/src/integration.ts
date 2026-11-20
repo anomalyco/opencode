@@ -79,6 +79,8 @@ export interface OAuthImplementation {
   readonly method: OAuthMethod
   readonly authorize: (answer: Form.Answer) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  /** Signs the credential out remotely before it is removed; a failure is logged and removal continues. */
+  readonly revoke?: (credential: Credential.OAuth) => Effect.Effect<void, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 
@@ -755,7 +757,24 @@ const layer = Layer.effect(
         update: Effect.fn("Integration.connection.update")((credentialID, updates) =>
           credentials.update(credentialID, updates),
         ),
-        remove: Effect.fn("Integration.connection.remove")((credentialID) => credentials.remove(credentialID)),
+        remove: Effect.fn("Integration.connection.remove")(function* (credentialID) {
+          const credential = yield* credentials.get(credentialID)
+          const value = credential?.value
+          const revoke =
+            credential && value?.type === "oauth"
+              ? state.get().integrations.get(credential.integrationID)?.implementations.get(value.methodID)?.revoke
+              : undefined
+          if (credential && value?.type === "oauth" && revoke)
+            yield* revoke(value).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("remote sign-out was not confirmed; removing the local credential", {
+                  integrationID: credential.integrationID,
+                  cause,
+                }),
+              ),
+            )
+          yield* credentials.remove(credentialID)
+        }),
         status: Effect.fn("Integration.connection.status")(function* (input) {
           const key = statusKey(input.integrationID, input.connection)
           if (Equal.equals(statuses.get(key), input.status)) return

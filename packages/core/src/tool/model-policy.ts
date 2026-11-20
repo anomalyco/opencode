@@ -1,6 +1,5 @@
 import type { Model } from "@opencode/schema/model"
 
-const codeModeBuiltIns = ["read", "write", "edit", "patch", "shell", "websearch"] as const
 const fullCodeModeHidden = ["glob", "grep", "webfetch"] as const
 
 export interface ModelTools {
@@ -20,55 +19,20 @@ export function modelTools(input: {
 
   // GPT-5+ edits with patch; every other model edits with edit and write.
   if (input.model) {
-    if (editMode(input.model) === "patch") {
-      hidden.add("edit")
-      hidden.add("write")
-    } else {
-      hidden.add("patch")
-    }
+    for (const name of usesPatch(input.model) ? ["edit", "write"] : ["patch"]) hidden.add(name)
   }
 
-  // With full_codemode, strong models (GPT and Claude) use the built-ins from inside Code Mode;
-  // every other model, or an unresolved one, keeps them as direct tools.
-  const direct = new Set<string>()
-  if (input.fullCodeMode && !strongModel(input.model)) {
-    for (const name of codeModeBuiltIns) {
-      if (!hidden.has(name)) direct.add(name)
-    }
-  }
-  return { hidden, direct }
+  return { hidden, direct: new Set<string>() }
 }
 
-function editMode(model: Model.Info) {
-  return gptMode(model.id.toLowerCase(), model.modelID.toLowerCase())
-}
-
-function strongModel(model: Model.Info | undefined) {
-  if (!model) return false
+function usesPatch(model: Model.Info) {
   const id = model.id.toLowerCase()
   const modelID = model.modelID.toLowerCase()
-  return gptMode(id, modelID) !== undefined || isAnthropic(model, id, modelID)
-}
-
-function gptMode(id: string, modelID: string): "patch" | "edit" | undefined {
-  if (!id.includes("gpt") && !modelID.includes("gpt")) return undefined
-  const usePatch =
+  return (
     (id.includes("gpt-") || modelID.includes("gpt-")) &&
     !id.includes("oss") &&
     !modelID.includes("oss") &&
     !id.includes("gpt-4") &&
     !modelID.includes("gpt-4")
-  return usePatch ? "patch" : "edit"
-}
-
-function isAnthropic(model: Model.Info, id: string, modelID: string) {
-  return (
-    model.providerID === "anthropic" ||
-    model.providerID === "claude-agent" ||
-    model.canonical === "anthropic" ||
-    model.canonical === "claude-agent" ||
-    id.includes("claude") ||
-    modelID.includes("claude") ||
-    Boolean(model.family?.toLowerCase().includes("claude"))
   )
 }

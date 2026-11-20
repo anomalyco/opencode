@@ -46,6 +46,7 @@ describe("settings schema", () => {
         showSearch: true,
         experimentalBrowser: false,
         showProjectIcon: true,
+        focusRing: "muted",
         releaseNotes: false,
         mobileDiffWrap: false,
       },
@@ -57,6 +58,7 @@ describe("settings schema", () => {
     expect(settings.general).not.toHaveProperty("showStatus")
     expect(settings.general).not.toHaveProperty("experimentalBrowser")
     expect(settings.general).not.toHaveProperty("showProjectIcon")
+    expect(settings.general).not.toHaveProperty("focusRing")
     expect(settings.appearance).not.toHaveProperty("showProjectName")
 
     const copied = (value: typeof settings) => ({

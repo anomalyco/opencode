@@ -1031,6 +1031,9 @@ function renderPromiseTypes(
             const schema = schemas[field.source]
             if (schema === undefined)
               throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
+            // A binary body goes to fetch as-is, so a Blob or File streams without being read into memory first.
+            if (field.source === "payload" && isBinaryPayload(endpoint))
+              return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: globalThis.Uint8Array | globalThis.Blob`
             return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${isOpaquePayload(endpoint) && field.source === "payload" ? typeOf(schema) : fieldTypeOf(schema, field.name, field.source === "query")}`
           })
           .join("; ")

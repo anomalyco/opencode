@@ -15,6 +15,7 @@ import {
   currentToolGroupedRead,
   currentToolHasLoadedFiles,
 } from "../message/current-tool-state"
+import { turnCommentary } from "./commentary"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
 import {
@@ -41,7 +42,7 @@ type FailedIdle = SessionMessageIdle & {
 }
 
 type Entry =
-  | { type: "assistant"; message: SessionMessageAssistant }
+  | { type: "assistant"; message: SessionMessageAssistant; run: number }
   | { type: "notice"; message: Notice }
   | { type: "idle"; message: FailedIdle }
   | { type: "diff"; message: SessionMessageIdle; from: string; files: string[] }
@@ -284,6 +285,7 @@ export namespace Timeline {
     const turnByUserID = new Map<string, Turn>()
     const leading: Notice[] = []
     let current: Turn | undefined
+    let openRun = 0
     // Everything since the last idle marker is one turn, including prompts steered in meanwhile.
     let execution: { opener: string; turn: Turn; files: Set<string> } | undefined
 
@@ -320,6 +322,7 @@ export namespace Timeline {
 
       if (message.type === "idle") {
         appendIdle(message)
+        openRun++
 
         // The summary follows the turn's last prompt, after any failure the marker reports.
         // Sorted like the diff route's git order, so the list keeps its order when the diffs arrive.
@@ -340,19 +343,19 @@ export namespace Timeline {
       const existing = current?.user ? current : undefined
 
       if (existing?.user) {
-        existing.entries.push({ type: "assistant", message })
+        existing.entries.push({ type: "assistant", message, run: openRun })
         current = existing
 
         return
       }
 
       if (current && !current.user && !current.shell) {
-        current.entries.push({ type: "assistant", message })
+        current.entries.push({ type: "assistant", message, run: openRun })
 
         return
       }
 
-      const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message }] }
+      const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message, run: openRun }] }
       turns.push(turn)
       current = turn
     })
@@ -400,8 +403,11 @@ export namespace Timeline {
     const commentary = new Set(
       detail && detail.commentary.placement !== "separate"
         ? turns.flatMap((turn) =>
-            turnCommentary(turn.entries, viewTurnPhase(phaseOf(turn)).settled, (content) =>
-              isRenderable(content, showReasoning, detail),
+            turnCommentary(
+              turn.entries.filter((entry) => entry.type === "assistant"),
+              openRun,
+              viewTurnPhase(phaseOf(turn)).settled,
+              (content) => isRenderable(content, showReasoning, detail),
             ),
           )
         : [],
@@ -761,26 +767,6 @@ function shellFailed(message: SessionMessageShell) {
   return (
     message.status === "timeout" || (message.status === "exited" && message.exit !== undefined && message.exit !== 0)
   )
-}
-
-// Text that a tool call follows in the same turn is commentary; text after the last tool call is the answer.
-// OpenAI Responses models label each message with a phase, which wins over position. A settled turn
-// without an answer keeps its last text, so an interrupted turn still ends with something to read.
-function turnCommentary(entries: Entry[], settled: boolean, visible: (content: Content) => boolean) {
-  const contents = entries.flatMap((entry) => (entry.type === "assistant" ? entry.message.content : []))
-  const lastTool = contents.findLastIndex((content) => content.type === "tool")
-
-  const commentary = contents.filter(
-    (content, index) =>
-      content.type === "text" &&
-      (content.native?.phase === "commentary" || (content.native?.phase !== "final_answer" && index < lastTool)),
-  )
-
-  const texts = contents.filter((content) => content.type === "text" && visible(content))
-
-  if (!settled || texts.some((content) => !commentary.includes(content))) return commentary
-
-  return commentary.filter((content) => content !== texts.at(-1))
 }
 
 function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, separate: ReadonlySet<string>) {

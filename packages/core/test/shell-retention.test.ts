@@ -136,7 +136,15 @@ it.live("does not inherit host process.env when creating a shell in a workspace-
           ),
           Global.node.replace(tempGlobalLayer),
           Config.node.replace(Config.testLayer()),
-          Environment.node.replace(hostEnvironmentLayer),
+          Environment.node.replace(
+            Layer.effect(
+              Environment.Service,
+              Effect.gen(function* () {
+                const host = yield* Environment.Service
+                return Environment.Service.of({ ...host, id: Environment.ID.make("wrk_workspace") })
+              }),
+            ).pipe(Layer.provide(hostEnvironmentLayer)),
+          ),
         ]),
       ),
     )

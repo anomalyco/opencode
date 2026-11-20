@@ -2055,7 +2055,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
           <span data-slot="execute-details-meta">{i18n.plural("ui.tool.execute.calls", props.calls)}</span>
         </div>
       </DialogHeader>
-      <DialogBody class="min-h-0 flex-none overflow-y-auto">
+      <DialogBody class="min-h-0">
         <div data-component="execute-details" style={{ "--execute-details-number-width": `${numberDigits()}ch` }}>
           <ExecuteDetailsSection
             label={i18n.t("ui.tool.execute.code")}
@@ -2144,13 +2144,24 @@ function ExecuteDetailsSection(props: {
   )
 }
 
+// Whether the press that ends on `row` selected text in it, which the row keeps rather than toggling. A selection that
+// neither starts nor ends in the row is not that press's: a text field keeps its selection after focus leaves it, and a
+// press on a row the host made non-selectable clears nothing.
+function selectsRowText(row: HTMLElement) {
+  const selection = window.getSelection()
+
+  if (!selection || selection.isCollapsed) return false
+
+  return row.contains(selection.anchorNode) || row.contains(selection.focusNode)
+}
+
 function ExecuteOutputRow(props: { output: string }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
   const text = createMemo(() => formatExecuteOutput(props.output).text)
 
-  const toggle = () => {
-    if (window.getSelection()?.toString()) return
+  const toggle = (event: { currentTarget: HTMLElement }) => {
+    if (selectsRowText(event.currentTarget)) return
     setOpen((value) => !value)
   }
 
@@ -2166,7 +2177,7 @@ function ExecuteOutputRow(props: { output: string }) {
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return
           event.preventDefault()
-          toggle()
+          toggle(event)
         }}
       >
         <span data-slot="execute-tool-call-marker">
@@ -2194,8 +2205,8 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
   const expandable = () => input().length > 0 || !!props.error
   const summary = () => (props.call ? args().join(", ") : props.error?.split("\n", 1)[0])
 
-  const toggle = () => {
-    if (!expandable() || window.getSelection()?.toString()) return
+  const toggle = (event: { currentTarget: HTMLElement }) => {
+    if (!expandable() || selectsRowText(event.currentTarget)) return
     setOpen((value) => !value)
   }
 
@@ -2213,7 +2224,7 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return
           event.preventDefault()
-          toggle()
+          toggle(event)
         }}
       >
         <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
