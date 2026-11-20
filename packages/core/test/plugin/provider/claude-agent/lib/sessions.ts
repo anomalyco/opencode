@@ -70,7 +70,11 @@ export const start = Effect.fn(function* (
   const io = FakeIO.make({ claude })
   const input = {
     io,
-    status: yield* ClaudeStatus.make(io, () => Effect.succeed({})),
+    status: yield* ClaudeStatus.make(
+      io,
+      () => Effect.succeed(ClaudeQueryOptions.connectionEnv({ settings })),
+      () => Effect.succeed(ClaudeQueryOptions.configDirs(settings?.configDir)),
+    ),
     storage: saved,
     directory: "/tmp/opencode",
   }

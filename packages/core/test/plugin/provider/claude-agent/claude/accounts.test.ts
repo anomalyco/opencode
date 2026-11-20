@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
 import os from "node:os"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, SubscriptionRef } from "effect"
 import { ClaudeQueryOptions } from "@opencode/core/plugin/provider/claude-agent/claude/query-options"
 import { RequestKind } from "@opencode/core/plugin/provider/claude-agent/language-model/request-kind"
 import { it } from "../../../../lib/effect"
@@ -90,6 +90,8 @@ describe("Claude accounts", () => {
       expect(TestSessions.text(two)).toBe("COPPER-OTTER")
       expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a, b])
       expect(test.storage.data.get("accounts/session-a")).toBe(b)
+      const status = yield* SubscriptionRef.get(test.input.status.state)
+      expect(status.type === "ready" && status.configDir).toBe(b)
       yield* test.registry.close()
       claude.check()
     }),
