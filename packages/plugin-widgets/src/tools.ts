@@ -29,7 +29,7 @@ export const templateDescription = `List, read and save widget templates for the
 
 - action "list": every template with its description and data schema.
 - action "get": one template including its source; read "suggestions" or "form" before writing your own and copy their patterns.
-- action "save": store a template (name, description, data, source, example). Saving an existing name creates a new version that becomes the latest; built-in names cannot be overwritten. \`example\` is data that is checked against \`data\` and rendered once before the template is stored.
+- action "save": store a template (name, description, data, source, example, and mode "live" for a long-running main). Saving an existing name creates a new version that becomes the latest; built-in names cannot be overwritten. \`example\` is data that is checked against \`data\` and rendered once before the template is stored.
 
 A template's source is confined JavaScript defining init(data), view(state, data) and update(state, event, data) with the prelude's ui.* node builders, submit(value, state), dismiss(state) and send(value, state, { wake }), plus draw(state, data, frame) for a canvas. Nodes include canvas (2D draw commands) and shader (a WGSL fragment shader). Load the "widgets" skill for the full builder reference before writing one.`
 
@@ -58,6 +58,10 @@ export const TemplateInput = Schema.Struct({
     description: 'JSON Schema (type "object") of the data the template takes, for save',
   }),
   source: Schema.String.pipe(optional).annotate({ description: "The template source, for save" }),
+  mode: Widget.Mode.pipe(optional).annotate({
+    description:
+      'For save: "step" (default) for init/view/update templates, "live" for a long-running async main(data) (games, timers, animations)',
+  }),
   example: Schema.Record(Schema.String, Schema.Json)
     .pipe(optional)
     .annotate({ description: "Example data (a JSON object) to test the template with, for save" }),

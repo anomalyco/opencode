@@ -30,6 +30,7 @@
     "@opencode/plugin": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/widget": "workspace:*",
+    "psychoscript": "0.2.1",
     "effect": "catalog:"
   },
   "devDependencies": {

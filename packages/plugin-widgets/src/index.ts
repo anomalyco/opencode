@@ -305,6 +305,7 @@ export default Plugin.define({
                   description: yield* required("description", input.description),
                   data: yield* required("data", input.data),
                   source: yield* required("source", input.source),
+                  ...(input.mode === undefined ? {} : { mode: input.mode }),
                   example: yield* required("example", input.example),
                 })
                 .pipe(Effect.mapError(toolError))

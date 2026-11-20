@@ -131,6 +131,7 @@ describe("widget templates", () => {
           version: second,
           description: "Pick one",
           data: pickerSchema,
+          mode: "step",
           builtin: false,
         })
 
@@ -141,6 +142,53 @@ describe("widget templates", () => {
         expect(
           yield* fake.call("program", { name: "picker", version: "0000000000000000" }).pipe(Effect.flip),
         ).toMatchObject({ type: "not_found" })
+      }),
+    ))
+})
+
+describe("live templates", () => {
+  const liveSource = `async function main(data) {
+  while (true) {
+    const event = await widget.event()
+    if (event.id === "stop") return widget.submit({ stopped: true })
+  }
+  throw new Error("never runs on the server")
+}`
+
+  test("stores the mode as part of the version and only compiles live programs", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const save = (input: Record<string, unknown>) =>
+          execute(fake, "widget_template", {
+            action: "save",
+            name: "ticker",
+            description: "Ticks",
+            data: pickerSchema,
+            source: liveSource,
+            example: { items: ["a"] },
+            mode: "live",
+            ...input,
+          })
+
+        const saved = yield* save({})
+        expect(saved).toMatchObject(Exit.succeed({ metadata: { name: "ticker" } }))
+        const live = yield* fake.call<Widget.Program>("program", { name: "ticker" })
+        expect(live).toMatchObject({ mode: "live", source: liveSource })
+        expect(live.version).not.toBe(version(liveSource, pickerSchema))
+        expect(
+          (yield* fake.call<ReadonlyArray<Widget.Summary>>("templates", {})).find((item) => item.name === "ticker"),
+        ).toMatchObject({ mode: "live" })
+
+        const broken = yield* save({ name: "broken", source: "async function main(data) { let = }" })
+        expect(String(failure(broken))).toContain('Invalid widget template "broken": example:')
+
+        // The widget tool validates the data and posts without running main.
+        expect(yield* execute(fake, "widget", { template: "ticker", data: { items: ["x"] } })).toMatchObject(
+          Exit.succeed({ metadata: { template: { name: "ticker", version: live.version } } }),
+        )
+        expect(failure(yield* execute(fake, "widget", { template: "ticker", data: { items: [] } }))).toBeInstanceOf(
+          Tool.Error,
+        )
       }),
     ))
 })

@@ -26,6 +26,10 @@ export const Ref = Schema.Struct({
 export const DataSchema = Schema.Record(Schema.String, Schema.Json).annotate({ identifier: "Widget.DataSchema" })
 export type DataSchema = typeof DataSchema.Type
 
+/** How clients run a template: short `init`/`update`/`view`/`draw` steps, or one long-running `main` (widgets-live.md). */
+export const Mode = Schema.Literals(["step", "live"]).annotate({ identifier: "Widget.Mode" })
+export type Mode = typeof Mode.Type
+
 /** A template version without its source, as listed. */
 export interface Summary extends Schema.Schema.Type<typeof Summary> {}
 export const Summary = Schema.Struct({
@@ -34,6 +38,7 @@ export const Summary = Schema.Struct({
   /** One line, shown to the model when listing templates. */
   description: Schema.String,
   data: DataSchema,
+  mode: Mode,
   builtin: Schema.Boolean,
 }).annotate({ identifier: "Widget.Summary" })
 
