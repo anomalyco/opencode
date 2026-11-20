@@ -92,7 +92,7 @@ export const Plugin = {
             "Schedule a recurring or one-off job: a prompt or Code Mode action that runs once at a time (\"in 20 minutes\", an ISO time), every interval (\"2 hours\"), on a cron or on a connected MCP server's push event, until it's done or reaches `expires`. A code action runs without a model, which suits cheap checks that send a prompt only when something changes. A prompt can target this session, another session in this project or a new subagent child. Code runs without a model and can return one send: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet.",
           input: Automation.Request,
           output: View,
-          options: { namespace: "automation", codemode: { pinned: true } },
+          options: { namespace: "automation", codemode: true },
           execute: (input, context) =>
             automations
               .create({ ...input, sessionID: context.sessionID }, Permission.invocation(context))
@@ -103,7 +103,7 @@ export const Plugin = {
           description: "List this project's automations with their status and next run, and the current time.",
           input: Schema.Struct({}),
           output: ListOutput,
-          options: { namespace: "automation", codemode: { pinned: true } },
+          options: { namespace: "automation", codemode: true },
           execute: (_, context) =>
             Effect.gen(function* () {
               const session = yield* caller(context.sessionID)
@@ -120,7 +120,7 @@ export const Plugin = {
           description: "Pause an automation. It keeps its settings and does not run until resumed.",
           input: IDInput,
           output: View,
-          options: { namespace: "automation", codemode: { pinned: true } },
+          options: { namespace: "automation", codemode: true },
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.pause(input.id)),
@@ -134,7 +134,7 @@ export const Plugin = {
             "Resume a paused automation. A missed `at` runs once; repeating timers resume at their next slot. Event watches request replay from their saved cursor.",
           input: IDInput,
           output: View,
-          options: { namespace: "automation", codemode: { pinned: true } },
+          options: { namespace: "automation", codemode: true },
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.resume(input.id)),
@@ -147,7 +147,7 @@ export const Plugin = {
           description: "Delete an automation for good.",
           input: IDInput,
           output: RemoveOutput,
-          options: { namespace: "automation", codemode: { pinned: true } },
+          options: { namespace: "automation", codemode: true },
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.remove(input.id)),
