@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
 import { createRoot, createSignal } from "solid-js"
-import { createData, type CreateDataInput } from "../src/solid"
+import { createData, locationKey, type CreateDataInput } from "../src/solid"
 import {
   OpenCode,
   type ModelInfo,
@@ -495,7 +495,13 @@ test("restores dropped tool files from the server once they are shown again", as
 test("restoring dropped tool files keeps live progress made while the server read was in flight", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
-  const tool = (id: string, state: object) => ({ type: "tool", id, name: "execute", time: { created: 1, ran: 1 }, state })
+  const tool = (id: string, state: object) => ({
+    type: "tool",
+    id,
+    name: "execute",
+    time: { created: 1, ran: 1 },
+    state,
+  })
   const running = { status: "running", input: {}, metadata: {} }
   const assistant = (content: object[]) => ({
     id: "msg_assistant",
@@ -554,7 +560,11 @@ test("restoring dropped tool files keeps live progress made while the server rea
     read.resolve(
       Response.json({
         data: assistant([
-          tool("call_shot", { status: "completed", input: {}, content: [{ type: "file", uri: screenshot, mime: "image/png" }] }),
+          tool("call_shot", {
+            status: "completed",
+            input: {},
+            content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+          }),
           tool("call_work", running),
         ]),
       }),
@@ -2067,3 +2077,11 @@ async function wait(check: () => boolean) {
     await Bun.sleep(10)
   }
 }
+
+test("locationKey normalizes Windows drive-letter casing", () => {
+  expect(locationKey({ directory: "c:\\work\\my-app" })).toBe(locationKey({ directory: "C:\\work\\my-app" }))
+  expect(locationKey({ directory: "\\\\?\\c:\\work\\my-app" })).toBe(
+    locationKey({ directory: "\\\\?\\C:\\work\\my-app" }),
+  )
+  expect(locationKey({ directory: "/work/my-app" })).toBe(JSON.stringify(["/work/my-app", undefined]))
+})

@@ -442,6 +442,9 @@ describe("LocationServiceMap", () => {
               `${directory}${path.sep}${path.sep}`,
               `${path.dirname(directory)}${path.sep}${path.sep}${path.basename(directory)}`,
               `${directory}${path.sep}.${path.sep}child${path.sep}..${path.sep}`,
+              ...(process.platform === "win32" && /^[A-Z]:/.test(directory)
+                ? [`${directory[0].toLowerCase()}${directory.slice(1)}`]
+                : []),
             ]
             for (const variant of variants) {
               const ref = Location.Ref.make({ directory: AbsolutePath.make(variant) })
@@ -463,6 +466,24 @@ describe("LocationServiceMap", () => {
         ),
       ),
     ),
+  )
+
+  it.effect("canonicalizes Windows drive-letter casing while leaving UNC and POSIX paths intact", () =>
+    Effect.sync(() => {
+      const canonical = (directory: string, platform: NodeJS.Platform = "win32") =>
+        LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(directory) }), platform).directory
+
+      expect(canonical("c:\\work\\my-app")).toBe(AbsolutePath.make("C:\\work\\my-app"))
+      expect(canonical("c:/work/my-app/")).toBe(AbsolutePath.make("C:\\work\\my-app"))
+      expect(canonical("C:\\work\\my-app")).toBe(AbsolutePath.make("C:\\work\\my-app"))
+      expect(canonical("c:\\")).toBe(AbsolutePath.make("C:\\"))
+      expect(canonical("c:/")).toBe(AbsolutePath.make("C:\\"))
+      expect(canonical("\\\\?\\c:\\work\\my-app\\")).toBe(AbsolutePath.make("\\\\?\\C:\\work\\my-app"))
+      expect(canonical("\\\\server\\share\\dir\\")).toBe(AbsolutePath.make("\\\\server\\share\\dir"))
+      // Remote POSIX workspace paths stay POSIX even on a Windows host.
+      expect(canonical("/work/my-app/")).toBe(AbsolutePath.make("/work/my-app"))
+      expect(canonical("/work/my-app/", "linux")).toBe(AbsolutePath.make("/work/my-app"))
+    }),
   )
 
   it.live("isolates provider state by location", () =>

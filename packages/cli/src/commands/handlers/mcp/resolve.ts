@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import type { OpenCodeClient } from "@opencode/client"
+import { waitForPlugins } from "../../../services/plugin-startup"
 
 // Resolve through the MCP-owned integrationID rather than matching integration names: the shared
 // integration registry also holds provider/plugin integrations, whose names could collide with a server.
@@ -7,6 +8,7 @@ import type { OpenCodeClient } from "@opencode/client"
 // or anonymous server), leaving that case for the caller to interpret.
 export const resolveIntegration = (client: OpenCodeClient, name: string, location: { directory: string }) =>
   Effect.gen(function* () {
+    yield* waitForPlugins(client, location.directory)
     const servers = yield* Effect.promise(() => client.mcp.list({ location }))
     const server = servers.data.find((entry) => entry.name === name)
     if (!server) return yield* Effect.fail(new Error(`MCP server not found: ${name}`))

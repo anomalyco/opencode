@@ -4,6 +4,7 @@ import { OpenCode, type McpServer } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { Service } from "@opencode/client/effect/service"
+import { waitForPlugins } from "../../../services/plugin-startup"
 import { ServerConnection } from "../../../services/server-connection"
 
 export default Runtime.handler(
@@ -11,7 +12,9 @@ export default Runtime.handler(
   Effect.fn("cli.mcp.list")(function* () {
     const { endpoint } = yield* ServerConnection.resolve()
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
-    const response = yield* Effect.promise(() => client.mcp.list({ location: { directory: process.cwd() } }))
+    const directory = process.cwd()
+    yield* waitForPlugins(client, directory)
+    const response = yield* Effect.promise(() => client.mcp.list({ location: { directory } }))
     const servers = response.data.toSorted((a, b) => a.name.localeCompare(b.name))
     if (servers.length === 0) {
       process.stdout.write("No MCP servers configured" + EOL)

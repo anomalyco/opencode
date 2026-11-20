@@ -160,7 +160,11 @@ type Store = {
 }
 
 export function locationKey(location: LocationRef) {
-  return JSON.stringify([location.directory, location.workspaceID])
+  const directory = location.directory.replace(
+    /^(\\\\\?\\)?([a-z]):/,
+    (_, prefix = "", drive: string) => `${prefix}${drive.toUpperCase()}:`,
+  )
+  return JSON.stringify([directory, location.workspaceID])
 }
 
 function locationQuery(ref: LocationRef) {
