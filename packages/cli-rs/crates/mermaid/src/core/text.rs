@@ -95,7 +95,7 @@ pub fn split_lines(value: &str) -> Vec<String> {
 
 /// JavaScript's `String.prototype.trim`.
 pub fn js_trim(value: &str) -> &str {
-    value.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}')
+    value.trim_matches(|c: char| (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}')
 }
 
 pub struct NumberedLine<'a> {

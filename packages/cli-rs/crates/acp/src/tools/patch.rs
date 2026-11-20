@@ -250,9 +250,9 @@ fn normalize(value: &str) -> String {
         .collect()
 }
 
-/// `String.prototype.trim`, which also strips the BOM.
+/// `String.prototype.trim`, which also strips the BOM but not U+0085.
 fn js_trim(value: &str) -> &str {
-    value.trim_matches(|char: char| char.is_whitespace() || char == '\u{feff}')
+    value.trim_matches(|char: char| (char.is_whitespace() && char != '\u{85}') || char == '\u{feff}')
 }
 
 /// `stripHeredoc`: the body of `cat <<EOF ... EOF` (or `<<'EOF'`, `<<"EOF"`), else the input.
