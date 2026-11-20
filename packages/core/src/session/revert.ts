@@ -9,6 +9,7 @@ import { RelativePath } from "../schema.js"
 import { Snapshot } from "../snapshot.js"
 import { SessionEvent } from "./event.js"
 import { MessageNotFoundError } from "./error.js"
+import { SessionInbox } from "./inbox.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionHistory } from "./history.js"
@@ -81,13 +82,10 @@ export const commit = Effect.fn("SessionRevert.commit")(function* (bus: Bus.Inte
 })
 
 const plan = Effect.fn("SessionRevert.plan")(function* (db: Database.Interface["db"], input: BoundaryInput) {
-  const boundary = yield* db
-    .select({ seq: SessionMessageTable.seq })
-    .from(SessionMessageTable)
-    .where(and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.messageID)))
-    .get()
-    .pipe(Effect.orDie)
-  if (!boundary) return yield* new MessageNotFoundError(input)
+  const boundary = yield* resolveBoundary(db, input)
+  // An admitted input has no message seq yet, so no assistant message can
+  // follow it in message order and there is nothing to restore.
+  if (boundary.type === "inbox") return new Map<RelativePath, Snapshot.ID>()
   const rows = yield* db
     .select()
     .from(SessionMessageTable)
@@ -109,4 +107,23 @@ const plan = Effect.fn("SessionRevert.plan")(function* (db: Database.Interface["
       if (!files.has(file)) files.set(file, message.snapshot.start)
   }
   return files
+})
+
+// Inbox admission sequence and materialized message sequence are different
+// durable event positions. Never use an inbox sequence as a message-history cutoff.
+const resolveBoundary = Effect.fn("SessionRevert.resolveBoundary")(function* (
+  db: Database.Interface["db"],
+  input: BoundaryInput,
+) {
+  const message = yield* db
+    .select({ seq: SessionMessageTable.seq })
+    .from(SessionMessageTable)
+    .where(and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.messageID)))
+    .get()
+    .pipe(Effect.orDie)
+  if (message) return { type: "message", seq: message.seq } as const
+  const inbox = yield* SessionInbox.find(db, input.messageID)
+  if (!inbox || inbox.sessionID !== input.sessionID) return yield* new MessageNotFoundError(input)
+  if (inbox.type !== "user" && inbox.type !== "synthetic") return yield* new MessageNotFoundError(input)
+  return { type: "inbox" } as const
 })
