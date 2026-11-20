@@ -550,8 +550,12 @@ function message(input: Exclude<LLMRequest["messages"][number], ToolMessage>): L
       ]
     case "user":
       return [{ role: "user", content: input.content.flatMap(userPart) }]
-    case "assistant":
-      return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
+    case "assistant": {
+      const content = input.content.flatMap(assistantPart).filter((part) => part.type !== "text" || part.text !== "")
+      // Strict providers reject, and keep rejecting, a turn with no model-visible content.
+      if (content.length === 0) return []
+      return [{ role: "assistant", content }]
+    }
   }
 }
 
