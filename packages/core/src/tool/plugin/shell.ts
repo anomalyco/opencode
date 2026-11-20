@@ -308,18 +308,18 @@ export const Plugin = {
           ...Permission.invocation(context),
         })
       // A target the scan cannot attribute to a path is checked against `*`, so the rules decide instead of
-      // the write going unchecked.
+      // the write going unchecked. Named targets are asserted too, so one unknown target cannot hide the rest.
+      if (writes.length > 0)
+        yield* permission.assert({
+          action: "edit",
+          resources: writes.map((write) => write.resource),
+          save: ["*"],
+          ...Permission.invocation(context),
+        })
       if (parsed.writesUnresolved)
         yield* permission.assert({
           action: "edit",
           resources: ["*"],
-          save: ["*"],
-          ...Permission.invocation(context),
-        })
-      else if (writes.length > 0)
-        yield* permission.assert({
-          action: "edit",
-          resources: writes.map((write) => write.resource),
           save: ["*"],
           ...Permission.invocation(context),
         })

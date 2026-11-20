@@ -549,6 +549,31 @@ describe("ShellTool scanner permissions", () => {
       }),
     ))
 
+  test("a target only known at run time does not hide a target that is known", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        // `*` is allowed and `secret` is denied, so only the named target can block the command.
+        yield* redirectAgent([
+          { action: "shell", resource: "*", effect: "allow" },
+          { action: "edit", resource: "*", effect: "allow" },
+          { action: "edit", resource: "secret", effect: "deny" },
+        ])
+        const secret = path.join(fixture.active, "secret")
+        const result = yield* runPermissionCommand(
+          registry,
+          `M=a; printf hi > "$M"; printf hi > secret`,
+          secret,
+          [],
+        )
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({
+          _tag: "Success",
+          value: { status: "error", error: { message: expect.stringContaining("Permission denied: edit") } },
+        })
+        expect(yield* Effect.promise(() => Bun.file(secret).exists())).toBe(false)
+      }),
+    ))
+
   test("a relative target after a directory change is checked against the whole workspace", () =>
     withScanner((registry, fixture) =>
       Effect.gen(function* () {
