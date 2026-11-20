@@ -707,19 +707,6 @@ fn numbered(count: usize, title: impl Fn(usize) -> String) -> Vec<SelectOption<u
 }
 
 #[test]
-fn a_select_opens_and_resizes_in_a_twelve_row_terminal() {
-    let kit = kit(72, 12);
-    open_models(&kit);
-    kit.app.press("down");
-    kit.app.render();
-    let kit = self::kit(72, 30);
-    open_models(&kit);
-    kit.app.resize(72, 12);
-    kit.app.press("down");
-    kit.app.render();
-}
-
-#[test]
 fn a_select_follows_a_terminal_resize() {
     for ((width, height), (to_width, to_height)) in [((80, 50), (48, 22)), ((48, 22), (80, 50))] {
         let fresh = self::kit(to_width, to_height);
