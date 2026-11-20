@@ -21,7 +21,7 @@ import { SessionMessageTable } from "./session/sql.js"
 import { SessionBlob } from "./session/blob.js"
 import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
-import { Agent } from "@opencode/schema/agent"
+import { Agent } from "./agent.js"
 import type { Permission } from "@opencode/schema/permission"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
@@ -512,7 +512,21 @@ const layer = Layer.effect(
       }),
       shell: (input) => sessions.forSession(input.sessionID).shell(input),
       skill: (input) => sessions.forSession(input.sessionID).skill(input),
-      switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
+      switchAgent: Effect.fn("Session.switchAgent")(function* (input) {
+        const handle = sessions.forSession(input.sessionID)
+        const session = yield* handle.get()
+        // A Session without a stored agent runs as its Location's default, so selecting that agent changes nothing.
+        // While the default is unknown (agents not loaded yet), the switch is recorded.
+        const current =
+          session.agent ??
+          (yield* Effect.gen(function* () {
+            const agents = yield* Agent.Service
+            const selected = yield* agents.select()
+            return selected.info?.id
+          }).pipe(instances.provide(session), Effect.orElseSucceed(() => undefined)))
+        if (current === input.agent) return
+        yield* handle.switchAgent(input)
+      }),
       switchModel: (input) => sessions.forSession(input.sessionID).switchModel(input),
       rename: (input) => sessions.forSession(input.sessionID).rename(input),
       archive: (sessionID) => sessions.forSession(sessionID).archive(),
