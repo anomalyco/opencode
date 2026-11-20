@@ -29,9 +29,10 @@ describe("parseDelimited", () => {
     ])
     expect(parsed.columns).toBe(2)
     expect(parsed.truncated).toBe(false)
+    expect(parsed.total).toBe(3)
   })
 
-  test("stops at the row limit and marks truncation only when another non-blank row follows", () => {
+  test("keeps rows up to the limit and counts the rest of a whole small file", () => {
     const exact = parseDelimited("a\tb\n1\t2\n\n\r\n", "\t", 2)
     expect(exact).toEqual({
       rows: [
@@ -40,6 +41,7 @@ describe("parseDelimited", () => {
       ],
       columns: 2,
       truncated: false,
+      total: 2,
     })
 
     const over = parseDelimited("a\tb\n1\t2\n3\t4\n5\t6", "\t", 2)
@@ -50,6 +52,7 @@ describe("parseDelimited", () => {
       ],
       columns: 2,
       truncated: true,
+      total: 4,
     })
   })
 
@@ -98,6 +101,7 @@ describe("parseDelimited", () => {
     expect(parsed.rows).toHaveLength(1001)
     expect(parsed.columns).toBe(22)
     expect(parsed.truncated).toBe(true)
+    expect(parsed.total).toBeUndefined()
     expect(parsed.rows[0]?.[0]).toBe("col_0")
     expect(parsed.rows[1000]?.[21]).toBe("value_21_0123456789abcdef")
   })

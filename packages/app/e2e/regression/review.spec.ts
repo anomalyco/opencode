@@ -2329,7 +2329,9 @@ for (const direction of ["ltr", "rtl"] as const) {
 
 // Oversized CSV previews used to download the whole file and render every row with its own copy button, freezing the
 // renderer, and the watcher's rereads froze it again.
-test("a large CSV previews from a bounded byte range and keeps its rows across a reread", async ({ page }) => {
+test("a large CSV previews from a bounded byte range, finds past its first rows, and keeps them across a reread", async ({
+  page,
+}) => {
   const file = "huge.csv"
   const totalBytes = 72_351_744
   const previewBytes = 1024 * 1024
@@ -2337,7 +2339,9 @@ test("a large CSV previews from a bounded byte range and keeps its rows across a
   const row = Array.from({ length: 21 }, (_, i) => `v${i + 1}`).join(",")
 
   const slice = (cell: string) =>
-    Buffer.from(`${header}\n${`${cell},${row}\n`.repeat(previewBytes / row.length)}`).subarray(0, previewBytes)
+    Buffer.from(
+      `${header}\n${Array.from({ length: previewBytes / row.length }, (_, n) => `${cell}-${n},${row}\n`).join("")}`,
+    ).subarray(0, previewBytes)
 
   const requests: Array<{ method: string; range: string | null }> = []
 
@@ -2376,8 +2380,16 @@ test("a large CSV previews from a bounded byte range and keeps its rows across a
   await panel.getByRole("treeitem", { name: file }).click()
   await expect(rows).toHaveCount(100)
   expect(requests).toEqual(read)
+
+  // Find searches the rendered rows, so a query renders the rows up to its match, and they stay once it closes.
+  await page.keyboard.press("ControlOrMeta+f")
+  await page.getByPlaceholder("Find", { exact: true }).fill("before-250")
+  await expect(page.getByText("1/1", { exact: true })).toBeVisible()
+  await expect(rows).toHaveCount(251)
+  await expect(panel.getByText("before-250", { exact: true })).toBeInViewport()
+  await page.keyboard.press("Escape")
   await panel.getByRole("button", { name: "Show more rows", exact: true }).click()
-  await expect(rows).toHaveCount(300)
+  await expect(rows).toHaveCount(451)
 
   // A truncated preview never copies or saves its prefix as the whole file.
   await expect(toolbar.getByRole("button", { name: "Copy content", exact: true })).toHaveCount(0)
@@ -2389,7 +2401,7 @@ test("a large CSV previews from a bounded byte range and keeps its rows across a
   await workspace.push([filesystemEvent(workspace.directory, file, "change")])
   await expect(rows.first()).toContainText("after")
   expect(requests).toEqual([...read, ...read])
-  await expect(rows).toHaveCount(300)
+  await expect(rows).toHaveCount(451)
 })
 
 async function statusInset(status: Locator, side: "left" | "right") {

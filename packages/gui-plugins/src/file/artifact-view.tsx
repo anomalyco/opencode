@@ -80,6 +80,8 @@ export default function ArtifactView(props: {
   content: FileContent
   cacheKey?: string
   source: JSX.Element
+  /** The open find bar's query, so a table preview renders the rows it matches. */
+  findQuery?: string
 }) {
   const ctx = usePlugin()
   const locale = ctx.locale
@@ -118,7 +120,7 @@ export default function ArtifactView(props: {
     const parsed = table()
 
     const info: ArtifactInfo = parsed
-      ? { rows: parsed.truncated ? undefined : parsed.rows.length, columns: parsed.columns }
+      ? { rows: parsed.total, columns: parsed.columns }
       : selectArtifactInfo(viewerState(), props.content)
 
     return [
@@ -224,7 +226,7 @@ export default function ArtifactView(props: {
             <ArtifactFont path={props.path} content={props.content} />
           </Match>
           {/* Not keyed, so a reread (the watcher while an agent still writes the file) keeps the table, its scroll and its revealed rows. */}
-          <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} />}</Match>
+          <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} findQuery={props.findQuery} />}</Match>
           <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
           {/* Keyed, so another viewer for the file mounts with bytes of its own. */}
           <Match when={viewer()} keyed>
@@ -852,12 +854,12 @@ const INITIAL_TABLE_ROWS = 100
 
 const TABLE_ROW_STEP = 200
 
-function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
+function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited>; findQuery?: string }) {
   const ctx = usePlugin()
   const controller = new AbortController()
   onCleanup(() => controller.abort())
 
-  const [visibleCount, setVisibleCount] = createSignal(INITIAL_TABLE_ROWS)
+  const [requested, setRequested] = createSignal(INITIAL_TABLE_ROWS)
   const copySymbol = `artifact-table-copy-${uuid()}`
   const copyIcon = getIcon("copy")
   const copyLabel = createMemo(() => ctx.t("view.table.copyCell"))
@@ -866,7 +868,20 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
   // Pad the header to the widest row so no data column is dropped.
   const header = createMemo(() => columns().map((index) => props.parsed.rows[0]?.[index] ?? ""))
   const body = createMemo(() => props.parsed.rows.slice(1))
-  const visibleBody = createMemo(() => body().slice(0, visibleCount()))
+
+  // Find searches only the rows on screen, so a query renders the parsed rows up to its last match, as find matches
+  // within one cell.
+  const matched = createMemo(() => {
+    const query = props.findQuery?.toLowerCase()
+
+    if (!query) return 0
+
+    return body().findLastIndex((row) => row.some((cell) => cell.toLowerCase().includes(query))) + 1
+  })
+
+  // Rows once shown stay, so a narrower query or a reread never collapses the table under the reader.
+  const shown = createMemo((previous: number) => Math.max(previous, requested(), matched()), INITIAL_TABLE_ROWS)
+  const visibleBody = createMemo(() => body().slice(0, shown()))
   const hasMore = () => visibleBody().length < body().length
 
   const copy = (text: string) => {
@@ -971,17 +986,17 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
       <Show when={hasMore() || props.parsed.truncated}>
         <div data-slot="artifact-table-footer">
           <span>
-            {props.parsed.truncated
-              ? visibleBody().length > 0
+            {props.parsed.total !== undefined
+              ? ctx.t("view.table.truncated", { shown: visibleBody().length, total: props.parsed.total - 1 })
+              : visibleBody().length > 0
                 ? ctx.t("view.table.truncatedPreview", { shown: visibleBody().length })
-                : ctx.t("view.table.previewTruncated")
-              : ctx.t("view.table.truncated", { shown: visibleBody().length, total: body().length })}
+                : ctx.t("view.table.previewTruncated")}
           </span>
           <Show when={hasMore()}>
             <button
               type="button"
               data-slot="artifact-table-more"
-              onClick={() => setVisibleCount((count) => count + TABLE_ROW_STEP)}
+              onClick={() => setRequested(shown() + TABLE_ROW_STEP)}
             >
               {ctx.t("view.table.showMore")}
             </button>

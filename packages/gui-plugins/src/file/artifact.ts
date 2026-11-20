@@ -19,7 +19,10 @@ export function contentBytes(content: FileContent) {
 export type ParsedDelimited = {
   rows: string[][]
   columns: number
+  /** Rows exist past `rows`, or the text itself is a prefix of the file. */
   truncated: boolean
+  /** Every non-blank row in the file, when the whole file was read and counted. */
+  total?: number
 }
 
 const QUOTE = 34
@@ -28,9 +31,14 @@ const CR = 13
 
 const LF = 10
 
+// Rows past the limit are still counted in text up to this length, so a whole small file shows its row count. Longer
+// text stops at the limit: counting it would parse the whole file.
+const COUNT_LIMIT = 4 * 1024 * 1024
+
 /**
  * Parse RFC 4180 style delimited text up to `limit` non-blank rows. Quoted fields may contain the
- * delimiter, newlines, and doubled quotes. Stops as soon as another non-blank row follows `limit`.
+ * delimiter, newlines, and doubled quotes. Past `limit`, rows are only counted, in text up to `COUNT_LIMIT`; longer
+ * text stops at the first row past `limit`.
  */
 export function parseDelimited(
   text: string,
@@ -45,6 +53,9 @@ export function parseDelimited(
   let field = ""
   let quoted = false
   let truncated = Boolean(options?.truncated)
+  const count = !truncated && len <= COUNT_LIMIT
+  let total = 0
+  let stopped = false
   let index = 0
 
   const finishRow = () => {
@@ -55,6 +66,7 @@ export function parseDelimited(
     row = []
 
     if (blank) return false
+    total++
 
     if (rows.length < limit) {
       rows.push(completed)
@@ -64,7 +76,7 @@ export function parseDelimited(
 
     truncated = true
 
-    return true
+    return !count
   }
 
   while (index < len) {
@@ -112,8 +124,9 @@ export function parseDelimited(
     if (code === LF) {
       index++
 
-      if (finishRow()) break
-      continue
+      if (!finishRow()) continue
+      stopped = true
+      break
     }
 
     // Scan a plain run until the next delimiter or line ending, then slice once.
@@ -139,7 +152,7 @@ export function parseDelimited(
 
   const columns = rows.reduce((max, current) => Math.max(max, current.length), 0)
 
-  return { rows, columns, truncated }
+  return { rows, columns, truncated, total: stopped || options?.truncated ? undefined : total }
 }
 
 /** The raw bytes of loaded content. */
