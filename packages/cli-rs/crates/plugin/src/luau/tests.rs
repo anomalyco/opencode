@@ -1410,6 +1410,17 @@ fn a_json_value_crosses_into_luau_and_back() {
     let expected =
         serde_json::json!({ "a": [1, null, "x", { "c": 2.5 }], "d": { "e": [] }, "é ü": true, "s": "ß\u{0}t" });
     assert_eq!(back(&crossed), expected);
+    // A conversion makes each key once and finds it again by the order the records repeat: a record that lacks a key,
+    // has one more or has them in another order, and a map of more keys than are kept, cross all the same.
+    let record = |index: usize| serde_json::json!({ "id": format!("msg_{index}"), "time": { "created": index }, "tokens": { "input": 1, "cache": { "read": 0 } } });
+    let mut records: Vec<serde_json::Value> = (0..4).map(record).collect();
+    records[1].as_object_mut().unwrap().remove("time");
+    records[2]["extra"] = serde_json::json!({ "id": "inner", "time": 1 });
+    records.push(serde_json::json!({ "tokens": { "cache": { "read": 3 }, "input": 2 }, "id": "msg_x" }));
+    let many: serde_json::Map<String, serde_json::Value> =
+        (0..300).map(|index| (format!("ses_{index}"), serde_json::json!({ "id": index }))).collect();
+    let page = serde_json::json!({ "data": records, "many": many, "cursor": { "next": "page2" } });
+    assert_eq!(back(&json::luau(&lua, &page).unwrap()), page);
     let mut deep = serde_json::json!("leaf");
     for _ in 0..500 {
         deep = serde_json::json!([deep]);
