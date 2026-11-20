@@ -10,7 +10,7 @@ import { Machines } from "@opencode/core/machine/machines"
 import { AbsolutePath } from "@opencode/core/schema"
 import { isWebSocketUpgrade } from "@opencode/protocol/groups/machine"
 import { Global } from "@opencode/util/global"
-import { Context, Effect, Latch, Option, Semaphore } from "effect"
+import { Context, Effect, Latch, Option, Scope, Semaphore } from "effect"
 import { HttpMiddleware, type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { Socket } from "effect/socket"
 import { IncomingMessage } from "node:http"
@@ -41,8 +41,8 @@ const STOPPING = "1 second"
 const CLOSE = 1008
 
 /**
- * Only for tests, as `Link.Fixed` is: called with the endpoint's `ws` server when the routes are built, so a test can
- * count its clients and watch a socket from the home's side. Production never sets it.
+ * Only for tests, as `Link.Fixed` is: called with the endpoint's `ws` server when it is made, so a test can count its
+ * clients and watch a socket from the home's side. Production never sets it.
  */
 export const Watch = Context.Reference<(sockets: WebSocketServer) => void>("@opencode/MachineLink/Watch", {
   defaultValue: () => () => {},
@@ -185,22 +185,34 @@ export const makeMachineLink = Effect.gen(function* () {
   const enabled = yield* machinesEnabled
   const services = yield* Effect.context<Machines.Service | Identity.Service>()
   const handshakes = Semaphore.makeUnsafe(MAX_HANDSHAKES)
+  const scope = yield* Effect.scope
+  const watch = yield* Watch
   // The endpoint's own `ws` server. The socket Effect makes of an upgraded request cannot say what waits unsent, ping
   // or drop the connection, and the server behind it takes messages of 100 MiB. This one refuses a message over
   // `MAX_FRAME` before it is buffered, which `ws` closes with 1009.
-  const sockets = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME })
-  const watch = yield* Watch
-  watch(sockets)
+  //
+  // It is made for the first request that gets past every check below, as Effect's HTTP server makes its own, and not
+  // with the routes: those are also built where there is no Node, whose `ws` has no server, and no request there
+  // gets that far.
+  //
   // The routes' scope closes as the server begins to stop, and stopping waits on no peer: every link is sent the close,
   // `ws` refuses any upgrade from here on, and what is still connected after `STOPPING` is dropped. Left open, one
   // link would hold the server for the twenty seconds it gives open connections.
-  yield* Effect.addFinalizer(() =>
-    Effect.gen(function* () {
-      sockets.clients.forEach((socket) => socket.close(CLOSE))
-      const empty = Effect.callback<void>((resume) => sockets.close(() => resume(Effect.void)))
-      if (Option.isNone(yield* Effect.timeoutOption(empty, STOPPING)))
-        sockets.clients.forEach((socket) => socket.terminate())
-    }),
+  const server = yield* Effect.cached(
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const sockets = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME })
+        watch(sockets)
+        return sockets
+      }),
+      (sockets) =>
+        Effect.gen(function* () {
+          sockets.clients.forEach((socket) => socket.close(CLOSE))
+          const empty = Effect.callback<void>((resume) => sockets.close(() => resume(Effect.void)))
+          if (Option.isNone(yield* Effect.timeoutOption(empty, STOPPING)))
+            sockets.clients.forEach((socket) => socket.terminate())
+        }),
+    ).pipe(Scope.provide(scope)),
   )
   return Effect.fn("MachineLink.serve")(function* (request: HttpServerRequest.HttpServerRequest) {
     const incoming = NodeHttpServerRequest.toIncomingMessage(request)
@@ -218,6 +230,7 @@ export const makeMachineLink = Effect.gen(function* () {
       // A place is taken before the upgrade and held until the handshake has ended, so no more strangers than there
       // are places are ever WebSockets. With none free the request is answered as HTTP, as `ws` answers an upgrade
       // once the server is stopping.
+      const sockets = yield* server
       const admitted = yield* handshakes.withPermitsIfAvailable(1)(
         Effect.gen(function* () {
           const transport = yield* upgrade(sockets, incoming)

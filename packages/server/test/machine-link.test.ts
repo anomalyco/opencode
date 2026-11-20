@@ -66,7 +66,7 @@ const options = (directory: string, machines: boolean) => ({
 /**
  * The server's routes on a port of their own, with the home's key and everything else it writes in a fresh directory.
  * As in ServerProcess, the routes are built once the server is serving, so they stop before it does. `sockets` is the
- * endpoint's own `ws` server, whose clients are the connections it holds. Without `password` the routes are the ones
+ * endpoint's own `ws` server once it has made one, whose clients are the connections it holds. Without `password` the routes are the ones
  * an embedding host serves, which ask for none, and without `upgrades` the server hands every request over as HTTP.
  */
 const home = Effect.fnUntraced(function* (
@@ -97,15 +97,34 @@ const home = Effect.fnUntraced(function* (
     ),
   ]
   const watched: Array<NodeWS.WebSocketServer> = []
+  const most = { sockets: 0 }
   const context = yield* Layer.build(
     (input.password === false
       ? createEmbeddedRoutes(options(directory, input.machines ?? true), overrides)
       : createRoutes(options(directory, input.machines ?? true), () => [], overrides)
     ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
-  ).pipe(Effect.provideService(Watch, (sockets) => void watched.push(sockets)))
+  ).pipe(
+    Effect.provideService(Watch, (sockets) => {
+      watched.push(sockets)
+      sockets.on("headers", () => {
+        most.sockets = Math.max(most.sockets, sockets.clients.size + 1)
+      })
+    }),
+  )
   yield* Deferred.succeed(routes, Context.get(context, HttpRouter.HttpRouter).asHttpEffect())
   const base = HttpServer.formatAddress(http.address)
-  return { base, url: link(base), machines: Context.get(context, Machines.Service), sockets: watched[0] }
+  return {
+    base,
+    url: link(base),
+    machines: Context.get(context, Machines.Service),
+    /** How many `ws` servers the endpoint has made: none until its first link, and one from then on. */
+    made: () => watched.length,
+    get sockets() {
+      return watched[0]
+    },
+    /** The most sockets the endpoint has held, counted each time one is about to be added. */
+    most: () => most.sockets,
+  }
 })
 
 const link = (base: string) => {
@@ -475,7 +494,7 @@ it.effect("takes no server password for a GET WebSocket upgrade to exactly its p
     // A server that upgrades nothing hands the upgrade over as any other request, and the endpoint leaves it one.
     const plain = yield* home({ upgrades: false })
     const kept = yield* exchange(plain.base, MACHINE_LINK_PATH, { ...websocket, Connection: "Upgrade, close" })
-    expect([kept.split("\r\n")[0], plain.sockets.clients.size]).toEqual(["HTTP/1.1 404 Not Found", 0])
+    expect([kept.split("\r\n")[0], plain.made()]).toEqual(["HTTP/1.1 404 Not Found", 0])
 
     // Routes that ask for no password answer everything but the upgrade as they answer a path with no route.
     const open = yield* home({ password: false })
@@ -527,6 +546,19 @@ it.effect("logs no response for a request that became a WebSocket, and still log
   }),
 )
 
+it.effect("makes its WebSocket server for the first link, not with the routes", () =>
+  Effect.gen(function* () {
+    // The routes are also built where there is no Node and no such server to make, and where nothing is a link.
+    const server = yield* home()
+    expect(server.made()).toBe(0)
+    yield* exchange(server.base, MACHINE_LINK_PATH, { authorization })
+    yield* exchange(server.base, MACHINE_LINK_PATH, { Upgrade: "websocket", authorization })
+    expect(server.made()).toBe(0)
+    const peers = yield* Effect.forEach([1, 2, 3], () => dial(server.url), { concurrency: "unbounded" })
+    expect([peers.every((peer) => peer.opened), server.made(), server.sockets.clients.size]).toEqual([true, 1, 3])
+  }),
+)
+
 it.effect("answers as an unknown route does while machines are off", () =>
   Effect.gen(function* () {
     const directory = (yield* tmpdirScoped("opencode-machine-link-")).path
@@ -557,7 +589,7 @@ it.effect("answers as an unknown route does while machines are off", () =>
     )
     const open = yield* home({ machines: false, password: false })
     expect(yield* exchange(open.base, MACHINE_LINK_PATH, websocket)).toBe(yield* exchange(open.base, OTHER, websocket))
-    expect([server.sockets.clients.size, open.sockets.clients.size]).toEqual([0, 0])
+    expect([server.made(), open.made()]).toEqual([0, 0])
   }),
 )
 
@@ -633,11 +665,6 @@ it.effect("closes a peer that says nothing ten seconds after it connected", () =
 it.effect("makes no more strangers WebSockets than it has places for, and answers the rest as HTTP", () =>
   Effect.gen(function* () {
     const server = yield* home()
-    // The endpoint's sockets, counted each time one is about to be added: when they are the most they have been.
-    const most = { sockets: 0 }
-    server.sockets.on("headers", () => {
-      most.sockets = Math.max(most.sockets, server.sockets.clients.size + 1)
-    })
     const strangers = yield* Effect.forEach(Array.from({ length: 50 }), () => dial(server.url), {
       concurrency: "unbounded",
     })
@@ -671,7 +698,8 @@ it.effect("makes no more strangers WebSockets than it has places for, and answer
       concurrency: "unbounded",
     })
     expect((yield* Fiber.join(asking)).filter((opened) => opened).length).toBeGreaterThan(0)
-    expect(most.sockets).toBe(MAX_HANDSHAKES)
+    // Counted as each was about to be added, when the endpoint's sockets were the most they had been.
+    expect(server.most()).toBe(MAX_HANDSHAKES)
     yield* idle(server)
 
     // The same for handshakes begun: the one past the last place is turned away with the clock where it was, and the
