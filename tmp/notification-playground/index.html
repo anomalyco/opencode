@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Desktop notification playground</title>
+<style>
+:root { color-scheme: light dark; --bg: #fff; --surface: #fafafa; --fg: #161616; --fg-2: #5c5c5c; --fg-3: #808080; --line: rgb(0 0 0 / .1); --accent: #3b5cf6;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+@media screen and (prefers-color-scheme: dark) { :root { --bg: #161616; --surface: #1f1f1f; --fg: #fafafa; --fg-2: #aeaeae; --line: rgb(255 255 255 / .1); --accent: #a2bcff; } }
+*, ::before, ::after { box-sizing: border-box; } body { margin: 0; }
+html { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+main { max-width: 1120px; margin: 0 24px 0 max(24px, calc(50% - 560px)); padding: 56px 0 96px; }
+h1 { font-size: 32px; letter-spacing: -.02em; margin: 0 0 8px; font-weight: 600; line-height: 1.2; }
+.lede { font-size: 18px; color: var(--fg-2); max-width: 720px; margin: 0 0 32px; }
+h2 { font-size: 22px; font-weight: 600; margin: 64px 0 6px; letter-spacing: -.01em; }
+.sub { color: var(--fg-2); margin: 0 0 20px; max-width: 720px; }
+button { font: inherit; font-size: 13px; font-weight: 500; height: 30px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); cursor: pointer; }
+button:hover { background: var(--surface); }
+button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.controls select, .controls input[type="text"], textarea { font: inherit; font-size: 13px; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; width: 100%; padding: 6px 8px; }
+.controls select, .controls input[type="text"] { height: 32px; padding-block: 0; }
+textarea { resize: vertical; }
+
+.pg { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 960px) { .pg { grid-template-columns: 1fr; } }
+.controls { display: flex; flex-direction: column; gap: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.controls fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.controls legend, .controls summary { padding: 0; margin-bottom: 6px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--fg-2); }
+.controls summary { cursor: pointer; margin-bottom: 0; }
+.controls details[open] > summary { margin-bottom: 10px; }
+.controls details > :not(summary) + :not(summary) { margin-top: 10px; }
+.controls select + select { margin-top: 6px; }
+.seg { display: flex; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.seg label { flex: 1; position: relative; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg span { display: block; text-align: center; font-size: 13px; padding: 4px 8px; border-radius: 6px; cursor: pointer; color: var(--fg-2); }
+.seg input:checked + span { background: var(--fg); color: var(--bg); }
+.seg input:focus-visible + span { outline: 2px solid var(--accent); }
+.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--fg-2); }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--fg); }
+.check input { margin: 0; accent-color: var(--fg); }
+.stage-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
+.sp { flex: 1; }
+.stage-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--fg-2); }
+.log { color: var(--fg); }
+
+.wall { border: 1px solid var(--line); }
+.wall.os-win.t-dark { background: radial-gradient(60% 80% at 72% 62%, #2a6cf0 0%, #123a8c 42%, #071430 85%); }
+.wall.os-win.t-light { background: radial-gradient(60% 80% at 72% 62%, #a9cbff 0%, #6b9cf0 45%, #e3edfc 88%); }
+.wall.os-mac.t-dark { background: linear-gradient(160deg, #1b1f3b, #55306e 55%, #b6604a); }
+.wall.os-mac.t-light { background: linear-gradient(160deg, #a9c7ff, #e7bddb 55%, #ffd6a8); }
+.t-dark { --t-bg: rgb(44 44 44 / .97); --m-bg: rgb(42 42 46 / .86); --t-fg: #fff; --t-fg2: rgb(255 255 255 / .78); --t-fg3: rgb(255 255 255 / .55); --t-line: rgb(255 255 255 / .09);
+  --t-ctl: rgb(255 255 255 / .06); --t-ctl-line: rgb(255 255 255 / .08); --t-item: rgb(255 255 255 / .05); --t-panel: rgb(32 32 32 / .95); --t-accent: #60cdff; --t-primary: #60cdff; --t-primary-fg: #000;
+  --tb: rgb(28 28 28 / .86); --mb: rgb(0 0 0 / .3); --t-menu: #2c2c2c; }
+.t-light { --t-bg: rgb(249 249 249 / .97); --m-bg: rgb(246 246 246 / .86); --t-fg: #1b1b1b; --t-fg2: rgb(0 0 0 / .7); --t-fg3: rgb(0 0 0 / .5); --t-line: rgb(0 0 0 / .08);
+  --t-ctl: rgb(255 255 255 / .85); --t-ctl-line: rgb(0 0 0 / .1); --t-item: rgb(255 255 255 / .75); --t-panel: rgb(243 243 243 / .96); --t-accent: #005fb8; --t-primary: #005fb8; --t-primary-fg: #fff;
+  --tb: rgb(243 243 243 / .86); --mb: rgb(255 255 255 / .45); --t-menu: #f9f9f9; }
+.screen { position: relative; height: 500px; border-radius: 12px; overflow: hidden; isolation: isolate; }
+.appwin { position: absolute; left: 5%; top: 9%; width: 54%; height: 66%; border-radius: 8px; background: var(--t-bg); opacity: .5; box-shadow: 0 20px 50px rgb(0 0 0 / .3); padding: 44px 28px; display: flex; flex-direction: column; gap: 14px; }
+.os-mac .appwin { top: 13%; border-radius: 12px; }
+.appwin i { display: block; height: 10px; border-radius: 5px; background: var(--t-line); }
+.appwin i:nth-child(1) { width: 62%; } .appwin i:nth-child(2) { width: 84%; } .appwin i:nth-child(3) { width: 48%; }
+.taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 40px; background: var(--tb); display: flex; align-items: center; justify-content: center; gap: 8px; border-top: 1px solid var(--t-line); backdrop-filter: blur(20px); }
+.taskbar i { width: 22px; height: 22px; border-radius: 5px; background: var(--t-line); }
+.taskbar i.oc { background: #2f6fde; }
+.taskbar .clock { position: absolute; right: 14px; font: 11px/1.3 "Segoe UI", system-ui, sans-serif; text-align: right; color: var(--t-fg); }
+.menubar { position: absolute; left: 0; right: 0; top: 0; height: 24px; display: flex; align-items: center; gap: 16px; padding: 0 14px; font: 12px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--t-fg); background: var(--mb); backdrop-filter: blur(20px); }
+.toast-slot { position: absolute; right: 12px; bottom: 52px; z-index: 2; }
+.os-mac .toast-slot { top: 34px; bottom: auto; right: 10px; }
+.enter { animation: toast-in .45s cubic-bezier(.2, .8, .2, 1); }
+.leave { animation: toast-out .3s ease-in forwards; }
+@keyframes toast-in { from { transform: translateX(calc(100% + 24px)); opacity: 0; } }
+@keyframes toast-out { to { transform: translateX(calc(100% + 24px)); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .enter, .leave { animation-duration: 1ms; } }
+
+.toast { text-align: left; color: var(--t-fg); }
+.toast button { font: inherit; height: auto; padding: 0; border: 0; background: none; color: inherit; border-radius: 0; cursor: pointer; }
+.toast .title { font-weight: 600; }
+.toast .body { color: var(--t-fg2); }
+.toast code { font-family: "Cascadia Code", var(--mono); font-size: .92em; }
+.toast .img { flex: none; width: var(--s); height: var(--s); }
+.toast .img svg { display: block; width: 100%; height: 100%; }
+.toast .txt { flex: 1; min-width: 0; }
+.toast .reply input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; padding: 0; color: var(--t-fg); font: inherit; outline: none; }
+.toast .reply input::placeholder { color: var(--t-fg3); }
+.toast select { width: 100%; font: inherit; color: var(--t-fg); background: var(--t-ctl); border: 1px solid var(--t-ctl-line); padding: 0 8px; }
+.toast select option { background: var(--t-menu); color: var(--t-fg); }
+.toast .acts button { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; min-width: 0; }
+
+.toast.win { width: 364px; padding: 12px 16px 16px; border-radius: 8px; background: var(--t-bg); border: 1px solid var(--t-line); box-shadow: 0 16px 40px rgb(0 0 0 / .35); font: 14px/20px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+.win .w-hdr { display: flex; align-items: center; gap: 8px; height: 20px; margin-bottom: 12px; font-size: 12px; }
+.w-app { display: inline-flex; width: 16px; height: 16px; flex: none; } .w-app svg { width: 16px; height: 16px; }
+.win .w-ctl { width: 28px; height: 24px; display: grid; place-items: center; color: var(--t-fg2); font-size: 12px; border-radius: 4px; }
+.win button.w-ctl:hover { background: var(--t-ctl); }
+.win .w-row { display: flex; gap: 12px; align-items: flex-start; }
+.win .title, .win .body { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; }
+.win .body { -webkit-line-clamp: 3; }
+.win .small { font-size: 12px; line-height: 16px; color: var(--t-fg3); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.win .inputs { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.win .inputs + .acts { margin-top: 8px; }
+.win select { height: 32px; border-radius: 4px; }
+.win .acts { display: flex; gap: 8px; margin-top: 16px; }
+.win .acts button { flex: 1; height: 32px; padding: 0 6px; border-radius: 4px; background: var(--t-ctl); border: 1px solid var(--t-ctl-line); font-size: 14px; }
+.win .acts button.primary { background: var(--t-primary); border-color: transparent; color: var(--t-primary-fg); }
+.win .reply { display: flex; align-items: center; height: 32px; border-radius: 4px; background: var(--t-ctl); border: 1px solid var(--t-ctl-line); border-bottom: 2px solid var(--t-accent); padding: 0 4px 0 10px; }
+.win .reply button { width: 28px; height: 24px; display: grid; place-items: center; border-radius: 3px; }
+.win.compact { width: auto; padding: 10px 12px; border-radius: 6px; box-shadow: none; background: var(--t-item); margin-bottom: 6px; }
+.win.compact .title, .win.compact .body { -webkit-line-clamp: 1; }
+
+.toast.mac { width: 344px; padding: 11px 12px; border-radius: 16px; background: var(--m-bg); border: 1px solid var(--t-line); box-shadow: 0 10px 30px rgb(0 0 0 / .28); backdrop-filter: blur(24px) saturate(1.6); font: 13px/17px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; }
+.mac .m-main { display: flex; gap: 10px; align-items: center; }
+.mac .m-icon { flex: none; width: 38px; height: 38px; } .mac .m-icon svg { width: 100%; height: 100%; }
+.mac .m-top { display: flex; gap: 8px; align-items: baseline; }
+.mac .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mac .m-time { font-size: 12px; color: var(--t-fg3); }
+.mac .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mac .body { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mac .img { border-radius: 6px; overflow: hidden; }
+.mac .inputs { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.mac .inputs + .acts { margin-top: 6px; }
+.mac .acts { display: flex; gap: 6px; margin-top: 10px; }
+.mac .acts.col { flex-direction: column; }
+.mac .acts button { flex: 1; min-height: 26px; padding: 0 8px; border-radius: 7px; background: var(--t-ctl); border: 1px solid var(--t-ctl-line); font-size: 12.5px; }
+.mac .reply { display: flex; align-items: center; height: 28px; border-radius: 7px; background: var(--t-ctl); border: 1px solid var(--t-ctl-line); padding: 0 4px 0 10px; }
+.mac .reply button { width: 26px; height: 22px; display: grid; place-items: center; color: #0a84ff; }
+.mac.live .acts, .mac.live .inputs { display: none; }
+.mac.live:hover .acts, .mac.live:focus-within .acts, .mac.live:hover .inputs, .mac.live:focus-within .inputs { display: flex; }
+.mac.compact { width: auto; margin-bottom: 8px; box-shadow: none; }
+.mac.compact .m-icon { width: 32px; height: 32px; }
+
+.center { position: absolute; z-index: 2; right: 12px; top: 12px; bottom: 52px; width: 380px; overflow: auto; padding: 12px; border-radius: 8px; background: var(--t-panel); border: 1px solid var(--t-line); box-shadow: 0 16px 40px rgb(0 0 0 / .35); color: var(--t-fg); font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+.os-mac .center { top: 34px; bottom: 12px; right: 10px; width: 360px; background: none; border: 0; box-shadow: none; padding: 0; font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+.c-head { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 10px; }
+.c-clear { color: var(--t-fg3); }
+.c-group { display: flex; justify-content: space-between; font-weight: 600; font-size: 13px; padding: 6px 2px; }
+.c-group span:last-child { font-weight: 400; color: var(--t-fg3); font-size: 12px; }
+.os-mac .c-head, .os-mac .c-group, .os-mac .c-group span:last-child, .os-mac .c-clear { color: #fff; text-shadow: 0 1px 3px rgb(0 0 0 / .35); }
+
+.tile { border-radius: 10px; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 190px; overflow: hidden; }
+.static .toast { pointer-events: none; }
+.static .center { position: static; width: 380px; overflow: visible; }
+.static.os-mac .center { width: 344px; }
+
+.frames { display: flex; gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 12px; margin: 0; }
+.frame { flex: none; width: 430px; margin: 0; scroll-snap-align: start; cursor: pointer; }
+.frame .tile { height: 400px; }
+.frame:hover .tile { border-color: var(--fg-3); }
+.frame figcaption { display: flex; gap: 10px; margin-top: 10px; font-size: 14px; color: var(--fg-2); }
+.frame figcaption b { color: var(--fg); font-weight: 600; margin-right: 4px; }
+.frame .n { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px; color: var(--fg); }
+
+.cmp { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 20px; }
+.cmp-card { border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.cmp-card.active { border-color: var(--fg-3); }
+.cmp-card h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.cmp-card > p { margin: -8px 0 0; color: var(--fg-2); font-size: 14px; }
+.cmp-card .tile { flex: 1; }
+.cmp-card footer { display: flex; gap: 8px; justify-content: space-between; align-items: center; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 8px; }
+th, td { padding: 10px 16px 10px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { color: var(--fg-2); font-size: 13px; font-weight: 500; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+main code { font-family: var(--mono); font-size: .88em; }
+ul.rules { padding-left: 1.2em; max-width: 720px; color: var(--fg-2); margin: 20px 0 0; }
+ul.rules li + li { margin-top: 4px; }
+.notes textarea { min-height: 100px; font-size: 14px; max-width: 720px; display: block; }
+
+@media (max-width: 720px) { table { display: block; overflow-x: auto; } }
+@media print {
+  :root { color-scheme: light; }
+  main { max-width: none; margin: 0; padding: 0; }
+  .controls, .stage-bar { display: none; }
+  .frames { flex-wrap: wrap; overflow: visible; }
+  .pg { grid-template-columns: 1fr; }
+  figure, .cmp-card, table { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="top">Desktop notification playground</h1>
+  <p class="lede">Every notification the desktop app sends, with the real choices each one offers in the app. Try the alternatives on Windows 11 and macOS, play the storyboard, and vote for one at the bottom.</p>
+
+  <section id="playground">
+    <h2>Playground</h2>
+    <p class="sub">Pick a notification and a design, or change each part yourself. The notification in the preview works: click it, press its buttons, pick from its menu or type a reply.</p>
+    <div class="pg">
+      <form class="controls" id="controls" autocomplete="off" onsubmit="return false">
+        <fieldset><legend>Platform</legend>
+          <div class="seg"><label><input type="radio" name="platform" value="win"><span>Windows 11</span></label><label><input type="radio" name="platform" value="mac"><span>macOS</span></label></div>
+        </fieldset>
+        <fieldset><legend>Appearance</legend>
+          <div class="seg"><label><input type="radio" name="theme" value="dark"><span>Dark</span></label><label><input type="radio" name="theme" value="light"><span>Light</span></label></div>
+        </fieldset>
+        <fieldset><legend>Notification</legend>
+          <select name="kind" aria-label="Notification"></select>
+          <select name="variant" aria-label="Case"></select>
+        </fieldset>
+        <fieldset><legend>Design</legend>
+          <select name="preset" aria-label="Design">
+            <option value="current">Current</option>
+            <option value="minimal">A · Minimal</option>
+            <option value="context">B · With context</option>
+            <option value="details">C · Details</option>
+            <option value="actions">D · Actionable</option>
+            <option value="grouped">E · Grouped by project</option>
+            <option value="custom" disabled>Custom</option>
+          </select>
+        </fieldset>
+        <details open><summary>Layout</summary>
+          <label class="f">Image<select name="image"><option value="none">None</option><option value="logo">App logo</option></select></label>
+          <label class="f">Headline<select name="headline"><option value="session">Session title</option><option value="status">Status</option></select></label>
+          <label class="f">Body<select name="body"><option value="status">Status</option><option value="session">Session title</option><option value="detail">Details</option><option value="none">None</option></select></label>
+          <label class="f">Small line<select name="small"><option value="none">None</option><option value="context">Project · branch</option><option value="status">Status</option></select></label>
+          <label class="check"><input type="checkbox" name="actions"> Answer from the notification</label>
+          <label class="check"><input type="checkbox" name="group"> Group by project</label>
+        </details>
+        <details><summary>Content</summary>
+          <label class="f">Session title<input type="text" name="title"></label>
+          <label class="f">Project<input type="text" name="project"></label>
+          <label class="f">Branch<input type="text" name="branch"></label>
+          <label class="f">Duration<input type="text" name="duration"></label>
+          <label class="f">Details for this notification<textarea name="detail" rows="4"></textarea></label>
+        </details>
+      </form>
+      <div>
+        <div class="stage-bar">
+          <button type="button" data-view="toast">Toast</button>
+          <button type="button" data-view="center">Notification center</button>
+          <span class="sp"></span>
+          <button type="button" id="replay">Replay ↻</button>
+        </div>
+        <div class="screen wall" id="screen" role="img" aria-label="Desktop preview with the notification"></div>
+        <div class="stage-foot"><span class="log" id="log"></span><span id="cost"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="storyboard">
+    <h2>Storyboard</h2>
+    <p class="sub">One morning of notifications in the design you picked above. Change the design or platform and the whole story updates. Click a frame to open it in the playground.</p>
+    <div class="frames">
+      <figure class="frame" id="frame-permission" data-kind="permission"><div class="tile"></div><figcaption><span class="n">1</span><span><b>10:02</b>You switch to Slack. The agent wants to run the tests.</span></figcaption></figure>
+      <figure class="frame" id="frame-question" data-kind="question"><div class="tile"></div><figcaption><span class="n">2</span><span><b>10:04</b>It needs a decision before it can continue.</span></figcaption></figure>
+      <figure class="frame" id="frame-websearch" data-kind="websearch"><div class="tile"></div><figcaption><span class="n">3</span><span><b>10:05</b>It wants to search the web for the first time.</span></figcaption></figure>
+      <figure class="frame" id="frame-response" data-kind="response"><div class="tile"></div><figcaption><span class="n">4</span><span><b>10:07</b>It finishes while you're in a meeting.</span></figcaption></figure>
+      <figure class="frame" id="frame-error" data-kind="error" data-title="Pricing page copy pass" data-project="website" data-branch="pricing-copy"><div class="tile"></div><figcaption><span class="n">5</span><span><b>10:09</b>A session in another project fails.</span></figcaption></figure>
+      <figure class="frame" id="frame-center" data-view="center"><div class="tile"></div><figcaption><span class="n">6</span><span><b>10:30</b>Back at your desk, you open the notification center.</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="compare">
+    <h2>Compare designs</h2>
+    <p class="sub">Every design for <b id="cmp-kind"></b>. Pick another notification or platform in the playground.</p>
+    <div class="cmp">
+      <article class="cmp-card" id="design-current" data-preset="current"><h3>Current</h3><p>Logo twice, status as the headline.</p><div class="tile"></div><footer><button type="button" data-load="current">Open in playground</button><button data-field="v2-current" data-kind="vote">Vote</button></footer></article>
+      <article class="cmp-card" id="design-minimal" data-preset="minimal"><h3>A · Minimal</h3><p>No image. Session title first, status below.</p><div class="tile"></div><footer><button type="button" data-load="minimal">Open in playground</button><button data-field="v2-minimal" data-kind="vote">Vote</button></footer></article>
+      <article class="cmp-card" id="design-context" data-preset="context"><h3>B · With context</h3><p>A, plus the project and branch.</p><div class="tile"></div><footer><button type="button" data-load="context">Open in playground</button><button data-field="v2-context" data-kind="vote">Vote</button></footer></article>
+      <article class="cmp-card" id="design-details" data-preset="details"><h3>C · Details</h3><p>Says what it's about: the command, the question, the error or the reply.</p><div class="tile"></div><footer><button type="button" data-load="details">Open in playground</button><button data-field="v2-details" data-kind="vote">Vote</button></footer></article>
+      <article class="cmp-card" id="design-actions" data-preset="actions"><h3>D · Actionable</h3><p>C, plus the same choices the app offers, where they fit in a notification.</p><div class="tile"></div><footer><button type="button" data-load="actions">Open in playground</button><button data-field="v2-actions" data-kind="vote">Vote</button></footer></article>
+      <article class="cmp-card" id="design-grouped" data-preset="grouped"><h3>E · Grouped by project</h3><p>A, stacked by project in the notification center.</p><div class="tile"></div><footer><button type="button" data-load="grouped">Open in playground</button><button data-field="v2-grouped" data-kind="vote">Vote</button></footer></article>
+    </div>
+  </section>
+
+  <section id="today">
+    <h2>What the app sends today</h2>
+    <p class="sub">Every one of these shows the same thing: the status as the headline and the session title underneath. Nothing can be answered from the notification; clicking it opens the session.</p>
+    <table>
+      <thead><tr><th>Notification</th><th>When</th><th>Setting</th><th>What the app asks once you open it</th></tr></thead>
+      <tbody>
+        <tr><td>Response ready</td><td>A session finishes, and none of its subagents is still running</td><td>Agent</td><td>Nothing. You read the reply</td></tr>
+        <tr><td>Session error</td><td>A session's run fails</td><td>Errors</td><td>Nothing. The error itself is not in the notification</td></tr>
+        <tr><td>Permission required</td><td>A tool needs approval, and auto-approve is off for the project</td><td>Permissions</td><td>The tool, its arguments and file patterns, with Deny, Allow always and Allow once</td></tr>
+        <tr><td>Permission required<br><small>(web search)</small></td><td>An agent wants to search the web and no search provider is chosen</td><td>Permissions</td><td>A provider menu (Any, or a specific one), with Don't use search and Enable</td></tr>
+        <tr><td>Question requires an answer</td><td>The agent asks one or more questions</td><td>Questions</td><td>Each question has options with descriptions, numbered 1 to 9, pick one or several, plus "Type your own answer…". Dismiss, Next or Submit</td></tr>
+        <tr><td>Input requested</td><td>An MCP server asks for input</td><td>Questions</td><td>A form: text, number, on/off, menu, checkboxes, or a link to open. Dismiss or Submit</td></tr>
+        <tr><td>From a plugin</td><td>A plugin calls <code>attention.notify</code></td><td>Agent, or Errors for the error variant</td><td>The plugin's own title and message. Clicking opens the session it names</td></tr>
+      </tbody>
+    </table>
+    <ul class="rules">
+      <li>A notification shows only while no OpenCode window has focus, and only once when several windows are open.</li>
+      <li>The session needs an open tab. A request from a subagent points at its parent session's tab.</li>
+      <li>Muted sessions and subagent sessions never notify on finish or failure.</li>
+      <li>A permission or question that is answered before the notification goes out is skipped.</li>
+      <li>The notification itself is silent. The app plays its own sound, set per category in Settings.</li>
+    </ul>
+  </section>
+
+  <section id="feedback" class="notes">
+    <h2>Feedback</h2>
+    <p class="sub">Anything to change or combine? For example, "C, but keep the buttons for permissions only".</p>
+    <textarea data-field="notes" aria-label="Feedback" placeholder="Your notes"></textarea>
+  </section>
+
+  <section id="cost-table">
+    <h2>What each one takes</h2>
+    <table>
+      <thead><tr><th>Design</th><th>Change</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td>A</td><td>Drop the icon, swap title and body</td><td><code>desktop/src/renderer/platform/notifications.ts</code>, <code>app/src/shell/notifications/notification.tsx</code></td></tr>
+        <tr><td>B, C</td><td>Also pass the project, branch, and the command, question, error or last message through <code>platform.notify</code></td><td>Same files, plus the <code>Platform["notify"]</code> signature</td></tr>
+        <tr><td>D, E</td><td>Move to Electron's main-process <code>Notification</code>. On Windows, <code>toastXml</code> gives buttons, a menu, a text box and a project header. Answers go back through the same permission and form replies the app uses</td><td>New IPC handler in <code>desktop/src/main/ipc-handlers</code></td></tr>
+        <tr><td>macOS</td><td>Buttons and one reply field work through Electron's <code>actions</code> and <code>hasReply</code>. There is no menu, so the web search choice opens the app. The app icon always shows on the left</td><td>Same handler</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+const APP_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="3.5" fill="#2f6fde"/><rect x="5" y="3.5" width="6" height="9" rx="1" fill="none" stroke="#fff" stroke-width="1.6"/></svg>'
+const LOGO = '<svg viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" fill="#111"/><rect x="13" y="9" width="22" height="30" fill="#fff"/><rect x="19" y="16" width="10" height="16" fill="#4a4a4a"/></svg>'
+const SEND = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-7-6 15-2.5-6.5L4 12z" fill="currentColor"/></svg>'
+const PERMISSION = { buttons: ['Allow once', 'Allow always', 'Deny'], primary: true }
+const OPEN = { buttons: ['Open', 'Dismiss'] }
+const KINDS = {
+  response: { name: 'Response ready', label: 'Response ready', variants: [
+    { id: 'done', name: 'Finished', detail: 'The preview now streams rows into a virtualized grid and stops parsing after 5,000 rows, so a 400 MB file opens instantly. Tests pass on Windows and macOS.', actions: { reply: 'Send a follow-up…' } },
+  ] },
+  permission: { name: 'Permission required', label: 'Permission required', variants: [
+    { id: 'bash', name: 'Shell command', detail: 'Run `bun test packages/app`', actions: PERMISSION },
+    { id: 'edit', name: 'File edit', detail: 'Edit `packages/app/src/session/preview.tsx`', actions: PERMISSION },
+  ] },
+  websearch: { name: 'Permission required (web search)', label: 'Permission required', variants: [
+    { id: 'provider', name: 'Choose a provider', detail: 'Third-party web search. Select the search provider agents use to search the web.', actions: { select: ['Any', 'Exa', 'Firecrawl', 'Parallel', 'Tavily'], buttons: ['Enable', 'Don’t use search'], primary: true }, mac: { buttons: ['Open', 'Don’t use search'] } },
+  ] },
+  question: { name: 'Question requires an answer', label: 'Question requires an answer', variants: [
+    { id: 'single', name: 'One question, pick one', detail: 'How many rows should the preview load before it stops?', actions: { reply: 'Type your own answer…', buttons: ['5,000 rows', '10,000 rows', 'No limit'], answer: true } },
+    { id: 'multi', name: 'One question, pick several', detail: 'Which platforms should the fix cover? Select all answers that apply.', actions: OPEN },
+    { id: 'several', name: 'Three questions', note: '1 of 3 questions', detail: 'How many rows should the preview load before it stops?', actions: OPEN },
+  ] },
+  elicitation: { name: 'Input requested', label: 'Input requested', variants: [
+    { id: 'text', name: 'One text field', detail: 'Sentry needs your organization slug to continue.', actions: { reply: 'Organization slug' } },
+    { id: 'link', name: 'A link to open', detail: 'Sign in to Linear to continue.', actions: OPEN },
+    { id: 'form', name: 'Longer form', detail: 'Linear needs a team, a priority and labels for the new issue.', actions: OPEN },
+  ] },
+  error: { name: 'Session error', label: 'Session error', variants: [
+    { id: 'failed', name: 'Run failed', detail: 'The model provider is overloaded. Try again in a moment.' },
+  ] },
+  plugin: { name: 'From a plugin', label: 'Tests finished', plugin: true, variants: [
+    { id: 'default', name: 'Default', detail: '128 passed, 2 failed in packages/app' },
+  ] },
+}
+const LAYOUT = ['image', 'headline', 'body', 'small', 'actions', 'group']
+const PRESETS = {
+  current: { image: 'logo', headline: 'status', body: 'session', small: 'none', actions: false, group: false },
+  minimal: { image: 'none', headline: 'session', body: 'status', small: 'none', actions: false, group: false },
+  context: { image: 'none', headline: 'session', body: 'status', small: 'context', actions: false, group: false },
+  details: { image: 'none', headline: 'session', body: 'detail', small: 'status', actions: false, group: false },
+  actions: { image: 'none', headline: 'session', body: 'detail', small: 'status', actions: true, group: false },
+  grouped: { image: 'none', headline: 'session', body: 'status', small: 'none', actions: false, group: true },
+}
+const ACT_LOG = {
+  'Allow once': 'Allowed once. The agent keeps going without you opening the app.',
+  'Allow always': 'Allowed always, so matching requests stop asking.',
+  Deny: 'Denied. The agent is told and continues.',
+  'Don’t use search': 'Web search stays off.',
+  Open: 'Opens the session in OpenCode, where the full prompt is.',
+  Dismiss: 'Dismissed, the same as Dismiss in the app.',
+}
+
+const state = {
+  platform: /Mac/.test(navigator.platform) ? 'mac' : 'win',
+  theme: matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
+  kind: 'permission',
+  variant: {},
+  preset: 'actions',
+  view: 'toast',
+  layout: { ...PRESETS.actions },
+}
+const content = {
+  title: 'Fix #65041: desktop UI freeze previewing large CSV',
+  project: 'opencode',
+  branch: 'csv-preview-freeze',
+  duration: '3m 12s',
+  details: {},
+}
+
+const $ = (s) => document.querySelector(s)
+const form = $('#controls')
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+const md = (s) => esc(s).replace(/`(.+?)`/g, '<code>$1</code>')
+const variantOf = (kind) => KINDS[kind].variants.find((v) => v.id === state.variant[kind]) ?? KINDS[kind].variants[0]
+const detailOf = (kind) => content.details[kind + ':' + variantOf(kind).id] ?? variantOf(kind).detail
+
+function texts(layout, kind, c) {
+  const K = KINDS[kind]
+  const V = variantOf(kind)
+  const status = [K.label, V.note ?? (kind === 'response' ? c.duration : '')].filter(Boolean).join(' · ')
+  const detail = detailOf(kind)
+  // A plugin sends its own title and message; today the session title is not part of it.
+  const today = K.plugin && layout.headline === 'status'
+  const pick = (v) => ({ session: today ? detail : c.title, status, detail, context: [c.project, c.branch].filter(Boolean).join(' · '), none: '' })[v]
+  return { headline: layout.headline === 'status' ? K.label : c.title, body: pick(layout.body), small: pick(layout.small) }
+}
+
+function actionsHtml(a, mac) {
+  if (!a) return ''
+  const inputs = [
+    a.select ? `<select aria-label="Search provider">${a.select.map((o) => `<option>${esc(o)}</option>`).join('')}</select>` : '',
+    a.reply ? `<div class="reply"><input type="text" placeholder="${esc(a.reply)}" aria-label="${esc(a.reply)}"><button type="button" data-act="send" aria-label="Send">${SEND}</button></div>` : '',
+  ].join('')
+  const buttons = (a.buttons ?? []).map((b, i) => `<button type="button" data-act="${esc(b)}"${a.answer ? ' data-answer' : ''}${i === 0 && a.primary && !mac ? ' class="primary"' : ''}>${esc(b)}</button>`).join('')
+  return (inputs ? `<div class="inputs">${inputs}</div>` : '') + (buttons ? `<div class="acts${mac && a.buttons.length > 2 ? ' col' : ''}">${buttons}</div>` : '')
+}
+
+function toastHtml(layout, kind, c, o) {
+  const V = variantOf(kind)
+  const t = texts(layout, kind, c)
+  const mac = o.platform === 'mac'
+  const size = o.compact ? 32 : mac ? 38 : 48
+  const image = layout.image === 'logo' ? `<div class="img" style="--s:${size}px">${LOGO}</div>` : ''
+  const actions = layout.actions && !o.compact ? actionsHtml(mac ? (V.mac ?? V.actions) : V.actions, mac) : ''
+  const cls = `toast ${o.platform}${o.compact ? ' compact' : ''}${o.live ? ' live' : ''}`
+  if (mac) {
+    const text = `<div class="txt"><div class="m-top"><span class="title">${md(t.headline)}</span><span class="m-time">now</span></div>${t.small ? `<div class="sub">${esc(t.small)}</div>` : ''}${t.body ? `<div class="body">${md(t.body)}</div>` : ''}</div>`
+    return `<div class="${cls}"><div class="m-main"><div class="m-icon">${APP_ICON}</div>${text}${image}</div>${actions}</div>`
+  }
+  const text = `<div class="txt"><div class="title">${md(t.headline)}</div>${t.body ? `<div class="body">${md(t.body)}</div>` : ''}${t.small ? `<div class="small">${esc(t.small)}</div>` : ''}</div>`
+  const header = o.compact ? '' : `<div class="w-hdr"><span class="w-app">${APP_ICON}</span>OpenCode Dev<span class="sp"></span><span class="w-ctl" aria-hidden="true">···</span><button type="button" class="w-ctl" data-act="close" aria-label="Dismiss">✕</button></div>`
+  return `<div class="${cls}">${header}<div class="w-row">${image}${text}</div>${actions}</div>`
+}
+
+function feed() {
+  return [
+    { kind: 'response', c: content },
+    { kind: 'question', c: { ...content, title: 'Refactor session inbox delivery', branch: 'inbox-delivery' } },
+    { kind: 'permission', c: { ...content, title: 'Regenerate SDK', branch: 'regenerate-sdk' } },
+    { kind: 'error', c: { ...content, title: 'Pricing page copy pass', project: 'website', branch: 'pricing-copy' } },
+  ]
+}
+
+function centerHtml(o, layout) {
+  const items = feed()
+  const groups = layout.group
+    ? Object.entries(items.reduce((acc, i) => ({ ...acc, [i.c.project]: [...(acc[i.c.project] ?? []), i] }), {}))
+    : [['', items]]
+  const list = groups.map(([name, its]) => (name ? `<div class="c-group"><span>${esc(name)}</span><span>${its.length}</span></div>` : '') + its.map((i) => toastHtml(layout, i.kind, i.c, { ...o, compact: true })).join('')).join('')
+  return `<div class="center"><div class="c-head"><span class="w-app">${APP_ICON}</span><b>OpenCode Dev</b><span class="sp"></span><span class="c-clear">Clear all</span></div>${list}</div>`
+}
+
+function costNote(l) {
+  if (l.actions || l.group) return 'Needs main-process notifications'
+  if (l.small !== 'none' || l.body === 'detail') return 'Small change: pass more data to notify'
+  if (l.image === 'logo' && l.headline === 'status') return 'What ships today'
+  return 'Tiny change to the current code'
+}
+
+function hint() {
+  if (state.view === 'center') return 'Everything you missed, newest first.'
+  const V = variantOf(state.kind)
+  const a = state.platform === 'mac' ? (V.mac ?? V.actions) : V.actions
+  if (!state.layout.actions || !a) return 'Click the notification to open the session.'
+  if (state.platform === 'mac') return 'Hover the notification to see its actions.'
+  if (a === OPEN) return 'This one is too big for a notification, so it opens the app.'
+  return 'Answer it here, or click the notification to open the session.'
+}
+
+function render(animate) {
+  const o = { platform: state.platform, theme: state.theme }
+  const wall = `wall os-${o.platform} t-${o.theme}`
+  const screen = $('#screen')
+  screen.className = 'screen ' + wall
+  const chrome = o.platform === 'win'
+    ? '<div class="taskbar" aria-hidden="true"><i></i><i></i><i class="oc"></i><i></i><i></i><span class="clock">10:07<br>11/20/2026</span></div>'
+    : '<div class="menubar" aria-hidden="true"><b>Slack</b><span>File</span><span>Edit</span><span>View</span><span class="sp"></span><span>Fri 10:07</span></div>'
+  const body = state.view === 'center'
+    ? centerHtml(o, state.layout)
+    : `<div class="toast-slot${animate ? ' enter' : ''}">${toastHtml(state.layout, state.kind, content, { ...o, live: true })}</div>`
+  screen.innerHTML = '<div class="appwin" aria-hidden="true"><i></i><i></i><i></i></div>' + chrome + body
+  document.querySelectorAll('button[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)))
+  $('#cost').textContent = costNote(state.layout)
+  if (animate) log(hint())
+
+  document.querySelectorAll('.frame').forEach((fr) => {
+    const tile = fr.querySelector('.tile')
+    tile.className = 'tile static ' + wall
+    const c = fr.dataset.title ? { ...content, title: fr.dataset.title, project: fr.dataset.project, branch: fr.dataset.branch } : content
+    tile.innerHTML = fr.dataset.view === 'center' ? centerHtml(o, state.layout) : toastHtml(state.layout, fr.dataset.kind, c, o)
+  })
+
+  $('#cmp-kind').textContent = '“' + KINDS[state.kind].name + '”'
+  document.querySelectorAll('.cmp-card').forEach((card) => {
+    const p = card.dataset.preset
+    const tile = card.querySelector('.tile')
+    tile.className = 'tile static ' + wall
+    tile.innerHTML = p === 'grouped' ? centerHtml(o, PRESETS.grouped) : toastHtml(PRESETS[p], state.kind, content, o)
+    card.classList.toggle('active', state.preset === p)
+  })
+}
+
+function sync() {
+  const f = form.elements
+  for (const n of ['platform', 'theme']) form.querySelector(`[name="${n}"][value="${state[n]}"]`).checked = true
+  f.kind.innerHTML = Object.entries(KINDS).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')
+  f.kind.value = state.kind
+  const variants = KINDS[state.kind].variants
+  f.variant.innerHTML = variants.map((v) => `<option value="${v.id}">${esc(v.name)}</option>`).join('')
+  f.variant.value = variantOf(state.kind).id
+  f.variant.hidden = variants.length < 2
+  f.preset.value = state.preset
+  for (const k of LAYOUT) {
+    if (f[k].type === 'checkbox') f[k].checked = state.layout[k]
+    else f[k].value = state.layout[k]
+  }
+  for (const k of ['title', 'project', 'branch', 'duration']) f[k].value = content[k]
+  f.detail.value = detailOf(state.kind)
+}
+
+function applyPreset(p) {
+  state.preset = p
+  state.layout = { ...PRESETS[p] }
+  state.view = p === 'grouped' ? 'center' : 'toast'
+  sync()
+  render(true)
+}
+
+form.addEventListener('input', (e) => {
+  const el = e.target
+  const n = el.name
+  if (n === 'preset') return applyPreset(el.value)
+  if (n === 'platform' || n === 'theme' || n === 'kind' || n === 'variant') {
+    if (n === 'variant') state.variant[state.kind] = el.value
+    else state[n] = el.value
+    if (n === 'kind' || n === 'variant') state.view = 'toast'
+    sync()
+    return render(true)
+  }
+  if (LAYOUT.includes(n)) {
+    state.layout[n] = el.type === 'checkbox' ? el.checked : el.value
+    state.preset = Object.keys(PRESETS).find((k) => LAYOUT.every((x) => PRESETS[k][x] === state.layout[x])) ?? 'custom'
+    form.elements.preset.value = state.preset
+    return render(true)
+  }
+  if (n === 'detail') content.details[state.kind + ':' + variantOf(state.kind).id] = el.value
+  else content[n] = el.value
+  render(false)
+})
+
+function log(msg) { $('#log').textContent = msg }
+function dismiss(msg) {
+  log('→ ' + msg)
+  const slot = $('.toast-slot')
+  if (!slot) return
+  slot.classList.remove('enter')
+  slot.classList.add('leave')
+}
+function send(toast) {
+  const v = toast.querySelector('.reply input').value.trim()
+  if (!v) return log('Type something first.')
+  const verb = { question: 'Answered', elicitation: 'Submitted' }[state.kind] ?? 'Sent'
+  dismiss(`${verb} “${v}” without opening the app.`)
+}
+
+$('#screen').addEventListener('click', (e) => {
+  const toast = e.target.closest('.toast-slot .toast')
+  if (!toast || e.target.closest('input, select')) return
+  const act = e.target.closest('[data-act]')
+  if (!act) return dismiss(`Opens OpenCode at “${content.title}”.`)
+  const a = act.dataset.act
+  if (a === 'close') return dismiss('Dismissed. It stays in the notification center.')
+  if (a === 'send') return send(toast)
+  if (act.hasAttribute('data-answer')) return dismiss(`Answered “${a}”. The agent keeps going without you opening the app.`)
+  if (a === 'Enable') return dismiss(`Web search is on, using “${toast.querySelector('select').value}”.`)
+  dismiss(ACT_LOG[a] ?? a)
+})
+$('#screen').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('.reply input')) send(e.target.closest('.toast'))
+})
+$('#replay').addEventListener('click', () => { state.view = 'toast'; render(true) })
+document.querySelectorAll('button[data-view]').forEach((b) => b.addEventListener('click', () => { state.view = b.dataset.view; render(true) }))
+document.querySelector('.frames').addEventListener('click', (e) => {
+  const fr = e.target.closest('.frame')
+  if (!fr) return
+  state.view = fr.dataset.view === 'center' ? 'center' : 'toast'
+  if (fr.dataset.kind) state.kind = fr.dataset.kind
+  sync()
+  render(true)
+  $('#playground').scrollIntoView({ behavior: 'smooth' })
+})
+document.querySelectorAll('[data-load]').forEach((b) => b.addEventListener('click', () => {
+  applyPreset(b.dataset.load)
+  $('#playground').scrollIntoView({ behavior: 'smooth' })
+}))
+
+sync()
+render(true)
+</script>
+</body>
+</html>
