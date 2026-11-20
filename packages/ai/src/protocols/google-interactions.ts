@@ -242,13 +242,28 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 // =============================================================================
 // Request Body Construction
 // =============================================================================
+// https://aistudio.google.com/docs/document-processing#office-documents
+const OFFICE_DOCUMENT_MIME_TYPES = new Set([
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.oasis.opendocument.presentation",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.oasis.opendocument.spreadsheet",
+])
+
 export const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
   if (
     asset.kind !== "image" &&
     asset.kind !== "audio" &&
     asset.kind !== "video" &&
     asset.mediaType !== "application/pdf" &&
-    asset.mediaType !== "text/csv"
+    asset.mediaType !== "text/csv" &&
+    !OFFICE_DOCUMENT_MIME_TYPES.has(asset.mediaType)
   )
     return yield* ProviderShared.invalidRequest(
       `Google Interactions does not support ${asset.mediaType} document input`,

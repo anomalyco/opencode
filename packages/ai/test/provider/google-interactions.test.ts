@@ -1,8 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Stream } from "effect"
-import { ai, isRetryable } from "../../src/effect.js"
+import { ai, isRetryable, Media, Message } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/testing.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
@@ -47,6 +48,25 @@ describe("Google Interactions", () => {
         { type: "hate_speech", threshold: "block_only_high" },
       ])
       expect(bodies[0]).not.toHaveProperty("safetySettings")
+    }),
+  )
+
+  it.effect("lowers DOCX as a document and rejects an undocumented Office MIME type", () =>
+    Effect.gen(function* () {
+      const docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      const docm = "application/vnd.ms-word.document.macroenabled.12"
+      const request = (mime: string) => ai.request({ model, prompt: Message.media(Media.base64("UEsDBA==", mime)) })
+
+      const compiled = yield* compileRequest(request(docx))
+      expect(compiled.body.input).toEqual([
+        { type: "user_input", content: [{ type: "document", mime_type: docx, data: "UEsDBA==" }] },
+      ])
+
+      const error = yield* compileRequest(request(docm)).pipe(Effect.flip)
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidRequest",
+        message: `Google Interactions does not support ${docm} document input`,
+      })
     }),
   )
 
