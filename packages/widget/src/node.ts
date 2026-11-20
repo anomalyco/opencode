@@ -103,6 +103,8 @@ export interface Canvas {
   readonly fps?: number
   /** Seconds after the canvas appears to animate at `fps`, ending with a frame at `t >= duration`; default forever. */
   readonly duration?: number
+  /** In full screen, grow to the remaining height (`height` is the minimum); widgets-fullscreen.md. */
+  readonly fill?: boolean
   readonly alt?: string
 }
 /** A WGSL fragment shader defining `fn shade(frag: vec2f) -> vec4f` (see the spec's Shader section). */
@@ -117,6 +119,8 @@ export interface Shader {
   readonly values?: ReadonlyArray<number>
   /** Default 60, max 60. */
   readonly fps?: number
+  /** In full screen, grow to the remaining height (`height` is the minimum); widgets-fullscreen.md. */
+  readonly fill?: boolean
   readonly alt?: string
   /** An image src shown where the shader can't run. */
   readonly poster?: string
@@ -152,6 +156,8 @@ export interface Pointer {
 export type WidgetEvent =
   | { readonly id: string; readonly type: "press" | "change"; readonly value?: unknown }
   | { readonly id: string; readonly type: "pointer"; readonly value: Pointer }
+  /** The widget entered (`true`) or left (`false`) full screen; `id` is empty. */
+  | { readonly id: ""; readonly type: "fullscreen"; readonly value: boolean }
 
 /** What `draw` gets: the canvas being drawn, the time, its size and the pointer over it. */
 export interface Frame {
@@ -168,6 +174,11 @@ export interface Frame {
   readonly scale: number
   readonly pointer: { readonly x: number; readonly y: number; readonly down: boolean } | null
   readonly dark: boolean
+  /**
+   * The widget is full screen (widgets-fullscreen.md); `width` and `height` follow it. Hosts without full screen, such
+   * as the TUI, may leave it out, which means `false`.
+   */
+  readonly fullscreen?: boolean
 }
 
 export type StepInput =
@@ -339,6 +350,7 @@ export const Node: Schema.Codec<Node> = Schema.Union([
     width: optional(Schema.Finite.check(Schema.isGreaterThan(0))),
     fps: optional(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 60 }))),
     duration: optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+    fill: optional(Schema.Boolean),
     alt: optional(Schema.String),
   }),
   Schema.Struct({
@@ -351,6 +363,7 @@ export const Node: Schema.Codec<Node> = Schema.Union([
     ),
     values: optional(Schema.Array(Schema.Finite).check(Schema.isMaxLength(16))),
     fps: optional(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 60 }))),
+    fill: optional(Schema.Boolean),
     alt: optional(Schema.String),
     poster: optional(Schema.String),
   }),

@@ -62,6 +62,10 @@ export const TemplateInput = Schema.Struct({
     description:
       'For save: "step" (default) for init/view/update templates, "live" for a long-running async main(data) (games, timers, animations)',
   }),
+  fullscreen: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "For save: true to always offer full screen (games, big visualizations), false to never; omit to let clients offer it for live and canvas/shader widgets",
+  }),
   capabilities: Widget.Capabilities.pipe(optional).annotate({
     description:
       'For save, live templates only: what the widget may use, e.g. { https: { hosts: ["api.github.com"] } } for widget.fetch. Declare the fewest hosts it needs',
