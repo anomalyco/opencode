@@ -18,6 +18,7 @@ const links = `<!doctype html><title>Links</title>
 <a href="/target?blank" target="_blank" style="top:50px">Blank link</a>
 <a href="mailto:someone@example.test" style="top:100px">Mail link</a>
 <div style="top:150px">No link</div>
+<a href="/target?opener" target="_blank" rel="opener" style="top:200px">Opener link</a>
 <script>
 window.presses = 0
 window.moves = 0
@@ -32,16 +33,20 @@ setTimeout(() => document.querySelector("a").dispatchEvent(new MouseEvent("click
 
 const unprompted = `<!doctype html><title>Unprompted</title><script>setTimeout(() => window.open("/target?timer"), 50)</script>`
 
-const pages = new Map([
-  ["/links", links],
-  ["/synthetic", synthetic],
-  ["/unprompted", unprompted],
-])
+function served(path: string | undefined) {
+  if (path === "/links") return links
+
+  if (path === "/synthetic") return synthetic
+
+  if (path === "/unprompted") return unprompted
+
+  return "<!doctype html><title>Target</title><p>target</p>"
+}
 
 const server = createServer((request, response) => {
   if (request.url === "/favicon.ico") return void response.writeHead(404).end()
   response.writeHead(200, { "content-type": "text/html" })
-  response.end(pages.get(request.url ?? "") ?? "<!doctype html><title>Target</title><p>target</p>")
+  response.end(served(request.url))
 })
 
 void electron.app.whenReady().then(async () => {
@@ -245,13 +250,15 @@ void electron.app.whenReady().then(async () => {
   const mail = await press(2, "left")
   const mailMiddle = await press(2, "middle")
   const nothing = await press(3, "middle")
+  const opener = await press(4, "left")
+  const openerMiddle = await press(4, "middle")
   const key = await enter([modifier])
   const agent = await agentPress()
   const reclaimed = await press(0, "middle")
   const synthesized = await unasked("/synthetic")
   const timer = await unasked("/unprompted")
   process.stdout.write(
-    `${JSON.stringify({ platform: process.platform, middle, modified, modifiedShift, middleShift, shift, blank, blankMiddle, mail, mailMiddle, nothing, key, agent, reclaimed, synthetic: synthesized, timer })}\n`,
+    `${JSON.stringify({ platform: process.platform, middle, modified, modifiedShift, middleShift, shift, blank, blankMiddle, mail, mailMiddle, nothing, opener, openerMiddle, key, agent, reclaimed, synthetic: synthesized, timer })}\n`,
   )
   await page.dispose()
   server.closeAllConnections()

@@ -45,6 +45,9 @@ test(
     expect(result.mailMiddle).toEqual(result.mail)
     // A middle-click on no link asks for nothing.
     expect(result.nothing).toEqual({ tabs: [], notices: [], owner: "user" })
+    // A link that asks for an opener gets one on a click, as before. Chromium gives a middle-clicked link none.
+    expect(result.opener).toEqual({ tabs: [{ background: false, owner: "user", url: "/target?opener", opener: "opener" }], notices: [], owner: "user" })
+    expect(result.openerMiddle).toEqual(behind("/target?opener"))
 
     // The agent's middle-click is not the person's: it stays a blocked pop-up, or on Linux is refused before it is
     // sent, as it can paste the system selection.
