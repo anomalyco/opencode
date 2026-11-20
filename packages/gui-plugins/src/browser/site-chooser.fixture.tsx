@@ -28,6 +28,9 @@ export type SiteScenario = {
   readonly pages?: number
 }
 
+/** The dialog host, once the opener mounts under it: the offer opens its own import dialog there. */
+type Hosted = { dialog?: ReturnType<typeof useDialog> }
+
 const sources: ProfileSource[] = [
   {
     id: "chrome",
@@ -84,8 +87,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
   }>({ imports: [], reads: [], closed: false, imported: 0, closes: 0 })
 
   const held = Promise.withResolvers<void>()
-  // The dialog host, once the opener mounts under it: the offer opens its own import dialog there.
-  const hosted: { dialog?: ReturnType<typeof useDialog> } = {}
+  const hosted: Hosted = {}
 
   const client = {
     state: () => ({ extensions: [], remoteSignIns: false }),
