@@ -45,7 +45,7 @@ describe("Claude history branches", () => {
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn(),
         FakeClaude.expectStartup(),
-        FakeClaude.expectTurn({ recording: "billing-error" }),
+        FakeClaude.expectTurn({ recording: "api-error" }),
         FakeClaude.expectInterrupt(),
         FakeClaude.expectInterrupt(),
       ])
