@@ -7,7 +7,6 @@ import { Effect, Schema } from "effect"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
-import { Permission } from "../../permission.js"
 import { SessionMessage } from "../../session/message.js"
 import { SessionSearch } from "../../session/search.js"
 
@@ -56,7 +55,6 @@ export const Plugin = {
   id: "opencode.tool.session-search",
   effect: Effect.fn("SessionSearchTools.Plugin")(function* (ctx: Context) {
     const config = yield* Config.Service
-    const permission = yield* Permission.Service
     const search = yield* SessionSearch.Service
     // Internal plugins are not re-run on config changes, so reload the tool transform instead.
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
@@ -74,21 +72,13 @@ export const Plugin = {
           input: SearchInput,
           output: SessionSearch.SearchOutput,
           options: { namespace: "opencode.session", codemode: true },
-          execute: (input, context) =>
-            Effect.gen(function* () {
-              yield* permission.assert({
-                action: "opencode_session_search",
-                resources: ["*"],
-                save: ["*"],
-                ...Permission.invocation(context),
-              })
-              return {
-                output: yield* search.search({
-                  ...input,
-                  projectID: input.scope === "all" ? undefined : ctx.location.project.id,
-                }),
-              }
-            }).pipe(Effect.mapError(failure)),
+          execute: (input) =>
+            search
+              .search({ ...input, projectID: input.scope === "all" ? undefined : ctx.location.project.id })
+              .pipe(
+                Effect.map((output) => ({ output })),
+                Effect.mapError(failure),
+              ),
         })
         editor.add({
           name: "read",
@@ -97,16 +87,11 @@ export const Plugin = {
           input: ReadInput,
           output: SessionSearch.ReadOutput,
           options: { namespace: "opencode.session", codemode: true },
-          execute: (input, context) =>
-            Effect.gen(function* () {
-              yield* permission.assert({
-                action: "opencode_session_read",
-                resources: ["*"],
-                save: ["*"],
-                ...Permission.invocation(context),
-              })
-              return { output: yield* search.read(input) }
-            }).pipe(Effect.mapError(failure)),
+          execute: (input) =>
+            search.read(input).pipe(
+              Effect.map((output) => ({ output })),
+              Effect.mapError(failure),
+            ),
         })
       })
       .pipe(Effect.orDie)

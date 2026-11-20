@@ -19,7 +19,6 @@ import { SessionSearchTools } from "@opencode/core/tool/plugin/session-search"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { testEffect } from "./lib/effect"
-import { permissionLayer } from "./lib/permission"
 import { codeModeListings, executeTool, toolIdentity } from "./lib/tool"
 import { makePluginTestLayer } from "./plugin/fixture"
 
@@ -59,9 +58,7 @@ describe("SessionSearchTools", () => {
       const plugins = yield* Plugin.Service
       const tools = yield* Tool.Service
       yield* config.setEntries(documents(false))
-      yield* SessionSearchTools.Plugin.effect(yield* PluginHost.make(plugins, "test")).pipe(
-        Effect.provide(permissionLayer({ assert: () => Effect.void })),
-      )
+      yield* SessionSearchTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
 
       expect(yield* paths(tools)).not.toContain("opencode.session.search")
       expect(yield* paths(tools)).not.toContain("opencode.session.read")
@@ -86,14 +83,13 @@ describe("SessionSearchTools", () => {
     }),
   )
 
-  it.effect("executes session_search and session_read through Code Mode and enforces flag + permissions", () =>
+  it.effect("executes session_search and session_read through Code Mode", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       const config = yield* Config.Test
       const plugins = yield* Plugin.Service
       const tools = yield* Tool.Service
       const location = yield* Location.Service
-      const asserted: string[] = []
 
       const elsewhere = Project.ID.make("prj_elsewhere")
       yield* db
@@ -157,16 +153,7 @@ describe("SessionSearchTools", () => {
       while (!(yield* SessionSearchIndex.buildChunk(db)).done) {}
 
       yield* config.setEntries(documents(true))
-      yield* SessionSearchTools.Plugin.effect(yield* PluginHost.make(plugins, "test")).pipe(
-        Effect.provide(
-          permissionLayer({
-            assert: (input) =>
-              Effect.sync(() => {
-                asserted.push(input.action)
-              }),
-          }),
-        ),
-      )
+      yield* SessionSearchTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
 
       // Defaults to the caller's project; scope: "all" widens it.
       const searched = yield* runCode(tools, `return await tools.opencode.session.search({ query: "walrus" })`)
@@ -186,8 +173,6 @@ describe("SessionSearchTools", () => {
         session: { sessionID: targetSession },
         messages: [{ messageID: targetMessage, text: "We decided on compact walrus layout" }],
       })
-      expect(asserted).toEqual(["opencode_session_search", "opencode_session_search", "opencode_session_read"])
-
     }),
   )
 })
