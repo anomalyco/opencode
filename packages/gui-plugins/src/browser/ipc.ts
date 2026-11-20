@@ -181,10 +181,11 @@ export const PaneEvent = Schema.Union([
     type: Schema.Literal("state"),
     state: Schema.NullOr(Browser.State),
     error: Schema.optionalKey(Schema.String),
-    // Tabs a link opened whose pages have no name yet. The strip sizes a tab by its label, so it shows each one only
-    // once it leaves this list, with the label it keeps.
-    held: Schema.optionalKey(Schema.Array(Browser.TabID)),
-    // With the report that first shows such a tab: the tab it stands after, as in Chrome. The window's strip holds
+    // Tabs a link opened whose first page has no name of its own yet. The strip sizes a tab by its label, so each keeps
+    // its new-tab label until it leaves this list, and takes its page's title once: never Chromium's name for a
+    // document that has not named itself, which is its address.
+    unnamed: Schema.optionalKey(Schema.Array(Browser.TabID)),
+    // With the inventory that first lists such a tab: the tab it stands after, as in Chrome. The window's strip holds
     // other panels' tabs too, so it adds the tab there instead of at its end.
     placed: Schema.optionalKey(Schema.Struct({ tabID: Browser.TabID, after: Browser.TabID })),
   }),

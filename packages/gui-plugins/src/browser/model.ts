@@ -53,6 +53,7 @@ import {
   sessionTab,
   sessionTabs,
   sessionUnavailable,
+  tabUnnamed,
   unseenActivity,
   revealGuard,
   transition,
@@ -385,7 +386,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (event.error !== undefined) noteFailure(event.error, undefined)
 
-      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error, held: event.held, placed: event.placed })
+      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error, unnamed: event.unnamed, placed: event.placed })
     }
 
     if (event.type === "embed")
@@ -902,6 +903,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return !!ref && !!state.chrome[session.key]?.[tabID]?.prompt && layout.state(key(tabID), ref) !== "visible"
     },
     unseen: (session: Session, tabID: string) => unseenActivity(machine(), session.key, tabID),
+    /** The tab keeps its new-tab label until its page names itself. */
+    unnamed: (session: Session, tabID: string) => tabUnnamed(machine(), session.key, tabID),
     seen: (session: Session, tabID: Browser.TabID) => dispatch({ type: "activity.seen", sessionKey: session.key, tabID }),
     revealGuard: (session: Session, tabID: string) => revealGuard(machine(), session.key, tabID),
     windowShown,

@@ -4,13 +4,6 @@ import type { PaneCloseReason, PaneEvent } from "./ipc"
 import { openersAfterClose, openersAfterOpen, openersAfterSelect, placedAfter, type Openers } from "./tab-openers"
 import type { PageEnd } from "./page-log"
 
-/**
- * How long a tab a link opened may wait for its page's name before the strip shows it without one. The strip sizes a
- * tab by its label, so a tab shown as "New tab" would change width, and move every tab after it, once its page names
- * itself.
- */
-export const LISTING_DEADLINE_MS = 3_000
-
 /** How long a binding may wait for the server's `attached` handshake before it closes. */
 export const REGISTER_TIMEOUT_MS = 15_000
 
@@ -20,9 +13,8 @@ export const REGISTER_TIMEOUT_MS = 15_000
  * - `unloaded`: only the tab's metadata. A restored tab stays here until the pane shows it or an agent command names
  *   it; a tab whose page crashed returns here, with `loadError`, so it can be loaded again.
  * - `live`: a page exists for `attempt`. Results from an earlier page of the same tab carry another attempt.
- *   `url` is the last address the page reported, kept while a new document has not committed one. `opening`: a link
- *   in `from`'s page opened the tab, and the window's strip does not show it yet: it waits for the label it keeps
- *   (`named`), and takes the pane then when it opened in `front` and `from` is still the tab in front.
+ *   `url` is the last address the page reported, kept while a new document has not committed one. `unnamed`: a link
+ *   opened the tab and its first page has no name of its own yet (`named`), so the strip keeps its new-tab label.
  */
 export type TabSlot =
   | { readonly status: "unloaded"; readonly tab: Browser.Tab }
@@ -31,7 +23,7 @@ export type TabSlot =
       readonly attempt: number
       readonly tab: Browser.Tab
       readonly url: string
-      readonly opening?: { readonly from: Browser.TabID; readonly front: boolean }
+      readonly unnamed?: true
     }
 
 type Inventory = {
@@ -115,7 +107,7 @@ export type BindingEvent =
   /**
    * A page for `tabID` was created as `attempt`, the binding's `nextAttempt`. `beside`: the tab whose page or link
    * opened it, and whether the new tab takes the pane (`front`) or stays behind. A new tab stands next to that tab, as
-   * in Chrome, and the strip shows it once its page has a name; any other new tab goes to the end at once.
+   * in Chrome, and is reported at once; any other new tab goes to the end.
    */
   | {
       readonly type: "tab.opened"
@@ -126,11 +118,6 @@ export type BindingEvent =
     }
   /** The person gave the tab an address of their own, typed or picked, as opposed to following a link. */
   | { readonly type: "tab.addressed"; readonly tabID: Browser.TabID }
-  /**
-   * The strip shows a tab a link opened as `attempt` now, named or not: `LISTING_DEADLINE_MS` have passed, or its page
-   * asks the person something.
-   */
-  | { readonly type: "tab.due"; readonly tabID: Browser.TabID; readonly attempt: number }
   | { readonly type: "restore.refused"; readonly tabID: Browser.TabID; readonly reason: "browser.restore.outside" | "browser.restore.refused" }
   | {
       readonly type: "tab.published"
@@ -172,8 +159,6 @@ type StateEvent = Extract<PaneEvent, { readonly type: "state" }>
 
 export type PaneEffect =
   | { readonly type: "start-timer"; readonly binding: string; readonly ms: number }
-  /** Dispatches `tab.due` for the tab's page after `ms`. */
-  | { readonly type: "await-name"; readonly binding: string; readonly tabID: Browser.TabID; readonly attempt: number; readonly ms: number }
   | { readonly type: "resolve-register"; readonly binding: string }
   | { readonly type: "save-restore"; readonly binding: string; readonly storageKey: string; readonly snapshot: StoredRestore }
   | { readonly type: "remove-restore"; readonly storageKey: string }
@@ -387,23 +372,6 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     }
   }
 
-  // A tab the strip does not show yet cannot be selected or marked there: it is shown first.
-  if (event.type === "tab.active" || event.type === "tab.focused" || event.type === "tab.due" || event.type === "tab.crashed") {
-    const slot = state.tabs.get(event.tabID)
-    const due = event.type !== "tab.due" || (slot?.status === "live" && slot.attempt === event.attempt)
-
-    if (slot?.status === "live" && slot.opening && due) {
-      const listed = list(state, event.tabID, slot.opening)
-
-      if (event.type === "tab.due") return listed
-      const next = transitionAttached(listed.state, event)
-
-      return { state: next.state, effects: [...listed.effects, ...next.effects] }
-    }
-  }
-
-  if (event.type === "tab.due") return { state, effects: [] }
-
   if (event.type === "tab.active") {
     if (!state.tabs.has(event.tabID) || state.agentTabID === event.tabID) return { state, effects: [] }
 
@@ -443,20 +411,19 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     const after = placedAfter(Array.from(state.tabs.keys()), state.openers, beside.tabID, beside.front)
     const entries = Array.from(state.tabs)
     const index = entries.findIndex(([tabID]) => tabID === after) + 1
-    const opening: TabSlot = { ...slot, opening: { from: beside.tabID, front: beside.front } }
+    const unnamed: TabSlot = { ...slot, unnamed: true }
 
-    // Its place among the tabs is decided now, so tabs opened in a row keep their order whichever page is named first.
-    const next = publish({
-      ...state,
-      tabs: new Map([...entries.slice(0, index), [event.tabID, opening], ...entries.slice(index)]),
-      openers: openersAfterOpen(state.openers, event.tabID, beside.tabID, beside.front),
-      nextAttempt: event.attempt + 1,
-    })
-
-    return {
-      state: next.state,
-      effects: [...next.effects, { type: "await-name", binding: state.binding, tabID: event.tabID, attempt: event.attempt, ms: LISTING_DEADLINE_MS }],
-    }
+    // Reported at once, with where it stands: the window's strip holds other tabs too, and only adds this one.
+    return publish(
+      {
+        ...state,
+        tabs: new Map([...entries.slice(0, index), [event.tabID, unnamed], ...entries.slice(index)]),
+        openers: openersAfterOpen(state.openers, event.tabID, beside.tabID, beside.front),
+        nextAttempt: event.attempt + 1,
+      },
+      undefined,
+      { tabID: event.tabID, after },
+    )
   }
 
   if (event.type === "tab.addressed") {
@@ -500,11 +467,11 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
   if (slot?.status !== "live" || slot.attempt !== event.attempt) return { state, effects: [] }
 
   if (event.type === "tab.published") {
-    const tabs = new Map(state.tabs).set(event.tabID, { ...slot, tab: event.tab, url: event.tab.url || slot.url })
+    const next = { status: "live" as const, attempt: slot.attempt, tab: event.tab, url: event.tab.url || slot.url }
+    // The strip gives the tab its page's title once, when the page has the name it keeps.
+    const waiting = slot.unnamed && !named(slot.tab, event.tab)
 
-    return slot.opening && named(slot.tab, event.tab)
-      ? list({ ...state, tabs }, event.tabID, slot.opening, event.error)
-      : publish({ ...state, tabs }, event.error)
+    return publish({ ...state, tabs: new Map(state.tabs).set(event.tabID, waiting ? { ...next, unnamed: true } : next) }, event.error)
   }
 
   // A crashed page keeps its tab, unloaded, so showing it or an agent command on it loads its address again.
@@ -529,10 +496,10 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
 }
 
 /**
- * Whether a page that reported `before` and now reports `tab` has the label its tab keeps: its document named itself,
+ * Whether a page that reported `before` and now reports `tab` has the name its tab keeps: its document named itself,
  * or its load ended (with Chromium's name for a document that has none, an error, or no document at all, as for a
  * refused address). Chromium names a document after its URL from the commit until its <title> parses, and a failed
- * load reports its name a moment after its error.
+ * load reports its name a moment after its error; neither is a name the strip shows.
  */
 function named(before: Browser.Tab, tab: Browser.Tab) {
   const blank = tab.url === "about:blank"
@@ -540,31 +507,6 @@ function named(before: Browser.Tab, tab: Browser.Tab) {
   if (!tab.loading) return (before.loading || before.loadError !== undefined) && (blank || tab.title !== "")
 
   return !blank && tab.generation === before.generation && tab.title !== "" && tab.title !== before.title
-}
-
-/**
- * Shows the window's strip a tab a link opened: after the nearest tab before it that the strip shows, and in front
- * when it opened in front and the tab it came from still is. Tabs opened in a row may be shown in any order; each
- * lands where it was opened.
- */
-function list(state: AttachedBinding, tabID: Browser.TabID, opening: { readonly from: Browser.TabID; readonly front: boolean }, error?: string): AttachedTransition {
-  const slot = state.tabs.get(tabID)
-
-  if (slot?.status !== "live") return { state, effects: [] }
-  const ids = Array.from(state.tabs.keys())
-  const after = ids.slice(0, ids.indexOf(tabID)).findLast((id) => !held(state.tabs.get(id)))
-  const front = opening.front && state.focusedTabID === opening.from
-  const tabs = new Map(state.tabs).set(tabID, { status: "live", attempt: slot.attempt, tab: slot.tab, url: slot.url })
-  const next = publish({ ...state, tabs, focusedTabID: front ? tabID : state.focusedTabID }, error, after && { tabID, after })
-
-  if (!front) return next
-
-  return { state: next.state, effects: [...next.effects, { type: "emit", binding: state.binding, event: { type: "focus", tabID } }] }
-}
-
-/** A tab a link opened that the window's strip does not show yet. */
-function held(slot: TabSlot | undefined) {
-  return slot?.status === "live" && slot.opening !== undefined
 }
 
 /** Aborts the requests that target a tab whose page went away, releases that page, and publishes the result. */
@@ -584,17 +526,17 @@ function withoutTab(state: AttachedBinding, tabID: Browser.TabID, slot: TabSlot,
 
 /**
  * Saves the tabs for the next launch, and reports the state unless it repeats the last one reported. `placed` says
- * once, with the report that first shows the strip a tab a link opened, which tab it stands after.
+ * once, with the inventory that first lists a tab a link opened, which tab it stands after.
  */
 function publish(state: AttachedBinding, error?: string, placed?: StateEvent["placed"]): AttachedTransition {
   const inventory = selectInventory(state)
-  const waiting = Array.from(state.tabs).flatMap(([tabID, slot]) => (held(slot) ? [tabID] : []))
+  const unnamed = Array.from(state.tabs).flatMap(([tabID, slot]) => (slot.status === "live" && slot.unnamed ? [tabID] : []))
 
   const event = {
     type: "state" as const,
     state: inventory,
     ...(error !== undefined && { error }),
-    ...(waiting.length > 0 && { held: waiting }),
+    ...(unnamed.length > 0 && { unnamed }),
   }
 
   const published = JSON.stringify([event, state.agentTabID])

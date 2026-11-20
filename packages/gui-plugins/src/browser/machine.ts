@@ -48,11 +48,6 @@ export type Strip = {
   readonly located: boolean
   /** Tab IDs of the last inventory the strip received, to tell new tabs from ones the user just closed. */
   readonly mirrored: readonly Browser.TabID[]
-  /**
-   * Tabs of the inventory that the desktop holds back from the strip: a link opened each, and its page has no name
-   * yet. The strip sizes a tab by its label, so it adds one only with the label it keeps.
-   */
-  readonly withheld: readonly Browser.TabID[]
   /** A native inventory arrived while the strip could not be written; the next sync prunes with it. */
   readonly prune: boolean
   /** A tab main asked to select while the strip could not be written. */
@@ -127,6 +122,11 @@ export type Attachment = {
    */
   readonly held?: Held
   readonly unseen: readonly Browser.TabID[]
+  /**
+   * Tabs a link opened whose first page has no name of its own yet, as the desktop reports them. The strip sizes a tab
+   * by its label, so each keeps its new-tab label until its page names itself, and is relabelled once.
+   */
+  readonly unnamed: readonly Browser.TabID[]
   /** The person's prompts that wait in the session's inbox, by inbox ID, with how each will be delivered. */
   readonly prompts: Readonly<Record<string, "steer" | "queue">>
   /**
@@ -256,9 +256,9 @@ export type Event =
       readonly attempt: number
       readonly state: Browser.State | null
       readonly error: string | undefined
-      /** Tabs of the inventory the strip does not show yet (`Strip.withheld`). */
-      readonly held?: readonly Browser.TabID[]
-      /** The tab a link opened that the strip shows from now on, and the tab it stands after. */
+      /** Tabs a link opened whose pages have no name of their own yet (`Attachment.unnamed`). */
+      readonly unnamed?: readonly Browser.TabID[]
+      /** The tab this inventory lists for the first time because a page or link opened it, and the tab it stands after. */
       readonly placed?: Placed
     }
   | {
@@ -365,7 +365,6 @@ type SessionEvent = Exclude<
 const noFocus = (): AddressFocus => ({ status: "none" })
 
 const noStrip = (): Strip => ({
-  withheld: [],
   located: false,
   mirrored: [],
   prune: false,
@@ -477,6 +476,11 @@ export function sessionBrowser(state: State, sessionKey: string) {
 
 export function sessionTab(state: State, sessionKey: string, tabID: string) {
   return sessionBrowser(state, sessionKey)?.tabs.find((tab) => tab.id === tabID)
+}
+
+/** Whether the tab keeps its new-tab label: a link opened it and its page has no name of its own yet. */
+export function tabUnnamed(state: State, sessionKey: string, tabID: string) {
+  return attachmentOf(state, sessionKey)?.unnamed.some((id) => id === tabID) ?? false
 }
 
 export function unseenActivity(state: State, sessionKey: string, tabID: string) {
@@ -609,6 +613,7 @@ function attached(state: Open, event: Extract<Event, { type: "session.attached" 
     side: "unobserved",
     shown: false,
     unseen: [],
+    unnamed: [],
     prompts: {},
   })
 }
@@ -973,8 +978,7 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
   if (strip.located === value) return { state, effects: [] }
 
   if (!value) return put(state, key, { ...attachment, strip: { ...strip, located: false } })
-  const all = attachment.browser?.tabs.map((tab) => tab.id)
-  const ids = all?.filter((id) => !strip.withheld.includes(id))
+  const ids = attachment.browser?.tabs.map((tab) => tab.id)
   const focus = strip.focus
 
   return settle(
@@ -983,7 +987,7 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
       key,
       { ...attachment, strip: { ...strip, located: true, mirrored: ids ?? [], prune: false, focus: undefined } },
       [
-        ...(ids ? sync(key, ids, strip.mirrored, strip.prune, undefined, all) : []),
+        ...(ids ? sync(key, ids, strip.mirrored, strip.prune) : []),
         ...(focus && ids?.includes(focus) ? [{ type: "focus-strip-tab" as const, sessionKey: key, tabID: focus }] : []),
       ],
     ),
@@ -1185,7 +1189,6 @@ function paneState(
     event.state,
     true,
     event.placed,
-    event.held,
   )
 
   // An inventory that repeats the error it reported last is the same failure, not a new one to read again.
@@ -1215,6 +1218,7 @@ function paneState(
         phase: { status: "ready", attempt: phase.attempt },
         browser: event.state,
         unseen: attachment.unseen.filter(id => event.state?.tabs.some(tab => tab.id === id)),
+        unnamed: sameIDs(attachment.unnamed, event.unnamed ?? []) ? attachment.unnamed : (event.unnamed ?? []),
         failure,
         strip: mirrored.strip,
         addressFocus: follow(attachment.addressFocus, event.state),
@@ -1280,45 +1284,34 @@ function backoff(state: Open, key: string, attachment: Attachment, phase: Bound)
 // Mirrors an inventory into the strip. Only tabs new since the last mirrored inventory are added, so a tab the user
 // just closed is not reopened before the desktop confirms. Only a native inventory prunes; suspended and restoring
 // states keep the tabs they will restore. While the strip cannot be written, the prune waits for the location.
-function mirror(
-  key: string,
-  strip: Strip,
-  browser: Browser.State | null,
-  native: boolean,
-  placed?: Placed,
-  withheld: readonly Browser.TabID[] = [],
-) {
+function mirror(key: string, strip: Strip, browser: Browser.State | null, native: boolean, placed?: Placed) {
   if (!browser) return { strip: { ...noStrip(), located: strip.located }, effects: [] }
-  const all = browser.tabs.map((tab) => tab.id)
-  const ids = all.filter((id) => !withheld.includes(id))
+  const ids = browser.tabs.map((tab) => tab.id)
 
   if (!strip.located)
     return {
       strip: {
         ...strip,
-        withheld,
         prune: strip.prune || native,
         focus: strip.focus && ids.includes(strip.focus) ? strip.focus : undefined,
       },
       effects: [],
     }
 
-  return { strip: { ...strip, withheld, mirrored: ids }, effects: sync(key, ids, strip.mirrored, native, placed, all) }
+  return { strip: { ...strip, mirrored: ids }, effects: sync(key, ids, strip.mirrored, native, placed) }
 }
 
-// `ids` are the tabs the strip shows; `keep`, when it differs, every tab the desktop has, withheld ones included.
 function sync(
   key: string,
   ids: readonly Browser.TabID[],
   mirrored: readonly Browser.TabID[],
   prune: boolean,
   placed?: Placed,
-  keep = ids,
 ): MachineEffect[] {
   const open = ids.filter((id) => !mirrored.includes(id))
 
   if (!prune && open.length === 0) return []
-  const effect = { type: "sync-strip" as const, sessionKey: key, keep: prune ? keep : undefined, open }
+  const effect = { type: "sync-strip" as const, sessionKey: key, keep: prune ? ids : undefined, open }
 
   // Only a tab this inventory adds is placed: one the strip has already stays where the person sees it.
   return [placed && open.includes(placed.tabID) ? { ...effect, placed } : effect]
@@ -1400,4 +1393,8 @@ function put(
 
 function listed(sessions: Open["sessions"]) {
   return Object.entries(sessions).filter((entry): entry is [string, Attachment] => entry[1] !== undefined)
+}
+
+function sameIDs(before: readonly Browser.TabID[], after: readonly Browser.TabID[]) {
+  return before.length === after.length && before.every((id, index) => id === after[index])
 }

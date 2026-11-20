@@ -43,10 +43,18 @@ test(
     // A middle-click, and a Ctrl+click (Cmd+click on macOS): a new tab behind the current one, with no opener and no
     // notice. Enter on the focused link with the same modifier is the same.
     expect(result.middle).toEqual(behind("/target?plain"))
-    // What that tab's page published on the way: its load starts on the blank document, its document commits under
-    // Chromium's name for it (its address), it names itself, and its load ends. The pane shows the strip the tab at
-    // the third step, with the label it keeps (`named` in pane-machine.ts, whose table replays this sequence).
-    expect(result.reports).toEqual(["untitled loading about:blank", "/target?plain loading /target?plain", "Target loading /target?plain", "Target loaded /target?plain"])
+    // A slow page's tab, as the pane's machine reports it to the window from what the page publishes: listed at the
+    // click, right after the pressed tab, with its new-tab label. It keeps that label while its load starts and its
+    // document commits under Chromium's name for it (its address), and takes the page's title once, when the document
+    // names itself. Nothing but `loading` changes after that.
+    expect(result.slow).toEqual(behind("/slow"))
+    expect(result.reports).toEqual([
+      "new-tab label, untitled loaded about:blank after the pressed tab",
+      "new-tab label, untitled loading about:blank",
+      "new-tab label, /slow loading /slow",
+      "page's title, Slow loading /slow",
+      "page's title, Slow loaded /slow",
+    ])
     expect(result.modified).toEqual(behind("/target?plain"))
     expect(result.key).toEqual(behind("/target?plain"))
     // With Shift as well, the new tab opens in front.

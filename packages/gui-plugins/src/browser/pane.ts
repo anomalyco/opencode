@@ -679,17 +679,6 @@ export function createBrowserPane(input: {
       return
     }
 
-    if (effect.type === "await-name") {
-      const stop = () => clearTimeout(timer)
-
-      const timer = setTimeout(() => {
-        handle.abort.signal.removeEventListener("abort", stop)
-        dispatchBinding(effect.binding, { type: "tab.due", tabID: effect.tabID, attempt: effect.attempt })
-      }, effect.ms)
-
-      return handle.abort.signal.addEventListener("abort", stop, { once: true })
-    }
-
     if (effect.type === "resolve-register") {
       clearTimeout(handle.timer)
 
@@ -902,9 +891,6 @@ export function createBrowserPane(input: {
       prompt: (view) => {
         if (!current()) return
 
-        // A tab the strip holds back for its page's name is shown now: the person cannot answer a tab they cannot see.
-        if (view) dispatchBinding(binding, { type: "tab.due", tabID: id, attempt })
-
         // The page held the keyboard; the window's document takes it, so the prompt can.
         if (view?.focus && focused() && win.isFocused()) win.webContents.focus()
         emit(binding, { type: "prompt", tabID: id, prompt: view })
@@ -951,16 +937,19 @@ export function createBrowserPane(input: {
         if (handle.shared) input.profile.extensionTabs.hidden(page.contents.id)
       },
       popup: (popupOptions, background, activity, refused) => {
-        // The agent's pop-up is listed at once, at the end, and marked, as its own tabs are.
-        if (activityOwner(activity) === "agent") {
-          const popup = create(binding, { initialize: false, popupOptions, activity, opener: id, refused })
+        const agent = activityOwner(activity) === "agent"
+        // The person's tab stands beside this one. The agent's goes to the end, as its own tabs do.
+        const popup = create(binding, { initialize: false, popupOptions, activity, opener: id, refused, beside: agent ? undefined : { tabID: id, front: !background } })
+
+        if (agent) {
           announce(binding, popup.state().id, "none", !background)
 
           return popup.contents
         }
 
-        // The person's stands beside this tab, and takes the pane once the strip shows it (`tab.opened`).
-        return create(binding, { initialize: false, popupOptions, activity, opener: id, refused, beside: { tabID: id, front: !background } }).contents
+        if (!background) dispatchBinding(binding, { type: "tab.focused", tabID: popup.state().id })
+
+        return popup.contents
       },
     })
 
@@ -1193,8 +1182,7 @@ export function createBrowserPane(input: {
 
       if (file) openingFiles.set(opened, file)
 
-      // A tab a page's link opened takes the pane once the strip shows it.
-      if (origin === "user" && action.focus !== false && from?.beside === undefined) present(tabID)
+      if (origin === "user" && action.focus !== false) present(tabID)
 
       try {
         await opened.ready
