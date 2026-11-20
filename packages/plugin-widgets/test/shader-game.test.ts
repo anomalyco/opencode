@@ -4,10 +4,8 @@ import path from "node:path"
 import { LiveWidget, ManualClock, type Node, program } from "@opencode/widget"
 import { WidgetLint } from "../src/lint.js"
 
-// The skill's shader game, run on the reference live host the way a client would run it.
-const skill = await Bun.file(new URL("../src/skill.md", import.meta.url)).text()
-const section = skill.slice(skill.indexOf("### Shader games"))
-const source = section.slice(section.indexOf("```js\n") + 6, section.indexOf("\n```", section.indexOf("```js\n")))
+// A complete shader game (a raymarched tunnel runner), run on the reference live host the way a client would run it.
+const source = await Bun.file(new URL("./fixtures/tunnel-runner.js", import.meta.url)).text()
 
 const shader = (node: Node | undefined): Extract<Node, { type: "shader" }> | undefined => {
   if (!node) return

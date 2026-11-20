@@ -1,478 +1,123 @@
-<!--
-  Built-in skill, registered with the widget tools in
-  packages/core/src/tool/plugin/widget.ts when the `widgets` flag is on.
-  The body below becomes the skill's content.
--->
+<!-- Keep it general: contracts and decisions. Full tested examples: packages/widget/docs/, plugin-widgets/test/fixtures/. -->
 
 # Widgets
 
-The `widget` tool shows an interactive card inline in the conversation. It renders natively in every client, and the
-user's answer comes back as your next message.
+The `widget` tool shows an interactive surface inline in the conversation, rendered natively by every client.
 
-## When to show a widget
+## What a widget can be
 
-Show one when the user should pick, tune or confirm something, and clicking beats typing:
+- **Choices, forms, confirmations**: cards with images, text inputs, sliders, checkboxes, selects, buttons.
+- **Data pictures**: charts and 17 diagram types (built in), or your own **canvas** drawing (2D commands).
+- **GPU shaders**: a WGSL fragment shader for animated, generative or 3D (raymarched) visuals.
+- **Live programs**: an `async main` running while the widget is open, with timers, frames, pointer input and HTTPS
+  fetch: games, timers, simulations, animations, self-refreshing dashboards.
+- **Full screen**: `fullscreen: true` on the root node lets clients offer a full-screen button (games, big visuals);
+  `fill: true` on a canvas or shader grows it to the screen's height.
 
-- **Pick between 2–3 things they should see**: designs, photos, places, products, layouts → `suggestions`.
-- **Several structured inputs at once**: settings, parameters, a booking, a release config → `form`. Use sliders for
-  numbers with a range, checkboxes for on/off, selects for fixed choices.
-- **Approve something consequential**: deploy, delete, send, spend → `confirm` (set `danger: true` when it can't be
-  undone).
-- **Numbers that read better as a picture**: a trend, a comparison, a breakdown → `chart` (add `choose: true` when the
-  user should pick one of the bars or points).
-- **A celebratory or atmospheric banner** with a short message → `backdrop`.
-- **Anything else that is a small interactive surface** and fits no built-in → write a template (below).
+Decide in this order:
 
-Don't show one for a single free-text question, a plain yes/no in passing, or when the user asked for an explanation.
-Use the `question` tool for text-only choices.
+1. A **built-in** fits (table below)? Use it with data; nothing to write.
+2. It changes only when the user acts? Write a **step** template (cheaper, works everywhere, the terminal included).
+3. Something happens on its own (time, frames, polling)? Write a **live** template (`mode: "live"`).
+4. Inside either: plain nodes for UI and text, `canvas` for exact 2D shapes and pointer input, `shader` for
+   full-surface GPU effects (it can't draw text; put text in nodes beside it).
 
-## How to show one well
+Not for one free-text question, a passing yes/no or an explanation (use `question` for text-only choices).
 
-- Show it early. Gather only what the widget needs; don't research for many steps before the user has seen anything.
-  If they want more detail, they'll say so in their answer.
-- `data` is a JSON object, never a string. It must match the template's schema; errors come back as the tool error,
-  so fix the data and call again rather than giving up.
-- Images: real `https:` URLs you know resolve, `data:` URIs, or paths relative to the session directory (for example
-  files you just generated). Never invent image URLs.
-- Give it a short `title`; the transcript uses it.
-- After the widget is shown, end your turn. Don't repeat the options in text.
-- The answer arrives as `User responded to widget "<title>": <JSON>` or `User dismissed widget "<title>"`. Act on it.
-- Messages a widget sends while it stays open arrive as `Widget "<title>" sent: <JSON>`.
+## Showing one
 
-## Waiting for the answer
+- `data` is a JSON object matching the template's schema; fix errors from the tool and call again. Give a short `title`.
+- Images: real `https:` URLs, `data:` URIs, or paths relative to the session directory. Never invent URLs.
+- Without `wait`: end your turn; don't repeat the options in text. The answer arrives as
+  `User responded to widget "<title>": <JSON>` / `User dismissed widget "<title>"`; open widgets may also send
+  `Widget "<title>" sent: <JSON>`.
+- `wait: true`: the call blocks and returns the answer (a dismissal is a tool error), like `question`: for short
+  decisions you need this turn, never for live or long-open widgets.
 
-`wait: true` makes the `widget` call block until the user answers and return the answer as its result, like the
-`question` tool; a dismissal comes back as a tool error saying so. You keep working in the same turn.
+## Built-ins
 
-- Wait when you need the answer to continue right now: a short decision, a confirmation before a step, a small form
-  whose values feed the next tool call.
-- Don't wait for widgets the user may leave open for a while, live widgets that `send` updates (games, dashboards,
-  step-by-step controls), or when the user may want to think or reply in text. Show those without `wait` and end your
-  turn; the answer and any messages arrive as your next input.
-- If the user stops the call while you wait, the widget stays open and its answer arrives later as a message.
+All take `title`. Exact schemas: `widget_template` `list`; real sources to copy: `widget_template` `get <name>`.
+Diagrams submit nothing unless `choose: true` adds a Choose button that submits the selected element.
 
-## Built-in templates
-
-`suggestions` — submits `{ choice, index, note? }`:
-
-```json
-{
-  "title": "Which landing page?",
-  "options": [
-    {
-      "label": "Bold",
-      "note": "Big type, one CTA",
-      "images": ["shots/bold-desktop.png", "shots/bold-mobile.png"],
-      "recommended": true
-    },
-    { "label": "Calm", "images": ["shots/calm.png"] }
-  ],
-  "allowNote": true
-}
-```
-
-2–3 options, 1–3 images each (several images become a swipeable carousel).
-
-`form` — submits `{ [key]: value }`:
-
-```json
-{
-  "title": "Configure the release",
-  "submitLabel": "Start release",
-  "fields": [
-    { "key": "name", "type": "text", "label": "Release name", "default": "Spring" },
-    { "key": "rollout", "type": "number", "label": "Rollout %", "min": 0, "max": 100, "step": 5, "default": 25 },
-    { "key": "notify", "type": "boolean", "label": "Notify subscribers", "default": true },
-    {
-      "key": "channel",
-      "type": "select",
-      "label": "Channel",
-      "options": [
-        { "value": "stable", "label": "Stable" },
-        { "value": "beta", "label": "Beta" }
-      ]
-    }
-  ]
-}
-```
-
-`confirm` — submits `{ confirmed }`: `{ "title": "Deploy main?", "message": "Ships **3 commits** to production.", "confirmLabel": "Deploy", "danger": false }`.
-
-`chart` — submits nothing, or `{ series, index, value }` when `choose` is true and the user taps a bar or point:
-
-```json
-{
-  "title": "Weekly signups",
-  "kind": "bar",
-  "unit": "k",
-  "labels": ["W1", "W2", "W3", "W4"],
-  "series": [
-    { "label": "Organic", "values": [4.2, 5.1, 4.8, 6.3] },
-    { "label": "Paid", "values": [2.0, 2.4, 3.1, 2.9], "color": "#f59e0b" }
-  ]
-}
-```
-
-`kind` is `bar` (grouped per label) or `line`; up to 6 series of up to 60 values. Pressing shows a value.
-
-`backdrop` — submits nothing: `{ "title": "v2 is live", "preset": "aurora", "text": "Thanks **everyone**.", "accent": "#2dd4bf" }`
-(`preset`: `plasma`, `aurora` or `waves`).
-
-## Diagrams
-
-Built-in canvas templates for showing data. Each takes `title`; `choose: true` adds a Choose button that submits the
-selected element (for `pie`, `{ label, index, value, share }`). Without `choose` they submit nothing: the user explores
-and you keep talking, so end your turn only if you asked something. Get exact schemas with `widget_template` `list`.
-
-| Template | Data (caps) | Use it for |
+| Template | Data | Submits |
 | --- | --- | --- |
-| `pie` | `slices: { label, value }[]` (≤ 12), `donut?`, `unit?` | Parts of one whole; over 6 slices use `chart` bars |
-| `scatter` | `series: { label, points: { x, y, size?, label? }[] }[]`, `xLabel?`, `yLabel?`, `trend?` | How two measures relate; `size` for bubbles |
-| `histogram` | `values: number[]` (raw, ≤ 2,000), `bins?`, `unit?` | The distribution of one measure |
-| `area` | `series: { label, values }[]`, `labels?`, `mode?: stacked \| percent \| stream` | Totals and composition over time |
-| `heatmap` | `layout: "matrix"` (`rows`, `columns`, `values[row][col]`) or `"calendar"` (`days: { date, value }[]`) | Intensity across two categories, or daily activity |
-| `treemap` | `items: { label, value?, children? }[]` (≤ 4 levels) | What takes the space in a hierarchy |
-| `sankey` | `nodes: { id, label? }[]`, `links: { source, target, value }[]` | Flows that split and merge |
-| `graph` | `nodes: { id, label?, group? }[]` (≤ 40), `edges: { source, target, label? }[]`, `directed?` | Networks without a hierarchy |
-| `tree` | `root: { label, note?, children? }` (≤ 6 levels), `orientation?: right \| down` | Hierarchies: org charts, file trees |
-| `timeline` | `tasks: { label, start, end?, group?, progress? }[]`, `today?` | Schedules (Gantt); no `end` is a milestone |
-| `funnel` | `stages: { label, value }[]` (2–10) | Step-by-step drop-off with conversion rates |
-| `radar` | `axes: string[]` (3–12), `series: { label, values }[]`, `max?` | A few items scored on several dimensions |
-| `gauge` | `gauges: { label, value, min?, max, unit?, target?, bands? }[]` (1–4) | Headline KPIs against thresholds |
-| `boxplot` | `groups: { label, values? \| stats? }[]` (≤ 12) | Comparing distributions across groups |
-| `flowchart` | `nodes: { id, label?, shape? }[]`, `edges: { from, to, label? }[]` | Processes and decision logic |
-| `sequence` | `participants: string[]`, `messages: { from, to, label, kind? }[]` | Interactions over time between systems |
-| `table` | `columns: { label, unit?, digits? }[]`, `rows: { cells, trend? }[]` (≤ 50) | Exact values to scan and sort |
+| `suggestions` | `options: { label, note?, images[1-3], recommended? }[2-3]`, `allowNote?` | `{ choice, index, note? }` |
+| `form` | `fields[]` of `text`, `number` (slider: min, max, step), `boolean`, `select` (options, multiple) | `{ [key]: value }` |
+| `confirm` | `message` (markdown), `confirmLabel?`, `danger?` | `{ confirmed }` |
+| `chart` | `kind: bar \| line`, `labels`, `series: { label, values }[≤6]`, `unit?`, `choose?` | nothing, or the tapped point |
+| `backdrop` | `preset: plasma \| aurora \| waves`, `text?`, `accent?` (an animated shader banner) | nothing |
+| `minigame` | `seconds?` (live: tap the dots) | `{ score, seconds }` |
 
-For one or two plain series over categories or time, use `chart`.
+**Diagrams** (field names in `list`): `pie` slices ≤ 12 (parts of a whole) · `scatter` x/y points, `size`, `trend` ·
+`histogram` raw values ≤ 2,000 · `area` series over time, stacked/percent/stream · `heatmap` matrix or calendar ·
+`treemap` nested items ≤ 4 levels · `sankey` nodes and weighted links (flows) · `graph` ≤ 40 nodes and edges ·
+`tree` a hierarchy ≤ 6 levels · `timeline` tasks with start/end (Gantt) · `funnel` 2–10 stages · `radar` 3–12 axes ·
+`gauge` 1–4 KPIs with targets · `boxplot` groups ≤ 12 · `flowchart` nodes and edges · `sequence` participants and
+messages · `table` ≤ 50 sortable rows with sparklines. For one or two plain series, use `chart`.
 
 ## Writing a template
 
-Use `widget_template` with `action: "get"` on `suggestions` or `form` first and copy their patterns, then
-`action: "save"` with `name`, `description`, `data` (a JSON Schema with top-level `type: "object"`), `source` and an
-`example` that matches the schema. The server never runs template code: saving parses and lints the source (the entry
-functions exist, only function and `const` declarations at the top level, no prelude names reused) and checks the
-example against the schema. Errors in running it come from the clients that show it, as a message
-`Widget "<title>" failed on <client>: <phase>: <message> (line N, col M)` (or as the tool error with `wait: true`): fix
-the source, save it again (a new version) and show the widget again. Saved templates are
-reusable in later sessions, so make them general and put the specifics in `data`.
+`widget_template` `save`: `name`, `description`, `data` (JSON Schema, `type: "object"`), `source`, an `example`
+matching the schema, `mode: "live"` for live ones. Saving again makes a new version; templates persist, so keep them
+general and put specifics in `data`.
 
-The source is confined JavaScript (no imports, timers, randomness or I/O) with top-level functions:
+The server never runs template code. It parses and lints the source: required entry functions, only function and
+`const` declarations at the top level (nothing runs at load), no prelude names (`ui`, `widget`, `submit`, `dismiss`,
+`send`, ...) redeclared, at most 128 KB. Runtime errors come back from the clients that show the widget, as
+`Widget "<title>" failed on <client>: <phase>: <message> (line N, col M)` (or as the tool error with `wait: true`):
+fix the source, save it again and show the widget again.
 
-```js
-function init(data) { return { picked: null } }            // optional, the initial state
-function view(state, data) { return ui.column({}, [...]) } // required, returns the view tree
-function update(state, event, data) {                       // optional, returns the next state
-  if (event.id === "choose") return submit({ picked: state.picked }, state)
-  return { ...state, picked: event.value }
-}
-```
-
-State and data are plain JSON. `update` may return `submit(value, state)` to send `value` to you, or `dismiss(state)`;
-both close the widget. `send(value, state, { wake })` sends `value` to you and keeps the widget open: use it for live
-events or messages to the agent (a move in a game, "run this step now"), and `{ wake: false }` for background updates
-you should only see on your next turn (a running tally, the latest slider position). Omitted `state` keeps the current
-state. Events are `{ id, type: "press" | "change" | "pointer", value? }`.
-
-Node builders (props are optional objects; tone is default|muted|accent|success|warning|error; gap is 0..3):
-
-```
-ui.column(props, children)   { gap, align: start|center|end|stretch }
-ui.row(props, children)      { gap, align: start|center|end, wrap }
-ui.text(text, props)         { style: title|body|caption|code, tone }
-ui.markdown(text)
-ui.image(src, props)         { alt, aspect }            aspect = width / height
-ui.carousel(props, children) { id, index }              one child at a time; with id it sends change with the page
-ui.card(props, children)     { id, selected }           with id it sends press
-ui.button(id, label, props)  { variant: primary|secondary|danger, disabled }    sends press
-ui.checkbox(id, label, checked, props)                  sends change with a boolean
-ui.slider(id, { label, value, min, max, step })         sends change with a number
-ui.select(id, [{ value, label, description }], { label, value, multiple })      sends change, string or string[]
-ui.input(id, value, { label, placeholder, multiline })  sends change with a string
-ui.divider()
-ui.canvas({ id, height, width, fps, duration, alt })    drawn by draw(); with id it sends pointer
-ui.shader(wgsl, { id, height, width, values, fps, alt, poster })   a WGSL fragment shader
-```
-
-Children may contain `null` or `false` (for `cond && node`) and nested arrays.
-
-## Live templates
-
-A **live** template runs one program for as long as the widget is open: it keeps state in variables, waits for taps,
-timers and display frames, and renders whenever it wants. Use it when something happens **without the user acting**:
-games, timers and countdowns, step-by-step animations and simulations, dashboards that refresh themselves. Stay with
-step mode for pickers, forms, confirmations and charts: it's cheaper, works in the terminal (which can't run live
-widgets); like every template, a live widget's `main` only runs on the user's device. The built-in `minigame` (`{ "title": "Tap the dots", "seconds": 20 }`,
-submits `{ score, seconds }`) is one.
-
-Save it with `mode: "live"` and define `async function main(data)` instead of `init`/`view`/`update`/`draw`. It runs
-until it returns, calls `widget.submit(...)` / `widget.dismiss()`, or the widget closes:
-
-```
-widget.render(node)                      replace the view (any ui.* node)
-widget.draw(canvasID, g)                 replace a canvas's drawing (g = ui.draw())
-await widget.event()                     next user event { id, type, value }
-await widget.frame()                     next display frame { t, dt, width, height, scale, pointer, dark }
-await widget.next({ frame, timeout })    first of { type: "event", event } | { type: "frame", frame }
-                                           | { type: "timeout" } | { type: "resumed", pausedMs }
-await widget.sleep(ms) / widget.now()    timers; now() is ms running, not counting pauses
-await widget.fetch(url, { method, headers, body })   HTTPS → { ok, status, headers, text(), json() }
-widget.submit(value) / widget.dismiss()  final answer; the program stops
-widget.send(value, { wake })             a message to you while the widget stays open
-```
-
-- Ask for a frame (`widget.next({ frame: true })`) only while something moves, handle events between frames and draw
-  on the frame. Call `widget.render` only when layout or text changes; put per-frame changes in a canvas.
-- Never run 50 ms without an `await`; keep each `draw` under 2,000 commands.
-- The program pauses when the widget is out of view; `widget.next` then gives `{ type: "resumed", pausedMs }` first.
-- `Math.random()` is fine. Always set the canvas `alt`.
+**Step ABI.** Confined JavaScript, plain JSON state:
+`init(data)` → state (optional) · `view(state, data)` → node (required) · `update(state, event, data)` → next state, or
+`submit(value, state)` / `dismiss(state)` (final) / `send(value, state, { wake })` (a message to you; widget stays open;
+`wake: false` = you see it next turn) · `draw(state, data, frame)` → canvas commands (pure). Events are
+`{ id, type: "press" | "change" | "pointer", value? }`. No timers, randomness or I/O.
 
 ```js
-// Catch the ball: it bounces around; tap it to score. Submits { score }.
+function init(data) { return { pick: null } }
+function view(state, data) { return ui.column({ gap: 1 }, [ui.text(data.title, { style: "title" }), ...data.items.map((item) => ui.button(item, item))]) }
+function update(state, event) { return submit({ pick: event.id }, state) }
+```
+
+**Live API** (`mode: "live"`, define `async function main(data)`; `Math.random()` allowed):
+`widget.render(node)` · `widget.draw(canvasID, g)` · `await widget.event()` · `await widget.frame()` →
+`{ t, dt, width, height, scale, pointer, dark }` · `await widget.next({ frame, timeout })` → event | frame | timeout |
+`{ type: "resumed", pausedMs }` · `await widget.sleep(ms)` · `widget.now()` (pauses don't count) ·
+`await widget.fetch(url, init)` · `widget.submit(v)` / `widget.dismiss()` / `widget.send(v, { wake })`. Ask for a frame
+only while something moves, and call `render` only when the view changes (or a shader's `values` do).
+
+```js
 async function main(data) {
-  widget.render(
-    ui.column({ gap: 1 }, [
-      ui.text(data.title, { style: "title" }),
-      ui.canvas({ id: "court", height: 240, alt: "Catch the ball game" }),
-    ]),
-  )
-  const ball = { x: 60, y: 60, vx: 180, vy: 140, r: 22 }
-  const end = widget.now() + (data.seconds ?? 15) * 1000
-  let score = 0
-  while (widget.now() < end) {
-    const next = await widget.next({ frame: true, timeout: end - widget.now() })
-    if (next.type === "event" && next.event.type === "pointer" && next.event.value.kind === "down") {
-      if (Math.hypot(next.event.value.x - ball.x, next.event.value.y - ball.y) <= ball.r + 8) {
-        score++
-        ball.vx *= 1.1
-      }
-    }
-    if (next.type !== "frame") continue
-    const f = next.frame
-    ball.x += ball.vx * f.dt
-    ball.y += ball.vy * f.dt
-    if (ball.x < ball.r || ball.x > f.width - ball.r) ball.vx = -ball.vx
-    if (ball.y < ball.r || ball.y > f.height - ball.r) ball.vy = -ball.vy
-    ball.x = Math.max(ball.r, Math.min(f.width - ball.r, ball.x))
-    ball.y = Math.max(ball.r, Math.min(f.height - ball.r, ball.y))
-    const g = ui.draw()
-    g.text(12, 24, "Score " + score, { size: 16, weight: 600 })
-    g.text(f.width - 12, 24, Math.ceil((end - widget.now()) / 1000) + "s", { align: "right", color: "muted" })
-    g.circle(ball.x, ball.y, ball.r, "accent")
-    widget.draw("court", g)
-  }
-  widget.render(
-    ui.column({ gap: 1 }, [
-      ui.text("You caught it " + score + " times", { style: "title" }),
-      ui.button("done", "Submit", { variant: "primary" }),
-    ]),
-  )
-  while ((await widget.event()).id !== "done") {}
-  widget.submit({ score })
+  let left = data.seconds
+  while (left > 0) { widget.render(ui.text(left + " s", { style: "title" })); await widget.sleep(1000); left-- }
+  widget.submit({ done: true })
 }
 ```
 
-### Shader games
+**Nodes** (`ui.*`; props optional; children may hold `null`/`false` and nested arrays):
+`column(props, children)` / `row(props, children)` gap 0-3, align · `text(text, { style, tone })` · `markdown(text)` ·
+`image(src, { alt, aspect })` · `carousel({ id, index }, children)` change → page · `card({ id, selected }, children)`
+press · `button(id, label, { variant, disabled })` press · `checkbox(id, label, checked)` change → boolean ·
+`slider(id, { label, value, min, max, step })` change → number · `select(id, options, { value, multiple })` change ·
+`input(id, value, { placeholder, multiline })` change → string · `divider()` ·
+`canvas({ id, height, width?, fps, duration, alt, fill })` pointer · `shader(wgsl, { id, height, values, fps, alt, poster, fill })` pointer.
 
-For a 3D game, keep the state and physics in `main` and let a WGSL shader draw the scene:
+**Draw** (`const g = ui.draw()`, chainable): `save restore translate rotate scale alpha rect rrect circle line path
+text(x, y, s, { size, weight, align, color, mono }) image`; paint is a color, a theme name (`text muted accent bg
+surface border success warning error`) or `{ fill | stroke, width, gradient }`. Lay out from `frame.width`; ≤ 2,000
+commands per draw.
 
-- Each frame, step the physics with `frame.dt`, then `widget.render` the same view with the shader's `values` packing
-  the state (up to 16 floats: player height, distance travelled, distance to the next obstacle, score, alive). Clients
-  update the uniforms without recompiling, so re-rendering every frame is fine when only `values` change.
-- In WGSL, raymarch a signed-distance scene driven by `widget.time` and `widget.values`. Keep it cheap: at most 64
-  march steps, a far cutoff, no nested loops.
-- Give the shader an `id`: it sends `pointer` events like a canvas, so a `down` is the jump. Put the score in a text row,
-  set `fullscreen: true` on the root and `fill: true` on the shader, and always set `alt` (the terminal shows it).
+**Shader.** `wgsl` defines `fn shade(frag: vec2f) -> vec4f` (physical pixels, origin top left; premultiplied sRGB).
+The client provides `widget: { resolution, time, scale, pointer: (x, y, down, 0), values: array<vec4f, 4> }` (don't
+redeclare it). Pass state as `values` (≤ 16 numbers, `values[0].x` first); a new view that changes only `values` just
+updates the uniforms, so a live program can re-render every frame (3D games: physics in `main`, a raymarched scene in
+WGSL, ≤ 64 march steps). With an `id` it sends `pointer` events like a canvas. ≤ 16 KB; keep it cheap.
 
-```js
-// Tunnel runner: race down a pulsing neon tunnel; tap to jump the barriers. Submits { score, distance }.
-const GRAVITY = -30
-const JUMP = 11
-const SPACING = 18
-const BARRIER = 1.1
+**Capabilities and fetch** (live only): declare hosts as narrowly as possible, e.g.
+`capabilities: { https: { hosts: ["api.github.com", "*.example.com"] } }` (`["*"]` only if truly any host). HTTPS
+only; the local network is blocked; ≤ 4 requests in flight and 10 a second; 15 s timeout; 2 MB responses. Fetch from
+the widget only for dashboards that must refresh while open; otherwise fetch the data yourself and pass it in `data`.
 
-const WGSL = `
-// values[0] = (height, distance, gap to the next barrier, score); values[1].x = 1 while alive
-fn tunnel(p: vec3f) -> f32 {
-  let wobble = 0.3 * sin(p.z * 0.5 + widget.time * 1.7);
-  return 2.4 + wobble - length(p.xy);
-}
-
-fn barrier(p: vec3f) -> f32 {
-  let gap = widget.values[0].z;
-  let z = (p.z - gap) - 18.0 * round((p.z - gap) / 18.0);
-  let q = abs(vec3f(p.x, p.y + 1.9, z)) - vec3f(2.6, 0.55, 0.3);
-  return length(max(q, vec3f(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
-}
-
-fn shade(frag: vec2f) -> vec4f {
-  let res = widget.resolution;
-  let uv = (frag - 0.5 * res) / res.y;
-  let ro = vec3f(0.0, -1.1 + widget.values[0].x * 0.55, 0.0);
-  let rd = normalize(vec3f(uv.x, -uv.y, 1.1));
-  var t = 0.0;
-  var hit = false;
-  for (var i = 0; i < 64; i++) {
-    let p = ro + rd * t;
-    let d = min(tunnel(p), barrier(p));
-    if (d < 0.003) {
-      hit = true;
-      break;
-    }
-    t += d * 0.85;
-    if (t > 45.0) {
-      break;
-    }
-  }
-  let p = ro + rd * t;
-  let travelled = p.z + widget.values[0].y;
-  let swirl = atan2(p.y, p.x) * 3.0 + travelled * 1.3 - widget.time * 3.0;
-  var color = mix(vec3f(0.18, 0.0, 0.3), vec3f(0.95, 0.15, 0.55), 0.5 + 0.5 * sin(swirl));
-  if (barrier(p) < 0.02) {
-    color = vec3f(0.2, 1.0, 0.7) * (0.7 + 0.3 * sin(widget.time * 12.0));
-  }
-  color = select(vec3f(0.0), color * exp(-t * 0.07), hit);
-  if (widget.values[1].x < 0.5) {
-    color = mix(color, vec3f(0.7, 0.0, 0.05), 0.55);
-  }
-  return vec4f(color, 1.0);
-}
-`
-
-async function main(data) {
-  const run = { y: 0, vy: 0, distance: 0, speed: 9, next: SPACING, score: 0, alive: true }
-  const show = () =>
-    widget.render(
-      ui.column({ gap: 1, fullscreen: true }, [
-        ui.row({ gap: 2 }, [ui.text(data.title ?? "Tunnel runner", { style: "title" }), ui.text("Score " + run.score)]),
-        ui.shader(WGSL, {
-          id: "tunnel",
-          height: 280,
-          fill: true,
-          values: [run.y, run.distance, run.next - run.distance, run.score, run.alive ? 1 : 0],
-          alt: "A neon tunnel runner: tap to jump the barriers",
-        }),
-      ]),
-    )
-  const end = widget.now() + (data.seconds ?? 45) * 1000
-  show()
-  while (run.alive && widget.now() < end) {
-    const next = await widget.next({ frame: true, timeout: end - widget.now() })
-    if (next.type === "event" && next.event.id === "tunnel" && next.event.value?.kind === "down" && run.y === 0)
-      run.vy = JUMP
-    if (next.type !== "frame") continue
-    const dt = Math.min(next.frame.dt, 0.05)
-    run.vy += GRAVITY * dt
-    run.y = Math.max(0, run.y + run.vy * dt)
-    if (run.y === 0) run.vy = Math.max(0, run.vy)
-    run.distance += run.speed * dt
-    run.speed += dt * 0.25
-    if (run.distance >= run.next) {
-      if (run.y < BARRIER) run.alive = false
-      else {
-        run.score++
-        run.next += SPACING
-      }
-    }
-    show()
-  }
-  widget.render(
-    ui.column({ gap: 1 }, [
-      ui.text(run.alive ? "Time's up: " + run.score + " barriers" : "Crashed after " + run.score + " barriers", {
-        style: "title",
-      }),
-      ui.button("done", "Submit score", { variant: "primary" }),
-    ]),
-  )
-  while ((await widget.event()).id !== "done") {}
-  widget.submit({ score: run.score, distance: Math.round(run.distance) })
-}
-```
-
-### Capabilities
-
-A live template that calls `widget.fetch` declares the hosts it needs in `capabilities`, as few as it can:
-`{ "https": { "hosts": ["api.github.com"] } }` (exact hosts, `*.example.com`, or `["*"]` only if it truly needs any
-host). Clients show the hosts on the widget. Requests are HTTPS only, at most 4 in flight and 10 a second, 15 s and
-2 MB each; failures reject with `{ kind, message }`. Step templates can't declare capabilities. Fetch from the widget
-only for live dashboards that must refresh while open; otherwise fetch the data yourself and pass it in `data`.
-
-## Canvas and shader
-
-Use a **canvas** for custom 2D graphics driven by data and state: charts, diagrams, gauges, small games, anything that
-needs exact shapes, text placement or pointer input. Use a **shader** for full-surface GPU effects that are a function
-of the pixel position and time: animated backgrounds, gradients, noise, generative art. A shader can't draw text or
-read data beyond 16 numbers, so put text in normal nodes next to it. Always set `alt` (terminals show it instead), and
-keep both sparse: they cost battery on phones.
-
-**Canvas.** Define `draw(state, data, frame)` and return draw commands; it is pure (no state changes) and runs when the
-canvas appears, when state changes, and every frame while `fps > 0` (default 0, max 60). `frame` is
-`{ id, t, dt, width, height, scale, pointer: { x, y, down } | null, dark }`, `t` in seconds since it appeared. For an
-intro animation, set `{ fps: 60, duration: 0.6 }`: it animates until a frame with `t >= duration` is drawn. With an
-`id`, pointer input arrives in `update` as `{ id, type: "pointer", value: { kind: "down" | "move" | "up", x, y, width,
-height } }` (`move` only while down). Coordinates are logical pixels from the top left; the canvas fills the width
-unless `width` is set, so lay out from `frame.width` (or the event's `width` in `update`). At most 2,000 commands.
-
-```
-const g = ui.draw()               every method returns g; return g.commands (or g)
-g.save()  g.restore()  g.translate(x, y)  g.rotate(radians)  g.scale(sx, sy)  g.alpha(0..1)
-g.rect(x, y, w, h, paint)  g.rrect(x, y, w, h, radius, paint)  g.circle(cx, cy, r, paint)
-g.line(x1, y1, x2, y2, paint)
-g.path([["M", x, y], ["L", x, y], ["Q", cx, cy, x, y], ["C", c1x, c1y, c2x, c2y, x, y], ["Z"]], paint)
-g.text(x, y, string, { size, weight: 400|500|600|700, align: left|center|right, color, mono })   y is the baseline
-g.image(src, x, y, w, h)
-paint: { fill: color | gradient, stroke: color, width, cap: butt|round }, or a color string (fill; stroke for line)
-color: "#rgb" | "#rrggbb" | "#rrggbbaa" | text|muted|accent|bg|surface|border|success|warning|error (theme colors)
-gradient: { linear: [x1, y1, x2, y2], stops: [[0, color], [1, color]] } or { radial: [cx, cy, r], stops }
-```
-
-```js
-function view(state, data) {
-  return ui.column({ gap: 1 }, [
-    ui.text(data.title, { style: "title" }),
-    ui.canvas({ id: "gauge", height: 120, fps: 60, duration: 0.8, alt: data.title + ": " + data.value + "%" }),
-  ])
-}
-function draw(state, data, frame) {
-  const g = ui.draw()
-  const p = (Math.min(1, frame.t / 0.8) * data.value) / 100
-  g.rrect(0, 40, frame.width, 16, 8, "surface")
-  g.rrect(0, 40, frame.width * p, 16, 8, "accent")
-  g.text(frame.width / 2, 90, Math.round(p * 100) + "%", { size: 20, weight: 600, align: "center" })
-  return g.commands
-}
-```
-
-**Shader.** `wgsl` defines `fn shade(frag: vec2f) -> vec4f`, returning premultiplied sRGB RGBA for the pixel at `frag`
-(physical pixels, origin top left). The client provides this uniform; don't redeclare it:
-
-```wgsl
-struct Widget { resolution: vec2f, time: f32, scale: f32, pointer: vec4f, values: array<vec4f, 4> }
-@group(0) @binding(0) var<uniform> widget: Widget;
-```
-
-`resolution` is the size in physical pixels, `scale` the pixel ratio, `pointer` is `(x, y, down, 0)` and `values` holds
-the node's `values` (up to 16 numbers, zero padded: `values[0].x` is the first). Drive `values` from state in `view`;
-`fps` defaults to 60 (use 0 when nothing moves). Keep it under 16 KB and cheap: no loops over many iterations.
-
-```js
-const WGSL = `
-fn shade(frag: vec2f) -> vec4f {
-  let uv = frag / widget.resolution;
-  let t = widget.time * widget.values[0].x;
-  let c = 0.5 + 0.5 * cos(t + uv.xyx * 3.0 + vec3f(0.0, 2.0, 4.0));
-  return vec4f(c, 1.0);
-}`
-function init() {
-  return { speed: 1 }
-}
-function view(state) {
-  return ui.column({ gap: 1 }, [
-    ui.shader(WGSL, { height: 160, values: [state.speed], alt: "Shifting colors" }),
-    ui.slider("speed", { label: "Speed", value: state.speed, min: 0, max: 3, step: 0.1 }),
-  ])
-}
-function update(state, event) {
-  return { speed: event.value }
-}
-```
+**Limits.** A step must finish in 250 ms; a live program must `await` at least every 50 ms; ≤ 240 posts a second;
+pausing (out of view, background) freezes timers and frames. Always set `alt` on canvas and shader nodes: the terminal
+shows it, and it can't run live widgets.

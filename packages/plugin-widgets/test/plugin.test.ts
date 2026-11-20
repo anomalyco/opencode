@@ -8,6 +8,7 @@ import { builtins, program, version } from "@opencode/widget"
 import { Cause, Deferred, Effect, Exit, Fiber, Queue } from "effect"
 import WidgetsPlugin, { RATE_LIMIT, WidgetTools } from "../src/index.js"
 import { make } from "./fake.js"
+import { WidgetLint } from "../src/lint.js"
 
 const sessionID = Session.ID.make("ses_widget_test")
 const messageID = SessionMessage.ID.make("msg_widget_assistant")
@@ -193,17 +194,18 @@ describe("live templates", () => {
     ))
 })
 
-test("the skill's live game example is the one the runtime's guidance tests", async () => {
-  const guidance = await Bun.file(new URL("../../widget/docs/live-guidance.md", import.meta.url)).text()
-  const game = guidance.slice(guidance.indexOf("```js\n// Catch the ball"))
-  const run = await Effect.runPromise(
+test("the skill's examples pass the lint", async () => {
+  const content = await Effect.runPromise(
     Effect.gen(function* () {
       const fake = yield* make
       yield* WidgetsPlugin.effect(fake.context)
       return fake.skills[0]!.content
     }).pipe(Effect.scoped),
   )
-  expect(run).toContain(game.slice(0, game.indexOf("\n```\n")))
+  const blocks = [...content.matchAll(/```js\n([\s\S]*?)\n```/g)].map((match) => match[1]!)
+  expect(blocks).toHaveLength(2)
+  expect(WidgetLint.lint(blocks[0]!, "step")).toEqual([])
+  expect(WidgetLint.lint(blocks[1]!, "live")).toEqual([])
 })
 
 // The runtime's diagram examples, loaded by path because they sit outside this package's sources.
@@ -216,7 +218,7 @@ test("every diagram built-in posts with its example data and is listed in the sk
       for (const [name, data] of Object.entries(examples)) {
         const result = yield* execute(fake, "widget", { template: name, data })
         expect([name, Exit.isSuccess(result) ? "ok" : String(failure(result))]).toEqual([name, "ok"])
-        expect(fake.skills[0]!.content).toContain("| `" + name + "` |")
+        expect(fake.skills[0]!.content).toContain("`" + name + "`")
       }
     }),
   ))

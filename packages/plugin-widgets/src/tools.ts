@@ -7,36 +7,23 @@ import { Schema } from "effect"
 export const name = "widget"
 export const templateName = "widget_template"
 
-export const description = `Show the user an interactive widget inline in the conversation: option cards with image carousels, a form with text inputs, sliders, checkboxes and selects, a confirmation, or a chart. The user's answer arrives as your next message.
+export const description = `Show the user an interactive widget inline in the conversation: choices with images, forms, confirmations, charts and diagrams, canvas drawings, GPU shaders, or live programs such as games and timers. The answer arrives as your next message.
 
-Use it when the user should pick between things they should see, fill several structured inputs at once, or approve something consequential. Load the "widgets" skill for when and how to use it, data examples and writing templates.
+Built-ins (schemas via widget_template "list"): suggestions, form, confirm, chart, backdrop, minigame, and diagrams (pie, scatter, histogram, area, heatmap, treemap, sankey, graph, tree, timeline, funnel, radar, gauge, boxplot, flowchart, sequence, table). Load the "widgets" skill before writing your own template.
 
-Built-in templates (data schemas via widget_template action "list"):
-- suggestions: 2 or 3 options, each with 1 to 3 images and an optional note; submits { choice, index, note? }.
-- form: text, number (slider), boolean (checkbox) and select fields with a submit button; submits { [key]: value }.
-- confirm: a yes/no question with markdown details; submits { confirmed }.
-- chart: an animated bar or line chart of number series; submits nothing, or { series, index, value } on a tap with choose: true.
-- backdrop: a title and text on an animated shader banner (plasma, aurora or waves); submits nothing.
-- diagrams (pie, scatter, histogram, area, heatmap, treemap, sankey, graph, tree, timeline, funnel, radar, gauge, boxplot, flowchart, sequence, table): see the skill.
-
-Usage notes:
-- \`data\` is a JSON object (not a string) matching the template's JSON Schema; fix mismatches from the tool error and call again.
-- The server doesn't run templates. If a client hits an error, it arrives as "Widget ... failed on <client>: ..." (or as this tool's error with \`wait: true\`): fix the template and show it again.
-- Image paths may be https URLs, data: URIs or paths relative to the session directory. Never invent image URLs.
-- Show the widget early instead of researching for many steps first.
-- By default the call returns at once: end your turn unless there is unrelated work to do, and do not ask the same thing again in text. The answer arrives as your next message.
-- With \`wait: true\` the call blocks until the user answers and returns the answer (a dismissal comes back as an error), like the question tool. Use it for short decisions or forms you need to continue this turn, not for widgets the user may leave open or that send live updates.`
+- \`data\` is a JSON object matching the template's schema; fix errors and call again. Never invent image URLs.
+- By default the call returns at once: end your turn and don't repeat the question in text. With \`wait: true\` it blocks and returns the answer (a dismissal is an error); only for short decisions you need this turn.
+- The server doesn't run templates: a client's runtime error arrives as "Widget ... failed on <client>: ..."; fix the template and show it again.`
 
 export const templateDescription = `List, read and save widget templates for the widget tool.
 
-- action "list": every template with its description and data schema.
-- action "get": one template including its source; read "suggestions" or "form" before writing your own and copy their patterns.
-- action "save": store a template (name, description, data, source, example, and mode "live" for a long-running main). Saving an existing name creates a new version that becomes the latest; built-in names cannot be overwritten. \`example\` is data checked against \`data\`. The server never runs template code (it only parses and lints it): errors in running it come back as messages from the clients that show the widget; fix the source, save again and re-post.
+- "list": every template with its description and data schema. "get": one template with its source (built-ins are real examples to copy).
+- "save": name, description, data (JSON Schema), source, example (checked against data), mode "live" for a long-running main. Saving a name again makes a new version; built-in names can't be overwritten. The source is parsed and linted, never run: errors in running it come back from clients as messages.
 
-A template's source is confined JavaScript defining init(data), view(state, data) and update(state, event, data) with the prelude's ui.* node builders, submit(value, state), dismiss(state) and send(value, state, { wake }), plus draw(state, data, frame) for a canvas. Nodes include canvas (2D draw commands) and shader (a WGSL fragment shader). Load the "widgets" skill for the full builder reference before writing one.`
+Load the "widgets" skill for the step ABI, the live API, nodes, drawing and shaders.`
 
 export const skillDescription =
-  "Use when showing the user an interactive widget (option cards with images, forms with sliders, checkboxes and selects, confirmations, charts) with the widget tool, or writing a widget template: when a widget beats text, how to fill each built-in template, and the template language with canvas drawing and WGSL shaders."
+  "Use when showing the user an interactive widget with the widget tool or writing a widget template: what widgets can do (choices, forms, charts and diagrams, canvas, GPU shaders, live programs and games, full screen), the built-ins, and the template contracts."
 
 export const Input = Schema.Struct({
   template: Schema.String.annotate({ description: 'Template name, such as "suggestions", "form" or "confirm"' }),
