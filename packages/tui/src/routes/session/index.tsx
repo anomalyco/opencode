@@ -44,6 +44,7 @@ import {
   type SessionMessageUser,
   type SessionInfo,
   type ModelInfo,
+  type PermissionRequest,
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
@@ -214,6 +215,10 @@ export function Session(props: {
     )
   })
   const promptedPermissions = createMemo(() => (local.permission.mode === "autoaccept" ? [] : permissions()))
+  const promptedPermission = createMemo(
+    (previous?: PermissionRequest) =>
+      promptedPermissions().find((request) => request.id === previous?.id) ?? promptedPermissions()[0],
+  )
   const forms = createMemo(() => {
     const global = data.session.form.list("global", location()) ?? []
     if (session()?.parentID) return global
@@ -1625,9 +1630,9 @@ export function Session(props: {
               <Switch>
                 <Match when={composerVisible()}>{null}</Match>
                 <Match when={promptedPermissions().length > 0}>
-                  <Show when={promptedPermissions()[0]?.id} keyed>
+                  <Show when={promptedPermission()?.id} keyed>
                     {(_) => {
-                      const request = promptedPermissions()[0]
+                      const request = promptedPermission()
                       return request ? (
                         <PermissionPrompt request={request} directory={session()?.location.directory} />
                       ) : null
