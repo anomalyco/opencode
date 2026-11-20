@@ -47,7 +47,8 @@ export {
   ManualClock,
   realClock,
 } from "./live.js"
-export { compile, type CompileError, entry, prelude, program, version } from "./program.js"
+export { compile, type CompileError } from "./compile.js"
+export { entry, prelude, program, version } from "./program.js"
 export {
   FETCH_LIMITS,
   type FetchError,

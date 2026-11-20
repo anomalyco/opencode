@@ -1,4 +1,4 @@
-import { builtins } from "@opencode/widget"
+import { builtins, program } from "@opencode/widget"
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
@@ -32,6 +32,7 @@ async function render(
   } = {},
 ) {
   const responses: WidgetResponse[] = []
+  const reports: Parameters<WidgetBackend["report"]>[0]["error"][] = []
   const [message, setMessage] = createSignal({ ...widgetFixtureMessage(name, options.status), ...options.widget })
   const backend: WidgetBackend = {
     program: options.program ?? ((template) => cached(template, () => Promise.reject(new Error("not a built-in")))),
@@ -44,6 +45,9 @@ async function render(
       }))
     },
     async send() {},
+    async report(input) {
+      reports.push(input.error)
+    },
   }
   function Harness() {
     const focus = createWidgetFocus(() => [message()])
@@ -69,7 +73,7 @@ async function render(
     ),
     { width: options.width ?? 100, height: 48, kittyKeyboard: true },
   )
-  return { ...setup, responses, message, [Symbol.dispose]: () => setup.renderer.destroy() }
+  return { ...setup, responses, reports, message, [Symbol.dispose]: () => setup.renderer.destroy() }
 }
 
 async function frame(setup: Awaited<ReturnType<typeof render>>, matches: (frame: string) => boolean) {
@@ -102,6 +106,29 @@ test("the built-in live minigame shows the desktop and mobile fallback", async (
     widget: { template: { name: minigame.name, version: minigame.version }, data: { title: "Tap the dots" } },
   })
   await frame(setup, (current) => current.includes("Open this widget on desktop or mobile."))
+})
+
+test("a failing step is reported to the agent", async () => {
+  const source =
+    'function view() {\n  return ui.button("go", "Go")\n}\nfunction update() {\n  throw new Error("boom")\n}'
+  using setup = await render("confirm", { program: async () => ({ program: program(source), mode: "step" }) })
+  await frame(setup, (current) => current.includes("Go"))
+  setup.mockInput.pressTab()
+  setup.mockInput.pressEnter()
+  await frame(setup, (current) => current.includes("boom"))
+  expect(setup.reports).toEqual([{ phase: "update", message: "Error: boom" }])
+})
+
+test("a template that fails to load is reported, with no position past the template's source", async () => {
+  const source = 'function view() {\n  return ui.text("x")\n}\nfunction update( {\n}'
+  using setup = await render("confirm", { program: async () => ({ program: program(source), mode: "step" }) })
+  await frame(setup, (current) => current.includes("Widget failed to load"))
+  expect(setup.reports).toEqual([
+    {
+      phase: "init",
+      message: "SyntaxError: Unexpected token. Code must be plain JavaScript written as a program body.",
+    },
+  ])
 })
 
 test("form renders every field kind", async () => {

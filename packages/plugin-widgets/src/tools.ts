@@ -21,6 +21,7 @@ Built-in templates (data schemas via widget_template action "list"):
 
 Usage notes:
 - \`data\` is a JSON object (not a string) matching the template's JSON Schema; fix mismatches from the tool error and call again.
+- The server doesn't run templates. If a client hits an error, it arrives as "Widget ... failed on <client>: ..." (or as this tool's error with \`wait: true\`): fix the template and show it again.
 - Image paths may be https URLs, data: URIs or paths relative to the session directory. Never invent image URLs.
 - Show the widget early instead of researching for many steps first.
 - By default the call returns at once: end your turn unless there is unrelated work to do, and do not ask the same thing again in text. The answer arrives as your next message.
@@ -30,7 +31,7 @@ export const templateDescription = `List, read and save widget templates for the
 
 - action "list": every template with its description and data schema.
 - action "get": one template including its source; read "suggestions" or "form" before writing your own and copy their patterns.
-- action "save": store a template (name, description, data, source, example, and mode "live" for a long-running main). Saving an existing name creates a new version that becomes the latest; built-in names cannot be overwritten. \`example\` is data that is checked against \`data\` and rendered once before the template is stored.
+- action "save": store a template (name, description, data, source, example, and mode "live" for a long-running main). Saving an existing name creates a new version that becomes the latest; built-in names cannot be overwritten. \`example\` is data checked against \`data\`. The server never runs template code (it only parses and lints it): errors in running it come back as messages from the clients that show the widget; fix the source, save again and re-post.
 
 A template's source is confined JavaScript defining init(data), view(state, data) and update(state, event, data) with the prelude's ui.* node builders, submit(value, state), dismiss(state) and send(value, state, { wake }), plus draw(state, data, frame) for a canvas. Nodes include canvas (2D draw commands) and shader (a WGSL fragment shader). Load the "widgets" skill for the full builder reference before writing one.`
 

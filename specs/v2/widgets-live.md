@@ -103,7 +103,9 @@ and hands the actual transfer to the app (URLSession / OkHttp), so system TLS an
 
 ## Server
 
-The `widget` tool validates `data` and compiles the program (syntax only) for live templates; it does not run `main`.
+The server never runs template code: the `widget` tool validates `data`, and `widget_template save` parses and lints the
+source (an `async function main`, top-level declarations only; see `widgets.md`, Tools). A client whose live program
+fails reports it with the `report` RPC (`phase: "main"`, or `"fetch"` for a fetch error it can't handle).
 `widget_template` `save` takes `mode` and `capabilities`; both are part of the template version (see `widgets.md`, Template). Step templates
 can't declare capabilities. The skill teaches when to use live mode (games, timers, animations,
 simulations) and shows a small game.

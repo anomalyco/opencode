@@ -128,7 +128,8 @@ type StepOutput = {
 ```
 
 A step that fails (throws, times out, returns an invalid view) leaves the previous state and view in place and shows the
-error inline. The first `init` step failing shows an error card with the message.
+error inline. The first `init` step failing shows an error card with the message. Either way the client reports the
+error to the agent with the `report` RPC (see Server plugin), since the server never runs template code.
 
 ## Events
 
@@ -318,6 +319,7 @@ A widget goes `open → submitted` or `open → dismissed`, once. States of a de
 | `states` | `{ sessionID }` | `State[]` of the Session, oldest first | |
 | `respond` | `{ sessionID, messageID, callID, response: { value } \| { dismiss: true } }` | the new `State` | `not_found`, `closed` (`data: { status }`) |
 | `send` | `{ sessionID, messageID, callID, value, wake? }` | the `State` (unchanged) | `not_found`, `closed`, `rate_limited` |
+| `report` | `{ sessionID, messageID, callID, error: { phase, message, line?, column? }, client }` | the `State` (unchanged) | `not_found` |
 
 ```ts
 type Summary = {
@@ -352,13 +354,21 @@ prompt: an idle Session starts a turn, a busy one takes them at its next step.
 | submitted | `User responded to widget "<label>": <JSON value>` | `Responded to "<label>"` | `response` | yes |
 | dismissed | `User dismissed widget "<label>"` | `Dismissed "<label>"` | `response` | yes |
 | send | `Widget "<label>" sent: <JSON value>` | `<label>: <value>` (strings raw, else JSON, cut at 80) | `message` | `wake` (default true) |
+| report | `Widget "<label>" failed on <client>: <phase>: <message> (line N, col M)` | `<label> failed on <client>` | `error` | yes |
 
-`metadata` is `{ widget: { messageID, callID, kind } }`; clients detect these by `metadata.widget`, never by text, and
+`metadata` is `{ widget: { messageID, callID, kind } }` (`kind`: `response`, `message` or `error`); clients detect these by `metadata.widget`, never by text, and
 show them as one quiet line (`◈ <description>` in the TUI). `<label>` is the title, or the template name. A send with
 `wake: false` is admitted without waking (`resume: false`): it stays pending and the model sees it with the next turn.
 
 Waiting tool calls and the lock that serializes respond and send live in the server process, shared by every Location
 and plugin reload in it; this assumes one server process per database, like the goal plugin.
+
+`report` is how a client tells the agent that running the widget failed: `phase` is `init`, `view`, `update`, `draw`,
+`main`, `shader`, `fetch` or another string; `line`/`column` (1-based) are in the template's source when known; `client`
+names the client (`tui`, `rune`, `ios`, `android`). Identical reports (same phase and message) for a widget are delivered
+once, and at most one report per widget every 10 seconds; reports for a closed widget are ignored. While a `wait: true`
+call waits, a report fails that call with the same text instead, so the model fixes the template and posts it again.
+Clients report when a step, a draw or the live program fails, and when the program doesn't load.
 
 Respond writes the state first and then admits the message. These are two writes without a transaction: if the server
 dies between them, the widget shows as answered but the model never hears of it (the user can say so in the prompt).
@@ -372,9 +382,9 @@ Respond and send for one process are serialized, so a widget is answered once.
 input: { template: string; data: object; title?: string; wait?: boolean }
 ```
 
-The plugin resolves the latest version, validates `data` against the template's JSON Schema, and runs the `init` step
-with `@opencode/widget` once to fail fast on broken programs (errors go back to the model as the tool error). It then
-stores the widget's state and publishes `changed`.
+The plugin resolves the latest version, validates `data` against the template's JSON Schema (errors go back to the
+model as the tool error), stores the widget's state and publishes `changed`. **The server never runs template code**:
+not `init`, `view` or `main`. Errors in running a widget come from the clients that show it, through `report`.
 
 - `wait` omitted or `false`: returns at once with `Widget "<title>" is shown to the user. Their response arrives as the
   next message; end your turn now unless there is unrelated work to do.` The answer arrives as a synthetic message.
@@ -401,10 +411,13 @@ input: {
 }
 ```
 
-`save` validates the name, checks `example` against the schema, and runs `init` (which renders the first `view`) with
-`example` before storing; a live template is only compiled. `capabilities` are rejected on step templates, and each
-`https.hosts` entry must be a lowercase host name, `*.` plus one, or `*` (1 to 32 entries). The `widget` tool likewise validates data and only
-compiles a live template's program, never running `main`. Built-in names cannot be overwritten. Saving content that already exists (same version) makes
+`save` validates the name, checks `example` against the schema, and parses and lints the source without running it
+(psychoscript's parser): at most 128 KB; the entry functions exist (`view` for step templates, `async function main` for
+live ones; `init`, `update`, `draw` are optional); only function and `const` declarations at the top level, and no
+`const` initializer that runs code (calls, `new`, assignments), so nothing runs when the program loads; no prelude name
+(`ui`, `widget`, `submit`, `dismiss`, `send`, the `__widget_*` internals, `__input`, `__host`) is redeclared. Problems
+come back as the tool error with `line N, col M`. `capabilities` are rejected on step templates, and each
+`https.hosts` entry must be a lowercase host name, `*.` plus one, or `*` (1 to 32 entries). Built-in names cannot be overwritten. Saving content that already exists (same version) makes
 that version the latest again and updates its description.
 
 Permission actions are `widget` (resource: the template name) and `widget_template` (resource: the template name, or

@@ -102,6 +102,18 @@ export const State = Schema.Struct({
   time: Schema.Struct({ created: Schema.Number, responded: optional(Schema.Number) }),
 }).annotate({ identifier: "Widget.State" })
 
+/** Where a client's run of a widget failed. `phase` is open: clients may report others. */
+export interface RuntimeError extends Schema.Schema.Type<typeof RuntimeError> {}
+export const RuntimeError = Schema.Struct({
+  phase: Schema.String.annotate({
+    description: '"init", "view", "update", "draw", "main", "shader", "fetch" or another',
+  }),
+  message: Schema.String,
+  /** 1-based, in the template's source. */
+  line: optional(Schema.Number),
+  column: optional(Schema.Number),
+}).annotate({ identifier: "Widget.RuntimeError" })
+
 const Call = { sessionID: Schema.String, messageID: Schema.String, callID: Schema.String }
 const standard = Schema.toStandardSchemaV1
 const NotFound = standard(Schema.Struct({}))
@@ -136,6 +148,15 @@ export const Definition = Rpc.define({
       input: standard(Schema.Struct({ ...Call, value: Schema.Json, wake: optional(Schema.Boolean) })),
       output: standard(State),
       errors: { not_found: NotFound, closed: Closed, rate_limited: NotFound },
+    },
+    /**
+     * A runtime error a client hit running the widget (the server never runs templates). Delivered once to the agent:
+     * identical reports are dropped, and at most one per widget every 10 seconds. A closed widget ignores reports.
+     */
+    report: {
+      input: standard(Schema.Struct({ ...Call, error: RuntimeError, client: Schema.String })),
+      output: standard(State),
+      errors: { not_found: NotFound },
     },
   },
   events: {

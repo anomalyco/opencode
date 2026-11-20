@@ -39,6 +39,8 @@ export type WidgetBackend = {
   respond: (input: { widget: WidgetInfo; response: WidgetResponse }) => Promise<void>
   /** Sends a non-final value from `send(...)`; the widget stays open. */
   send: (input: { widget: WidgetInfo; value: JsonValue; wake: boolean }) => Promise<void>
+  /** Tells the agent this client failed running the widget (client name "tui"). */
+  report: (input: { widget: WidgetInfo; error: Widget.RuntimeError }) => Promise<void>
 }
 
 export const widgetKey = (messageID: string, callID: string) => `${messageID}:${callID}`
@@ -182,6 +184,19 @@ export function useWidgetBackend(): WidgetBackend {
             throw error
           },
         ),
+    report: (input) =>
+      rpc()
+        .report(
+          {
+            sessionID: input.widget.sessionID,
+            messageID: input.widget.messageID,
+            callID: input.widget.callID,
+            error: input.error,
+            client: "tui",
+          },
+          options(input.widget),
+        )
+        .then(() => undefined),
     send: (input) =>
       rpc()
         .send(

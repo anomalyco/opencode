@@ -3,7 +3,7 @@ import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Tool } from "@opencode/schema/tool"
-import type { Widget } from "@opencode/schema/widget"
+import { Widget } from "@opencode/schema/widget"
 import { builtins, program, version } from "@opencode/widget"
 import { Cause, Deferred, Effect, Exit, Fiber, Queue } from "effect"
 import WidgetsPlugin, { RATE_LIMIT, WidgetTools } from "../src/index.js"
@@ -155,7 +155,7 @@ describe("live templates", () => {
   throw new Error("never runs on the server")
 }`
 
-  test("stores the mode as part of the version and only compiles live programs", () =>
+  test("stores the mode as part of the version and only lints live programs", () =>
     run((fake) =>
       Effect.gen(function* () {
         const save = (input: Record<string, unknown>) =>
@@ -180,8 +180,7 @@ describe("live templates", () => {
         ).toMatchObject({ mode: "live" })
 
         const broken = yield* save({ name: "broken", source: "async function main(data) { let = }" })
-        expect(String(failure(broken))).toContain('Invalid widget template "broken": example:')
-        expect(String(failure(broken))).toContain("line 1")
+        expect(String(failure(broken))).toContain('Invalid widget template "broken": line 1, col 35: SyntaxError')
 
         // The widget tool validates the data and posts without running main.
         expect(yield* execute(fake, "widget", { template: "ticker", data: { items: ["x"] } })).toMatchObject(
@@ -390,6 +389,91 @@ describe("widget answers", () => {
         expect(fake.permissions.get("plan")).toEqual([{ action: "widget", resource: "*", effect: "allow" }])
         expect(fake.permissions.get("general")).toEqual([{ action: "widget", resource: "*", effect: "deny" }])
         expect(fake.skills.map((skill) => String(skill.id))).toEqual(["widgets"])
+      }),
+    ))
+})
+
+test("the respond input decodes a dismissal as a dismissal, as the RPC route parses it", async () => {
+  const call = { sessionID, messageID, callID: "call_1" }
+  const validate = (input: unknown) => Widget.Definition.methods.respond.input["~standard"].validate(input)
+  expect(await validate({ ...call, response: { dismiss: true } })).toEqual({
+    value: { ...call, response: { dismiss: true } },
+  })
+  expect(await validate({ ...call, response: { value: null } })).toEqual({
+    value: { ...call, response: { value: null } },
+  })
+})
+
+describe("error reports", () => {
+  const show = (fake: Effect.Success<typeof make>) =>
+    Effect.gen(function* () {
+      const at = context()
+      yield* execute(fake, "widget", { template: "confirm", data: confirmData, title: "Deploy" }, at)
+      return { sessionID, messageID, callID: at.id }
+    })
+  const error = { phase: "view", message: "data.items is undefined", line: 3, column: 12 }
+
+  test("delivers a client's runtime error once as a waking message, then drops repeats and floods", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const call = yield* show(fake)
+
+        expect(yield* fake.call("report", { ...call, error, client: "android" })).toMatchObject({ status: "open" })
+        expect(fake.synthetic).toEqual([
+          {
+            sessionID,
+            text: 'Widget "Deploy" failed on android: view: data.items is undefined (line 3, col 12)',
+            description: "Deploy failed on android",
+            metadata: { widget: { messageID, callID: call.callID, kind: "error" } },
+            resume: true,
+          },
+        ])
+        // The same error from another client, and a new one within the window, are dropped.
+        yield* fake.call("report", { ...call, error, client: "tui" })
+        yield* fake.call("report", { ...call, error: { phase: "update", message: "boom" }, client: "tui" })
+        expect(fake.synthetic).toHaveLength(1)
+
+        yield* fake.call("respond", { ...call, response: { dismiss: true } })
+        yield* fake.call("report", { ...call, error: { phase: "draw", message: "late" }, client: "tui" })
+        expect(fake.synthetic.map((message) => message.metadata?.widget)).toMatchObject([
+          { kind: "error" },
+          { kind: "response" },
+        ])
+        expect(
+          yield* fake.call("report", { ...call, callID: "call_missing", error, client: "tui" }).pipe(Effect.flip),
+        ).toMatchObject({ type: "not_found" })
+      }),
+    ))
+
+  test("fails a waiting tool call with the reported error instead of messaging", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const at = context()
+        const fiber = yield* execute(
+          fake,
+          "widget",
+          {
+            template: "confirm",
+            data: confirmData,
+            title: "Deploy",
+            wait: true,
+          },
+          at,
+        ).pipe(Effect.forkChild({ startImmediately: true }))
+        while ((yield* states(fake)).length === 0) yield* Effect.yieldNow
+
+        yield* fake.call("report", {
+          sessionID,
+          messageID,
+          callID: at.id,
+          error: { phase: "init", message: "boom" },
+          client: "rune",
+        })
+
+        expect(failure(yield* Fiber.join(fiber))).toEqual(
+          new Tool.Error({ message: 'Widget "Deploy" failed on rune: init: boom' }),
+        )
+        expect(fake.synthetic).toEqual([])
       }),
     ))
 })

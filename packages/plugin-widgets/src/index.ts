@@ -17,6 +17,14 @@ export { WidgetTools } from "./tools.js"
 
 export const id = "opencode.widget"
 
+/** At most one error report per widget is delivered within this many milliseconds. */
+export const REPORT_WINDOW_MS = 10_000
+
+/** A client's runtime error, as it fails a waiting tool call. */
+class ReportedError {
+  constructor(readonly text: string) {}
+}
+
 /** At most this many `send` messages per widget within {@link RATE_WINDOW_MS}. */
 export const RATE_LIMIT = 10
 export const RATE_WINDOW_MS = 1000
@@ -25,7 +33,9 @@ type Call = { readonly sessionID: string; readonly messageID: string; readonly c
 
 // Process-wide rather than per activation, so a plugin reload or another Location's instance still finds a waiting
 // call. Keys are a widget's storage key.
-const waiters = new Map<string, Deferred.Deferred<Widget.Response>>()
+const waiters = new Map<string, Deferred.Deferred<Widget.Response, ReportedError>>()
+// Error reports already delivered per widget (`phase\0message`), and when the last one went out.
+const reports = new Map<string, { readonly seen: Set<string>; last: number }>()
 const recentSends = new Map<string, number[]>()
 // Serializes every state change and its delivery, so a widget is answered once, never sends after its answer, and its
 // messages reach the model in order. Process-local: one server process per database.
@@ -41,6 +51,16 @@ export const responseText = (state: Pick<Widget.State, "title" | "template">, re
   "value" in response
     ? `User responded to widget "${label(state)}": ${JSON.stringify(response.value)}`
     : `User dismissed widget "${label(state)}"`
+
+export const errorText = (
+  state: Pick<Widget.State, "title" | "template">,
+  error: Widget.RuntimeError,
+  client: string,
+) => {
+  const position =
+    error.line === undefined ? "" : ` (line ${error.line}${error.column === undefined ? "" : `, col ${error.column}`})`
+  return `Widget "${label(state)}" failed on ${client}: ${error.phase}: ${error.message}${position}`
+}
 
 export const messageText = (state: Pick<Widget.State, "title" | "template">, value: unknown) =>
   `Widget "${label(state)}" sent: ${JSON.stringify(value)}`
@@ -87,7 +107,7 @@ export default Plugin.define({
       // turn, a busy one takes it at its next step. `resume: false` admits it without waking.
       const deliver = (
         state: Widget.State,
-        kind: "response" | "message",
+        kind: "response" | "message" | "error",
         text: string,
         description: string,
         wake: boolean,
@@ -158,6 +178,36 @@ export default Plugin.define({
         }).pipe(Semaphore.withPermit(lock))
       })
 
+      // A client's runtime error reaches the model once: a waiting call fails with it, otherwise a waking message.
+      const report = Effect.fn("WidgetPlugin.report")(function* (
+        call: Call,
+        error: Widget.RuntimeError,
+        client: string,
+      ) {
+        return yield* Effect.gen(function* () {
+          const state = yield* read(call)
+          if (!state) return undefined
+          if (state.status !== "open") return state
+          const now = yield* Clock.currentTimeMillis
+          const key = stateKey(call)
+          const seen = reports.get(key) ?? { seen: new Set<string>(), last: -Infinity }
+          const id = `${error.phase}\0${error.message}`
+          if (seen.seen.has(id) || now - seen.last < REPORT_WINDOW_MS) return state
+          seen.seen.add(id)
+          seen.last = now
+          reports.set(key, seen)
+          const text = errorText(state, error, client)
+          const waiter = waiters.get(key)
+          if (waiter) {
+            waiters.delete(key)
+            yield* Deferred.fail(waiter, new ReportedError(text))
+            return state
+          }
+          yield* deliver(state, "error", text, `${label(state)} failed on ${client}`, true)
+          return state
+        }).pipe(Semaphore.withPermit(lock))
+      })
+
       holder.rpc = yield* ctx.rpc
         .register(Widget.Definition, {
           templates: () => templates.list(),
@@ -181,6 +231,12 @@ export default Plugin.define({
                 )
               return outcome.state
             }),
+          report: (input, call) =>
+            report(input, input.error, input.client).pipe(
+              Effect.flatMap((state) =>
+                state ? Effect.succeed(state) : Effect.fail(call.error("not_found", "Widget not found", {})),
+              ),
+            ),
           send: (input, call) =>
             Effect.gen(function* () {
               const outcome = yield* send(input, input.value, input.wake ?? true)
@@ -323,11 +379,15 @@ export default Plugin.define({
       // that arrives at once finds it; it is removed under the lock, so an answer reaches either this call or the model.
       const wait = Effect.fnUntraced(function* (state: Widget.State, cancel: Effect.Effect<void> | undefined) {
         const key = stateKey(state)
-        const answered = yield* Deferred.make<Widget.Response>()
+        const answered = yield* Deferred.make<Widget.Response, ReportedError>()
         waiters.set(key, answered)
         return yield* Effect.gen(function* () {
           yield* write(state).pipe(Semaphore.withPermit(lock))
-          const answer = Deferred.await(answered).pipe(Effect.map(Option.some))
+          // A client's error report fails the call, so the model fixes the template and posts it again.
+          const answer = Deferred.await(answered).pipe(
+            Effect.mapError((error) => new Tool.Error({ message: error.text })),
+            Effect.map(Option.some),
+          )
           const result = cancel ? yield* Effect.raceFirst(answer, cancel.pipe(Effect.as(Option.none()))) : yield* answer
           if (Option.isSome(result)) return result.value
           return yield* new Tool.Error({

@@ -2,7 +2,11 @@ export * as WidgetTemplates from "./templates.js"
 
 import type { StorageDomain } from "@opencode/plugin/effect/storage"
 import { Widget } from "@opencode/schema/widget"
-import { builtins, compile, program, StepError, step, validateData, version } from "@opencode/widget"
+// Subpath imports: the package root also exports the step and live runners, which the server must never load.
+import { validateData } from "@opencode/widget/json-schema"
+import { program, version } from "@opencode/widget/program"
+import { builtins } from "@opencode/widget/template"
+import { WidgetLint } from "./lint.js"
 import { Effect, Option, Schema } from "effect"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Widget.TemplateNotFoundError", {
@@ -46,8 +50,8 @@ export interface SaveInput {
   /** Live templates only. */
   readonly capabilities?: Widget.Capabilities
   /**
-   * Data checked against `data` and, for a step template, run through `init` (which renders the first view) before the
-   * template is stored. A live template is only compiled.
+   * Data checked against `data` before the template is stored. The server never runs template code; it only parses and
+   * lints the source.
    */
   readonly example: Schema.Json
 }
@@ -130,20 +134,11 @@ export const make = (storage: StorageDomain) => {
     yield* storage.set(versionKey(template.name, template.version), Schema.encodeSync(Widget.Template)(template))
   })
 
+  // Data only: the server never runs a template, so `init` and `view` errors come back from clients (`report`).
   const check = Effect.fn("WidgetTemplates.check")(function* (template: Widget.Template, data: Schema.Json) {
     const errors = validateData(template.data, data)
     if (errors.length > 0)
       return yield* new InvalidDataError({ name: template.name, reason: errors.slice(0, 5).join("; ") })
-    // A live program runs until it finishes, so the server only checks that it compiles (widgets-live.md).
-    if (template.mode === "live") {
-      const error = compile(template.source, "live")
-      if (error) return yield* new InvalidDataError({ name: template.name, reason: error.message })
-      return
-    }
-    yield* Effect.tryPromise({
-      try: () => step(program(template.source), { phase: "init", data }),
-      catch: (error) => (error instanceof StepError ? `${error.kind}: ${error.message}` : String(error)),
-    }).pipe(Effect.mapError((reason) => new InvalidDataError({ name: template.name, reason })))
   })
 
   const save = Effect.fn("WidgetTemplates.save")(function* (input: SaveInput) {
@@ -166,6 +161,8 @@ export const make = (storage: StorageDomain) => {
       source: input.source,
       builtin: false,
     })
+    const issues = WidgetLint.lint(input.source, mode)
+    if (issues.length > 0) return yield* invalid(WidgetLint.format(issues))
     yield* check(template, input.example).pipe(Effect.mapError((error) => invalid(`example: ${error.reason}`)))
     // The version first, so `latest` never names a version that is not stored. Saving existing content promotes it
     // again with the new description.

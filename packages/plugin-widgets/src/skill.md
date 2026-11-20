@@ -150,7 +150,11 @@ For one or two plain series over categories or time, use `chart`.
 
 Use `widget_template` with `action: "get"` on `suggestions` or `form` first and copy their patterns, then
 `action: "save"` with `name`, `description`, `data` (a JSON Schema with top-level `type: "object"`), `source` and an
-`example` that matches the schema. Saving renders the example once; fix the errors it returns. Saved templates are
+`example` that matches the schema. The server never runs template code: saving parses and lints the source (the entry
+functions exist, only function and `const` declarations at the top level, no prelude names reused) and checks the
+example against the schema. Errors in running it come from the clients that show it, as a message
+`Widget "<title>" failed on <client>: <phase>: <message> (line N, col M)` (or as the tool error with `wait: true`): fix
+the source, save it again (a new version) and show the widget again. Saved templates are
 reusable in later sessions, so make them general and put the specifics in `data`.
 
 The source is confined JavaScript (no imports, timers, randomness or I/O) with top-level functions:
@@ -198,8 +202,7 @@ A **live** template runs one program for as long as the widget is open: it keeps
 timers and display frames, and renders whenever it wants. Use it when something happens **without the user acting**:
 games, timers and countdowns, step-by-step animations and simulations, dashboards that refresh themselves. Stay with
 step mode for pickers, forms, confirmations and charts: it's cheaper, works in the terminal (which can't run live
-widgets), and the server can run it to check it; a live widget's `main` only runs on the user's device,
-so the server only checks that it compiles. The built-in `minigame` (`{ "title": "Tap the dots", "seconds": 20 }`,
+widgets); like every template, a live widget's `main` only runs on the user's device. The built-in `minigame` (`{ "title": "Tap the dots", "seconds": 20 }`,
 submits `{ score, seconds }`) is one.
 
 Save it with `mode: "live"` and define `async function main(data)` instead of `init`/`view`/`update`/`draw`. It runs

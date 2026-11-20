@@ -1,12 +1,7 @@
 import type { Plugin } from "@opencode/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createSignal, Show } from "solid-js"
-import {
-  cached,
-  WidgetBackendProvider,
-  type WidgetBackend,
-  type WidgetInfo,
-} from "../../../component/widget/backend"
+import { cached, WidgetBackendProvider, type WidgetBackend, type WidgetInfo } from "../../../component/widget/backend"
 import { createWidgetFocus, WidgetMessage } from "../../../component/widget/message"
 import { StoryFooter } from "./footer"
 import type { Story } from "./index"
@@ -43,6 +38,9 @@ function WidgetStory(props: { context: Plugin.Context }) {
         status: "dismiss" in response ? "dismissed" : "submitted",
         ...("value" in response ? { response: response.value } : {}),
       }))
+    },
+    async report(input) {
+      setLast(`error ${input.error.phase}: ${input.error.message}`)
     },
     async send(input) {
       setLast(`sent ${JSON.stringify(input.value)}${input.wake ? "" : " (no wake)"}`)

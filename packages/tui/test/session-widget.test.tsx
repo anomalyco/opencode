@@ -52,6 +52,39 @@ test("a widget posted by the widget tool is answered in the timeline", async () 
   expect(done).toContain('◈ Responded to "Ship it"')
 }, 20000)
 
+test("a widget dismissed over the RPC is dismissed and tells the agent", async () => {
+  await using server = await createScriptedServer({
+    directory: process.cwd(),
+    reply: (request) => {
+      const last = request.messages.at(-1)
+      if (last?.role === "tool") return { text: "Waiting." }
+      if (JSON.stringify(last?.content).includes("dismissed widget")) return { text: "Okay, not deploying." }
+      return {
+        tool: {
+          name: "widget",
+          input: { template: "confirm", title: "Ship it", data: { title: "Ship it?", message: "x" } },
+        },
+      }
+    },
+  })
+  const session = await server.api.session.create({ title: "Dismiss", location: { directory: process.cwd() } })
+  await server.api.session.prompt({ sessionID: session.id, text: "Ask me" })
+  const rpc = server.api.rpc(Widget.Definition)
+  const location = { location: { directory: process.cwd() } }
+  const deadline = Date.now() + 10_000
+  let states: readonly Widget.State[] = []
+  while (states.length === 0 && Date.now() < deadline) {
+    states = await rpc.states({ sessionID: session.id }, location).catch(() => [])
+    if (states.length === 0) await Bun.sleep(25)
+  }
+  const widget = states[0]!
+  const dismissed = await rpc.respond(
+    { sessionID: session.id, messageID: widget.messageID, callID: widget.callID, response: { dismiss: true } },
+    location,
+  )
+  expect(dismissed).toMatchObject({ status: "dismissed" })
+})
+
 const pinger = {
   name: "pinger",
   description: "A button that pings the agent without closing",

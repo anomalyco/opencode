@@ -1,5 +1,5 @@
 import type { JsonValue } from "@opencode/client"
-import { StepError, WidgetSession, type Node, type WidgetEvent } from "@opencode/widget"
+import { program, StepError, WidgetSession, type Node, type WidgetEvent } from "@opencode/widget"
 import { TextAttributes } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, type Accessor } from "solid-js"
@@ -66,6 +66,9 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
     response?: unknown
   }>({ sending: false })
   const [session, setSession] = createSignal<WidgetSession>()
+  // Lines in the template source, so a position past it (in the appended entry) isn't reported as the template's.
+  const source = { lines: 0 }
+
 
   const status = () => (props.message.status === "open" ? (store.sent ?? "open") : props.message.status)
   const interactive = () => status() === "open" && !store.sending && session() !== undefined
@@ -86,6 +89,7 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
         .then((loaded) => {
           // The TUI does not run live programs yet (widgets-live.md).
           if (loaded.mode === "live") return void (current && setStore("live", true))
+          source.lines = loaded.program.split("\n").length - preludeLines
           return WidgetSession.start(loaded.program, props.message.data).then((started) => {
             if (!current) return
             setSession(started)
@@ -93,7 +97,9 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
           })
         })
         .catch((error) => {
-          if (current) setStore("failure", stepMessage(error))
+          if (!current) return
+          setStore("failure", stepMessage(error))
+          report("init", error)
         })
     }),
   )
@@ -118,8 +124,18 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
         if (output.send) return send(output.send.value as JsonValue, output.send.wake)
       })
       .catch((error) => {
-        if (session() === current) setStore("error", stepMessage(error))
+        if (session() !== current) return
+        setStore("error", stepMessage(error))
+        report("update", error)
       })
+  }
+
+  // The server never runs templates, so a failing step goes back to the agent, which can fix the template.
+  function report(phase: "init" | "update", error: unknown) {
+    if (!(error instanceof StepError) || status() !== "open") return
+    void backend
+      .report({ widget: props.message, error: { phase, ...stepPosition(error.message, source.lines) } })
+      .catch((cause) => log.warn("failed to report a widget error", { cause: errorMessage(cause) }))
   }
 
   function send(value: JsonValue, wake: boolean) {
@@ -249,6 +265,17 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
 function liveAlt(data: unknown) {
   if (typeof data !== "object" || data === null || !("alt" in data) || typeof data.alt !== "string") return
   return `${data.alt} · Open this widget on desktop or mobile.`
+}
+
+// The interpreter counts lines in the whole program, prelude included; reports count them in the template source.
+const preludeLines = program("").split("\n").length - 1
+
+function stepPosition(message: string, lines: number) {
+  const position = /\(line (\d+), col (\d+)\)$/.exec(message)
+  if (!position) return { message }
+  const line = Number(position[1]) - preludeLines
+  const text = message.slice(0, position.index).trimEnd()
+  return line < 1 || line > lines ? { message: text } : { message: text, line, column: Number(position[2]) }
 }
 
 function stepMessage(error: unknown) {
