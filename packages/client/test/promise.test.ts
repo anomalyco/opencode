@@ -148,7 +148,6 @@ test("nests a method under client.experimental exactly when its route is experim
     "file.watch",
     "file.write",
     "generate.decisions",
-    "generate.image",
     "generate.text",
     "integration.wellknown.add",
     "mcp.add",

@@ -343,6 +343,15 @@ export class AutomationNotFoundError extends Schema.TaggedError<AutomationNotFou
   { httpApiStatus: 404 },
 ) {}
 
+export class ImageNotFoundError extends Schema.TaggedError<ImageNotFoundError>()(
+  "ImageNotFoundError",
+  {
+    imageID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
 export class VideoNotFoundError extends Schema.TaggedError<VideoNotFoundError>()(
   "VideoNotFoundError",
   {

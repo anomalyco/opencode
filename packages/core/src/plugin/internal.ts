@@ -37,6 +37,7 @@ import { ConfigCompatibilityPlugin } from "../config/plugin/compatibility.js"
 import { ConfigToolOutputPlugin } from "../config/plugin/tool-output.js"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch.js"
 import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
+import { ImageGeneration } from "../image-generation.js"
 import { VideoGeneration } from "../video-generation.js"
 import { Worktree } from "../worktree.js"
 import { WorktreeStrategies } from "../worktree/strategies.js"
@@ -185,6 +186,7 @@ const services = [
   ToolOutput.Service,
   Watcher.Service,
   WellKnown.Service,
+  ImageGeneration.Service,
   VideoGeneration.Service,
   Worktree.Service,
   WorktreeStrategies.Service,
@@ -250,6 +252,7 @@ export const requirements = LayerNode.group([
   ToolOutput.node,
   Watcher.node,
   WellKnown.node,
+  ImageGeneration.node,
   VideoGeneration.node,
   Worktree.node,
   WorktreeStrategies.node,

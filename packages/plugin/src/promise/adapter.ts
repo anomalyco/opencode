@@ -379,7 +379,13 @@ export function fromPromise(plugin: Plugin) {
             },
             generate: {
               text: adaptApiMethod(GenerateEndpoints["generate.text"], host.experimental.generate.text),
-              image: adaptApiMethod(GenerateEndpoints["generate.image"], host.experimental.generate.image),
+              image: {
+                create: adaptApiMethod(
+                  GenerateEndpoints["generate.image.create"],
+                  host.experimental.generate.image.create,
+                ),
+                get: adaptApiMethod(GenerateEndpoints["generate.image.get"], host.experimental.generate.image.get),
+              },
               decisions: adaptApiMethod(GenerateEndpoints["generate.decisions"], host.experimental.generate.decisions),
             },
             artifact: {

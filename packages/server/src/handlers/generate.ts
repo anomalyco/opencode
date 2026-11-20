@@ -1,11 +1,13 @@
 import { Flag } from "@opencode/core/flag"
 import { Generate } from "@opencode/core/generate"
+import { ImageGeneration } from "@opencode/core/image-generation"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import {
   ForbiddenError,
+  ImageNotFoundError,
   VideoNotFoundError,
   InvalidRequestError,
   ModelNotFoundError,
@@ -13,7 +15,7 @@ import {
   ServiceUnavailableError,
   UnsupportedModelError,
 } from "@opencode/protocol/errors"
-import type { DecisionRequest, VideoID, ImageRequest, VideoRequest } from "@opencode/schema/generate"
+import type { DecisionRequest, ImageID, ImageRequest, VideoID, VideoRequest } from "@opencode/schema/generate"
 import { Global } from "@opencode/util/global"
 import { Model } from "@opencode/schema/model"
 import { Effect } from "effect"
@@ -25,6 +27,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
   Effect.gen(function* () {
     const global = yield* Global.Service
     const locations = yield* LocationServiceMap.Service
+    const images = yield* ImageGeneration.Service
     const videos = yield* VideoGeneration.Service
     const services = locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))
     const text = Effect.fn("server.generate.text")(
@@ -35,10 +38,19 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
       Effect.provide(services),
       locationErrors,
     )
-    const image = Effect.fn("server.generate.image")(
+    const imageCreate = Effect.fn("server.generate.image.create")(
       function* (request: { readonly payload: ImageRequest }) {
-        const generate = yield* Generate.Service
-        return { data: yield* generate.image(request.payload).pipe(Effect.mapError(generateError)) }
+        return { data: yield* images.start(request.payload).pipe(Effect.mapError(generateError)) }
+      },
+      Effect.provide(services),
+      locationErrors,
+    )
+    const imageGet = Effect.fn("server.generate.image.get")(
+      function* (request: { readonly params: { readonly id: ImageID } }) {
+        const job = yield* images
+          .get(request.params.id)
+          .pipe(Effect.mapError((error) => new ImageNotFoundError({ imageID: error.id, message: error.message })))
+        return { data: job }
       },
       Effect.provide(services),
       locationErrors,
@@ -86,7 +98,8 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     return handlers
       .handle("generate.text", text)
       .handle("generate.textLegacy", text)
-      .handle("generate.image", image)
+      .handle("generate.image.create", imageCreate)
+      .handle("generate.image.get", imageGet)
       .handle("generate.decisions", decisions)
       .handle("generate.video.create", videoCreate)
       .handle("generate.video.get", videoGet)

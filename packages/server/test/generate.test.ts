@@ -25,6 +25,7 @@ const generate = makeLocationNode({
             ),
           ),
         image: () => Effect.die("unused"),
+        checkImage: () => Effect.void,
         decisions: () => Effect.die("unused"),
         video: {
           start: () => Effect.die("unused"),

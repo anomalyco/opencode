@@ -9,6 +9,7 @@ import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { FileSystem } from "@opencode/core/filesystem"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
 import { BlobStore } from "@opencode/core/blob-store"
+import { ImageGeneration } from "@opencode/core/image-generation"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { Pty } from "@opencode/core/pty"
 import { Snapshot } from "@opencode/core/snapshot"
@@ -93,6 +94,7 @@ export function replacements(options: Options): LayerNode.Replacements {
     Npm.node.replace(npmLayer),
     // Blobs need a local `blobs/` folder, which a Durable Object doesn't have.
     BlobStore.node.replace(BlobStore.unsupportedLayer),
+    ImageGeneration.node.replace(ImageGeneration.unsupportedLayer),
     VideoGeneration.node.replace(VideoGeneration.unsupportedLayer),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.

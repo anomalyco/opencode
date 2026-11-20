@@ -82,7 +82,6 @@ export const deprecatedClientPaths = new Set([
   "file.watch",
   "file.write",
   "generate.decisions",
-  "generate.image",
   "generate.text",
   "integration.wellknown.add",
   "mcp.add",
