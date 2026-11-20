@@ -199,7 +199,10 @@ export function eventDefinition(type: `rpc.${string}`): Event.Definition {
   ) satisfies Event.EphemeralDefinition<string, typeof data>
 }
 
-function parse(schema: Tool.ValueSchema, value: unknown): Effect.Effect<unknown, unknown> {
+function parse(schema: Tool.ValueSchema | undefined, value: unknown): Effect.Effect<unknown, unknown> {
+  // The RPC docs say to leave out the side a method does not use, so a method may declare only one of the two
+  // schemas; there is nothing to validate on the side it left out (#59755).
+  if (schema === undefined) return Effect.succeed(value)
   if (Schema.isSchema(schema)) return Schema.decodeUnknownEffect(schema)(value)
   if (isStandardSchema(schema)) {
     return Effect.gen(function* () {
@@ -257,13 +260,13 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
-function isStandardSchema(schema: Tool.ValueSchema): schema is Extract<Tool.ValueSchema, StandardSchemaV1> {
-  return "~standard" in schema
+function isStandardSchema(schema: Tool.ValueSchema | undefined): schema is Extract<Tool.ValueSchema, StandardSchemaV1> {
+  return typeof schema === "object" && schema !== null && "~standard" in schema
 }
 
-function read(schema: Tool.ValueSchema, value: unknown): Effect.Effect<unknown, unknown> {
+function read(schema: Tool.ValueSchema | undefined, value: unknown): Effect.Effect<unknown, unknown> {
   // Standard Schema results were already parsed by the publisher; don't apply transforms twice.
-  return Schema.isSchema(schema) ? Schema.decodeUnknownEffect(schema)(value) : Effect.succeed(value)
+  return schema === undefined || !Schema.isSchema(schema) ? Effect.succeed(value) : Schema.decodeUnknownEffect(schema)(value)
 }
 
 const logicalEvent = Effect.fn("Rpc.logicalEvent")(function* <
