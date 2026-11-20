@@ -524,6 +524,7 @@ export function createSessionTimelineRowRenderer(input: {
 
         return group.refs.flatMap((ref) => {
           const message = input.projection.messageByID().get(ref.messageID)
+
           const file =
             message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
 
