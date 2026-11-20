@@ -33,6 +33,7 @@ import { Cause, Clock, Duration, Effect, Exit, PlatformError, Queue, Schedule, S
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
+import { TraceContext } from "@opencode/util/observability/trace-context"
 import { McpStdio } from "./stdio.js"
 import { EventStreamRejectedError, EventStreamTerminatedError } from "./event-errors.js"
 
@@ -709,33 +710,39 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           ),
         ),
       callTool: (input) => {
-        const call = Effect.tryPromise({
-          try: (signal) =>
-            client.callTool(
-              {
-                name: input.name,
-                arguments: input.args ?? {},
-                ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
-              },
-              {
-                signal: claim(signal, input),
-                timeout: execution,
-                // Only asks for a progress token: progress on the response stream can keep proxies from closing it.
-                // The SDK timeout does not reset on progress; execution is the hard wall.
-                onprogress: () => {},
-                // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
-                // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
-                // a string `$schema`); ours keep the server's values. Leaving out `outputSchema` skips the
-                // SDK's output check: servers return results that miss or break their own schema (Zoom
-                // answers a 204 with nothing), and failing the call would report a completed action as failed.
-                toolDefinition: {
-                  ...(listed.get(input.name) ?? { name: input.name, inputSchema: { type: "object" } }),
-                  outputSchema: undefined,
-                } as CallToolRequestOptions["toolDefinition"],
-              },
-            ),
-          catch: (error) => error,
-        })
+        const call = Effect.flatMap(TraceContext.current, (headers) =>
+          Effect.tryPromise({
+            try: (signal) =>
+              client.callTool(
+                {
+                  name: input.name,
+                  arguments: input.args ?? {},
+                  _meta: {
+                    ...headers,
+                    ...(input.sessionID === undefined ? {} : { "ai.opencode/sessionID": input.sessionID }),
+                  },
+                },
+                {
+                  signal: claim(signal, input),
+                  timeout: execution,
+                  headers,
+                  // Only asks for a progress token: progress on the response stream can keep proxies from closing it.
+                  // The SDK timeout does not reset on progress; execution is the hard wall.
+                  onprogress: () => {},
+                  // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
+                  // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
+                  // a string `$schema`); ours keep the server's values. Leaving out `outputSchema` skips the
+                  // SDK's output check: servers return results that miss or break their own schema (Zoom
+                  // answers a 204 with nothing), and failing the call would report a completed action as failed.
+                  toolDefinition: {
+                    ...(listed.get(input.name) ?? { name: input.name, inputSchema: { type: "object" } }),
+                    outputSchema: undefined,
+                  } as CallToolRequestOptions["toolDefinition"],
+                },
+              ),
+            catch: (error) => error,
+          }),
+        )
         // A modern server rejects headers mirrored from a stale definition before running the tool,
         // so relist and retry once with the fresh definition.
         return call.pipe(
