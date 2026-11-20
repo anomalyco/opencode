@@ -60,7 +60,7 @@ const decodeOption = (value: unknown) =>
   Schema.decodeUnknownOption(Widget.Template)(
     typeof value === "object" && value !== null && !("mode" in value) ? { ...value, mode: "step" } : value,
   )
-const builtin = new Map(builtins.map((template) => [template.name, decode({ mode: "step", ...template })]))
+const builtin = new Map(builtins.map((template) => [template.name, decode(template)]))
 
 /**
  * A template's content address. Step templates use `@opencode/widget`'s `version`; a live template's also covers its
