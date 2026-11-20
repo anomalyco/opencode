@@ -2011,6 +2011,7 @@ fn server_loader(project: &Project, configured: Vec<Configured>, specs: &[&str])
 
 /// Whether each target needs approval, by target.
 #[cfg(feature = "ts")]
+#[cfg(unix)]
 fn approvals(loader: &Loader) -> Vec<(String, bool)> {
     loader.targets().into_iter().map(|target| (target.target, target.project)).collect()
 }
