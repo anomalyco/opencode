@@ -540,7 +540,7 @@ function SessionScreenContent(props: {
                       drag={drag}
                       toggle={
                         <div
-                          data-slot="session-review-toggle"
+                          data-slot="session-review-panel-toggle"
                           classList={{ invisible: !toggleInPanel() }}
                           onPointerDown={hideTimelineScrollbar}
                           onClick={hideTimelineScrollbar}
