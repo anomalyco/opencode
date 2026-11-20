@@ -379,3 +379,56 @@ test("backdrop: a shader per preset driven by the speed slider", async () => {
   )
   expect(new Set(presets).size).toBe(3)
 })
+
+test("step built-ins ignore key, focus and capture events", async () => {
+  const { examples } = await import("./fixtures/diagrams.js")
+  const data: Record<string, unknown> = {
+    ...examples,
+    suggestions: {
+      title: "Pick",
+      options: [
+        { label: "A", images: ["a.png"] },
+        { label: "B", images: ["b.png"] },
+      ],
+    },
+    form: { title: "Form", fields: [{ key: "name", type: "text", label: "Name" }] },
+    confirm: { title: "Sure?", message: "Really." },
+    chart: revenue,
+    backdrop: { title: "Hi", preset: "plasma" },
+  }
+  const events = [
+    { id: "", type: "focus" as const, value: true },
+    {
+      id: "",
+      type: "key" as const,
+      value: {
+        kind: "down" as const,
+        key: "a",
+        code: "KeyA",
+        repeat: false,
+        shift: false,
+        alt: false,
+        ctrl: false,
+        meta: false,
+      },
+    },
+    { id: "", type: "capture" as const, value: true },
+    { id: "", type: "focus" as const, value: false },
+  ]
+  const step = builtins.filter((item) => item.mode === "step")
+  expect(step.map((item) => item.name).filter((name) => !(name in data))).toEqual([])
+  for (const item of step) {
+    const session = await start(item.name, data[item.name])
+    const before = session.state
+    for (const event of events) {
+      const output = await session.dispatch(event)
+      expect({ name: item.name, submit: output.submit, dismiss: output.dismiss, send: output.send }).toEqual({
+        name: item.name,
+        submit: undefined,
+        dismiss: undefined,
+        send: undefined,
+      })
+    }
+    expect({ name: item.name, state: session.state }).toEqual({ name: item.name, state: before })
+  }
+})

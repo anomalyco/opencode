@@ -16,5 +16,6 @@ function view(state) {
   ])
 }
 function update(state, event) {
+  if (event.type !== "change" || event.id !== "speed") return state
   return { speed: event.value }
 }

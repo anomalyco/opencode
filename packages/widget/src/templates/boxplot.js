@@ -31,7 +31,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const { outliers, ...stats } = state.stats[state.selected]
     return submit({ label: data.groups[state.selected].label, index: state.selected, ...stats }, state)
   }

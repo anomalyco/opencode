@@ -31,7 +31,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const message = data.messages[state.selected]
     return submit({ index: state.selected, from: message.from, to: message.to, label: message.label }, state)
   }

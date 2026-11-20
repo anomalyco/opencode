@@ -42,7 +42,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const picked = cell(state, data, state.selected)
     return submit(
       data.layout === "calendar"

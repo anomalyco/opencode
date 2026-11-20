@@ -45,8 +45,8 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "back") return { path: state.path.slice(0, -1), selected: state.path[state.path.length - 1] }
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "back") return { path: state.path.slice(0, -1), selected: state.path[state.path.length - 1] }
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const picked = focus(data, state.path).children[state.selected]
     return submit(
       { label: picked.label, value: total(picked), path: [...trail(data, state.path).slice(1), picked.label] },

@@ -29,6 +29,7 @@ async function main(data) {
     )
     while (true) {
       const event = await widget.event()
+      if (event.type !== "press") continue
       if (event.id === "submit") return widget.submit({ score, seconds })
       if (event.id === "again") break
     }

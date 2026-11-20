@@ -68,6 +68,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
+  if (event.type !== "press") return state
   if (event.id.startsWith("sort:")) {
     const column = Number(event.id.slice(5))
     if (state.sort === column) return { ...state, desc: !state.desc }
@@ -77,7 +78,7 @@ function update(state, event, data) {
     const index = Number(event.id.slice(4))
     return { ...state, selected: state.selected === index ? null : index }
   }
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const row = data.rows[state.selected]
     return submit(
       {

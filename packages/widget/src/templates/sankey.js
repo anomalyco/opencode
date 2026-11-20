@@ -26,7 +26,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected) {
+  if (event.type === "press" && event.id === "choose" && state.selected) {
     if (state.selected.kind === "link") {
       const link = data.links[state.selected.index]
       return submit({ kind: "link", source: link.source, target: link.target, value: link.value }, state)

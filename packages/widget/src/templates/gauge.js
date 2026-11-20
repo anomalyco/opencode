@@ -27,7 +27,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const gauge = data.gauges[state.selected]
     return submit(
       { label: gauge.label, index: state.selected, value: gauge.value, tone: tone(gauge, gauge.value) },

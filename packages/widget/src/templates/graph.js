@@ -30,7 +30,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const node = data.nodes[state.selected]
     return submit(
       { id: node.id, label: name(node), neighbors: neighbors(state, state.selected).map((at) => data.nodes[at].id) },

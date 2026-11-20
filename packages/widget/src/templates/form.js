@@ -37,7 +37,8 @@ function input(field, value) {
 }
 
 function update(state, event, data) {
-  if (event.id === "submit") return submit(state.values, state)
+  if (event.type === "press" && event.id === "submit") return submit(state.values, state)
+  if (event.type !== "change") return state
   const field = data.fields.find((field) => "field:" + field.key === event.id)
   if (!field) return state
   return { ...state, values: { ...state.values, [field.key]: coerce(field, event.value) } }

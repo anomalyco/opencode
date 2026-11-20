@@ -29,7 +29,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const node = data.nodes[state.selected]
     return submit({ id: node.id, label: node.label ?? node.id }, state)
   }

@@ -37,8 +37,9 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
+  if (event.type === "change") return event.id === "note" ? { ...state, note: String(event.value ?? "") } : state
+  if (event.type !== "press") return state
   if (event.id.startsWith("option:")) return { ...state, picked: Number(event.id.slice("option:".length)) }
-  if (event.id === "note") return { ...state, note: String(event.value ?? "") }
   if (event.id === "dismiss") return dismiss(state)
   if (event.id !== "choose" || state.picked === null) return state
   const note = data.allowNote === false ? "" : state.note.trim()

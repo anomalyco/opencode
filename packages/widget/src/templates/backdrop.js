@@ -150,7 +150,7 @@ function view(state, data) {
 }
 
 function update(state, event) {
-  if (event.id !== "speed") return state
+  if (event.type !== "change" || event.id !== "speed") return state
   return { speed: Math.round(Math.min(2, Math.max(0, Number(event.value) || 0)) * 10) / 10 }
 }
 

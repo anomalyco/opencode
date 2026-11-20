@@ -30,7 +30,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.active) {
+  if (event.type === "press" && event.id === "choose" && state.active) {
     const point = data.series[state.active.series].points[state.active.index]
     return submit({ series: data.series[state.active.series].label, index: state.active.index, ...point }, state)
   }

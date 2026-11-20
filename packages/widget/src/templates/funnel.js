@@ -24,7 +24,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const stage = data.stages[state.selected]
     return submit(
       { label: stage.label, index: state.selected, value: stage.value, ...rates(data, state.selected) },

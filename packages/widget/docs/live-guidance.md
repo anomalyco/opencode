@@ -31,7 +31,8 @@ widget closes. Everything goes through the `widget` object:
 ```
 widget.render(node)                      replace the view (any ui.* node, canvas and shader included)
 widget.draw(canvasID, g)                 replace a canvas's drawing (g = ui.draw(), same commands as step mode)
-await widget.event()                     next user event: { id, type: "press" | "change" | "pointer", value }
+await widget.event()                     next event: { id, type: "press" | "change" | "pointer" | "key" | "focus"
+                                           | "capture", value }; always switch on type (and id)
 await widget.frame()                     next display frame { t, dt, width, height, scale, pointer, dark }
 await widget.next({ frame, timeout })    whichever comes first:
                                            { type: "event", event } | { type: "frame", frame }
@@ -104,7 +105,10 @@ async function main(data) {
       ui.button("done", "Submit", { variant: "primary" }),
     ]),
   )
-  while ((await widget.event()).id !== "done") {}
+  while (true) {
+    const event = await widget.event()
+    if (event.type === "press" && event.id === "done") break
+  }
   widget.submit({ score })
 }
 ```
@@ -156,7 +160,7 @@ async function main(data) {
   await refresh()
   while (true) {
     const next = await widget.next({ timeout: every })
-    if (next.type === "event" && next.event.id !== "refresh") continue
+    if (next.type === "event" && (next.event.type !== "press" || next.event.id !== "refresh")) continue
     await refresh()
   }
 }

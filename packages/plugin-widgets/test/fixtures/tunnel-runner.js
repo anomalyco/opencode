@@ -71,7 +71,7 @@ async function main(data) {
   show()
   while (run.alive && widget.now() < end) {
     const next = await widget.next({ frame: true, timeout: end - widget.now() })
-    if (next.type === "event" && next.event.id === "tunnel" && next.event.value?.kind === "down" && run.y === 0)
+    if (next.type === "event" && next.event.type === "pointer" && next.event.id === "tunnel" && next.event.value.kind === "down" && run.y === 0)
       run.vy = JUMP
     if (next.type !== "frame") continue
     const dt = Math.min(next.frame.dt, 0.05)
@@ -97,6 +97,9 @@ async function main(data) {
       ui.button("done", "Submit score", { variant: "primary" }),
     ]),
   )
-  while ((await widget.event()).id !== "done") {}
+  while (true) {
+    const event = await widget.event()
+    if (event.type === "press" && event.id === "done") break
+  }
   widget.submit({ score: run.score, distance: Math.round(run.distance) })
 }

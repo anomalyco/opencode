@@ -76,15 +76,16 @@ fix the source, save it again and show the widget again.
 ```js
 function init(data) { return { pick: null } }
 function view(state, data) { return ui.column({ gap: 1 }, [ui.text(data.title, { style: "title" }), ...data.items.map((item) => ui.button(item, item))]) }
-function update(state, event) { return submit({ pick: event.id }, state) }
+function update(state, event) { return event.type === "press" ? submit({ pick: event.id }, state) : state }
 ```
 
 **Live API** (`mode: "live"`, define `async function main(data)`; `Math.random()` allowed):
 `widget.render(node)` · `widget.draw(canvasID, g)` · `await widget.event()` · `await widget.frame()` →
 `{ t, dt, width, height, scale, pointer, dark }` · `await widget.next({ frame, timeout })` → event | frame | timeout |
 `{ type: "resumed", pausedMs }` · `await widget.sleep(ms)` · `widget.now()` (pauses don't count) ·
-`await widget.fetch(url, init)` · `widget.submit(v)` / `widget.dismiss()` / `widget.send(v, { wake })`. Ask for a frame
-only while something moves, and call `render` only when the view changes (or a shader's `values` do).
+`await widget.fetch(url, init)` · `widget.submit(v)` / `widget.dismiss()` / `widget.send(v, { wake })`. Always switch
+on `event.type` (and `id`): focus, key and capture events arrive too. Ask for a frame only while something moves, and
+call `render` only when the view changes (or a shader's `values` do).
 
 ```js
 async function main(data) {

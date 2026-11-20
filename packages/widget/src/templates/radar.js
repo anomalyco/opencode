@@ -32,7 +32,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null)
+  if (event.type === "press" && event.id === "choose" && state.selected !== null)
     return submit(
       {
         axis: data.axes[state.selected],

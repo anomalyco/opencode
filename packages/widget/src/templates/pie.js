@@ -35,7 +35,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const slice = data.slices[state.selected]
     const share = Math.round((slice.value / total(data, state)) * 1000) / 1000
     return submit({ label: slice.label, index: state.selected, value: slice.value, share }, state)

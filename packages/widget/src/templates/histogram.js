@@ -43,7 +43,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.active !== null) {
+  if (event.type === "press" && event.id === "choose" && state.active !== null) {
     const picked = state.bins[state.active]
     return submit({ index: state.active, from: picked.from, to: picked.to, count: picked.count }, state)
   }

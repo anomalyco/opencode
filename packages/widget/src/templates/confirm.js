@@ -10,6 +10,7 @@ function view(state, data) {
 }
 
 function update(state, event) {
+  if (event.type !== "press") return state
   if (event.id === "confirm") return submit({ confirmed: true }, state)
   if (event.id === "cancel") return submit({ confirmed: false }, state)
   return state

@@ -20,7 +20,9 @@ this. Clients only; the server knows nothing about it.
 - A widget asks for the mouse with `widget.capturePointer()` (live) or by setting `capture: "pointer"` on the view's root
   node (step and live). The client grants it on the next click inside the widget (a user gesture): the cursor is hidden
   and locked, and pointer events carry relative movement: `{ id, type: "pointer", value: { kind: "move", dx, dy } }`
-  plus `down`/`up` with `button`. `widget.releasePointer()` (or dropping the root prop) gives it back.
+  plus `down`/`up` with `button`. `widget.releasePointer()` (or dropping the root prop) gives it back. When capture is
+  granted the program gets `{ id: "", type: "capture", value: true }`; when it ends for any reason,
+  `{ id: "", type: "capture", value: false }`.
 - Without capture, pointer events are as before (absolute `x`, `y` on canvas/shader nodes with an `id`).
 
 ## Esc always releases

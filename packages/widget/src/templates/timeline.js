@@ -47,7 +47,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const task = data.tasks[state.selected]
     return submit(
       { label: task.label, index: state.selected, start: task.start, end: task.end ?? task.start, group: task.group },

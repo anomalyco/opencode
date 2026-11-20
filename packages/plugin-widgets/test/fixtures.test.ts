@@ -26,4 +26,11 @@ test("the color shader fixture lints and follows its slider", async () => {
     event: { id: "speed", type: "change", value: 2 },
   })
   expect(JSON.stringify(next.view)).toContain('"values":[2]')
+  const focused = await step(program(source), {
+    phase: "event",
+    data: {},
+    state: next.state,
+    event: { id: "", type: "focus", value: true },
+  })
+  expect(focused.state).toEqual(next.state)
 })

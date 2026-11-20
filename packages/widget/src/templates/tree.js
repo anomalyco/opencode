@@ -49,7 +49,7 @@ function view(state, data) {
 }
 
 function update(state, event, data) {
-  if (event.id === "choose" && state.selected !== null) {
+  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
     const picked = layout(data, state).items.find((item) => item.key === state.selected)
     return submit({ label: picked.node.label, path: trail(data, picked.key), note: picked.node.note }, state)
   }
