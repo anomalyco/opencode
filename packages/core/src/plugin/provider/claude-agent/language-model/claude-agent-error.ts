@@ -5,7 +5,6 @@ import type { SDKAssistantMessageError, SDKMessage, SDKRateLimitInfo } from "@an
 export class Failure extends Error {
   constructor(
     message: string,
-    // A subscription limit refused the request, rather than an API error that Claude Code already retried.
     readonly limited: boolean,
   ) {
     super(message)

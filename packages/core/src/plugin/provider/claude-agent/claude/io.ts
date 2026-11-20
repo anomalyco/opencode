@@ -41,7 +41,7 @@ export const real: Interface = {
     try {
       return await inFolder(configDir, "fork", [sessionID, messageID])
     } catch (error) {
-      // Without the worker, as in the Node build, a fresh Claude session replays the history instead.
+      // Without the worker, a fresh Claude session replays the history instead.
       if (error instanceof WorkerUnavailableError) return undefined
       throw error
     }
@@ -52,7 +52,6 @@ export const real: Interface = {
 
 class WorkerUnavailableError extends Error {}
 
-// The SDK's session helpers read CLAUDE_CONFIG_DIR from process.env and take no folder option.
 export const helpers = {
   fork: ClaudeFork.create,
   remove: async (sessionID: string) => {
@@ -63,7 +62,8 @@ export const helpers = {
 
 type HelperResult<Name extends keyof typeof helpers> = Awaited<ReturnType<(typeof helpers)[Name]>>
 
-// A worker has its own process.env, so the helpers see another folder without changing it for other sessions.
+// The SDK's session helpers take no folder and read CLAUDE_CONFIG_DIR from process.env. A worker has its own, so they
+// see another folder without changing it for other sessions.
 async function inFolder<Name extends keyof typeof helpers>(
   configDir: string,
   name: Name,

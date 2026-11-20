@@ -20,7 +20,6 @@ const CatalogModel = Schema.Struct({
   efforts: Schema.Array(Schema.String),
   contextWindow: Schema.optionalKey(Schema.Number),
   resolvedModel: Schema.optionalKey(Schema.String),
-  // Still usable, but not offered in the model picker
   hidden: Schema.optionalKey(Schema.Boolean),
 })
 type CatalogModel = typeof CatalogModel.Type
@@ -106,37 +105,36 @@ export const connection = Effect.fn("ClaudeProvider.connection")(function* (ctx:
   return ClaudeQueryOptions.connectionEnv({ settings: info.settings, headers: info.headers, body: info.body })
 })
 
-// Claude Code does not name a model the same way every time: it lists Fable under whatever name the chat was started
-// with, and each account caches its own list. A chat or opencode's config may hold any ID that was ever listed, so
-// none is dropped. A model is told apart by what its name resolves to, and the ID offered first stays the one offered.
+// Claude Code lists Fable under whatever name the chat was started with, and each account caches its own list, while a
+// chat or the config may hold any ID that was ever listed. So no ID is dropped, and a model already offered under one
+// ID keeps it when Claude Code lists it under another.
 // Context windows only come from the full check, so a chat's startup report keeps the saved ones.
 function fromClaude(models: readonly ClaudeProbe.Model[], saved: readonly CatalogModel[]): CatalogModel[] {
   // "default" follows Claude Code's own default, which can change under a running opencode session
   const listed = models.filter((model) => model.value !== "default")
   const result = new Map<string, CatalogModel>()
   for (const model of listed) {
+    const own = saved.find((item) => item.id === model.value)
+    const offered =
+      own && !own.hidden
+        ? undefined
+        : saved.find(
+            (item) =>
+              !item.hidden &&
+              item.resolvedModel !== undefined &&
+              item.resolvedModel === model.resolvedModel &&
+              // An alias that is still listed has moved to another version, and this row is the old one
+              !listed.some((other) => other.value === item.id),
+          )
     const entry = {
       id: model.value,
       name: model.displayName,
       efforts: model.supportedEffortLevels ?? [],
-      contextWindow: model.contextWindow ?? saved.find((item) => item.id === model.value)?.contextWindow,
+      contextWindow: model.contextWindow ?? (offered ?? own)?.contextWindow,
       resolvedModel: model.resolvedModel,
     }
-    // Another saved ID for the same model that this list does not name itself
-    const same = (item: CatalogModel) =>
-      model.resolvedModel !== undefined &&
-      item.resolvedModel === model.resolvedModel &&
-      !result.has(item.id) &&
-      !listed.some((other) => other.value === item.id)
-    const own = saved.find((item) => item.id === model.value)
-    const shown =
-      own && !own.hidden ? undefined : (saved.find((item) => !item.hidden && same(item)) ?? saved.find(same))
-    if (!shown) {
-      result.set(entry.id, entry)
-      continue
-    }
-    result.set(shown.id, { ...entry, id: shown.id, contextWindow: model.contextWindow ?? shown.contextWindow })
-    result.set(entry.id, { ...entry, contextWindow: model.contextWindow ?? shown.contextWindow, hidden: true })
+    if (offered) result.set(offered.id, { ...entry, id: offered.id })
+    result.set(entry.id, offered ? { ...entry, hidden: true } : entry)
   }
   for (const model of saved) {
     if (!result.has(model.id)) result.set(model.id, { ...model, hidden: true })
