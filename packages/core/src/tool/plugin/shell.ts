@@ -302,6 +302,7 @@ export const Plugin = {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
     const access = yield* FileAccess.Service
+    const environment = yield* Environment.Service
     const location = yield* Location.Service
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
@@ -317,19 +318,28 @@ export const Plugin = {
       context: Tool.Context,
       requested: { readonly cwd: string; readonly target: FileAccess.Target },
     ) {
-      // Resolved before the hooks ran; only a hook that moved the working directory needs it resolved again.
+      // Resolved before the hooks ran; only a hook that moved the working directory needs it resolved again. It always
+      // resolves from a base, so a moved path is a plain path on the machine the command was asked for.
       const target =
         invocation.cwd === requested.cwd
           ? requested.target
-          : yield* access.resolve({ path: invocation.cwd, kind: "directory" })
+          : yield* access.resolve({
+              path: invocation.cwd,
+              base:
+                requested.target.environment.id === environment.id
+                  ? { absolute: location.directory, environment }
+                  : requested.target,
+              kind: "directory",
+            })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
-      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
+      const local = target.environment.id === environment.id
+      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, {
+        home: local ? undefined : null,
+      })
+      // A directory the command names is written relative to its working directory, on that same machine.
       const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-        access.resolve({
-          path: FileAccess.resolvePath(target.absolute, directory),
-          kind: "directory",
-        }),
+        access.resolve({ path: directory, base: target, kind: "directory" }),
       )
       yield* access.authorizeExternal([target, ...directories], context)
       if (parsed.commands.length > 0)

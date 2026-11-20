@@ -93,6 +93,14 @@ This section is the single source for loading indicators across `app`, `ui`, `se
 - Every other loading state uses `Loader` (`@opencode/ui/loader`): page, pane and file loads, browser reload, search, connecting, authenticating, sending, installing. Use a purpose-built indicator only when the state has one, such as the titlebar update ring.
 - Choose the indicator at each call site. Never restyle a shared indicator (`Loader`, `ActivityRing`, `Spinner`) to look like another one; that silently changes every caller.
 
+## Floating surfaces over native pages
+
+A native page view, such as the browser pane's, paints above every DOM element, so `src/runtime/plugin/embeds.tsx` hides it while floating app UI overlaps it.
+
+- Mark the painted box of a floating surface with `data-floating-overlay` for its whole visible lifetime, including its exit animation. Mark the surface, not a full-window transparent portal wrapper.
+- Popper positioners, `aria-modal` dialogs, open `<dialog>` elements and open popovers count without the marker. Tooltips never cover the page.
+- A positioned surface that takes pointer input and is portalled to `document.body` after the app root also counts without the marker. It is a fallback: mark new surfaces.
+
 ## Scrolling
 
 This section is the single source for scroll containers across `app`, `ui`, `session-ui`, `gui-plugins` and `desktop`.

@@ -3,7 +3,7 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
 import { Schema } from "effect"
 import { openBinding } from "./connection"
-import { BrowserPane, type PaneEvent } from "./ipc"
+import { BrowserPane, PluginTabHandle, type PaneEvent } from "./ipc"
 
 type Client = IpcClient<(typeof BrowserPane)["spec"]>
 
@@ -42,6 +42,7 @@ function fixture(reject?: Error) {
   const events: PaneEvent[] = []
 
   const client: Client = {
+    forget: async () => undefined,
     register: async (input) => {
       registered.push(input)
 
@@ -49,6 +50,10 @@ function fixture(reject?: Error) {
     },
     load: async () => undefined,
     command: async () => undefined,
+    find: async () => undefined,
+    notice: async () => undefined,
+    reviewLink: async () => tabID,
+    answer: async () => undefined,
     inspect: async () => undefined,
     highlight: async (input) => {
       highlights.push(input)
@@ -57,6 +62,11 @@ function fixture(reject?: Error) {
     setViewport: async () => undefined,
     site: async () => ({ cookies: 0 }),
     clearSite: async () => undefined,
+    clearCache: async () => undefined,
+    reveal: async () => undefined,
+    openPage: async () => undefined,
+    createTab: async () => PluginTabHandle.make("handle"),
+    closeTab: async () => true,
     close: async (input) => {
       closed.push(input.binding)
     },
@@ -113,4 +123,15 @@ test("main's answer to the register reaches the owner", async () => {
   await Bun.sleep(0)
   expect(accepted.outcomes).toEqual(["accepted"])
   expect(rejected.outcomes).toEqual(["browser.pane.registration.invalid"])
+})
+
+test("a plugin open requires its session on screen, including after registration", async () => {
+  const app = fixture()
+  const url = "https://example.invalid"
+  await expect(app.registration.createTab("owner", url, () => false)).rejects.toThrow("notOnScreen")
+  const route = { current: true }
+  const opening = app.registration.createTab("owner", url, () => route.current)
+  route.current = false
+  await expect(opening).rejects.toThrow("notOnScreen")
+  expect(await app.registration.createTab("owner", url, () => true)).toBe(PluginTabHandle.make("handle"))
 })

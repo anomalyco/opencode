@@ -48,6 +48,11 @@ function child(input: { failures?: number; admitted?: boolean; status?: Status; 
     },
     setStatus: (_sessionID: string, status: "idle" | "running") => void statuses.push(status),
     acceptSend: (id: string) => void accepted.push(id),
+    sequence: async <Value>(_sessionID: string, send: () => Promise<Value>, prepare?: () => Promise<unknown>) => {
+      await prepare?.()
+
+      return send()
+    },
   }
 
   return { data: { session }, sessionID, prompts, statuses, accepted }

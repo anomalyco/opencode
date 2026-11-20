@@ -143,6 +143,23 @@ test("keys are left alone while keybinds are blocked", () => {
   expect(ran).toEqual(["palette"])
 })
 
+// A page prompt in the browser pane is a modal alert dialog; the app's keys stay off inside it and work everywhere else.
+test("a modal alert dialog keeps command keys from running inside it", () => {
+  const ran: string[] = []
+  setup([command("palette", "mod+k", ran)])
+  const prompt = document.createElement("div")
+  prompt.setAttribute("role", "alertdialog")
+  prompt.setAttribute("aria-modal", "true")
+  const field = document.createElement("input")
+  prompt.append(field)
+  document.body.append(prompt)
+
+  press(field, { key: "k", ctrlKey: true })
+  press(document.body, { key: "k", ctrlKey: true })
+
+  expect(ran).toEqual(["palette"])
+})
+
 test.each([
   { keybind: "mod+alt+.", init: { key: "≥", code: "Period", ctrlKey: true, altKey: true } },
   { keybind: "mod+shift+[", init: { key: "{", code: "BracketLeft", ctrlKey: true, shiftKey: true } },

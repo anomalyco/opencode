@@ -2640,7 +2640,11 @@ export type ConfigEntry =
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           console_watches?: boolean
           mcp_events?: boolean
+          recommended_api?: boolean
           full_codemode?: boolean
+          machines?: boolean
+          home_memory?: boolean
+          sqlite_fts?: boolean
           schedules?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
@@ -4446,7 +4450,7 @@ export type FileFindOutput = { location: LocationPublicRef; data: Array<FileSyst
 export type ExperimentalFileWriteInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly path: string
-  readonly payload: globalThis.Uint8Array
+  readonly payload: globalThis.Uint8Array | globalThis.Blob
 }
 
 export type ExperimentalFileWriteOutput = { location: LocationPublicRef; data: FileSystemWrite }

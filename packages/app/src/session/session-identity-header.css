@@ -79,6 +79,24 @@
   flex-shrink: 1;
 }
 
+.session-title-rename {
+  min-inline-size: 0;
+}
+
+.session-title-rename > button {
+  display: block;
+  max-inline-size: 100%;
+  padding: 6px 4px;
+  border-radius: 6px;
+  text-align: start;
+}
+
+/* The toggle follows the header actions in DOM order, but stays at the pane row's end as review opens. */
+.session-header-actions > [data-slot="session-review-toggle"] {
+  position: fixed;
+  inset-inline-end: calc(var(--shell-inline-inset, 8px) + var(--session-header-inset-end, 12px));
+}
+
 .session-header-title-measure {
   position: absolute;
   visibility: hidden;

@@ -340,7 +340,7 @@ for (const outline of [
             },
           )
 
-    // A second turn adds the fixed turn gap, which must not get the paint-rounding margin.
+    // A second turn adds the fixed turn gap, which must not get the paint margin the other rows keep.
     await setupTimeline(page, {
       messages: [
         userMessage(undefined, {
@@ -376,7 +376,7 @@ for (const outline of [
       })),
     )
 
-    expect(rows.filter((row) => row.tag !== "TurnGap").every((row) => row.clipMargin === "0.5px")).toBe(true)
+    expect(rows.filter((row) => row.tag !== "TurnGap").every((row) => row.clipMargin === "5px")).toBe(true)
     expect(rows.filter((row) => row.tag === "TurnGap")).toEqual([{ tag: "TurnGap", clipMargin: "0px" }])
 
     const part = page.locator(`[data-timeline-part-id="${partID}"]`)

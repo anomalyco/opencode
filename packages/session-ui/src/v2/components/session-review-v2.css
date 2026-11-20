@@ -126,6 +126,13 @@
   min-width: 0;
 }
 
+/* The floating file-tree toggle sits just 2px from the mode selector. Its fill can cover an outset ring. */
+[data-component="session-review-v2"][data-sidebar-toggle]
+  :is([data-slot="session-review-v2-sidebar-title"], [data-slot="session-review-v2-toolbar-title"])
+  [data-component="select-v2"]:focus-visible {
+  outline-offset: -2px;
+}
+
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-filter"] {
   padding: 0 8px 4px;
   flex-shrink: 0;

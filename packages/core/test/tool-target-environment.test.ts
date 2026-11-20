@@ -52,6 +52,7 @@ const fileToolsNode = makeLocationNode({
     FileWrite.node,
     Formatter.node,
     Image.node,
+    Environment.node,
     Permission.node,
     SessionInstructions.node,
     InstructionDiscovery.node,

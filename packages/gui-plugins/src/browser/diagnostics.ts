@@ -3,6 +3,7 @@ import type { Protocol } from "devtools-protocol"
 import type { Cdp } from "./cdp"
 import {
   evictHop,
+  extensionSource,
   MAX_RETAINED_REQUESTS,
   MAX_STASHED_CHAINS,
   networkRequest,
@@ -16,7 +17,7 @@ import {
 
 const levels = ["debug", "info", "warning", "error"] as const
 
-export function createDiagnostics(cdp: Cdp) {
+export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string, pageContext: (id: number, sessionID?: string) => boolean) {
   const messages: Browser.ConsoleEntry[] = []
   // Every hop by its public id, oldest first.
   const requests = new Map<string, Hop>()
@@ -39,11 +40,11 @@ export function createDiagnostics(cdp: Cdp) {
       id: `${scope}:${++sequence}`,
       timestampMs,
       level,
-      text: text.slice(0, 2_000),
+      text: text.slice(0, 2_000).replace(/oc-preview:\/\/[^\s"'<>()[\]]+/gi, displayURL).slice(0, 2_000),
       textTruncated: text.length > 2_000,
     }
 
-    messages.push(source ? { ...entry, source } : entry)
+    messages.push(source ? { ...entry, source: { ...source, url: displayURL(source.url) } } : entry)
 
     if (messages.length > 500) {
       messages.shift()
@@ -99,7 +100,8 @@ export function createDiagnostics(cdp: Cdp) {
     }
   }
 
-  cdp.on("Runtime.consoleAPICalled", (event) => {
+  cdp.on("Runtime.consoleAPICalled", (event, sessionID) => {
+    if (!pageContext(event.executionContextId, sessionID) || extensionSource(undefined, event.stackTrace)) return
     const source = event.stackTrace?.callFrames[0]
     add(
       event.type === "error" || event.type === "assert"
@@ -128,6 +130,8 @@ export function createDiagnostics(cdp: Cdp) {
   // are Log entries, not Runtime console calls.
   cdp.on("Log.entryAdded", (event) => {
     const entry = event.entry
+
+    if (extensionSource(entry.url, entry.stackTrace)) return
     add(
       entry.level === "verbose" ? "debug" : entry.level,
       entry.text,
@@ -137,8 +141,10 @@ export function createDiagnostics(cdp: Cdp) {
         : undefined,
     )
   })
-  cdp.on("Runtime.exceptionThrown", (event) => {
+  cdp.on("Runtime.exceptionThrown", (event, sessionID) => {
     const error = event.exceptionDetails
+
+    if ((error.executionContextId !== undefined && !pageContext(error.executionContextId, sessionID)) || extensionSource(error.url, error.stackTrace)) return
     add(
       "error",
       error.exception?.description ?? error.text,
@@ -148,7 +154,7 @@ export function createDiagnostics(cdp: Cdp) {
   })
 
   cdp.on("Network.requestWillBeSent", (event, sessionID) =>
-    apply(`${sessionID ?? ""}:${event.requestId}`, { type: "request", id: `${scope}:${++sequence}`, sessionID, event }),
+    apply(`${sessionID ?? ""}:${event.requestId}`, { type: "request", id: `${scope}:${++sequence}`, sessionID, event: { ...event, request: { ...event.request, url: displayURL(event.request.url) } } }),
   )
   cdp.on("Network.requestWillBeSentExtraInfo", (event, sessionID) =>
     apply(`${sessionID ?? ""}:${event.requestId}`, { type: "request.extra", headers: event.headers }),
@@ -208,7 +214,7 @@ export function createDiagnostics(cdp: Cdp) {
   const retained = (id: string, message: string) => {
     const hop = requests.get(id)
 
-    if (!hop) throw new Error(message)
+    if (!hop || hop.extension) throw new Error(message)
 
     return hop
   }
@@ -241,6 +247,7 @@ export function createDiagnostics(cdp: Cdp) {
       const matching = Array.from(requests.values())
         .filter(
           (hop) =>
+            !hop.extension &&
             (!input.urlContains || hop.url.includes(input.urlContains)) &&
             (!input.resourceType || input.resourceType === hop.resourceType),
         )
@@ -277,7 +284,7 @@ export function createDiagnostics(cdp: Cdp) {
         return value.length ? { state: "text", text: value.slice(0, max), truncated: value.length > max } : { state: "empty" }
       }
 
-      const known = responseBody(hop, input.includeBody)
+      const known = responseBody(hop, input.includeResponseBody ?? input.includeBody)
 
       return {
         request: networkRequest(hop),

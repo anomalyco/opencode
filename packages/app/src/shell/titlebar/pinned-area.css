@@ -97,6 +97,13 @@
   pointer-events: none;
 }
 
+/* The group's outline would cover the edge of an inset ring on its first and last controls. */
+[data-component="pinned-group"] [data-pinned-slot]:has(:focus-visible),
+[data-slot="pinned-group-trigger"]:focus-visible {
+  position: relative;
+  z-index: 2;
+}
+
 [data-slot="pinned-group-label"] {
   color: var(--v2-text-text-base);
 }

@@ -1076,7 +1076,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<subagent>` report to the parent's inbox and wakes the parent unless it has a staged revert."
+                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<background-result kind=\"subagent\">` report to the parent's inbox and wakes the parent unless it has a staged revert."
                   },
                   "title": {
                     "anyOf": [
@@ -17426,7 +17426,19 @@
               "mcp_events": {
                 "type": "boolean"
               },
+              "recommended_api": {
+                "type": "boolean"
+              },
               "full_codemode": {
+                "type": "boolean"
+              },
+              "machines": {
+                "type": "boolean"
+              },
+              "home_memory": {
+                "type": "boolean"
+              },
+              "sqlite_fts": {
                 "type": "boolean"
               },
               "schedules": {

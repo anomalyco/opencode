@@ -9,16 +9,15 @@ import { permissionLayer } from "../lib/permission"
 import { hostEnvironmentLayer } from "./environment"
 import { location } from "./location"
 
-const memoryEnvironment = (): Environment.Interface => {
-  const driver = Environment.makeMemoryDriver()
-  return { files: Environment.makeFiles(driver), spawner: driver.spawner }
-}
-
 /**
  * A session on the host at `directory` whose resolved targets all live in another environment, in memory
  * unless one is given. A tool that still acts through the session's environment touches the host instead.
+ * An environment given here needs an id other than the session's, or it names the same machine.
  */
-export const elsewhere = (directory: string, environment = memoryEnvironment()) => {
+export const elsewhere = (
+  directory: string,
+  environment = Environment.make(Environment.ID.make("elsewhere"), Environment.makeMemoryDriver()),
+) => {
   const assertions: Permission.AssertInput[] = []
   const checked: Permission.AssertInput[] = []
   const replacements = [

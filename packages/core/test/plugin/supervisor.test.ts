@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Duration, Effect, Layer, LayerMap, Stream } from "effect"
+import { Clock, Deferred, Duration, Effect, Layer, LayerMap, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { define } from "@opencode/plugin/effect/plugin"
@@ -17,13 +17,14 @@ import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
 import { Provider } from "@opencode/core/provider"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
+import { PluginUpdate } from "@opencode/core/plugin/update"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Database } from "../../src/database/database"
 import { Bus } from "../../src/bus"
 import { tempGlobalLayer } from "../fixture/global"
 import { offlineModels } from "../fixture/models"
 import { tmpdirScoped } from "../fixture/tmpdir"
-import { advance } from "../lib/clock"
+import { advance, drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 
 const id = Plugin.ID.make("account-prompts")
@@ -50,8 +51,8 @@ const sourceLayer = Layer.succeed(
   }),
 )
 
-// Package checks report `available`; updates are recorded instead of installed.
-const packages = { available: false, updated: [] as string[] }
+// Package checks report `available` after `delay`; updates are recorded instead of installed.
+const packages = { available: false, delay: Duration.zero, checks: 0, updated: [] as string[] }
 
 const instances = Layer.effect(
   LocationServiceMap.Service,
@@ -78,7 +79,11 @@ const instances = Layer.effect(
                 }),
               ),
             resolve: (name) => Effect.succeed({ directory: "", name }),
-            check: () => Effect.succeed(packages.available),
+            check: () =>
+              Effect.sleep(packages.delay).pipe(
+                Effect.andThen(Effect.sync(() => packages.checks++)),
+                Effect.as(packages.available),
+              ),
             update: (pkg) =>
               packages.available
                 ? Effect.sync(() => {
@@ -224,6 +229,55 @@ describe("PluginSupervisor", () => {
         ),
       )
       expect(packages.updated).toEqual(["latest-plugin@latest"])
+    }),
+  )
+
+  it.effect("checks and updates once per interval, 24 hours after a slow startup", () =>
+    Effect.gen(function* () {
+      source.operations = [{ type: "add", target: "latest-plugin@latest", options: {} }]
+      packages.available = true
+      // Checks take a while, so the first ones finish well after startup.
+      packages.delay = Duration.seconds(10)
+      packages.checks = 0
+      packages.updated = []
+      source.activations = 0
+      const sdk = yield* SdkPlugins.Service
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const started = yield* Clock.currentTimeMillis
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* advance(() => packages.updated.length === 1)
+        // The update reloads and checks again; the newer version is still reported but isn't installed twice.
+        yield* drain
+        yield* plugins.awaitActivation
+        expect(packages.updated).toEqual(["latest-plugin@latest"])
+        // Other reloads in the same interval reuse the checks.
+        const checks = packages.checks
+        const activations = source.activations
+        yield* sdk.register(greeter("interval-greet", "interval"))
+        yield* advance(() => source.activations > activations)
+        yield* drain
+        yield* plugins.awaitActivation
+        expect(packages.checks).toBe(checks)
+        expect(packages.updated).toHaveLength(1)
+        // The scheduled check exactly one interval after startup checks and installs again.
+        yield* TestClock.adjust(started + PluginUpdate.interval - (yield* Clock.currentTimeMillis))
+        yield* advance(() => packages.updated.length === 2)
+        yield* drain
+        expect(packages.checks).toBeGreaterThan(checks)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        Effect.ensuring(
+          Effect.sync(() => {
+            source.operations = []
+            packages.available = false
+            packages.delay = Duration.zero
+          }),
+        ),
+      )
+      expect(packages.updated).toEqual(["latest-plugin@latest", "latest-plugin@latest"])
     }),
   )
 

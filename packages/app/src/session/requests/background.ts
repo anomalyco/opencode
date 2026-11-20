@@ -254,3 +254,16 @@ function executeShellCommands(calls: JsonValue | undefined) {
     }),
   )
 }
+
+// Applies the job.updated events that arrived while the list request was in flight on top of its response, which may
+// predate them.
+export function mergeJobList<T extends Pick<JobInfo, "id"> & { status: string }>(
+  listed: readonly T[],
+  updates: ReadonlyMap<string, T>,
+) {
+  const jobs = new Map(listed.map((job) => [job.id, job]))
+
+  updates.forEach((info, id) => (info.status === "running" ? jobs.set(id, info) : jobs.delete(id)))
+
+  return jobs
+}
