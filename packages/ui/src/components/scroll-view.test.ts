@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  canScrollKey,
-  scrollKey,
-  scrollOffsetFromThumbPointer,
-  scrollTopFromThumbPointer,
-} from "./scroll-view"
+import { canScrollKey, scrollKey, scrollOffsetFromThumbPointer, scrollTopFromThumbPointer } from "./scroll-view"
 
 describe("scrollKey", () => {
   test("maps plain navigation keys", () => {
