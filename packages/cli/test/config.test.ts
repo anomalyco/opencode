@@ -576,6 +576,33 @@ test("updates a config draft while preserving JSONC comments", async () => {
   expect(await Bun.file(path.join(directory.path, "cli.json")).text()).toContain("// Keep this comment")
 })
 
+test.each([
+  '"session": {"thinking": "hide"}, "session": {"image_preview": true}',
+  '"session": {}, "session": {"thinking": "hide"}, "session": {"image_preview": true}',
+  '"session": {"thinking": "hide", "thinking": "show", "image_preview": true}',
+])("updates the effective session settings with duplicate keys: %s", async (session) => {
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
+  await Bun.write(file, `{\n  // Keep this comment\n  ${session},\n  "custom": {"value": 1},\n}\n`)
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      const updated = yield* service.update((draft) => {
+        draft.session = { ...draft.session, thinking: "hide" }
+      })
+      expect(updated.session).toEqual({ image_preview: true, thinking: "hide" })
+      return yield* service.get()
+    }),
+  )
+
+  expect(config.session).toEqual({ image_preview: true, thinking: "hide" })
+  const text = await Bun.file(file).text()
+  expect(parse(text)).toMatchObject({ session: config.session, custom: { value: 1 } })
+  expect(text).toContain("// Keep this comment")
+})
+
 async function waitForFile(file: string, exited: Promise<number>) {
   const found = await Promise.race([
     (async () => {
