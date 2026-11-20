@@ -3,6 +3,7 @@ export * as TestSessions from "./sessions"
 import type { LanguageModelV3Prompt, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Effect } from "effect"
+import { ClaudeQueryOptions } from "@opencode/core/plugin/provider/claude-agent/claude/query-options"
 import { ClaudeSessions } from "@opencode/core/plugin/provider/claude-agent/claude/sessions"
 import { ClaudeStatus } from "@opencode/core/plugin/provider/claude-agent/claude/status"
 import { ClaudeAgentLanguageModel } from "@opencode/core/plugin/provider/claude-agent/language-model/claude-agent-language-model"
@@ -38,11 +39,13 @@ export function followup(text = "What was the marker? Reply only with it."): Lan
   ]
 }
 
-export const model = Effect.fn(function* (sessions: ClaudeSessions.Interface) {
+export const model = Effect.fn(function* (sessions: ClaudeSessions.Interface, settings?: Record<string, unknown>) {
   const context = yield* Effect.context<never>()
-  return new ClaudeAgentLanguageModel.Model("haiku", {
-    run: (request, signal) => Effect.runPromiseWith(context)(sessions.run(request), { signal }),
-  })
+  return new ClaudeAgentLanguageModel.Model(
+    "haiku",
+    { run: (request, signal) => Effect.runPromiseWith(context)(sessions.run(request), { signal }) },
+    ClaudeQueryOptions.connectionEnv({ settings }),
+  )
 })
 
 export const start = Effect.fn(function* (claude: FakeClaude.Fake, saved = storage()) {

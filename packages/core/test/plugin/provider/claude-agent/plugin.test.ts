@@ -28,6 +28,8 @@ import { Session } from "@opencode/core/session"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import os from "node:os"
+import path from "node:path"
 import { FakeClaude } from "./lib/fake-claude"
 import { FakeIO } from "./lib/fake-io"
 import { TestSessions } from "./lib/sessions"
@@ -517,7 +519,7 @@ describe("ClaudeAgentPlugin provider config", () => {
           provider.body = { metadata: { user_id: "dan" } }
         })
         editor.models.update(ClaudeProvider.ID, haiku.id, (model) => {
-          model.settings = { baseURL: "https://haiku-gateway.example" }
+          model.settings = { baseURL: "https://haiku-gateway.example", configDir: "~/.claude-work" }
           model.headers = { "X-Model": "haiku" }
         })
       })
@@ -548,9 +550,43 @@ describe("ClaudeAgentPlugin provider config", () => {
       // Model settings override the provider's, and only configured headers are sent, not opencode's own
       const chat = claude.runs.find((run) => run.args.includes("--include-partial-messages"))!.env
       expect(chat.ANTHROPIC_BASE_URL).toBe("https://haiku-gateway.example")
+      expect(chat.CLAUDE_CONFIG_DIR).toBe(path.join(os.homedir(), ".claude-work"))
       expect(chat.ANTHROPIC_AUTH_TOKEN).toBe("config-token")
       expect(chat.ANTHROPIC_CUSTOM_HEADERS).toBe("X-Team: core\nX-Model: haiku")
       expect(chat.CLAUDE_CODE_EXTRA_BODY).toBe(JSON.stringify({ metadata: { user_id: "dan" } }))
+      yield* registry.close()
+      claude.check()
+    }),
+  )
+
+  it.live("runs the default folder without naming it, so Claude Code keeps its usual state file", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make(
+        [FakeClaude.expectStartup(), FakeClaude.expectTurn(), FakeClaude.expectInterrupt()],
+        { probes: true },
+      )
+      const registry = yield* addPlugin(FakeIO.make({ claude }))
+      const providers = yield* Provider.Service
+      yield* providers.transform((editor) => {
+        editor.update(ClaudeProvider.ID, (provider) => {
+          provider.settings = { configDir: "~/.claude" }
+        })
+      })
+      yield* connect
+      yield* eventually(claudeModels, (models) => models.some((model) => model.id === "sonnet"))
+      const models = yield* Model.Service
+      const aisdk = yield* AISDK.Service
+      const model = yield* models.get(ClaudeProvider.ID, haiku.id)
+      if (!model) throw new Error("Expected the haiku model")
+      const language = yield* aisdk.language(model)
+      const result = yield* Effect.promise(() =>
+        language.doStream({
+          prompt: TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker."),
+          headers: { [RequestKind.SESSION_HEADER]: "session-a", [RequestKind.HEADER]: "primary" },
+        }),
+      )
+      expect(TestSessions.text(yield* Effect.promise(() => TestSessions.collect(result.stream)))).toBe("COPPER-OTTER")
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([undefined, undefined])
       yield* registry.close()
       claude.check()
     }),

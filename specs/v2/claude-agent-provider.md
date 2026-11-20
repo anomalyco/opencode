@@ -84,6 +84,7 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 | `settings.authToken`     | `ANTHROPIC_AUTH_TOKEN`          |
 | `settings.headerTimeout` | `API_TIMEOUT_MS`                |
 | `settings.chunkTimeout`  | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `settings.configDir`     | `CLAUDE_CONFIG_DIR`             |
 | `headers`                | `ANTHROPIC_CUSTOM_HEADERS`      |
 | `body`                   | `CLAUDE_CODE_EXTRA_BODY`        |
 | effort                   | the SDK's `effort` option       |
@@ -93,6 +94,9 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 - Settings are applied in this order, with later ones winning: the user's shell, then opencode config, then the settings we turn off.
 - Changing any of these restarts the Claude process.
 - Without an explicit max output, we drop opencode's automatic limit and let Claude pick its own.
+- `configDir` expands a leading `~/`, because Claude Code does not. Each config folder has its own transcripts, so a session keeps one record per folder, and forks are made and deleted in the folder they belong to.
+- A model with its own `configDir` runs another account. Its chats do not change the provider's login status, prices or model list, which describe the provider's own folder.
+- A `configDir` of `~/.claude` is the default folder, and is used by not setting `CLAUDE_CONFIG_DIR`. Setting it moves Claude Code's state from `~/.claude.json` to `~/.claude/.claude.json`, which can hold an older model list, and would give existing sessions a new record. It stays set when opencode itself was started with `CLAUDE_CONFIG_DIR`, since leaving it out would then run that folder.
 
 ## History and Switching Models
 

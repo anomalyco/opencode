@@ -9,7 +9,12 @@ export type State =
   | { readonly type: "checking" }
   | { readonly type: "missing" }
   | { readonly type: "failed"; readonly message: string }
-  | { readonly type: "ready"; readonly probe: ClaudeProbe.Result; readonly fromChat?: boolean }
+  | {
+      readonly type: "ready"
+      readonly probe: ClaudeProbe.Result
+      readonly configDir?: string
+      readonly fromChat?: boolean
+    }
 
 export interface Interface {
   readonly state: SubscriptionRef.SubscriptionRef<State>
@@ -29,9 +34,9 @@ export const make = Effect.fn("ClaudeStatus.make")(function* (
   const refresh = Effect.fn("ClaudeStatus.refresh")(function* () {
     const executable = io.which()
     if (!executable) return yield* SubscriptionRef.set(state, { type: "missing" })
-    const env = yield* connection()
+    const env = ClaudeQueryOptions.withoutDefaultFolder(yield* connection(), io)
     const next = yield* ClaudeProbe.run(ClaudeQueryOptions.base({ executable, io, connection: env })).pipe(
-      Effect.map((probe): State => ({ type: "ready", probe })),
+      Effect.map((probe): State => ({ type: "ready", probe, configDir: env.CLAUDE_CONFIG_DIR })),
       Effect.catch((error) =>
         Effect.logWarning("Claude Code login check failed", { cause: error.cause }).pipe(
           Effect.as<State>({
@@ -44,7 +49,14 @@ export const make = Effect.fn("ClaudeStatus.make")(function* (
     yield* SubscriptionRef.set(state, next)
   }, lock.withPermit)
 
-  const report = (next: State) => SubscriptionRef.set(state, next)
+  // A model with its own configDir runs another account, which must not replace the provider's login, prices and models.
+  const report = Effect.fn("ClaudeStatus.report")(function* (next: State) {
+    if (next.type === "ready") {
+      const own = ClaudeQueryOptions.withoutDefaultFolder(yield* connection(), io).CLAUDE_CONFIG_DIR
+      if (next.configDir !== own) return
+    }
+    yield* SubscriptionRef.set(state, next)
+  })
 
   return { state, refresh, report } satisfies Interface
 })
