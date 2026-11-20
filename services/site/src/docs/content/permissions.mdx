@@ -33,11 +33,11 @@ The last matching rule wins, so the specific exceptions follow the broad rule.
 
 Each rule requires three string fields:
 
-| Field      | Meaning                                                                    |
-| ---------- | -------------------------------------------------------------------------- |
-| `action`   | Tool permission action                                                     |
+| Field      | Meaning                                                                      |
+| ---------- | ---------------------------------------------------------------------------- |
+| `action`   | Tool permission action                                                       |
 | `resource` | Value being used, such as a path, command, URL, query, skill ID, or agent ID |
-| `effect`   | `allow`, `deny`, or `ask`                                                   |
+| `effect`   | `allow`, `deny`, or `ask`                                                    |
 
 ```jsonc
 {
@@ -54,23 +54,25 @@ Each rule requires three string fields:
 | `deny`  | Block the operation                 |
 | `ask`   | Wait for a decision from the client |
 
-If no rule matches, OpenCode uses `ask`.
+Agents start with a [base policy](#defaults) that includes a universal `allow`
+rule, so actions are allowed unless a later matching rule overrides it.
+Add an explicit `ask` or `deny` rule to require approval or block an action.
+The evaluator falls back to `ask` only when no effective rule matches, which
+does not occur with the default base policy.
 
 ## Matching
 
 Actions and resources use simple whole-value wildcards:
 
-| Pattern | Match                                      |
-| ------- | ------------------------------------------ |
-| `*`     | Zero or more characters, including `/`    |
-| `?`     | Exactly one character                     |
-| Other   | The literal character                     |
+| Pattern | Match                                  |
+| ------- | -------------------------------------- |
+| `*`     | Zero or more characters, including `/` |
+| `?`     | Exactly one character                  |
+| Other   | The literal character                  |
 
 ```jsonc
 {
-  "permissions": [
-    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
-  ],
+  "permissions": [{ "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" }],
 }
 ```
 
@@ -107,24 +109,24 @@ operation is allowed.
 V2 action names are strings, so plugins may define more actions. Built-in tools
 currently use these actions and resources:
 
-| Action               | Resource                                                                    |
-| -------------------- | --------------------------------------------------------------------------- |
-| `read`               | Location-relative internal path or canonical absolute external path         |
-| `edit`               | Target path for `edit`, `write`, and `patch`                                |
-| `glob`               | Requested glob pattern                                                      |
-| `grep`               | Requested regular expression, not the search path                           |
-| `shell`              | Scanner-produced command string; compound commands may produce several      |
-| `subagent`           | Target agent ID                                                             |
-| `skill`              | Skill ID                                                                    |
-| `question`           | `*`                                                                         |
-| `webfetch`           | Requested URL                                                               |
-| `websearch`          | Search query                                                                |
-| `experimental_image_generate` | Selected image model as `providerID/modelID`, plus `#variant` when set |
-| `external_directory` | Canonical external directory boundary, normally ending in `/*`              |
-| `<server>_<tool>`    | `*` for an MCP tool; unsupported characters in both names become `_`        |
-| `opencode_list_mcp_resources` | MCP server name                                                    |
-| `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
-| `execute`            | `*`; a deny removes Code Mode and lists its tools directly, while nested tools enforce their rules |
+| Action                        | Resource                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| `read`                        | Location-relative internal path or canonical absolute external path                                |
+| `edit`                        | Target path for `edit`, `write`, and `patch`                                                       |
+| `glob`                        | Requested glob pattern                                                                             |
+| `grep`                        | Requested regular expression, not the search path                                                  |
+| `shell`                       | Scanner-produced command string; compound commands may produce several                             |
+| `subagent`                    | Target agent ID                                                                                    |
+| `skill`                       | Skill ID                                                                                           |
+| `question`                    | `*`                                                                                                |
+| `webfetch`                    | Requested URL                                                                                      |
+| `websearch`                   | Search query                                                                                       |
+| `experimental_image_generate` | Selected image model as `providerID/modelID`, plus `#variant` when set                             |
+| `external_directory`          | Canonical external directory boundary, normally ending in `/*`                                     |
+| `<server>_<tool>`             | `*` for an MCP tool; unsupported characters in both names become `_`                               |
+| `opencode_list_mcp_resources` | MCP server name                                                                                    |
+| `opencode_read_mcp_resource`  | `<server>:<uri>`                                                                                   |
+| `execute`                     | `*`; a deny removes Code Mode and lists its tools directly, while nested tools enforce their rules |
 
 For example, allow one skill and deny all other skills:
 
@@ -149,9 +151,7 @@ unless you add a rule. To be asked before any access outside the project:
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "permissions": [
-    { "action": "external_directory", "resource": "*", "effect": "ask" },
-  ],
+  "permissions": [{ "action": "external_directory", "resource": "*", "effect": "ask" }],
 }
 ```
 
@@ -225,15 +225,15 @@ Every agent, including custom agents, starts with this ordered base policy:
 
 Shipped agents append these policies:
 
-| Agent        | Additional policy                                                              |
-| ------------ | ------------------------------------------------------------------------------ |
-| `build`      | Allows questions                                                               |
-| `plan`       | Allows questions; denies edits except files under `~/.opencode/plan`           |
-| `general`    | Denies questions and launching subagents                                       |
+| Agent        | Additional policy                                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `build`      | Allows questions                                                                                                               |
+| `plan`       | Allows questions; denies edits except files under `~/.opencode/plan`                                                           |
+| `general`    | Denies questions and launching subagents                                                                                       |
 | `explore`    | Denies everything except shell, reads, globs, grep, web fetches, web searches, and external directories; asks for `.env` reads |
-| `title`      | Denies all actions                                                              |
-| `summary`    | Denies all actions                                                              |
-| `compaction` | Keeps the base policy                                                          |
+| `title`      | Denies all actions                                                                                                             |
+| `summary`    | Denies all actions                                                                                                             |
+| `compaction` | Keeps the base policy                                                                                                          |
 
 Because no default rule asks for `external_directory`, reads and edits outside
 the Location and worktree proceed without a prompt. Add an
@@ -257,9 +257,7 @@ Put shared rules at the top level and narrower rules under
     "reviewer": {
       "description": "Review code without changing it",
       "mode": "subagent",
-      "permissions": [
-        { "action": "edit", "resource": "*", "effect": "deny" },
-      ],
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
     },
   },
 }
@@ -273,11 +271,11 @@ permissions.
 
 When a rule resolves to `ask`, clients can reply with:
 
-| Choice       | Reply      | Result                                                               |
-| ------------ | ---------- | -------------------------------------------------------------------- |
-| Allow once   | `once`     | Approve only the pending request                                     |
-| Allow always | `always`   | Approve it and save the tool's proposed patterns for the project     |
-| Reject       | `reject`   | Reject it and every other pending permission request in that session |
+| Choice       | Reply    | Result                                                               |
+| ------------ | -------- | -------------------------------------------------------------------- |
+| Allow once   | `once`   | Approve only the pending request                                     |
+| Allow always | `always` | Approve it and save the tool's proposed patterns for the project     |
+| Reject       | `reject` | Reject it and every other pending permission request in that session |
 
 For example, choosing **Allow always** for `git status --short` may save a
 shell prefix that covers later `git status` commands:
