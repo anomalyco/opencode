@@ -1,8 +1,7 @@
-//! Subscribers share one upstream and receive the latest `server.connected` even when filtered. A lagging subscriber
-//! fails independently. On overflow the connection drops the stream rather than silently losing deltas; consumers
-//! resynchronize on the next `server.connected`.
+//! The event stream: one-shot reads and the reconnecting connection loop. On overflow the connection drops the stream
+//! rather than silently losing deltas; consumers resynchronize on the next `server.connected`.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::fmt;
 use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex};
@@ -18,9 +17,6 @@ use tokio_util::sync::CancellationToken;
 
 /// The event every stream starts with, and the one that tells consumers to resynchronize.
 pub const CONNECTED: &str = "server.connected";
-
-/// How many events a [`SharedEvents`] subscriber may hold unread before it fails.
-pub const CAPACITY: usize = 4_096;
 
 /// A server event.
 pub trait Event: Clone + Send + 'static {
@@ -58,262 +54,6 @@ pub fn raw<T: serde::de::DeserializeOwned + Send + 'static>(
 
 /// Reports transport activity, including keepalive comments that carry no event.
 pub type Activity = Arc<dyn Fn() + Send + Sync>;
-
-/// Opens one upstream event stream. The token is cancelled when the stream is no longer wanted.
-pub type Connect<E, X> = Arc<dyn Fn(CancellationToken, Activity) -> BoxStream<'static, Result<E, X>> + Send + Sync>;
-
-// ---------------------------------------------------------------------------------------------------
-// Shared subscription
-
-#[derive(Debug, thiserror::Error)]
-pub enum SubscribeError<X> {
-    /// The upstream failed; every subscriber gets the same error.
-    #[error("{0}")]
-    Source(Arc<X>),
-    #[error("Event subscriber exceeded its {CAPACITY}-event capacity")]
-    Overflow,
-}
-
-impl<X> Clone for SubscribeError<X> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Source(error) => Self::Source(error.clone()),
-            Self::Overflow => Self::Overflow,
-        }
-    }
-}
-
-/// One upstream shared by any number of subscriptions, opened by the first read and closed when the
-/// last subscription ends.
-pub struct SharedEvents<E, X> {
-    hub: Arc<Mutex<Hub<E, X>>>,
-    connect: Connect<E, X>,
-}
-
-impl<E, X> Clone for SharedEvents<E, X> {
-    fn clone(&self) -> Self {
-        Self { hub: self.hub.clone(), connect: self.connect.clone() }
-    }
-}
-
-struct Hub<E, X> {
-    next: u64,
-    current: Option<u64>,
-    upstreams: HashMap<u64, Upstream<E, X>>,
-}
-
-struct Upstream<E, X> {
-    cancel: CancellationToken,
-    subscribers: Vec<Arc<Subscriber<E, X>>>,
-    connected: Option<E>,
-}
-
-struct Subscriber<E, X> {
-    types: Option<HashSet<String>>,
-    activity: Option<Activity>,
-    state: Mutex<Inbox<E, X>>,
-    notify: Notify,
-}
-
-struct Inbox<E, X> {
-    queue: VecDeque<E>,
-    completion: Option<Option<SubscribeError<X>>>,
-}
-
-impl<E: Event, X> Subscriber<E, X> {
-    /// Queues `event` if selected; returns false when the subscriber overflowed and must be removed.
-    fn push(&self, event: &E) -> bool {
-        let selected =
-            self.types.as_ref().is_none_or(|types| event.kind() == CONNECTED || types.contains(event.kind()));
-        let mut inbox = lock(&self.state);
-        if inbox.completion.is_some() || !selected {
-            return true;
-        }
-        if inbox.queue.len() == CAPACITY {
-            inbox.queue.clear();
-            inbox.completion = Some(Some(SubscribeError::Overflow));
-            drop(inbox);
-            self.notify.notify_one();
-            return false;
-        }
-        inbox.queue.push_back(event.clone());
-        drop(inbox);
-        self.notify.notify_one();
-        true
-    }
-
-    fn finish(&self, completion: Option<SubscribeError<X>>, discard: bool) {
-        let mut inbox = lock(&self.state);
-        if inbox.completion.is_none() {
-            inbox.completion = Some(completion);
-        }
-        if discard {
-            inbox.queue.clear();
-        }
-        drop(inbox);
-        self.notify.notify_one();
-    }
-}
-
-impl<E: Event, X: Send + Sync + 'static> SharedEvents<E, X> {
-    pub fn new(connect: Connect<E, X>) -> Self {
-        Self { hub: Arc::new(Mutex::new(Hub { next: 0, current: None, upstreams: HashMap::new() })), connect }
-    }
-
-    /// A lazy subscription: nothing opens until its first [`Subscription::next`]. With `types`, only
-    /// those events and `server.connected` come through.
-    pub fn subscribe(&self, types: Option<&[&str]>, activity: Option<Activity>) -> Subscription<E, X> {
-        let types =
-            types.filter(|types| !types.is_empty()).map(|types| types.iter().map(|kind| (*kind).to_owned()).collect());
-        Subscription {
-            shared: self.clone(),
-            subscriber: Arc::new(Subscriber {
-                types,
-                activity,
-                state: Mutex::new(Inbox { queue: VecDeque::new(), completion: None }),
-                notify: Notify::new(),
-            }),
-            upstream: None,
-        }
-    }
-
-    fn start(&self, subscriber: &Arc<Subscriber<E, X>>) -> u64 {
-        let mut hub = lock(&self.hub);
-        let fresh = hub.current.is_none();
-        let id = match hub.current {
-            Some(id) => id,
-            None => {
-                let id = hub.next;
-                hub.next += 1;
-                hub.current = Some(id);
-                hub.upstreams.insert(
-                    id,
-                    Upstream { cancel: CancellationToken::new(), subscribers: Vec::new(), connected: None },
-                );
-                id
-            }
-        };
-        let upstream = hub.upstreams.get_mut(&id).expect("the current upstream is registered");
-        upstream.subscribers.push(subscriber.clone());
-        if let Some(connected) = &upstream.connected {
-            subscriber.push(connected);
-        }
-        let cancel = upstream.cancel.clone();
-        drop(hub);
-        if fresh {
-            tokio::spawn(self.clone().run(id, cancel));
-        }
-        id
-    }
-
-    async fn run(self, id: u64, cancel: CancellationToken) {
-        let hub = Arc::downgrade(&self.hub);
-        let activity: Activity = Arc::new(move || {
-            let Some(hub) = hub.upgrade() else { return };
-            let callbacks = lock(&hub)
-                .upstreams
-                .get(&id)
-                .map(|upstream| {
-                    upstream.subscribers.iter().filter_map(|subscriber| subscriber.activity.clone()).collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            callbacks.iter().for_each(|callback| callback());
-        });
-        let mut stream = (self.connect)(cancel.clone(), activity);
-        let completion = loop {
-            let item = tokio::select! {
-                _ = cancel.cancelled() => break None,
-                item = stream.next() => item,
-            };
-            match item {
-                None => break None,
-                Some(Err(error)) => break Some(SubscribeError::Source(Arc::new(error))),
-                Some(Ok(event)) => {
-                    let mut hub = lock(&self.hub);
-                    let Some(upstream) = hub.upstreams.get_mut(&id) else { break None };
-                    if event.kind() == CONNECTED {
-                        upstream.connected = Some(event.clone());
-                    }
-                    upstream.subscribers.retain(|subscriber| subscriber.push(&event));
-                    if upstream.subscribers.is_empty() {
-                        Self::stop(&mut hub, id);
-                    }
-                }
-            }
-        };
-        let subscribers = {
-            let mut hub = lock(&self.hub);
-            Self::stop(&mut hub, id);
-            hub.upstreams.remove(&id).map(|upstream| upstream.subscribers).unwrap_or_default()
-        };
-        drop(stream);
-        subscribers.iter().for_each(|subscriber| subscriber.finish(completion.clone(), false));
-    }
-
-    /// Detaches an upstream: new subscriptions open a replacement while this one winds down.
-    fn stop(hub: &mut Hub<E, X>, id: u64) {
-        if hub.current == Some(id) {
-            hub.current = None;
-        }
-        if let Some(upstream) = hub.upstreams.get_mut(&id) {
-            upstream.connected = None;
-            upstream.cancel.cancel();
-        }
-    }
-
-    fn leave(&self, id: u64, subscriber: &Arc<Subscriber<E, X>>) {
-        let mut hub = lock(&self.hub);
-        let Some(upstream) = hub.upstreams.get_mut(&id) else { return };
-        let before = upstream.subscribers.len();
-        upstream.subscribers.retain(|other| !Arc::ptr_eq(other, subscriber));
-        if before != upstream.subscribers.len() && upstream.subscribers.is_empty() {
-            Self::stop(&mut hub, id);
-        }
-    }
-}
-
-/// One consumer of a [`SharedEvents`]. Dropping it, or [`Subscription::close`], leaves the upstream.
-pub struct Subscription<E: Event, X: Send + Sync + 'static> {
-    shared: SharedEvents<E, X>,
-    subscriber: Arc<Subscriber<E, X>>,
-    upstream: Option<u64>,
-}
-
-impl<E: Event, X: Send + Sync + 'static> Subscription<E, X> {
-    /// The next event; `None` once the subscription or the upstream ended. A failure repeats on every
-    /// later call, as the TypeScript iterator rejects every later `next()`.
-    pub async fn next(&mut self) -> Option<Result<E, SubscribeError<X>>> {
-        loop {
-            {
-                let mut inbox = lock(&self.subscriber.state);
-                if let Some(event) = inbox.queue.pop_front() {
-                    return Some(Ok(event));
-                }
-                if let Some(completion) = &inbox.completion {
-                    return completion.clone().map(Err);
-                }
-            }
-            if self.upstream.is_none() {
-                self.upstream = Some(self.shared.start(&self.subscriber));
-                continue;
-            }
-            self.subscriber.notify.notified().await;
-        }
-    }
-
-    pub fn close(&mut self) {
-        self.subscriber.finish(None, true);
-        if let Some(id) = self.upstream {
-            self.shared.leave(id, &self.subscriber);
-        }
-    }
-}
-
-impl<E: Event, X: Send + Sync + 'static> Drop for Subscription<E, X> {
-    fn drop(&mut self) {
-        self.close();
-    }
-}
 
 // ---------------------------------------------------------------------------------------------------
 // Connection loop
@@ -643,7 +383,7 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[derive(Debug, Clone, PartialEq)]
     struct Ev {
@@ -686,8 +426,6 @@ mod tests {
     /// One fake upstream: the test pushes events into it, and `dropped` reports that its reader let go.
     struct Upstream {
         sender: Mutex<Option<mpsc::UnboundedSender<Result<Ev, Failure>>>>,
-        activity: Activity,
-        cancel: CancellationToken,
         dropped: Arc<AtomicBool>,
     }
 
@@ -702,10 +440,6 @@ mod tests {
             if let Some(sender) = lock(&self.sender).take() {
                 let _ = sender.send(Err(Failure(failure)));
             }
-        }
-
-        fn close(&self) {
-            lock(&self.sender).take();
         }
 
         fn dropped(&self) -> bool {
@@ -726,37 +460,28 @@ mod tests {
         opened: Arc<Mutex<Vec<Arc<Upstream>>>>,
     }
 
-    impl Fake {
-        fn open(&self, cancel: CancellationToken, activity: Activity) -> BoxStream<'static, Result<Ev, Failure>> {
+    impl Source<Ev> for Fake {
+        type Error = Failure;
+
+        fn open(&mut self, _activity: Activity) -> BoxStream<'static, Result<Ev, Failure>> {
             let (sender, receiver) = mpsc::unbounded_channel();
             let dropped = Arc::new(AtomicBool::new(false));
             let flag = DropFlag(dropped.clone());
-            lock(&self.opened).push(Arc::new(Upstream { sender: Mutex::new(Some(sender)), activity, cancel, dropped }));
+            lock(&self.opened).push(Arc::new(Upstream { sender: Mutex::new(Some(sender)), dropped }));
             futures_util::stream::unfold((receiver, flag), |(mut receiver, flag)| async move {
                 receiver.recv().await.map(|item| (item, (receiver, flag)))
             })
             .boxed()
         }
+    }
 
+    impl Fake {
         fn count(&self) -> usize {
             lock(&self.opened).len()
         }
 
         fn at(&self, index: usize) -> Arc<Upstream> {
             lock(&self.opened)[index].clone()
-        }
-
-        fn shared(&self) -> SharedEvents<Ev, Failure> {
-            let fake = self.clone();
-            SharedEvents::new(Arc::new(move |cancel, activity| fake.open(cancel, activity)))
-        }
-    }
-
-    impl Source<Ev> for Fake {
-        type Error = Failure;
-
-        fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<Ev, Failure>> {
-            Fake::open(self, CancellationToken::new(), activity)
         }
     }
 
@@ -776,306 +501,6 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
         panic!("timed out waiting for condition");
-    }
-
-    type Read = tokio::task::JoinHandle<(Subscription<Ev, Failure>, Option<Result<Ev, SubscribeError<Failure>>>)>;
-
-    /// Starts a read in the background, as an unawaited `next()` promise in the TS tests.
-    fn read(mut subscription: Subscription<Ev, Failure>) -> Read {
-        tokio::spawn(async move {
-            let item = subscription.next().await;
-            (subscription, item)
-        })
-    }
-
-    async fn next(subscription: &mut Subscription<Ev, Failure>) -> Option<Result<Ev, SubscribeError<Failure>>> {
-        tokio::time::timeout(Duration::from_secs(1), subscription.next()).await.expect("next() hung")
-    }
-
-    fn value(item: Option<Result<Ev, SubscribeError<Failure>>>) -> Ev {
-        item.expect("an event").expect("not an error")
-    }
-
-    #[tokio::test]
-    async fn creation_subscription_and_idle_subscriptions_are_lazy() {
-        let fake = Fake::default();
-        let shared = fake.shared();
-        let mut idle = shared.subscribe(None, None);
-        settle().await;
-        assert_eq!(fake.count(), 0);
-        idle.close();
-        assert!(next(&mut idle).await.is_none());
-        assert_eq!(fake.count(), 0);
-
-        let active = read(shared.subscribe(None, None));
-        settle().await;
-        assert_eq!(fake.count(), 1);
-        fake.at(0).push(ev(CONNECTED, 0));
-        let (active, item) = active.await.unwrap();
-        assert_eq!(value(item), ev(CONNECTED, 0));
-        drop(active);
-        settle().await;
-        assert!(fake.at(0).dropped());
-    }
-
-    #[tokio::test]
-    async fn a_subscription_dropped_before_its_first_read_opens_nothing() {
-        let fake = Fake::default();
-        drop(fake.shared().subscribe(None, None));
-        settle().await;
-        assert_eq!(fake.count(), 0);
-    }
-
-    #[tokio::test]
-    async fn consumers_share_one_source_and_receive_native_and_rpc_events() {
-        let fake = Fake::default();
-        let shared = fake.shared();
-        let (mut first, mut second) = (shared.subscribe(None, None), shared.subscribe(None, None));
-        for event in [ev(CONNECTED, 0), ev("session.updated", 0), ev("rpc.example.updated", 1)] {
-            let reads = (read(first), read(second));
-            settle().await;
-            fake.at(0).push(event.clone());
-            let (one, a) = reads.0.await.unwrap();
-            let (two, b) = reads.1.await.unwrap();
-            assert_eq!((value(a), value(b)), (event.clone(), event));
-            (first, second) = (one, two);
-        }
-        assert_eq!(fake.count(), 1);
-        first.close();
-        assert!(!fake.at(0).cancel.is_cancelled());
-        let pending = read(second);
-        settle().await;
-        fake.at(0).push(ev("rpc.example.updated", 2));
-        let (second, item) = pending.await.unwrap();
-        assert_eq!(value(item), ev("rpc.example.updated", 2));
-        drop(second);
-        settle().await;
-        assert!(fake.at(0).cancel.is_cancelled());
-        assert!(fake.at(0).dropped());
-    }
-
-    #[tokio::test]
-    async fn a_types_filter_delivers_only_the_requested_types_plus_server_connected() {
-        let fake = Fake::default();
-        let mut filtered = fake.shared().subscribe(Some(&["session.updated"]), None);
-        let connected = read(filtered);
-        settle().await;
-        for kind in [CONNECTED, "permission.asked", "rpc.example.updated", "session.updated"] {
-            fake.at(0).push(ev(kind, 0));
-        }
-        let item;
-        (filtered, item) = connected.await.unwrap();
-        assert_eq!(value(item), ev(CONNECTED, 0));
-        assert_eq!(value(next(&mut filtered).await), ev("session.updated", 0));
-    }
-
-    #[tokio::test]
-    async fn a_slow_or_idle_consumer_does_not_stall_other_subscribers() {
-        let fake = Fake::default();
-        let shared = fake.shared();
-        let mut slow = shared.subscribe(None, None);
-        let mut fast = shared.subscribe(None, None);
-        let reads = (read(slow), read(fast));
-        settle().await;
-        fake.at(0).push(ev(CONNECTED, 0));
-        (slow, _) = reads.0.await.unwrap();
-        (fast, _) = reads.1.await.unwrap();
-
-        fake.at(0).push(ev("permission.asked", 1));
-        assert_eq!(value(next(&mut fast).await), ev("permission.asked", 1));
-        fake.at(0).push(ev("session.updated", 2));
-        assert_eq!(value(next(&mut fast).await), ev("session.updated", 2));
-
-        assert_eq!(value(next(&mut slow).await), ev("permission.asked", 1));
-        assert_eq!(value(next(&mut slow).await), ev("session.updated", 2));
-    }
-
-    #[tokio::test]
-    async fn an_idle_consumer_fails_instead_of_buffering_without_bound() {
-        let fake = Fake::default();
-        let mut idle = fake.shared().subscribe(None, None);
-        let connected = read(idle);
-        settle().await;
-        fake.at(0).push(ev(CONNECTED, 0));
-        (idle, _) = connected.await.unwrap();
-
-        (0..=CAPACITY as i64).for_each(|value| fake.at(0).push(ev("session.updated", value)));
-        // The last subscriber overflowed, so the source closes.
-        until(|| fake.at(0).dropped()).await;
-        let error = next(&mut idle).await.unwrap().unwrap_err();
-        assert!(matches!(error, SubscribeError::Overflow));
-        assert_eq!(error.to_string(), "Event subscriber exceeded its 4096-event capacity");
-    }
-
-    #[tokio::test]
-    async fn source_completion_preserves_events_already_buffered() {
-        let fake = Fake::default();
-        let mut idle = fake.shared().subscribe(None, None);
-        let connected = read(idle);
-        settle().await;
-        fake.at(0).push(ev(CONNECTED, 0));
-        (idle, _) = connected.await.unwrap();
-        fake.at(0).push(ev("session.updated", 1));
-        fake.at(0).push(ev("session.updated", 2));
-        fake.at(0).close();
-        settle().await;
-        assert!(fake.at(0).dropped());
-
-        assert_eq!(value(next(&mut idle).await), ev("session.updated", 1));
-        assert_eq!(value(next(&mut idle).await), ev("session.updated", 2));
-        assert!(next(&mut idle).await.is_none());
-    }
-
-    #[tokio::test]
-    async fn late_consumers_receive_the_latest_connection_marker_but_no_replay() {
-        let fake = Fake::default();
-        let shared = fake.shared();
-        let mut first = shared.subscribe(None, None);
-        let mut idle = shared.subscribe(None, None);
-        let pending = read(first);
-        settle().await;
-        fake.at(0).push(ev(CONNECTED, 1));
-        (first, _) = pending.await.unwrap();
-        for event in [ev(CONNECTED, 2), ev("rpc.example.updated", 3)] {
-            fake.at(0).push(event.clone());
-            assert_eq!(value(next(&mut first).await), event);
-        }
-
-        assert_eq!(value(next(&mut idle).await), ev(CONNECTED, 2));
-        let pending = read(idle);
-        settle().await;
-        fake.at(0).push(ev("rpc.example.updated", 4));
-        assert_eq!(value(pending.await.unwrap().1), ev("rpc.example.updated", 4));
-        assert_eq!(fake.count(), 1);
-    }
-
-    #[tokio::test]
-    async fn closing_removes_only_its_subscriber_and_the_last_close_ends_the_source() {
-        let fake = Fake::default();
-        let shared = fake.shared();
-        let first = read(shared.subscribe(None, None));
-        let second = read(shared.subscribe(None, None));
-        settle().await;
-        first.abort();
-        settle().await;
-        assert!(!fake.at(0).cancel.is_cancelled());
-
-        second.abort();
-        settle().await;
-        assert!(fake.at(0).cancel.is_cancelled());
-        assert!(fake.at(0).dropped());
-    }
-
-    #[tokio::test]
-    async fn rapid_resubscription_opens_a_replacement() {
-        let fake = Fake::default();
-        let shared = fake.shared();
-        let mut first = shared.subscribe(None, None);
-        let pending = read(first);
-        settle().await;
-        fake.at(0).push(ev(CONNECTED, 1));
-        (first, _) = pending.await.unwrap();
-        // The old upstream has not finished cleaning up when the replacements subscribe.
-        first.close();
-        let second = read(shared.subscribe(None, None));
-        let third = read(shared.subscribe(None, None));
-        let cancelled = read(shared.subscribe(None, None));
-        settle().await;
-        cancelled.abort();
-        assert_eq!(fake.count(), 2);
-
-        fake.at(1).push(ev(CONNECTED, 2));
-        assert_eq!(value(second.await.unwrap().1), ev(CONNECTED, 2));
-        assert_eq!(value(third.await.unwrap().1), ev(CONNECTED, 2));
-        assert!(fake.at(0).dropped());
-    }
-
-    #[tokio::test]
-    async fn source_eof_finishes_all_consumers_and_permits_a_fresh_subscription() {
-        let fake = Fake::default();
-        let shared = fake.shared();
-        let reads = (read(shared.subscribe(None, None)), read(shared.subscribe(None, None)));
-        settle().await;
-        fake.at(0).push(ev(CONNECTED, 1));
-        let (mut first, _) = reads.0.await.unwrap();
-        let (mut second, _) = reads.1.await.unwrap();
-        fake.at(0).push(ev("rpc.example.updated", 2));
-        assert_eq!(value(next(&mut first).await), ev("rpc.example.updated", 2));
-        assert_eq!(value(next(&mut second).await), ev("rpc.example.updated", 2));
-        fake.at(0).close();
-        assert!(next(&mut first).await.is_none());
-        assert!(next(&mut second).await.is_none());
-        assert_eq!(fake.count(), 1);
-
-        let fresh = read(shared.subscribe(None, None));
-        settle().await;
-        fake.at(1).push(ev(CONNECTED, 3));
-        assert_eq!(value(fresh.await.unwrap().1), ev(CONNECTED, 3));
-    }
-
-    #[tokio::test]
-    async fn source_failures_reach_every_consumer_as_the_same_error() {
-        let fake = Fake::default();
-        let shared = fake.shared();
-        let reads = (read(shared.subscribe(None, None)), read(shared.subscribe(None, None)));
-        settle().await;
-        fake.at(0).fail("actual source failure");
-        let (mut first, a) = reads.0.await.unwrap();
-        let (_second, b) = reads.1.await.unwrap();
-        let (Some(Err(SubscribeError::Source(a))), Some(Err(SubscribeError::Source(b)))) = (a, b) else {
-            panic!("both consumers fail");
-        };
-        assert!(Arc::ptr_eq(&a, &b));
-        assert_eq!(*a, Failure("actual source failure"));
-        let Some(Err(SubscribeError::Source(again))) = next(&mut first).await else { panic!("the failure repeats") };
-        assert!(Arc::ptr_eq(&a, &again));
-        assert_eq!(fake.count(), 1);
-
-        let fresh = read(shared.subscribe(None, None));
-        settle().await;
-        fake.at(1).push(ev(CONNECTED, 0));
-        assert_eq!(value(fresh.await.unwrap().1), ev(CONNECTED, 0));
-    }
-
-    #[tokio::test]
-    async fn a_source_that_fails_to_open_rejects_subscribers_without_retry() {
-        let attempts = Arc::new(Mutex::new(Vec::<CancellationToken>::new()));
-        let recorded = attempts.clone();
-        let shared: SharedEvents<Ev, Failure> = SharedEvents::new(Arc::new(move |cancel, _| {
-            lock(&recorded).push(cancel);
-            futures_util::stream::once(async { Err(Failure("connect failed")) }).boxed()
-        }));
-        let error = next(&mut shared.subscribe(None, None)).await;
-        assert!(
-            matches!(error, Some(Err(SubscribeError::Source(ref failure))) if **failure == Failure("connect failed"))
-        );
-        settle().await;
-        assert_eq!(lock(&attempts).len(), 1);
-        assert!(lock(&attempts)[0].is_cancelled());
-        assert!(matches!(next(&mut shared.subscribe(None, None)).await, Some(Err(_))));
-        assert_eq!(lock(&attempts).len(), 2);
-    }
-
-    #[tokio::test]
-    async fn source_activity_fans_out_to_every_subscriber_that_asked_for_it() {
-        let fake = Fake::default();
-        let shared = fake.shared();
-        let count = Arc::new(AtomicUsize::new(0));
-        let counter = count.clone();
-        let first = read(shared.subscribe(
-            None,
-            Some(Arc::new(move || {
-                counter.fetch_add(1, Ordering::SeqCst);
-            })),
-        ));
-        let second = read(shared.subscribe(None, None));
-        settle().await;
-        (fake.at(0).activity)();
-        (fake.at(0).activity)();
-        fake.at(0).push(ev(CONNECTED, 0));
-        first.await.unwrap();
-        second.await.unwrap();
-        assert_eq!(count.load(Ordering::SeqCst), 2);
     }
 
     fn options(idle: u64) -> Options {
@@ -1153,7 +578,7 @@ mod tests {
             type Error = Failure;
             fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<Ev, Failure>> {
                 self.0
-                    .open(CancellationToken::new(), activity)
+                    .open(activity)
                     .map(|item| {
                         if item.as_ref().is_ok_and(|event| event.kind == "panic") {
                             panic!("reader bug");
