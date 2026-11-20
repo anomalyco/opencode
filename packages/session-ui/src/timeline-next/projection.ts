@@ -24,7 +24,15 @@ import {
 } from "../timeline/turn-phase-machine"
 import { errorInfo } from "./errors"
 import { launchOf } from "../timeline/facts"
-import { hidesActivity, placeNotice, placer, type Place } from "../timeline/place"
+import {
+  hidesActivity,
+  placeNotice,
+  placer,
+  placeScriptChange,
+  scriptChangeItems,
+  type Place,
+  type PlaceFactOf,
+} from "../timeline/place"
 import { placeFacts } from "../timeline/projection"
 import { noticeEvent, workKey, type TimelineEvent } from "./events"
 import { echoesUserShell, liveThinkingShows, movedInPlace, textShows } from "./rules"
@@ -68,6 +76,8 @@ type Input = {
   shows: (content: Content) => boolean
   /** Where a part shows, each call placed once per build. */
   place: (content: Content, commentary?: boolean) => Place
+  /** What placing a call reads, through a signal per call. */
+  factOf?: PlaceFactOf
 }
 
 // A field of the wrong type decodes as absent, so one bad field does not discard its neighbours.
@@ -145,6 +155,7 @@ export function createNextTimelineProjection(input: {
       queuedCompactionIDs: input.queuedCompactionIDs?.() ?? [],
       turnDiffs: input.turnDiffs?.() ?? false,
       place,
+      factOf,
       shows: (content) =>
         content.type === "tool"
           ? place(content).placement !== "hidden"
@@ -320,7 +331,7 @@ function constructRows(input: Input) {
           ),
         ]
 
-      return turnRows(turn, index > 0, phaseOf(turn), input.detail, visible, commentary, input.place)
+      return turnRows(turn, index > 0, phaseOf(turn), input.detail, visible, commentary, input.place, input.factOf)
     }),
   ]
 
@@ -462,6 +473,7 @@ function turnRows(
   isVisible: (content: Content) => boolean,
   commentary: ReadonlySet<Content>,
   place: Input["place"],
+  factOf?: PlaceFactOf,
 ) {
   const rows: TimelineRow.TimelineRow[] = []
   const assistantMessages = turn.entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -481,11 +493,13 @@ function turnRows(
   // segment so none of those rows cross it.
   const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
     const refs = messages.flatMap((message, messageIndex) =>
-      contentEntries(message)
-        .filter(
-          (entry) => isVisible(entry.content) && !(thinking?.messageID === message.id && thinking.partID === entry.id),
-        )
-        .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
+      contentEntries(message).flatMap((entry) => [
+        ...(isVisible(entry.content) && !(thinking?.messageID === message.id && thinking.partID === entry.id)
+          ? [{ messageID: message.id, messageIndex, partID: entry.id, content: entry.content, script: false }]
+          : []),
+        // A script's changes follow it, placed by the Edits setting even where the script itself hides.
+        ...scriptChangeItems(message.id, messageIndex, entry.content, detail, factOf),
+      ]),
     )
 
     const interruptedAt = messages.findIndex((message) => isInterruptedError(message.error))
@@ -494,7 +508,7 @@ function turnRows(
 
     const appendGroups = (items: typeof refs) => {
       let offset = 0
-      groupContent(items, place, commentary).forEach((group) => {
+      groupContent(items, place, commentary, detail).forEach((group) => {
         const tool = group.type !== "part" || items[offset]?.content.type !== "text"
         offset += group.type === "part" ? 1 : group.refs.length
         rows.push(
@@ -892,9 +906,10 @@ function groupPartKey(ref: PartRef) {
 }
 
 function groupContent(
-  items: { messageID: string; partID: string; content: Content }[],
+  items: { messageID: string; partID: string; content: Content; script?: boolean }[],
   place: Input["place"],
   commentary: ReadonlySet<Content>,
+  detail: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
   let adjacent: { type: "context" | "file" | "read" | "events"; refs: PartRef[] } | undefined
@@ -916,7 +931,9 @@ function groupContent(
     adjacent = undefined
   }
 
-  const placed = items.map((item) => place(item.content, commentary.has(item.content)))
+  const placed = items.map((item) =>
+    item.script ? placeScriptChange(detail) : place(item.content, commentary.has(item.content)),
+  )
 
   items.forEach((item, index) => {
     const group = placed[index]!.group

@@ -223,7 +223,10 @@ export function ContextGroup(props: {
                     const value = item()
 
                     return !Array.isArray(value) &&
-                      (value.type === "notice" || value.type === "shell" || value.type === "text")
+                      (value.type === "notice" ||
+                        value.type === "shell" ||
+                        value.type === "text" ||
+                        value.type === "file")
                       ? value
                       : undefined
                   })

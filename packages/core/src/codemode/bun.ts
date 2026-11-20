@@ -13,6 +13,7 @@ import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
 import { Permission } from "../permission.js"
 import { fileDiff } from "../tool/plugin/file-diff.js"
+import { CodeModeDiffs } from "./diffs.js"
 import { CodeModeExecution } from "./execution.js"
 
 /** The session's file services, which the `Bun` global reads and writes through. */
@@ -183,6 +184,8 @@ const remove = (handle: Handle) =>
         return yield* new Environment.WrongKind({ path: handle.target.absolute, actual: info.type })
       yield* host.fileWrite.authorize(handle.target, host.context)
       yield* handle.target.environment.files.remove(handle.target.absolute)
+      // Removing a file builds no diff, so the change is recorded without counts.
+      yield* CodeModeDiffs.record({ file: handle.target.resource, status: "deleted" })
     }).pipe(host.fileMutation.withLock([handle.target])),
   )
 
@@ -229,16 +232,17 @@ const put = (
           after === undefined || options.append || type === undefined
             ? ""
             : text((yield* target.environment.files.read(target.absolute)).bytes)
-        yield* host.fileWrite.authorize(
-          target,
-          host.context,
-          after !== undefined && before !== undefined
-            ? fileDiff(target.resource, before, after, type === undefined ? "added" : "modified")
-            : undefined,
-        )
+        const status = type === undefined ? "added" : "modified"
+        const preview =
+          after !== undefined && before !== undefined ? fileDiff(target.resource, before, after, status) : undefined
+        yield* host.fileWrite.authorize(target, host.context, preview)
         yield* options.append
           ? host.fileMutation.append({ target, content: bytes })
           : host.fileMutation.write({ target, content: bytes })
+        // The run's record reuses the request's diff. An append's diff starts at an empty file, so only its counts hold.
+        yield* options.append
+          ? CodeModeDiffs.appended(target, status, after)
+          : CodeModeDiffs.written(target, status, preview)
         return bytes.byteLength
       }).pipe(host.fileMutation.withLock([target]))
     }),

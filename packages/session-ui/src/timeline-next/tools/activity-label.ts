@@ -14,9 +14,12 @@ const modeVerb = {
   tool: "ui.timeline.activity.used",
 } as const
 
-/** A group's parts as facts. What background work reported counts as its outcome; notices count nothing. */
+/**
+ * A group's parts as facts. What background work reported counts as its outcome; notices count nothing. A script's
+ * files count where they are placed, so only those in the group.
+ */
 export function activityFacts(parts: readonly ActivityGroupPart[]) {
-  return factsOf(
+  const facts = factsOf(
     parts.flatMap((part): FactPart[] => {
       if (part.type === "tool" || part.type === "reasoning") return [part]
 
@@ -26,6 +29,11 @@ export function activityFacts(parts: readonly ActivityGroupPart[]) {
       return [{ type: "outcome", id: part.id, outcome: { kind, verb, failed, key: workKey(part.event) } }]
     }),
   )
+
+  return [
+    ...facts.filter((fact) => fact.kind !== "file" || fact.via !== "script"),
+    ...parts.flatMap((part) => (part.type === "file" ? [part.file] : [])),
+  ]
 }
 
 /**
@@ -36,7 +44,8 @@ export function activityLabel(parts: readonly ActivityGroupPart[], i18n: UiI18n)
   const summary = summarize(activityFacts(parts))
   const launches = summary.background.verbs
   const launched = launches.map((bucket) => i18n.plural(launchKeys[bucket.verb], bucket.count))
-  const mode = modePriority.find((item) => summary.modes[item] > 0)
+  // Files a script changed name the group as edits do, where they are placed in it.
+  const mode = modePriority.find((item) => summary.modes[item] > 0 || (item === "edit" && summary.files.length > 0))
 
   if (!mode) {
     const [first, ...rest] = launches

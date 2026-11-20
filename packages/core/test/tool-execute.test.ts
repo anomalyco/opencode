@@ -339,6 +339,72 @@ describe("Bun", () => {
     expect(asked[1]?.metadata?.files).toMatchObject([{ file: "notes.txt", status: "modified", additions: 1 }])
   })
 
+  test("a script's changes are recorded one per change, from diffs the write paths already build", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "old\n")
+    await Bun.write(path.join(tmp.path, "gone.txt"), "bye\n")
+    const reads: string[] = []
+    const services = codeModeServices(tmp.path, undefined, undefined, (files) => ({
+      read: (file, range) => {
+        reads.push(path.relative(tmp.path, file))
+        return files.read(file, range)
+      },
+    }))
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, services).execute(
+        {
+          code: `await Bun.write("notes.txt", "old\\nnew\\n")
+          await Bun.write("notes.txt", "newer\\n")
+          await Bun.write("created.txt", "a\\nb\\n")
+          const log = Bun.file("log.txt").writer()
+          log.write("one\\n")
+          await log.flush()
+          log.write("two\\nthree\\n")
+          await log.end()
+          await Bun.file("gone.txt").delete()
+          return []`,
+        },
+        context,
+      ),
+    )
+    expect(
+      (result.metadata?.files as Array<{ file: string; status: string; additions?: number; patch?: string }>).map(
+        ({ file, status, additions, patch }) => [file, status, additions, patch !== undefined],
+      ),
+    ).toEqual([
+      ["notes.txt", "modified", 1, true],
+      ["notes.txt", "modified", 1, true],
+      ["created.txt", "added", 2, true],
+      ["log.txt", "added", 1, true],
+      ["log.txt", "modified", 2, false],
+      ["gone.txt", "deleted", undefined, false],
+    ])
+    // Only the permission request's own diff reads a file it overwrites; nothing reads to record a change.
+    expect(reads).toEqual(["notes.txt", "notes.txt"])
+  })
+
+  test("a namespaced tool named like a file tool records no changes", async () => {
+    const tool = (name: string, namespace?: string): Info => ({
+      name,
+      description: "Looks like a file tool",
+      input: Schema.Struct({ path: Schema.String, content: Schema.String }),
+      output: Schema.String,
+      ...(namespace ? { options: { namespace } } : {}),
+      execute: ({ path }) =>
+        Effect.succeed({
+          output: `Created file successfully: ${path}`,
+          metadata: { files: [{ file: path, status: "added", additions: 1, deletions: 0, patch: "+x" }] },
+        }),
+    })
+    const result = await Effect.runPromise(
+      createCodeMode(new Map([["notes_write", tool("write", "notes")]])).execute(
+        { code: 'await tools.notes.write({ path: "n.md", content: "x" })\nreturn []' },
+        context,
+      ),
+    )
+    expect(result.metadata?.files).toBeUndefined()
+  })
+
   test("a denied permission reaches the program and changes nothing", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, "keep.txt"), "keep")
