@@ -98,10 +98,15 @@ pub fn js_string(value: &serde_json::Value) -> String {
     }
 }
 
+/// JavaScript's white space, as `\s` and `String.prototype.trim` see it: Unicode's, but U+0085, and the BOM.
+pub fn is_whitespace(c: char) -> bool {
+    (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}'
+}
+
 /// `Number(text)`, with NaN as `None`: surrounding whitespace is ignored, an empty text is 0, `0x`,
 /// `0o` and `0b` prefixes read unsigned integers, and `Infinity` may carry a sign.
 pub fn parse_number(text: &str) -> Option<f64> {
-    let text = text.trim();
+    let text = text.trim_matches(is_whitespace);
     if text.is_empty() {
         return Some(0.0);
     }
@@ -319,6 +324,8 @@ mod tests {
             ("NaN", None),
             ("12px", None),
             ("1_000", None),
+            ("\u{feff}7\u{2028}", Some(7.0)),
+            ("\u{85}7", None),
         ];
         for (text, number) in cases {
             assert_eq!(parse_number(text), number, "{text:?}");

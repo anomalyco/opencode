@@ -2,6 +2,7 @@
 
 mod accents;
 
+use opencode_api_types::js::is_whitespace;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
@@ -222,12 +223,12 @@ fn lower_info(text: &str) -> (Vec<u16>, u32, bool) {
 }
 
 fn prepare_search(search: &str) -> Search {
-    let search = search.trim_matches(|c: char| c.is_whitespace());
+    let search = search.trim_matches(is_whitespace);
     let (lower, bitflags, contains_space) = lower_info(search);
     let mut spaces = Vec::new();
     if contains_space {
         let mut seen: Vec<&str> = Vec::new();
-        for word in search.split(char::is_whitespace) {
+        for word in search.split(is_whitespace) {
             if word.is_empty() || seen.contains(&word) {
                 continue;
             }
@@ -564,6 +565,8 @@ mod tests {
         // Letters without a decomposition and other scripts stay.
         assert_eq!(score("o", "Ø"), None);
         assert_eq!(score("α", "ά"), None);
+        // A search of JavaScript white space only, the BOM included, is empty.
+        assert_eq!(score("\u{feff} ", "\u{feff}"), None);
     }
 
     #[test]
