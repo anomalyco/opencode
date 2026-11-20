@@ -244,16 +244,16 @@ describe("SessionSearch", () => {
       expect(page2.sessions?.map((s) => s.sessionID)).toEqual([ses("old")])
       expect(page2.next).toBeNull()
 
-      // Search includes children by default; explicit children: false hides them.
+      // Search includes subagent sessions by default; subagents: false hides them.
       const withChildren = yield* search.search({ query: "narwhal", directory: "/work/app" })
       expect(withChildren.results?.map((r) => r.sessionID).toSorted()).toEqual([ses("child"), ses("old"), ses("sub")])
-      const noChildren = yield* search.search({ query: "narwhal", directory: "/work/app", children: false })
+      const noChildren = yield* search.search({ query: "narwhal", directory: "/work/app", subagents: false })
       expect(noChildren.results?.map((r) => r.sessionID).toSorted()).toEqual([ses("old"), ses("sub")])
 
       // Time filters support relative durations and ISO dates.
-      const recent = yield* search.search({ query: "narwhal", after: "7d", children: false })
+      const recent = yield* search.search({ query: "narwhal", after: "7d", subagents: false })
       expect(recent.results?.map((r) => r.sessionID).toSorted()).toEqual([ses("other"), ses("sub")])
-      const older = yield* search.search({ query: "narwhal", before: "2026-11-10", children: false })
+      const older = yield* search.search({ query: "narwhal", before: "2026-11-10", subagents: false })
       expect(older.results?.map((r) => r.sessionID)).toEqual([ses("old")])
 
       // sessionID restricts to one session (even a child).
@@ -344,21 +344,29 @@ describe("SessionSearch", () => {
         textPart("answer from part row"),
       ])
 
-      // Read from start includes pre-compaction messages and skips idle + system by default.
-      const startPage = yield* search.read({ sessionID: ses("a"), from: "start", after: 2 })
+      // Reading forward from the start includes pre-compaction messages and skips idle + system by default.
+      const startPage = yield* search.read({ sessionID: ses("a"), direction: "after", limit: 2 })
       expect(startPage.session.title).toBe("Deep session")
       expect(startPage.messages.map((m) => m.messageID)).toEqual([msg("01"), msg("02")])
       expect(startPage.olderCursor).toBeUndefined()
-      expect(startPage.newerCursor).toBe(msg("03"))
+      expect(startPage.newerCursor).toBe(msg("02"))
 
-      // Center on compaction message with before: 1, after: 1.
-      const middle = yield* search.read({ sessionID: ses("a"), messageID: msg("03"), before: 1, after: 1 })
+      // Passing a cursor back in the same direction never repeats a message.
+      const nextPage = yield* search.read({ sessionID: ses("a"), messageID: msg("02"), direction: "after", limit: 2 })
+      expect(nextPage.messages.map((m) => m.messageID)).toEqual([msg("03"), msg("06")])
+      expect(nextPage.newerCursor).toBe(msg("06"))
+
+      // Around the compaction message, split evenly.
+      const middle = yield* search.read({ sessionID: ses("a"), messageID: msg("03"), limit: 3 })
       expect(middle.messages.map((m) => m.messageID)).toEqual([msg("02"), msg("03"), msg("06")])
-      expect(middle.olderCursor).toBe(msg("01"))
-      expect(middle.newerCursor).toBe(msg("07"))
+      expect(middle.olderCursor).toBe(msg("02"))
+      expect(middle.newerCursor).toBe(msg("06"))
+      const earlier = yield* search.read({ sessionID: ses("a"), messageID: msg("02"), direction: "before" })
+      expect(earlier.messages.map((m) => m.messageID)).toEqual([msg("01")])
+      expect(earlier.olderCursor).toBeUndefined()
 
-      // Default read (from end) shows compact one-line tool summaries and part text.
-      const latest = yield* search.read({ sessionID: ses("a"), before: 1 })
+      // Default read (newest) shows compact one-line tool summaries and part text.
+      const latest = yield* search.read({ sessionID: ses("a"), limit: 1 })
       expect(latest.messages).toHaveLength(1)
       expect(latest.messages[0]).toMatchObject({
         messageID: msg("07"),
@@ -366,10 +374,14 @@ describe("SessionSearch", () => {
         text: "answer from part row",
         tools: ['read({"path":"src/foo.ts"})', 'shell({"command":"false"}) → error'],
       })
-      expect(latest.olderCursor).toBe(msg("06"))
+      expect(latest.olderCursor).toBe(msg("07"))
+      expect(latest.newerCursor).toBeUndefined()
+
+      // A limit over 50 is clamped instead of rejected.
+      expect((yield* search.read({ sessionID: ses("a"), limit: 500 })).messages).toHaveLength(5)
 
       // includeTools: true expands tool inputs/outputs/errors and includes system messages.
-      const detailed = yield* search.read({ sessionID: ses("a"), messageID: msg("07"), before: 2, after: 0, includeTools: true })
+      const detailed = yield* search.read({ sessionID: ses("a"), messageID: msg("07"), limit: 5, includeTools: true })
       expect(detailed.messages.map((m) => m.messageID)).toEqual([msg("04"), msg("06"), msg("07")])
       expect(detailed.messages[2]?.tools).toEqual([
         { name: "read", status: "completed", input: '{"path":"src/foo.ts"}', output: "file body here" },

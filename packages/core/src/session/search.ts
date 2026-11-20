@@ -150,7 +150,7 @@ export interface SearchInput {
   readonly directory?: string
   readonly after?: string
   readonly before?: string
-  readonly children?: boolean
+  readonly subagents?: boolean
   readonly limit?: number
   readonly offset?: number
 }
@@ -158,9 +158,8 @@ export interface SearchInput {
 export interface ReadInput {
   readonly sessionID: Session.ID
   readonly messageID?: SessionMessage.ID
-  readonly from?: "start" | "end"
-  readonly before?: number
-  readonly after?: number
+  readonly direction?: "around" | "before" | "after"
+  readonly limit?: number
   readonly includeTools?: boolean
 }
 
@@ -211,7 +210,7 @@ const listSessions = Effect.fnUntraced(function* (
     directory: input.directory,
     after: input.after,
     before: input.before,
-    children: input.sessionID ? true : (input.children ?? false),
+    subagents: input.sessionID ? true : (input.subagents ?? false),
   })
   const rows = yield* db
     .select()
@@ -257,7 +256,7 @@ const searchSessions = Effect.fnUntraced(function* (
     directory: input.directory,
     after: input.after,
     before: input.before,
-    children: input.sessionID ? true : (input.children ?? true),
+    subagents: input.sessionID ? true : (input.subagents ?? true),
   })
   const runMatch = (expression: string) =>
     db.all<{ source_id: string; session_id: string; score: number }>(sql`
@@ -356,6 +355,11 @@ const searchSessions = Effect.fnUntraced(function* (
   return indexStatus ? { results, indexStatus } : { results }
 })
 
+/**
+ * Reads up to `limit` messages around, before or after `messageID`, or from the newest (around, before) or oldest
+ * (after) message without one. Before and after exclude the anchor, and the cursors are the oldest and newest message
+ * returned, so passing one back with the same direction never repeats a message.
+ */
 const readSession = Effect.fnUntraced(function* (
   db: DatabaseService,
   input: ReadInput,
@@ -371,71 +375,73 @@ const readSession = Effect.fnUntraced(function* (
   const includeTools = input.includeTools === true
   const visible = includeTools ? VISIBLE_WITH_SYSTEM : VISIBLE_TYPES
   const filter = and(eq(SessionMessageTable.session_id, input.sessionID), inArray(SessionMessageTable.type, visible))
-
-  if (input.messageID) {
-    const anchor = yield* db
+  const limit = clamp(Math.trunc(input.limit ?? 7), 1, 50)
+  const direction = input.direction ?? "around"
+  const older = (seq: number | undefined, count: number) =>
+    db
       .select()
       .from(SessionMessageTable)
-      .where(and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.messageID)))
-      .get()
-      .pipe(Effect.orDie)
-    if (!anchor) return yield* new MessageNotFoundError({ sessionID: input.sessionID, messageID: input.messageID })
-
-    const beforeCount = clamp(input.before ?? 3, 0, 50)
-    const afterCount = clamp(input.after ?? 3, 0, 50)
-    const beforeRows = yield* db
-      .select()
-      .from(SessionMessageTable)
-      .where(and(filter, lt(SessionMessageTable.seq, anchor.seq)))
+      .where(seq === undefined ? filter : and(filter, lt(SessionMessageTable.seq, seq)))
       .orderBy(desc(SessionMessageTable.seq))
-      .limit(beforeCount + 1)
+      .limit(count + 1)
       .all()
       .pipe(Effect.orDie)
-    const afterRows = yield* db
+  const newer = (seq: number | undefined, count: number) =>
+    db
       .select()
       .from(SessionMessageTable)
-      .where(and(filter, gt(SessionMessageTable.seq, anchor.seq)))
-      .orderBy(asc(SessionMessageTable.seq))
-      .limit(afterCount + 1)
-      .all()
-      .pipe(Effect.orDie)
-
-    const olderCursor = beforeRows.length > beforeCount ? beforeRows[beforeCount]?.id : undefined
-    const newerCursor = afterRows.length > afterCount ? afterRows[afterCount]?.id : undefined
-    const rows = [...beforeRows.slice(0, beforeCount).toReversed(), anchor, ...afterRows.slice(0, afterCount)]
-    return formatReadOutput(session, yield* decodeWindowRows(db, rows), includeTools, olderCursor, newerCursor)
-  }
-
-  if (input.from === "start") {
-    const count = clamp(input.after ?? 10, 1, 50)
-    const rows = yield* db
-      .select()
-      .from(SessionMessageTable)
-      .where(filter)
+      .where(seq === undefined ? filter : and(filter, gt(SessionMessageTable.seq, seq)))
       .orderBy(asc(SessionMessageTable.seq))
       .limit(count + 1)
       .all()
       .pipe(Effect.orDie)
-    const newerCursor = rows.length > count ? rows[count]?.id : undefined
-    return formatReadOutput(session, yield* decodeWindowRows(db, rows.slice(0, count)), includeTools, undefined, newerCursor)
+
+  const anchor = input.messageID
+    ? yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.messageID)))
+        .get()
+        .pipe(Effect.orDie)
+    : undefined
+  if (input.messageID && !anchor)
+    return yield* new MessageNotFoundError({ sessionID: input.sessionID, messageID: input.messageID })
+
+  if (anchor && direction === "around") {
+    const beforeCount = Math.floor((limit - 1) / 2)
+    const afterCount = limit - 1 - beforeCount
+    const before = yield* older(anchor.seq, beforeCount)
+    const after = yield* newer(anchor.seq, afterCount)
+    const rows = [...before.slice(0, beforeCount).toReversed(), anchor, ...after.slice(0, afterCount)]
+    return formatReadOutput(
+      session,
+      yield* decodeWindowRows(db, rows),
+      includeTools,
+      before.length > beforeCount ? rows[0]?.id : undefined,
+      after.length > afterCount ? rows.at(-1)?.id : undefined,
+    )
   }
 
-  const count = clamp(input.before ?? 10, 1, 50)
-  const rows = yield* db
-    .select()
-    .from(SessionMessageTable)
-    .where(filter)
-    .orderBy(desc(SessionMessageTable.seq))
-    .limit(count + 1)
-    .all()
-    .pipe(Effect.orDie)
-  const olderCursor = rows.length > count ? rows[count]?.id : undefined
+  if (direction === "after") {
+    const rows = yield* newer(anchor?.seq, limit)
+    const page = rows.slice(0, limit)
+    return formatReadOutput(
+      session,
+      yield* decodeWindowRows(db, page),
+      includeTools,
+      anchor ? (page[0]?.id ?? anchor.id) : undefined,
+      rows.length > limit ? page.at(-1)?.id : undefined,
+    )
+  }
+
+  const rows = yield* older(anchor?.seq, limit)
+  const page = rows.slice(0, limit).toReversed()
   return formatReadOutput(
     session,
-    yield* decodeWindowRows(db, rows.slice(0, count).toReversed()),
+    yield* decodeWindowRows(db, page),
     includeTools,
-    olderCursor,
-    undefined,
+    rows.length > limit ? page[0]?.id : undefined,
+    anchor ? (page.at(-1)?.id ?? anchor.id) : undefined,
   )
 })
 
@@ -625,7 +631,7 @@ function sessionConditions(input: {
   readonly directory?: string
   readonly after?: number
   readonly before?: number
-  readonly children: boolean
+  readonly subagents: boolean
 }) {
   const conditions: SQL[] = []
   if (input.sessionID) conditions.push(eq(SessionTable.id, input.sessionID))
@@ -637,7 +643,7 @@ function sessionConditions(input: {
   }
   if (input.after !== undefined) conditions.push(gte(SessionTable.time_updated, input.after))
   if (input.before !== undefined) conditions.push(lt(SessionTable.time_created, input.before))
-  if (!input.children) conditions.push(isNull(SessionTable.parent_id))
+  if (!input.subagents) conditions.push(isNull(SessionTable.parent_id))
   return conditions
 }
 
@@ -647,7 +653,7 @@ function ftsFilters(input: {
   readonly directory?: string
   readonly after?: number
   readonly before?: number
-  readonly children: boolean
+  readonly subagents: boolean
 }) {
   const parts: SQL[] = []
   if (input.sessionID) parts.push(sql`AND s.id = ${input.sessionID}`)
@@ -659,7 +665,7 @@ function ftsFilters(input: {
   }
   if (input.after !== undefined) parts.push(sql`AND s.time_updated >= ${input.after}`)
   if (input.before !== undefined) parts.push(sql`AND s.time_created < ${input.before}`)
-  if (!input.children) parts.push(sql`AND s.parent_id IS NULL`)
+  if (!input.subagents) parts.push(sql`AND s.parent_id IS NULL`)
   return parts.length > 0 ? sql.join(parts, sql` `) : sql``
 }
 

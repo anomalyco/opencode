@@ -30,7 +30,7 @@ export const SearchInput = Schema.Struct({
   before: Schema.optionalKey(Schema.String).annotate({
     description: "Only sessions created before this time: ISO date or duration ago.",
   }),
-  children: Schema.optionalKey(Schema.Boolean).annotate({
+  subagents: Schema.optionalKey(Schema.Boolean).annotate({
     description: "When listing, include subagent sessions (default false). Searches include them by default.",
   }),
   limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))).annotate({
@@ -44,16 +44,14 @@ export const SearchInput = Schema.Struct({
 export const ReadInput = Schema.Struct({
   sessionID: Session.ID.annotate({ description: "Session to read." }),
   messageID: Schema.optionalKey(SessionMessage.ID).annotate({
-    description: "Center the window on this message.",
+    description: "Anchor message, from session.search or a cursor. Omit to start from the newest or oldest message.",
   }),
-  from: Schema.optionalKey(Schema.Literals(["start", "end"])).annotate({
-    description: 'Without messageID: read from the start or the end (default "end").',
+  direction: Schema.optionalKey(Schema.Literals(["around", "before", "after"])).annotate({
+    description:
+      'Which messages to read relative to the anchor (default "around"). Without messageID, "around" and "before" read the newest messages and "after" the oldest.',
   }),
-  before: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 }))).annotate({
-    description: "Messages before the anchor. Default 3 (with messageID) or 10 (from end).",
-  }),
-  after: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 }))).annotate({
-    description: "Messages after the anchor. Default 3 (with messageID) or 10 (from start).",
+  limit: Schema.optionalKey(Schema.Int).annotate({
+    description: "Number of messages. Default 7, at most 50.",
   }),
   includeTools: Schema.optionalKey(Schema.Boolean).annotate({
     description: "Include tool inputs, outputs, and system messages. Default false.",
@@ -108,7 +106,7 @@ export const Plugin = {
         editor.add({
           name: "read",
           description:
-            'Read messages from one session, including history from before compaction. With messageID, returns a window around that message (from opencode.session.search). Without it, returns the session\'s latest messages, or its first ones with from="start". Tool calls are shown as one-line summaries unless includeTools is true. Page with olderCursor or newerCursor.',
+            'Read messages from one session, including history from before compaction. With messageID (from opencode.session.search), returns messages around it; direction "before" or "after" reads only one side. Without messageID, reads the newest messages, or the oldest with direction "after". Tool calls are shown as one-line summaries unless includeTools is true. To keep reading, pass olderCursor with direction "before" or newerCursor with direction "after" as messageID; pages never repeat.',
           input: ReadInput,
           output: SessionSearch.ReadOutput,
           options: { namespace: "opencode.session", codemode: true },
