@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test"
 import { draw, type Frame, MAX_COMMANDS, program, step, WidgetSession } from "../src/index.js"
 
-const frame: Frame = { id: "c", t: 0.5, dt: 1 / 60, width: 200, height: 100, scale: 2, pointer: null, dark: true }
+const frame: Frame = { id: "0/:c", t: 0.5, dt: 1 / 60, width: 200, height: 100, scale: 2, pointer: null, dark: true }
 
 const drawn = (body: string) =>
   draw(
     program(
-      `function view() { return ui.canvas({ id: "c", height: 100 }) }\nfunction draw(state, data, frame) {${body}}`,
+      `function view() { return ui.canvas({ key: "c", height: 100 }) }\nfunction draw(state, data, frame) {${body}}`,
     ),
     {
       data: null,
@@ -22,7 +22,7 @@ test("canvas and shader builders build their nodes", async () => {
     program(`
       function view() {
         return ui.column([
-          ui.canvas({ id: "c", height: 120, width: 300, fps: 30, duration: 0.6, alt: "A chart" }),
+          ui.canvas({ key: "c", height: 120, width: 300, fps: 30, duration: 0.6, alt: "A chart" }),
           ui.shader("fn shade(frag: vec2f) -> vec4f { return vec4f(1.0); }", { height: 80, values: [1, 2], poster: "p.png", alt: "Glow" }),
           ui.canvas({ height: 40, type: "image" }),
         ])
@@ -33,7 +33,7 @@ test("canvas and shader builders build their nodes", async () => {
   expect(output.view).toEqual({
     type: "column",
     children: [
-      { type: "canvas", id: "c", height: 120, width: 300, fps: 30, duration: 0.6, alt: "A chart" },
+      { type: "canvas", id: "0/:c", height: 120, width: 300, fps: 30, duration: 0.6, alt: "A chart" },
       {
         type: "shader",
         wgsl: "fn shade(frag: vec2f) -> vec4f { return vec4f(1.0); }",
@@ -128,9 +128,9 @@ test("the draw builder emits the spec's compact commands", async () => {
 
 test("draw gets state, data and frame; it may return the builder; no draw draws nothing", async () => {
   const source = program(`
-    function view() { return ui.canvas({ id: "c", height: 100 }) }
+    function view() { return ui.canvas({ key: "c", height: 100 }) }
     function draw(state, data, frame) {
-      return ui.draw().text(0, 0, [state.n, data.label, frame.id, frame.t, frame.width, frame.dark].join(" "))
+      return ui.draw().text(0, 0, [state.n, data.label, frame.key, frame.t, frame.width, frame.dark].join(" "))
     }
   `)
   expect(await draw(source, { data: { label: "x" }, state: { n: 3 }, frame })).toEqual({
@@ -164,19 +164,24 @@ test("a session draws with its current state and draw never changes it", async (
   const session = await WidgetSession.start(
     program(`
       function init() { return { x: 0 } }
-      function view(state) { return ui.canvas({ id: "c", height: 100, fps: state.down ? 60 : 0 }) }
-      function update(state, event) {
-        if (event.type === "pointer") return { x: event.value.x / event.value.width, down: event.value.kind !== "up" }
+      function view(state) {
+        return ui.canvas({
+          key: "c",
+          height: 100,
+          fps: state.down ? 60 : 0,
+          onPointer: (state, p) => ({ x: p.x / p.width, down: p.kind !== "up" }),
+        })
       }
       function draw(state, data, frame) {
         state.x = 99
+        if (frame.key !== "c" || "id" in frame) throw new Error("draw gets the canvas key, not its id")
         return ui.draw().circle(state.x * frame.width, 50, 4)
       }
     `),
     null,
   )
-  await session.dispatch({ id: "c", type: "pointer", value: { kind: "down", x: 50, y: 10, width: 200, height: 100 } })
-  expect(session.view).toEqual({ type: "canvas", id: "c", height: 100, fps: 60 })
-  expect((await session.draw(frame)).commands).toEqual([["circle", 19800, 50, 4, { fill: "text" }]])
+  await session.dispatch({ id: ":c", type: "pointer", value: { kind: "down", x: 50, y: 10, width: 200, height: 100 } })
+  expect(session.view).toEqual({ type: "canvas", id: ":c", height: 100, fps: 60 })
+  expect((await session.draw({ ...frame, id: ":c" })).commands).toEqual([["circle", 19800, 50, 4, { fill: "text" }]])
   expect(session.state).toEqual({ x: 0.25, down: true })
 })

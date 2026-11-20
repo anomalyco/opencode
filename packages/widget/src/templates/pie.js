@@ -15,7 +15,13 @@ function view(state, data) {
   const picked = state.selected === null ? null : data.slices[state.selected]
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
-    ui.canvas({ id: "pie", height: HEIGHT, fps: 60, duration: INTRO, alt: summary(data) }),
+    ui.canvas({
+      onPointer: (state, p) => tap(state, data, p),
+      height: HEIGHT,
+      fps: 60,
+      duration: INTRO,
+      alt: summary(data),
+    }),
     ui.text(
       picked
         ? picked.label +
@@ -29,19 +35,26 @@ function view(state, data) {
     ),
     data.choose &&
       ui.row({ gap: 1 }, [
-        ui.button("choose", picked ? "Choose " + picked.label : "Choose", { variant: "primary", disabled: !picked }),
+        ui.button(picked ? "Choose " + picked.label : "Choose", {
+          onPress: (state) => choose(state, data),
+          variant: "primary",
+          disabled: !picked,
+        }),
       ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
+function choose(state, data) {
+  if (state.selected !== null) {
     const slice = data.slices[state.selected]
     const share = Math.round((slice.value / total(data, state)) * 1000) / 1000
-    return submit({ label: slice.label, index: state.selected, value: slice.value, share }, state)
+    return submit({ label: slice.label, index: state.selected, value: slice.value, share })
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
   const hit = locate(layout(data, state, pointer.width, pointer.height), pointer.x, pointer.y)
   if (!hit) return { ...state, selected: null }
   if (hit.kind === "legend") {
@@ -95,7 +108,7 @@ function draw(state, data, frame) {
   return g.commands
 }
 
-// Geometry shared by draw and update: the pie on the left, the legend on the right.
+// Geometry shared by draw and tap: the pie on the left, the legend on the right.
 function layout(data, state, width, height) {
   const legendWidth = Math.min(210, Math.max(110, width * 0.38))
   const r = Math.max(20, Math.min(height / 2 - 14, (width - legendWidth) / 2 - 18))

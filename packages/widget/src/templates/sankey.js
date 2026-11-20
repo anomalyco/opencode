@@ -15,30 +15,43 @@ function init(data) {
 function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
-    ui.canvas({ id: "sankey", height: HEIGHT, fps: 60, duration: INTRO, alt: summary(state, data) }),
+    ui.canvas({
+      onPointer: (state, p) => tap(state, data, p),
+      height: HEIGHT,
+      fps: 60,
+      duration: INTRO,
+      alt: summary(state, data),
+    }),
     ui.text(state.selected ? describe(state, data, state.selected) : "Tap a stage or a flow to trace it", {
       style: "caption",
       tone: state.selected ? "default" : "muted",
     }),
     data.choose &&
-      ui.row({ gap: 1 }, [ui.button("choose", "Choose", { variant: "primary", disabled: !state.selected })]),
+      ui.row({ gap: 1 }, [
+        ui.button("Choose", { onPress: (state) => choose(state, data), variant: "primary", disabled: !state.selected }),
+      ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected) {
+function choose(state, data) {
+  if (state.selected) {
     if (state.selected.kind === "link") {
       const link = data.links[state.selected.index]
-      return submit({ kind: "link", source: link.source, target: link.target, value: link.value }, state)
+      return submit({ kind: "link", source: link.source, target: link.target, value: link.value })
     }
     const node = data.nodes[state.selected.index]
-    return submit(
-      { kind: "node", id: node.id, label: node.label ?? node.id, value: state.nodes[state.selected.index].value },
-      state,
-    )
+    return submit({
+      kind: "node",
+      id: node.id,
+      label: node.label ?? node.id,
+      value: state.nodes[state.selected.index].value,
+    })
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
   const hit = locate(state, frameOf(state, pointer.width, pointer.height), pointer.x, pointer.y)
   const same = hit && state.selected && hit.kind === state.selected.kind && hit.index === state.selected.index
   return { ...state, selected: same ? null : hit }

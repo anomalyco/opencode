@@ -15,7 +15,7 @@ function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
     ui.canvas({
-      id: "histogram",
+      onPointer: (state, p) => tap(state, data, p),
       height: HEIGHT,
       fps: 60,
       duration: state.down ? undefined : INTRO,
@@ -38,17 +38,22 @@ function view(state, data) {
             amount(state.stats.mean, data.unit),
       { style: "caption", tone: picked ? "default" : "muted" },
     ),
-    data.choose && ui.row({ gap: 1 }, [ui.button("choose", "Choose bin", { variant: "primary", disabled: !picked })]),
+    data.choose &&
+      ui.row({ gap: 1 }, [
+        ui.button("Choose bin", { onPress: (state) => choose(state, data), variant: "primary", disabled: !picked }),
+      ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.active !== null) {
+function choose(state, data) {
+  if (state.active !== null) {
     const picked = state.bins[state.active]
-    return submit({ index: state.active, from: picked.from, to: picked.to, count: picked.count }, state)
+    return submit({ index: state.active, from: picked.from, to: picked.to, count: picked.count })
   }
-  if (event.type !== "pointer") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
   const hit = locate(state, layout(state, data, pointer.width, pointer.height), pointer.x, pointer.y)
   if (pointer.kind !== "up") return { ...state, active: hit ?? state.active, down: true }
   return { ...state, active: hit, down: false }
@@ -124,7 +129,7 @@ function bin(sorted, bins) {
   return { bins: result, stats: { n, min, max, mean, median: quantile(0.5) } }
 }
 
-// Geometry shared by draw and update.
+// Geometry shared by draw and tap.
 function layout(state, data, width, height) {
   const counts = nice(Math.max(...state.bins.map((item) => item.count)))
   const left = 14 + 7 * String(counts.high).length

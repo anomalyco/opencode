@@ -137,7 +137,6 @@ function init(data) {
 function view(state, data) {
   return ui.column({ gap: 2, align: "stretch" }, [
     ui.shader(PRESETS[data.preset], {
-      id: "backdrop",
       height: 200,
       values: [state.speed, ...rgb(data.accent ?? ACCENTS[data.preset])],
       fps: state.speed > 0 ? 60 : 0,
@@ -145,13 +144,15 @@ function view(state, data) {
     }),
     ui.text(data.title, { style: "title" }),
     data.text && ui.markdown(data.text),
-    ui.slider("speed", { label: "Speed", value: state.speed, min: 0, max: 2, step: 0.1 }),
+    ui.slider({
+      label: "Speed",
+      value: state.speed,
+      min: 0,
+      max: 2,
+      step: 0.1,
+      onChange: (state, speed) => ({ speed: Math.round(speed * 10) / 10 }),
+    }),
   ])
-}
-
-function update(state, event) {
-  if (event.type !== "change" || event.id !== "speed") return state
-  return { speed: Math.round(Math.min(2, Math.max(0, Number(event.value) || 0)) * 10) / 10 }
 }
 
 // "#rgb" or "#rrggbb" to three 0..1 floats.

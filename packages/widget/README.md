@@ -9,8 +9,7 @@ Rust). The TypeScript runtime targets Bun.
 A template's `version` is the first 16 hex chars of `sha256(program + "\n" + JSON.stringify(dataSchema))`, where
 `program = prelude + "\n" + source`, so a prelude change yields new versions. A live template appends `"\nlive"`, then
 `"\n" + JSON.stringify(capabilities)` when it declares any: `version(source, data, mode, capabilities)`.
-`compile(source, mode)` checks a template's syntax without running it (what the server does for live templates) and
-reports lines in the template source. `entry(mode)` is the line a client appends to the program to run it.
+`compile(source, mode)` checks a template's syntax without running it and reports lines in the template source. `entry(mode)` is the line a client appends to the program to run it.
 
 ## TypeScript
 
@@ -19,13 +18,13 @@ import { WidgetSession, program, validateData, builtins } from "@opencode/widget
 
 const session = await WidgetSession.start(program(template.source), data) // or the server's `program` field
 render(session.view)
-const output = await session.dispatch({ id: "choose", type: "press" })
+const output = await session.dispatch({ id: button.id, type: "press" }) // ids come from the view
 if ("submit" in output) respond({ value: output.submit })
 if (output.dismiss) respond({ dismiss: true })
 if (output.send) message(output.send.value, { wake: output.send.wake }) // the widget stays open
 
 // A canvas: draw when it appears, on state changes, and per frame while it animates. Never changes the state.
-const { commands } = await session.draw({ id: "chart", t, dt, width, height, scale, pointer, dark })
+const { commands } = await session.draw({ id: canvas.id, t, dt, width, height, scale, pointer, dark })
 ```
 
 `step(program, input)` runs one step and `draw(program, { data, state, frame })` one draw without a session. Failures reject with `StepError` (`kind`: `error`, `timeout`
@@ -53,7 +52,7 @@ const widget = LiveWidget.start(program(template.source), data, {
 })
 await widget.when((current) => current.frameRequested)
 widget.frame({ t, dt, width, height, scale, pointer, dark })
-widget.event({ id: "board", type: "pointer", value: { kind: "down", x, y, width, height } })
+widget.event({ id: canvas.id, type: "pointer", value: { kind: "down", x, y, width, height } })
 widget.pause() // nothing is delivered and timers freeze until resume(), which first sends { type: "resumed", pausedMs }
 widget.resume()
 await clock.advance(1000) // fires due timers, letting the program react to each
@@ -61,7 +60,8 @@ const end = await widget.done // submit, dismiss, return, stop or error (a StepE
 ```
 
 It stops a program that runs 50 ms without any host call in flight (a lower bound of the spec's "without awaiting",
-which it can't observe exactly), rejects invalid `render`/`draw` posts and draws over 2,000 commands with an error,
+which it can't observe exactly: while a view has handlers the prelude keeps a `receive` in flight, so a busy loop then
+goes unnoticed), rejects invalid `render`/`draw` posts and draws over 2,000 commands with an error,
 and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
 
 ## ABI for other clients
@@ -87,7 +87,7 @@ and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
          phase: "event"
          data: unknown
          state: unknown
-         event: { id: string; type: "press" | "change" | "pointer"; value?: unknown }
+         event: { id: string; type: "press" | "change" | "pointer" | "key" | "focus" | "fullscreen" | "capture"; value?: unknown }
        }
      | { phase: "draw"; data: unknown; state: unknown; frame: Frame }
    ```
@@ -102,10 +102,12 @@ and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
    a warning) and ignore unknown props. A failed step (throw, timeout, invalid view) keeps the previous state and view
    and shows the error inline; a failed `init` shows an error card.
 
-Event `id`s come from the nodes: `button` and `card` (with `id`) send `press`; `checkbox` (`boolean`), `slider`
-(`number`, on release), `select` (`string`, or `string[]` when `multiple`), `input` (`string`, on commit or after
-300 ms) and `carousel` (with `id`, new page index) send `change`. `canvas` (with `id`) sends `pointer` with
-`{ kind: "down" | "move" | "up", x, y, width, height }`.
+Event `id`s come from the nodes, where the prelude put them (templates attach handlers and never see ids): `button`
+and `card` (with `id`) send `press`; `checkbox` (`boolean`), `slider` (`number`, on release), `select` (`string`, or
+`string[]` when `multiple`), `input` (`string`, on commit or after 300 ms) and `carousel` (with `id`, new page index)
+send `change`. `canvas` and `shader` (with `id`) send `pointer` with `{ kind: "down" | "move" | "up", x, y, width,
+height }`. Keyboard, focus, full-screen and capture events (`specs/v2/widgets-input.md`) carry `id: ""`. The prelude
+routes each event to the right handler or hook and drops the rest, so a client may send any event without harm.
 
 `canvas` and `shader` nodes need a GPU-backed renderer; where you can't draw (a terminal), show `alt` (and a
 `shader`'s `poster`). A `canvas` with `duration` animates until it has drawn a frame with `t >= duration`.

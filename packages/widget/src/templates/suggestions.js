@@ -8,7 +8,7 @@ function view(state, data) {
     ui.row(
       { gap: 2, align: "start", wrap: true },
       data.options.map((option, index) =>
-        ui.card({ id: "option:" + index, selected: state.picked === index }, [
+        ui.card({ selected: state.picked === index, onPress: (state) => ({ ...state, picked: index }) }, [
           option.images.length === 1
             ? ui.image(option.images[0], { alt: option.label, aspect: 4 / 3 })
             : ui.carousel(
@@ -28,21 +28,26 @@ function view(state, data) {
         ]),
       ),
     ),
-    data.allowNote !== false && ui.input("note", state.note, { label: "Note", placeholder: "Add a note (optional)" }),
+    data.allowNote !== false &&
+      ui.input(state.note, {
+        label: "Note",
+        placeholder: "Add a note (optional)",
+        onChange: (state, note) => ({ ...state, note }),
+      }),
     ui.row({ gap: 1, align: "center" }, [
-      ui.button("choose", "Choose", { variant: "primary", disabled: state.picked === null }),
-      ui.button("dismiss", "Dismiss", { variant: "secondary" }),
+      ui.button("Choose", {
+        variant: "primary",
+        disabled: state.picked === null,
+        onPress: (state) => choose(state, data),
+      }),
+      ui.button("Dismiss", { variant: "secondary", onPress: () => dismiss() }),
     ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "change") return event.id === "note" ? { ...state, note: String(event.value ?? "") } : state
-  if (event.type !== "press") return state
-  if (event.id.startsWith("option:")) return { ...state, picked: Number(event.id.slice("option:".length)) }
-  if (event.id === "dismiss") return dismiss(state)
-  if (event.id !== "choose" || state.picked === null) return state
-  const note = data.allowNote === false ? "" : state.note.trim()
+function choose(state, data) {
+  if (state.picked === null) return state
+  const note = state.note.trim()
   const choice = { choice: data.options[state.picked].label, index: state.picked }
-  return submit(note ? { ...choice, note } : choice, state)
+  return submit(note ? { ...choice, note } : choice)
 }

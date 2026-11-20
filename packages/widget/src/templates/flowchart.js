@@ -14,7 +14,7 @@ function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
     ui.canvas({
-      id: "flowchart",
+      onPointer: (state, p) => tap(state, data, p),
       height: state.layers * LAYER - 20,
       fps: 60,
       duration: intro(state),
@@ -24,17 +24,23 @@ function view(state, data) {
       style: "caption",
       tone: picked ? "default" : "muted",
     }),
-    data.choose && ui.row({ gap: 1 }, [ui.button("choose", "Choose step", { variant: "primary", disabled: !picked })]),
+    data.choose &&
+      ui.row({ gap: 1 }, [
+        ui.button("Choose step", { onPress: (state) => choose(state, data), variant: "primary", disabled: !picked }),
+      ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
+function choose(state, data) {
+  if (state.selected !== null) {
     const node = data.nodes[state.selected]
-    return submit({ id: node.id, label: node.label ?? node.id }, state)
+    return submit({ id: node.id, label: node.label ?? node.id })
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
   const boxes = place(state, data, pointer.width)
   const hit = boxes.findIndex(
     (box) => Math.abs(pointer.x - box.x) <= box.w / 2 + 4 && Math.abs(pointer.y - box.y) <= box.h / 2 + 4,

@@ -28,10 +28,10 @@ test("the game example plays and submits its score", async () => {
   for (let frame = 0; !texts(widget.view).some((text) => text.startsWith("You caught")); frame++) {
     await widget.when((current) => current.frameRequested || texts(current.view).some((text) => text.startsWith("You")))
     if (!widget.frameRequested) break
-    const ball = widget.drawings.get("court")?.find((command) => command[0] === "circle")
+    const ball = widget.drawings.get("0/:court")?.find((command) => command[0] === "circle")
     if (ball && frame % 10 === 0) {
       widget.event({
-        id: "court",
+        id: "0/:court",
         type: "pointer",
         value: { kind: "down", x: ball[1], y: ball[2], width: 300, height: 240 },
       })
@@ -42,7 +42,7 @@ test("the game example plays and submits its score", async () => {
     await widget.when((current) => !current.frameRequested || current.ended !== undefined)
   }
   await widget.when((current) => texts(current.view).some((text) => text.startsWith("You caught")))
-  widget.event({ id: "done", type: "press" })
+  widget.event({ id: "0/1", type: "press" })
   const end = await widget.done
   expect(end.type).toBe("submit")
   expect(end.type === "submit" && (end.value as { score: number }).score).toBeGreaterThan(5)
@@ -78,7 +78,7 @@ test("the dashboard example polls, refreshes on demand and when resumed, and sho
   })
   await clock.advance(30_000)
   await showing("★ 42")
-  widget.event({ id: "refresh", type: "press" })
+  widget.event({ id: "0/3", type: "press" })
   await showing("★ 43")
   widget.pause()
   await clock.advance(120_000)

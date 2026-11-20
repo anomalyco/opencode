@@ -6,6 +6,7 @@ import {
   type LiveOptions,
   LiveWidget,
   ManualClock,
+  type Node,
   program,
   type Transport,
 } from "../src/index.js"
@@ -37,68 +38,134 @@ const showing = (widget: LiveWidget, text: string) =>
     ),
   )
 
-test("render, draw, events and submit", async () => {
+// The id the prelude gave the first node of `type` (optionally with this label) in the last rendered view.
+const idOf = (widget: LiveWidget, type: string, label?: string) => {
+  const visit = (node: Node): string | undefined => {
+    if (node.type === type && (label === undefined || ("label" in node && node.label === label)) && "id" in node)
+      return node.id
+    return "children" in node ? node.children.map(visit).find((id) => id !== undefined) : undefined
+  }
+  const id = widget.view && visit(widget.view)
+  if (id === undefined) throw new Error(`no ${type} ${label ?? ""}`)
+  return id
+}
+const key = (code: string, kind: "down" | "up" = "down") => ({
+  id: "",
+  type: "key" as const,
+  value: { kind, key: code, code, repeat: false, shift: false, alt: false, ctrl: false, meta: false },
+})
+
+test("render, draw by canvas key, handlers and submit", async () => {
   const { widget, messages } = start(
     `
     async function main(data) {
-      widget.render(ui.column([ui.text(data.title), ui.button("go", "Go")]))
+      widget.render(ui.column([
+        ui.text(data.title),
+        ui.button("Go", { onPress: () => { widget.send({ got: "go" }, { wake: false }); widget.submit({ done: true }) } }),
+        ui.canvas({ key: "c", height: 10 }),
+      ]))
       widget.draw("c", ui.draw().circle(1, 2, 3))
-      widget.draw("raw", [["save"], ["restore"]])
-      const event = await widget.event()
-      widget.send({ got: event.id }, { wake: false })
-      widget.submit({ done: true })
-      widget.render(ui.text("after submit"))
     }
   `,
     {},
     { title: "Hi" },
   )
-  await widget.when((current) => current.view !== undefined)
+  await widget.when((current) => current.drawings.size > 0)
   expect(widget.view).toEqual({
     type: "column",
     children: [
       { type: "text", text: "Hi" },
-      { type: "button", id: "go", label: "Go" },
+      { type: "button", id: "0/1", label: "Go" },
+      { type: "canvas", id: "0/:c", height: 10 },
     ],
   })
-  await widget.when((current) => current.drawings.has("raw"))
-  expect(widget.drawings.get("c")).toEqual([["circle", 1, 2, 3, { fill: "text" }]])
-  widget.event(press("go"))
+  expect(widget.drawings.get("0/:c")).toEqual([["circle", 1, 2, 3, { fill: "text" }]])
+  // main has returned; the view's handler keeps the widget open.
+  expect(widget.ended).toBeUndefined()
+  widget.event(press("0/1"))
   expect(await widget.done).toEqual({ type: "submit", value: { done: true } })
-  expect(messages.map((message) => message.type)).toEqual(["render", "draw", "draw", "send", "submit"])
-  expect(messages[3]).toEqual({ type: "send", value: { got: "go" }, wake: false })
+  expect(messages.map((message) => message.type)).toEqual(["render", "draw", "send", "submit"])
+  expect(messages[2]).toEqual({ type: "send", value: { got: "go" }, wake: false })
 })
 
-test("capturePointer and releasePointer post capture messages; key, focus and capture events reach the program", async () => {
-  const { widget, messages } = start(`
+test("handlers get typed values; events for other nodes, of the wrong type or with bad values are dropped", async () => {
+  const { widget } = start(`
     async function main() {
-      widget.capturePointer()
       const seen = []
-      while (seen.length < 4) {
-        const event = await widget.event()
-        seen.push(event.type + ":" + JSON.stringify(event.value))
-      }
-      widget.releasePointer()
-      widget.submit(seen)
+      const show = () =>
+        widget.render(ui.column([
+          ui.text(seen.join(" ")),
+          ui.checkbox("On", false, { onChange: (on) => { seen.push("check:" + on); show() } }),
+          ui.slider({ value: 1, min: 0, max: 10, onChange: (value) => { seen.push("slide:" + value); show() } }),
+          ui.select(["a", "b"], { onChange: (value) => { seen.push("pick:" + value); show() } }),
+          ui.input("", { onChange: (text) => { seen.push("type:" + text); show() } }),
+          ui.button("Done", { onPress: () => widget.submit(seen) }),
+        ]))
+      show()
     }
   `)
-  await widget.when(() => messages.length > 0)
-  widget.event({ id: "", type: "focus", value: true })
+  await widget.when((current) => current.view !== undefined)
+  const change = (type: string, value: unknown) => widget.event({ id: idOf(widget, type), type: "change", value })
+  change("checkbox", true)
+  change("checkbox", "yes")
+  change("slider", 99)
+  change("slider", "x")
+  change("select", "b")
+  change("select", "zzz")
+  change("input", "hi")
+  widget.event({ id: idOf(widget, "checkbox"), type: "press" })
+  widget.event({ id: "0/404", type: "press" })
+  widget.event({ id: idOf(widget, "button"), type: "change", value: 1 })
+  widget.event(press(idOf(widget, "button")))
+  expect(await widget.done).toEqual({ type: "submit", value: ["check:true", "slide:10", "pick:b", "type:hi"] })
+})
+
+test("system events go only to widget.on hooks, control events only to handlers", async () => {
+  const { widget, messages } = start(`
+    async function main() {
+      const seen = []
+      widget.capturePointer()
+      widget.on("focus", (on) => seen.push("focus:" + on))
+      widget.on("capture", (on) => seen.push("capture:" + on))
+      const off = widget.on("key", (key) => seen.push("key:" + key.code + ":" + [...widget.keys].join("+")))
+      widget.render(ui.column([
+        ui.shader("fn shade(p: vec2f) -> vec4f { return vec4f(1.0); }", {
+          height: 10,
+          onPointer: (p) => seen.push("pointer:" + JSON.stringify(p)),
+        }),
+        ui.button("Off", { onPress: () => { off(); seen.push("press") } }),
+        ui.button("Done", { onPress: () => { widget.releasePointer(); widget.submit({ seen, pointer: widget.pointer }) } }),
+      ]))
+    }
+  `)
+  await widget.when((current) => current.view !== undefined)
+  const shader = idOf(widget, "shader")
+  const button = idOf(widget, "button")
+  widget.event({ id: button, type: "focus", value: true })
   widget.event({ id: "", type: "capture", value: true })
-  widget.event({ id: "view", type: "pointer", value: { kind: "move", dx: 3, dy: -2 } })
-  widget.event({
-    id: "",
-    type: "key",
-    value: { kind: "down", key: " ", code: "Space", repeat: false, shift: false, alt: false, ctrl: false, meta: false },
-  })
-  expect(await widget.done).toMatchObject({
+  widget.event({ id: shader, type: "pointer", value: { kind: "move", dx: 3, dy: -2 } })
+  widget.event(key("KeyA"))
+  widget.event(key("KeyB"))
+  widget.event({ id: button, type: "key", value: key("KeyC").value })
+  widget.event({ id: "", type: "press" })
+  widget.event({ id: shader, type: "press" })
+  widget.event(press(button))
+  widget.event(key("KeyD"))
+  widget.event(press(idOf(widget, "button", "Done")))
+  expect(await widget.done).toEqual({
     type: "submit",
-    value: [
-      "focus:true",
-      "capture:true",
-      'pointer:{"kind":"move","dx":3,"dy":-2}',
-      expect.stringContaining('"code":"Space"'),
-    ],
+    value: {
+      seen: [
+        "focus:true",
+        "capture:true",
+        'pointer:{"kind":"move","dx":3,"dy":-2,"button":0}',
+        "key:KeyA:KeyA",
+        "key:KeyB:KeyA+KeyB",
+        "key:KeyC:KeyA+KeyB+KeyC",
+        "press",
+      ],
+      pointer: { kind: "move", dx: 3, dy: -2, button: 0 },
+    },
   })
   expect(messages.filter((message) => message.type === "capture")).toEqual([
     { type: "capture", value: true },
@@ -106,95 +173,90 @@ test("capturePointer and releasePointer post capture messages; key, focus and ca
   ])
 })
 
-test("frames are requested once and events that arrive meanwhile wait", async () => {
+test("frames are requested once; handlers run while main awaits a frame", async () => {
   const { widget, messages } = start(`
     async function main() {
+      let pressed = "none"
+      widget.render(ui.button("Early", { onPress: () => (pressed = "early") }))
       const frame = await widget.frame()
-      const event = await widget.event()
-      widget.render(ui.text(frame.width + " " + event.id))
-      await widget.event()
+      widget.render(ui.text(frame.width + " " + pressed))
+      await widget.sleep(1)
       widget.dismiss()
     }
   `)
   await widget.when((current) => current.frameRequested)
-  widget.event(press("early"))
+  widget.event(press("0"))
+  await Bun.sleep(5)
   expect(widget.frame(size)).toBe(true)
   expect(widget.frame(size)).toBe(false)
   await showing(widget, "300 early")
   expect(messages.filter((message) => message.type === "frame")).toHaveLength(1)
-  widget.event(press("close"))
-  expect(await widget.done).toEqual({ type: "dismiss" })
-})
-
-test("next returns an event, a frame or a timeout, whichever comes first", async () => {
-  const { widget, clock } = start(`
-    async function main() {
-      const seen = []
-      const report = () => widget.render(ui.text(seen.join(",")))
-      seen.push((await widget.next({ frame: true })).type)
-      report()
-      seen.push((await widget.next({ frame: true, timeout: 1000 })).type)
-      report()
-      seen.push((await widget.next({ timeout: 500 })).type + "@" + widget.now())
-      report()
-      seen.push((await widget.next({ frame: true, timeout: 100 })).type)
-      report()
-      await widget.event()
-    }
-  `)
-  await widget.when((current) => current.frameRequested)
-  widget.frame(size)
-  await showing(widget, "frame")
-  widget.event(press("x"))
-  await showing(widget, "frame,event")
-  await clock.advance(500)
-  await showing(widget, "frame,event,timeout@500")
-  // The frame requested by the second call is still pending, so the fourth gets it.
-  widget.frame(size)
-  await showing(widget, "frame,event,timeout@500,frame")
-  await widget.stop()
 })
 
 test("a paused program gets nothing until it resumes, then hears how long it was paused", async () => {
   const { widget, clock } = start(`
     async function main() {
       const before = widget.now()
+      let resumed = null
+      let pressed = null
+      widget.on("resumed", (ms) => (resumed = ms))
+      widget.render(ui.button("Held", { onPress: () => (pressed = widget.now()) }))
       await widget.sleep(1000)
-      widget.render(ui.text("slept " + (widget.now() - before)))
-      const resumed = await widget.next()
-      const event = await widget.next()
-      widget.render(ui.text(resumed.type + " " + resumed.pausedMs + " then " + event.event.id + " at " + widget.now()))
-      await widget.event()
+      widget.render(ui.text("slept " + (widget.now() - before) + " resumed " + resumed + " pressed at " + pressed))
+      await widget.sleep(1e9)
     }
   `)
+  await widget.when((current) => current.view !== undefined)
   await clock.advance(400)
   widget.pause()
   expect(widget.paused).toBe(true)
   await clock.advance(5000)
-  widget.event(press("held"))
-  expect(widget.view).toBeUndefined()
+  widget.event(press("0"))
   widget.resume()
   await clock.advance(599)
-  expect(widget.view).toBeUndefined()
+  expect(shown(widget)).toBeUndefined()
   await clock.advance(1)
-  await showing(widget, "slept 1000")
-  await showing(widget, "resumed 5000 then held at 1000")
+  await showing(widget, "slept 1000 resumed 5000 pressed at 400")
   await widget.stop()
 })
 
-test("a program that throws, renders an invalid view or draws too much stops with an error", async () => {
-  const failure = async (body: string) => {
+test("a program that throws, renders an invalid view, draws too much or fails in a handler stops with an error", async () => {
+  const failure = async (body: string, after?: (widget: LiveWidget) => void) => {
     const { widget } = start(`async function main() { ${body} }`)
+    if (after) {
+      await widget.when((current) => current.view !== undefined)
+      after(widget)
+    }
     const end = await widget.done
     return end.type === "error" ? { kind: end.error.kind, message: end.error.message } : end
   }
   expect(await failure(`throw new Error("boom")`)).toMatchObject({ kind: "error", message: "Error: boom" })
   expect(await failure(`widget.render({ type: "button" })`)).toMatchObject({ kind: "invalid" })
-  expect(await failure(`widget.draw("c", [["rect"]])`)).toMatchObject({ kind: "invalid" })
   expect(
-    await failure(`const g = ui.draw(); for (let i = 0; i < 2001; i++) g.save(); widget.draw("c", g)`),
+    await failure(`widget.render(ui.canvas({ key: "c", height: 1 })); widget.draw("c", [["rect"]])`),
+  ).toMatchObject({ kind: "invalid" })
+  expect(await failure(`widget.draw("nope", [])`)).toMatchObject({
+    kind: "error",
+    message: expect.stringContaining('No canvas with key "nope"'),
+  })
+  expect(
+    await failure(
+      `widget.render(ui.canvas({ key: "c", height: 1 })); const g = ui.draw(); for (let i = 0; i < 2001; i++) g.save(); widget.draw("c", g)`,
+    ),
   ).toMatchObject({ kind: "invalid", message: expect.stringContaining("at most 2000 commands") })
+  expect(
+    await failure(`widget.render(ui.button("Go", { onPress: () => { throw new Error("handler") } }))`, (widget) =>
+      widget.event(press("0")),
+    ),
+  ).toMatchObject({ kind: "error", message: expect.stringContaining("handler") })
+  expect(
+    await failure(`widget.render(ui.button("Go", { onPress: async () => { throw new Error("later") } }))`, (widget) =>
+      widget.event(press("0")),
+    ),
+  ).toMatchObject({ kind: "error", message: expect.stringContaining("later") })
   expect(await failure(`return 1`)).toEqual({ type: "return" })
+  // A view without handlers doesn't keep the widget open once main returns.
+  expect(await failure(`widget.render(ui.text("bye"))`)).toEqual({ type: "return" })
 })
 
 test("a program that runs too long without awaiting is stopped", async () => {
@@ -203,8 +265,9 @@ test("a program that runs too long without awaiting is stopped", async () => {
     error: { kind: "timeout", message: "The program ran more than 50 ms without awaiting" },
   }
   expect(await start(`async function main() { while (true) {} }`).widget.done).toMatchObject(busy)
-  const later = start(`async function main() { await widget.event(); while (true) {} }`)
-  later.widget.event(press("go"))
+  const later = start(`async function main() { await widget.frame(); while (true) {} }`)
+  await later.widget.when((current) => current.frameRequested)
+  later.widget.frame(size)
   expect(await later.widget.done).toMatchObject(busy)
 })
 
@@ -235,7 +298,7 @@ const fetching = async (url: string, transport: Transport, options: LiveOptions 
       } catch (error) {
         widget.render(ui.text(error.kind + ": " + error.message))
       }
-      await widget.event()
+      await widget.sleep(1e9)
     }
   `,
     { capabilities: { https: { hosts: ["api.example.com", "*.cdn.example.org"] } }, transport, ...options },
@@ -273,7 +336,7 @@ test("fetch reaches declared https hosts and returns status, headers and the bod
       const body = await response.json()
       const image = await widget.fetch("https://api.example.com/png")
       widget.render(ui.text([response.status, response.headers["x-total"], body.items.length, image.ok, (await image.text()).length].join(" ")))
-      await widget.event()
+      await widget.sleep(1e9)
     }
   `,
     {
@@ -346,7 +409,7 @@ test("fetch is limited to 4 in flight, 10 per second and 15 seconds", async () =
     async function main() {
       const results = await Promise.allSettled([1, 2, 3, 4, 5].map((n) => widget.fetch("https://api.example.com/" + n)))
       widget.render(ui.text(results.map((r) => r.status === "rejected" ? r.reason.kind : r.value.status).join(" ")))
-      await widget.event()
+      await widget.sleep(1e9)
     }
   `,
     { capabilities: { https: { hosts: ["api.example.com"] } }, transport: never },
@@ -366,7 +429,7 @@ test("fetch is limited to 4 in flight, 10 per second and 15 seconds", async () =
       await widget.sleep(1000)
       kinds.push(await widget.fetch("https://api.example.com/").then((r) => r.status, (e) => e.kind))
       widget.render(ui.text(kinds.slice(-2).join(" ")))
-      await widget.event()
+      await widget.sleep(1e9)
     }
   `,
     { capabilities: { https: { hosts: ["api.example.com"] } }, transport: async () => json({}) },

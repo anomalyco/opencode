@@ -59,49 +59,52 @@ messages · `table` ≤ 50 sortable rows with sparklines. For one or two plain s
 
 `widget_template` `save`: `name`, `description`, `data` (JSON Schema, `type: "object"`), `source`, an `example`
 matching the schema, `mode: "live"` for live ones. Saving again makes a new version; templates persist, so keep them
-general and put specifics in `data`.
+general and put specifics in `data`. The server only parses and lints the source (entry functions, only function and
+`const` declarations at the top level, no prelude names redeclared, ≤ 128 KB). Clients report runtime errors as
+`Widget "<title>" failed on <client>: <phase>: <message> (line N, col M)` (the tool error with `wait: true`): fix the
+source, save it and show the widget again.
 
-The server never runs template code. It parses and lints the source: required entry functions, only function and
-`const` declarations at the top level (nothing runs at load), no prelude names (`ui`, `widget`, `submit`, `dismiss`,
-`send`, ...) redeclared, at most 128 KB. Runtime errors come back from the clients that show the widget, as
-`Widget "<title>" failed on <client>: <phase>: <message> (line N, col M)` (or as the tool error with `wait: true`):
-fix the source, save it again and show the widget again.
+**Handlers.** Attach handlers to nodes (`onPress`, `onChange`, `onPointer`); the prelude gives nodes ids and routes
+each event to its node only. Set `key` on list items that come and go (`ui.row({ key: item.id }, ...)`) so they keep
+their identity. Keys, focus, full screen and pointer capture only reach hooks you define.
 
-**Step ABI.** Confined JavaScript, plain JSON state:
-`init(data)` → state (optional) · `view(state, data)` → node (required) · `update(state, event, data)` → next state, or
-`submit(value, state)` / `dismiss(state)` (final) / `send(value, state, { wake })` (a message to you; widget stays open;
-`wake: false` = you see it next turn) · `draw(state, data, frame)` → canvas commands (pure). Events are
-`{ id, type: "press" | "change" | "pointer", value? }`. No timers, randomness or I/O.
+**Step ABI.** Confined JavaScript, JSON state, no timers, randomness or I/O. `init(data)` → state (optional) ·
+`view(state, data)` → node · `draw(state, data, frame)` → canvas commands (pure; `frame.key` is the canvas's `key`).
+Handlers get `(state, value)` and return the next state, `submit(value)` / `dismiss()` (final) or
+`send(value, { wake, state })` (a message to you; stays open; `wake: false` = next turn). Hooks: `onKey(state, key)`,
+`onFocus(state, focused)`, `onFullscreen(state, on)`, `onCapture(state, on)`.
 
 ```js
-function init(data) { return { pick: null } }
-function view(state, data) { return ui.column({ gap: 1 }, [ui.text(data.title, { style: "title" }), ...data.items.map((item) => ui.button(item, item))]) }
-function update(state, event) { return event.type === "press" ? submit({ pick: event.id }, state) : state }
+function view(state, data) {
+  return ui.column({ gap: 1 }, data.items.map((item) => ui.button(item, { onPress: () => submit({ pick: item }) })))
+}
 ```
 
-**Live API** (`mode: "live"`, define `async function main(data)`; `Math.random()` allowed):
-`widget.render(node)` · `widget.draw(canvasID, g)` · `await widget.event()` · `await widget.frame()` →
-`{ t, dt, width, height, scale, pointer, dark }` · `await widget.next({ frame, timeout })` → event | frame | timeout |
-`{ type: "resumed", pausedMs }` · `await widget.sleep(ms)` · `widget.now()` (pauses don't count) ·
-`await widget.fetch(url, init)` · `widget.submit(v)` / `widget.dismiss()` / `widget.send(v, { wake })`. Always switch
-on `event.type` (and `id`): focus, key and capture events arrive too. Ask for a frame only while something moves, and
-call `render` only when the view changes (or a shader's `values` do).
+**Live API** (`async function main(data)`; `Math.random()` allowed; handlers get only the value and run between your
+awaits): `widget.render(node)` · `widget.draw(key, g)` · `await widget.frame()` → `{ t, dt, width, height, scale,
+pointer, dark }` · `await widget.sleep(ms)` · `widget.now()` (pauses don't count) · `widget.on("key" | "focus" |
+"fullscreen" | "capture" | "resumed", fn)` → unsubscribe · `widget.keys` (held codes) · `widget.pointer` ·
+`await widget.fetch(url, init)` · `widget.submit(v)` / `dismiss()` / `send(v, { wake })` ·
+`widget.capturePointer()` / `releasePointer()`. After `main` returns, the view's handlers keep running. Ask for frames
+only while something moves; render only when the view (or a shader's `values`) changes.
 
 ```js
 async function main(data) {
   let left = data.seconds
-  while (left > 0) { widget.render(ui.text(left + " s", { style: "title" })); await widget.sleep(1000); left-- }
-  widget.submit({ done: true })
+  widget.render(ui.button("Stop", { onPress: () => widget.submit({ left }) }))
+  while (left > 0) { await widget.sleep(1000); left-- }
+  widget.submit({ left })
 }
 ```
 
-**Nodes** (`ui.*`; props optional; children may hold `null`/`false` and nested arrays):
-`column(props, children)` / `row(props, children)` gap 0-3, align · `text(text, { style, tone })` · `markdown(text)` ·
-`image(src, { alt, aspect })` · `carousel({ id, index }, children)` change → page · `card({ id, selected }, children)`
-press · `button(id, label, { variant, disabled })` press · `checkbox(id, label, checked)` change → boolean ·
-`slider(id, { label, value, min, max, step })` change → number · `select(id, options, { value, multiple })` change ·
-`input(id, value, { placeholder, multiline })` change → string · `divider()` ·
-`canvas({ id, height, width?, fps, duration, alt, fill })` pointer · `shader(wgsl, { id, height, values, fps, alt, poster, fill })` pointer.
+**Nodes** (`ui.*`; props optional; children may hold `null`/`false` and nested arrays): `column(props, children)` /
+`row(props, children)` gap 0-3, align · `text(text, { style, tone })` · `markdown(text)` · `image(src, { alt, aspect })`
+· `carousel({ index, onChange }, children)` · `card({ selected, onPress }, children)` · `button(label, { variant,
+disabled, onPress })` · `checkbox(label, checked, { onChange })` · `slider({ label, value, min, max, step, onChange })`
+· `select(options, { value, multiple, onChange })` · `input(value, { placeholder, multiline, onChange })` · `divider()`
+· `canvas({ height, width, fps, duration, alt, fill, key, onPointer })` · `shader(wgsl, { height, values, fps, alt,
+poster, fill, onPointer })`. Pointers are `{ kind: down|move|up, x, y, width, height }`, or `{ kind, dx, dy, button }`
+under capture (`widget.capturePointer()` or root `capture: "pointer"`; Esc always releases it; not on mobile).
 
 **Draw** (`const g = ui.draw()`, chainable): `save restore translate rotate scale alpha rect rrect circle line path
 text(x, y, s, { size, weight, align, color, mono }) image`; paint is a color, a theme name (`text muted accent bg
@@ -110,19 +113,12 @@ commands per draw.
 
 **Shader.** `wgsl` defines `fn shade(frag: vec2f) -> vec4f` (physical pixels, origin top left; premultiplied sRGB).
 The client provides `widget: { resolution, time, scale, pointer: (x, y, down, 0), values: array<vec4f, 4> }` (don't
-redeclare it). Pass state as `values` (≤ 16 numbers, `values[0].x` first); a new view that changes only `values` just
-updates the uniforms, so a live program can re-render every frame (3D games: physics in `main`, a raymarched scene in
-WGSL, ≤ 64 march steps). With an `id` it sends `pointer` events like a canvas. ≤ 16 KB; keep it cheap.
+redeclare it). Pass state as `values` (≤ 16 numbers); a view that changes only `values` just updates the uniforms, so a
+live program can re-render every frame (3D games: physics in `main`, a raymarched scene, ≤ 64 march steps). ≤ 16 KB.
 
-**Capabilities and fetch** (live only): declare hosts as narrowly as possible, e.g.
-`capabilities: { https: { hosts: ["api.github.com", "*.example.com"] } }` (`["*"]` only if truly any host). HTTPS
-only; the local network is blocked; ≤ 4 requests in flight and 10 a second; 15 s timeout; 2 MB responses. Fetch from
-the widget only for dashboards that must refresh while open; otherwise fetch the data yourself and pass it in `data`.
-
-**Keys and capture**: a focused widget gets `key` (`{ kind, key, code, shift, alt, ctrl, meta }`) and `focus` events;
-`widget.capturePointer()` / `releasePointer()` (or root `capture: "pointer"`) gives relative `pointer` moves `{ dx, dy }`.
-Esc is reserved (it releases both); mobile has hardware keys only and no capture.
+**Fetch** (live only): declare hosts narrowly, e.g. `capabilities: { https: { hosts: ["api.github.com"] } }`. HTTPS
+only; the local network is blocked; ≤ 4 in flight and 10 a second; 15 s; 2 MB. Only for widgets that must refresh
+while open; otherwise fetch the data yourself and pass it in `data`.
 
 **Limits.** A step must finish in 250 ms; a live program must `await` at least every 50 ms; ≤ 240 posts a second;
-pausing (out of view, background) freezes timers and frames. Always set `alt` on canvas and shader nodes: the terminal
-shows it, and it can't run live widgets.
+pausing (out of view) freezes timers and frames. Always set `alt` on canvas and shader nodes: the terminal shows it.

@@ -29,7 +29,7 @@ function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
     ui.canvas({
-      id: "timeline",
+      onPointer: (state, p) => tap(state, data, p),
       height: TOP + state.rows.length * ROW + 6,
       fps: 60,
       duration: INTRO,
@@ -41,21 +41,31 @@ function view(state, data) {
     }),
     data.choose &&
       ui.row({ gap: 1 }, [
-        ui.button("choose", "Choose task", { variant: "primary", disabled: state.selected === null }),
+        ui.button("Choose task", {
+          onPress: (state) => choose(state, data),
+          variant: "primary",
+          disabled: state.selected === null,
+        }),
       ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
+function choose(state, data) {
+  if (state.selected !== null) {
     const task = data.tasks[state.selected]
-    return submit(
-      { label: task.label, index: state.selected, start: task.start, end: task.end ?? task.start, group: task.group },
-      state,
-    )
+    return submit({
+      label: task.label,
+      index: state.selected,
+      start: task.start,
+      end: task.end ?? task.start,
+      group: task.group,
+    })
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
   const row = state.rows[Math.floor((pointer.y - TOP) / ROW)]
   const hit = pointer.y >= TOP && row && row.task !== undefined ? row.task : null
   return { ...state, selected: hit === state.selected ? null : hit }

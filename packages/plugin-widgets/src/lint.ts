@@ -39,11 +39,20 @@ const RUNS = new Set([
   "UpdateExpression",
 ])
 const DEFERRED = new Set(["FunctionExpression", "ArrowFunctionExpression"])
+// Parts of the event API that handlers replaced, with what to use instead.
+const GONE: Record<string, string> = {
+  update:
+    "`update(state, event)` is gone: attach handlers to nodes (`onPress`, `onChange`, `onPointer`) and define `onKey`/`onFocus`/`onFullscreen`/`onCapture` for other events",
+  event:
+    "`widget.event()` is gone: attach handlers to nodes, or `widget.on(...)` for keys, focus, full screen and capture",
+  next: "`widget.next()` is gone: await `widget.frame()` or `widget.sleep(ms)`; input arrives through handlers",
+}
 
 /**
  * Parses (never runs) a template's source and checks its shape: the entry functions its mode needs, only function and
- * `const` declarations at the top level so nothing runs when the program loads, no redeclared prelude names, and the
- * size cap. Returns every issue found, in source order.
+ * `const` declarations at the top level so nothing runs when the program loads, no redeclared prelude names, no use of
+ * the removed event API (`update`, `widget.event`, `widget.next`), and the size cap. Returns every issue found, in
+ * source order.
  */
 export function lint(source: string, mode: Widget.Mode): Issue[] {
   if (Buffer.byteLength(source) > MAX_SOURCE_BYTES)
@@ -80,6 +89,9 @@ export function lint(source: string, mode: Widget.Mode): Issue[] {
       at(statement, "only function and `const` declarations may appear at the top level; nothing runs when it loads"),
     )
   }
+  const update = declared.get("update")
+  if (update) issues.push(at(update, GONE.update!))
+  for (const member of removed(parsed.program as Node)) issues.push(at(member.node, GONE[member.name]!))
   if (mode === "step" && !declared.has("view"))
     issues.push({ message: "a step template must define `function view(state, data)`" })
   if (mode === "live" && !isAsync(declared.get("main")))
@@ -129,6 +141,29 @@ function runs(node: Node): Node | undefined {
       if (found) return found
     }
   }
+}
+
+// Every `widget.event` and `widget.next` anywhere in the program.
+function removed(root: Node) {
+  const found: Array<{ node: Node; name: string }> = []
+  const visit = (node: Node) => {
+    const member = node as Node & { object?: Node & { name?: string }; property?: Node & { name?: string } }
+    if (
+      node.type === "MemberExpression" &&
+      member.object?.type === "Identifier" &&
+      member.object.name === "widget" &&
+      (member.property?.name === "event" || member.property?.name === "next")
+    )
+      found.push({ node, name: member.property.name })
+    for (const [key, value] of Object.entries(node)) {
+      if (key === "loc") continue
+      for (const child of Array.isArray(value) ? value : [value])
+        if (typeof child === "object" && child !== null && typeof (child as Node).type === "string")
+          visit(child as Node)
+    }
+  }
+  visit(root)
+  return found
 }
 
 let names: ReadonlySet<string> | undefined

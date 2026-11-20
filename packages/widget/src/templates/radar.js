@@ -14,7 +14,13 @@ function init(data) {
 function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
-    ui.canvas({ id: "radar", height: HEIGHT, fps: 60, duration: INTRO, alt: summary(data) }),
+    ui.canvas({
+      onPointer: (state, p) => tap(state, data, p),
+      height: HEIGHT,
+      fps: 60,
+      duration: INTRO,
+      alt: summary(data),
+    }),
     ui.text(
       state.selected === null
         ? "Tap an axis to compare the series; tap a legend entry to hide one"
@@ -26,23 +32,27 @@ function view(state, data) {
     ),
     data.choose &&
       ui.row({ gap: 1 }, [
-        ui.button("choose", "Choose axis", { variant: "primary", disabled: state.selected === null }),
+        ui.button("Choose axis", {
+          onPress: (state) => choose(state, data),
+          variant: "primary",
+          disabled: state.selected === null,
+        }),
       ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected !== null)
-    return submit(
-      {
-        axis: data.axes[state.selected],
-        index: state.selected,
-        values: Object.fromEntries(data.series.map((series) => [series.label, series.values[state.selected]])),
-      },
-      state,
-    )
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const pointer = event.value
+function choose(state, data) {
+  if (state.selected !== null)
+    return submit({
+      axis: data.axes[state.selected],
+      index: state.selected,
+      values: Object.fromEntries(data.series.map((series) => [series.label, series.values[state.selected]])),
+    })
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
   const box = layout(data, pointer.width, pointer.height)
   const entry = box.legend.findIndex(
     (item) => pointer.y >= item.y - 9 && pointer.y <= item.y + 9 && pointer.x <= box.legendRight,
@@ -108,7 +118,7 @@ function draw(state, data, frame) {
   return g.commands
 }
 
-// Geometry shared by draw and update: the center and radius, the scale's max and the legend rows on the left.
+// Geometry shared by draw and tap: the center and radius, the scale's max and the legend rows on the left.
 function layout(data, width, height) {
   const legendRight =
     data.series.length > 1 ? Math.min(140, 30 + 7 * Math.max(...data.series.map((series) => series.label.length))) : 0

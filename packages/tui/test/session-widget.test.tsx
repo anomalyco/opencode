@@ -91,12 +91,13 @@ const pinger = {
   data: { type: "object", properties: { title: { type: "string" } }, required: ["title"] },
   example: { title: "Ping me" },
   source: `function view(state, data) {
-  return ui.column({ gap: 1 }, [ui.text(data.title), ui.row({ gap: 1 }, [ui.button("ping", "Ping"), ui.button("done", "Done")])])
-}
-function update(state, event) {
-  if (event.id === "ping") return send({ pinged: true }, state)
-  if (event.id === "done") return submit({ done: true }, state)
-  return state
+  return ui.column({ gap: 1 }, [
+    ui.text(data.title),
+    ui.row({ gap: 1 }, [
+      ui.button("Ping", { onPress: () => send({ pinged: true }) }),
+      ui.button("Done", { onPress: () => submit({ done: true }) }),
+    ]),
+  ])
 }`,
 }
 

@@ -11,28 +11,39 @@ function init(data) {
 function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
-    ui.canvas({ id: "funnel", height: data.stages.length * ROW + 4, fps: 60, duration: INTRO, alt: summary(data) }),
+    ui.canvas({
+      onPointer: (state, p) => tap(state, data, p),
+      height: data.stages.length * ROW + 4,
+      fps: 60,
+      duration: INTRO,
+      alt: summary(data),
+    }),
     ui.text(state.selected === null ? "Tap a stage to see its conversion" : describe(data, state.selected), {
       style: "caption",
       tone: state.selected === null ? "muted" : "default",
     }),
     data.choose &&
       ui.row({ gap: 1 }, [
-        ui.button("choose", "Choose stage", { variant: "primary", disabled: state.selected === null }),
+        ui.button("Choose stage", {
+          onPress: (state) => choose(state, data),
+          variant: "primary",
+          disabled: state.selected === null,
+        }),
       ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
+function choose(state, data) {
+  if (state.selected !== null) {
     const stage = data.stages[state.selected]
-    return submit(
-      { label: stage.label, index: state.selected, value: stage.value, ...rates(data, state.selected) },
-      state,
-    )
+    return submit({ label: stage.label, index: state.selected, value: stage.value, ...rates(data, state.selected) })
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const index = Math.floor((event.value.y - 2) / ROW)
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
+  const index = Math.floor((pointer.y - 2) / ROW)
   const hit = index >= 0 && index < data.stages.length ? index : null
   return { ...state, selected: hit === state.selected ? null : hit }
 }

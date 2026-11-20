@@ -14,22 +14,34 @@ function init(data) {
 function view(state, data) {
   const widths = measure(data)
   const trend = data.rows.some((row) => row.trend)
-  const wrap = (id, selected, children) =>
-    data.choose
-      ? ui.card({ id, selected }, [ui.row({ gap: 1, align: "center", wrap: true }, children)])
-      : ui.row({ gap: 1, align: "center", wrap: true }, children)
+  // Rows are keyed by their index in `data.rows`, so sorting keeps each row's ids.
+  const wrap = (index, children) =>
+    data.choose && index !== null
+      ? ui.card(
+          {
+            key: index,
+            selected: state.selected === index,
+            onPress: (state) => ({ ...state, selected: state.selected === index ? null : index }),
+          },
+          [ui.row({ gap: 1, align: "center", wrap: true }, children)],
+        )
+      : ui.row({ key: index ?? "header", gap: 1, align: "center", wrap: true }, children)
   const picked = state.selected === null ? null : data.rows[state.selected]
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
     ui.row({ gap: 1, align: "center", wrap: true }, [
       ui.text("Sort by", { style: "caption", tone: "muted" }),
       data.columns.map((column, index) =>
-        ui.button("sort:" + index, column.label + (state.sort === index ? (state.desc ? " ↓" : " ↑") : ""), {
+        ui.button(column.label + (state.sort === index ? (state.desc ? " ↓" : " ↑") : ""), {
           variant: state.sort === index ? "primary" : "secondary",
+          onPress: (state) =>
+            state.sort === index
+              ? { ...state, desc: !state.desc }
+              : { ...state, sort: index, desc: numeric(data, index) },
         }),
       ),
     ]),
-    wrap(undefined, false, [
+    wrap(null, [
       ui.text(
         line(
           data,
@@ -43,12 +55,12 @@ function view(state, data) {
     ]),
     !data.choose && ui.divider(),
     order(state, data).map((index) =>
-      wrap("row:" + index, state.selected === index, [
+      wrap(index, [
         ui.text(line(data, widths, data.rows[index].cells, false), { style: "code" }),
         trend &&
           data.rows[index].trend &&
           ui.canvas({
-            id: "spark:" + index,
+            key: "spark" + index,
             width: SPARK_WIDTH,
             height: SPARK_HEIGHT,
             fps: 60,
@@ -59,42 +71,28 @@ function view(state, data) {
     ),
     data.choose &&
       ui.row({ gap: 1 }, [
-        ui.button("choose", picked ? "Choose " + text(data, 0, picked.cells[0]) : "Choose", {
+        ui.button(picked ? "Choose " + text(data, 0, picked.cells[0]) : "Choose", {
           variant: "primary",
           disabled: !picked,
+          onPress: (state) => choose(state, data),
         }),
       ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type !== "press") return state
-  if (event.id.startsWith("sort:")) {
-    const column = Number(event.id.slice(5))
-    if (state.sort === column) return { ...state, desc: !state.desc }
-    return { ...state, sort: column, desc: numeric(data, column) }
-  }
-  if (event.id.startsWith("row:")) {
-    const index = Number(event.id.slice(4))
-    return { ...state, selected: state.selected === index ? null : index }
-  }
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
-    const row = data.rows[state.selected]
-    return submit(
-      {
-        index: state.selected,
-        row: Object.fromEntries(data.columns.map((column, at) => [column.label, row.cells[at] ?? null])),
-      },
-      state,
-    )
-  }
-  return state
+function choose(state, data) {
+  if (state.selected === null) return state
+  const row = data.rows[state.selected]
+  return submit({
+    index: state.selected,
+    row: Object.fromEntries(data.columns.map((column, at) => [column.label, row.cells[at] ?? null])),
+  })
 }
 
 // A sparkline: the trend as a line over a faint area, drawn in from the left, with the last value marked.
 function draw(state, data, frame) {
   const g = ui.draw()
-  const values = data.rows[Number(frame.id.slice(6))].trend
+  const values = data.rows[Number(frame.key.slice(5))].trend
   const min = Math.min(...values)
   const span = Math.max(...values) - min || 1
   const x = (index) => 3 + ((frame.width - 6) * index) / Math.max(1, values.length - 1)

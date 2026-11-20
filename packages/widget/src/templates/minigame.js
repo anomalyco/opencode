@@ -1,5 +1,5 @@
 // "Tap the dots", a live template: dots pop up on a timer and shrink until they vanish; tapping one scores more the
-// smaller it is. The loop waits for whichever comes first, a tap or the next display frame, and draws only on frames.
+// smaller it is. Taps arrive through the canvas's handler between frames; the loop draws once per display frame.
 
 const HEIGHT = 320
 const HUD = 44
@@ -9,7 +9,8 @@ const POP_MS = 420
 async function main(data) {
   const seconds = data.seconds ?? 20
   const best = { score: 0 }
-  while (true) {
+  // One round, then its result with Submit and Play again; the buttons' handlers keep the widget open after main.
+  const round = async () => {
     const score = await play(data, seconds)
     const record = score > best.score && best.score > 0
     best.score = Math.max(best.score, score)
@@ -22,48 +23,48 @@ async function main(data) {
           { style: "caption", tone: record ? "success" : "muted" },
         ),
         ui.row({ gap: 1 }, [
-          ui.button("submit", "Submit score", { variant: "primary" }),
-          ui.button("again", "Play again", { variant: "secondary" }),
+          ui.button("Submit score", { variant: "primary", onPress: () => widget.submit({ score, seconds }) }),
+          ui.button("Play again", { variant: "secondary", onPress: round }),
         ]),
       ]),
     )
-    while (true) {
-      const event = await widget.event()
-      if (event.type !== "press") continue
-      if (event.id === "submit") return widget.submit({ score, seconds })
-      if (event.id === "again") break
-    }
   }
+  await round()
 }
 
 async function play(data, seconds) {
+  const game = { dots: [], pops: [], score: 0, start: 0, spawn: 0, width: 0, height: HEIGHT, begin: null }
+  const begun = new Promise((resolve) => (game.begin = resolve))
+  // The first tap starts the round; later taps hit dots.
+  const onPointer = (pointer) => {
+    if (pointer.kind !== "down") return
+    if (game.begin) {
+      resize(game, pointer)
+      game.begin()
+      game.begin = null
+    } else tap(game, pointer, widget.now())
+  }
   widget.render(
     ui.column({ gap: 1, align: "stretch" }, [
       ui.text(data.title, { style: "title" }),
-      ui.canvas({ id: "board", height: HEIGHT, alt: "Tap the dots: a game for touch or mouse" }),
+      ui.canvas({ key: "board", height: HEIGHT, alt: "Tap the dots: a game for touch or mouse", onPointer }),
       ui.text("Tap the dots before they vanish. Smaller dots score more.", { style: "caption", tone: "muted" }),
     ]),
   )
-  const game = { dots: [], pops: [], score: 0, start: 0, spawn: 0, width: 0, height: HEIGHT }
   resize(game, await widget.frame())
   widget.draw("board", ready(game, seconds))
-  while (true) {
-    const event = await widget.event()
-    if (event.type !== "pointer" || event.value.kind !== "down") continue
-    resize(game, event.value)
-    break
-  }
+  await begun
   game.start = widget.now()
   game.spawn = game.start
   const length = seconds * 1000
   const end = game.start + length
+  // The round ends on time even if frames stop coming.
+  const over = widget.sleep(length)
   while (true) {
-    const next = await widget.next({ frame: true, timeout: end - widget.now() })
+    const frame = await Promise.race([widget.frame(), over])
     const now = widget.now()
-    if (now >= end) break
-    if (next.type === "event") tap(game, next.event, now)
-    if (next.type !== "frame") continue
-    resize(game, next.frame)
+    if (now >= end || !frame) break
+    resize(game, frame)
     advance(game, now, (now - game.start) / length)
     widget.draw("board", paint(game, now, end - now, length))
   }
@@ -127,10 +128,9 @@ function radius(dot, now) {
   return dot.r * (1 - Math.pow(1 - grow, 3)) * Math.max(0, 1 - age / dot.life)
 }
 
-function tap(game, event, now) {
-  if (event.type !== "pointer" || event.value.kind !== "down") return
-  const x = event.value.x
-  const y = event.value.y
+function tap(game, pointer, now) {
+  const x = pointer.x
+  const y = pointer.y
   const hit = game.dots
     .map((dot) => ({ dot, r: radius(dot, now), d: Math.hypot(dot.x - x, dot.y - y) }))
     .filter((candidate) => candidate.d <= candidate.r + 6)

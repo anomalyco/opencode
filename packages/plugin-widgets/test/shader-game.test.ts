@@ -27,7 +27,7 @@ test("the shader game renders its shader every frame, jumps on a tap and submits
   await widget.when((current) => shader(current.view) !== undefined)
   const frame = { t: 0, dt: 1 / 60, width: 360, height: 280, scale: 2, pointer: null, dark: true }
   const tap = () =>
-    widget.event({ id: "tunnel", type: "pointer", value: { kind: "down", x: 180, y: 140, width: 360, height: 280 } })
+    widget.event({ id: "0/1", type: "pointer", value: { kind: "down", x: 180, y: 140, width: 360, height: 280 } })
 
   // Jump every barrier until two are cleared, then stop jumping and crash into the next one.
   let jumped = false
@@ -47,7 +47,7 @@ test("the shader game renders its shader every frame, jumps on a tap and submits
   }
   expect(jumped).toBe(true)
   expect(texts(widget.view)).toContain("Crashed after 2 barriers")
-  widget.event({ id: "done", type: "press" })
+  widget.event({ id: "0/1", type: "press" })
   expect(await widget.done).toMatchObject({ type: "submit", value: { score: 2 } })
 })
 

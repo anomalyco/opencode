@@ -13,6 +13,8 @@ import {
 const minigame = builtins.find((template) => template.name === "minigame")!
 const WIDTH = 360
 const HEIGHT = 320
+// The canvas's id: the prelude derives it from the canvas's `key`.
+const BOARD = "0/:board"
 
 const play = (data: unknown) => {
   expect(validateData(minigame.data, data)).toEqual([])
@@ -26,16 +28,16 @@ const play = (data: unknown) => {
     await clock.advance(16)
     time.t += 0.016
     const next: LiveFrame = { t: time.t, dt: 0.016, width: WIDTH, height: HEIGHT, scale: 2, pointer: null, dark: true }
-    const before = widget.drawings.get("board")
+    const before = widget.drawings.get(BOARD)
     expect(widget.frame(next)).toBe(true)
-    await widget.when((current) => current.drawings.get("board") !== before || buttons(current.view).length > 0)
+    await widget.when((current) => current.drawings.get(BOARD) !== before || buttons(current.view).length > 0)
   }
   const tap = (x: number, y: number) =>
-    widget.event({ id: "board", type: "pointer", value: { kind: "down", x, y, width: WIDTH, height: HEIGHT } })
+    widget.event({ id: BOARD, type: "pointer", value: { kind: "down", x, y, width: WIDTH, height: HEIGHT } })
   return { widget, clock, frame, tap }
 }
 
-const board = (widget: LiveWidget) => widget.drawings.get("board") ?? []
+const board = (widget: LiveWidget) => widget.drawings.get(BOARD) ?? []
 const texts = (commands: ReadonlyArray<Command>) =>
   commands.flatMap((command) => (command[0] === "text" ? [command[3]] : []))
 // The filled circles: the live dots (each also has a faint ring at its full size).
@@ -48,6 +50,8 @@ const dots = (commands: ReadonlyArray<Command>) =>
 const all = (node: Node | undefined): Node[] =>
   node ? [node, ...("children" in node ? node.children.flatMap(all) : [])] : []
 const buttons = (view: Node | undefined) => all(view).flatMap((node) => (node.type === "button" ? [node.label] : []))
+const button = (view: Node | undefined, label: string) =>
+  all(view).flatMap((node) => (node.type === "button" && node.label === label ? [node.id] : []))[0] ?? ""
 
 test("minigame: tap to start, tap shrinking dots to score, then submit the score", async () => {
   const game = play({ title: "Tap the dots", seconds: 5 })
@@ -81,7 +85,7 @@ test("minigame: tap to start, tap shrinking dots to score, then submit the score
   )
   expect(score).toBeGreaterThanOrEqual(taps.count)
   expect(buttons(game.widget.view)).toEqual(["Submit score", "Play again"])
-  game.widget.event({ id: "submit", type: "press" })
+  game.widget.event({ id: button(game.widget.view, "Submit score"), type: "press" })
   expect(await game.widget.done).toEqual({ type: "submit", value: { score, seconds: 5 } })
 })
 
@@ -98,7 +102,7 @@ test("minigame: a miss scores nothing, the round ends on time even without frame
   await game.clock.advance(20_000)
   await game.widget.when((current) => buttons(current.view).length > 0)
   expect(all(game.widget.view).some((node) => node.type === "text" && node.text === "0 points")).toBe(true)
-  game.widget.event({ id: "again", type: "press" })
+  game.widget.event({ id: button(game.widget.view, "Play again"), type: "press" })
   await game.frame()
   expect(texts(board(game.widget))[0]).toBe("Tap to start")
   await game.widget.stop()

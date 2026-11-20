@@ -29,6 +29,21 @@ const find = (view: Node, predicate: (node: Node) => boolean) => nodes(view).fil
 
 const press = (id: string) => ({ id, type: "press" as const })
 const change = (id: string, value: unknown) => ({ id, type: "change" as const, value })
+// Ids come from the prelude (the node's place in the view), so tests find the node first, as a client would.
+const idOf = (session: WidgetSession, predicate: (node: Node) => boolean) => {
+  const found = nodes(session.view).find(predicate)
+  if (!found || !("id" in found) || !found.id) throw new Error("no such node with an id")
+  return found.id
+}
+const labeled = (label: string) => (node: Node) => "label" in node && node.label === label
+const pressOn = (session: WidgetSession, predicate: (node: Node) => boolean) =>
+  session.dispatch(press(idOf(session, predicate)))
+const changeOn = (session: WidgetSession, predicate: (node: Node) => boolean, value: unknown) =>
+  session.dispatch(change(idOf(session, predicate), value))
+const card = (index: number) => {
+  const seen = { count: -1 }
+  return (node: Node) => node.type === "card" && ++seen.count === index
+}
 
 test("built-ins have valid names", () => {
   expect(builtins.map((item) => item.name)).toEqual([
@@ -68,25 +83,25 @@ test("suggestions: pick a card, add a note, choose", async () => {
     ],
   })
   const cards = find(session.view, (node) => node.type === "card")
-  expect(cards.map((node) => node.type === "card" && node.id)).toEqual(["option:0", "option:1"])
+  expect(cards.map((node) => node.type === "card" && node.id)).toEqual(["0/1/0", "0/1/1"])
   expect(find(cards[0], (node) => node.type === "carousel")).toHaveLength(1)
   expect(find(cards[0], (node) => node.type === "image")).toHaveLength(2)
   expect(find(cards[1], (node) => node.type === "carousel")).toHaveLength(0)
   expect(find(session.view, (node) => node.type === "text" && node.text === "(Recommended)")).toHaveLength(1)
   expect(
-    find(session.view, (node) => node.type === "button" && node.id === "choose" && node.disabled === true),
+    find(session.view, (node) => node.type === "button" && node.label === "Choose" && node.disabled === true),
   ).toHaveLength(1)
 
   // Choosing before picking does nothing.
-  expect((await session.dispatch(press("choose"))).submit).toBeUndefined()
-  await session.dispatch(press("option:1"))
+  expect((await pressOn(session, labeled("Choose"))).submit).toBeUndefined()
+  await pressOn(session, card(1))
   expect(
     find(session.view, (node) => node.type === "card" && node.selected === true).map(
       (node) => node.type === "card" && node.id,
     ),
-  ).toEqual(["option:1"])
-  await session.dispatch(change("note", "  but bluer  "))
-  expect((await session.dispatch(press("choose"))).submit).toEqual({ choice: "Cool", index: 1, note: "but bluer" })
+  ).toEqual(["0/1/1"])
+  await changeOn(session, (node) => node.type === "input", "  but bluer  ")
+  expect((await pressOn(session, labeled("Choose"))).submit).toEqual({ choice: "Cool", index: 1, note: "but bluer" })
 })
 
 test("suggestions: no note input when allowNote is false, and dismiss", async () => {
@@ -99,9 +114,9 @@ test("suggestions: no note input when allowNote is false, and dismiss", async ()
     ],
   })
   expect(find(session.view, (node) => node.type === "input")).toHaveLength(0)
-  await session.dispatch(press("option:0"))
-  expect((await session.dispatch(press("choose"))).submit).toEqual({ choice: "A", index: 0 })
-  expect((await session.dispatch(press("dismiss"))).dismiss).toBe(true)
+  await pressOn(session, card(0))
+  expect((await pressOn(session, labeled("Choose"))).submit).toEqual({ choice: "A", index: 0 })
+  expect((await pressOn(session, labeled("Dismiss"))).dismiss).toBe(true)
 })
 
 test("suggestions data schema enforces 2..3 options with 1..3 images", () => {
@@ -164,21 +179,23 @@ test("form: one control per field type, edit, submit", async () => {
     "button",
   ])
   expect(find(session.view, (node) => node.type === "slider")).toEqual([
-    { type: "slider", id: "field:size", label: "Size", value: 3, min: 1, max: 10, step: 1 },
+    { type: "slider", id: "0/2/1", label: "Size", value: 3, min: 1, max: 10, step: 1 },
   ])
   expect(find(session.view, (node) => node.type === "button")).toEqual([
-    { type: "button", id: "submit", label: "Create", variant: "primary" },
+    { type: "button", id: "0/3/0", label: "Create", variant: "primary" },
   ])
 
-  await session.dispatch(change("field:name", "atlas"))
-  await session.dispatch(change("field:size", 42))
-  await session.dispatch(change("field:private", true))
-  await session.dispatch(change("field:stack", "node"))
-  await session.dispatch(change("field:tags", ["web", "cli"]))
+  await changeOn(session, labeled("Name"), "atlas")
+  // The slider's handler gets the value clamped to its range; values that aren't options are dropped.
+  await changeOn(session, labeled("Size"), 42)
+  await changeOn(session, labeled("Private"), true)
+  await changeOn(session, labeled("Stack"), "node")
+  await changeOn(session, labeled("Stack"), "deno")
+  await changeOn(session, labeled("Tags"), ["web", "cli", "gui"])
   expect(find(session.view, (node) => node.type === "checkbox")).toEqual([
-    { type: "checkbox", id: "field:private", label: "Private", checked: true },
+    { type: "checkbox", id: "0/2/2", label: "Private", checked: true },
   ])
-  expect((await session.dispatch(press("submit"))).submit).toEqual({
+  expect((await pressOn(session, labeled("Create"))).submit).toEqual({
     name: "atlas",
     size: 10,
     private: true,
@@ -196,7 +213,7 @@ test("form submits defaults untouched", async () => {
       { key: "on", type: "boolean", label: "On", default: true },
     ],
   })
-  expect((await session.dispatch(press("submit"))).submit).toEqual({ note: "hi", level: 2, on: true })
+  expect((await pressOn(session, labeled("Submit"))).submit).toEqual({ note: "hi", level: 2, on: true })
 })
 
 test("form data schema checks each field type", () => {
@@ -216,15 +233,15 @@ test("confirm: confirm and cancel", async () => {
     danger: true,
   })
   expect(find(session.view, (node) => node.type === "button")).toEqual([
-    { type: "button", id: "confirm", label: "Delete", variant: "danger" },
-    { type: "button", id: "cancel", label: "Cancel", variant: "secondary" },
+    { type: "button", id: "0/2/0", label: "Delete", variant: "danger" },
+    { type: "button", id: "0/2/1", label: "Cancel", variant: "secondary" },
   ])
-  expect((await session.dispatch(press("cancel"))).submit).toEqual({ confirmed: false })
-  expect((await session.dispatch(press("confirm"))).submit).toEqual({ confirmed: true })
+  expect((await pressOn(session, labeled("Cancel"))).submit).toEqual({ confirmed: false })
+  expect((await pressOn(session, labeled("Delete"))).submit).toEqual({ confirmed: true })
 })
 
 const frame = (t: number, pointer: Frame["pointer"] = null): Frame => ({
-  id: "chart",
+  id: "0/1",
   t,
   dt: 1 / 60,
   width: 400,
@@ -234,7 +251,7 @@ const frame = (t: number, pointer: Frame["pointer"] = null): Frame => ({
   dark: true,
 })
 const pointer = (kind: Pointer["kind"], x: number, y: number) => ({
-  id: "chart",
+  id: "0/1",
   type: "pointer" as const,
   value: { kind, x, y, width: 400, height: 240 },
 })
@@ -260,7 +277,7 @@ test("chart: bars grow in, then the canvas stops animating", async () => {
   expect(find(session.view, (node) => node.type === "canvas")).toEqual([
     {
       type: "canvas",
-      id: "chart",
+      id: "0/1",
       height: 240,
       fps: 60,
       duration: 0.65,
@@ -363,12 +380,13 @@ test("backdrop: a shader per preset driven by the speed slider", async () => {
     accent: "#f0a",
   })
   const shader = () => nodes(session.view).find((node): node is Shader => node.type === "shader")
-  expect(shader()).toMatchObject({ id: "backdrop", height: 200, fps: 60, values: [1, 1, 0, 2 / 3] })
+  expect(shader()).toMatchObject({ height: 200, fps: 60, values: [1, 1, 0, 2 / 3] })
+  expect(shader()).not.toHaveProperty("id")
   expect(shader()?.wgsl).toContain("fn shade(frag: vec2f) -> vec4f")
   expect(nodes(session.view).map((node) => node.type)).toEqual(["column", "shader", "text", "markdown", "slider"])
-  await session.dispatch(change("speed", 0.25))
+  await changeOn(session, labeled("Speed"), 0.25)
   expect(shader()).toMatchObject({ fps: 60, values: [0.3, 1, 0, 2 / 3] })
-  const paused = await session.dispatch(change("speed", 0))
+  const paused = await changeOn(session, labeled("Speed"), 0)
   expect(paused.submit).toBeUndefined()
   expect(shader()).toMatchObject({ fps: 0, values: [0, 1, 0, 2 / 3] })
   const presets = await Promise.all(

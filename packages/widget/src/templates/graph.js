@@ -17,28 +17,42 @@ function view(state, data) {
   const picked = state.selected === null ? null : data.nodes[state.selected]
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
-    ui.canvas({ id: "graph", height: HEIGHT, fps: 60, duration: INTRO, alt: summary(state, data) }),
+    ui.canvas({
+      onPointer: (state, p) => tap(state, data, p),
+      height: HEIGHT,
+      fps: 60,
+      duration: INTRO,
+      alt: summary(state, data),
+    }),
     ui.text(picked ? describe(state, data, state.selected) : "Tap a node to see its neighbors", {
       style: "caption",
       tone: picked ? "default" : "muted",
     }),
     data.choose &&
       ui.row({ gap: 1 }, [
-        ui.button("choose", picked ? "Choose " + name(picked) : "Choose", { variant: "primary", disabled: !picked }),
+        ui.button(picked ? "Choose " + name(picked) : "Choose", {
+          onPress: (state) => choose(state, data),
+          variant: "primary",
+          disabled: !picked,
+        }),
       ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
+function choose(state, data) {
+  if (state.selected !== null) {
     const node = data.nodes[state.selected]
-    return submit(
-      { id: node.id, label: name(node), neighbors: neighbors(state, state.selected).map((at) => data.nodes[at].id) },
-      state,
-    )
+    return submit({
+      id: node.id,
+      label: name(node),
+      neighbors: neighbors(state, state.selected).map((at) => data.nodes[at].id),
+    })
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
   const hit = locate(state, data, positions(state, 1, pointer.width, pointer.height), pointer.x, pointer.y)
   return { ...state, selected: hit === state.selected ? null : hit }
 }

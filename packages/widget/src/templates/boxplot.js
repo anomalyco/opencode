@@ -18,25 +18,38 @@ function init(data) {
 function view(state, data) {
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
-    ui.canvas({ id: "boxplot", height: HEIGHT, fps: 60, duration: INTRO, alt: summary(state, data) }),
+    ui.canvas({
+      onPointer: (state, p) => tap(state, data, p),
+      height: HEIGHT,
+      fps: 60,
+      duration: INTRO,
+      alt: summary(state, data),
+    }),
     ui.text(state.selected === null ? "Tap a box to read its statistics" : describe(state, data, state.selected), {
       style: "caption",
       tone: state.selected === null ? "muted" : "default",
     }),
     data.choose &&
       ui.row({ gap: 1 }, [
-        ui.button("choose", "Choose group", { variant: "primary", disabled: state.selected === null }),
+        ui.button("Choose group", {
+          onPress: (state) => choose(state, data),
+          variant: "primary",
+          disabled: state.selected === null,
+        }),
       ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.selected !== null) {
+function choose(state, data) {
+  if (state.selected !== null) {
     const { outliers, ...stats } = state.stats[state.selected]
-    return submit({ label: data.groups[state.selected].label, index: state.selected, ...stats }, state)
+    return submit({ label: data.groups[state.selected].label, index: state.selected, ...stats })
   }
-  if (event.type !== "pointer" || event.value.kind !== "up") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
+  if (pointer.kind !== "up") return state
   const hit = locate(data, layout(state, data, pointer.width, pointer.height), pointer.x, pointer.y)
   return { ...state, selected: hit === state.selected ? null : hit }
 }

@@ -26,7 +26,7 @@ export const Ref = Schema.Struct({
 export const DataSchema = Schema.Record(Schema.String, Schema.Json).annotate({ identifier: "Widget.DataSchema" })
 export type DataSchema = typeof DataSchema.Type
 
-/** How clients run a template: short `init`/`update`/`view`/`draw` steps, or one long-running `main` (widgets-live.md). */
+/** How clients run a template: short `init`/`view`/`draw` steps with handlers on nodes, or one long-running `main` (widgets-live.md). */
 export const Mode = Schema.Literals(["step", "live"]).annotate({ identifier: "Widget.Mode" })
 export type Mode = typeof Mode.Type
 
@@ -106,7 +106,7 @@ export const State = Schema.Struct({
 export interface RuntimeError extends Schema.Schema.Type<typeof RuntimeError> {}
 export const RuntimeError = Schema.Struct({
   phase: Schema.String.annotate({
-    description: '"init", "view", "update", "draw", "main", "shader", "fetch" or another',
+    description: '"init", "event" (a handler or hook), "view", "draw", "main", "shader", "fetch" or another',
   }),
   message: Schema.String,
   /** 1-based, in the template's source. */

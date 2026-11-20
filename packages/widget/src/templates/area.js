@@ -14,7 +14,13 @@ function view(state, data) {
   const active = state.active
   return ui.column({ gap: 1, align: "stretch" }, [
     ui.text(data.title, { style: "title" }),
-    ui.canvas({ id: "area", height: HEIGHT, fps: 60, duration: state.down ? undefined : INTRO, alt: summary(data) }),
+    ui.canvas({
+      onPointer: (state, p) => tap(state, data, p),
+      height: HEIGHT,
+      fps: 60,
+      duration: state.down ? undefined : INTRO,
+      alt: summary(data),
+    }),
     ui.text(
       active
         ? label(data, active.index) +
@@ -25,25 +31,27 @@ function view(state, data) {
         : "Press to read the values at a point in time; tap a legend entry to hide a series",
       { style: "caption", tone: active ? "default" : "muted" },
     ),
-    data.choose && ui.row({ gap: 1 }, [ui.button("choose", "Choose", { variant: "primary", disabled: !active })]),
+    data.choose &&
+      ui.row({ gap: 1 }, [
+        ui.button("Choose", { onPress: (state) => choose(state, data), variant: "primary", disabled: !active }),
+      ]),
   ])
 }
 
-function update(state, event, data) {
-  if (event.type === "press" && event.id === "choose" && state.active) {
+function choose(state, data) {
+  if (state.active) {
     const series = data.series[state.active.series]
-    return submit(
-      {
-        series: series.label,
-        index: state.active.index,
-        label: label(data, state.active.index),
-        value: series.values[state.active.index],
-      },
-      state,
-    )
+    return submit({
+      series: series.label,
+      index: state.active.index,
+      label: label(data, state.active.index),
+      value: series.values[state.active.index],
+    })
   }
-  if (event.type !== "pointer") return state
-  const pointer = event.value
+  return state
+}
+
+function tap(state, data, pointer) {
   const box = layout(data, state, pointer.width, pointer.height)
   const entry = box.legend.findIndex(
     (item) => pointer.y < box.plot.y - 6 && pointer.x >= item.x - 4 && pointer.x <= item.to,
@@ -100,7 +108,7 @@ function draw(state, data, frame) {
   return g.commands
 }
 
-// Geometry shared by draw and update: the plot, the stacked bands of the visible series and the y range.
+// Geometry shared by draw and tap: the plot, the stacked bands of the visible series and the y range.
 function layout(data, state, width, height) {
   const count = Math.max(...data.series.map((series) => series.values.length))
   const shown = data.series

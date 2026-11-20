@@ -92,7 +92,7 @@ export interface Input {
 export interface Divider {
   readonly type: "divider"
 }
-/** Drawn by the template's `draw(state, data, frame)`; sends `pointer` events when it has an `id`. */
+/** Drawn by the template's `draw(state, data, frame)`; sends `pointer` events when it has an `id` (prelude-assigned). */
 export interface Canvas {
   readonly type: "canvas"
   readonly id?: string
@@ -139,12 +139,12 @@ export type Node =
   | Canvas
   | Shader
 
-/** Pointer input on a canvas with an `id`: `move` only while down, at most once per frame. */
+/** Pointer input on a canvas or shader with an `id`: `move` only while down, at most once per frame. */
 export interface Pointer {
   readonly kind: "down" | "move" | "up"
   readonly x: number
   readonly y: number
-  /** The canvas's logical size, so `update` can hit-test a layout that follows the width. */
+  /** The canvas's logical size, so a handler can hit-test a layout that follows the width. */
   readonly width: number
   readonly height: number
 }
@@ -174,10 +174,12 @@ export type WidgetEvent =
   | { readonly id: string; readonly type: "focus"; readonly value: boolean }
   /** Pointer capture granted or released. */
   | { readonly id: string; readonly type: "capture"; readonly value: boolean }
+  /** Full screen entered or left (widgets-fullscreen.md). */
+  | { readonly id: string; readonly type: "fullscreen"; readonly value: boolean }
 
 /** What `draw` gets: the canvas being drawn, the time, its size and the pointer over it. */
 export interface Frame {
-  /** The canvas node's id, so templates with several canvases can switch on it. */
+  /** The canvas node's id. The prelude hands the template `frame.key` (the canvas's `key`, or null) instead. */
   readonly id: string | null
   /** Seconds since the canvas appeared. */
   readonly t: number
