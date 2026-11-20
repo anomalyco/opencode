@@ -344,6 +344,10 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional),
           ...PromptInput.Prompt.fields,
+          text: PromptInput.Prompt.fields.text.annotate({
+            description:
+              "Plain user prompt text, stored verbatim. Leading slash commands are not parsed or dispatched; use session.command instead.",
+          }),
           metadata: SessionInbox.UserPayload.fields.metadata,
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
@@ -356,7 +360,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "session.prompt",
             summary: "Send message",
-            description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+            description:
+              "Durably admit one session input and schedule agent-loop execution unless resume is false. Text is stored verbatim as plain user input and does not parse or dispatch slash commands; use session.command (POST /api/session/{sessionID}/command) to run a command.",
           }),
         ),
     )
@@ -364,8 +369,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.post("session.command", "/api/session/:sessionID/command", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
-          name: Schema.String,
+          name: Schema.String.annotate({
+            description: 'Registered command name without a leading slash, for example "goal" or "review".',
+          }),
           ...PromptInput.Prompt.fields,
+          text: PromptInput.Prompt.fields.text.annotate({
+            description: "Argument string passed to the command.",
+          }),
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
@@ -376,7 +386,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "session.command",
             summary: "Run command",
-            description: "Execute a slash command callback immediately.",
+            description:
+              'Execute a registered slash command callback immediately. Pass the command name without a leading slash (for example, "goal" or "review") in name and its argument string in text.',
           }),
         ),
     )

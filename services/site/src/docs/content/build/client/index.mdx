@@ -35,6 +35,16 @@ await client.session.prompt({
 })
 ```
 
+`session.prompt` stores `text` verbatim as plain user input and does not parse slash commands. Use `session.command` with the command `name` without a leading `/` and its arguments in `text` to invoke a registered command.
+
+```ts
+await client.session.command({
+  sessionID: session.id,
+  name: "review",
+  text: "src/auth.ts",
+})
+```
+
 ## Headers and requests
 
 Pass default authentication or application headers to `OpenCode.make` with
