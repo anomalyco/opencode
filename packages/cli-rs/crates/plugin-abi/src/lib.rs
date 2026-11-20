@@ -699,8 +699,10 @@ impl Rgba {
 
     /// `#rrggbbaa`, or `#rrggbb` for an opaque color.
     pub fn parse(text: &str) -> Option<Self> {
-        let hex = text.strip_prefix('#').filter(|hex| matches!(hex.len(), 6 | 8) && hex.is_ascii())?;
-        let channel = |index: usize| u8::from_str_radix(hex.get(index..index + 2)?, 16).ok();
+        let hex = text
+            .strip_prefix('#')
+            .filter(|hex| matches!(hex.len(), 6 | 8) && hex.bytes().all(|byte| byte.is_ascii_hexdigit()))?;
+        let channel = |index: usize| u8::from_str_radix(&hex[index..index + 2], 16).ok();
         let a = if hex.len() == 8 { channel(6)? } else { 255 };
         Some(Self::new(channel(0)?, channel(2)?, channel(4)?, a))
     }
@@ -5386,6 +5388,7 @@ mod tests {
         assert_eq!(fence.width, 0);
         assert_eq!(Rgba::parse("#0a0b0c"), Some(Rgba::new(10, 11, 12, 255)));
         assert_eq!(Rgba::parse("#0a0b0"), None);
+        assert_eq!(Rgba::parse("#+a+b+c"), None);
     }
 
     #[test]
