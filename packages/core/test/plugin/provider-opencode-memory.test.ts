@@ -2884,7 +2884,7 @@ describe("OpencodePlugin memory capture", () => {
   )
 
   capturing("console_memory,memory_capture").effect(
-    "backs an observed fix with evidence once its test fails before the turn's commit and passes at it",
+    "backs an observed fix once the turn shows its test failing, then passing after a change, and a commit",
     () =>
       withConsole((console) =>
         Effect.gen(function* () {
@@ -2913,30 +2913,36 @@ describe("OpencodePlugin memory capture", () => {
               },
             ],
           })
-          const { host } = yield* start(console)
+          const { host, compacted } = yield* start(console)
           const session = yield* host.session.create({})
+          // The test file doesn't exist: the plugin runs no test, and goes by the outcomes the session saw.
           const test = "bun test test/value.test.ts"
-          // The turn: the test fails, the fix and its test are written, the test passes, and the session commits.
-          yield* prompt(session.id, "Fix the value")
-          yield* shell(session.id, test, Effect.succeed(1))
-          yield* Effect.promise(async () => {
-            await fs.mkdir(path.join(directory, "test"), { recursive: true })
-            await fs.writeFile(
-              path.join(directory, "test/value.test.ts"),
-              'import { expect, test } from "bun:test"\nimport fs from "fs"\ntest("value", () => expect(fs.readFileSync("src/value.txt", "utf8").trim()).toBe("fixed"))\n',
-            )
-            await fs.writeFile(path.join(directory, "src/value.txt"), "fixed\n")
-          })
-          yield* shell(session.id, test, Effect.succeed(0))
-          yield* shell(session.id, "git add -A && git commit -qm fix", run("git add -A && git commit -qm fix"))
-          const sha = (yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(directory).text())).trim()
-          // Re-run in the background, before the commit and at it; the fix holds, so its entry gets the evidence.
           const verified = () =>
             console.state.requests.filter(
               (item) =>
                 item.path === "/api/memory/entries/mem_new0/evidence" &&
                 JSON.stringify(item.body).includes("verified-fix"),
             )
+          // A test that failed and passed with nothing changed in between shows no fix, commit or not.
+          yield* prompt(session.id, "Fix the value")
+          yield* shell(session.id, test, Effect.succeed(1))
+          yield* shell(session.id, test, Effect.succeed(0))
+          yield* shell(session.id, "git commit --allow-empty -qm retry", run("git commit --allow-empty -qm retry"))
+          yield* waitUntil(Effect.sync(() => publishes(console).length > 0))
+          yield* drain
+          expect(verified()).toEqual([])
+
+          // It fails, the session changes the file, it passes, and the session commits: the entry gets the evidence.
+          yield* shell(session.id, test, Effect.succeed(1))
+          yield* Effect.promise(() => fs.writeFile(path.join(directory, "src/value.txt"), "fixed\n"))
+          yield* ran(session.id, "edit", { path: path.join(directory, "src/value.txt") })
+          yield* shell(session.id, test, Effect.succeed(0))
+          // Not before the commit, whose hash is what the evidence names.
+          yield* compacted(session.id)
+          yield* drain
+          expect(verified()).toEqual([])
+          yield* shell(session.id, "git add -A && git commit -qm fix", run("git add -A && git commit -qm fix"))
+          const sha = (yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(directory).text())).trim()
           yield* waitUntil(Effect.sync(() => verified().length > 0))
           expect(verified()[0]?.body).toMatchObject({
             evidence: [{ kind: "verified-fix", ref: sha }],

@@ -25,13 +25,10 @@ import { Integration } from "../../integration.js"
 import { AbsolutePath, RelativePath } from "../../schema.js"
 import { normalizeContent, normalizedName } from "../../tool/runtime.js"
 import { Flag } from "../../flag.js"
-import { SessionEnvironment } from "../../session/environment.js"
-import { ShellSelect } from "../../shell/select.js"
 import { OpencodeMemoryAccess } from "./opencode-memory-access.js"
 import { OpencodeMemoryCapture } from "./opencode-memory-capture.js"
 import { OpencodeMemoryDecide } from "./opencode-memory-decide.js"
 import { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
-import { OpencodeMemoryVerify } from "./opencode-memory-verify.js"
 import { OpencodeWatches } from "./opencode-watches.js"
 
 /** The `GET /api/v2/config` response header Console sends while the caller may use the workspace's memory. */
@@ -94,7 +91,7 @@ const InstructionsMetadata = Schema.Struct({
     instructions: Schema.Array(Schema.Struct({ key: Schema.String, text: Schema.String })),
   }),
 })
-/** The evidence a fix the plugin re-ran itself carries, with the commit's hash. */
+/** The evidence a fix the session showed holding carries, with the commit's hash. */
 const VERIFIED = "verified-fix"
 /** The session instruction entries memory keeps: entries again after a compaction, and a correction reminder. */
 const DELIVERED = "memory.delivered"
@@ -262,10 +259,19 @@ type Tracked = {
   readonly commits: string[]
   /** Files the session wrote with its own edit tools, which aren't outside input when it reads them back. */
   readonly wrote: Set<string>
-  /** The current user turn: its commits and test runs, and the observed entries published in it, still unverified. */
-  turn: OpencodeMemoryVerify.Turn & {
+  /**
+   * The current user turn: its commits, its test runs with how many changes and commits the session had made before
+   * each, and the observed entries published in it, still unverified.
+   */
+  turn: {
     readonly commits: string[]
-    readonly tests: Array<{ readonly command: string; readonly failed: boolean }>
+    readonly tests: Array<{
+      readonly command: string
+      readonly failed: boolean
+      readonly changes: number
+      readonly commits: number
+    }>
+    changes: number
     readonly pending: Array<{ readonly id: string; readonly revision: number; readonly paths: ReadonlyArray<string> }>
   }
   /** The session took in outside input, so what it writes is marked tainted and never promoted; also stored. */
@@ -316,9 +322,6 @@ export const make = Effect.fnUntraced(function* (
   const processes = yield* AppProcess.Service
   const flags = yield* Flag.Service
   const config = yield* Config.Service
-  const environments = yield* SessionEnvironment.Service
-  const shells = yield* ShellSelect.Service
-  const verify = OpencodeMemoryVerify.make({ git, processes, shell: shells.resolve({ priority: "config" }) })
   // The decision model config names under console_memory, the bench's by default, when OpenCode offers it as one; none
   // when config turns decisions off or no provider offers it, and then the judgements that need one are off.
   const decide = OpencodeMemoryDecide.make({
@@ -359,7 +362,7 @@ export const make = Effect.fnUntraced(function* (
       allowance: DISTILLATIONS_PER_TURN,
       commits: [],
       wrote: new Set(),
-      turn: { commits: [], tests: [], pending: [] },
+      turn: { commits: [], tests: [], changes: 0, pending: [] },
       about: new Map(),
       instructions: Deferred.makeUnsafe<string>(),
       pending: [],
@@ -826,7 +829,7 @@ export const make = Effect.fnUntraced(function* (
               }).pipe(Effect.as(undefined))
             }),
           )
-          // An observed claim the session can back itself waits for this turn's commit and test to be re-run.
+          // An observed claim the session can back itself waits for this turn's commit and its test's outcome.
           if (published?.id !== undefined && backing === "observed")
             turn.pending.push({
               id: published.id,
@@ -943,23 +946,25 @@ export const make = Effect.fnUntraced(function* (
         )
       })
     /**
-     * Re-runs, in the background, the fix behind each observed entry the session published this turn, once the turn
-     * shows a commit that changed its files and a test that failed, then passed; one that holds gets the evidence,
-     * which Console promotes on. Never for a session that took in outside input.
+     * Backs each observed entry the session published this turn once the turn shows the fix's outcome itself: a test
+     * command that failed, then passed after the session changed something, and a commit made after that, whose hash
+     * goes with it. Never runs a test, and never for a session that took in outside input.
      */
     const attempt = (sessionID: Session.ID, turn: Tracked["turn"]) =>
       Effect.gen(function* () {
-        const found = yield* discovered
-        if (turn.pending.length === 0 || !found || (yield* tainted(sessionID))) return
-        const env = (yield* environments.get(sessionID)) ?? process.env
+        const fix = turn.tests.findLast(
+          (run, index) =>
+            !run.failed &&
+            turn.tests
+              .slice(0, index)
+              .some((item) => item.failed && item.command === run.command && item.changes < run.changes),
+        )
+        const sha = fix === undefined ? undefined : turn.commits.slice(fix.commits).at(-1)
+        if (turn.pending.length === 0 || sha === undefined || (yield* tainted(sessionID))) return
         yield* Effect.forEach(
-          [...turn.pending],
+          turn.pending.splice(0),
           (entry) =>
             Effect.gen(function* () {
-              const sha = yield* verify({ repository: found, turn, paths: entry.paths, env })
-              if (sha === undefined) return
-              turn.pending.splice(turn.pending.indexOf(entry), 1)
-              if (sha === false) return
               yield* call(Schema.Unknown, "POST", `/api/memory/entries/${encodeURIComponent(entry.id)}/evidence`, {
                 evidence: [{ kind: VERIFIED, ref: sha }],
                 revision: entry.revision,
@@ -1206,7 +1211,7 @@ export const make = Effect.fnUntraced(function* (
         }
         // The distillation this message starts has the turn it closes; a new one begins.
         const closed = state.turn
-        state.turn = { commits: [], tests: [], pending: [] }
+        state.turn = { commits: [], tests: [], changes: 0, pending: [] }
         // Judged off the prompt's path, when a decision model resolves: whether it states a lasting rule, which given
         // entry it corrects and which it asks to forget, which is then retired. A decision that fails is a no. The
         // session's later events wait for it, so the segment keeps their order.
@@ -1302,6 +1307,7 @@ export const make = Effect.fnUntraced(function* (
           yield* record(event.sessionID, { type: "subtask", ...(read ? { outside: true } : {}) })
         }
         if (event.tool !== "read") files.forEach((file) => tracked(event.sessionID).wrote.add(file))
+        if (event.tool !== "read" && files.length > 0) tracked(event.sessionID).turn.changes++
         if (fromOutside) yield* taint(event.sessionID)
         if (files.length > 0) {
           const state = tracked(event.sessionID)
@@ -1321,7 +1327,9 @@ export const make = Effect.fnUntraced(function* (
         const command = shell.value.input.command
         const exitCode = shell.value.output.exitCode
         const failed = policy.failed(command, shell.value.output.output, exitCode)
-        if (policy.test(command)) tracked(event.sessionID).turn.tests.push({ command, failed })
+        const turn = tracked(event.sessionID).turn
+        if (policy.test(command))
+          turn.tests.push({ command, failed, changes: turn.changes, commits: turn.commits.length })
         yield* record(event.sessionID, {
           type: "shell",
           command: command.slice(0, MAX_TAIL),
