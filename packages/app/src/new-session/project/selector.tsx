@@ -48,6 +48,9 @@ export function createPromptProjectController(input: { controls: Accessor<Prompt
     const key = pathKey(controls.directory)
     const projects = controls.available.filter((project) => !project.server || project.server.key === controls.server)
 
+    // Any other directory, such as a worktree outside the project root, waits for the server to resolve its project;
+    // nothing is guessed from recent projects. Exact roots go first because projects without a root commit share
+    // the `global` ID.
     return (
       projects.find(
         (project) =>
@@ -65,7 +68,7 @@ export function createPromptProjectController(input: { controls: Accessor<Prompt
       ),
   )
 
-  const selected = () => current() ?? projects()[0]
+  const selected = current
 
   const matches = (project: PromptProject, other?: PromptProject) =>
     !!other && pathKey(other.worktree) === pathKey(project.worktree) && other.server?.key === project.server?.key
