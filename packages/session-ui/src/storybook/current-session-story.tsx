@@ -12,6 +12,7 @@ import { CURRENT_SESSION_ID, STORY_TIME } from "./current-session-fixtures"
 export function CurrentSessionProviders(props: {
   document: SessionDocument
   readMedia?: ReadMediaUrlFn
+  shellRunning?: (id: string) => boolean
   turnDiff?: TurnDiffSource
   children: JSX.Element
 }) {
@@ -20,6 +21,7 @@ export function CurrentSessionProviders(props: {
       directory="C:/workspaces/opencode"
       sessionID={props.document.sessionID}
       readMedia={props.readMedia}
+      shellRunning={props.shellRunning}
       data={{
         agent: [
           { name: "build", color: "blue" },

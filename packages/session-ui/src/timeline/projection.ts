@@ -11,6 +11,7 @@ import { Effect, Option, Predicate, Schema } from "effect"
 import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
 import {
   currentContentDefaultOpen,
+  currentToolBackgroundShell,
   currentToolFailed,
   currentToolGroupedRead,
   currentToolHasLoadedFiles,
@@ -1068,7 +1069,12 @@ function toolGroupType(
     if (content.name === "question" && !currentToolFailed(content)) return undefined
     const category = timelineCategory(content)!
 
-    if (detail[category].placement === "grouped") return "context"
+    if (detail[category].placement === "grouped") {
+      // Background shells stay visible on their own row so running work is never hidden inside a collapsed group.
+      if (currentToolBackgroundShell(content)) return undefined
+
+      return "context"
+    }
 
     if (currentToolGroupedRead(content)) return "read"
 

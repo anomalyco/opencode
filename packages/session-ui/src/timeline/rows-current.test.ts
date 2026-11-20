@@ -1224,7 +1224,12 @@ describe("current session timeline rows", () => {
     {
       name: "default",
       grouped: false,
-      groups: [["context", "read", "grep"], ["part", "agent_1"], ["part", "agent_2"], ["context", "glob", "read_2"]],
+      groups: [
+        ["context", "read", "grep"],
+        ["part", "agent_1"],
+        ["part", "agent_2"],
+        ["context", "glob", "read_2"],
+      ],
     },
     { name: "opted in", grouped: true, groups: [["context", "read", "grep", "agent_1", "agent_2", "glob", "read_2"]] },
   ])("gives each subagent its own row unless subagent grouping is enabled ($name)", (input) => {
@@ -1260,6 +1265,70 @@ describe("current session timeline rows", () => {
             ],
       ),
     ).toEqual(input.groups.map((group) => [...group]))
+  })
+
+  test("keeps background shells standalone in compact mode while grouping finished foreground shells", () => {
+    const compact = timelinePresets.find((preset) => preset.id === "compact")!.value
+    const quiet = timelinePresets.find((preset) => preset.id === "quiet")!.value
+
+    const messages = storyDocument([
+      storyTool("read_1", "read", "completed", { path: "src/a.ts" }),
+      storyTool(
+        "shell_fg",
+        "shell",
+        "completed",
+        { command: "echo ok" },
+        { metadata: { status: "completed", exit: 0 } },
+      ),
+      storyTool(
+        "shell_bg_explicit",
+        "shell",
+        "completed",
+        { command: "bun run dev", background: true },
+        { metadata: { status: "running", shellID: "sh_1" } },
+      ),
+      storyTool("read_2", "read", "completed", { path: "src/b.ts" }),
+      storyTool(
+        "shell_bg_timeout",
+        "shell",
+        "completed",
+        { command: "bun test" },
+        { metadata: { status: "running", shellID: "sh_2" } },
+      ),
+      { type: "text", text: "Started the background commands." },
+    ]).messages
+
+    const grouped = (detail: (typeof timelinePresets)[number]["value"]) =>
+      Timeline.constructSessionMessageRows(
+        messages,
+        true,
+        { type: "idle" },
+        undefined,
+        false,
+        false,
+        undefined,
+        detail,
+      ).rows.flatMap((row) =>
+        !Predicate.isTagged(row, "AssistantPart")
+          ? []
+          : [
+              [
+                row.group.type,
+                ...(row.group.type === "part" ? [row.group.ref] : row.group.refs).map((ref) => ref.partID),
+              ],
+            ],
+      )
+
+    expect(grouped(compact)).toEqual([
+      ["context", "read_1", "shell_fg"],
+      ["part", "shell_bg_explicit"],
+      ["context", "read_2"],
+      ["part", "shell_bg_timeout"],
+      ["part", "msg_tool_projection_assistant:text:0"],
+    ])
+
+    // Hidden shell placement still hides background shells.
+    expect(grouped(quiet)).toEqual([["part", "msg_tool_projection_assistant:text:0"]])
   })
 
   test("merges adjacent separate reads into one read row split by other parts", () => {

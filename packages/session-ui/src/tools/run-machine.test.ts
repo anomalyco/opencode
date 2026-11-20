@@ -3,6 +3,7 @@ import {
   createShellRunState,
   INITIAL_SUBAGENT_RUN_STATE,
   shellRunProps,
+  shellToolRunning,
   stoppedShell,
   subagentRunProps,
   transitionShellRun,
@@ -127,6 +128,73 @@ describe("transitionShellRun", () => {
     expect(
       viewShellRun(sync(writing, { status: "streaming", input: { command: "ls" }, metadata: {}, output: undefined })),
     ).toMatchObject({ writingPlaceholder: false, command: "ls" })
+  })
+})
+
+describe("shellToolRunning", () => {
+  test("tracks foreground, background, saved, and non-shell tools", () => {
+    const bg: Parameters<typeof shellToolRunning>[0] = {
+      name: "shell",
+      state: {
+        status: "completed",
+        input: { command: "bun run dev", background: true },
+        content: [{ type: "text", text: "Command moved to the background" }],
+        metadata: { status: "running", shellID: "shl_bg" },
+      },
+    }
+
+    expect(shellToolRunning(bg, running(["shl_bg"]))).toBe(true)
+    expect(shellToolRunning(bg, running([]))).toBe(false)
+    expect(shellToolRunning(bg)).toBe(false)
+
+    expect(
+      shellToolRunning(
+        {
+          name: "bash",
+          state: {
+            status: "completed",
+            input: { command: "sleep 60" },
+            content: [{ type: "text", text: "" }],
+            metadata: { status: "running", shellID: "shl_bg" },
+          },
+        },
+        running(["shl_bg"]),
+      ),
+    ).toBe(true)
+
+    expect(
+      shellToolRunning(
+        {
+          name: "shell",
+          state: {
+            status: "completed",
+            input: { command: "bun test" },
+            content: [{ type: "text", text: "ok" }],
+            metadata: { status: "completed", shellID: "shl_bg", exit: 0 },
+          },
+        },
+        running(["shl_bg"]),
+      ),
+    ).toBe(false)
+
+    expect(
+      shellToolRunning({ name: "shell", state: { status: "running", input: { command: "ls" }, metadata: {} } }),
+    ).toBe(true)
+
+    expect(
+      shellToolRunning(
+        {
+          name: "read",
+          state: {
+            status: "completed",
+            input: { path: "README.md" },
+            content: [{ type: "text", text: "" }],
+            metadata: { status: "running", shellID: "shl_bg" },
+          },
+        },
+        running(["shl_bg"]),
+      ),
+    ).toBe(false)
   })
 })
 

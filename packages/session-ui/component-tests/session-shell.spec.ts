@@ -91,3 +91,53 @@ story("keeps Copied for two seconds after the latest click", async ({ mount, pag
   await expect(result.getByRole("button", { name: "Copy output", exact: true })).toBeVisible()
   await expect(page.getByRole("tooltip")).toBeHidden()
 })
+
+story(
+  "shows a live background shell in compact mode while the session is idle and settles on exit",
+  async ({ mount }) => {
+    const root = await mount("current-session-terminal-work--background-shell-compact")
+    const shell = root.locator('[data-timeline-part-id="tool_shell_bg"]')
+    const shimmer = shell.locator('[data-slot="basic-tool-tool-title"] [data-component="text-shimmer"]')
+
+    // Preceding read stays collapsed in its group, while the background shell stays visible and live.
+    await expect(root.getByRole("button", { name: "Used 1 Read", exact: true })).toBeVisible()
+    await expect(shell).toBeVisible()
+    await expect(shimmer).toHaveAttribute("aria-label", "Shell")
+    await expect(shimmer).toHaveAttribute("data-active", "true")
+    await expect(shell.locator('[data-component="shell-submessage"]')).toHaveText("bun run dev")
+    await expect(root.getByText("Started the dev server in the background.", { exact: true })).toBeVisible()
+
+    const handle = await shell.elementHandle()
+
+    await root.getByRole("button", { name: "Complete background shell", exact: true }).click()
+
+    // Once shell.exited arrives, the same row settles in place without remounting and the notice appears.
+    await expect(shimmer).toHaveAttribute("data-active", "false")
+    expect(await handle!.evaluate((node) => node.isConnected)).toBe(true)
+    await expect(root.locator('[data-slot="session-timeline-notice"]')).toContainText("Shell finished")
+    await expect(root.locator('[data-slot="session-timeline-notice"]')).toContainText("bun run dev")
+  },
+)
+
+for (const [preset, selector, verb] of [
+  ["compact", '[data-component="collapsed-tool-group"]', "Explored"],
+  ["detailed", '[data-component="timeline-event-row"]', "Started"],
+] as const) {
+  story(
+    `shimmers a running background shell in the New timeline (${preset}) and settles on exit`,
+    async ({ mount }) => {
+      const root = await mount("timeline-playground--background-shell", { args: { preset } })
+      const row = root.locator(selector)
+      const label = row.locator('[data-slot="context-tool-group-verb"]')
+      const shimmer = label.locator('[data-component="text-shimmer"]')
+
+      await expect(shimmer).toHaveAttribute("aria-label", verb)
+      await expect(shimmer).toHaveAttribute("data-active", "true")
+
+      await root.getByRole("button", { name: "Complete background shell", exact: true }).click()
+
+      await expect(shimmer).toHaveCount(0)
+      await expect(label).toHaveText(verb)
+    },
+  )
+}

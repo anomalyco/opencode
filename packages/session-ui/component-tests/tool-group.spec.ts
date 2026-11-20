@@ -288,3 +288,23 @@ for (const width of [840, 390]) {
       .toBe(true)
   })
 }
+
+story(
+  "shimmers a collapsed group while a background shell inside it is running and settles on exit",
+  async ({ mount }) => {
+    const root = await mount("current-tool-group--background-shell-group")
+    const group = root.locator('[data-component="collapsed-tool-group"]')
+    const header = group.locator('[data-component="context-tool-group-trigger"]')
+    const title = header.locator('[data-slot="basic-tool-tool-title"]')
+    const shimmer = title.locator('[data-component="text-shimmer"]')
+
+    await expect(header).toHaveAttribute("aria-label", "Used 2 Read, Shell")
+    await expect(shimmer).toHaveAttribute("aria-label", "Read, Shell")
+    await expect(shimmer).toHaveAttribute("data-active", "true")
+
+    await root.getByRole("button", { name: "Complete background shell", exact: true }).click()
+
+    await expect(shimmer).toHaveCount(0)
+    await expect(title).toHaveText("Read, Shell")
+  },
+)

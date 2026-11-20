@@ -73,6 +73,7 @@ import { createShellFollower } from "./shell-output"
 import {
   createShellRunState,
   shellRunProps,
+  shellToolRunning,
   subagentRunProps,
   transitionShellRun,
   transitionSubagentRun,
@@ -417,7 +418,8 @@ export function ExaOutput(props: { output?: string }) {
 export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
-  | { type: "notice" | "shell" | "text"; id: string; render: () => JSX.Element }
+  | { type: "shell"; id: string; running?: boolean; render: () => JSX.Element }
+  | { type: "notice" | "text"; id: string; render: () => JSX.Element }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -436,10 +438,20 @@ export function CurrentContextToolGroup(props: {
   patchGroupKey?: (tools: SessionMessageAssistantTool[]) => string
 }) {
   const i18n = useI18n()
+  const data = useData()
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
 
+  const shellActive = createMemo(
+    () =>
+      tools().some((tool) => shellToolRunning(tool, data.shellRunning)) ||
+      props.parts.some((part) => part.type === "shell" && part.running === true),
+  )
+
   const pending = createMemo(
-    () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
+    () =>
+      props.busy ||
+      shellActive() ||
+      tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
 
   const names = createMemo(() =>
@@ -634,7 +646,7 @@ export function CurrentContextToolGroup(props: {
               <Show when={label().title}>
                 {(title) => (
                   <span data-slot="basic-tool-tool-title">
-                    <Show when={thinking()} fallback={title()}>
+                    <Show when={thinking() || shellActive()} fallback={title()}>
                       <TextShimmer text={title()} active />
                     </Show>
                   </span>

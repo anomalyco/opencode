@@ -1,3 +1,5 @@
+import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { Predicate } from "effect"
 import { stripAnsi } from "./ansi"
 
 /** A shell tool call as the renderer decoded it: tool state, input and metadata. */
@@ -22,6 +24,23 @@ export type ShellRunProps = {
 // `completed` is an agent shell that finished in the foreground; the others are direct user shells. A backgrounded agent
 // shell reports `running` for good, so its output keeps coming from the shell.
 const SAVED_STATUSES = new Set(["completed", "exited", "timeout", "killed"])
+
+/** Whether a shell tool call is still running, including one that moved to the background. */
+export function shellToolRunning(
+  tool: Pick<SessionMessageAssistantTool, "name" | "state">,
+  shellRunning?: (id: string) => boolean,
+) {
+  if (tool.name !== "shell" && tool.name !== "bash") return false
+
+  if (tool.state.status === "streaming" || tool.state.status === "running") return true
+
+  if (tool.state.status !== "completed" || !shellRunning) return false
+  const metadata = tool.state.metadata
+
+  if (Predicate.isString(metadata?.status) && SAVED_STATUSES.has(metadata.status)) return false
+
+  return Predicate.isString(metadata?.shellID) && shellRunning(metadata.shellID) === true
+}
 
 export function shellRunProps(tool: ShellTool, shellRunning: (id: string) => boolean): ShellRunProps {
   const shellID = tool.metadata.shellID

@@ -343,3 +343,42 @@ export const PatchFollowUps = {
     )
   },
 }
+
+export const BackgroundShellGroup = {
+  args: { running: true },
+  render: (args: { running: boolean }) => {
+    const [open, setOpen] = createSignal(false)
+    const [running, setRunning] = createSignal(args.running)
+    createEffect(() => setRunning(args.running))
+
+    const parts = [
+      storyTool("group_bg_read", "read", "completed", { path: "package.json" }),
+      storyTool(
+        "group_bg_shell",
+        "shell",
+        "completed",
+        { command: "bun run dev", background: true },
+        {
+          output: "Command moved to the background (shell ID: shell_group_bg).",
+          metadata: { status: "running", shellID: "shell_group_bg" },
+        },
+      ),
+    ]
+
+    return (
+      <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
+        <div class="flex gap-3">
+          <button type="button" onClick={() => setRunning(false)}>
+            Complete background shell
+          </button>
+        </div>
+        <CurrentSessionProviders
+          document={storyDocument(parts)}
+          shellRunning={(id) => id === "shell_group_bg" && running()}
+        >
+          <CurrentContextToolGroup parts={parts} busy={false} open={open()} onOpenChange={setOpen} />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
+}

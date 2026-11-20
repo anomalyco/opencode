@@ -1,6 +1,7 @@
-import { For, Show, createEffect, createMemo, on, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { storyDocument, storyTool } from "../../storybook/current-session-scenarios"
 import { CurrentSessionProviders } from "../../storybook/current-session-story"
 import { timelinePresets } from "../../timeline/detail"
 import { SessionTimeline } from "../../timeline/session-timeline"
@@ -294,4 +295,44 @@ function Segmented<T extends string | number>(props: {
       </div>
     </div>
   )
+}
+
+export const BackgroundShell = {
+  args: { preset: defaultPreset },
+  argTypes: { preset: { options: timelinePresets.map((preset) => preset.id) } },
+  render: (args: { preset: PresetID }) => {
+    const [running, setRunning] = createSignal(true)
+    const detail = createMemo(() => timelinePresets.find((preset) => preset.id === args.preset)!.value)
+
+    const document = createMemo(() => ({
+      ...storyDocument([
+        storyTool("next_read", "read", "completed", { path: "package.json" }),
+        storyTool(
+          "next_shell_bg",
+          "shell",
+          "completed",
+          { command: "bun run dev", background: true },
+          {
+            output: "Command moved to the background (shell ID: shell_next_bg).",
+            metadata: { status: "running", shellID: "shell_next_bg" },
+          },
+        ),
+        { type: "text", text: "Started the dev server in the background." },
+      ]),
+      status: { type: "idle" as const },
+    }))
+
+    return (
+      <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6" data-timeline="next">
+        <div class="flex gap-3">
+          <button type="button" onClick={() => setRunning(false)}>
+            Complete background shell
+          </button>
+        </div>
+        <CurrentSessionProviders document={document()} shellRunning={(id) => id === "shell_next_bg" && running()}>
+          <NextSessionTimeline document={document()} timelineDetail={detail()} />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
 }
