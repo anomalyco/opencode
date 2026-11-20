@@ -1,216 +1,123 @@
-// Differential oracle for mini's transcript: runs each case through TypeScript's createSessionTransport and prints
-// the commits it appends and the footer state after each event. Usage: bun M.6-transcript.ts <cases.json>
-// A case is { thinking, tools, active, history, inbox, events }; the output is one { commits, states } per case.
+// Runs each case of mini's transcript property test through TypeScript's createSessionTransport and prints the
+// commits it appends and the footer's phase, status and usage after the hydration and each event.
+// Usage: bun M.6-transcript.ts <cases.json>
 import { createSessionTransport } from "../../../tui/src/mini/stream-v2.transport"
 
-type Case = {
-  thinking: boolean
-  tools: boolean
-  active: boolean
-  history: unknown[]
-  inbox: unknown[]
-  events: any[]
-}
+const realSetTimeout = globalThis.setTimeout
+// The transport waits 250 ms before it reconnects; the oracle does not.
+globalThis.setTimeout = ((fn: () => void, ms?: number) => realSetTimeout(fn, ms === 250 ? 0 : ms)) as typeof setTimeout
 
 function feed() {
-  const values: any[] = []
+  const values: unknown[] = []
   let closed = false
-  let wake: (() => void) | undefined
+  let wake = () => {}
   const stream = (async function* () {
     while (!closed || values.length > 0) {
-      if (values.length === 0) {
-        await new Promise<void>((resolve) => {
-          wake = resolve
-        })
-        continue
-      }
-      yield values.shift()
+      if (values.length === 0) await new Promise<void>((resolve) => (wake = resolve))
+      else yield values.shift()
     }
   })()
-  const poke = () => {
-    wake?.()
-    wake = undefined
-  }
   return {
     stream,
-    push(value: unknown) {
-      values.push(value)
-      poke()
-    },
-    close() {
-      closed = true
-      poke()
-    },
+    push: (value: unknown) => (values.push(value), wake()),
+    close: () => ((closed = true), wake()),
   }
 }
 
-// The transport waits 250 ms before it reconnects; the oracle does not.
-const realSetTimeout = globalThis.setTimeout
-globalThis.setTimeout = ((fn: () => void, ms?: number, ...rest: unknown[]) =>
-  realSetTimeout(fn, ms === 250 ? 0 : ms, ...rest)) as typeof setTimeout
-
-const ok = <T>(data: T) => Promise.resolve(data)
-
-function client(input: Case, list: () => unknown[], inbox: () => unknown[], subscribe: () => AsyncGenerator) {
+async function run(input: any) {
+  const feeds = [feed()]
+  const list = { history: input.history, inbox: input.inbox }
+  const commits: unknown[] = []
+  const states: unknown[] = []
+  let footer: any = { phase: "idle", status: "", usage: null }
+  let settled = () => {}
+  const ok = (data: unknown) => Promise.resolve(data)
   const location = { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } }
-  return {
-    event: { subscribe },
-    message: {
-      list: (request: any) => ok({ data: request.sessionID === "ses_1" ? list().toReversed() : [], cursor: {} }),
-    },
+  const sdk = {
+    event: { subscribe: () => feeds.at(-1)!.stream },
+    message: { list: () => ok({ data: list.history.toReversed(), cursor: {} }) },
     permission: { list: () => ok([]) },
     form: { list: () => ok({ location, data: [] }) },
-    experimental: { session: { wait: () => ok(undefined) } },
-    model: { default: () => ok({ location, data: undefined }) },
     session: {
       active: () => ok(input.active ? { ses_1: { type: "running" } } : {}),
-      inbox: { list: (request: any) => ok(request.sessionID === "ses_1" ? inbox() : []) },
+      inbox: { list: () => ok(list.inbox) },
       form: { list: () => ok([]) },
       message: { get: () => Promise.reject(new Error("no message")) },
-      get: () => Promise.reject(new Error("no session")),
       list: () => ok({ location, data: [] }),
-      interrupt: () => ok(undefined),
     },
   }
-}
-
-const strip = (commit: any) => ({
-  kind: commit.kind,
-  source: commit.source,
-  phase: commit.phase,
-  text: commit.text.toWellFormed(),
-  messageID: commit.messageID ?? null,
-  partID: commit.partID ?? null,
-  tool: commit.tool ?? null,
-  toolState: commit.toolState ?? null,
-  toolError: commit.toolError ?? null,
-  shell: commit.shell?.command ?? null,
-  image: commit.image ?? null,
-  compaction: commit.compaction === true,
-})
-
-async function run(input: Case) {
-  const feeds = [feed()]
-  let subscription = 0
-  let history = input.history
-  let inbox = input.inbox
-  const commits: any[] = []
-  const states: any[] = []
-  const rows: any[] = []
-  let state: { phase: string; status: string; usage: unknown } = { phase: "idle", status: "", usage: null }
-  let wake: (() => void) | undefined
-  const api = {
+  const footerApi = {
     isClosed: false,
     onPrompt: () => () => {},
     onClose: () => () => {},
     event(next: any) {
       if (next.type !== "stream.patch") return
-      const patch = next.patch
-      state = {
-        phase: patch.phase ?? state.phase,
-        status: typeof patch.status === "string" ? patch.status : state.status,
-        usage: "usage" in patch ? (patch.usage ?? null) : state.usage,
+      footer = {
+        phase: next.patch.phase ?? footer.phase,
+        status: typeof next.patch.status === "string" ? next.patch.status : footer.status,
+        usage: "usage" in next.patch ? (next.patch.usage ?? null) : footer.usage,
       }
     },
     append(commit: any) {
-      commits.push(strip(commit))
+      commits.push({
+        kind: commit.kind,
+        source: commit.source,
+        phase: commit.phase,
+        text: commit.text.toWellFormed(),
+        messageID: commit.messageID ?? null,
+        partID: commit.partID ?? null,
+        tool: commit.tool ?? null,
+        toolState: commit.toolState ?? null,
+        toolError: commit.toolError ?? null,
+        shell: commit.shell?.command ?? null,
+        image: commit.image ?? null,
+        compaction: commit.compaction === true,
+      })
     },
     idle: () => Promise.resolve(),
     close() {},
     destroy() {},
   }
-  // The runtime's rememberLocal.
-  const remember = (commit: any) => {
-    const last = rows.at(-1)
-    if (
-      last &&
-      (commit.kind === "assistant" || commit.kind === "reasoning") &&
-      last.commit.kind === commit.kind &&
-      last.commit.source === commit.source &&
-      last.commit.messageID === commit.messageID &&
-      last.commit.partID === commit.partID &&
-      last.commit.tool === commit.tool
-    ) {
-      rows[rows.length - 1] = { commit }
-      return
-    }
-    rows.push({ commit })
-    if (rows.length > 100) rows.shift()
-  }
-  let sentinels = 0
-  const sentinel = () => ({
-    id: `evt_sentinel${sentinels++}`,
-    created: 0,
-    type: "session.renamed",
-    durable: { aggregateID: "ses_1", seq: 0, version: 1 },
-    data: { sessionID: "ses_1", title: "\u0000sentinel" },
-  })
-  // Waits until the transport applied everything pushed before a sentinel.
-  const settle = async (push: (value: unknown) => void) => {
-    const done = new Promise<void>((resolve) => (wake = resolve))
-    push(sentinel())
+  // A rename that marks where the events pushed before it have been applied.
+  const sentinel = { id: "evt_sentinel", type: "session.renamed", data: { sessionID: "ses_1", title: "\u0000" } }
+  const settle = async () => {
+    const done = new Promise<void>((resolve) => (settled = resolve))
+    feeds.at(-1)!.push(sentinel)
     let timer: ReturnType<typeof setTimeout> | undefined
     await Promise.race([done, new Promise((resolve) => (timer = realSetTimeout(resolve, 2000)))])
     clearTimeout(timer)
+    states.push({ commits: commits.length, ...footer })
   }
-  const snapshot = () => states.push({ commits: commits.length, ...state })
   feeds[0]!.push({ id: "evt_connected", type: "server.connected", data: {} })
-  const current = () => feeds.at(-1)!
-  const ready = settle((value) => current().push(value))
+  const ready = settle()
   const transport = await createSessionTransport({
-    sdk: client(
-      input,
-      () => history,
-      () => inbox,
-      () => feeds[subscription++]!.stream,
-    ) as never,
+    sdk: sdk as never,
     sessionID: "ses_1",
     thinking: input.thinking,
     tools: input.tools,
     replay: true,
-    footer: api as never,
-    onCommit: remember,
-    onSessionTitle: (title) => {
-      if (title === "\u0000sentinel") wake?.()
-    },
+    footer: footerApi as never,
+    onSessionTitle: (title) => title === "\u0000" && settled(),
   })
   await ready
-  snapshot()
   for (const event of input.events) {
-    if (event.type === "@resize") {
-      history = event.history
-      inbox = event.inbox
-      await transport.replayOnResize({ localRows: () => rows, reset: async () => {} })
-      snapshot()
+    if (event.type !== "@reconnect") {
+      feeds.at(-1)!.push(event)
+      await settle()
       continue
     }
-    if (event.type === "@reconnect") {
-      history = event.history
-      inbox = event.inbox
-      const previous = current()
-      feeds.push(feed())
-      current().push({ id: "evt_connected", type: "server.connected", data: {} })
-      const done = settle((value) => current().push(value))
-      previous.close()
-      await done
-      snapshot()
-      continue
-    }
-    current().push(event)
-    await settle((value) => current().push(value))
-    snapshot()
+    list.history = event.history
+    const previous = feeds.at(-1)!
+    feeds.push(feed())
+    feeds.at(-1)!.push({ id: "evt_connected", type: "server.connected", data: {} })
+    const done = settle()
+    previous.close()
+    await done
   }
   await transport.close()
   return { commits, states }
 }
 
-const cases: Case[] = await Bun.file(process.argv[2]!).json()
 const results = []
-for (const input of cases) {
-  try {
-    results.push(await run(input))
-  } catch (error) {
-    results.push({ error: String(error) })
-  }
-}
+for (const input of await Bun.file(process.argv[2]!).json()) results.push(await run(input))
 process.stdout.write(JSON.stringify(results))

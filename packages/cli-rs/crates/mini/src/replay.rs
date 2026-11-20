@@ -228,6 +228,8 @@ pub struct Transcript {
     /// With tools hidden, a message's text waits for its step to end, and is dropped when the message turns out
     /// to call tools (`quietText`, `toolMessages`).
     quiet: Vec<(String, Vec<(String, String)>)>,
+    /// With tools hidden, the length of the text a list showed per part: an end buffers only what follows it.
+    quiet_shown: HashMap<String, usize>,
     tool_messages: HashSet<String>,
     /// The session's directory, which tool paths are shown relative to.
     pub directory: Option<String>,
@@ -312,6 +314,7 @@ impl Transcript {
             lost: false,
             local: Vec::new(),
             quiet: Vec::new(),
+            quiet_shown: HashMap::new(),
             tool_messages: HashSet::new(),
             directory: None,
             tool_tracks: HashMap::new(),
@@ -471,6 +474,7 @@ impl Transcript {
         self.shell_ended.clear();
         self.shell_commands.clear();
         self.quiet.clear();
+        self.quiet_shown.clear();
         self.active_compaction = None;
         let mut output = Output::default();
         let local = std::mem::take(&mut self.local);
@@ -714,9 +718,13 @@ impl Transcript {
         if self.finished_tools.contains(&key) {
             return Output::default();
         }
-        if matches!(part.state, ToolPartState::Streaming(_)) {
-            self.tool_tracks
-                .insert(key, ToolTrack { part: part.clone(), output: String::new(), version: 0, started: false });
+        let streaming = |part: &SessionMessageAssistantTool| matches!(part.state, ToolPartState::Streaming(_));
+        if streaming(part) {
+            // A list read after the call started may show it further along already.
+            if self.tool_tracks.get(&key).is_none_or(|track| streaming(&track.part)) {
+                self.tool_tracks
+                    .insert(key, ToolTrack { part: part.clone(), output: String::new(), version: 0, started: false });
+            }
             return Output::default();
         }
         let name = opencode_ui::tool_info::canonical_tool_name(&part.name).to_owned();
@@ -916,6 +924,9 @@ impl Transcript {
                     if visible && text.len() > update.previous.len() {
                         commits.push(text_commit(&fragment, suffix(text, &update.previous)));
                     }
+                    if visible && !self.tools {
+                        self.quiet_shown.insert(part_key(id, &fragment.part_id), text.len());
+                    }
                 }
                 ContentItem::Reasoning(part) => {
                     let text = part.text.as_str();
@@ -1025,7 +1036,8 @@ impl Transcript {
                 let fragment = Fragment::new(message, "text", data.ordinal as u64);
                 let update = self.fragments.end(&fragment, &data.text);
                 if !self.tools {
-                    self.buffer_quiet(message, &fragment.part_id, &data.text, true);
+                    let shown = self.quiet_shown.get(&part_key(message, &fragment.part_id)).copied().unwrap_or(0);
+                    self.buffer_quiet(message, &fragment.part_id, data.text.get(shown..).unwrap_or_default(), true);
                     return Output::default();
                 }
                 if data.text.len() <= update.previous.len() {
