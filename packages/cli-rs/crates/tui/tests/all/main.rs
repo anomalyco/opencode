@@ -79,6 +79,7 @@ mod resize;
 mod review_ms1;
 mod review_ms34;
 mod root;
+mod select_model;
 mod session_links;
 mod session_view;
 mod sessions;

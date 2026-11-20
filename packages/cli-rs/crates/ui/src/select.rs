@@ -490,11 +490,24 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
             Select(inner).scroll_to_selection(false);
         }
     }));
+    // The list's height changed: its box takes the new limits later in this layout, so scroll after it.
+    handle.0.scroll.wrapper_view().on_resize(bind!(weak, |inner, cx, _| {
+        if inner.scroll_after_layout.replace(false) {
+            cx.app().defer(bind!(inner, |inner, _| Select(inner).scroll_to_selection(false)));
+        }
+    }));
     // TS reads the terminal size reactively: the list height, the details' width and the footer follow a resize.
     let resized = app.on_resize(bind!(weak, |inner, _cx, _, _| {
         let select = Select(inner);
         select.render();
-        select.scroll_to_selection(false);
+        // Before layout the box clamps a scroll to its last limits, where a move past the end is the end.
+        let (rows, height) = (select.list_rows().0, select.list_height());
+        let scroll = &select.0.scroll;
+        if scroll.content_view().rect().height == rows as f32 && scroll.wrapper_view().rect().height == height as f32 {
+            select.scroll_to_selection(false);
+        } else {
+            select.0.scroll_after_layout.set(true);
+        }
     }));
     let resizes = app.clone();
     cx.on_close(opentui::keymap::Disposer::new(move || {
@@ -1112,6 +1125,10 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
     fn scroll_to_selection(&self, center: bool) {
         let Some(y) = self.selected_y() else { return };
         let height = f64::from(self.list_height());
+        // A list with no rows shows nothing, and a scroll past its end would stay at the end once it grows.
+        if height == 0.0 {
+            return;
+        }
         let scroll = &self.0.scroll;
         let y = f64::from(y) - scroll.scroll_position().1;
         if center {
