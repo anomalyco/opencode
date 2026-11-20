@@ -5,8 +5,10 @@ import boldLatin from "../../asset/fonts/openmono-bold-latin.woff2"
 import boldCyrillic from "../../asset/fonts/openmono-bold-cyrillic.woff2"
 import boldRest from "../../asset/fonts/openmono-bold-rest.woff2"
 import italicLatin from "../../asset/fonts/openmono-italic-latin.woff2"
+import italicCyrillic from "../../asset/fonts/openmono-italic-cyrillic.woff2"
 import italicRest from "../../asset/fonts/openmono-italic-rest.woff2"
 import boldItalicLatin from "../../asset/fonts/openmono-bold-italic-latin.woff2"
+import boldItalicCyrillic from "../../asset/fonts/openmono-bold-italic-cyrillic.woff2"
 import boldItalicRest from "../../asset/fonts/openmono-bold-italic-rest.woff2"
 import plexMonoLatin from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Regular-Latin1.woff2"
 import ranges from "../../asset/fonts/openmono.json"
@@ -15,9 +17,9 @@ import ranges from "../../asset/fonts/openmono.json"
 // monospace face for every visitor (--font-mono in site.css). script/openmono.py builds each
 // style's files from the app build of OpenMono 1.000, the build OpenCode Desktop takes its files
 // from (no ligatures, every character one cell wide): "latin" (Latin, punctuation, arrows, shapes,
-// box drawing), "cyrillic" (regular and bold only, with the stress marks) and "rest" (the font's
-// other characters), each fetched only when a page uses one of its characters. Every character
-// advances 0.6 em.
+// box drawing and the keys shortcuts name), "cyrillic" (with the stress marks) and "rest" (the
+// font's other characters, such as Greek, Vietnamese and math), each fetched only when a page uses
+// one of its characters. Every character advances 0.6 em.
 export const monoFontLatin = regularLatin
 
 // Settings › Mono font (development only): the family ahead of the stack. IBM Plex Mono loads from
@@ -39,17 +41,21 @@ export const monoFontPreloads: Partial<Record<string, string>> = import.meta.env
  * The overrides are divided by size-adjust, which scales them too. DejaVu Sans Mono (Linux) shares
  * Menlo's metrics. local() matches a face's full or PostScript name, not its family ("Menlo
  * Regular", not "Menlo"). The stand-ins have no unicode-range, so characters OpenMono lacks
- * (Greek, and Cyrillic in italic) set in the scaled system font, at the same advance. Pages get them from
+ * (Hebrew, for one) set in the scaled system font, at the same advance. Pages get them from
  * src/style/fonts.css, which writes them out (test/fonts.test.ts keeps the two the same).
  */
 export const monoFontFaces = [
   ...[
     [regularLatin, regularCyrillic, regularRest, 400, "normal"],
     [boldLatin, boldCyrillic, boldRest, 700, "normal"],
-    [italicLatin, undefined, italicRest, 400, "italic"],
-    [boldItalicLatin, undefined, boldItalicRest, 700, "italic"],
+    [italicLatin, italicCyrillic, italicRest, 400, "italic"],
+    [boldItalicLatin, boldItalicCyrillic, boldItalicRest, 700, "italic"],
   ].flatMap(([latin, cyrillic, rest, weight, style]) =>
-    [[latin, ranges.latin], ...(cyrillic ? [[cyrillic, ranges.cyrillic]] : []), [rest, ranges.rest]].map(
+    [
+      [latin, ranges.latin],
+      [cyrillic, ranges.cyrillic],
+      [rest, ranges.rest],
+    ].map(
       ([url, range]) =>
         `@font-face { font-family: "OpenMono"; src: url(${url}) format("woff2"); font-weight: ${weight}; font-style: ${style}; font-display: swap; unicode-range: ${range}; }`,
     ),

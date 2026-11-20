@@ -4,15 +4,14 @@
 # src/docs/assets/fonts (as OpenMono-<Style>.woff2) and src/asset/fonts/OpenMono-OFL.txt; without one it
 # rebuilds from those copies. The copies are OpenMono 1.000.
 #
-# The files are split by unicode-range like Inter: "latin" (Latin, punctuation, arrows, shapes and box
-# drawing, what the site sets in mono), "cyrillic" (the Russian and Ukrainian pages, and those
-# languages' names in a language menu) and "rest" (every other character the font has), each only
-# fetched when a page uses one of its characters. Regular and bold have all three; the italics have no
-# Cyrillic file, since no page sets Cyrillic in mono italic and its two faces would put the docs'
-# stylesheet over its budget (src/docs/script/build.ts). The ranges are written to
-# src/asset/fonts/openmono.json for mono-fonts.ts; if they change, write them into src/style/fonts.css
-# too (test/fonts.test.ts compares the two). packages/data/app serves copies of the regular and bold
-# files; refresh them too.
+# Each style is three files, split by unicode-range like Inter: "latin" (Latin, punctuation, arrows,
+# shapes and box drawing, what the site sets in mono), "cyrillic" (the Russian and Ukrainian pages,
+# and those languages' names in a language menu) and "rest" (every other character the font has),
+# each only fetched when a page uses one of its characters. No character is left out. OpenCode
+# Desktop's script (packages/app/script/openmono.py) follows the same rules, so both make the same
+# files. The ranges are written to src/asset/fonts/openmono.json for mono-fonts.ts; if they change,
+# write them into src/style/fonts.css too (test/fonts.test.ts compares the two). packages/data/app
+# serves copies of the regular and bold files; refresh them too.
 #
 # The app build has no ligatures and every character one cell wide (0.6 em, like the metric-matched
 # fallbacks), so no CSS feature is needed. Only the layout features for accents are kept.
@@ -40,24 +39,46 @@ styles = {
     "italic": "Italic",
     "bold-italic": "BoldItalic",
 }
-# Left out of every file, so they set in the system font: the one-cell ⇧ is too narrow to read as
-# the Shift key in shortcuts (⌘ and ⌥, its neighbours there, aren't in the font either).
-excluded = {0x21E7}
 latin = [(0x0000, 0x017F), (0x2000, 0x206F), (0x20AC, 0x20AC), (0x2122, 0x2122), (0x2190, 0x21FF), (0x2212, 0x2212), (0x2500, 0x25FF)]
+# The keys that shortcuts name (⌃ ⌘ ⌥ ⌫ ⎋ ⏎, as in Inter's Latin file), which are in the Latin file too: the
+# search box on every page shows ⌘K, and from the "rest" file that one character would cost 124 kB.
+# Desktop's script has no such list, so its Latin files lack these six.
+keys = {0x2303, 0x2318, 0x2325, 0x232B, 0x238B, 0x23CE}
 cyrillic = [(0x0400, 0x052F), (0x1C80, 0x1C8F), (0x2DE0, 0x2DFF), (0xA640, 0xA69F)]
 # The stress marks, which the Cyrillic file has too: a stressed letter such as у́ has no code point of
 # its own, and a browser sets a letter and its mark from one file or falls back for both. (A Latin
 # letter with one of them has a code point of its own, which the Latin file has.)
 stress = {0x0300, 0x0301}
-# Blocks of rare letters and symbols (phonetic letters, Latin Extended-D to G, powerline and legacy
-# computing symbols) where the font has a few scattered characters. There a range runs from the
-# first to the last one, which keeps the stylesheet short: no other file serves the code points
-# between them, so the only cost is that a page using one fetches the "rest" file before falling back.
-sparse = [(0x1D00, 0x1DBF), (0xA720, 0xA7FF), (0xAB30, 0xAB6F), (0xE0B0, 0xE0BF), (0xF880, 0xF89F), (0x10780, 0x107BF), (0x1CC00, 0x1CEBF), (0x1DF00, 0x1DFFF), (0x1FB00, 0x1FBFF)]
+# Blocks where the font has most characters or a few scattered ones, and the ones it lacks are
+# unassigned or rare: Greek, Armenian, phonetic letters, superscripts, currency signs, letterlike
+# and technical symbols, Latin Extended-D to G, double-struck letters and legacy computing symbols.
+# There a range runs on across the code points the font lacks, up to one that another file has,
+# which keeps the stylesheet within the docs' budget (src/docs/script/build.ts). The only cost is
+# that a page using one of the lacking characters fetches the "rest" file before falling back. The
+# ranges around the Powerline characters are exact, as in Desktop, whose icons file has the code
+# points between them.
+sparse = [
+    (0x0370, 0x03FF),
+    (0x0530, 0x058F),
+    (0x1D00, 0x1DBF),
+    (0x1F00, 0x1FFF),
+    (0x2070, 0x209F),
+    (0x20A0, 0x20CF),
+    (0x2100, 0x214F),
+    (0x2300, 0x23FF),
+    (0xA720, 0xA7FF),
+    (0xAB30, 0xAB6F),
+    (0xF880, 0xF89F),
+    (0x10780, 0x107BF),
+    (0x1CC00, 0x1CEBF),
+    (0x1D400, 0x1D7FF),
+    (0x1DF00, 0x1DFFF),
+    (0x1FB00, 0x1FBFF),
+]
 notice = """The openmono-*.woff2 files in this folder are subsets of OpenMono 1.000, made by
 services/site/script/openmono.py from the app build (no ligatures, every
 character one cell wide). OpenMono is Anomaly's typeface, built on Iosevka by
-Belleve Invis. The font declares no Reserved Font Name.
+Renzhi Li (Belleve Invis). The font declares no Reserved Font Name.
 
 """
 
@@ -66,19 +87,22 @@ def within(code, spans):
     return any(a <= code <= b for a, b in spans)
 
 
-def spans(codes):
+def spans(codes, others=frozenset()):
+    """The ranges of some characters: runs of code points, joined across a gap inside one sparse block unless a
+    character of another file is in the gap."""
     found = []
     for code in sorted(codes):
         block = next((span for span in sparse if within(code, [span])), None)
-        if found and (found[-1][1] == code - 1 or (block and within(found[-1][1], [block]))):
+        gap = range(found[-1][1] + 1, code) if found else range(0)
+        if found and (not gap or (block and within(gap[0], [block]) and others.isdisjoint(gap))):
             found[-1][1] = code
             continue
         found.append([code, code])
     return found
 
 
-def ranges(codes):
-    return ", ".join(f"U+{a:04X}" if a == b else f"U+{a:04X}-{b:04X}" for a, b in spans(codes))
+def ranges(codes, others=frozenset()):
+    return ", ".join(f"U+{a:04X}" if a == b else f"U+{a:04X}-{b:04X}" for a, b in spans(codes, others))
 
 
 build = Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else None
@@ -99,14 +123,12 @@ with tempfile.TemporaryDirectory() as folder:
         wide = sorted(code for code, glyph in font.getBestCmap().items() if font["hmtx"][glyph][0] not in (0, 600))
         if wide:
             raise SystemExit(f"Nothing was written. {inputs[file]} is not the one-cell build: {ranges(wide)} are not 600 units wide")
-        codes = set(font.getBestCmap()) - excluded
+        codes = set(font.getBestCmap())
         groups = {
-            "latin": {code for code in codes if within(code, latin)},
+            "latin": {code for code in codes if within(code, latin) or code in keys},
             "cyrillic": {code for code in codes if within(code, cyrillic) or code in stress},
-            "rest": {code for code in codes if not within(code, latin + cyrillic)},
+            "rest": {code for code in codes if not within(code, latin + cyrillic) and code not in keys},
         }
-        if "italic" in name:
-            del groups["cyrillic"]
         for group, chars in groups.items():
             if members.setdefault(group, chars) != chars:
                 raise SystemExit(f"Nothing was written. {inputs[file]} has other {group} characters than the styles before it: {ranges(members[group] ^ chars)}")
@@ -124,13 +146,13 @@ with tempfile.TemporaryDirectory() as folder:
             subsetter.subset(copy)
             copy.flavor = "woff2"
             copy.save(staged / f"openmono-{name}-{group}.woff2")
-    # A wider range must not take a character from another file.
+    # A file's range may run across code points the font lacks, never across another file's characters.
+    others = {group: frozenset().union(*(chars for other, chars in members.items() if other != group)) - members[group] for group in members}
     for group, chars in members.items():
-        added = {code for a, b in spans(chars) for code in range(a, b + 1)} - chars
-        taken = sorted(code for other, others in members.items() if other != group for code in added & others)
+        taken = sorted({code for a, b in spans(chars, others[group]) for code in range(a, b + 1)} & others[group])
         if taken:
             raise SystemExit(f"Nothing was written. The {group} range would take {ranges(taken)} from another file")
-    (staged / "openmono.json").write_text(json.dumps({group: ranges(chars) for group, chars in members.items()}, indent=2) + "\n")
+    (staged / "openmono.json").write_text(json.dumps({group: ranges(chars, others[group]) for group, chars in members.items()}, indent=2) + "\n")
     if licence:
         (staged / "OpenMono-OFL.txt").write_text(notice + licence.read_text())
 
