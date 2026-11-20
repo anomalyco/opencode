@@ -9,18 +9,32 @@ fn palette() -> Palette {
     Palette::read(&Reader::new(&theme, ThemeMode::Dark))
 }
 
+/// A composite state whose decision a transition leaves, with a note: parallel transitions out of it crowd their labels.
+fn processing() -> String {
+    "stateDiagram-v2\n  [*] --> Processing\n  state Processing {\n    [*] --> Validate\n    Validate --> Decision\n    \
+     state Decision <<choice>>\n    Decision --> Accepted: valid\n    Decision --> Rejected: invalid\n    \
+     Accepted --> [*]\n    Rejected --> [*]\n  }\n  note right of Processing\n    Validation and routing happen\n    \
+     inside this composite state.\n  end note\n  Processing --> Complete\n  Complete --> [*]\n"
+        .to_string()
+}
+
 /// The labels of many parallel transitions find their places near their routes, not by scanning the plane.
 #[test]
 fn many_labeled_transitions_render_promptly() {
-    let source = format!(
-        "stateDiagram-v2\n  [*] --> Processing\n  state Processing {{\n    [*] --> Validate\n    Validate --> Decision\n    \
-         Decision --> Accepted: valid\n    Decision --> Rejected: invalid\n    Accepted --> [*]\n    Rejected --> [*]\n  \
-         }}\n  Processing --> Complete\n  Complete --> [*]\n{}",
-        "  Decision --> Rejected: invalid\n".repeat(16)
-    );
+    let source = format!("{}{}", processing(), "  Decision --> Rejected: invalid\n".repeat(16));
     let started = Instant::now();
     assert!(matches!(render(&source, 120, &palette()), Rendered::Diagram(_)));
     assert!(started.elapsed() < Duration::from_secs(3), "{:?}", started.elapsed());
+}
+
+/// Labels of a hundred parallel transitions look up their spots' distance and clearance cell by cell, not route by
+/// route and claim by claim.
+#[test]
+fn a_hundred_labeled_transitions_render_promptly() {
+    let source = format!("{}{}", processing(), "  Decision --> Rejected: invalid\n".repeat(96));
+    let started = Instant::now();
+    assert!(matches!(render(&source, 120, &palette()), Rendered::Diagram(_)));
+    assert!(started.elapsed() < Duration::from_secs(8), "{:?}", started.elapsed());
 }
 
 /// Repeated edges in a flowchart folded for a narrow terminal check their crossings by cell, not route by route.
