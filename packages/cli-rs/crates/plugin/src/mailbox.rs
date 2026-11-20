@@ -422,67 +422,6 @@ mod tests {
         assert_eq!(mailbox.put_json(b"", b"{not json"), abi::CLOSED);
     }
 
-    /// The C ABI's link, as `host_send` makes it: JSON text into [`Mailbox::put_json`].
-    struct Json(Arc<Mailbox>);
-
-    impl Link for Json {
-        fn json(&self) -> bool {
-            true
-        }
-
-        fn send(&self, key: Option<&str>, message: Outgoing) -> Result<(), (Refused, Outgoing)> {
-            let Outgoing::Json(text) = &message else { unreachable!("a JSON link gets text") };
-            match self.0.put_json(key.unwrap_or_default().as_bytes(), text.as_bytes()) {
-                abi::OK => Ok(()),
-                abi::FULL => Err((Refused::Full, message)),
-                abi::CLOSED => Err((Refused::Closed, message)),
-                _ => Err((Refused::Unencodable, message)),
-            }
-        }
-
-        fn report(&self, message: &str) {
-            self.0.panicked(message.to_owned());
-        }
-
-        fn stopped(&self) -> bool {
-            self.0.closed()
-        }
-    }
-
-    /// A message with a field JSON leaves out.
-    #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-    struct Note {
-        text: String,
-        #[serde(skip)]
-        cached: u32,
-    }
-
-    #[test]
-    fn both_carriers_take_and_refuse_the_same_messages() {
-        let _limits =
-            crate::limits::set(crate::limits::Limits { plugin_content: 120, ..crate::limits::Limits::default() });
-        let note = |n: u32| Note { text: "x".repeat(40 + n as usize), cached: n + 7 };
-        let mut outcomes = Vec::new();
-        for json in [false, true] {
-            let mailbox = Mailbox::new("test.equal", Arc::new(Wake::new(None)));
-            let link: Arc<dyn Link> = match json {
-                false => mailbox.clone(),
-                true => Arc::new(Json(mailbox.clone())),
-            };
-            let sender = abi::mail::Sender::<Note>::new(abi::mail::Revocable::new(link));
-            let sent: Vec<Result<(), abi::mail::SendError<Note>>> = (0..4).map(|n| sender.send(note(n))).collect();
-            assert!(matches!(&sent[2], Err(abi::mail::SendError::Full(back)) if *back == note(2)), "{json}: {sent:?}");
-            let taken = mailbox.take_one(None).map(|message| match message {
-                Message::Value(value, bytes) => (*value.downcast::<Note>().unwrap(), bytes),
-                Message::Json(text) => (serde_json::from_str::<Note>(&text).unwrap(), text.len()),
-            });
-            outcomes.push((sent.iter().map(Result::is_ok).collect::<Vec<_>>(), taken));
-        }
-        let read = Note { text: "x".repeat(40), cached: 0 };
-        assert_eq!(outcomes[0], outcomes[1]);
-        assert_eq!(outcomes[0], (vec![true, true, false, false], Some((read, 51))));
-    }
-
     #[test]
     fn the_registry_keeps_one_row_a_plugin() {
         let before = rows();

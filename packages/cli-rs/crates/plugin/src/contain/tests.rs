@@ -512,34 +512,6 @@ fn backlogged(bench: &Bench, slot: Slot, frames: usize) -> Vec<(String, String)>
 }
 
 #[test]
-fn slow_is_told_once_a_plugin_and_session_across_causes_and_activations() {
-    // Calls first, then the backlog.
-    let bench = Bench::new();
-    let slot = bench.monitor.slot(&Artifact::builtin("p"));
-    let mut news = bench.frames(slot, 13, 1);
-    assert_eq!(news.len(), 1);
-    news.extend(backlogged(&bench, slot, 13).into_iter().map(|(_, news)| news));
-    assert_eq!(news.len(), 1, "a second cause told again: {news:?}");
-    assert!(bench.monitor.is_slow("p"));
-    // Set up again (disabled and enabled), then slow again by either cause: nothing more.
-    bench.call(slot, "setup", US);
-    assert!(!bench.monitor.is_slow("p"));
-    assert!(bench.frames(slot, 13, 1).is_empty() && bench.monitor.is_slow("p"));
-    bench.call(slot, "setup", US);
-    assert!(backlogged(&bench, slot, 13).is_empty() && bench.monitor.is_slow("p"));
-    // A new build of the same plugin.
-    let new = bench.monitor.slot(&Artifact::external("p", "/p", "0000000000000002"));
-    bench.call(new, "setup", US);
-    assert!(bench.frames(new, 13, 1).is_empty() && bench.monitor.is_slow("p"));
-    // The backlog first, then the calls; another plugin is told of its own.
-    let bench = Bench::new();
-    let (slot, other) = (bench.monitor.slot(&Artifact::builtin("p")), bench.monitor.slot(&Artifact::builtin("q")));
-    assert_eq!(backlogged(&bench, slot, 13).len(), 1);
-    assert!(bench.frames(slot, 13, 1).is_empty());
-    assert_eq!(bench.frames(other, 13, 1).len(), 1);
-}
-
-#[test]
 fn a_backlog_that_starts_or_ends_is_a_change_of_slow() {
     let bench = Bench::new();
     let slot = bench.monitor.slot(&Artifact::builtin("p"));

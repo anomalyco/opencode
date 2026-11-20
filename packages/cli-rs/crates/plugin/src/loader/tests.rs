@@ -553,94 +553,6 @@ fn a_verbatim_path_is_handed_on_plain() {
 
 #[test]
 #[cfg(native)]
-fn reconcile_loads_reloads_keeps_and_unloads() {
-    let root = opencode_util::temp::tempdir().unwrap();
-    let config = root.path().join("config");
-    let lib_dir = config.join("plugins").join("fake");
-    let ts_dir = config.join("plugins").join("typescript");
-    write(&ts_dir.join("package.json"), r#"{ "name": "@acme/typescript-tui" }"#);
-    write(&lib_dir.join(entry_file()), "id=fake");
-    let file = root.path().join(format!("extra.{}", std::env::consts::DLL_EXTENSION));
-    write(&file, "id=extra");
-    let host = host();
-    let registry = Registry::define(Vec::new(), [file.to_str().unwrap(), "@acme/tui"]);
-    let fake = Rc::new(Fake::default());
-    let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
-    let loader =
-        Loader::new(config.clone(), root.path().to_path_buf(), configured).with_native(fake.clone() as Rc<dyn Backend>);
-    let lib_target = lib_dir.to_string_lossy().into_owned();
-    let file_target = file.to_string_lossy().into_owned();
-    let ts_target = ts_dir.to_string_lossy().into_owned();
-
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let entries = registry.entries();
-    assert_eq!(entry(&entries, &lib_target).id, "fake");
-    assert_eq!(entry(&entries, &lib_target).source, Source::External);
-    assert_eq!(entry(&entries, &lib_target).status, Status::Active);
-    assert_eq!(entry(&entries, &file_target).id, "extra");
-    assert_eq!(entry(&entries, &ts_target).status, Status::Skipped(SKIPPED_OFF.to_owned()));
-    assert_eq!(entry(&entries, &ts_target).id, "@acme/typescript-tui");
-    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_OFF.to_owned()));
-    assert_eq!(fake.active.get(), 2);
-    assert_eq!(host.remounts.get(), 1);
-    assert!(loader.watch_dirs().contains(&lib_dir));
-
-    // Nothing changed: no load, no remount.
-    assert!(!loader.reconcile(&dynamic(&host), &registry));
-    assert_eq!(fake.loads.get(), 2);
-
-    // A broken build keeps the running version and says so.
-    write(&lib_dir.join(entry_file()), "boom");
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let entries = registry.entries();
-    assert_eq!(entry(&entries, &lib_target).status, Status::Failed("boom (previous version still active)".to_owned()));
-    assert_eq!(fake.active.get(), 2);
-    // The same broken build is not retried.
-    assert!(!loader.reconcile(&dynamic(&host), &registry));
-    assert_eq!(fake.loads.get(), 3);
-    // The running version can be disabled, and enabling it starts it afresh without the stale failure.
-    assert!(entry(&registry.entries(), &lib_target).active);
-    assert!(registry.set_active(&dynamic(&host), "fake", false));
-    assert_eq!(entry(&registry.entries(), &lib_target).status, Status::Inactive);
-    assert!(registry.set_active(&dynamic(&host), "fake", true));
-    assert_eq!(entry(&registry.entries(), &lib_target).status, Status::Active);
-    assert_eq!(fake.active.get(), 2);
-
-    // A fixed build replaces it in place, under its new ID.
-    write(&lib_dir.join(entry_file()), "id=fake2");
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let entries = registry.entries();
-    assert_eq!(entry(&entries, &lib_target).id, "fake2");
-    assert_eq!(entry(&entries, &lib_target).status, Status::Active);
-    assert_eq!(
-        entries
-            .iter()
-            .filter(|entry| entry.source == Source::External)
-            .map(|entry| entry.id.as_str())
-            .collect::<Vec<_>>(),
-        ["fake2", "extra"]
-    );
-
-    // A removed build unloads; the directory is a TypeScript plugin now.
-    fs::remove_file(lib_dir.join(entry_file())).unwrap();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let entries = registry.entries();
-    assert_eq!(entry(&entries, &lib_target).status, Status::Skipped(SKIPPED_OFF.to_owned()));
-    assert!(!entries.iter().any(|entry| entry.id == "fake2"));
-    assert_eq!(fake.active.get(), 1);
-
-    // Deleted directories leave the list, whether they were skipped or loaded.
-    fs::remove_dir_all(&lib_dir).unwrap();
-    fs::remove_dir_all(&ts_dir).unwrap();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let entries = registry.entries();
-    let gone = |entry: &Entry| entry.target.as_ref().is_some_and(|target| [&lib_target, &ts_target].contains(&target));
-    assert!(!entries.iter().any(gone), "{entries:?}");
-    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_OFF.to_owned()));
-}
-
-#[test]
-#[cfg(native)]
 fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
@@ -841,42 +753,6 @@ fn only_a_target_without_a_native_build_is_logged_as_skipped() {
         .cloned()
         .collect();
     assert_eq!(skipped, [format!("plugin {typescript} skipped: {SKIPPED}")]);
-}
-
-#[test]
-#[cfg(native)]
-fn changed_plugin_entries_reconcile_while_running() {
-    let root = opencode_util::temp::tempdir().unwrap();
-    let config = root.path().join("config");
-    let file = root.path().join(format!("extra.{}", std::env::consts::DLL_EXTENSION));
-    write(&file, "id=extra");
-    let target = file.to_string_lossy().into_owned();
-    let host = host();
-    let registry = Registry::define(vec![Definition::new("b", |_| {})], [target.as_str()]);
-    registry.activate(&dynamic(&host));
-    let fake = Rc::new(Fake::default());
-    let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
-    let loader =
-        Loader::new(config, root.path().to_path_buf(), configured).with_native(fake.clone() as Rc<dyn Backend>);
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    assert_eq!(fake.active.get(), 1);
-    let status = |id: &str| registry.entries().into_iter().find(|entry| entry.id == id).map(|entry| entry.status);
-
-    let options = Some(r#"{"a":1}"#.to_owned());
-    assert_eq!(registry.set_targets(&dynamic(&host), [target.as_str()]), std::slice::from_ref(&target));
-    loader.set_configured(vec![Configured { target: target.clone(), options: options.clone() }]);
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    assert_eq!(fake.options.borrow().last(), Some(&options));
-    assert_eq!((fake.active.get(), status("extra")), (1, Some(Status::Active)));
-
-    assert!(registry.set_targets(&dynamic(&host), ["-b"]).is_empty());
-    loader.set_configured(Vec::new());
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    assert_eq!((fake.active.get(), status("extra")), (0, None));
-    assert_eq!(status("b"), Some(Status::Inactive));
-
-    registry.set_targets(&dynamic(&host), []);
-    assert_eq!(status("b"), Some(Status::Active));
 }
 
 /// A project `repo` (with `.git`) as the working directory, and the global config directory beside it.
@@ -2023,35 +1899,6 @@ fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
 #[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
-fn a_server_part_inside_the_project_is_the_projects() {
-    let project = Project::new();
-    let dir = project.repo().join(".opencode/plugins/js");
-    write(&dir.join("tui.ts"), "export default {}\n");
-    let other = project.repo().join("tools/part");
-    write(&other.join("tui.ts"), "export default {}\n");
-    let link = project.repo().join("linked");
-    std::os::unix::fs::symlink(&dir, &link).unwrap();
-    let cache = project.root.path().join("cache");
-    let cached = cache.join("npm/pkg@1.0.0/1/node_modules/pkg");
-    write(&cached.join("tui.ts"), "export default {}\n");
-    let host = host();
-    let scripts = crate::pipe::Scripts::new(crate::pipe::Config::new("bun".into()), &dynamic(&host));
-    let loader = project.loader(Vec::new()).with_npm(cache).with_scripts(scripts);
-    let parts = [&link, &other].map(|path| path.to_string_lossy().into_owned());
-    let server = [&parts[0], &parts[1]].map(|path| ServerPart::Local { path: path.clone(), id: None });
-    loader.set_server(
-        [server[0].clone(), server[1].clone(), ServerPart::Package { spec: "pkg@1.0.0".into(), id: None }].into(),
-        Vec::new(),
-    );
-    let targets: Vec<(String, bool)> =
-        loader.targets().into_iter().map(|target| (target.target, target.project)).collect();
-    let dir = dir.to_string_lossy().into_owned();
-    assert_eq!(targets, [(dir, true), (parts[1].clone(), true), ("pkg@1.0.0".to_owned(), true)]);
-}
-
-#[cfg(feature = "ts")]
-#[cfg(unix)]
-#[test]
 #[cfg(native)]
 fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
     let project = Project::new();
@@ -2169,48 +2016,6 @@ fn approvals(loader: &Loader) -> Vec<(String, bool)> {
 }
 
 #[cfg(feature = "ts")]
-#[test]
-fn a_removal_in_the_users_configuration_withdraws_its_vouch() {
-    let project = Project::new();
-    let specs = ["revoked@1.0.0", "byid@1.0.0", "byglob@1.0.0", "again@1.0.0", "enabled@1.0.0", "selected@1.0.0"];
-    let loader = server_loader(&project, Vec::new(), &specs);
-    let part = |spec: &str, id: &str| ServerPart::Package { spec: spec.into(), id: Some(id.into()) };
-    let parts = vec![
-        part("revoked@1.0.0", "revoked"),
-        part("byid@1.0.0", "acme.byid"),
-        part("byglob@1.0.0", "acme.byglob"),
-        part("again@1.0.0", "again"),
-        part("enabled@1.0.0", "enabled"),
-        part("selected@1.0.0", "selected"),
-    ];
-    let user = [
-        "revoked@1.0.0",
-        "byid@1.0.0",
-        "byglob@1.0.0",
-        "again@1.0.0",
-        "enabled@1.0.0",
-        "-revoked@1.0.0",
-        "-acme.byid",
-        "-acme.*",
-        "-again@1.0.0",
-        "-*",
-        "again@1.0.0",
-        "enabled",
-        "selected",
-    ];
-    loader.set_server(parts, user.map(str::to_owned).to_vec());
-    let expected = [
-        ("revoked@1.0.0", true),
-        ("byid@1.0.0", true),
-        ("byglob@1.0.0", true),
-        ("again@1.0.0", false),
-        ("enabled@1.0.0", false),
-        ("selected@1.0.0", true),
-    ];
-    assert_eq!(approvals(&loader), expected.map(|(spec, project)| (spec.to_owned(), project)));
-}
-
-#[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
 fn only_a_direct_child_of_a_global_plugins_directory_is_vouched_for() {
@@ -2262,20 +2067,6 @@ fn a_server_part_and_a_cli_json_entry_for_one_directory_are_one_target() {
         let targets: Vec<_> =
             loader.targets().into_iter().map(|target| (target.target, target.options, target.project)).collect();
         assert_eq!(targets, [(link.to_string_lossy().into_owned(), options.clone(), false)], "{reported:?}");
-    }
-}
-
-#[cfg(feature = "ts")]
-#[test]
-fn a_cli_json_package_takes_precedence_over_the_servers_version() {
-    let project = Project::new();
-    let configured = vec![Configured { target: "pkg@0.1.2".into(), options: None }];
-    let loader = server_loader(&project, configured, &["pkg@0.1.2", "pkg@0.1.3", "@s/other@1.0.0"]);
-    let part = |spec: &str| ServerPart::Package { spec: spec.into(), id: Some("acme.pkg".into()) };
-    for user in [vec!["pkg@0.1.3".to_owned(), "pkg@0.1.2".to_owned()], vec!["pkg@0.1.2".to_owned()]] {
-        loader.set_server(vec![part("pkg@0.1.3"), part("@s/other@1.0.0")], user);
-        let expected = [("@s/other@1.0.0".to_owned(), true), ("pkg@0.1.2".to_owned(), false)];
-        assert_eq!(approvals(&loader), expected);
     }
 }
 

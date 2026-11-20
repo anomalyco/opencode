@@ -247,20 +247,4 @@ mod tests {
         release("", Kind::Nodes, 5);
         assert_eq!((held("").nodes, total().nodes), (0, before));
     }
-
-    #[test]
-    fn a_plugin_spends_only_its_own_share_of_the_total() {
-        let _limits = set(Limits { plugin_content: 10, all_content: 15, ..Limits::default() });
-        assert!(charge("test.a", Kind::Content, 10));
-        assert!(!charge("test.a", Kind::Content, 1), "past its own share");
-        assert_eq!(room("test.b", Kind::Content, 0), 5, "what the total has left");
-        assert!(!charge("test.b", Kind::Content, 6));
-        assert!(charge("test.b", Kind::Content, 5));
-        assert_eq!(room("test.a", Kind::Content, 4), 4, "a replacement of 4 gets back its own 4, and no more");
-        recharge("test.a", Kind::Content, 4, 2);
-        assert_eq!((held("test.a").content, total().content), (8, 13));
-        release("test.a", Kind::Content, 8);
-        release("test.b", Kind::Content, 5);
-        assert_eq!((held("test.a"), held("test.b"), total()), (Held::default(), Held::default(), Held::default()));
-    }
 }

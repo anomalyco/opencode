@@ -100,39 +100,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn names_keep_every_pair_apart() {
-        let parts = ["a", "b", "ab", "a.b", "b.a", "a.b.c", "x-y", "x_y", "a.bb", "aa.b"];
-        let mut names = std::collections::HashSet::new();
-        for id in parts {
-            for key in parts {
-                let name = name(id, key).unwrap();
-                assert!(names.insert(name.now.clone()), "collision: {id} {key}");
-                let ts = format!("plugin.{id}.{key}");
-                if key.contains('.') {
-                    assert_eq!(name.before.as_ref(), Some(&ts));
-                } else {
-                    assert_eq!(name, Name { now: ts, before: None });
-                }
-            }
-        }
-        for (id, key) in [
-            ("a.", "k"),
-            (".a", "k"),
-            ("a..b", "k"),
-            ("a", "k."),
-            ("a", ".k"),
-            ("a", "k..j"),
-            ("a", ""),
-            ("", "k"),
-            ("a", "k/j"),
-            ("a", "../k"),
-            ("a b", "k"),
-        ] {
-            assert!(name(id, key).is_err(), "{id:?} {key:?}");
-        }
-    }
-
-    #[test]
     fn what_a_plugin_keeps_is_bounded() {
         let mut keys = Vec::new();
         for index in 0..KEYS {

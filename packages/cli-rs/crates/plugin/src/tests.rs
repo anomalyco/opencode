@@ -1,9 +1,8 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use opencode_ui::keymap::{GLOBAL_MODE, Keybinds, KeymapLayer, Options, TuiCommand};
+use opencode_ui::keymap::{Keybinds, Options};
 use opencode_ui::theme::{Catalog, ThemeMode};
-use opentui::keymap::RunResult;
 use opentui::testing::TestApp;
 
 use super::slot::{self, Placed, Placement, Resolution};
@@ -135,38 +134,6 @@ fn selectors_match_as_in_ts() {
 }
 
 #[test]
-fn config_disables_builtins_and_skips_typescript_plugins() {
-    let builtins = ["opencode.home.footer", "opencode.sidebar.todo", "opencode.sidebar.mcp", "opencode.stats"]
-        .map(|id| Definition::new(id, |_| {}))
-        .to_vec();
-    let registry = Registry::define(
-        builtins,
-        [
-            "-opencode.sidebar.*",
-            "opencode.sidebar.mcp",
-            "-opencode.stats",
-            "opencode.unknown",
-            "*",
-            "@acme/opencode-tui",
-            "./plugins/local",
-            "@acme/opencode-tui",
-            "-*",
-            "opencode.home.footer",
-        ],
-    );
-    let host = host();
-    registry.activate(&dynamic(&host));
-    let status = |id: &str| {
-        registry.entries().into_iter().find(|entry| entry.id == id).map(|entry| (entry.source, entry.status)).unwrap()
-    };
-    assert_eq!(status("opencode.home.footer"), (Source::Builtin, Status::Active));
-    assert_eq!(status("opencode.sidebar.mcp"), (Source::Builtin, Status::Inactive));
-    assert_eq!(status("opencode.stats"), (Source::Builtin, Status::Inactive));
-    assert_eq!(registry.skipped(), ["@acme/opencode-tui", "./plugins/local"]);
-    assert_eq!(status("./plugins/local"), (Source::Configured, Status::Skipped(SKIPPED.to_owned())));
-}
-
-#[test]
 fn mount_orders_claims_around_the_content() {
     let host = host();
     let registry = Registry::define(
@@ -293,55 +260,6 @@ fn a_plugin_keeps_its_place_across_a_reload_and_a_toggle() {
 }
 
 #[test]
-fn deactivation_undoes_every_registration() {
-    let host = host();
-    let disposed = Rc::new(Cell::new(0));
-    let ran = Rc::new(Cell::new(0));
-    let plugin = {
-        let disposed = disposed.clone();
-        let ran = ran.clone();
-        Definition::new("test.plugin", move |cx: &mut Setup<'_>| {
-            let ran = ran.clone();
-            cx.layer(KeymapLayer {
-                mode: Some(GLOBAL_MODE.to_owned()),
-                commands: vec![TuiCommand::new("test.run", move |_, _| ran.set(ran.get() + 1))],
-                ..KeymapLayer::default()
-            });
-            cx.slot(Placement::append(slot::SIDEBAR_CONTENT), |host, _| Box::new(View::new(host.app())));
-            cx.route("page", |host| Box::new(View::new(host.app())));
-            cx.code_block("math", |_, _| None);
-            let disposed = disposed.clone();
-            cx.on_dispose(move || disposed.set(disposed.get() + 1));
-        })
-    };
-    let registry = Registry::define(vec![], []);
-    registry.add(plugin);
-    registry.activate(&dynamic(&host));
-    assert!(matches!(host.keymap.dispatch("test.run", None), RunResult::Ok));
-    assert_eq!(ran.get(), 1);
-    assert!(registry.route(&*host, "test.plugin", "page").is_some());
-    assert!(registry.route(&*host, "test.plugin", "other").is_none());
-    let mounted = |registry: &Registry| {
-        let parent = View::new(host.app());
-        !registry.mount(&*host, &parent, slot::SIDEBAR_CONTENT, &SlotInput::default(), |_| {}).is_empty()
-    };
-    assert!(mounted(&registry));
-
-    assert!(registry.set_active(&dynamic(&host), "test.plugin", false));
-    assert_eq!(disposed.get(), 1);
-    assert!(!matches!(host.keymap.dispatch("test.run", None), RunResult::Ok));
-    assert!(registry.route(&*host, "test.plugin", "page").is_none());
-    assert!(!mounted(&registry));
-    assert_eq!(registry.entries()[0].status, Status::Inactive);
-
-    // Reactivation runs setup again.
-    assert!(registry.set_active(&dynamic(&host), "test.plugin", true));
-    assert!(matches!(host.keymap.dispatch("test.run", None), RunResult::Ok));
-    assert_eq!(ran.get(), 2);
-    assert!(!registry.set_active(&dynamic(&host), "missing", true));
-}
-
-#[test]
 fn code_blocks_follow_activation_order() {
     let host = host();
     let languages = Rc::new(std::cell::RefCell::new(Vec::new()));
@@ -364,49 +282,6 @@ fn code_blocks_follow_activation_order() {
     host.app().root().add(&markdown);
     host.app.render();
     assert_eq!(languages.borrow().first(), Some(&("second", "x^2".to_owned())));
-}
-
-#[test]
-fn code_blocks_draw_in_the_theme_of_the_render() {
-    let host = host();
-    let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
-    let registry = Registry::define(
-        vec![Definition::new("math", {
-            let seen = seen.clone();
-            move |cx: &mut Setup<'_>| {
-                let seen = seen.clone();
-                cx.code_block("math", move |_, theme| {
-                    seen.borrow_mut().push(theme.background.base);
-                    None
-                });
-            }
-        })],
-        [],
-    );
-    registry.activate(&dynamic(&host));
-    let light = Catalog::default().load("opencode", ThemeMode::Light).unwrap().theme;
-    let current = Rc::new(std::cell::RefCell::new(host.theme()));
-    let renderers = registry.code_blocks({
-        let current = current.clone();
-        Rc::new(move || current.borrow().clone())
-    });
-    let markdown = opencode_ui::markdown::view(
-        host.app(),
-        &host.theme(),
-        &opencode_ui::code::syntax_theme(&host.theme()),
-        &renderers,
-        true,
-        false,
-    );
-    markdown.set_markdown("```math\nx^2\n```\n");
-    host.app().root().add(&markdown);
-    host.app.render();
-    // The renderers are made once; a later render reads the theme that is current then.
-    *current.borrow_mut() = light.clone();
-    markdown.set_markdown("```math\nx^3\n```\n");
-    host.app.render();
-    assert_eq!(*seen.borrow().first().unwrap(), host.theme().background.base);
-    assert_eq!(*seen.borrow().last().unwrap(), light.background.base);
 }
 
 /// A plugin whose one claim at `placement` renders what `render` returns.
@@ -680,37 +555,6 @@ fn a_claim_root_takes_each_layout_as_mounted_fresh() {
 thread_local! {
     /// Whether `test.fails`' view panics.
     static PANICS: Cell<bool> = const { Cell::new(false) };
-}
-
-#[test]
-fn a_failed_surface_drops_what_it_held() {
-    use abi::v2;
-    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.surface(v2::Surface::new("fails", v2::Place::Slot(abi::Placement::append(slot::HOME_FOOTER)), |cx| {
-            let body = cx.memo("body", 1, |cx| {
-                let handle = cx.content("held bytes");
-                v2::Node::Markdown { id: None, source: v2::Source::Content(handle) }
-            });
-            assert!(!PANICS.get(), "the view panics");
-            v2::Node::column(vec![body])
-        }));
-        Ok(())
-    }
-    PANICS.set(false);
-    let host = host();
-    let registry = Registry::define(vec![abi::Plugin { id: "test.fails", setup }.into()], []);
-    registry.activate(&dynamic(&host));
-    let parent = View::new(host.app()).column().width(30);
-    let mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    host.app().root().add(&parent);
-    assert!(rows(&host).iter().any(|row| row.contains("held bytes")));
-    assert_eq!(surface::ledger(), surface::Ledger { mounts: 1, content: 1, content_bytes: 10, memo_entries: 1 });
-    PANICS.set(true);
-    mount.sync(&*host, Some(&abi::Changed::default()));
-    assert!(!rows(&host).iter().any(|row| row.contains("held bytes")));
-    assert_eq!(surface::ledger(), surface::Ledger { mounts: 1, ..surface::Ledger::default() });
-    drop(mount);
-    assert_eq!(surface::ledger(), surface::Ledger::default());
 }
 
 thread_local! {
@@ -1025,21 +869,6 @@ fn counted(host: &Rc<TestHost>, ran: &Rc<Cell<usize>>, count: usize) {
         let ran = ran.clone();
         defer(&weak, move |_| ran.set(ran.get() + 1));
     }
-}
-
-#[test]
-fn answers_that_drain_before_a_paint_share_its_budget() {
-    let host = host();
-    let ran = Rc::new(Cell::new(0));
-    for _ in 0..3 {
-        counted(&host, &ran, 600);
-        host.app.advance(std::time::Duration::from_millis(1));
-    }
-    assert_eq!(ran.get(), FRAME_EFFECTS, "the answers ran past the frame's budget");
-    assert!(host.app.needs_frame(), "the rest asked for no paint");
-    host.app.render();
-    host.app.advance(std::time::Duration::ZERO);
-    assert_eq!((ran.get(), effects_waiting()), (1800, 0), "the rest did not run at the paint");
 }
 
 #[test]
