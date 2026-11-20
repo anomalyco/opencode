@@ -12147,7 +12147,13 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_events: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recommended_api: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_codemode: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machines: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_memory: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schedules: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
