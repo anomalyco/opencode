@@ -275,6 +275,23 @@ function createSync() {
 }
 
 const CHILD_PAGE = 200
+// TODO: `sequence` and SEQUENCE_HANDOFF_MS patch a rare ordering race: a
+// `!shell` or `/command` sent behind a prompt that waits on a gate (the
+// desktop browser's attachment) must not reach the server before it. That is
+// fine for now and needs no core, server or protocol change. `session.prompt`
+// and `session.compact` already return on durable admission: core's
+// SessionInbox.admit and admitCompaction publish `session.inbox.enqueued`
+// (one `session_inbox` row), SessionExecution.wake starts the work, and its
+// progress arrives as events. `session.shell` and `session.command` do not:
+// Session.shell joins its fiber until the process exits, publishing
+// `session.shell.started` and `session.shell.ended` on the way, and
+// SessionCommand.execute runs the command, whose template may run shell,
+// before it prompts, so their POST stays open for the whole run. Admitting
+// both through the inbox, returning on admission and streaming output and
+// completion as events would make this chain as deterministic as prompt and
+// compact, and both could then go. The gate exists because the browser
+// plugin's `attach` RPC needs an existing session; `session.create` already
+// takes `permissions`, but nothing attaches at creation today.
 // How long a sequenced request that stays open holds its session's send chain
 // once it has left: time to reach the server before the next send does.
 const SEQUENCE_HANDOFF_MS = 250
