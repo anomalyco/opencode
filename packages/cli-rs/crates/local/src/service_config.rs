@@ -296,12 +296,12 @@ impl ServiceConfig {
     /// `remote` is repaired in place, so every reader sees the same route.
     pub fn read(&self) -> io::Result<Info> {
         if let Some(legacy) = &self.legacy
-            && let Ok(text) = fs::read_to_string(legacy)
+            && let Ok(text) = crate::read_text(legacy)
             && Info::parse(&text).is_some()
         {
             let _ = write_new_private(&self.file, &text);
         }
-        let Ok(text) = fs::read_to_string(&self.file) else { return Ok(Info::default()) };
+        let Ok(text) = crate::read_text(&self.file) else { return Ok(Info::default()) };
         if let Some(info) = Info::parse(&text) {
             return Ok(info);
         }
@@ -528,6 +528,12 @@ mod tests {
         assert_eq!(config.read().unwrap(), Info { port: Some(5), ..Info::default() });
         fs::write(&config.file, "not json").unwrap();
         assert_eq!(config.read().unwrap(), Info::default());
+        // An editor's BOM and a Latin-1 byte read as TypeScript reads them.
+        fs::write(&config.file, b"\xef\xbb\xbf{\"port\":5,\"hostname\":\"caf\xe9\"}").unwrap();
+        assert_eq!(
+            config.read().unwrap(),
+            Info { port: Some(5), hostname: Some("caf\u{fffd}".into()), ..Info::default() }
+        );
 
         let dev = super::tests::config(dir.path(), "oc-x");
         let legacy = dev.legacy.clone().unwrap();

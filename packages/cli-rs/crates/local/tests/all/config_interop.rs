@@ -507,6 +507,15 @@ fn cli_config_files_match_typescript() {
             ops: json!([{"get": true}, {"update": [[["theme", "name"], "nord"]]}]),
         },
         Scenario {
+            name: "byte order mark",
+            files: vec![(
+                "config/opencode/cli.json",
+                "\u{feff}{\n  \"keybinds\": { \"session_new\": \"ctrl+n\" },\n  \"mouse\": false\n}\n",
+            )],
+            overlay: None,
+            ops: json!([{"get": true}, {"update": [[["theme", "name"], "x"]]}]),
+        },
+        Scenario {
             name: "broken",
             files: vec![("config/opencode/cli.json", "{ \"theme\": ")],
             overlay: None,
