@@ -68,7 +68,7 @@ export interface Interface {
   readonly run: (request: Request) => Effect.Effect<void, Error>
   // OpenCode stopped running the session, so a turn still waiting for tool results will not get them.
   readonly idle: (sessionID: string) => Effect.Effect<void>
-  // OpenCode deleted the session, so nothing can resume it: stop its process now rather than after IDLE_MS.
+  // OpenCode deleted the session, so nothing can resume it.
   readonly remove: (sessionID: string) => Effect.Effect<void>
 }
 
@@ -498,7 +498,6 @@ export function registry() {
       const entry = entries.get(sessionID)
       entries.delete(sessionID)
       if (entry) yield* closeEntry(entry)
-      // A record saved before a restart has no entry here.
       yield* records.remove(sessionID)
     })
 

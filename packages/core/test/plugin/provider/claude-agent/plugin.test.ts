@@ -65,12 +65,6 @@ const connect = Effect.gen(function* () {
   })
 })
 
-const newSession = Effect.gen(function* () {
-  const location = yield* Location.Service
-  const sessions = yield* Session.Service
-  return yield* sessions.create({ location: { directory: location.directory } })
-})
-
 const claudeModels = Effect.gen(function* () {
   const result: Model.Info[] = []
   const models = yield* Model.Service
@@ -314,6 +308,47 @@ describe("ClaudeAgentPlugin models", () => {
   )
 })
 
+describe("ClaudeAgentPlugin deleted sessions", () => {
+  it.live("deleting a session stops its process and removes what was saved for it", () =>
+    Effect.gen(function* () {
+      const store = yield* storage
+      const claude = FakeClaude.make(
+        [FakeClaude.expectStartup(), FakeClaude.expectTurn(), FakeClaude.expectInterrupt()],
+        { probes: true },
+      )
+      yield* addPlugin(FakeIO.make({ claude }))
+      const location = yield* Location.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ location: { directory: location.directory } })
+      const aisdk = yield* AISDK.Service
+      const sdk = yield* aisdk.runSDK({
+        model: Model.Info.make({
+          ...Model.Info.default(ClaudeProvider.ID, haiku.id),
+          modelID: haiku.id,
+          package: Provider.aisdk(ClaudeProvider.PACKAGE),
+        }),
+        package: ClaudeProvider.PACKAGE,
+        options: {},
+      })
+      const model: LanguageModelV3 = sdk.sdk.languageModel("haiku")
+      const result = yield* Effect.promise(() =>
+        model.doStream({
+          prompt: TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker."),
+          headers: { [RequestKind.SESSION_HEADER]: session.id, [RequestKind.HEADER]: "primary" },
+        }),
+      )
+      yield* Effect.promise(() => TestSessions.collect(result.stream))
+      yield* store.set(`sessions/${session.id}:/claude-work`, { claudeSessionID: "other-folder" })
+      yield* store.set(`accounts/${session.id}`, "/claude-work")
+
+      yield* sessions.remove(session.id)
+      yield* Effect.promise(() => claude.runs[0]!.closed)
+      yield* eventually(store.scan({ prefix: "" }), (saved) => saved.entries.every((entry) => entry.key === "models"))
+      claude.check()
+    }),
+  )
+})
+
 describe("ClaudeAgentPlugin connection", () => {
   it.live("connecting without claude installed asks the user to install it", () =>
     Effect.gen(function* () {
@@ -363,6 +398,12 @@ describe("ClaudeAgentPlugin session hooks", () => {
     messages: [] as Message[],
     options: { maxTokens: 32_000 } as Record<string, unknown>,
     tools: {},
+  })
+
+  const newSession = Effect.gen(function* () {
+    const location = yield* Location.Service
+    const sessions = yield* Session.Service
+    return yield* sessions.create({ location: { directory: location.directory } })
   })
 
   const addAgents = Effect.gen(function* () {
@@ -491,38 +532,6 @@ describe("ClaudeAgentPlugin session hooks", () => {
         decision: { retry: true, delay: 1000 },
       })
       expect(event.decision).toEqual({ retry: false })
-    }),
-  )
-})
-
-describe("ClaudeAgentPlugin deleted sessions", () => {
-  it.live("deleting a session drops its record", () =>
-    Effect.gen(function* () {
-      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
-      const store = yield* storage
-      const sessions = yield* Session.Service
-      const session = yield* newSession
-      yield* store.set(`sessions/${session.id}`, { claudeSessionID: "saved" })
-      yield* sessions.remove(session.id)
-      yield* eventually(store.get(`sessions/${session.id}`), (value) => value === undefined)
-    }),
-  )
-
-  it.live("on start, drops the records of sessions deleted while no instance listened", () =>
-    Effect.gen(function* () {
-      const store = yield* storage
-      const sessions = yield* Session.Service
-      // IDs sort newest first, so the scan checks the kept record before the deleted one.
-      const deleted = yield* newSession
-      const kept = yield* newSession
-      yield* store.set(`sessions/${deleted.id}`, { claudeSessionID: "deleted" })
-      yield* store.set(`sessions/${kept.id}`, { claudeSessionID: "kept" })
-      yield* sessions.remove(deleted.id)
-      expect(yield* store.get(`sessions/${deleted.id}`)).toEqual({ claudeSessionID: "deleted" })
-
-      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
-      yield* eventually(store.get(`sessions/${deleted.id}`), (value) => value === undefined)
-      expect(yield* store.get(`sessions/${kept.id}`)).toEqual({ claudeSessionID: "kept" })
     }),
   )
 })
