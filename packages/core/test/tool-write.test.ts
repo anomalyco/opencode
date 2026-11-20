@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer, Tracer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Tracer } from "effect"
 import { FileMutation } from "@opencode/core/file-mutation"
 import { FileWrite } from "@opencode/core/file-write"
 import { Config } from "@opencode/core/config"
@@ -437,4 +437,35 @@ describe("WriteTool", () => {
       ).pipe(Effect.provideService(Tracer.Tracer, tracer))
     })
   })
+
+  it.live("serializes commit under the shared file transaction lock", () =>
+    withTempDir((tmp) => {
+      const fixture = makeWriteFixture()
+      return withTool(tmp.path, fixture, (registry) =>
+        Effect.gen(function* () {
+          const target = path.join(tmp.path, "locked.txt")
+          const held = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const writeDone = yield* Deferred.make<void>()
+          const fileMutation = yield* FileMutation.Service
+
+          const holder = yield* fileMutation
+            .withLock([target])(Deferred.succeed(held, undefined).pipe(Effect.andThen(Deferred.await(release))))
+            .pipe(Effect.forkChild)
+          yield* Deferred.await(held)
+
+          const writer = yield* executeTool(registry, call({ path: "locked.txt", content: "written" }))
+            .pipe(Effect.tap(() => Deferred.succeed(writeDone, undefined)))
+            .pipe(Effect.forkChild)
+          yield* Effect.yieldNow
+          expect(yield* Deferred.isDone(writeDone)).toBe(false)
+
+          yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(holder)
+          expect(yield* Fiber.join(writer)).toMatchObject({ status: "completed" })
+          expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("written")
+        }),
+      )
+    }),
+  )
 })

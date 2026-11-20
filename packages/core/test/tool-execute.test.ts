@@ -359,6 +359,79 @@ describe("Bun", () => {
     ).toEqual(["Permission denied: edit", "Permission denied: edit"])
     expect(await fs.readdir(tmp.path)).toEqual(["keep.txt"])
   })
+
+  test("Bun.write and Bun.file.delete do not hold the file mutation lock while waiting for permission", async () => {
+    await using tmp = await tmpdir()
+    const target = path.join(tmp.path, "shared.txt")
+    await Bun.write(target, "before\n")
+
+    const writeGate = Promise.withResolvers<void>()
+    const writeParked = Promise.withResolvers<void>()
+    const gatedWrite = {
+      assert: (input: Permission.AssertInput) =>
+        input.action === "edit"
+          ? Effect.promise(async () => {
+              writeParked.resolve()
+              await writeGate.promise
+            })
+          : Effect.void,
+    }
+    const pendingWrite = run(
+      tmp.path,
+      `return await Bun.write("shared.txt", "from-a\\n")`,
+      permissionService(gatedWrite),
+      codeModeServices(tmp.path, gatedWrite),
+    )
+    await writeParked.promise
+
+    const allowAll = { assert: () => Effect.void }
+    expect(
+      await run(
+        tmp.path,
+        `return await Bun.write("shared.txt", "from-b\\n")`,
+        permissionService(allowAll),
+        codeModeServices(tmp.path, allowAll),
+      ),
+    ).toBe(7)
+    expect(await Bun.file(target).text()).toBe("from-b\n")
+
+    writeGate.resolve()
+    await pendingWrite
+    expect(await Bun.file(target).text()).toBe("from-a\n")
+
+    const deleteGate = Promise.withResolvers<void>()
+    const deleteParked = Promise.withResolvers<void>()
+    const gatedDelete = {
+      assert: (input: Permission.AssertInput) =>
+        input.action === "edit"
+          ? Effect.promise(async () => {
+              deleteParked.resolve()
+              await deleteGate.promise
+            })
+          : Effect.void,
+    }
+    const pendingDelete = run(
+      tmp.path,
+      `const handle = Bun.file("shared.txt"); await handle.delete(); return true`,
+      permissionService(gatedDelete),
+      codeModeServices(tmp.path, gatedDelete),
+    )
+    await deleteParked.promise
+
+    expect(
+      await run(
+        tmp.path,
+        `return await Bun.write("shared.txt", "before-delete\\n")`,
+        permissionService(allowAll),
+        codeModeServices(tmp.path, allowAll),
+      ),
+    ).toBe(14)
+    expect(await Bun.file(target).text()).toBe("before-delete\n")
+
+    deleteGate.resolve()
+    await pendingDelete
+    expect(await Bun.file(target).exists()).toBe(false)
+  })
 })
 
 describe("execute output", () => {

@@ -42,6 +42,10 @@ export interface Interface {
   readonly withLock: (
     targets: ReadonlyArray<FileAccess.Place | string>,
   ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E | Environment.Failed, R>
+  /** Monotonic counter incremented whenever a cooperating OpenCode mutation commits to this file. */
+  readonly revision: (target: Pick<FileAccess.Place, "absolute" | "environment">) => number
+  /** Record a direct environment file mutation (such as a patch write, remove, or move) under its lock. */
+  readonly recordMutation: (target: Pick<FileAccess.Place, "absolute" | "environment">) => void
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
   /** Add bytes to the end of a file, creating it when missing. */
   readonly append: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
@@ -87,8 +91,15 @@ export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
   return synced.text
 })
 
-/** Share transaction locks across Location graphs that address the same file. */
+/** Share transaction locks and mutation revisions across Location graphs that address the same file. */
 const transactionLocks = KeyedMutex.makeUnsafe<string>()
+const revisions = new Map<string, number>()
+
+const targetKey = (target: Pick<FileAccess.Place, "absolute" | "environment">) =>
+  FileAccess.key({
+    absolute: AbsolutePath.make(FSUtil.resolve(target.absolute)),
+    environment: target.environment,
+  })
 
 /**
  * Mutation locking is process-local and serializes cooperating OpenCode
@@ -99,28 +110,24 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const access = yield* FileAccess.Service
     const locks = KeyedMutex.makeUnsafe<string>()
+    const revision: Interface["revision"] = (target) => revisions.get(targetKey(target)) ?? 0
+    const recordMutation: Interface["recordMutation"] = (target) => {
+      const key = targetKey(target)
+      revisions.set(key, (revisions.get(key) ?? 0) + 1)
+    }
     const withLock: Interface["withLock"] = (targets) => (effect) =>
       Effect.gen(function* () {
         const places = yield* Effect.forEach(targets, (target) =>
           typeof target === "string" ? access.locate(target) : Effect.succeed(target),
         )
-        return yield* [
-          ...new Set(
-            places.map((target) =>
-              FileAccess.key({
-                absolute: AbsolutePath.make(FSUtil.resolve(target.absolute)),
-                environment: target.environment,
-              }),
-            ),
-          ),
-        ]
+        return yield* [...new Set(places.map(targetKey))]
           .sort()
           .reduceRight((result, file) => transactionLocks.withLock(file)(result), effect)
       })
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        locks.withLock(FileAccess.key(target))(Effect.uninterruptible(effect))
+        locks.withLock(targetKey(target))(Effect.uninterruptible(effect))
 
     const writeResult = (target: Target, existed: boolean): WriteResult => ({
       operation: "write",
@@ -140,6 +147,7 @@ const layer = Layer.effect(
             input.target.absolute,
             typeof input.content === "string" ? new TextEncoder().encode(input.content) : input.content,
           )
+          recordMutation(input.target)
           return writeResult(input.target, existed)
         }),
       )
@@ -163,12 +171,13 @@ const layer = Layer.effect(
             input.target.absolute,
             new TextEncoder().encode(Bom.join(next.text, bom)),
           )
+          recordMutation(input.target)
           return { ...writeResult(input.target, current !== undefined), bom }
         }),
       ),
     )
 
-    return Service.of({ withLock, write, append, writeTextPreservingBom })
+    return Service.of({ withLock, revision, recordMutation, write, append, writeTextPreservingBom })
   }),
 )
 

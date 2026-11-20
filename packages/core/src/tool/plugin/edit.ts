@@ -13,6 +13,7 @@ import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { toolFailure } from "../runtime.js"
+import type { FileAccess } from "../../file-access.js"
 import { FileMutation } from "../../file-mutation.js"
 import { FileWrite } from "../../file-write.js"
 import { Permission } from "../../permission.js"
@@ -297,75 +298,88 @@ export const Plugin = {
               }
 
               const target = yield* fileWrite.target(input.path, context)
-
-              const original = yield* FileMutation.readEditableText(target.environment.files, target.absolute).pipe(
-                Effect.catchTag("Environment.NotFound", () =>
-                  Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
-                ),
-                Effect.catchTag("FileMutation.InvalidUtf8Error", (error) =>
-                  Effect.fail(new ToolFailure({ message: `Unable to edit ${input.path}: ${error.message}` })),
-                ),
-                Effect.catchTag("Environment.WrongKind", (error) =>
-                  error.actual === "directory"
-                    ? Effect.fail(new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` }))
-                    : Effect.fail(new ToolFailure({ message: `Unable to edit ${input.path}`, error })),
-                ),
-              )
-              const source = original.text
-              // Strings that differ only in \r ask to change line endings themselves, so they apply to the exact
-              // bytes. Every other edit matches the LF view Read shows the model and keeps the file's endings.
-              const endingsOnly = input.oldString.replaceAll("\r", "") === input.newString.replaceAll("\r", "")
-              const { matches, replace } = endingsOnly
-                ? { matches: findOccurrences(source, input.oldString), replace: () => input.newString }
-                : matchView(source, input.oldString, input.newString)
-              const replacements = matches.length
-              const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
-                .toReversed()
-                .reduce(
-                  (content, match) => `${content.slice(0, match.start)}${replace(match)}${content.slice(match.end)}`,
-                  source,
-                )
+              const revision = fileMutation.revision(target)
+              const initial = prepareEdit((yield* readSource(target, input.path)).text, input)
               const preview =
-                replacements > 0 && (replacements === 1 || input.replaceAll === true)
-                  ? fileDiff(target.resource, source, replaced)
+                initial.replacements > 0 && (initial.replacements === 1 || input.replaceAll === true)
+                  ? fileDiff(target.resource, initial.source, initial.replaced)
                   : undefined
               yield* fileWrite.authorize(target, context, preview)
-              if (replacements === 0) {
-                // The hint shows file contents, so only when reading this file is already allowed.
-                const readable = yield* permission.allows({
-                  action: "read",
-                  resources: [target.resource],
-                  save: ["*"],
-                  ...Permission.invocation(context),
-                })
-                const hint = readable ? missHint(source, input.oldString, input.newString) : undefined
-                return yield* new ToolFailure({
-                  message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.${hint ? `\n\n${hint}` : ""}`,
-                })
-              }
-              if (replacements > 1 && input.replaceAll !== true) {
-                return yield* new ToolFailure({
-                  message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
-                })
-              }
-              if (replaced === source) {
-                return yield* new ToolFailure({
-                  message: endingsOnly
-                    ? `No changes to apply: ${input.path} already has those line endings.`
-                    : `No changes to apply: the edit leaves ${input.path} unchanged. Line endings follow the file; to change them, write \\r explicitly in oldString or newString.`,
-                })
-              }
-              const result = yield* fileWrite.commit(target, replaced)
-              const formatted =
-                result.formatted ?? (yield* FileMutation.readText(target.environment.files, target.absolute)).text
-              return {
-                output: `Edited ${result.resource} (${replacements} replacement${replacements === 1 ? "" : "s"})`,
-                metadata: { files: [fileDiff(result.resource, source, formatted)] },
-              }
-            }).pipe(fileMutation.withLock([input.path]), Effect.mapError(toolFailure(`Unable to edit ${input.path}`)))
+
+              return yield* fileMutation.withLock([target])(
+                Effect.gen(function* () {
+                  const prepared =
+                    fileMutation.revision(target) === revision
+                      ? initial
+                      : prepareEdit((yield* readSource(target, input.path)).text, input)
+                  if (prepared.replacements === 0) {
+                    // The hint shows file contents, so only when reading this file is already allowed.
+                    const readable = yield* permission.allows({
+                      action: "read",
+                      resources: [target.resource],
+                      save: ["*"],
+                      ...Permission.invocation(context),
+                    })
+                    const hint = readable ? missHint(prepared.source, input.oldString, input.newString) : undefined
+                    return yield* new ToolFailure({
+                      message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.${hint ? `\n\n${hint}` : ""}`,
+                    })
+                  }
+                  if (prepared.replacements > 1 && input.replaceAll !== true) {
+                    return yield* new ToolFailure({
+                      message: `Found ${prepared.replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
+                    })
+                  }
+                  if (prepared.replaced === prepared.source) {
+                    return yield* new ToolFailure({
+                      message: prepared.endingsOnly
+                        ? `No changes to apply: ${input.path} already has those line endings.`
+                        : `No changes to apply: the edit leaves ${input.path} unchanged. Line endings follow the file; to change them, write \\r explicitly in oldString or newString.`,
+                    })
+                  }
+                  const result = yield* fileWrite.commit(target, prepared.replaced)
+                  const formatted =
+                    result.formatted ?? (yield* FileMutation.readText(target.environment.files, target.absolute)).text
+                  return {
+                    output: `Edited ${result.resource} (${prepared.replacements} replacement${prepared.replacements === 1 ? "" : "s"})`,
+                    metadata: { files: [fileDiff(result.resource, prepared.source, formatted)] },
+                  }
+                }),
+              )
+            }).pipe(Effect.mapError(toolFailure(`Unable to edit ${input.path}`)))
           },
         }),
       )
       .pipe(Effect.orDie)
   }),
+}
+
+function readSource(target: FileAccess.Target, displayPath: string) {
+  return FileMutation.readEditableText(target.environment.files, target.absolute).pipe(
+    Effect.catchTag("Environment.NotFound", () =>
+      Effect.fail(new ToolFailure({ message: `File not found: ${displayPath}` })),
+    ),
+    Effect.catchTag("FileMutation.InvalidUtf8Error", (error) =>
+      Effect.fail(new ToolFailure({ message: `Unable to edit ${displayPath}: ${error.message}` })),
+    ),
+    Effect.catchTag("Environment.WrongKind", (error) =>
+      error.actual === "directory"
+        ? Effect.fail(new ToolFailure({ message: `Path is a directory, not a file: ${displayPath}` }))
+        : Effect.fail(new ToolFailure({ message: `Unable to edit ${displayPath}`, error })),
+    ),
+  )
+}
+
+function prepareEdit(source: string, input: typeof Input.Type) {
+  // Strings that differ only in \r ask to change line endings themselves, so they apply to the exact
+  // bytes. Every other edit matches the LF view Read shows the model and keeps the file's endings.
+  const endingsOnly = input.oldString.replaceAll("\r", "") === input.newString.replaceAll("\r", "")
+  const { matches, replace } = endingsOnly
+    ? { matches: findOccurrences(source, input.oldString), replace: () => input.newString }
+    : matchView(source, input.oldString, input.newString)
+  const replacements = matches.length
+  const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
+    .toReversed()
+    .reduce((content, match) => `${content.slice(0, match.start)}${replace(match)}${content.slice(match.end)}`, source)
+  return { source, endingsOnly, replacements, replaced }
 }
