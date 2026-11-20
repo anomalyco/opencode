@@ -261,12 +261,6 @@
       pointer-events: none;
     }
 
-    &:hover [data-slot="timeline-event-item-title"] {
-      text-decoration: underline;
-      text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
-      text-underline-offset: 2px;
-    }
-
     &:focus-visible {
       outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
@@ -294,54 +288,42 @@
     flex-shrink: 0;
   }
 
-  /* A subagent's status chip: its outline, fill and glyph say what happened, so no status word follows the title.
-     Updated is info blue softened toward muted; the others use their state colors as they are. */
+  /* A subagent's status: a bar and word, in the state's color, say what happened, so no status word follows the
+     title. Updated is info blue softened toward muted; the others use their state colors as they are. */
   [data-slot="timeline-event-item-status"] {
-    box-sizing: border-box;
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
-    gap: 4px;
-    height: 18px;
-    padding: 0 6px;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    font-size: 12px;
+    gap: 6px;
     font-weight: 530;
-    line-height: 16px;
     white-space: nowrap;
 
-    [data-slot="timeline-event-item-glyph"] {
+    &::before {
+      content: "";
       flex-shrink: 0;
-      width: 12px;
-      height: 12px;
-      margin-left: -1px;
-      color: currentColor;
+      width: 3px;
+      height: 10px;
+      border-radius: 999px;
+      background: currentColor;
     }
 
     &[data-state="started"] {
-      border-color: color-mix(in srgb, var(--v2-text-text-muted) 35%, transparent);
       color: var(--v2-text-text-faint);
     }
 
     &[data-state="updated"] {
-      border-style: dashed;
-      border-color: color-mix(in srgb, var(--v2-state-fg-info) 50%, transparent);
       color: color-mix(in srgb, var(--v2-state-fg-info) 70%, var(--v2-text-text-muted));
     }
 
     &[data-state="completed"] {
-      background: color-mix(in srgb, var(--v2-state-fg-success) 16%, transparent);
       color: var(--v2-state-fg-success);
     }
 
     &[data-state="failed"] {
-      background: var(--v2-state-bg-danger);
       color: var(--v2-state-fg-danger);
     }
 
     &[data-state="stopped"] {
-      border-color: color-mix(in srgb, var(--v2-text-text-muted) 55%, transparent);
       color: var(--v2-text-text-muted);
     }
   }
@@ -377,16 +359,6 @@
 
     > [data-slot="timeline-event-item"] {
       gap: 8px;
-      margin-inline: -6px;
-      padding-inline: 6px;
-      border-radius: var(--radius-sm);
-
-      @media (hover: hover) {
-        &:hover:not([aria-disabled]) {
-          cursor: pointer;
-          background-color: var(--v2-overlay-simple-overlay-hover);
-        }
-      }
     }
   }
 

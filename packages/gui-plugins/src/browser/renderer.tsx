@@ -526,7 +526,11 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     const text = () => {
       const tab = page()
 
-      return !tab?.url || tab.url === "about:blank" ? ctx.t("tab.new") : tabTitle(tab, saved()) || tab.url
+      // A tab a link opened keeps this label until its page names itself, so it is relabelled once: never with
+      // Chromium's name for a document that has not named itself, which is its address.
+      const unnamed = !tab?.url || tab.url === "about:blank" || model()?.unnamed({ key: session }, id)
+
+      return unnamed ? ctx.t("tab.new") : tabTitle(tab, saved()) || tab.url
     }
 
     const icon = () => {

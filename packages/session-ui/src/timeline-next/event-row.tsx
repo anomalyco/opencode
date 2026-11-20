@@ -1,6 +1,6 @@
 import { Badge } from "@opencode/ui/badge"
 import { useI18n } from "@opencode/ui/context/i18n"
-import { For, Match, Show, Switch, createMemo } from "solid-js"
+import { For, Show, createMemo } from "solid-js"
 import { BasicTool } from "../components/basic-tool"
 import { useData } from "../context/data"
 import { taskAgentName } from "../tools/tool-renderer"
@@ -134,10 +134,9 @@ export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?:
         open()
       }}
     >
-      {/* A subagent leads with its status chip. */}
+      {/* A subagent leads with its status. */}
       <Show when={props.event.kind === "subagent"}>
         <span data-slot="timeline-event-item-status" data-state={state()}>
-          <StatusGlyph state={state()} />
           {i18n.t(statusKeys[state()])}
         </span>
       </Show>
@@ -151,42 +150,5 @@ export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?:
         <Badge variant="danger">{i18n.t("ui.toolErrorCard.failed")}</Badge>
       </Show>
     </a>
-  )
-}
-
-/** The status chip's glyph: ring, ↻, ✓, ✕ or ■, drawn at 12px in the chip's text color. */
-function StatusGlyph(props: { state: SubagentState }) {
-  return (
-    <svg data-slot="timeline-event-item-glyph" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <Switch>
-        <Match when={props.state === "started"}>
-          <circle cx="8" cy="8" r="4.5" stroke="currentColor" stroke-width="1.4" />
-        </Match>
-        <Match when={props.state === "updated"}>
-          <path
-            d="M12.5 8a4.5 4.5 0 1 1-1.4-3.25M12.5 3v2.5H10"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </Match>
-        <Match when={props.state === "completed"}>
-          <path
-            d="M3.8 8.3l2.7 2.7 5.7-6"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </Match>
-        <Match when={props.state === "failed"}>
-          <path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-        </Match>
-        <Match when={props.state === "stopped"}>
-          <rect x="4.75" y="4.75" width="6.5" height="6.5" rx="1.2" fill="currentColor" />
-        </Match>
-      </Switch>
-    </svg>
   )
 }

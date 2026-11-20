@@ -16,6 +16,7 @@ import {
   sessionSuspended,
   sessionTabs,
   sessionUnavailable,
+  tabUnnamed,
   transition,
   type Attachment,
   type Event,
@@ -633,6 +634,30 @@ describe("browser pane machine", () => {
 
     for (const state of [start, ready(start), replaced, paused])
       expect(transition(state, { type: "session.retry", sessionKey: key }).state).toBe(state)
+  })
+
+  test("a tab a link opens joins the strip at once, after the tab the desktop names, and keeps its new-tab label until its page is named", () => {
+    const start = ready()
+    const placed = { tabID: tabB, after: tabA }
+    // The inventory as main reports it: with the tab it lists for the first time and where, and the tabs with no name yet.
+    const report = (state: State, browser: Browser.State, rest: { unnamed?: Browser.TabID[]; placed?: typeof placed }): Event => ({ type: "pane.state", sessionKey: key, attempt: attempt(state), state: browser, error: undefined, ...rest })
+    const strips = (effects: readonly MachineEffect[]) => effects.filter((effect) => effect.type === "sync-strip")
+    const labels = (state: State) => [tabA, tabB, tabC].map((tabID) => tabUnnamed(state, key, tabID))
+    // A link opened B: the strip adds it now, after A.
+    const opened = transition(start, report(start, inventory(tab(tabA), tab(tabB), tab(tabC)), { placed, unnamed: [tabB] }))
+    expect(strips(opened.effects)).toEqual([{ type: "sync-strip", sessionKey: key, keep: [tabA, tabB, tabC], open: [tabB, tabC], placed }])
+    expect(labels(opened.state)).toEqual([false, true, false])
+    // Its page loads: the strip changes nothing, and the label stays.
+    const loading = transition(opened.state, report(opened.state, inventory(tab(tabA), { ...tab(tabB), loading: true }, tab(tabC)), { unnamed: [tabB] }))
+    expect(strips(loading.effects)).toEqual([{ type: "sync-strip", sessionKey: key, keep: [tabA, tabB, tabC], open: [] }])
+    expect(labels(loading.state)).toEqual([false, true, false])
+    // Its page named itself: the label is the page's from now on.
+    const named = transition(loading.state, report(loading.state, inventory(tab(tabA), tab(tabB), tab(tabC)), {}))
+    expect(strips(named.effects)).toEqual([{ type: "sync-strip", sessionKey: key, keep: [tabA, tabB, tabC], open: [] }])
+    expect(labels(named.state)).toEqual([false, false, false])
+    // A tab the strip has already is not placed again: it stays where the person sees it.
+    const again = transition(named.state, report(named.state, inventory(tab(tabA), tab(tabB)), { placed }))
+    expect(strips(again.effects)).toEqual([{ type: "sync-strip", sessionKey: key, keep: [tabA, tabB], open: [] }])
   })
 
   // A tab drawn from the saved state can be closed or selected before the desktop reports it. With no inventory there

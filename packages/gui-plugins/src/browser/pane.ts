@@ -562,6 +562,8 @@ export function createBrowserPane(input: {
 
       if (reason) throw new Error(reason)
 
+      if (command.type === "navigate") dispatchBinding(binding, { type: "tab.addressed", tabID: command.tabID })
+
       if ("tabID" in command && command.type !== "tabs.focus") page(binding, command.tabID)?.personCommand()
       const closing = command.type === "tabs.close" ? page(binding, command.tabID) : undefined
 
@@ -807,6 +809,8 @@ export function createBrowserPane(input: {
       readonly opener?: Browser.TabID
       /** Shows the opener's tab why an address this tab was opened for could not open. */
       readonly refused?: (url: string) => void
+      /** The tab whose page or link opened this one, which it stands next to, and whether it takes the pane. */
+      readonly beside?: { readonly tabID: Browser.TabID; readonly front: boolean }
     } = {},
   ) {
     const entry = selectBinding(machine.state, binding)
@@ -878,7 +882,7 @@ export function createBrowserPane(input: {
 
           if (current()) await execute(binding, { action, files: [] }, handle.abort.signal, "user")
         },
-        open: async (url, background) => { if (current()) await execute(binding, { action: { type: "tabs.open", url, ...(background && { focus: false }) }, files: [] }, handle.abort.signal, "user", "new", childActivity(activity)) },
+        open: async (url, background) => { if (current()) await execute(binding, { action: { type: "tabs.open", url, ...(background && { focus: false }) }, files: [] }, handle.abort.signal, "user", "new", { activity: childActivity(activity), beside: id }) },
         verifier: input.verifier,
       },
       embeds: input.embeds,
@@ -933,9 +937,11 @@ export function createBrowserPane(input: {
         if (handle.shared) input.profile.extensionTabs.hidden(page.contents.id)
       },
       popup: (popupOptions, background, activity, refused) => {
-        const popup = create(binding, { initialize: false, popupOptions, activity, opener: id, refused })
+        const agent = activityOwner(activity) === "agent"
+        // The person's tab stands beside this one. The agent's goes to the end, as its own tabs do.
+        const popup = create(binding, { initialize: false, popupOptions, activity, opener: id, refused, beside: agent ? undefined : { tabID: id, front: !background } })
 
-        if (activityOwner(activity) === "agent") {
+        if (agent) {
           announce(binding, popup.state().id, "none", !background)
 
           return popup.contents
@@ -968,7 +974,7 @@ export function createBrowserPane(input: {
     }))
     downloads.set(page.contents.id, page.download)
     input.profile.permissions.set(page.contents.id, page.permissions)
-    dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
+    dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state(), beside: options.beside })
     // Straight to the window, not through the server report: the embed is local to this desktop.
     emit(binding, { type: "embed", tabID: id, embed: page.embed })
     // A page that does not become ready reports that itself, through `fail`.
@@ -1015,7 +1021,7 @@ export function createBrowserPane(input: {
           new AbortController().signal,
           "user",
           "new",
-          page.childActivity(),
+          { activity: page.childActivity() },
         )
 
         const created = Option.getOrUndefined(Schema.decodeUnknownOption(Schema.Struct({ id: Browser.TabID }))(opened.value))
@@ -1054,7 +1060,7 @@ export function createBrowserPane(input: {
     dispatchBinding(binding, { type: "tab.published", tabID, attempt, tab: page.state() })
   }
 
-  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity, created?: (id: Browser.TabID) => void): Promise<Browser.Result> {
+  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", from?: { readonly activity: TabActivity; readonly beside?: Browser.TabID }, created?: (id: Browser.TabID) => void): Promise<Browser.Result> {
     const action = command.action
 
     const present = (tabID: Browser.TabID, reveal: "none" | "tab" = "none", active = true) => {
@@ -1160,7 +1166,12 @@ export function createBrowserPane(input: {
         }
       }
 
-      const opened = create(binding, { activity: createdActivity(origin, inherited) })
+      // A tab a page's own link or menu opened stands next to that page's tab; any other goes to the end.
+      const opened = create(binding, {
+        activity: createdActivity(origin, from?.activity),
+        beside: from?.beside === undefined ? undefined : { tabID: from.beside, front: action.focus !== false },
+      })
+
       const tabID = opened.state().id
       const shown = agentTabShow(action)
 
