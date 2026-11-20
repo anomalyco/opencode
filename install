@@ -298,18 +298,19 @@ download_with_progress() {
 
     trap 'trap - RETURN; if [ "$cursor_hidden" = "true" ]; then printf "\033[?25h" >&4; exec 4>&-; cursor_hidden=false; fi' RETURN
 
-    local length
-    length=$(curl -fsIL "$url" 2>/dev/null | grep -i '^content-length:' | tail -n 1 | tr -dc '0-9' || true)
+    local headers="${output}.headers"
 
     # Poll the file size on a timer so rendering cost stays fixed no matter how many bytes arrive.
     # Read the size with ls because busybox wc -c reads the whole file.
-    # Redirect in bash instead of passing -o to curl so confined builds (e.g. snap) don't need host /tmp access.
-    curl -fsL "$url" > "$output" &
+    # Bash opens both files so a confined curl (e.g. snap) with a private /tmp can still write them.
+    # npm's CDN omits content-length on HEAD, so read it from this request's headers.
+    curl -fsL -D /dev/stderr "$url" > "$output" 2> "$headers" &
     download_curl_pid=$!
 
-    local bytes
+    local length bytes
     while kill -0 "$download_curl_pid" 2>/dev/null; do
         if [ -f "$output" ]; then
+            length=$(grep -i '^content-length:' "$headers" 2>/dev/null | tail -n 1 | tr -dc '0-9' || true)
             bytes=$(ls -ln "$output" | awk '{print $5}')
             print_progress "$bytes" "${length:-0}"
         fi
