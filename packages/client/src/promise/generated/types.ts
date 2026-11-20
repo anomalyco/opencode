@@ -2644,6 +2644,7 @@ export type ConfigEntry =
           full_codemode?: boolean
           machines?: boolean
           home_memory?: boolean
+          sqlite_fts?: boolean
           schedules?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
