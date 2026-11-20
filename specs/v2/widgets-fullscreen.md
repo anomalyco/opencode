@@ -18,7 +18,7 @@ always visible on touch devices. It is not offered for submitted or dismissed wi
 ## Full screen
 
 - **Mobile:** a full-screen cover above the session (status bar hidden, safe areas respected), rotation allowed
-  while it's open (landscape for games). Exit with the close button, swipe down, or the system back gesture.
+  while it's open (landscape for games). Exit with the floating close button, swipe down, or the system back gesture.
 - **Desktop:** the widget fills the whole window and the window enters the OS full-screen mode (macOS native full
   screen; F11-style elsewhere). Exit with Esc, the close button, or leaving OS full screen.
 - **Web host:** the Fullscreen API on the widget's container; Esc exits.
@@ -27,9 +27,14 @@ always visible on touch devices. It is not offered for submitted or dismissed wi
 
 ## Layout
 
-The root node fills the screen. `canvas` and `shader` nodes gain an optional `fill?: boolean`: with `fill: true`
-they grow to take the remaining height in full screen (their `height` is the minimum); without it they keep their
-`height`. Width is the available width as usual. Content taller than the screen scrolls.
+The root node fills the screen. In full screen every `canvas` and `shader` grows by default to share the remaining
+height equally (its `height` is the minimum); `fill: false` keeps it at its `height`. Width is the available width as
+usual. Content taller than the screen scrolls. Inline (not full screen), sizes are unchanged.
+
+## Chrome
+
+Full screen has no title bar: only a small floating close button in a top corner (safe areas respected, never covering
+more than its own hit area). The widget's own view supplies any title.
 
 ## Telling the program
 
