@@ -65,7 +65,7 @@ export const format = (message: SessionMessage.CompactionCompleted) => {
   if (entries.length === 0) return ""
   return [
     "<subagents>",
-    "Direct subagent sessions of this session, with their status when this checkpoint was written. Pass a sessionID to the subagent tool to continue one:",
+    "Direct subagent sessions of this session, with their status when this checkpoint was written:",
     ...entries.map(formatEntry),
     "</subagents>",
   ].join("\n")

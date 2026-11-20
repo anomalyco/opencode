@@ -235,7 +235,7 @@ Earlier work
     const metadata = { subagents: [{ id: "ses_child", agent: "explore", title: "Search", status: "running" }] }
     const block = [
       "<subagents>",
-      "Direct subagent sessions of this session, with their status when this checkpoint was written. Pass a sessionID to the subagent tool to continue one:",
+      "Direct subagent sessions of this session, with their status when this checkpoint was written:",
       "- ses_child (explore, running): Search",
       "</subagents>",
     ].join("\n")
