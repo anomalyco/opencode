@@ -91,6 +91,17 @@ body`)
     expect(parsed.data.model).toEqual({ providerID: "example", model: "chat" })
   })
 
+  test("keeps block scalar headers with commented colons during repair", () => {
+    const parsed = ConfigMarkdown.parse(`---
+description: Review changes. Keywords: review, audit
+prompt: |- # see: docs
+  Review carefully.
+---
+body`)
+    expect(parsed.data.description).toBe("Review changes. Keywords: review, audit")
+    expect(parsed.data.prompt).toBe("Review carefully.")
+  })
+
   test("still throws on unclosed or mismatched flow collections", () => {
     expect(() => ConfigMarkdown.parse("---\nmodel: { providerID: example\n---\nbody")).toThrow()
     expect(() => ConfigMarkdown.parse("---\ndescription: [Tag} text\n---\nbody")).toThrow()

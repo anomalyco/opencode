@@ -1,12 +1,6 @@
 export * as ConfigMarkdown from "./markdown.js"
 
 import matter from "gray-matter"
-
-type FlowState = {
-  stack: Array<"]" | "}">
-  quote: '"' | "'" | undefined
-}
-
 export function parse(content: string) {
   // Passing options bypasses gray-matter's module-global content cache, which
   // it populates before parsing: a failed YAML parse poisons the entry and
@@ -64,6 +58,11 @@ function isValidYaml(line: string) {
   } catch {
     return false
   }
+}
+
+type FlowState = {
+  stack: Array<"]" | "}">
+  quote: '"' | "'" | undefined
 }
 
 function scanFlow(text: string, state: FlowState) {
