@@ -151,6 +151,9 @@ Source that builds on the 2.0 SDK builds on every later 2.x SDK. So every contra
 On the wire, a later 2.x adds only optional fields, request types the host sends only to a library of that minor,
 and node kinds an author lowers for an older host with `v2::View::or`.
 
+`plugin!`, the C ABI's types and the `runtime` shims are behind the default feature `c-abi`. A plugin crate keeps the
+default features; the host takes the crate without them, and turns `c-abi` on with native plugins.
+
 The crate's `host` feature, for the host's own build, keeps the types exhaustive so the host must handle each
 addition. It is outside this promise: a plugin never turns it on. `tests/sdk.rs` builds a pinned author crate,
 `tests/pinned`, against this SDK and against what a later 2.x adds (the `next` feature), so a change that breaks that

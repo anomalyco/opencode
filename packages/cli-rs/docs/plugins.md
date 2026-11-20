@@ -15,7 +15,7 @@ Schema, `crates/plugin-abi/schema/v2.json`. A *carrier* runs a plugin against it
 | Carrier | A plugin is | A call crosses as | Host code |
 | --- | --- | --- | --- |
 | Linked Rust | an `abi::Plugin { id, setup }` compiled into the client | Rust values | `Builtin` in `crates/plugin/src/lib.rs` |
-| C ABI | a shared library that exports `opencode_plugin_v2`: Rust with `plugin!`, or C on `crates/plugin-abi/include/opencode_plugin.h` | JSON in byte buffers | `crates/plugin/src/loader/native.rs` |
+| C ABI | a shared library that exports `opencode_plugin_v2`: Rust with `plugin!`, or C on `crates/plugin-abi/include/opencode_plugin.h` | JSON in byte buffers | `crates/plugin/src/loader/native.rs`, and `loader/requests.rs`, which it shares with the pipe |
 | Luau | a directory with `plugin.toml` and `init.luau` | Luau tables, in a sandboxed VM for each activation | `crates/plugin/src/luau` |
 | Pipe | a TypeScript TUI plugin, unmodified | framed messages to one Bun process for all TS plugins, the *JS host* | `crates/plugin/src/pipe` |
 
@@ -26,8 +26,16 @@ Schema, `crates/plugin-abi/schema/v2.json`. A *carrier* runs a plugin against it
 - **A TS plugin gets the context the TypeScript client gives it** from a compatibility layer, which turns its JSX
   into contract trees. [`F16-v2-compat-layer.md`](../parity/deviations/F16-v2-compat-layer.md) lists what does not
   map.
-- **The JS host and Luau are cargo features**, `ts` and `luau`, both on by default. `OPENCODE_PLUGIN_JS=0` and
-  `OPENCODE_PLUGIN_LUAU=0` turn them off at run time. A plugin of a missing carrier is listed as skipped.
+- **The JS host, Luau and the C ABI are cargo features**, `ts`, `luau` and `native` (of `opencode-cli`,
+  `opencode-tui` and `opencode-plugin`), all on by default. `OPENCODE_PLUGIN_JS=0`, `OPENCODE_PLUGIN_LUAU=0` and
+  `OPENCODE_PLUGIN_NATIVE=0` turn them off at run time. A plugin of a missing carrier is listed as skipped.
+- **Without `native`** no library is opened and no `dlopen` of a plugin is linked: a library target, a project's
+  included, is skipped and never asked about; `plugin dev` and `plugin test` say the build lacks native plugins; the
+  crash guard (`opencode-native` as the parent of its TUI) starts only for Luau plugins. `native` turns on
+  `opencode-plugin-abi`'s `c-abi`, the C ABI's types and shims, which the linked built-ins do not use. A static musl
+  build (`RUSTFLAGS="-C target-feature=+crt-static"`) needs `native` off: `.cargo/config.toml` links musl dynamically
+  for every build, as target rustflags cannot follow features, and `crates/util/src/dl.rs` refuses a static one only
+  with `native`. On macOS only a build with `native` needs the `disable-library-validation` entitlement.
 
 `setup` runs once for each activation. The same registrations on each language:
 
