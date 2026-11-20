@@ -1768,8 +1768,8 @@ describe("Automation", () => {
         expect(yield* bad('await tools.shell({ command: "pwd" })')).toMatchObject({
           reason: "Tool shell cannot be used inside an automation",
         })
-        expect(yield* bad("return await tools.opencode.automation_create({})")).toMatchObject({
-          reason: "Tool opencode.automation_create cannot be used inside an automation",
+        expect(yield* bad("return await tools.automation.create({})")).toMatchObject({
+          reason: "Tool automation.create cannot be used inside an automation",
         })
         expect(
           yield* Effect.flip(
