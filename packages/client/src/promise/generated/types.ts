@@ -2646,6 +2646,7 @@ export type ConfigEntry =
           full_codemode?: boolean
           machines?: boolean
           home_memory?: boolean
+          compaction_subagents?: boolean
           sqlite_fts?: boolean
           schedules?: boolean
           part_rows?: boolean
