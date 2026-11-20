@@ -107,19 +107,6 @@ describe("model dialog flyout", () => {
     expect(selectFlyoutOpenId(placed.state)).toBe("a")
   })
 
-  test("a sub-pixel position change does not replace the placed position", () => {
-    const shown = transitionDialogFlyout(createDialogFlyoutState(), { type: "highlighted", id: "a" })
-    const placed = transitionDialogFlyout(shown.state, { type: "placed", attempt: 1, position }).state
-    const jittered = { left: position.left + 0.25, top: position.top - 0.25 }
-
-    expect(transitionDialogFlyout(placed, { type: "placed", attempt: 1, position: jittered }).state).toBe(placed)
-
-    const moved = { left: position.left + 1, top: position.top }
-    expect(transitionDialogFlyout(placed, { type: "placed", attempt: 1, position: moved }).state).toMatchObject({
-      position: moved,
-    })
-  })
-
   test("a single arrow press moves the flyout at once", () => {
     const down = flyoutReplay(keyboardOpened("a"), [
       { type: "keyboard", id: "a", repeat: false },

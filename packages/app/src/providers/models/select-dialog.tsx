@@ -744,7 +744,9 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     const x = rect.left - parseFloat(rendered.style.left)
     const y = rect.top - parseFloat(rendered.style.top)
 
-    return x || y ? { left: position.left - x, top: position.top - y } : position
+    // Under a pixel is rounding residue from a non-100% zoom, not a containing block. Subtracting it moves the flyout,
+    // which changes the residue, so the placement never settles.
+    return Math.abs(x) < 1 && Math.abs(y) < 1 ? position : { left: position.left - x, top: position.top - y }
   }
 
   const dispatch = (event: DialogFlyoutEvent) => {

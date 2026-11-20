@@ -267,14 +267,7 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
       if (!event.position)
         return { state: { status: "closed", attempt, input: state.input, warm: false }, effects: NO_EFFECTS }
 
-      // At non-100% zoom the measured position carries sub-pixel residue, so an exact compare never settles and the
-      // placement effect loops until the stack overflows.
-      if (
-        state.position &&
-        Math.abs(state.position.left - event.position.left) < 0.5 &&
-        Math.abs(state.position.top - event.position.top) < 0.5
-      )
-        return same(state)
+      if (state.position?.left === event.position.left && state.position.top === event.position.top) return same(state)
 
       return same({ ...state, position: event.position })
     case "open.due":
