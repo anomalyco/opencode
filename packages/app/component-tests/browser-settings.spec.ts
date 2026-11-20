@@ -6,20 +6,37 @@ const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 const modules = {
   fixture: source("../../gui-plugins/src/browser/settings.fixture.tsx"),
   ui: source("../src/runtime/plugin/ui.tsx"),
+  // The app's own confirmation dialog, which `Dialogs.confirm` shows, and the language it reads.
+  dialogs: source("../src/runtime/plugin/dialogs.tsx"),
+  language: source("../src/runtime/i18n/language.tsx"),
 }
 
 // Any story loads the app styles; the fixture mounts the real Settings > Browser page beside it. `target` is the entry
 // a settings search or the command palette is revealing.
 async function open(
   page: Page,
-  options?: { target?: string; extensions?: boolean; installed?: boolean; historyKept?: boolean; file?: { imported: number; failed: number } | "unreadable" },
+  options?: {
+    target?: string
+    extensions?: boolean
+    installed?: boolean
+    historyKept?: boolean
+    clearFails?: boolean
+    file?: { imported: number; failed: number } | "unreadable"
+  },
 ) {
   await page.evaluate(
     async (input) => {
-      const [{ mountBrowserSettings }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
+      const [{ mountBrowserSettings }, { ui }, { PluginConfirmDialog }, { LanguageProvider }] = await Promise.all([
+        import(input.modules.fixture),
+        import(input.modules.ui),
+        import(input.modules.dialogs),
+        import(input.modules.language),
+      ])
 
       mountBrowserSettings({
         ui,
+        host: { Confirm: PluginConfirmDialog, LanguageProvider },
+        clearFails: input.options?.clearFails,
         target: input.options?.target,
         extensions: input.options?.extensions,
         installed: input.options?.installed,
@@ -36,6 +53,13 @@ async function open(
     root,
     advanced: root.getByRole("button", { name: /^Advanced/ }),
     stored: root.getByTestId("browser-settings-stored"),
+    data: root.getByRole("region", { name: "Browser data", exact: true }),
+    // The red button, and the question it asks before anything is cleared.
+    clear: root.getByRole("region", { name: "Browser data", exact: true }).getByRole("button", { name: "Clear browsing data", exact: true }),
+    confirm: page.getByRole("dialog", { name: "Clear browsing data?", exact: true }),
+    // How often main was asked to clear. The dialog is modal, so this is hidden from the accessibility tree meanwhile.
+    clears: root.getByTestId("browser-settings-clears"),
+    visits: root.getByTestId("browser-settings-visits"),
   }
 }
 
@@ -99,18 +123,72 @@ story("each switch is named by its row's title, and each row says what it does i
   await expect(sites.locator("p")).toHaveText("Agent and remote server tabs ask again. Clearing browsing data keeps saved permissions.")
 })
 
-story("clearing browsing data that left the history behind says so in its row, and still forgets the window's last pages", async ({ page }) => {
-  const view = await open(page, { target: "settings-browser-cookies", historyKept: true })
-  const data = view.root.getByRole("region", { name: "Browser data", exact: true })
-  const clear = data.getByRole("button", { name: "Clear browsing data", exact: true })
+story("the red button asks first: Cancel, Escape, Enter on Cancel and a click outside clear nothing, and the confirm clears once", async ({ page }) => {
+  const view = await open(page, { target: "settings-browser-cookies" })
+  const cancel = view.confirm.getByRole("button", { name: "Cancel", exact: true })
+  const confirm = view.confirm.getByRole("button", { name: "Clear data", exact: true })
 
-  await expect(view.root.getByTestId("browser-settings-visits")).toHaveText("1")
-  await expect(data.getByText("0 cookies. Sign-ins are shared across sessions.", { exact: true })).toBeVisible()
-  await clear.click()
+  await expect(view.data.getByText("0 cookies. Sign-ins are shared across sessions.", { exact: true })).toBeVisible()
+  await view.clear.click()
+  // One title, one line, two buttons: no close button, as the app's other confirmations.
+  await expect(view.confirm.getByText("This signs you out of all sites and deletes history in OpenCode, leaving your other browsers untouched.", { exact: true })).toBeVisible()
+  await expect(view.confirm.getByRole("button")).toHaveText(["Cancel", "Clear data"])
+  // As the app's destructive confirmations do, it opens on Cancel, so Enter does not clear by accident.
+  await expect(cancel).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(confirm).toBeFocused()
+  await page.keyboard.press("Shift+Tab")
+  await page.keyboard.press("Enter")
+  await expect(view.confirm).toHaveCount(0)
+  await expect(view.clears).toHaveText("0")
+
+  for (const dismiss of [
+    () => cancel.click(),
+    () => page.keyboard.press("Escape"),
+    // Outside the dialog: the dimmed page behind it.
+    () => page.mouse.click(8, 8),
+  ]) {
+    await view.clear.click()
+    await expect(cancel).toBeFocused()
+    await dismiss()
+    await expect(view.confirm).toHaveCount(0)
+    await expect(view.clears).toHaveText("0")
+  }
+
+  // Nothing ran: the row still shows the count, the window's last pages are there, and the button is ready again.
+  await expect(view.data.getByText("0 cookies. Sign-ins are shared across sessions.", { exact: true })).toBeVisible()
+  await expect(view.visits).toHaveText("1")
+  await expect(view.clear).toBeEnabled()
+
+  // Confirmed, with a second press on its way: main is asked once, and the row says how it ended.
+  await view.clear.click()
+  await confirm.dblclick()
+  await expect(view.confirm).toHaveCount(0)
+  await expect(view.data.getByText("Cleared browsing data.", { exact: true })).toBeVisible()
+  await expect(view.clears).toHaveText("1")
+  await expect(view.visits).toHaveText("0")
+})
+
+story("a confirmed clear that left the history behind says so in its row", async ({ page }) => {
+  const kept = await open(page, { target: "settings-browser-cookies", historyKept: true })
+
+  await kept.clear.click()
+  await kept.confirm.getByRole("button", { name: "Clear data", exact: true }).click()
   // The sign-ins and site data went, so the row does not call it failed; it says what stayed.
-  await expect(data.getByText("Cleared browsing data. The history could not be cleared.", { exact: true })).toBeVisible()
-  await expect(view.root.getByTestId("browser-settings-visits")).toHaveText("0")
-  await expect(clear).toBeEnabled()
+  await expect(kept.data.getByText("Cleared sign-ins and site data, but history could not be cleared.", { exact: true })).toBeVisible()
+  await expect(kept.visits).toHaveText("0")
+  await expect(kept.clear).toBeEnabled()
+})
+
+story("a confirmed clear that main rejects says that it could not clear, and can be tried again", async ({ page }) => {
+  const view = await open(page, { target: "settings-browser-cookies", clearFails: true })
+
+  await view.clear.click()
+  await view.confirm.getByRole("button", { name: "Clear data", exact: true }).click()
+  await expect(view.data.getByText("Couldn't clear browsing data. Try again.", { exact: true })).toBeVisible()
+  await expect(view.clears).toHaveText("1")
+  await expect(view.visits).toHaveText("1")
+  await expect(view.clear).toBeEnabled()
 })
 
 // A cookie file is cookies, so its row counts them: the one place an import says "cookies".
