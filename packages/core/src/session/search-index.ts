@@ -243,6 +243,10 @@ const Folds = [
 const fold = (column: string) =>
   `${Folds.reduce((text, [from, to]) => `replace(${text}, '${from}', '${to}')`, column)} AS ${column}`
 
+/** Applies the same extra-letter ASCII folds that {@link SourceView} indexes into `session_search`. */
+export const foldText = (value: string) =>
+  Folds.reduce((text, [from, to]) => text.replaceAll(from, to), value)
+
 /**
  * One row per title or message with text to index: user text, a finished assistant's text (part rows, then inline
  * content), a completed compaction's summary. Rows that are not JSON objects are passed rather than failing the write
@@ -456,6 +460,12 @@ const creatable = (db: DatabaseService, layout: Layout) =>
     )
     .pipe(capability)
 
+/** True when an error is a generic `SQLITE_ERROR` (code 1: syntax error, unknown function/option/table). */
+export const isQueryError = (error: unknown) => {
+  const native = sqlError(error)?.reason
+  return native?._tag === "UnknownError" && primaryCode(native) === 1
+}
+
 /**
  * Only a generic SQLITE_ERROR (unknown module, option or function) means unsupported; locks, read-only files and
  * corruption are defects.
@@ -464,9 +474,8 @@ const capability = <A, E>(effect: Effect.Effect<A, E>) =>
   effect.pipe(
     Effect.as(undefined),
     Effect.catch((error) => {
-      const native = sqlError(error)?.reason
-      if (native?._tag !== "UnknownError" || primaryCode(native) !== 1) return Effect.die(error)
-      return Effect.succeed({ reason: String(native.cause) })
+      if (!isQueryError(error)) return Effect.die(error)
+      return Effect.succeed({ reason: String(sqlError(error)?.reason.cause) })
     }),
   )
 
