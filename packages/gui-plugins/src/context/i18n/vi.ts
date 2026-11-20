@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Mức sử dụng",
   "usage.cost": "Chi phí",
   "usage.view": "Xem cách sử dụng ngữ cảnh",
-  "systemPrompt.title": "Lời nhắc hệ thống",
   "rawMessages.title": "Tin nhắn thô",
   "export.session": "Xuất phiên",
   "stats.session": "Phiên",

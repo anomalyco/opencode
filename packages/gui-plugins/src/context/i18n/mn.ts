@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Хэрэглээ",
   "usage.cost": "Зардал",
   "usage.view": "Контекст ашиглалтыг харах",
-  "systemPrompt.title": "Системийн промпт",
   "rawMessages.title": "Түүхий мессежүүд",
   "export.session": "Экспортын сесс",
   "stats.session": "Сесс",
