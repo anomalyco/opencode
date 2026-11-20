@@ -445,7 +445,8 @@ fn strip_cr(line: &[u8]) -> &[u8] {
 /// Breaks on a batch: the SDK's `receiveWireMessage` closes the connection without running any of it.
 fn receive_line(connection: &Connection, handler: &Arc<dyn Handler>, line: &[u8]) -> ControlFlow<()> {
     let text = String::from_utf8_lossy(line);
-    let text = text.trim();
+    // JavaScript's `trim`: a byte order mark goes, U+0085 stays.
+    let text = text.trim_matches(opencode_api::js::is_whitespace);
     if text.is_empty() {
         return ControlFlow::Continue(());
     }
@@ -518,6 +519,22 @@ mod tests {
                 json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": "Parse error" } }),
                 json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32600, "message": "Invalid request", "data": 5 } }),
                 json!({ "jsonrpc": "2.0", "id": 3, "result": { "a": 1 } }),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn lines_trim_as_javascript_does() {
+        // A byte order mark is white space to `trim`; U+0085 is not, so the second line is no batch.
+        let input = "\u{feff}{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"echo\"}\n[]\u{85}\n";
+        let (mut messages, closed) = exchange(input.as_bytes()).await;
+        assert_eq!(closed, Closed::Eof);
+        messages.sort_by_key(Value::to_string);
+        assert_eq!(
+            messages,
+            [
+                json!({ "jsonrpc": "2.0", "id": 1, "result": null }),
+                json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": "Parse error" } }),
             ]
         );
     }
