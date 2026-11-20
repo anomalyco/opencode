@@ -25,16 +25,19 @@
 }
 
 /* OpenMono, the code and terminal font: the app build of OpenMono Nerd 1.000, which has no ligatures and every
-   character one cell wide (script/openmono.ts copies it; SIL OFL 1.1, /assets/OpenMono-OFL.txt). These faces take the
-   name ahead of an installed OpenMono, which has ligatures. Regular covers every weight below bold, so only bold
-   syntax tokens, markup and terminal cells load the Bold file. The files are in src so that the bundler puts a content
-   hash in each URL: the web server lets a browser keep every file but the page for a year.
+   character one cell wide (script/openmono.py builds these files from it; SIL OFL 1.1, /assets/OpenMono-OFL.txt).
+   These faces take the name ahead of an installed OpenMono, which has ligatures. Regular covers every weight below
+   bold, so only bold syntax tokens, markup and terminal cells load the Bold files. The files are in src so that the
+   bundler puts a content hash in each URL: the web server lets a browser keep every file but the page for a year.
+   Each style is three files, like the websites' fonts: "latin" loads with the app, and "cyrillic" and "rest" load
+   when a character of theirs is first drawn. The Cyrillic rule comes after the "rest" rule because both files have
+   the stress marks U+300 and U+301, and the later rule wins.
    The overrides are the font's typographic line metrics (ascender 965, descender 285, no gap; 1.25 em). macOS reads the
    files' hhea table instead (descender 220, gap 65), which makes inline code backgrounds and terminal rows 17px tall,
    not 18px. Remove them if the font's hhea table ever matches its typographic metrics. */
 @font-face {
   font-family: "OpenMono";
-  src: url("./assets/fonts/OpenMono-Regular-text.woff2") format("woff2");
+  src: url("./assets/fonts/OpenMono-Regular-latin.woff2") format("woff2");
   font-weight: 100 599;
   font-style: normal;
   font-display: swap;
@@ -42,13 +45,49 @@
   descent-override: 28.5%;
   line-gap-override: 0%;
   unicode-range:
-    U+20-2387, U+2500-25FF, U+2699-26A0, U+2713-2731, U+27F3, U+2948-2B30, U+2C62-AB68, U+E0B8, U+E0BA, U+E0BC, U+E0BE,
-    U+F882-1FBE7;
+    U+0020-007E, U+00A0-017F, U+2000-200D, U+2010-2029, U+202F-2064, U+20AC, U+2122, U+2190-21FF, U+2212, U+2500-25FF;
 }
 
 @font-face {
   font-family: "OpenMono";
-  src: url("./assets/fonts/OpenMono-Bold-text.woff2") format("woff2");
+  src: url("./assets/fonts/OpenMono-Regular-rest.woff2") format("woff2");
+  font-weight: 100 599;
+  font-style: normal;
+  font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+0180-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03E1, U+03F0-03FF, U+0531-0556, U+0559-058A,
+    U+058D-058F, U+0E3F, U+1D00-1DBF, U+1E00-1F15, U+1F18-1F1D, U+1F20-1F45, U+1F48-1F4D, U+1F50-1F57, U+1F59, U+1F5B,
+    U+1F5D, U+1F5F-1F7D, U+1F80-1FB4, U+1FB6-1FC4, U+1FC6-1FD3, U+1FD6-1FDB, U+1FDD-1FEF, U+1FF2-1FF4, U+1FF6-1FFE,
+    U+2070-2071, U+2074-208E, U+2090-209C, U+20A1, U+20A3-20AB, U+20AD-20AF, U+20B1-20B5, U+20B8-20BA, U+20BC-20C0,
+    U+20D2, U+20D8, U+20EB, U+2100-2103, U+2105-2109, U+210C-210F, U+2111, U+2113, U+2115-211A, U+211C-211D,
+    U+2120-2121, U+2124, U+2126-212B, U+212D-212E, U+2132, U+2135-2149, U+214B, U+214D-218B, U+2200-2211, U+2213-232B,
+    U+232D-237B, U+237D-238B, U+238D, U+2394-2395, U+239B-23AE, U+23B0-23B3, U+23B8-23CC, U+23CE-23CF, U+23DA-23DB,
+    U+23E2, U+23E4-23E5, U+23E8-23FA, U+23FF-2429, U+266D, U+266F, U+2687, U+2699, U+26A0, U+2713, U+2715-2717, U+2731,
+    U+2736, U+274C, U+2794, U+279C-279E, U+27DC, U+27E6-27EB, U+27F3, U+2916, U+2948, U+294A, U+2987-2988, U+29BF,
+    U+2A00, U+2A05-2A06, U+2ADC, U+2AEE, U+2B0E-2B13, U+2B16, U+2B1D, U+2B25, U+2B29-2B2A, U+2B30, U+2C60-2C7F,
+    U+A720-A7FF, U+AB30-AB6B, U+E0B8, U+E0BA, U+E0BC, U+E0BE, U+F882-F892, U+FB01-FB02, U+FFFD, U+10788-107B9,
+    U+1CD06-1CEAB, U+1D538-1D539, U+1D53B-1D53E, U+1D540-1D544, U+1D546, U+1D54A-1D550, U+1D552-1D56B, U+1DF05-1DF1D,
+    U+1FB82-1FBE7;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("./assets/fonts/OpenMono-Regular-cyrillic.woff2") format("woff2");
+  font-weight: 100 599;
+  font-style: normal;
+  font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("./assets/fonts/OpenMono-Bold-latin.woff2") format("woff2");
   font-weight: 600 900;
   font-style: normal;
   font-display: swap;
@@ -56,13 +95,49 @@
   descent-override: 28.5%;
   line-gap-override: 0%;
   unicode-range:
-    U+20-2387, U+2500-25FF, U+2699-26A0, U+2713-2731, U+27F3, U+2948-2B30, U+2C62-AB68, U+E0B8, U+E0BA, U+E0BC, U+E0BE,
-    U+F882-1FBE7;
+    U+0020-007E, U+00A0-017F, U+2000-200D, U+2010-2029, U+202F-2064, U+20AC, U+2122, U+2190-21FF, U+2212, U+2500-25FF;
 }
 
 @font-face {
   font-family: "OpenMono";
-  src: url("./assets/fonts/OpenMono-Italic-text.woff2") format("woff2");
+  src: url("./assets/fonts/OpenMono-Bold-rest.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+0180-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03E1, U+03F0-03FF, U+0531-0556, U+0559-058A,
+    U+058D-058F, U+0E3F, U+1D00-1DBF, U+1E00-1F15, U+1F18-1F1D, U+1F20-1F45, U+1F48-1F4D, U+1F50-1F57, U+1F59, U+1F5B,
+    U+1F5D, U+1F5F-1F7D, U+1F80-1FB4, U+1FB6-1FC4, U+1FC6-1FD3, U+1FD6-1FDB, U+1FDD-1FEF, U+1FF2-1FF4, U+1FF6-1FFE,
+    U+2070-2071, U+2074-208E, U+2090-209C, U+20A1, U+20A3-20AB, U+20AD-20AF, U+20B1-20B5, U+20B8-20BA, U+20BC-20C0,
+    U+20D2, U+20D8, U+20EB, U+2100-2103, U+2105-2109, U+210C-210F, U+2111, U+2113, U+2115-211A, U+211C-211D,
+    U+2120-2121, U+2124, U+2126-212B, U+212D-212E, U+2132, U+2135-2149, U+214B, U+214D-218B, U+2200-2211, U+2213-232B,
+    U+232D-237B, U+237D-238B, U+238D, U+2394-2395, U+239B-23AE, U+23B0-23B3, U+23B8-23CC, U+23CE-23CF, U+23DA-23DB,
+    U+23E2, U+23E4-23E5, U+23E8-23FA, U+23FF-2429, U+266D, U+266F, U+2687, U+2699, U+26A0, U+2713, U+2715-2717, U+2731,
+    U+2736, U+274C, U+2794, U+279C-279E, U+27DC, U+27E6-27EB, U+27F3, U+2916, U+2948, U+294A, U+2987-2988, U+29BF,
+    U+2A00, U+2A05-2A06, U+2ADC, U+2AEE, U+2B0E-2B13, U+2B16, U+2B1D, U+2B25, U+2B29-2B2A, U+2B30, U+2C60-2C7F,
+    U+A720-A7FF, U+AB30-AB6B, U+E0B8, U+E0BA, U+E0BC, U+E0BE, U+F882-F892, U+FB01-FB02, U+FFFD, U+10788-107B9,
+    U+1CD06-1CEAB, U+1D538-1D539, U+1D53B-1D53E, U+1D540-1D544, U+1D546, U+1D54A-1D550, U+1D552-1D56B, U+1DF05-1DF1D,
+    U+1FB82-1FBE7;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("./assets/fonts/OpenMono-Bold-cyrillic.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("./assets/fonts/OpenMono-Italic-latin.woff2") format("woff2");
   font-weight: 100 599;
   font-style: italic;
   font-display: swap;
@@ -70,8 +145,44 @@
   descent-override: 28.5%;
   line-gap-override: 0%;
   unicode-range:
-    U+20-2387, U+2500-25FF, U+2699-26A0, U+2713-2731, U+27F3, U+2948-2B30, U+2C62-AB68, U+E0B8, U+E0BA, U+E0BC, U+E0BE,
-    U+F882-1FBE7;
+    U+0020-007E, U+00A0-017F, U+2000-200D, U+2010-2029, U+202F-2064, U+20AC, U+2122, U+2190-21FF, U+2212, U+2500-25FF;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("./assets/fonts/OpenMono-Italic-rest.woff2") format("woff2");
+  font-weight: 100 599;
+  font-style: italic;
+  font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range:
+    U+0180-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03E1, U+03F0-03FF, U+0531-0556, U+0559-058A,
+    U+058D-058F, U+0E3F, U+1D00-1DBF, U+1E00-1F15, U+1F18-1F1D, U+1F20-1F45, U+1F48-1F4D, U+1F50-1F57, U+1F59, U+1F5B,
+    U+1F5D, U+1F5F-1F7D, U+1F80-1FB4, U+1FB6-1FC4, U+1FC6-1FD3, U+1FD6-1FDB, U+1FDD-1FEF, U+1FF2-1FF4, U+1FF6-1FFE,
+    U+2070-2071, U+2074-208E, U+2090-209C, U+20A1, U+20A3-20AB, U+20AD-20AF, U+20B1-20B5, U+20B8-20BA, U+20BC-20C0,
+    U+20D2, U+20D8, U+20EB, U+2100-2103, U+2105-2109, U+210C-210F, U+2111, U+2113, U+2115-211A, U+211C-211D,
+    U+2120-2121, U+2124, U+2126-212B, U+212D-212E, U+2132, U+2135-2149, U+214B, U+214D-218B, U+2200-2211, U+2213-232B,
+    U+232D-237B, U+237D-238B, U+238D, U+2394-2395, U+239B-23AE, U+23B0-23B3, U+23B8-23CC, U+23CE-23CF, U+23DA-23DB,
+    U+23E2, U+23E4-23E5, U+23E8-23FA, U+23FF-2429, U+266D, U+266F, U+2687, U+2699, U+26A0, U+2713, U+2715-2717, U+2731,
+    U+2736, U+274C, U+2794, U+279C-279E, U+27DC, U+27E6-27EB, U+27F3, U+2916, U+2948, U+294A, U+2987-2988, U+29BF,
+    U+2A00, U+2A05-2A06, U+2ADC, U+2AEE, U+2B0E-2B13, U+2B16, U+2B1D, U+2B25, U+2B29-2B2A, U+2B30, U+2C60-2C7F,
+    U+A720-A7FF, U+AB30-AB6B, U+E0B8, U+E0BA, U+E0BC, U+E0BE, U+F882-F892, U+FB01-FB02, U+FFFD, U+10788-107B9,
+    U+1CD06-1CEAB, U+1D538-1D539, U+1D53B-1D53E, U+1D540-1D544, U+1D546, U+1D54A-1D550, U+1D552-1D56B, U+1DF05-1DF1D,
+    U+1FB82-1FBE7;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("./assets/fonts/OpenMono-Italic-cyrillic.woff2") format("woff2");
+  font-weight: 100 599;
+  font-style: italic;
+  font-display: swap;
+  ascent-override: 96.5%;
+  descent-override: 28.5%;
+  line-gap-override: 0%;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
 }
 
 /* The Nerd Fonts icons (1 MB) share no character with the text files and load when a character in their range is
@@ -87,8 +198,9 @@
   descent-override: 28.5%;
   line-gap-override: 0%;
   unicode-range:
-    U+23FB-23FE, U+2630-2665, U+26A1, U+276C-2771, U+2800-28FF, U+2B58, U+E000-E0B7, U+E0B9, U+E0BB, U+E0BD,
-    U+E0BF-F533, U+F0001-F1AF0;
+    U+23FB-23FE, U+2630, U+2665, U+26A1, U+276C-2771, U+2800-28FF, U+2B58, U+E000-E00A, U+E0A0-E0A3, U+E0B0-E0B7,
+    U+E0B9, U+E0BB, U+E0BD, U+E0BF-E0D7, U+E200-E2A9, U+E300-E3E3, U+E5FA-E6BB, U+E700-E958, U+EA60-EC84, U+ED00-EFCF,
+    U+F000-F385, U+F400-F533, U+F0001-F1AF0;
 }
 
 @font-face {
@@ -101,8 +213,9 @@
   descent-override: 28.5%;
   line-gap-override: 0%;
   unicode-range:
-    U+23FB-23FE, U+2630-2665, U+26A1, U+276C-2771, U+2800-28FF, U+2B58, U+E000-E0B7, U+E0B9, U+E0BB, U+E0BD,
-    U+E0BF-F533, U+F0001-F1AF0;
+    U+23FB-23FE, U+2630, U+2665, U+26A1, U+276C-2771, U+2800-28FF, U+2B58, U+E000-E00A, U+E0A0-E0A3, U+E0B0-E0B7,
+    U+E0B9, U+E0BB, U+E0BD, U+E0BF-E0D7, U+E200-E2A9, U+E300-E3E3, U+E5FA-E6BB, U+E700-E958, U+EA60-EC84, U+ED00-EFCF,
+    U+F000-F385, U+F400-F533, U+F0001-F1AF0;
 }
 
 @font-face {
@@ -115,8 +228,9 @@
   descent-override: 28.5%;
   line-gap-override: 0%;
   unicode-range:
-    U+23FB-23FE, U+2630-2665, U+26A1, U+276C-2771, U+2800-28FF, U+2B58, U+E000-E0B7, U+E0B9, U+E0BB, U+E0BD,
-    U+E0BF-F533, U+F0001-F1AF0;
+    U+23FB-23FE, U+2630, U+2665, U+26A1, U+276C-2771, U+2800-28FF, U+2B58, U+E000-E00A, U+E0A0-E0A3, U+E0B0-E0B7,
+    U+E0B9, U+E0BB, U+E0BD, U+E0BF-E0D7, U+E200-E2A9, U+E300-E3E3, U+E5FA-E6BB, U+E700-E958, U+EA60-EC84, U+ED00-EFCF,
+    U+F000-F385, U+F400-F533, U+F0001-F1AF0;
 }
 
 /* Panel motion sets this on the one element whose own layout reads it. An inherited property would restyle every

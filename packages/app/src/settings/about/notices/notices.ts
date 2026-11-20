@@ -17,9 +17,9 @@ export const notices = [
     // The font has no public page to link to yet.
     url: undefined,
     license: "SIL Open Font License 1.1",
-    // The copyright lines of public/assets/OpenMono-OFL.txt; script/openmono.ts fails when they differ.
+    // The copyright lines of public/assets/OpenMono-OFL.txt; script/openmono.py fails when they differ.
     notice: [
-      "Copyright (c) 2015-2026, Belleve Invis (belleve@typeof.net).",
+      "Copyright (c) 2015-2026, Renzhi Li (aka. Belleve Invis, belleve@typeof.net)",
       "Copyright (c) 2025, Ahmed Hatem (https://github.com/ahatem).",
       "Copyright (c) 2026, Anomaly.",
     ].join("\n"),

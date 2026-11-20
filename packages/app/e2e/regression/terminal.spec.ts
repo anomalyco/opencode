@@ -42,21 +42,24 @@ test("restores a terminal from the server's snapshot after a reload", async ({ p
   ])
 })
 
-test("draws terminal icons whose font file arrives after the first paint", async ({ page }) => {
-  // The Nerd Fonts icons are a font file of their own, which loads when a terminal opens.
+test("draws terminal characters whose font files arrive after the first paint", async ({ page }) => {
+  // The Nerd Fonts icons and the characters outside Latin and Cyrillic are font files of their own, which load when
+  // a terminal first draws one of their characters.
   const icons = await holdRoute(page, /OpenMono-icons[^/]*\.woff2/)
+  const rest = await holdRoute(page, /OpenMono-Regular-rest[^/]*\.woff2/)
 
-  // A folder icon on the first row, with the cursor, whose row the terminal redraws by itself, on the last one.
+  // A folder icon and a check mark on the first row, with the cursor, whose row the terminal redraws by itself, on
+  // the last one.
   const { persistentPty } = await openSession(page, {
     name: "Terminals",
     persistentPty: {
-      initial: [{ id: "pty_icons", sessionID: SESSION, title: "Build", output: "ls \uf07b\x1b[999;1H" }],
+      initial: [{ id: "pty_icons", sessionID: SESSION, title: "Build", output: "ls \uf07b \u2713\x1b[999;1H" }],
     },
   })
 
   await openSide(page)
   await showTerminal(page, "Build", "pty_icons")
-  await icons.arrived
+  await Promise.all([icons.arrived, rest.arrived])
 
   // What the first cells of a row show: undefined while they are blank, else a checksum of their pixels.
   const row = (index: number) =>
@@ -77,10 +80,11 @@ test("draws terminal icons whose font file arrives after the first paint", async
   await expect.poll(() => row(0)).toBeDefined()
   const fallback = await row(0)
   icons.release()
+  rest.release()
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
-  // The same text on the third row, first drawn with the file loaded, is what the first row must now show.
-  persistentPty.output("pty_icons", "\x1b[3;1Hls \uf07b\x1b[999;1H")
+  // The same text on the third row, first drawn with the files loaded, is what the first row must now show.
+  persistentPty.output("pty_icons", "\x1b[3;1Hls \uf07b \u2713\x1b[999;1H")
   await expect.poll(() => row(2)).toBeDefined()
   const loaded = await row(2)
   expect(loaded).not.toBe(fallback)
