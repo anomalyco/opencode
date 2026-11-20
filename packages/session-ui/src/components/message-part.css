@@ -1125,6 +1125,8 @@
   gap: 16px;
   width: 100%;
   min-width: 0;
+  /* Code and output share the dialog's height and scroll in their own boxes, so the bottom padding always shows. */
+  min-height: 0;
   padding: 0 16px 16px;
 
   [data-slot="execute-details-section"] {
@@ -1132,6 +1134,7 @@
     flex-direction: column;
     gap: 6px;
     min-width: 0;
+    min-height: 0;
   }
 
   [data-slot="execute-details-section-header"] {
