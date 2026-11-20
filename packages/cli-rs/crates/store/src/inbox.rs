@@ -522,7 +522,7 @@ impl Data {
                     time: SessionInboxUserTime { created: now() },
                     r#type: "compaction".into(),
                     delivery: SessionInboxDelivery::Steer,
-                    payload: SessionInboxCompactionPayload {},
+                    payload: SessionInboxCompactionPayload::default(),
                 }));
             }
             None

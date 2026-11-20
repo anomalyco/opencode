@@ -107,9 +107,14 @@ export class Types {
       case "Never":
         return "()"
       case "Objects":
-        // An empty object says nothing about its role, so it keeps its own name instead of sharing one.
-        if (r.propertySignatures.length === 0 && r.indexSignatures.length === 0)
-          return this.objects(r, this.name(hint), hint)
+        // An empty struct schema accepts any value but `null` and keeps it as it is, extra keys included.
+        // It says nothing about its role, so it keeps its own name instead of sharing one.
+        if (r.propertySignatures.length === 0 && r.indexSignatures.length === 0) {
+          const name = this.name(hint)
+          this.defaultable.add(name)
+          this.items.push(`/// Any value but \`null\`.\npub type ${name} = crate::de::NotNull;`)
+          return name
+        }
         return this.shaped(r, () => this.objects(r, this.name(hint), hint))
       case "Arrays":
         return this.arrays(r, hint)

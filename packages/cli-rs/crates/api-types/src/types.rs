@@ -1087,8 +1087,8 @@ pub struct SessionCompactInput {
     pub delivery: Option<SessionInboxDelivery>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionInboxCompactionPayload {}
+/// Any value but `null`.
+pub type SessionInboxCompactionPayload = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionInboxCompaction {
@@ -7654,8 +7654,8 @@ pub struct EventSubscribeInput {
     pub types: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct LocationShutdownData {}
+/// Any value but `null`.
+pub type LocationShutdownData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LocationShutdown {
@@ -7670,8 +7670,8 @@ pub struct LocationShutdown {
     pub data: LocationShutdownData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ModelsDevRefreshedData {}
+/// Any value but `null`.
+pub type ModelsDevRefreshedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelsDevRefreshed {
@@ -7728,8 +7728,8 @@ pub struct CredentialSwitched {
     pub data: CredentialSwitchedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct IntegrationUpdatedData {}
+/// Any value but `null`.
+pub type IntegrationUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationUpdated {
@@ -7744,8 +7744,8 @@ pub struct IntegrationUpdated {
     pub data: IntegrationUpdatedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ProviderUpdatedData {}
+/// Any value but `null`.
+pub type ProviderUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProviderUpdated {
@@ -7760,8 +7760,8 @@ pub struct ProviderUpdated {
     pub data: ProviderUpdatedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ModelUpdatedData {}
+/// Any value but `null`.
+pub type ModelUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelUpdated {
@@ -7776,8 +7776,8 @@ pub struct ModelUpdated {
     pub data: ModelUpdatedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct AgentUpdatedData {}
+/// Any value but `null`.
+pub type AgentUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AgentUpdated {
@@ -7943,8 +7943,8 @@ pub struct FilesystemChanged {
     pub data: FilesystemChangedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ReferenceUpdatedData {}
+/// Any value but `null`.
+pub type ReferenceUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ReferenceUpdated {
@@ -8011,8 +8011,8 @@ pub struct PermissionReplied {
     pub data: PermissionRepliedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PluginUpdatedData {}
+/// Any value but `null`.
+pub type PluginUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginUpdated {
@@ -8099,8 +8099,8 @@ pub struct WorktreeResolved {
     pub data: WorktreeResolvedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct CommandUpdatedData {}
+/// Any value but `null`.
+pub type CommandUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CommandUpdated {
@@ -8115,8 +8115,8 @@ pub struct CommandUpdated {
     pub data: CommandUpdatedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigUpdatedData {}
+/// Any value but `null`.
+pub type ConfigUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigUpdated {
@@ -8131,8 +8131,8 @@ pub struct ConfigUpdated {
     pub data: ConfigUpdatedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SkillUpdatedData {}
+/// Any value but `null`.
+pub type SkillUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SkillUpdated {
@@ -8688,8 +8688,8 @@ pub struct FormCancelled {
     pub data: FormCancelledData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct WebsearchUpdatedData {}
+/// Any value but `null`.
+pub type WebsearchUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WebsearchUpdated {
@@ -8704,8 +8704,8 @@ pub struct WebsearchUpdated {
     pub data: WebsearchUpdatedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ArtifactUpdatedData {}
+/// Any value but `null`.
+pub type ArtifactUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ArtifactUpdated {
@@ -9026,8 +9026,8 @@ pub struct V2EventRpc {
     pub data: IndexMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct V2EventServerConnectedData {}
+/// Any value but `null`.
+pub type V2EventServerConnectedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct V2EventServerConnected {
