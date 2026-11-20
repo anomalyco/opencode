@@ -235,7 +235,7 @@ export const Plugin = {
         draft.add({
           name: "models",
           description:
-            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first.",
+            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first. When selecting a model for subagents, image generation, video generation, or any other tool, prefer its standard offering by default. Choose an alternative speed, cost, or service tier only when the user explicitly requests it.",
           input: ModelsInput,
           output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },
