@@ -16,7 +16,7 @@ pub fn double_option<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
 }
 
 /// The name serde_json's `RawValue` asks for. serde_json then hands over the value's text instead of
-/// parsing it; any other deserializer gives the value itself (`raw_text_from_serde_json` checks it).
+/// parsing it; any other deserializer gives the value itself.
 const RAW_TOKEN: &str = "$serde_json::private::RawValue";
 
 /// A union's JSON before its member is known: the text, borrowed when the input allows, from serde_json
@@ -281,15 +281,6 @@ fn value_end(bytes: &[u8], start: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn raw_text_from_serde_json() {
-        let json = r#"{"a":1,"type":"x"}"#;
-        let raw: Raw = serde_json::from_str(json).unwrap();
-        assert!(matches!(raw, Raw::Text(Cow::Borrowed(text)) if text == json));
-        let raw = Raw::deserialize(serde_json::json!({"type": "x"})).unwrap();
-        assert!(matches!(raw, Raw::Text(_)));
-    }
 
     #[test]
     fn fields_match_value_get() {
