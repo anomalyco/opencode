@@ -149,6 +149,9 @@ export default {
   "signins.title": "Bring your sign-ins",
   "signins.description": "Copy your sign-ins from a browser on this computer, so sites such as GitHub open already signed in.",
   "signins.bar": "Already signed in somewhere else? Bring your sign-ins here.",
+  "signins.description.history":
+    "Copy your sign-ins and history from a browser on this computer, so sites such as GitHub open already signed in.",
+  "signins.bar.history": "Already signed in somewhere else? Bring your sign-ins and history here.",
   "signins.import": "Import from {{browser}}",
   "signins.action": "Import",
   "signins.other": "Import from another browser",
@@ -161,6 +164,12 @@ export default {
   "signins.imported.incomplete.other": "Imported {{count}} cookies. Not imported: {{omitted}}.",
   "signins.imported.from.one": "Imported {{count}} cookie from {{browser}}",
   "signins.imported.from.other": "Imported {{count}} cookies from {{browser}}",
+  "signins.imported.history.one": "Imported {{number}} cookie and {{pages}}.",
+  "signins.imported.history.other": "Imported {{number}} cookies and {{pages}}.",
+  "signins.imported.history.from.one": "Imported {{number}} cookie and {{pages}} from {{browser}}",
+  "signins.imported.history.from.other": "Imported {{number}} cookies and {{pages}} from {{browser}}",
+  "history.pages.one": "{{number}} page",
+  "history.pages.other": "{{number}} pages",
   "signins.imported.partial.one":
     "Imported {{count}} cookie. This browser keeps {{protected}} more locked so that only it can read them. Sign in to those sites here.",
   "signins.imported.partial.other":
@@ -200,6 +209,10 @@ export default {
     "Remote servers can use your sign-ins: their pages open signed in to your sites, and those sites can change your sign-ins on this device. Turn this on only for servers you trust.",
   "settings.import.title": "Import sign-ins",
   "settings.import.note": "Copies cookies only. The other browser keeps its own.",
+  "settings.import.note.history": "Copies cookies and history. The other browser keeps its own.",
+  "settings.history.title": "Import browsing history",
+  "settings.history.description":
+    "An import also copies the other browser's history, so the address bar completes from the pages you visit. It stays on this computer.",
   "settings.import.none": "No other browser found on this computer",
   "settings.import.choose": "Choose sites",
   "sites.description": "Brings the sign-ins of only the sites you select.",
@@ -437,6 +450,9 @@ export default {
   "import.description.one": "Copies cookies for {{number}} site. The other browser keeps its own.",
   "import.description.other": "Copies cookies for all {{number}} sites. The other browser keeps its own.",
   "import.description.loading": "Copies cookies only. The other browser keeps its own.",
+  "import.description.history.one": "Copies cookies for {{number}} site and your history. Nothing is removed.",
+  "import.description.history.other": "Copies cookies for {{number}} sites and your history. Nothing is removed.",
+  "import.description.history.loading": "Copies cookies and your history. Nothing is removed.",
   "settings.import.open": "Import…",
   "settings.advanced": "Advanced",
   "settings.advanced.summary": "Remote servers, site permissions, sign out, cookie file",

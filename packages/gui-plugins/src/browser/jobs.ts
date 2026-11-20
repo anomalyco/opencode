@@ -2,7 +2,7 @@ import { createSignal, onCleanup, untrack } from "solid-js"
 import { createKeyed, createLatest, usePlugin, type IpcClient } from "@opencode/plugin/gui"
 import type { Choice } from "./choices"
 import type definition from "./index"
-import { BrowserProfile, type ExtensionCompatibility, type ProfileSource } from "./profile/ipc"
+import { BrowserProfile, type ExtensionCompatibility, type ImportResult, type ProfileSource } from "./profile/ipc"
 import {
   importedCookies,
   importLoss,
@@ -53,6 +53,10 @@ export function createProfileJobs(
   const [state, setState] = createSignal(initialJobsState)
   const [version, setVersion] = createSignal(0)
   const mac = ctx.desktop?.os === "macos"
+  // Counts are grouped for the app's language: 4,210.
+  const grouped = (value: number) => new Intl.NumberFormat(ctx.locale.locale()).format(value)
+  // An import brings the other browser's history too, unless the person turned that off in Settings.
+  const importsHistory = () => preferences.value.importHistory !== false
   // Each running job's call and timer, by attempt.
   const handles = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
@@ -80,6 +84,10 @@ export function createProfileJobs(
       setVersion((value) => value + 1)
       input.finished?.(effect.finished)
 
+      // Signing out everywhere forgets where the person has been: main's history went with the cookies, and the
+      // window's list of the last pages goes here.
+      if (effect.finished.outcome.type === "cleared") ctx.stores.history.set({ visits: [] })
+
       // Cookies came in: the user is signed in, so the pane stops offering the import. Last, as it may unmount the
       // surface that runs this.
       if (importedCookies(effect.finished.outcome) > 0 && !preferences.value.welcomed)
@@ -106,7 +114,7 @@ export function createProfileJobs(
       controller,
       timer: setTimeout(() => dispatch({ type: "timed-out", attempt }), effect.timeoutMs),
     })
-    void perform(current, effect.job, AbortSignal.any([ctx.signal, controller.signal])).then(
+    void perform(current, effect.job, untrack(importsHistory), AbortSignal.any([ctx.signal, controller.signal])).then(
       (outcome) => dispatch({ type: "finished", attempt, outcome }),
       () => dispatch({ type: "failed", attempt }),
     )
@@ -144,6 +152,21 @@ export function createProfileJobs(
   const browserName = (job: Job) => source(job)?.name
   // On macOS a Chromium browser's cookie key is in the login Keychain, and the system asks before handing it over.
   const keychain = (job: Job) => mac && source(job)?.engine === "chromium"
+
+  /**
+   * The one line for a clean import: the cookies, and with them the pages of history when any came, from the browser
+   * when the surface names it. It alone picks the plural of both counts, so no surface joins count phrases.
+   */
+  const imported = (result: Extract<ImportResult, { type: "imported" }>, browser?: string) => {
+    const number = grouped(result.imported)
+    const pages = result.pages ? ctx.plural("history.pages", result.pages, { number: grouped(result.pages) }) : undefined
+
+    if (pages && browser) return ctx.plural("signins.imported.history.from", result.imported, { number, pages, browser })
+
+    if (pages) return ctx.plural("signins.imported.history", result.imported, { number, pages })
+
+    return browser ? ctx.plural("signins.imported.from", result.imported, { browser }) : ctx.plural("signins.imported", result.imported)
+  }
 
   /** What to say about a finished job; undefined for one whose result the surface already shows. */
   const describe = (finished: Finished | undefined): JobMessage | undefined => {
@@ -226,7 +249,7 @@ export function createProfileJobs(
         error: false,
       }
 
-    return { text: ctx.plural("signins.imported", result.imported), error: result.imported === 0 }
+    return { text: imported(result), error: result.imported === 0 }
   }
 
   return {
@@ -245,6 +268,10 @@ export function createProfileJobs(
     },
     last: () => lastFinished(state()),
     describe,
+    /** The one line that confirms a clean import by name: "Imported 613 cookies and 4,210 pages from Helium". */
+    imported,
+    /** Whether an import brings the other browser's history too; the person can turn that off in Settings. */
+    importsHistory,
     /** What to say while a job runs: on macOS, what the Keychain prompt in front of the window asks, and how to answer. */
     notice: (): JobMessage | undefined => {
       const job = runningJob(state())
@@ -276,15 +303,15 @@ export function createProfileJobs(
   }
 }
 
-/** Runs one job against main and says how it ended. */
-async function perform(client: Client, job: Job, signal: AbortSignal): Promise<Outcome> {
+/** Runs one job against main and says how it ended. With `history`, an import from a browser brings its history too. */
+async function perform(client: Client, job: Job, history: boolean, signal: AbortSignal): Promise<Outcome> {
   if ("token" in job && job.token) return { type: "installed", result: await client.install({ kind: "approve", token: job.token }, { signal }) }
 
   switch (job.type) {
     case "import-browser":
       return {
         type: "imported",
-        result: await client.importBrowser({ source: job.source, profile: job.profile, sites: job.sites }, { signal }),
+        result: await client.importBrowser({ source: job.source, profile: job.profile, sites: job.sites, history }, { signal }),
       }
     case "import-file":
       return { type: "imported", result: await client.importFile({ path: job.path }, { signal }) }

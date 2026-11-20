@@ -2,9 +2,16 @@
 // submitted address stays in the field until the page reports where it went. The page's reports are counted by
 // `nextAddressEpoch`, and a submit keeps the counts it saw, so the next URL change, finished load or rejection ends
 // the hold, even one that repeats a value, while focusing and leaving the field in between keeps it.
+//
+// Suggestions come from two places: the window's own list of the last pages, at once, and main's history, which is
+// asked on each change of the text and answers a moment later. The field never waits for it: each question takes the
+// next number, and only the answer to the last one is kept.
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { resolveAddress, searches } from "./address"
-import { completes, suggest, type Visit } from "./history"
+import { resolveAddress } from "./address"
+import type { HistoryPage } from "./history/ipc"
+import { pageKey } from "./history/page"
+import { suggestPages, type Suggestion } from "./history/suggest"
+import type { Visit } from "./history/visits"
 
 /** Suggestions the address field lists, and pages the new tab page lists. */
 export const ADDRESS_SUGGESTIONS = 5
@@ -42,7 +49,10 @@ export type SubmittedHold = {
   readonly moved: number
 }
 
-export type AddressState =
+export type AddressState = {
+  /** The last question main's history was asked for this field; an answer to any other is stale. */
+  readonly asked: number
+} & (
   | { readonly status: "rest" }
   | {
       readonly status: "editing"
@@ -55,8 +65,18 @@ export type AddressState =
       readonly dismissed: boolean
       /** A submitted address that had not been reported yet when the user focused; leaving the field keeps it. */
       readonly hold: SubmittedHold | undefined
+      /**
+       * Main's last answer. It stays while the next question is out, matched against the new text, so the list
+       * narrows at once instead of emptying until the answer comes.
+       */
+      readonly answer: readonly HistoryPage[]
+      /** The last change of the text may complete a suggestion: it typed, and did not delete. */
+      readonly completing: boolean
+      /** The person moved through the list since the last change of the text; an answer then keeps their choice. */
+      readonly stepped: boolean
     }
   | { readonly status: "submitted"; readonly hold: SubmittedHold }
+)
 
 export type AddressEvent =
   | { readonly type: "focused"; readonly epoch: AddressEpoch }
@@ -70,6 +90,15 @@ export type AddressEvent =
   | {
       readonly type: "key.pressed"
       readonly key: "ArrowDown" | "ArrowUp" | "Escape"
+      readonly visits: readonly Visit[]
+    }
+  /** Shift+Delete: forgets the chosen suggestion's page. */
+  | { readonly type: "forget.pressed"; readonly visits: readonly Visit[] }
+  /** Main answered question `attempt`; a question that failed is answered with no pages. */
+  | {
+      readonly type: "answered"
+      readonly attempt: number
+      readonly pages: readonly HistoryPage[]
       readonly visits: readonly Visit[]
     }
   /** Enter in the field; `failed` is whether the page failed to load, where an empty address opens a blank page. */
@@ -87,16 +116,24 @@ export type AddressEffect =
   | { readonly type: "blur-input" }
   | { readonly type: "prevent-default" }
   | { readonly type: "navigate"; readonly tabID: Browser.TabID; readonly url: string }
+  /** The person is about to type: main reads its history into memory, ahead of the first question. */
+  | { readonly type: "prepare" }
+  /** Asks main's history for the pages that match `query`; the answer names `attempt`. */
+  | { readonly type: "ask"; readonly attempt: number; readonly query: string }
+  /** Forgets a page: in main's history, and in the window's list of the last pages. */
+  | { readonly type: "forget"; readonly url: string }
 
 export type AddressTransition = { readonly state: AddressState; readonly effects: readonly AddressEffect[] }
 
-export const initialAddressState: AddressState = { status: "rest" }
+export const initialAddressState: AddressState = { status: "rest", asked: 0 }
 
 const SELECT: AddressEffect = { type: "select-input" }
 
 const BLUR: AddressEffect = { type: "blur-input" }
 
 const PREVENT: AddressEffect = { type: "prevent-default" }
+
+const PREPARE: AddressEffect = { type: "prepare" }
 
 export function transitionAddress(state: AddressState, event: AddressEvent): AddressTransition {
   switch (event.type) {
@@ -107,13 +144,18 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
       return {
         state: {
           status: "editing",
+          // A new edit: an answer still on its way to the last one is not for this one.
+          asked: state.asked + 1,
           text: hold ? hold.text : event.epoch.url,
           typed: false,
           active: -1,
           dismissed: false,
           hold,
+          answer: [],
+          completing: false,
+          stepped: false,
         },
-        effects: [SELECT],
+        effects: [SELECT, PREPARE],
       }
     }
 
@@ -122,18 +164,47 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
       if (state.status !== "editing") return unchanged(state)
       const hold = activeHold(state.hold, event.epoch)
 
-      return { state: hold ? { status: "submitted", hold } : initialAddressState, effects: [] }
+      return { state: hold ? { status: "submitted", asked: state.asked, hold } : { status: "rest", asked: state.asked }, effects: [] }
     }
 
     case "input.changed": {
       if (state.status !== "editing") return unchanged(state)
-      const first = suggest(event.visits, event.value, 1)[0]
-      // Typing completes the first suggestion, as a search would; deleting never does.
-      const complete = !!first && !event.deleting && (completes(first, event.value) || searches(event.value))
+      const asked = state.asked + 1
+      const text = event.value
+      // Text with nothing to search for asks nothing, and no answer to an earlier text fits it.
+      const searching = text.trim().length > 0
+      const next = { ...state, asked, text, typed: true, dismissed: false, completing: !event.deleting, stepped: false, answer: searching ? state.answer : [] }
 
       return {
-        state: { ...state, text: event.value, typed: true, dismissed: false, active: complete ? 0 : -1 },
+        state: { ...next, active: completed(next, event.visits) },
+        effects: searching ? [{ type: "ask", attempt: asked, query: text }] : [],
+      }
+    }
+
+    case "answered": {
+      if (state.status !== "editing" || event.attempt !== state.asked) return unchanged(state)
+      const next = { ...state, answer: event.pages }
+
+      // Typing completes the best suggestion, which the answer may be; a choice the person made stays theirs.
+      if (!state.stepped) return { state: { ...next, active: completed(next, event.visits) }, effects: [] }
+      const picked = addressSuggestions(state, event.visits)[state.active]
+
+      return {
+        state: { ...next, active: picked ? addressSuggestions(next, event.visits).findIndex((item) => item.url === picked.url) : -1 },
         effects: [],
+      }
+    }
+
+    case "forget.pressed": {
+      const picked = chosen(state, addressSuggestions(state, event.visits))
+
+      // Without a chosen suggestion the key is the input's own.
+      if (state.status !== "editing" || !picked) return unchanged(state)
+      const key = pageKey(picked.url)
+
+      return {
+        state: { ...state, stepped: true, answer: state.answer.filter((page) => page.url !== picked.url && (!key || pageKey(page.url) !== key)) },
+        effects: [PREVENT, { type: "forget", url: picked.url }],
       }
     }
 
@@ -156,6 +227,7 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
         state: {
           ...state,
           dismissed: false,
+          stepped: true,
           active: state.active + by < -1 ? count - 1 : ((state.active + by + 1) % (count + 1)) - 1,
         },
         effects: [PREVENT],
@@ -210,16 +282,20 @@ export function nextAddressEpoch(previous: AddressEpoch | undefined, page: Addre
   return { ...page, settled, followed, rejected, moved }
 }
 
-/** Suggestions follow what the user typed; a focused address is not a query. */
-export function addressSuggestions(state: AddressState, visits: readonly Visit[]): readonly Visit[] {
-  return state.status === "editing" && state.typed ? suggest(visits, state.text, ADDRESS_SUGGESTIONS) : []
+/**
+ * Suggestions follow what the user typed; a focused address is not a query. `visits` is the window's list of the
+ * last pages, which main's answer joins.
+ */
+export function addressSuggestions(state: AddressState, visits: readonly Visit[]): readonly Suggestion[] {
+  return state.status === "editing" && state.typed ? suggestPages(state.text, visits, state.answer, ADDRESS_SUGGESTIONS) : []
 }
 
 /** What the address field draws. */
-export function addressView(state: AddressState, epoch: AddressEpoch, suggestions: readonly Visit[]) {
+export function addressView(state: AddressState, epoch: AddressEpoch, suggestions: readonly Suggestion[]) {
   const editing = state.status === "editing"
   const shown = listed(state, suggestions)
-  const active = shown && state.status === "editing" ? state.active : -1
+  // A suggestion that went, as one the person removed, leaves the one that took its place chosen, or none.
+  const active = shown && state.status === "editing" && state.active < suggestions.length ? state.active : -1
   const hold = state.status === "rest" ? undefined : state.hold
 
   return {
@@ -246,6 +322,7 @@ function navigate(state: AddressState, url: string, epoch: AddressEpoch): Addres
   return {
     state: {
       status: "submitted",
+      asked: state.asked,
       hold: {
         text: url === "about:blank" ? "" : url,
         followed: epoch.followed,
@@ -263,12 +340,20 @@ function field(state: AddressState, epoch: AddressEpoch) {
   return state.status === "submitted" && activeHold(state.hold, epoch) ? state.hold.text : epoch.url
 }
 
-function listed(state: AddressState, suggestions: readonly Visit[]) {
+function listed(state: AddressState, suggestions: readonly Suggestion[]) {
   return state.status === "editing" && suggestions.length > 0 && !state.dismissed
 }
 
-function chosen(state: AddressState, suggestions: readonly Visit[]) {
+function chosen(state: AddressState, suggestions: readonly Suggestion[]) {
   return listed(state, suggestions) && state.status === "editing" ? suggestions[state.active] : undefined
+}
+
+/**
+ * The suggestion a change of the text completes: the best one, when its address begins with what was typed, so Enter
+ * opens it in place of the typed text. Deleting never completes, and neither does a page that only matches.
+ */
+function completed(state: Extract<AddressState, { status: "editing" }>, visits: readonly Visit[]) {
+  return state.completing && addressSuggestions(state, visits)[0]?.completes ? 0 : -1
 }
 
 /** The hold, while the page has not reported a URL change, a finished load or a rejection since the submit. */

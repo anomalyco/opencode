@@ -13,6 +13,8 @@ import { SignInOffer } from "./import-prompt"
 /**
  * What main answers the dialog: how many made-up sites the first profile has (or why it has none), whether the
  * listing waits for the test, whether an import brings everything or (`partial`) leaves a cookie behind, and the page's site it opens for (`site`).
+ * `pages` is how many pages of history an import that asks for history brings, and `history` false is the person's
+ * setting that an import brings none.
  */
 export type SiteScenario = {
   /** The dialog opens with its site list shown, as where the person asked to choose sites. */
@@ -24,6 +26,8 @@ export type SiteScenario = {
   readonly protected?: number
   readonly empty?: boolean
   readonly site?: { readonly name: string; readonly choose: boolean }
+  readonly pages?: number
+  readonly history?: boolean
 }
 
 const sources: ProfileSource[] = [
@@ -74,7 +78,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     (messages.get(key) ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(params?.[name] ?? ""))
 
   const [store, setStore] = createStore<{
-    imports: { source: string; profile: string; sites?: readonly string[] }[]
+    imports: { source: string; profile: string; sites?: readonly string[]; history?: boolean }[]
     reads: string[]
     closed: boolean
     imported: number
@@ -97,7 +101,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
 
       return input.scenario.sites === "locked" ? { type: "failed", reason: "locked" } : siteList(input.scenario.sites)
     },
-    importBrowser: async (request: { source: string; profile: string; sites?: readonly string[] }): Promise<ImportResult> => {
+    importBrowser: async (request: { source: string; profile: string; sites?: readonly string[]; history?: boolean }): Promise<ImportResult> => {
       setStore("imports", (items) => [...items, request])
       // Without a list of sites, main imports the whole profile.
       const count = (request.sites?.length ?? 5) * 2
@@ -108,6 +112,8 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
         skipped: input.scenario.skipped ?? 0,
         protected: input.scenario.protected ?? 0,
         failed: input.scenario.partial ? 1 : 0,
+        // History comes only when the import asks for it.
+        pages: request.history ? input.scenario.pages : undefined,
       }
     },
   }
@@ -128,7 +134,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     use: () => live,
     signal: controller.signal,
     desktop: { os: "windows" },
-    stores: { preferences: { value: { links: true, welcomed: !input.offer }, set() {} } },
+    stores: { preferences: { value: { links: true, welcomed: !input.offer, importHistory: input.scenario.history }, set() {} } },
     layout: { settings() {} },
     dialogs: { open: () => ({ close() {} }) },
   }

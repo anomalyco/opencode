@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { addressParts, externalAction, externalPage, pageHandoff, resolveAddress } from "./address"
-import { remember, suggest } from "./history"
+import { suggestPages } from "./history/suggest"
+import { remember } from "./history/visits"
 import { normalizeURL, refusal } from "./policy"
 
 test("typed file paths never become a host or a search query, regardless of the desktop OS", () => {
@@ -93,7 +94,7 @@ test("the field draws the whole URL, split around its host, in exactly the input
   expect(urls.map((url) => Object.values(addressParts(url)).join(""))).toEqual(urls)
 })
 
-test("history keeps one newest-first visit per URL and suggests addresses that complete the query first", () => {
+test("the window's list keeps one newest-first visit per URL and, alone, suggests its matches newest first", () => {
   const visits = ["https://docs.example/mdn-guide", "https://developer.mozilla.org/", "https://www.mdn.dev/"].reduce(
     (list, url) => remember(list, { url, title: url.includes("mozilla") ? "MDN Web Docs" : "Other" }),
     remember([], { url: "https://developer.mozilla.org/", title: "Old title" }),
@@ -104,13 +105,21 @@ test("history keeps one newest-first visit per URL and suggests addresses that c
     ["https://developer.mozilla.org/", "MDN Web Docs"],
     ["https://docs.example/mdn-guide", "Other"],
   ])
-  // A leading www. and the scheme are not typed, so mdn completes www.mdn.dev; the others only contain it.
-  expect(suggest(visits, "MDN", 5).map((visit) => visit.url)).toEqual([
+  // A leading www. and the scheme are not typed, so mdn completes www.mdn.dev; the others have it as a word of the
+  // title or a part of the path.
+  expect(suggestPages("MDN", visits, [], 5).map((visit) => [visit.url, visit.completes])).toEqual([
+    ["https://www.mdn.dev/", true],
+    ["https://developer.mozilla.org/", false],
+    ["https://docs.example/mdn-guide", false],
+  ])
+  // A word found only inside a longer one comes after every word start, however new its page.
+  expect(suggestPages("ozilla", visits, [], 5).map((visit) => visit.url)).toEqual(["https://developer.mozilla.org/"])
+  expect(suggestPages("d", visits, [], 5).map((visit) => visit.url)).toEqual([
     "https://www.mdn.dev/",
     "https://developer.mozilla.org/",
     "https://docs.example/mdn-guide",
   ])
-  expect(suggest(visits, "  ", 5)).toEqual([])
+  expect(suggestPages("  ", visits, [], 5)).toEqual([])
   expect(
     Array.from({ length: 40 }, (_, index) => `https://example.com/${index}`).reduce(
       (list, url) => remember(list, { url, title: "" }),

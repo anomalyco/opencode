@@ -3,6 +3,7 @@ import { createRoot, createSignal } from "solid-js"
 import type { IpcClient, SessionRef, SetupContext } from "@opencode/plugin/gui"
 import { liveAccessor } from "@opencode/plugin/gui/host"
 import { Browser } from "../../plugin-browser/src/rpc"
+import { BrowserHistory } from "../../gui-plugins/src/browser/history/ipc"
 import type definition from "../../gui-plugins/src/browser/index"
 import type { BrowserPane, PaneEvent } from "../../gui-plugins/src/browser/ipc"
 import { createModel } from "../../gui-plugins/src/browser/model"
@@ -93,11 +94,13 @@ function fixture(
   })
 
   const history = { value: { visits: [] }, set: () => undefined }
+  // Main's history of every page is away, as on the web: these cases are about the pane.
+  const away = liveAccessor(() => ({ status: "inactive" }))
 
   const fake = {
     id: "browser",
     t: (key: string, params?: Record<string, string>) => (params ? `${key} ${JSON.stringify(params)}` : key),
-    use: () => live,
+    use: (token: { readonly id: string }) => (token.id === BrowserHistory.id ? away : live),
     sessions: { current, list: () => refs },
     screen: { current: () => undefined },
     links: { open: () => undefined },

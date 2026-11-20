@@ -54,7 +54,10 @@ import {
 } from "./address-machine"
 import { commentNote, pageNote } from "./comment"
 import { Glyph } from "./choices"
-import { bare, highlight, type Visit } from "./history"
+import type { HistoryPage } from "./history/ipc"
+import { markMatches, parseQuery, type Query } from "./history/match"
+import { bare } from "./history/page"
+import type { Visit } from "./history/visits"
 import { SignInOffer } from "./import-prompt"
 import { SiteChooserDialog } from "./site-chooser"
 import type definition from "./index"
@@ -226,6 +229,12 @@ export default function SessionBrowserPane(props: {
   // Suggestions follow what the user typed; a focused address is not a query.
   const suggestions = createMemo(() => addressSuggestions(addressState(), props.model.visits()))
   const addressBar = createMemo(() => addressView(addressState(), epoch(), suggestions()))
+  // The typed words, whose matches each suggestion draws.
+  const query = createMemo(() => parseQuery(addressBar().query))
+
+  // Ends the questions to main's history that are still out when the pane goes.
+  const asking = new AbortController()
+  onCleanup(() => asking.abort())
 
   const dispatchAddress = (event: AddressEvent, domEvent?: Event) => {
     const next = transitionAddress(untrack(addressState), event)
@@ -236,6 +245,21 @@ export default function SessionBrowserPane(props: {
       if (effect.type === "blur-input") return input?.blur()
 
       if (effect.type === "prevent-default") return domEvent?.preventDefault()
+
+      if (effect.type === "forget") return props.model.forgetPage(effect.url)
+
+      if (effect.type === "prepare") return props.model.prepareHistory()
+
+      if (effect.type === "ask") {
+        // The field already shows what was typed and what the window knows; main's pages join when they come. A
+        // question main cannot answer, as on the web, is answered with none.
+        const answer = (pages: readonly HistoryPage[]) => {
+          if (!asking.signal.aborted) dispatchAddress({ type: "answered", attempt: effect.attempt, pages, visits: props.model.visits() })
+        }
+
+        return void props.model.searchHistory(effect.query, asking.signal).then(answer, () => answer([]))
+      }
+
       command({ type: "navigate", tabID: effect.tabID, url: effect.url })
     })
   }
@@ -996,6 +1020,9 @@ export default function SessionBrowserPane(props: {
 
                   if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Escape")
                     dispatchAddress({ type: "key.pressed", key: event.key, visits: props.model.visits() }, event)
+
+                  // Shift+Delete forgets the chosen suggestion, as in other browsers; with none chosen it is the field's.
+                  if (event.key === "Delete" && event.shiftKey) dispatchAddress({ type: "forget.pressed", visits: props.model.visits() }, event)
                 }}
               />
               {/* At rest, draw the whole URL over the input's hidden text with its host emphasized. While editing, the
@@ -1050,7 +1077,7 @@ export default function SessionBrowserPane(props: {
                   {(visit, index) => (
                     <PageRow
                       visit={visit}
-                      query={addressBar().query}
+                      query={query()}
                       option={{ id: `browser-suggestion-${index()}`, selected: index() === addressBar().active }}
                       onClick={() => go(visit.url)}
                     />
@@ -1597,7 +1624,7 @@ export default function SessionBrowserPane(props: {
 /** A page in the suggestions or the new tab page: its icon, title and address, with the query's matches drawn. */
 function PageRow(props: {
   visit: Visit
-  query?: string
+  query?: Query
   /** Set for a suggestion: an option of the address field's list, which keeps keyboard focus in the field. */
   option?: { id: string; selected: boolean }
   onClick: () => void
@@ -1608,12 +1635,12 @@ function PageRow(props: {
       <span data-slot="browser-page-row-text">
         <Show when={props.visit.title}>
           <span data-slot="browser-page-row-title">
-            <Marked text={props.visit.title} query={props.query ?? ""} />
+            <Marked text={props.visit.title} query={props.query} />
           </span>
           <span>-</span>
         </Show>
         <span data-slot="browser-page-row-url">
-          <Marked text={bare(props.visit.url)} query={props.query ?? ""} />
+          <Marked text={bare(props.visit.url)} query={props.query} />
         </span>
       </span>
     </>
@@ -1646,9 +1673,9 @@ function PageRow(props: {
   )
 }
 
-function Marked(props: { text: string; query: string }) {
+function Marked(props: { text: string; query: Query | undefined }) {
   return (
-    <For each={highlight(props.text, props.query)}>
+    <For each={markMatches(props.text, props.query)}>
       {(part) => (
         <Show when={part.match} fallback={part.text}>
           <mark>{part.text}</mark>

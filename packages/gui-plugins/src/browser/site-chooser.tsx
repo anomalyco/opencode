@@ -27,7 +27,8 @@ const TYPE_AHEAD_MS = 700
  * sites" reveals, in place, the sites the browser profile has cookies for, one row per registrable domain with its
  * cookie count, every one ticked until the person changes that; the button then names how many sites it brings. Main
  * reads the list from the cookies' hosts alone. Lists stay only while the dialog is open, so switching back to a
- * profile does not read it again; neither the lists nor the choice is stored.
+ * profile does not read it again; neither the lists nor the choice is stored. The browser's history comes with its
+ * cookies, all of it or the chosen sites', unless the person turned that off in Settings.
  *
  * The import runs as a job of `jobs`, the surface that opened the dialog, which reports how it ended in its own place
  * (a Settings row, the pane's offer). A clean import closes the dialog; a partial or failed one keeps it open and says
@@ -322,8 +323,8 @@ export function SiteChooser(props: {
       title={ctx.t("signins.import", { browser: choiceLabel(choice()) })}
       description={
         result()?.type === "listed"
-          ? ctx.plural("import.description", all().length, { number: number(all().length) })
-          : ctx.t("import.description.loading")
+          ? ctx.plural(props.jobs.importsHistory() ? "import.description.history" : "import.description", all().length, { number: number(all().length) })
+          : ctx.t(props.jobs.importsHistory() ? "import.description.history.loading" : "import.description.loading")
       }
       size={state.revealed ? "large" : "fit"}
       footer={

@@ -11,6 +11,8 @@ type SiteScenario = {
   empty?: boolean
   site?: { name: string; choose: boolean }
   reveal?: boolean
+  pages?: number
+  history?: boolean
 }
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
@@ -61,9 +63,7 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
   await expect(view.options.first()).toHaveAttribute("aria-setsize", "5000")
   // Every site comes over until the person changes that.
   await expect(view.dialog.getByText("5,000 of 5,000 selected")).toBeVisible()
-  await expect(
-    view.dialog.getByText("Copies cookies for all 5,000 sites. The other browser keeps its own."),
-  ).toBeVisible()
+  await expect(view.dialog.getByText("Copies cookies for 5,000 sites and your history. Nothing is removed.")).toBeVisible()
   expect(await view.options.count()).toBeLessThan(45)
   await expect(view.importButton).toHaveText("Import all")
 
@@ -101,7 +101,7 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
 
   // Enter imports what is selected; a clean import closes the dialog.
   await page.keyboard.press("Enter")
-  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", sites: ["linear.app", "figma.com"] })])
+  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", sites: ["linear.app", "figma.com"], history: true })])
   await expect(view.record).toHaveAttribute("data-closed", "true")
   await expect(view.record).toHaveAttribute("data-imported", "1")
 })
@@ -303,13 +303,32 @@ story("an empty profile says so", async ({ page }) => {
 story("opens on one sentence and Import all, which brings every site without the list", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false })
 
-  await expect(view.dialog.getByText("Copies cookies for all 5 sites. The other browser keeps its own.")).toBeVisible()
+  // One line, as before history came too: it does not wrap in the dialog.
+  const sentence = view.dialog.getByText("Copies cookies for 5 sites and your history. Nothing is removed.")
+  await expect(sentence).toBeVisible()
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  expect(
+    await sentence.evaluate((node) => {
+      const range = document.createRange()
+      range.selectNodeContents(node)
+
+      return range.getClientRects().length
+    }),
+  ).toBe(1)
   await expect(view.list).toHaveCount(0)
   await expect(view.dialog.getByRole("button", { name: "Choose sites" })).toHaveAttribute("aria-expanded", "false")
   await view.importButton.click()
-  // No list of sites: main imports the whole profile.
-  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default" })])
+  // No list of sites: main imports the whole profile, and its history with it.
+  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", history: true })])
   await expect(view.record).toHaveAttribute("data-closed", "true")
+})
+
+story("with history turned off in Settings, the dialog says cookies only and the import asks for none", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false, history: false })
+
+  await expect(view.dialog.getByText("Copies cookies for all 5 sites. The other browser keeps its own.")).toBeVisible()
+  await view.importButton.click()
+  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", history: false })])
 })
 
 story("empty fallback uses a compact fit dialog when no browsers are found", async ({ page }) => {
@@ -371,6 +390,22 @@ story("keeps site names left to right in a right-to-left layout, the box at the 
   expect(box && name && count && box.x > name.x && name.x > count.x).toBe(true)
   const long = view.dialog.locator('[data-site$="example.co.uk"]').first().locator("span[title]")
   expect(await long.evaluate((element) => [getComputedStyle(element).direction, element.scrollWidth > element.clientWidth])).toEqual(["rtl", true])
+})
+
+story("the sign-in bar confirms the cookies and the pages of history in one line", async ({ page }) => {
+  await page.evaluate(
+    async (input) => {
+      const [{ mountSiteChooser }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
+
+      mountSiteChooser({ ui, scenario: { sites: 5, pages: 4210 }, offer: true })
+    },
+    { modules },
+  )
+
+  await page.getByRole("button", { name: /^Import from Google Chrome/ }).click()
+  // Both counts are plural for themselves, and the larger is grouped for the app's language.
+  await expect(page.getByRole("status").filter({ hasText: /^Imported/ })).toHaveText("Imported 10 cookies and 4,210 pages from Google Chrome")
+  await expect(page.getByTestId("site-chooser-imports")).toHaveAttribute("data-imported", "1")
 })
 
 // The pane's sign-in bar says what an import brought for a few seconds, then goes by itself; Close ends it sooner.

@@ -6,12 +6,14 @@ import {
   initialAddressState,
   nextAddressEpoch,
   transitionAddress,
+  type AddressEffect,
   type AddressEpoch,
   type AddressEvent,
   type AddressPage,
   type AddressState,
 } from "./address-machine"
-import type { Visit } from "./history"
+import type { HistoryPage } from "./history/ipc"
+import type { Visit } from "./history/visits"
 
 const tabID = Browser.TabID.make("tab_11111111-1111-1111-1111-111111111111")
 
@@ -48,7 +50,8 @@ describe("a submitted address the browser has not reported yet", () => {
     ])
 
     const focused = transitionAddress(submitted.state, { type: "focused", epoch })
-    expect(focused.effects).toEqual([{ type: "select-input" }])
+    // Focusing also has main read its history, ahead of the first question.
+    expect(focused.effects).toEqual([{ type: "select-input" }, { type: "prepare" }])
     expect(view(focused.state, epoch).field).toBe("https://example.com/")
 
     const left = transitionAddress(focused.state, { type: "blurred", epoch })
@@ -69,7 +72,7 @@ describe("a submitted address the browser has not reported yet", () => {
     const focused = transitionAddress(submitted, { type: "focused", epoch: moved }).state
 
     expect(view(focused, moved).field).toBe("https://other.example/")
-    expect(transitionAddress(focused, { type: "blurred", epoch: moved }).state).toEqual({ status: "rest" })
+    expect(transitionAddress(focused, { type: "blurred", epoch: moved }).state).toMatchObject({ status: "rest" })
   })
 })
 
@@ -135,6 +138,7 @@ describe("submitting the field", () => {
     ])
 
     expect(view(editing, epoch, visits)).toMatchObject({ listed: true, active: 0, chosen: visits[0] })
+    expect(view(editing, epoch, visits).chosen?.completes).toBe(true)
 
     expect(transitionAddress(editing, { type: "submitted", epoch, visits, failed: false }).effects[0]).toEqual({
       type: "navigate",
@@ -208,8 +212,145 @@ describe("editing", () => {
   test("leaving the field drops what the edit typed", () => {
     const left = transitionAddress(typed("exa"), { type: "blurred", epoch }).state
 
-    expect(left).toEqual({ status: "rest" })
+    expect(left).toMatchObject({ status: "rest" })
     expect(view(left, epoch, visits)).toMatchObject({ field: "", typed: false, listed: false, query: "" })
+  })
+})
+
+describe("main's history answers after the field shows what was typed", () => {
+  const epoch = reports(blank)
+  const rune: HistoryPage = { url: "https://github.com/anomalyco/rune-desktop", title: "anomalyco/rune-desktop", score: 5 }
+  const github: HistoryPage = { url: "https://github.com/", title: "GitHub", score: 17 }
+  const gitlab: HistoryPage = { url: "https://gitlab.com/", title: "GitLab", score: 2 }
+
+  const focused = replay([{ type: "focused", epoch }])
+
+  const type = (state: AddressState, value: string, deleting = false) =>
+    transitionAddress(state, { type: "input.changed", value, deleting, visits: [] })
+
+  const answer = (state: AddressState, attempt: number, pages: readonly HistoryPage[], local: readonly Visit[] = []) =>
+    transitionAddress(state, { type: "answered", attempt, pages, visits: local })
+
+  const asked = (effects: readonly AddressEffect[]) => effects.flatMap((effect) => (effect.type === "ask" ? [effect] : []))
+
+  test("each change of the text asks main, without waiting: the field has the text at once", () => {
+    const typed = type(focused, "gith")
+    const [question] = asked(typed.effects)
+
+    expect(question).toMatchObject({ type: "ask", query: "gith" })
+    expect(view(typed.state, epoch)).toMatchObject({ field: "gith", listed: false, active: -1 })
+    // Text with nothing to search for asks nothing.
+    expect(type(focused, "   ").effects).toEqual([])
+    expect(type(focused, "https://").effects).toHaveLength(1)
+  })
+
+  test("the answer to the last question joins the list and completes the address it begins", () => {
+    const typed = type(focused, "gith")
+    const answered = answer(typed.state, asked(typed.effects)[0]?.attempt ?? -1, [github, rune])
+
+    expect(view(answered.state, epoch)).toMatchObject({ listed: true, active: 0, chosen: { url: "https://github.com/", completes: true } })
+    expect(transitionAddress(answered.state, { type: "submitted", epoch, visits: [], failed: false }).effects[0]).toEqual({
+      type: "navigate",
+      tabID,
+      url: "https://github.com/",
+    })
+  })
+
+  test("a page that matches without beginning with the text is listed, and Enter still opens the typed text", () => {
+    const typed = type(focused, "rune")
+    const answered = answer(typed.state, asked(typed.effects)[0]?.attempt ?? -1, [rune])
+
+    expect(view(answered.state, epoch)).toMatchObject({ listed: true, active: -1, chosen: undefined })
+    expect(transitionAddress(answered.state, { type: "submitted", epoch, visits: [], failed: false }).effects[0]).toEqual({
+      type: "navigate",
+      tabID,
+      url: "https://www.google.com/search?q=rune",
+    })
+    // One step down chooses it.
+    const stepped = transitionAddress(answered.state, { type: "key.pressed", key: "ArrowDown", visits: [] }).state
+    expect(transitionAddress(stepped, { type: "submitted", epoch, visits: [], failed: false }).effects[0]).toMatchObject({ url: rune.url })
+  })
+
+  test("an answer to an earlier text never replaces the answer to a later one", () => {
+    const first = type(focused, "git")
+    const second = type(first.state, "gith")
+    const early = asked(first.effects)[0]?.attempt ?? -1
+    const late = asked(second.effects)[0]?.attempt ?? -1
+
+    expect(late).not.toBe(early)
+    // The earlier answer arrives after the later question: ignored, as the same state object.
+    expect(answer(second.state, early, [gitlab]).state).toBe(second.state)
+    const answered = answer(second.state, late, [github]).state
+    // And it is ignored when it arrives last, too.
+    expect(answer(answered, early, [gitlab]).state).toBe(answered)
+    expect(view(answered, epoch).chosen).toMatchObject({ url: "https://github.com/" })
+  })
+
+  test("an answer that arrives after the edit ended, or in the next edit, is dropped", () => {
+    const typed = type(focused, "gith")
+    const attempt = asked(typed.effects)[0]?.attempt ?? -1
+    const left = transitionAddress(typed.state, { type: "blurred", epoch }).state
+
+    expect(answer(left, attempt, [github]).state).toBe(left)
+    const again = transitionAddress(left, { type: "focused", epoch }).state
+    expect(answer(again, attempt, [github]).state).toBe(again)
+    const submitted = transitionAddress(typed.state, { type: "submitted", epoch, visits: [], failed: false }).state
+    expect(answer(submitted, attempt, [github]).state).toBe(submitted)
+  })
+
+  test("the last answer stays while the next question is out, narrowed to the new text", () => {
+    const typed = type(focused, "git")
+    const answered = answer(typed.state, asked(typed.effects)[0]?.attempt ?? -1, [github, gitlab, rune]).state
+    const more = type(answered, "gith")
+
+    // GitLab no longer matches; the others show before main answers "gith".
+    expect(addressSuggestions(more.state, []).map((page) => page.url)).toEqual([github.url, rune.url])
+    expect(view(more.state, epoch).active).toBe(0)
+    // Emptying the field drops it: no text has that answer.
+    expect(addressSuggestions(type(more.state, "", true).state, [])).toEqual([])
+  })
+
+  test("deleting never completes, even once the answer comes", () => {
+    const typed = type(focused, "gith", true)
+    const answered = answer(typed.state, asked(typed.effects)[0]?.attempt ?? -1, [github]).state
+
+    expect(view(answered, epoch)).toMatchObject({ listed: true, active: -1, chosen: undefined })
+  })
+
+  test("an answer keeps the suggestion the person stepped to, wherever it lands", () => {
+    const local: Visit[] = [{ url: "https://github.com/sst/opentui", title: "sst/opentui" }]
+    const typed = transitionAddress(focused, { type: "input.changed", value: "gith", deleting: false, visits: local })
+    // Down leaves the completed suggestion for the typed text; down again steps back onto it.
+    const stepped = transitionAddress(typed.state, { type: "key.pressed", key: "ArrowDown", visits: local }).state
+    const chosen = transitionAddress(stepped, { type: "key.pressed", key: "ArrowDown", visits: local }).state
+
+    expect(view(chosen, epoch, local).chosen).toMatchObject({ url: local[0]?.url })
+    const answered = answer(chosen, asked(typed.effects)[0]?.attempt ?? -1, [github, rune], local).state
+    // Main's pages rank above it; it is still the one Enter opens.
+    expect(addressSuggestions(answered, local).map((page) => page.url)).toEqual([github.url, rune.url, local[0]?.url])
+    expect(view(answered, epoch, local)).toMatchObject({ active: 2, chosen: { url: local[0]?.url } })
+  })
+
+  test("a question main could not answer leaves what the window knows", () => {
+    const local: Visit[] = [{ url: "https://github.com/sst/opentui", title: "sst/opentui" }]
+    const typed = transitionAddress(focused, { type: "input.changed", value: "gith", deleting: false, visits: local })
+    const answered = answer(typed.state, asked(typed.effects)[0]?.attempt ?? -1, [], local).state
+
+    expect(view(answered, epoch, local)).toMatchObject({ listed: true, active: 0, chosen: { url: local[0]?.url } })
+  })
+
+  test("Shift+Delete forgets the chosen suggestion at once, and is the field's own key without one", () => {
+    const typed = type(focused, "gith")
+    const answered = answer(typed.state, asked(typed.effects)[0]?.attempt ?? -1, [github, rune]).state
+    const forgotten = transitionAddress(answered, { type: "forget.pressed", visits: [] })
+
+    expect(forgotten.effects).toEqual([{ type: "prevent-default" }, { type: "forget", url: "https://github.com/" }])
+    // The next suggestion takes its place and stays chosen.
+    expect(view(forgotten.state, epoch)).toMatchObject({ listed: true, active: 0, chosen: { url: rune.url } })
+
+    const none = transitionAddress(type(focused, "rune").state, { type: "forget.pressed", visits: [] })
+    expect(none.effects).toEqual([])
+    expect(transitionAddress(focused, { type: "forget.pressed", visits: [] }).state).toBe(focused)
   })
 })
 

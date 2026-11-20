@@ -57,6 +57,19 @@ story("a search that lands inside Advanced opens it once, and the person's toggl
   await expect(view.advanced).toHaveAttribute("aria-expanded", "false")
 })
 
+story("an import brings history until the person turns that off under Advanced, and the import note says which", async ({ page }) => {
+  const view = await open(page, { target: "settings-browser-history" })
+  const history = view.root.getByRole("switch", { name: "Import browsing history" })
+
+  await expect(view.advanced).toHaveAttribute("aria-expanded", "true")
+  await expect(history).toBeChecked()
+  await expect(view.root.getByText("Copies cookies and history. The other browser keeps its own.")).toBeVisible()
+
+  await history.click({ force: true })
+  await expect(view.stored).toContainText('"importHistory":false')
+  await expect(view.root.getByText("Copies cookies only. The other browser keeps its own.")).toBeVisible()
+})
+
 story("Add an extension aligns controls without top clipping and switches cleanly into a confirmation step", async ({ page }) => {
   const view = await open(page, { extensions: true })
 

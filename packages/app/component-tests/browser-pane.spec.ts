@@ -1353,15 +1353,73 @@ story("suggests visited pages and opens the first one that completes the typed a
   await address.press("Enter")
   await expect(address).toHaveValue("http://localhost:5173/settings")
 
-  // A search query also opens the first match; stepping past the list leaves the typed text, which searches.
+  // Words that only match a page list it without choosing it, so Enter still searches; a step down opens it.
   await address.click()
   await address.pressSequentially("color format")
   await expect(options).toHaveCount(1)
-  await expect(options.first()).toHaveAttribute("aria-selected", "true")
-  await address.press("ArrowDown")
   await expect(options.first()).toHaveAttribute("aria-selected", "false")
   await address.press("Enter")
   await expect(address).toHaveValue("https://www.google.com/search?q=color%20format")
+  await address.click()
+  await address.pressSequentially("color format")
+  await address.press("ArrowDown")
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  await address.press("Enter")
+  await expect(address).toHaveValue("https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Colors/Color_format_converter")
+})
+
+story("finds imported pages by their words, completes the site a host begins, and forgets a page on Shift+Delete", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
+  await expect(root.getByText("Main history: 59", { exact: true })).toBeVisible()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  const options = page.getByRole("listbox", { name: "Suggestions" }).getByRole("option")
+  const addresses = () => options.locator('[data-slot="browser-page-row-url"]')
+
+  // Main answers after the field shows the text: the list fills with the best matches of 59 pages, the most visited
+  // first, and a word found only inside another ("prune") last.
+  await address.click()
+  await address.pressSequentially("rune")
+  await expect(addresses()).toHaveText([
+    "github.com/anomalyco/rune-desktop",
+    "github.com/anomalyco/rune-desktop/pulls",
+    "docs.rune.example/guide/getting-started",
+    "github.com/anomalyco/rune-desktop/issues/128",
+    "github.com/runelabs/rune-lang",
+  ])
+  await expect(options.first().locator("mark")).toHaveText(["rune", "Rune", "rune"])
+  await expect(options.first()).toHaveAttribute("aria-selected", "false")
+  // Imported pages have no icon of their own: the globe stands in, and none is fetched.
+  await expect(options.locator("img")).toHaveCount(0)
+
+  // Both words, in either order, wherever each starts a part of the address.
+  await address.fill("")
+  await address.pressSequentially("desk anom")
+  await expect(addresses()).toHaveText([
+    "github.com/anomalyco/rune-desktop",
+    "github.com/anomalyco/rune-desktop/pulls",
+    "github.com/anomalyco/rune-desktop/issues/128",
+  ])
+
+  // Shift+Delete forgets the chosen page, in main's history too; with none chosen the key is the field's own.
+  await address.fill("")
+  await address.pressSequentially("rune")
+  await expect(options).toHaveCount(5)
+  await address.press("Shift+Delete")
+  await expect(root.getByText("Main history: 59", { exact: true })).toBeVisible()
+  await address.press("ArrowDown")
+  await address.press("Shift+Delete")
+  await expect(addresses().first()).toHaveText("github.com/anomalyco/rune-desktop/pulls")
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  await expect(root.getByText("Main history: 58", { exact: true })).toBeVisible()
+
+  // Text that begins a host completes its site, which Enter opens.
+  await address.fill("")
+  await address.pressSequentially("gith")
+  await expect(addresses().first()).toHaveText("github.com/")
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  await address.press("Enter")
+  await expect(address).toHaveValue("https://github.com/")
 })
 
 story("lists recent pages on a blank tab and opens one", async ({ page }) => {
@@ -2060,7 +2118,9 @@ story("asks for a site's sign-in with its realm, says the last one failed, and k
 story("the options menu lists everyday actions first and the rest under More tools, where each still runs", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Seed history", exact: true }).click()
+  await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
   await expect(root.getByText(/^Visits: \S/)).toBeVisible()
+  await expect(root.getByText("Main history: 59", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Browser options", exact: true }).click()
   // Find, the zoom row (out, the zoom itself, in), Copy link and Add page; then More tools; then settings.
   await expect(page.getByRole("menu").first().getByRole("menuitem")).toHaveText([
@@ -2081,8 +2141,10 @@ story("the options menu lists everyday actions first and the rest under More too
     /^Reload without saved files/,
     "Clear history",
   ])
+  // Clearing forgets the window's last pages and main's history, imported pages included.
   await page.getByRole("menuitem", { name: "Clear history", exact: true }).click()
   await expect(root.getByText("Visits:", { exact: true })).toBeVisible()
+  await expect(root.getByText("Main history: 0", { exact: true })).toBeVisible()
   // The bar keeps only what every browser has there.
   await expect(root.getByRole("button", { name: "Add page to session", exact: true })).toHaveCount(0)
   await expect(root.getByRole("button", { name: "Comment on part of the page", exact: true })).toHaveCount(0)

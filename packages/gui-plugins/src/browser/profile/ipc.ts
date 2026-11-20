@@ -124,6 +124,8 @@ export type ProfileSource = typeof ProfileSource.Type
  * How a cookie import ended.
  * - `imported`: `imported` cookies were written; `skipped` were expired or partitioned, `protected` were encrypted with a
  *   key only the source browser can use (Chrome and Edge app-bound encryption on Windows), `failed` did not decrypt.
+ *   `pages` is how many pages of the browser's history came too: absent for a cookie file, or when history was not
+ *   asked for. History that could not be read is 0 pages, never a failure.
  * - `failed`: nothing was read. `key`: the browser's key was not available, e.g. a denied Keychain prompt. `access`: the
  *   system denied access, e.g. Safari without Full Disk Access. `locked`: the browser runs and holds its cookies open,
  *   as Chromium does on Windows. `read`: the profile could not be read. `format`: the
@@ -136,6 +138,7 @@ export const ImportResult = Schema.Union([
     skipped: Count,
     protected: Count,
     failed: Count,
+    pages: Schema.optional(Count),
   }),
   Schema.Struct({
     type: Schema.Literal("failed"),
@@ -215,10 +218,15 @@ export const BrowserProfile = Ipc.define({
     sites: { input: Schema.Struct(SourceProfile), output: SiteList },
     /**
      * Imports a browser profile's cookies: all of them, or with `sites` only those of the sites `sites` returned that
-     * the user chose. Cookies already in the profile stay, so a later import adds more sites.
+     * the user chose. Cookies already in the profile stay, so a later import adds more sites. With `history`, the
+     * profile's browsing history comes too, for the address field to complete from: all of it, or the chosen sites'.
      */
     importBrowser: {
-      input: Schema.Struct({ ...SourceProfile, sites: Schema.optional(Schema.Array(text(255)).check(Schema.isMaxLength(100_000))) }),
+      input: Schema.Struct({
+        ...SourceProfile,
+        sites: Schema.optional(Schema.Array(text(255)).check(Schema.isMaxLength(100_000))),
+        history: Schema.optional(Schema.Boolean),
+      }),
       output: ImportResult,
     },
     /** A Netscape `cookies.txt`, a JSON cookie export or a Playwright storage state. */
@@ -231,8 +239,8 @@ export const BrowserProfile = Ipc.define({
     /** Turns sharing the profile's sign-ins with remote servers' pages on or off; see the state's `remoteSignIns`. */
     shareSignIns: { input: Schema.Struct({ enabled: Schema.Boolean }) },
     /**
-     * Signs out everywhere: deletes every cookie, cache, site's stored data and HTTP sign-in. Extensions and the site
-     * permissions the user kept stay.
+     * Signs out everywhere: deletes every cookie, cache, site's stored data and HTTP sign-in, and the browsing history.
+     * Extensions and the site permissions the user kept stay.
      */
     clear: {},
     /** The extensions a Chromium profile has installed. */
