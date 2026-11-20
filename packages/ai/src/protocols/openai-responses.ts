@@ -188,10 +188,7 @@ const toolUpdates = {
 
 const isHostedTool = (tool: ToolEntry) => tool.type === "tool" && tool.native !== undefined
 
-// Automatic `context_management` compaction drops developer messages, removal notices included, while the tools stay
-// declared, so tool changes fold alongside it.
-const declaresInPlace = (request: LLMRequest) =>
-  request.providerOptions?.contextManagement === undefined && toolUpdateKinds(request).includes("add")
+const declaresInPlace = (request: LLMRequest) => toolUpdateKinds(request).includes("add")
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
   const native = tool.native?.openai
@@ -203,22 +200,27 @@ const nativeImageTool = (tool: ToolDefinition) => {
   return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
 }
 
-// Each definition is lowered as itself: a tool redefined later keeps its earlier wire form where it was declared.
-const lowerTool = Effect.fnUntraced(function* (tool: ToolDefinition) {
+const lowerTool = Effect.fnUntraced(function* (
+  tool: ToolDefinition,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) {
   const native = nativeImageToolInput(tool)
   if (native !== undefined) {
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
     return yield* ProviderShared.invalidRequest("OpenAI Responses image generation tool options are invalid")
   }
-  const custom = OpenAIFreeform.resolve(tool)
-  if (custom) return OpenResponses.lowerCustomTool(tool, custom)
+  const definition = custom.get(tool.name)
+  if (definition) return OpenResponses.lowerCustomTool(tool, definition)
   return yield* OpenResponses.lowerTool(NAME, tool)
 })
 
 // Native namespaces hold only function tools, so deeper levels flatten into
 // the leaf names the same way non-native protocols flatten the whole tree.
-const lowerToolEntry = Effect.fnUntraced(function* (tool: ToolEntry) {
-  if (tool.type === "tool") return yield* lowerTool(tool)
+const lowerToolEntry = Effect.fnUntraced(function* (
+  tool: ToolEntry,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) {
+  if (tool.type === "tool") return yield* lowerTool(tool, custom)
   // OpenAI requires a namespace description; fall back to a generic one so a
   // missing description never blocks the request.
   return {
@@ -234,7 +236,7 @@ const lowerToolEntry = Effect.fnUntraced(function* (tool: ToolEntry) {
 // Lowers one request's tool updates, in message order. Every `additional_tools` item after the first is preceded by
 // a hint that it adds to the tools declared before it, naming tools removed and not declared again since. Without
 // it, models can read the latest item as the whole set.
-const toolChangeLowering = (declaredInPlace: boolean) => {
+const toolChangeLowering = (declaredInPlace: boolean, custom: ReadonlyMap<string, OpenAIFreeform.Custom>) => {
   let declared = declaredInPlace
   const unavailable = new Set<string>()
   return Effect.fnUntraced(function* (changes: ToolChanges) {
@@ -247,7 +249,7 @@ const toolChangeLowering = (declaredInPlace: boolean) => {
             {
               type: "additional_tools" as const,
               role: "developer" as const,
-              tools: yield* Effect.forEach(changes.add, lowerToolEntry),
+              tools: yield* Effect.forEach(changes.add, (tool) => lowerToolEntry(tool, custom)),
             },
           ]
     declared = declared || changes.add.length > 0
@@ -268,8 +270,11 @@ const removalNotice = (names: ReadonlyArray<string>) =>
   `These tools are no longer available. Do not call them: ${names.join(", ")}.`
 
 // The leading declaration: top-level `tools`, or a leading `additional_tools` item on models that add tools in place.
-const lowerToolLayout = Effect.fnUntraced(function* (request: LLMRequest) {
-  const lower = (tools: ReadonlyArray<ToolEntry>) => Effect.forEach(tools, lowerToolEntry)
+const lowerToolLayout = Effect.fnUntraced(function* (
+  request: LLMRequest,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) {
+  const lower = (tools: ReadonlyArray<ToolEntry>) => Effect.forEach(tools, (tool) => lowerToolEntry(tool, custom))
   const declared = declaresInPlace(request) ? request.tools.filter((tool) => !isHostedTool(tool)) : []
   const top = declared.length === 0 ? request.tools : request.tools.filter(isHostedTool)
   return {
@@ -305,10 +310,10 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   const updates = resolveEffortUpdates(request, options.reasoningEffort)
   const generation = OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort })
   const custom = OpenAIFreeform.tools(request)
-  const layout = yield* lowerToolLayout(request)
+  const layout = yield* lowerToolLayout(request, custom)
   const conversation = yield* OpenResponses.lowerConversation(updates.request, {
     ...adapter,
-    lowerToolChanges: toolChangeLowering(layout.head.length > 0),
+    lowerToolChanges: toolChangeLowering(layout.head.length > 0, custom),
   })
   return {
     model: conversation.model,
@@ -417,7 +422,10 @@ export const transport = channelTransport({
 
 export const route = Route.make({
   compact: {
-    endpoint: ResponsesCompaction.make(adapter, (request) => Effect.forEach(request.tools, lowerToolEntry)),
+    endpoint: ResponsesCompaction.make(adapter, (request) => {
+      const custom = OpenAIFreeform.tools(request)
+      return Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, custom))
+    }),
     trigger: ResponsesCheckpoint.make(checkpointBody),
   },
   id: ADAPTER,

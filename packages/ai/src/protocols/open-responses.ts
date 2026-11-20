@@ -656,8 +656,7 @@ const DEFAULT_EFFORT = "medium"
 export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
-  // A call replays in the form its tool had when it was made, so the custom tools follow each tool change in order.
-  let custom = OpenAIFreeform.declare(new Map(), request.tools)
+  const custom = OpenAIFreeform.tools(request)
   const customTool = (part: ToolCallPart | ToolResultPart) =>
     part.namespace === undefined ? custom.get(part.name) : undefined
 
@@ -679,7 +678,6 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
       // Planning folds every marker on routes whose protocol has no `toolUpdates`, so only adapters with
       // `lowerToolChanges` see one.
       const tools = toolsUpdate(message)
-      if (tools) custom = OpenAIFreeform.declare(custom, tools.add)
       if (tools && adapter.lowerToolChanges) {
         input.push(...(yield* adapter.lowerToolChanges(tools)))
         if (message.content.length === 0) continue
