@@ -1,26 +1,41 @@
 export { type JSONSchema, type JSONSchemaType, validateData } from "./json-schema.js"
 export {
   type Button,
+  type Canvas,
   type Card,
   type Carousel,
   type Checkbox,
+  type Color,
   type Column,
+  Command,
   type Divider,
+  type DrawInput,
+  DrawOutput,
+  type Frame,
   type Gap,
+  type Gradient,
   type Image,
   type Input,
   type Markdown,
+  MAX_COMMANDS,
   Node,
+  type Paint,
+  type Pointer,
   type Row,
+  type Segment,
   type Select,
   type SelectOption,
+  type Shader,
   type Slider,
   type StepInput,
   StepOutput,
+  type Stop,
   type Text,
+  type TextStyle,
   type Tone,
+  WGSL_BYTES,
   type WidgetEvent,
 } from "./node.js"
 export { prelude, program, version } from "./program.js"
-export { StepError, type StepOptions, TIMEOUT_MS, WidgetSession, step } from "./session.js"
+export { draw, StepError, type StepOptions, TIMEOUT_MS, WidgetSession, step } from "./session.js"
 export { builtins, NAME, type Template } from "./template.js"

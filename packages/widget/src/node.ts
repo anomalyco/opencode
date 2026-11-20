@@ -92,6 +92,33 @@ export interface Input {
 export interface Divider {
   readonly type: "divider"
 }
+/** Drawn by the template's `draw(state, data, frame)`; sends `pointer` events when it has an `id`. */
+export interface Canvas {
+  readonly type: "canvas"
+  readonly id?: string
+  /** Logical pixels; the canvas takes the full available width unless `width` is set. */
+  readonly height: number
+  readonly width?: number
+  /** Frames per second while animating: 0 (default) draws only when it appears or the state changes; max 60. */
+  readonly fps?: number
+  readonly alt?: string
+}
+/** A WGSL fragment shader defining `fn shade(frag: vec2f) -> vec4f` (see the spec's Shader section). */
+export interface Shader {
+  readonly type: "shader"
+  readonly id?: string
+  readonly height: number
+  readonly width?: number
+  /** At most 16 KB of UTF-8. */
+  readonly wgsl: string
+  /** Up to 16 floats, available to the shader as `widget.values` (4 vec4f, row-major, zero padded). */
+  readonly values?: ReadonlyArray<number>
+  /** Default 60, max 60. */
+  readonly fps?: number
+  readonly alt?: string
+  /** An image src shown where the shader can't run. */
+  readonly poster?: string
+}
 
 export type Node =
   | Column
@@ -107,12 +134,92 @@ export type Node =
   | Select
   | Input
   | Divider
+  | Canvas
+  | Shader
 
-export type WidgetEvent = { readonly id: string; readonly type: "press" | "change"; readonly value?: unknown }
+/** Pointer input on a canvas with an `id`: `move` only while down, at most once per frame. */
+export interface Pointer {
+  readonly kind: "down" | "move" | "up"
+  readonly x: number
+  readonly y: number
+}
+
+export type WidgetEvent =
+  | { readonly id: string; readonly type: "press" | "change"; readonly value?: unknown }
+  | { readonly id: string; readonly type: "pointer"; readonly value: Pointer }
+
+/** What `draw` gets: the canvas being drawn, the time, its size and the pointer over it. */
+export interface Frame {
+  /** The canvas node's id, so templates with several canvases can switch on it. */
+  readonly id: string | null
+  /** Seconds since the canvas appeared. */
+  readonly t: number
+  /** Seconds since the previous frame. */
+  readonly dt: number
+  /** Logical size. */
+  readonly width: number
+  readonly height: number
+  /** Device pixel ratio. */
+  readonly scale: number
+  readonly pointer: { readonly x: number; readonly y: number; readonly down: boolean } | null
+  readonly dark: boolean
+}
 
 export type StepInput =
   | { readonly phase: "init"; readonly data: unknown }
   | { readonly phase: "event"; readonly data: unknown; readonly state: unknown; readonly event: WidgetEvent }
+  | DrawInput
+
+export type DrawInput = {
+  readonly phase: "draw"
+  readonly data: unknown
+  readonly state: unknown
+  readonly frame: Frame
+}
+
+/** "#rgb", "#rrggbb", "#rrggbbaa" or a theme token. */
+export type Color = string
+export type Gradient =
+  | { readonly linear: readonly [number, number, number, number]; readonly stops: ReadonlyArray<Stop> }
+  | { readonly radial: readonly [number, number, number]; readonly stops: ReadonlyArray<Stop> }
+export type Stop = readonly [offset: number, color: Color]
+export interface Paint {
+  readonly fill?: Color | Gradient
+  readonly stroke?: Color
+  readonly width?: number
+  readonly cap?: "butt" | "round"
+}
+export interface TextStyle {
+  readonly size?: number
+  readonly weight?: 400 | 500 | 600 | 700
+  readonly align?: "left" | "center" | "right"
+  readonly color?: Color
+  readonly mono?: boolean
+}
+export type Segment =
+  | readonly ["M", number, number]
+  | readonly ["L", number, number]
+  | readonly ["Q", number, number, number, number]
+  | readonly ["C", number, number, number, number, number, number]
+  | readonly ["Z"]
+export type Command =
+  | readonly ["save"]
+  | readonly ["restore"]
+  | readonly ["translate", number, number]
+  | readonly ["rotate", number]
+  | readonly ["scale", number, number]
+  | readonly ["alpha", number]
+  | readonly ["rect", number, number, number, number, Paint]
+  | readonly ["rrect", number, number, number, number, number, Paint]
+  | readonly ["circle", number, number, number, Paint]
+  | readonly ["line", number, number, number, number, Paint]
+  | readonly ["path", ReadonlyArray<Segment>, Paint]
+  | readonly ["text", number, number, string, TextStyle]
+  | readonly ["image", string, number, number, number, number]
+
+export interface DrawOutput {
+  readonly commands: ReadonlyArray<Command>
+}
 
 export interface StepOutput {
   readonly state: unknown
@@ -124,6 +231,11 @@ export interface StepOutput {
   /** Added by the runtime, not the program: nodes of unknown types that were dropped from the view. */
   readonly warnings?: ReadonlyArray<string>
 }
+
+/** The most a shader's `wgsl` may hold, in UTF-8 bytes. */
+export const WGSL_BYTES = 16 * 1024
+/** The most commands one draw step may return. */
+export const MAX_COMMANDS = 2000
 
 const optional = Schema.optionalKey
 const children = Schema.Array(Schema.suspend((): Schema.Codec<Node> => Node))
@@ -210,6 +322,27 @@ export const Node: Schema.Codec<Node> = Schema.Union([
     multiline: optional(Schema.Boolean),
   }),
   Schema.Struct({ type: Schema.Literal("divider") }),
+  Schema.Struct({
+    type: Schema.Literal("canvas"),
+    id: optional(Schema.String),
+    height: Schema.Finite.check(Schema.isGreaterThan(0)),
+    width: optional(Schema.Finite.check(Schema.isGreaterThan(0))),
+    fps: optional(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 60 }))),
+    alt: optional(Schema.String),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("shader"),
+    id: optional(Schema.String),
+    height: Schema.Finite.check(Schema.isGreaterThan(0)),
+    width: optional(Schema.Finite.check(Schema.isGreaterThan(0))),
+    wgsl: Schema.String.check(
+      Schema.makeFilter((wgsl: string) => Buffer.byteLength(wgsl) <= WGSL_BYTES || `must be at most 16 KB of WGSL`),
+    ),
+    values: optional(Schema.Array(Schema.Finite).check(Schema.isMaxLength(16))),
+    fps: optional(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 60 }))),
+    alt: optional(Schema.String),
+    poster: optional(Schema.String),
+  }),
 ])
 
 export const types: ReadonlyArray<Node["type"]> = [
@@ -226,6 +359,8 @@ export const types: ReadonlyArray<Node["type"]> = [
   "select",
   "input",
   "divider",
+  "canvas",
+  "shader",
 ]
 
 export const StepOutput = Schema.Struct({
@@ -233,4 +368,58 @@ export const StepOutput = Schema.Struct({
   view: Node,
   submit: optional(Schema.Unknown),
   dismiss: optional(Schema.Literal(true)),
+})
+
+const n = Schema.Finite
+const tokens = ["text", "muted", "accent", "bg", "surface", "border", "success", "warning", "error"] as const
+const Color = Schema.Union([
+  Schema.Literals(tokens),
+  Schema.String.check(Schema.isPattern(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/)),
+])
+const stops = Schema.Array(Schema.Tuple([n, Color]))
+const Gradient = Schema.Union([
+  Schema.Struct({ linear: Schema.Tuple([n, n, n, n]), stops }),
+  Schema.Struct({ radial: Schema.Tuple([n, n, n]), stops }),
+])
+const Paint = Schema.Struct({
+  fill: optional(Schema.Union([Color, Gradient])),
+  stroke: optional(Color),
+  width: optional(n.check(Schema.isGreaterThanOrEqualTo(0))),
+  cap: optional(Schema.Literals(["butt", "round"])),
+})
+const TextStyle = Schema.Struct({
+  size: optional(n.check(Schema.isGreaterThan(0))),
+  weight: optional(Schema.Literals([400, 500, 600, 700])),
+  align: optional(Schema.Literals(["left", "center", "right"])),
+  color: optional(Color),
+  mono: optional(Schema.Boolean),
+})
+const Segment = Schema.Union([
+  Schema.Tuple([Schema.Literal("M"), n, n]),
+  Schema.Tuple([Schema.Literal("L"), n, n]),
+  Schema.Tuple([Schema.Literal("Q"), n, n, n, n]),
+  Schema.Tuple([Schema.Literal("C"), n, n, n, n, n, n]),
+  Schema.Tuple([Schema.Literal("Z")]),
+])
+
+export const Command: Schema.Codec<Command> = Schema.Union([
+  Schema.Tuple([Schema.Literal("save")]),
+  Schema.Tuple([Schema.Literal("restore")]),
+  Schema.Tuple([Schema.Literal("translate"), n, n]),
+  Schema.Tuple([Schema.Literal("rotate"), n]),
+  Schema.Tuple([Schema.Literal("scale"), n, n]),
+  Schema.Tuple([Schema.Literal("alpha"), n.check(Schema.isBetween({ minimum: 0, maximum: 1 }))]),
+  Schema.Tuple([Schema.Literal("rect"), n, n, n, n, Paint]),
+  Schema.Tuple([Schema.Literal("rrect"), n, n, n, n, n, Paint]),
+  Schema.Tuple([Schema.Literal("circle"), n, n, n, Paint]),
+  Schema.Tuple([Schema.Literal("line"), n, n, n, n, Paint]),
+  Schema.Tuple([Schema.Literal("path"), Schema.Array(Segment), Paint]),
+  Schema.Tuple([Schema.Literal("text"), n, n, Schema.String, TextStyle]),
+  Schema.Tuple([Schema.Literal("image"), Schema.String, n, n, n, n]),
+])
+
+export const DrawOutput = Schema.Struct({
+  commands: Schema.Array(Command).check(
+    Schema.isMaxLength(MAX_COMMANDS, { message: `must have at most ${MAX_COMMANDS} commands` }),
+  ),
 })

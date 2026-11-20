@@ -1,6 +1,15 @@
 import { Result, Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
-import { type Node, StepOutput, type StepInput, type WidgetEvent, types } from "./node.js"
+import {
+  type DrawInput,
+  DrawOutput,
+  type Frame,
+  type Node,
+  StepOutput,
+  type StepInput,
+  type WidgetEvent,
+  types,
+} from "./node.js"
 
 /** The most a step may run; clients may pass a smaller `timeoutMs`. */
 export const TIMEOUT_MS = 250
@@ -20,9 +29,37 @@ export class StepError extends Schema.TaggedError<StepError>()("Widget.StepError
  * Runs one step of `program` (see `program()`) on the stock interpreter with `__input` as the only host global.
  * Nodes of unknown types are dropped from the view and reported in `warnings`. Rejects with a `StepError`.
  */
-export async function step(program: string, input: StepInput, options?: StepOptions): Promise<StepOutput> {
+export async function step(
+  program: string,
+  input: Exclude<StepInput, DrawInput>,
+  options?: StepOptions,
+): Promise<StepOutput> {
+  const value = await run(program, input, options?.timeoutMs ?? TIMEOUT_MS)
+  const warnings: string[] = []
+  const decoded = decodeOutput(isRecord(value) ? { ...value, view: prune(value.view, warnings) } : value)
+  if (Result.isFailure(decoded)) throw new StepError({ kind: "invalid", message: decoded.failure.message })
+  if (warnings.length === 0) return decoded.success
+  return { ...decoded.success, warnings }
+}
+
+/**
+ * Runs the `draw` phase for a canvas: the template's `draw(state, data, frame)`, or nothing without one. Rejects with a
+ * `StepError` when it throws, times out or returns invalid commands. The timeout defaults to `TIMEOUT_MS`, not the
+ * spec's 8 ms frame budget: this interpreter parses the program on every step, which alone takes a few ms.
+ */
+export async function draw(
+  program: string,
+  input: Omit<DrawInput, "phase">,
+  options?: StepOptions,
+): Promise<DrawOutput> {
+  const decoded = decodeDraw(await run(program, { phase: "draw", ...input }, options?.timeoutMs ?? TIMEOUT_MS))
+  if (Result.isFailure(decoded)) throw new StepError({ kind: "invalid", message: decoded.failure.message })
+  return decoded.success
+}
+
+async function run(program: string, input: StepInput, timeoutMs: number) {
   const result = await Runtime.make({
-    limits: { timeoutMs: options?.timeoutMs ?? TIMEOUT_MS },
+    limits: { timeoutMs },
     globals: () => ({ __input: Host.fn(() => input) }),
   }).execute(program + "\nreturn __widget_step(__input())")
   if (!result.ok)
@@ -30,12 +67,7 @@ export async function step(program: string, input: StepInput, options?: StepOpti
       kind: result.error.kind === "TimeoutExceeded" ? "timeout" : "error",
       message: result.error.message,
     })
-  const warnings: string[] = []
-  const value = result.value
-  const decoded = decodeOutput(isRecord(value) ? { ...value, view: prune(value.view, warnings) } : value)
-  if (Result.isFailure(decoded)) throw new StepError({ kind: "invalid", message: decoded.failure.message })
-  if (warnings.length === 0) return decoded.success
-  return { ...decoded.success, warnings }
+  return result.value
 }
 
 export interface WidgetSession {
@@ -48,6 +80,8 @@ export interface WidgetSession {
    * and the session keeps its previous state and view.
    */
   readonly dispatch: (event: WidgetEvent) => Promise<StepOutput>
+  /** Draws a canvas of the current view with the current state; never changes the state. */
+  readonly draw: (frame: Frame) => Promise<DrawOutput>
 }
 
 export const WidgetSession = {
@@ -78,11 +112,13 @@ export const WidgetSession = {
         )
         return next
       },
+      draw: (frame) => draw(program, { data, state: current.state, frame }, options),
     }
   },
 }
 
 const decodeOutput = Schema.decodeUnknownResult(StepOutput)
+const decodeDraw = Schema.decodeUnknownResult(DrawOutput)
 const known = new Set<string>(types)
 
 // Drops nodes of unknown types from `children` so older clients render what they know (spec: "unknown node types
