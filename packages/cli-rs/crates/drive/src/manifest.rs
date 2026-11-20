@@ -156,24 +156,18 @@ mod tests {
         move |key| vars.get(key).cloned()
     }
 
+    /// Unset or empty is off, `1` the defaults, and a name a manifest of the registry: only a plain name, and only one
+    /// whose endpoints are loopback ports.
     #[test]
-    fn unset_and_default() {
+    fn manifests_come_from_the_registry() {
         assert_eq!(resolve(env(&[])), None);
         assert_eq!(resolve(env(&[("OPENCODE_DRIVE", "")])), None);
         assert_eq!(resolve(env(&[("OPENCODE_DRIVE", "1")])), Some(Ok(Manifest::defaults())));
         assert_eq!(Manifest::defaults().ui_addr(), SocketAddr::from(([127, 0, 0, 1], 40900)));
-    }
-
-    #[test]
-    fn names_are_checked() {
         for name in ["-x", "a/b", "a b", &"a".repeat(65)] {
             let error = resolve(env(&[("OPENCODE_DRIVE", name)])).unwrap().unwrap_err();
             assert!(error.0.starts_with("Invalid Drive configuration"), "{name}: {error}");
         }
-    }
-
-    #[test]
-    fn manifests_come_from_the_registry() {
         let directory = opencode_util::temp::tempdir().unwrap();
         let instances = directory.path().join("opencode-drive").join("instances");
         std::fs::create_dir_all(&instances).unwrap();
