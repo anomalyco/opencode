@@ -816,7 +816,9 @@ export function createBrowserPage(
   contents.on("did-stop-loading", () => {
     dispatch({ type: "loading.stopped", title: pageTitle() })
     detail()
-    journal.sample(processMemory(electron.app.getAppMetrics(), contents.getOSProcessId()))
+
+    // A page that ends before the pane's next sample still has its memory as it was once loaded.
+    if (!closed()) journal.sample(processMemory(electron.app.getAppMetrics(), contents.getOSProcessId()))
   })
   contents.on("did-start-navigation", (event) => {
     // A load no frame started (the address bar, a link from the conversation, history) may redirect before it commits.

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, jest, setSystemTime, test } from "bun:test"
-import { createPageLog, exitCodeHex, logOrigin, PROCESS_ACCOUNT_MS, processMemory, setupFailure, type ProcessMemory } from "./page-log"
+import { createPageLog, exitCodeHex, logOrigin, PROCESS_ACCOUNT_MS, processMemory, setupFailure } from "./page-log"
 
 // The desktop log goes into bug reports. Whatever a page's address holds beyond its origin must never reach it.
 test.each([
@@ -65,19 +65,19 @@ const address = "https://alex:pa55word@mail.example.com/inbox/42?token=s3cret#me
 
 type Line = { readonly level: string; readonly message: string; readonly data: object }
 
-// One page's log over a page the test moves: its memory is listed until `live` is cleared, as a process's is.
+// One page's log over a page the test moves: its process is listed, with its memory, until the test ends it.
 function page() {
   const lines: Line[] = []
-  const live: { memory?: ProcessMemory } = { memory: { pid: 10, workingSetKB: 900, peakWorkingSetKB: 950, privateKB: 400 } }
+  const processes = new Map([[10, { pid: 10, workingSetKB: 900, peakWorkingSetKB: 950, privateKB: 400 }]])
 
   const log = createPageLog({
     tab: "tab_1",
     write: (level, message, data) => lines.push({ level, message, data }),
     page: () => ({ address, agentDriven: true, loading: false }),
-    memory: () => live.memory,
+    memory: () => processes.get(10),
   })
 
-  return { lines, live, log }
+  return { lines, processes, log }
 }
 
 beforeEach(() => {
@@ -95,10 +95,10 @@ test("a crash the debugger reports before the process is one line with the proce
   const tab = page()
   setSystemTime(START + 60_000)
   const done = tab.log.operation("click", "agent")
-  tab.log.sample(tab.live.memory)
+  tab.log.sample(tab.processes.get(10))
   setSystemTime(START + 90_000)
   // The process is gone, so Electron lists its memory no more.
-  tab.live.memory = undefined
+  tab.processes.clear()
   tab.log.end({ cause: "target-crashed" })
   expect(tab.lines).toEqual([])
   tab.log.end({ cause: "renderer-gone", reason: "oom", exitCode: -536870904 })
