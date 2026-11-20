@@ -1166,8 +1166,8 @@ struct Call {
 pub(crate) type Effect = Box<dyn FnOnce(&dyn Host)>;
 
 impl Scope {
-    /// The host's names of storage key `key`, when the plugin declared it ([`storage::name`]).
-    fn stored(&self, key: &str) -> Option<storage::Name> {
+    /// The host's name of storage key `key`, when the plugin declared it ([`storage::name`]).
+    fn stored(&self, key: &str) -> Option<String> {
         if !self.keys.borrow().iter().any(|known| known == key) {
             log::warn!("plugin {}: storage key {key} was not declared", self.id);
             return None;
@@ -1397,7 +1397,7 @@ impl abi::Read for Scoped<'_> {
     }
 
     fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
-        let json = storage::read(self.host, &self.scope.stored(key)?)?;
+        let json = self.host.storage_read(&self.scope.stored(key)?)?;
         serde_json::from_str(&json).ok()
     }
 
@@ -1456,26 +1456,25 @@ impl abi::Host for Scoped<'_> {
         let Some(stored) = self.scope.stored(key) else { return };
         let json = value.to_string();
         let written = storage::bounded(json.len()).and_then(|()| {
-            self.written(&stored.now);
+            self.written(&stored);
             // The host shows it to reads at once; the claims hear of it in queue order.
-            self.host.storage_write(&stored.now, &json)
+            self.host.storage_write(&stored, &json)
         });
         match written {
             Ok(()) => self.defer(|host| host.storage_changed()),
-            Err(error) => log::warn!("storage {}: {error}", stored.now),
+            Err(error) => log::warn!("storage {stored}: {error}"),
         }
     }
 
     fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
         let Some(stored) = self.scope.stored(key) else { return };
         let merged = storage::bounded_merge(self.host, &stored, &fields).and_then(|()| {
-            self.written(&stored.now);
-            storage::migrate(self.host, &stored)?;
-            self.host.storage_merge(&stored.now, fields)
+            self.written(&stored);
+            self.host.storage_merge(&stored, fields)
         });
         match merged {
             Ok(()) => self.defer(|host| host.storage_changed()),
-            Err(error) => log::warn!("storage {}: {error}", stored.now),
+            Err(error) => log::warn!("storage {stored}: {error}"),
         }
     }
 

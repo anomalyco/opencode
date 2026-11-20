@@ -131,24 +131,23 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::StorageSet { .. } | HostRequest::StorageMerge { .. } if ctx.quiet => {}
         HostRequest::StorageGet { key: name } => {
             let stored = key(ctx, &name)?;
-            let value = ctx.host.upgrade().and_then(|host| crate::storage::read(&*host, &stored));
+            let value = ctx.host.upgrade().and_then(|host| host.storage_read(&stored));
             return Ok(serde_json::to_value(value).unwrap_or_default());
         }
         HostRequest::StorageSet { key: name, value } => {
             let stored = key(ctx, &name)?;
             crate::storage::bounded(value.len())?;
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
-            ctx.undo.record(&*host, &stored.now);
-            host.storage_write(&stored.now, &value)?;
+            ctx.undo.record(&*host, &stored);
+            host.storage_write(&stored, &value)?;
             ctx.effects.push(Effect::Stored);
         }
         HostRequest::StorageMerge { key: name, fields } => {
             let stored = key(ctx, &name)?;
             let host = ctx.host.upgrade().ok_or("the host is gone")?;
             crate::storage::bounded_merge(&*host, &stored, &fields)?;
-            ctx.undo.record(&*host, &stored.now);
-            crate::storage::migrate(&*host, &stored)?;
-            host.storage_merge(&stored.now, fields)?;
+            ctx.undo.record(&*host, &stored);
+            host.storage_merge(&stored, fields)?;
             ctx.effects.push(Effect::Stored);
         }
         HostRequest::OpenRoute { name } => ctx.effects.push(Effect::Route(name)),

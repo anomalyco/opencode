@@ -1324,30 +1324,29 @@ fn storage_keys_of_dotted_ids_and_keys_keep_apart() {
             harness.app.advance(Duration::from_millis(1));
             harness.app.render();
         };
-        for command in ["acme.read", "cloud.read", "acme.merge", "cloud.set", "acme.read", "cloud.read"] {
+        // `acme`'s `cloud.token` never reads `acme.cloud`'s `token`: not what TS kept under that name, nor what it
+        // writes, before or after `acme` writes its own.
+        let order = ["acme.read", "cloud.read", "cloud.set", "acme.read", "acme.merge", "acme.read", "cloud.read"];
+        for command in order {
             run(command);
         }
         opencode_tui::plugins::host::flush_storage(&harness.tui);
-        let legacy = Some(json!({ "legacy": true }));
-        let moved = json!({ "legacy": true, "m": 1 });
-        let migrated = Some(moved.clone());
+        let own = json!({ "m": 1 });
+        let other = json!({ "other": 2 });
         assert_eq!(
             STORED.take(),
             [
-                ("acme", legacy.clone()),
-                ("cloud", legacy),
-                ("acme", migrated.clone()),
-                ("cloud", Some(json!({ "other": 2 }))),
+                ("acme", None),
+                ("cloud", Some(json!({ "legacy": true }))),
+                ("acme", None),
+                ("acme", Some(own.clone())),
+                ("cloud", Some(other.clone())),
             ],
             "{carrier:?}"
         );
         let file = |key: &str| storage.load(key, &Value::Null).unwrap();
-        assert_eq!(file("plugin.acme..cloud.token"), moved, "{carrier:?}");
-        assert_eq!(
-            file("plugin.acme.cloud.token"),
-            json!({ "other": 2 }),
-            "{carrier:?}: TS's name is the dot-free key's"
-        );
+        assert_eq!(file("plugin.acme..cloud.token"), own, "{carrier:?}");
+        assert_eq!(file("plugin.acme.cloud.token"), other, "{carrier:?}: TS's name is the dot-free key's");
     }
 }
 
