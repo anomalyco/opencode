@@ -61,9 +61,10 @@ On Linux and macOS the library links statically with its own libc++, so neither 
 - **glibc**: `cargo zigbuild --profile dist --target x86_64-unknown-linux-gnu.2.17` (or `aarch64-…`). The binary
   needs `libc.so.6`, `libm.so.6`, `libpthread.so.0` and `libdl.so.2` at `GLIBC_2.17` or older, and no libstdc++ or
   libgcc_s.
-- **musl** (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`): musl links dynamically, because a static musl
-  binary cannot `dlopen` native plugins. `.cargo/config.toml` sets the flags, and a crt-static musl build fails to
-  compile. The binary needs only `ld-musl-<arch>.so.1`, which every Alpine install has.
+- **musl** (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`): fully static, with Rust's default
+  `crt-static` (O-188), so the binary needs no library and runs on any Linux. A static executable cannot `dlopen`, so
+  the musl builds load no native plugins (they are listed as skipped) and have no Zed editor context; the build
+  compiles the native carrier out with the default features, as `docs/plugins.md` describes.
 
 `--release` keeps line-table debug info (about 180 MB; `strip` brings it to about 40 MB). `--profile dist` adds fat
 LTO for a smaller, faster binary in `target/dist/`; its link takes about 10 minutes.
