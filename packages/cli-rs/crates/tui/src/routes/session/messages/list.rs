@@ -105,6 +105,8 @@ struct Inner {
     /// The terminal resize handler, which pins the reader's row before the layout.
     resize: Cell<Option<HandlerId>>,
     loading: Cell<bool>,
+    /// Message navigation or its slack holds the view, so the bottom it reaches is not the tail.
+    navigating: Cell<bool>,
     /// Message count at the last group-boundary page request.
     boundary: Cell<Option<usize>>,
     layer: RefCell<Option<Disposer>>,
@@ -251,6 +253,7 @@ impl Transcript {
             pin: RefCell::default(),
             resize: Cell::new(None),
             loading: Cell::new(false),
+            navigating: Cell::new(false),
             boundary: Cell::new(None),
             layer: RefCell::default(),
             settings: RefCell::default(),
@@ -329,6 +332,15 @@ impl Transcript {
     /// Re-renders every row, after a grouping setting changed.
     pub fn refresh(&self, tui: &Tui) {
         self.0.render(tui, |_| true);
+    }
+
+    /// Whether message navigation holds the view: the window then stays where it is, also at the bottom.
+    pub fn navigating(&self, navigating: bool) {
+        self.0.navigating.set(navigating);
+        if navigating {
+            let held = self.0.held();
+            *self.0.start.borrow_mut() = held;
+        }
     }
 
     /// Pins or follows the window after the view moved (`updateAwayFromBottom`).
@@ -1080,26 +1092,28 @@ impl Inner {
         let content = self.scroll.content_view().rect().height;
         let bottom = f64::from((content - self.scroll.rect().height).max(0.0));
         // Only a step down reaches the bottom; after a step up the content's size may be a frame old.
-        // The end of a head window is not the bottom.
-        let next = if down && top >= bottom && self.at_end() {
-            Start::Tail
-        } else {
-            match &*self.start.borrow() {
-                Start::Tail => {
-                    let specs = self.specs.borrow();
-                    match self.window_start(&specs) {
-                        0 => Start::Top,
-                        index => Start::Row(specs[index].key()),
-                    }
-                }
-                start => start.clone(),
-            }
-        };
+        // The end of a head window is not the bottom, and nor is a navigation's slack.
+        let next =
+            if down && top >= bottom && self.at_end() && !self.navigating.get() { Start::Tail } else { self.held() };
         if *self.start.borrow() == next {
             return;
         }
         *self.start.borrow_mut() = next;
         self.render(tui, |_| false);
+    }
+
+    /// The window's start, fixed at its first row while it follows the tail.
+    fn held(&self) -> Start {
+        match &*self.start.borrow() {
+            Start::Tail => {
+                let specs = self.specs.borrow();
+                match self.window_start(&specs) {
+                    0 => Start::Top,
+                    index => Start::Row(specs[index].key()),
+                }
+            }
+            start => start.clone(),
+        }
     }
 }
 
