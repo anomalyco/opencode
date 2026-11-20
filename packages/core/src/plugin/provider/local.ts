@@ -143,6 +143,10 @@ export function createLocalProviderPlugin<Discovered>(input: {
           yield* ctx.provider.reload()
         })
 
+        // The first inventory belongs to activation: a reopened session resolves its model as soon as
+        // the plugins are ready, and every request here is bounded by the one second timeout in
+        // createClient, so an unreachable endpoint cannot keep the plugins from activating.
+        yield* refresh().pipe(Effect.ignore)
         // Keep the last successful inventory through transient outages instead of flickering model availability.
         // Only a configured endpoint is expected to answer, and it is reported once per outage.
         // A reload doesn't wait for the attempt in flight, so a failure for a replaced source is dropped.
