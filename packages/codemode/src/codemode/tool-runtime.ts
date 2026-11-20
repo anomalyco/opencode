@@ -1,7 +1,7 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
 import type { DiagnosticKind } from "./codemode.js"
 import { ToolError, toolError } from "./tool-error.js"
-import { Host, HostFailure, type Json, type Run } from "psychoscript"
+import { Host, HostFailure, type Json, type Run } from "psychoscript/effect"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,

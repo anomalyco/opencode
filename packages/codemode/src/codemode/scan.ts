@@ -1,7 +1,7 @@
 import type { AnyNode, BlockStatement, ModuleDeclaration, Pattern, Program, Statement } from "acorn"
 import { Result } from "effect"
 import type { Diagnostic } from "./codemode.js"
-import { formatLocation, moduleName, parseProgram } from "psychoscript"
+import { formatLocation, moduleName, parseProgram } from "psychoscript/effect"
 
 /**
  * Extracts every `tools.<path>` referenced by a Code Mode program, in first-seen order. Fails on syntax errors,
