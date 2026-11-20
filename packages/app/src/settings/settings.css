@@ -179,26 +179,6 @@
   padding-inline: 4px;
 }
 
-/* A page with nothing to Tab to, such as an empty list, takes focus itself. Its ring would be clipped by the screen and
-   covered by its sticky header, so it is drawn inset over the content area, above the header. */
-.settings-content > .settings-panel:focus-visible {
-  outline: none;
-}
-
-.settings-content:has(> .settings-panel:focus-visible) {
-  position: relative;
-
-  &::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 11;
-    outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: -2px;
-    pointer-events: none;
-  }
-}
-
 .settings-nav-group {
   display: flex;
   width: 100%;
