@@ -123,6 +123,19 @@ function scopedRules(rules: Permission.Ruleset, action: string) {
   return rules.filter((rule) => rule.resource !== "*" && Wildcard.match(action, rule.action))
 }
 
+const bunFileReadMembers = new Set([
+  "name",
+  "type",
+  "size",
+  "lastModified",
+  "text",
+  "json",
+  "bytes",
+  "arrayBuffer",
+  "exists",
+  "stat",
+])
+
 const resolveCapabilities = Effect.fnUntraced(function* (scanned: ProgramScan) {
   const tools = yield* Tool.Service
   const actions = new Set<string>()
@@ -136,11 +149,25 @@ const resolveCapabilities = Effect.fnUntraced(function* (scanned: ProgramScan) {
       actions.add(found.options?.permission ?? found.id)
     }
   }
-  if (scanned.globals.includes("fetch")) actions.add("webfetch")
-  // Bun operations can compute their paths and be called through aliases. Approve the extension's actions
-  // at creation even if the flag is off, so enabling it later doesn't grant unapproved permissions.
-  if (scanned.globals.includes("Bun") || scanned.modules.includes("bun")) {
-    for (const action of ["read", "edit", "glob", "external_directory"]) actions.add(action)
+  if (scanned.globals.has("fetch")) actions.add("webfetch")
+  // Approve referenced file access even if the flag is off, so enabling it later doesn't grant it unattended.
+  const bun = scanned.globals.get("Bun") ?? []
+  if (scanned.modules.includes("bun") || bun.some((use) => use.member === undefined)) {
+    actions.add("read")
+    actions.add("edit")
+    actions.add("external_directory")
+  }
+  for (const use of bun) {
+    if (use.member === "file") {
+      actions.add("read")
+      if (use.resultMembers.some((chain) => !bunFileReadMembers.has(chain.find((name) => name !== "slice") ?? "")))
+        actions.add("edit")
+      actions.add("external_directory")
+    }
+    if (use.member === "write") {
+      actions.add("edit")
+      actions.add("external_directory")
+    }
   }
   return { tools, actions: [...actions] }
 })

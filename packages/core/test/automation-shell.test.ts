@@ -111,10 +111,7 @@ it.live("uses the saved location after the creating session moves and pauses if 
     const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
     const destination = AbsolutePath.make((yield* tmpdirScoped()).path)
     yield* Effect.promise(() =>
-      Bun.write(
-        path.join(directory, "opencode.json"),
-        JSON.stringify({ experimental: { automations: true } }),
-      ),
+      Bun.write(path.join(directory, "opencode.json"), JSON.stringify({ experimental: { automations: true } })),
     )
     const sessions = yield* Session.Service
     const session = yield* sessions.create({
@@ -241,7 +238,9 @@ const approveCodePermission = (action: string, tools: string[], session: Session
           Effect.repeat({ until: (asks) => asks.length > 0, schedule: Schedule.spaced("10 millis") }),
           Effect.timeout("10 seconds"),
         )
-      expect(asks).toMatchObject([{ action, resources: ["*"], metadata: { unattended: true, tools } }])
+      expect(asks).toMatchObject([
+        { action, resources: expect.arrayContaining(["*"]), metadata: { unattended: true, tools } },
+      ])
       expect(asks[0]?.save).toBeUndefined()
       for (const ask of asks) yield* permission.reply({ requestID: ask.id, reply: "once" })
     }).pipe(instances.provide(session)),
@@ -291,7 +290,14 @@ it.live("scheduled code uses the session files and runs shell after one approval
         path.join(directory, "opencode.json"),
         JSON.stringify({
           experimental: { automations: true, full_codemode: true },
-          permission: { execute: "allow", read: "allow", shell: "ask" },
+          permission: {
+            execute: "allow",
+            read: "ask",
+            edit: "ask",
+            glob: "ask",
+            external_directory: "ask",
+            shell: "ask",
+          },
         }),
       ),
     )
@@ -307,21 +313,55 @@ it.live("scheduled code uses the session files and runs shell after one approval
         action: {
           type: "code",
           code: `
-          const file = await Bun.file(path.resolve("fixture.txt")).text()
+          const file = Bun.file(path.resolve("fixture.txt"))
           const shell = await tools.shell({ command: "echo automation-output", description: "Print a test line" })
-          return { state: { file, output: shell.output.trim(), exitCode: shell.exitCode }, done: true }
+          return { state: { file: await file.text(), output: shell.output.trim(), exitCode: shell.exitCode }, done: true }
         `,
         },
       })
       .pipe(Effect.forkChild)
 
     yield* approveCodePermission("shell", ["shell"], session)
+    yield* approveCodePermission("read", ["shell"], session)
+    yield* approveCodePermission("external_directory", ["shell"], session)
 
-    const created = yield* Fiber.join(creating)
+    const created = yield* Fiber.join(creating).pipe(Effect.timeout("10 seconds"))
     expect(yield* tickCode(created.id)).toMatchObject({
       status: "done",
       lastOutcome: "fired",
       state: { file: "fixture contents", output: "automation-output", exitCode: 0 },
     })
+  }),
+)
+
+it.live("scheduled Bun.write asks for edit and external directory, not read or glob", () =>
+  Effect.gen(function* () {
+    const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(directory, "opencode.json"),
+        JSON.stringify({
+          experimental: { automations: true, full_codemode: true },
+          permission: { execute: "allow", edit: "ask", read: "ask", glob: "ask", external_directory: "ask" },
+        }),
+      ),
+    )
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ location: { directory } })
+    const automations = yield* Automation.Service
+    const creating = yield* automations
+      .create({
+        name: "write a fixture",
+        sessionID: session.id,
+        trigger,
+        action: { type: "code", code: 'await Bun.write("fixture.txt", "written"); return { done: true }' },
+      })
+      .pipe(Effect.forkChild)
+    yield* approveCodePermission("edit", [], session)
+    yield* approveCodePermission("external_directory", [], session)
+
+    const created = yield* Fiber.join(creating).pipe(Effect.timeout("10 seconds"))
+    expect(yield* tickCode(created.id)).toMatchObject({ status: "done", lastOutcome: "fired" })
+    expect(yield* Effect.promise(() => Bun.file(path.join(directory, "fixture.txt")).text())).toBe("written")
   }),
 )

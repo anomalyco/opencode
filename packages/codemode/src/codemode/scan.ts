@@ -13,8 +13,14 @@ export function scanTools(code: string): Result.Result<ReadonlyArray<string>, Di
 
 interface ProgramScan {
   readonly tools: ReadonlyArray<string>
-  readonly globals: ReadonlyArray<string>
+  readonly globals: ReadonlyMap<string, ReadonlyArray<GlobalUse>>
   readonly modules: ReadonlyArray<string>
+}
+
+interface GlobalUse {
+  readonly member?: string
+  // Property chains used on the result of an immediate member call. An empty chain is an unresolved use.
+  readonly resultMembers: ReadonlyArray<ReadonlyArray<string>>
 }
 
 /** Scans static tool calls, references to the given globals, and literal module loads. */
@@ -27,7 +33,8 @@ export function scanProgram(code: string, globals: ReadonlyArray<string>): Resul
   if (!parsed.ok) return Result.fail(parsed.error as Diagnostic)
 
   const tools = new Set<string>()
-  const referenced = new Set<string>()
+  const referenced = new Map<string, Array<() => GlobalUse>>()
+  const localUses = new Map<Set<string>, Map<string, Array<ReadonlyArray<string>>>>()
   const modules = new Set<string>()
   const scopes: Array<Set<string>> = [collectScope(parsed.program, true)]
   const ancestors: Array<AnyNode> = []
@@ -53,13 +60,53 @@ export function scanProgram(code: string, globals: ReadonlyArray<string>): Resul
       isReferencePosition(node, ancestors.at(-1))
     ) {
       if (node.name !== "tools") {
-        referenced.add(node.name)
+        const uses = referenced.get(node.name) ?? []
+        referenced.set(node.name, uses)
+        const member = ancestors.at(-1)
+        if (member?.type !== "MemberExpression" || member.object !== node) {
+          uses.push(() => ({ resultMembers: [] }))
+          return undefined
+        }
+        const name = memberName(member)
+        const result = ancestors.at(-2)
+        if (result?.type !== "CallExpression" || result.callee !== member) {
+          uses.push(() => ({ member: name, resultMembers: [[]] }))
+          return undefined
+        }
+        const parents = ancestors.slice(0, -2)
+        const consumed = valueUse(result, parents)
+        const binding = consumed.parent
+        if (
+          binding?.type === "VariableDeclarator" &&
+          binding.init === consumed.value &&
+          binding.id.type === "Identifier"
+        ) {
+          const key = binding.id.name
+          const scope = scopes.findLast((scope) => scope.has(key))
+          uses.push(() => ({ member: name, resultMembers: scope ? (localUses.get(scope)?.get(key) ?? []) : [[]] }))
+          return undefined
+        }
+        uses.push(() => ({
+          member: name,
+          resultMembers: consumed.parent?.type === "ExpressionStatement" ? [] : [memberChain(result, parents)],
+        }))
         return undefined
       }
       const chain = readStaticToolCall(node, ancestors)
       if (!chain.ok) return fail(chain.node, chain.reason)
       tools.add(chain.path)
       return undefined
+    }
+
+    if (globals.length > 0 && node.type === "Identifier" && isReferencePosition(node, ancestors.at(-1))) {
+      const scope = scopes.findLast((scope) => scope.has(node.name))
+      if (scope) {
+        const locals = localUses.get(scope) ?? new Map<string, Array<ReadonlyArray<string>>>()
+        localUses.set(scope, locals)
+        const uses = locals.get(node.name) ?? []
+        locals.set(node.name, uses)
+        uses.push(memberChain(node, ancestors))
+      }
     }
 
     // `import`/`require` of "tools" would reach tools the scan never sees.
@@ -84,7 +131,48 @@ export function scanProgram(code: string, globals: ReadonlyArray<string>): Resul
 
   const diagnostic = visit(parsed.program)
   if (diagnostic) return Result.fail(diagnostic)
-  return Result.succeed({ tools: [...tools], globals: [...referenced], modules: [...modules] })
+  return Result.succeed({
+    tools: [...tools],
+    globals: new Map([...referenced].map(([name, uses]) => [name, uses.map((use) => use())])),
+    modules: [...modules],
+  })
+}
+
+function memberName(node: Extract<AnyNode, { type: "MemberExpression" }>) {
+  if (!node.computed && node.property.type === "Identifier") return node.property.name
+  if (node.computed && node.property.type === "Literal" && typeof node.property.value === "string")
+    return node.property.value
+}
+
+/** Skip wrappers that leave the wrapped value available for another access. */
+function valueUse(value: AnyNode, ancestors: ReadonlyArray<AnyNode>) {
+  let index = ancestors.length - 1
+  for (; index >= 0; index--) {
+    const parent = ancestors[index]
+    if (
+      (parent.type === "AwaitExpression" && parent.argument === value) ||
+      (parent.type === "ChainExpression" && parent.expression === value)
+    ) {
+      value = parent
+      continue
+    }
+    return { value, parent, index }
+  }
+  return { value, parent: undefined, index }
+}
+
+function memberChain(value: AnyNode, ancestors: ReadonlyArray<AnyNode>): ReadonlyArray<string> {
+  const use = valueUse(value, ancestors)
+  if (use.parent?.type !== "MemberExpression" || use.parent.object !== use.value) return []
+  const name = memberName(use.parent)
+  if (name === undefined) return []
+  const call = ancestors[use.index - 1]
+  return [
+    name,
+    ...(call?.type === "CallExpression" && call.callee === use.parent
+      ? memberChain(call, ancestors.slice(0, use.index - 1))
+      : []),
+  ]
 }
 
 /** The module an `import` or `require(...)` loads, `null` when it is computed, or `undefined` for other nodes. */
