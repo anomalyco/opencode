@@ -3016,6 +3016,68 @@ describe("OpencodePlugin memory capture", () => {
   )
 
   capturing("console_memory,memory_capture").effect(
+    "takes a message the decision finds correcting a given entry as the user's confirmation of that correction",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          // As in the release check's s2: below D1's bar as a lasting rule, while D2 is sure it corrects mem_1.
+          const fix = "The retry limit in the worker is 30 now, not 50"
+          judge.answer = (asked) =>
+            asked.questions.corrects
+              ? { corrects: { none: 0, mem_1: 1 } }
+              : asked.questions.lasting
+                ? { lasting: 0.55 }
+                : { forgets: { none: 1 } }
+          const gate = yield* Deferred.make<void>()
+          distiller.gate = gate
+          distiller.reply = JSON.stringify({
+            candidates: [
+              {
+                kind: "convention",
+                title: "The worker retries 30 times",
+                body: "Claim: 30\nApplies when: x\nAction: x\nAvoid: x\nAnchors: x\nEvidence: the user said so",
+                basis: "user",
+                quote: fix,
+                supersedes: ["mem_1"],
+                edits: [{ oldText: "Body of mem_1", newText: "Retries: 30" }],
+              },
+            ],
+          })
+          const { host, compacted } = yield* start(console)
+          const session = yield* host.session.create({})
+          const read = yield* memoryTool("read")
+          yield* read.execute({ id: "mem_1" }, context(session.id))
+          yield* prompt(session.id, fix)
+          yield* judged(session.id)
+          // The reminder fires, and the agent edits the entry: pending until something backs it.
+          expect(
+            (yield* host.session.instructions.entry.list({ sessionID: session.id })).map((item) => item.key),
+          ).toContain("memory.correction")
+          yield* (yield* memoryTool("edit")).execute(
+            { id: "mem_1", revision: 1, oldText: "Body of mem_1", newText: "Retries: 30 (was 50)" },
+            context(session.id, "call_edit"),
+          )
+          expect(console.state.live.get("mem_1") ?? 1).toBe(1)
+
+          // The work goes on to a boundary, where the turn is distilled: the user's words back the agent's r2, which is
+          // served.
+          yield* ran(session.id, "edit", { path: "src/retry.ts" })
+          yield* compacted(session.id)
+          yield* Deferred.succeed(gate, undefined)
+          const evidence = () =>
+            console.state.requests.filter((item) => item.path === "/api/memory/entries/mem_1/evidence")
+          yield* waitUntil(Effect.sync(() => evidence().length > 0))
+          yield* drain
+          expect(evidence().map((item) => item.body)).toEqual([
+            expect.objectContaining({ evidence: [{ kind: "confirmation", ref: fix }], revision: 2 }),
+          ])
+          expect(console.state.live.get("mem_1")).toBe(2)
+          expect(publishes(console)).toEqual([])
+        }).pipe(Effect.ensuring(Effect.sync(() => (distiller.gate = undefined)))),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
     "supersedes an entry that changed since the session read it with that entry as the correction leaves it",
     () =>
       withConsole((console) =>

@@ -16,6 +16,8 @@ export type Event =
       readonly user: boolean
       /** The user's message states a lasting team rule, decision or correction, not only a request for this task. */
       readonly lasting?: boolean
+      /** The given entry the user's message corrects, as the decision found. */
+      readonly corrects?: string
     }
   | {
       readonly type: "shell"
@@ -174,9 +176,9 @@ const MIN_QUOTE = 12
 
 /**
  * Whether the user's own words back a candidate: `confirmed` when it says the user stated it and quotes, word for word,
- * a message of theirs in the segment that states a lasting rule, decision or correction (the user's confirmation, which
- * Console promotes on); `observed` for a candidate from the work itself, or one quoting a message that only asks for
- * this task; `dropped` for a misquote.
+ * a message of theirs in the segment that states a lasting rule, decision or correction, or that corrects a given entry
+ * the candidate supersedes (the user's confirmation, which Console promotes on); `observed` for a candidate from the
+ * work itself, or one quoting a message that only asks for this task; `dropped` for a misquote.
  */
 export function backing(candidate: Candidate, segment: ReadonlyArray<Event>): "confirmed" | "observed" | "dropped" {
   if (candidate.basis !== "user") return "observed"
@@ -184,7 +186,11 @@ export function backing(candidate: Candidate, segment: ReadonlyArray<Event>): "c
   if (quote.length < MIN_QUOTE) return "dropped"
   const said = segment.find((event) => event.type === "prompt" && event.user && flat(event.text).includes(quote))
   if (said === undefined) return "dropped"
-  return said.type === "prompt" && said.lasting ? "confirmed" : "observed"
+  // A message correcting an entry the session was given confirms a correction of that entry, lasting rule or not.
+  return said.type === "prompt" &&
+    (said.lasting || (said.corrects !== undefined && (candidate.supersedes ?? []).includes(said.corrects)))
+    ? "confirmed"
+    : "observed"
 }
 
 /**

@@ -1232,6 +1232,7 @@ export const make = Effect.fnUntraced(function* (
                   correction: entry !== undefined || rule,
                   user,
                   lasting: rule,
+                  ...(entry === undefined ? {} : { corrects: entry.id }),
                 },
                 closed,
               )
