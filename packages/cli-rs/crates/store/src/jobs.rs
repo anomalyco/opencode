@@ -18,6 +18,11 @@ impl State {
             .collect()
     }
 
+    /// `owned_jobs` by the parents in loaded session info.
+    pub fn owned_jobs<'a>(&self, jobs: &[&'a JobInfo], session: &SessionID) -> Vec<&'a JobInfo> {
+        owned_jobs(jobs, session, |id| self.info.get(id).and_then(|info| info.parent_id.clone()))
+    }
+
     pub(crate) fn on_job_updated(&mut self, info: &JobInfo) {
         let running = info.status() == Some(&JobStatus::Running);
         for read in self.job_reads.values_mut() {
@@ -142,6 +147,34 @@ impl State {
     }
 }
 
+/// Running jobs in `session`'s tree (TS `ownedJobs`). A subagent job belongs to the child it runs, which runs in a
+/// direct child of the session that started it, so a child whose parent is not loaded still reaches it.
+pub fn owned_jobs<'a>(
+    jobs: &[&'a JobInfo],
+    session: &SessionID,
+    parent: impl Fn(&SessionID) -> Option<SessionID>,
+) -> Vec<&'a JobInfo> {
+    let owned = |job: &JobInfo| {
+        let child = match job {
+            JobInfo::Subagent(job) => Some(&job.child_session_id),
+            _ => None,
+        };
+        let mut seen = HashSet::new();
+        let mut current = Some(child.cloned().unwrap_or_else(|| SessionID(job.session_id().to_owned())));
+        while let Some(id) = current {
+            if id == *session {
+                return true;
+            }
+            if !seen.insert(id.clone()) {
+                return false;
+            }
+            current = parent(&id).or_else(|| (Some(&id) == child).then(|| SessionID(job.session_id().to_owned())));
+        }
+        false
+    };
+    jobs.iter().copied().filter(|job| owned(job)).collect()
+}
+
 fn job_key(root: &SessionID) -> String {
     format!("job:{}", root.0)
 }
@@ -181,5 +214,30 @@ impl Data {
     pub async fn job_cancel(&self, id: &str) -> Result<(), Error> {
         let input = ExperimentalJobCancelInput { id: id.to_owned() };
         self.client().experimental_job_cancel(&input).await.map_err(Error::new)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn owned_jobs_follows_a_subagent_job_to_its_child_when_the_childs_parent_is_not_loaded() {
+        let jobs: Vec<JobInfo> = serde_json::from_value(json!([
+            { "kind": "codemode", "id": "cm_grandchild", "sessionID": "grandchild", "status": "running",
+              "time": { "started": 1 } },
+            { "kind": "subagent", "id": "sub_nested", "sessionID": "child", "childSessionID": "grandchild",
+              "agent": "general", "description": "Nested", "status": "running", "time": { "started": 1 } },
+        ]))
+        .unwrap();
+        let jobs: Vec<&JobInfo> = jobs.iter().collect();
+        let parent = |id: &SessionID| (id.0 == "child").then(|| SessionID("session".into()));
+        let owned = |session: &str| -> Vec<String> {
+            owned_jobs(&jobs, &SessionID(session.into()), parent).iter().map(|job| job.id().to_owned()).collect()
+        };
+        assert_eq!(owned("child"), ["sub_nested"]);
+        assert_eq!(owned("session"), ["sub_nested"]);
+        assert_eq!(owned("grandchild"), ["cm_grandchild", "sub_nested"]);
     }
 }
