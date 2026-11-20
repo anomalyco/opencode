@@ -348,7 +348,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       ),
     )
 
-  const initialize = Effect.fnUntraced(function* (transport: Transport, protocol: ConfigMCP.Protocol) {
+  const initialize = Effect.fnUntraced(function* (
+    transport: Transport,
+    protocol: ConfigMCP.Protocol,
+    startup = timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT,
+  ) {
     // SDK callbacks run outside any fiber. They must run with this context so events they publish keep
     // the server's Location; clients drop unlocated `form.created` events and elicitations then hang.
     const context = yield* Effect.context()
@@ -430,7 +434,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     }
 
     yield* Effect.tryPromise({
-      try: (signal) => client.connect(transport, { timeout: timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),
+      try: (signal) => client.connect(transport, { timeout: startup, signal }),
       catch: (error) => error,
     }).pipe(Effect.onError(() => Effect.promise(() => transport.close()).pipe(Effect.ignore)))
     return client
@@ -476,10 +480,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           },
         }).pipe(Effect.flatMap((transport) => initialize(transport, protocol)))
       // Some legacy servers exit on the auto probe's unknown request (Python SDK 1.3 does), so respawn for initialize.
+      // A shared connection (no roots) can't be legacy, so the pool opens its own private one instead.
       return yield* spawn(protocol).pipe(
         Effect.catchIf(
           (error) =>
             protocol === "auto" &&
+            options.roots !== false &&
             error instanceof SdkError &&
             (error.code === SdkErrorCode.ConnectionClosed || error.code === SdkErrorCode.EraNegotiationFailed),
           () => spawn("legacy"),
@@ -493,25 +499,29 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     const url = new URL(config.url)
     const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode") && !rejectsUnknownQuery(url)
     if (addedCodemode) url.searchParams.set("codemode", "false")
-    const open = Effect.fnUntraced(function* (url: URL, protocol: ConfigMCP.Protocol) {
+    const open = Effect.fnUntraced(function* (url: URL, protocol: ConfigMCP.Protocol, startup?: number) {
       session.transport = new StreamableHTTPClientTransport(url, {
         requestInit: config.headers ? { headers: config.headers } : undefined,
         authProvider: options.authProvider,
         fetch,
       })
-      return yield* initialize(session.transport, protocol)
+      return yield* initialize(session.transport, protocol, startup)
     })
-    // Over HTTP the SDK treats an unanswered auto probe as an outage, but slow legacy servers may still initialize.
+    // Every attempt opens a fresh transport; no retry starts once the startup timeout has passed.
+    const deadline = (yield* Clock.currentTimeMillis) + (timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
+    // Over HTTP the SDK treats an unanswered auto probe as an outage, but slow legacy servers may still initialize
+    // within what is left of the startup timeout.
     const negotiate = (url: URL) =>
       open(url, protocol).pipe(
         Effect.catchIf(
           (error) => protocol === "auto" && error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout,
-          () => open(url, "legacy"),
+          (error) =>
+            Clock.currentTimeMillis.pipe(
+              Effect.flatMap((now) => (now < deadline ? open(url, "legacy", deadline - now) : Effect.fail(error))),
+            ),
         ),
       )
 
-    // Every attempt opens a fresh transport; no retry starts once the startup timeout has passed.
-    const deadline = (yield* Clock.currentTimeMillis) + (timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
     return yield* retrying(
       "MCP connect",
       negotiate(url).pipe(

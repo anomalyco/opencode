@@ -3459,8 +3459,7 @@ describe("MCP pool", () => {
       expect(yield* status(a.mcp)).toEqual({ status: "connected" })
       const b = yield* open(config, pool, directories[0], { environment: recordingEnvironmentLayer(spawns) })
       expect(yield* status(b.mcp)).toEqual({ status: "connected" })
-      // The shared attempt respawns once on the legacy handshake before the pool gives up on it.
-      expect(probes).toHaveLength(2)
+      expect(probes).toHaveLength(1)
       expect(spawns).toHaveLength(2)
       expect(captured.logs).toEqual([
         [
