@@ -372,8 +372,6 @@ export function ScrollView(props: ScrollViewProps) {
     if (e.button !== 0) return
     e.preventDefault()
     e.stopPropagation()
-    const vertical = axis === "vertical"
-
     prepareScroll()
     const rect = e.currentTarget.getBoundingClientRect()
 
@@ -381,7 +379,7 @@ export function ScrollView(props: ScrollViewProps) {
       type: "drag.started",
       axis,
       pointerId: e.pointerId,
-      grabOffset: vertical ? e.clientY - rect.top : e.clientX - rect.left,
+      grabOffset: axis === "vertical" ? e.clientY - rect.top : e.clientX - rect.left,
       rtl: axis === "horizontal" && getComputedStyle(viewportRef).direction === "rtl",
     })
 
@@ -397,23 +395,15 @@ export function ScrollView(props: ScrollViewProps) {
     const track = thumbMount() ?? viewportRef
     const rect = track.getBoundingClientRect()
 
-    // The drag inverts the mapping updateThumb draws from, reading the live geometry on every
-    // move (after prepareScroll reconciles it). Freezing the grab-time sizes would leave the
-    // thumb behind the pointer when content streams in mid-drag, and the flush already moved
-    // any adjustment into the native offset, so the live geometry is the mapping to invert.
-    // The adjustment shift applies to the unclamped value inside scrollOffsetFromThumbPointer,
-    // with one clamp against the live range, so the top of the track can still reach 0.
-    const offset = scrollOffsetFromThumbPointer({
-      pointer: vertical ? e.clientY : e.clientX,
-      viewportStart: vertical ? rect.top : rect.left,
-      grabOffset: drag.grabOffset,
-      clientSize: vertical ? track.clientHeight : track.clientWidth,
-      scrollSize: vertical ? viewportRef.scrollHeight : viewportRef.scrollWidth,
-      thumbSize: vertical ? state.verticalThumbSize : state.horizontalThumbSize,
-      scrollClientSize: vertical ? viewportRef.clientHeight : viewportRef.clientWidth,
-      reverse: drag.rtl,
-      scrollAdjustment: vertical ? (local.verticalScrollAdjustment ?? 0) : 0,
-    })
+    const offset = thumbScrollOffset(
+      vertical ? e.clientY - rect.top - drag.grabOffset : e.clientX - rect.left - drag.grabOffset,
+      vertical ? track.clientHeight : track.clientWidth,
+      vertical ? viewportRef.scrollHeight : viewportRef.scrollWidth,
+      vertical ? state.verticalThumbSize : state.horizontalThumbSize,
+      vertical ? viewportRef.clientHeight : viewportRef.clientWidth,
+      drag.rtl,
+      vertical ? (local.verticalScrollAdjustment ?? 0) : 0,
+    )
 
     if (vertical) {
       viewportRef.scrollTop = offset

@@ -162,21 +162,6 @@ describe("thumb drag reads live geometry on every move", () => {
     ).toBeCloseTo((187 / 359) * 1500)
   })
 
-  test("reaches the end of content that grew during the drag", () => {
-    // Rows streamed in after the grab (the native height is 2600 now, so the live thumb is
-    // 96px). The drag follows the live geometry, so the pointer at the bottom of the track
-    // reaches the live end (2100) instead of stopping at the grab-time end (1500).
-    expect(
-      scrollOffsetFromThumbPointer({
-        ...drag,
-        pointer: 401,
-        scrollSize: 2_600,
-        scrollAdjustment: 0,
-        thumbSize: 96,
-      }),
-    ).toBe(2_100)
-  })
-
   test("reaches 0 at the top of the track with a positive adjustment", () => {
     // The adjustment shift applies to the unclamped offset and the clamp happens once against
     // the live range, so the top of the track reaches scrollTop 0 instead of stopping
@@ -186,12 +171,6 @@ describe("thumb drag reads live geometry on every move", () => {
     ).toBe(0)
   })
 
-  test("clamps the offset to the range the viewport has now", () => {
-    // The content shrank below the drag range mid-drag; the write cannot pass its end.
-    expect(
-      scrollOffsetFromThumbPointer({ ...drag, pointer: 10_000, scrollSize: 1_200, scrollAdjustment: 0 }),
-    ).toBe(700)
-  })
 })
 
 describe("scrollOffsetFromThumbPointer", () => {

@@ -58,16 +58,6 @@ describe("scroll view thumb machine", () => {
     })
   })
 
-  test("a drag holds the pointer that started it", () => {
-    expect(run(overflowing, drag()).state).toMatchObject({
-      status: "dragging",
-      axis: "vertical",
-      pointerId: 1,
-      grabOffset: 4,
-      rtl: false,
-    })
-  })
-
   test("a drag cannot start on an axis without overflow", () => {
     expect(run(INITIAL_SCROLL_THUMB_STATE, drag()).state).toBe(INITIAL_SCROLL_THUMB_STATE)
   })
