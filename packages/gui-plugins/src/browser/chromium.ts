@@ -89,7 +89,7 @@ import { pageHandoff } from "./address"
 import { defaultBrowser } from "./default-browser"
 import { FileVerificationError } from "./file-verification"
 import type { workspacePages } from "./workspace-pages"
-import { closesUnshown, windowOpening, type Unshown } from "./window-open"
+import { clickDisposition, closesUnshown, windowOpening, type Press, type Unshown } from "./window-open"
 import { artifactLinks } from "./artifact-links"
 import { createPagePrompts, RESTORE_PROMPT, takeDialogs } from "./page-prompts"
 import type { SitePermissions } from "./site-permissions"
@@ -371,13 +371,19 @@ export function createBrowserPage(
   let nativeMenu = true
   // Tab focus and browser chrome commands also reclaim the tab for the person. Neither is input to this document.
   let documentInput = false
-  // When the person last pressed a button or key in this document, until a tab opens for that press. It is the user
-  // gesture of a link Chromium routes to a new tab by its click, which carries no gesture report (window-open.ts).
-  let pressedAt: number | undefined
+  // The person's latest press of a button that opens links, or Enter, until a request for a tab uses it or other input
+  // follows. It stands for a link Chromium routes to a new tab by its click, which has no gesture report
+  // (window-open.ts).
+  let press: Press | undefined
+  // The link under the pointer, as Chromium reports it.
+  let hovered = ""
+  contents.on("update-target-url", (_event, url) => { hovered = url })
   // Presses the agent sent through the debugger that the page has not reported yet.
   let agentPresses = 0
   contents.on("before-mouse-event", (_event, mouse) => {
     if (mouse.type !== "mouseDown") return
+    // Whoever presses now, the press before opens nothing more.
+    press = undefined
 
     // Unlike keyboard events, Electron 44 does not expose the Blink modifiers on mouse events, so a press carries no
     // debugger provenance. Each press the agent sent is counted out here, even one reported after its command ended;
@@ -387,7 +393,8 @@ export function createBrowserPage(
 
     if (activity.agentRuns > 0) return
     documentInput = true
-    pressedAt = performance.now()
+
+    if (mouse.button === "left" || mouse.button === "middle") press = { type: "mouse", button: mouse.button, at: performance.now() }
     nativeMenu = true
     recordPageInput(activity, "user")
     options.userInput()
@@ -411,7 +418,11 @@ export function createBrowserPage(
     if (!hardware || input.type !== "keyDown") return
 
     documentInput = true
-    pressedAt = performance.now()
+    // Chromium opens a link for Enter as for a click with the same modifiers; any other key opens none.
+    press =
+      input.key === "Enter"
+        ? { type: "key", disposition: clickDisposition({ ...input, middle: false }, process.platform === "darwin"), at: performance.now() }
+        : undefined
     nativeMenu = true
     recordPageInput(activity, "user")
     options.userInput()
@@ -581,6 +592,11 @@ export function createBrowserPage(
 
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
+  // Chromium's report that a clicked link's navigation goes to a new tab or window, sent just before that request.
+  let linkReport: Protocol.Page.FrameRequestedNavigationEvent | undefined
+  cdp.on("Page.frameRequestedNavigation", (event) => {
+    if (event.reason === "anchorClick" && (event.disposition === "newTab" || event.disposition === "newWindow")) linkReport = event
+  })
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
   const runs = new Map<number, { controller: AbortController; interrupted: Interrupted; origin: "user" | "agent" }>()
@@ -839,7 +855,8 @@ export function createBrowserPage(
     passkeyPage.noticed = false
     passkeyPage.interrupted = false
     popupReport = undefined
-    pressedAt = undefined
+    linkReport = undefined
+    press = undefined
 
     rendering.committed()
   })
@@ -928,12 +945,18 @@ export function createBrowserPage(
       url,
       disposition,
       report: popupReport,
+      link: linkReport,
+      hovered,
       owner: activityOwner(activity),
-      pressedAt,
+      press,
       at: performance.now(),
     })
 
+    // Each report stands for one request, and a press for at most one tab, as Chromium's activation is used up by the
+    // tab it opens.
     popupReport = undefined
+    linkReport = undefined
+    press = undefined
 
     if (opening.type === "ask") {
       if (!postBody && destinationOrigin(url) && url.length <= 16384) notices.show({reason:"popup",target:url,action:"tab"})
@@ -955,8 +978,6 @@ export function createBrowserPage(
       return { action: "deny" }
     }
 
-    // One press opens one tab, as Chromium's activation is used up by the tab it opens.
-    pressedAt = undefined
     const workspace = options.workspace?.display(url)
 
     if (workspace && !postBody) {

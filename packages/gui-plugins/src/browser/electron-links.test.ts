@@ -34,9 +34,9 @@ const blocked = (url: string, owner: string): Outcome => ({ tabs: [], notices: [
 // a new tab with no such report (`setWindowOpenHandler` in chromium.ts, window-open.ts). This presses links in the
 // pinned Electron with Chromium's input events, so an upgrade that changes any of that fails here.
 test(
-  "the person's middle-click and modified clicks on a link open tabs as in Chrome, a tab left with nothing to show closes, and the agent's and a page's own stay blocked pop-ups",
+  "the person's middle-click and modified clicks on a link open tabs as in Chrome, a tab left with nothing to show closes, and the agent's and a page's own stay blocked pop-ups, right after a press too",
   async () => {
-    const result: Record<string, Outcome> & { agent: Outcome & { refusal?: string }; platform: string } = JSON.parse(
+    const result: Record<string, Outcome> & { agent: Outcome & { refusal?: string }; platform: string; afterPress: object[] } = JSON.parse(
       await runElectronFixture({ fixture: path.join(import.meta.dir, "electron-links.fixture.ts") }),
     )
 
@@ -100,6 +100,17 @@ test(
     // A Shift+click the page makes up, and a `window.open` on a timer, have nobody's press behind them.
     expect(result.synthetic).toEqual(blocked("/target?synthetic", "user"))
     expect(result.timer).toEqual(blocked("/target?timer", "user"))
+
+    // A person's press stands only for the link it pressed. 50 ms, 500 ms and 2 s after a plain press elsewhere on the
+    // page, a `window.open` from a frame the press gave no activation, and a Shift+click the page makes up on another
+    // link, are each still a blocked pop-up. The same after a press on a link whose own navigation the page prevents.
+    expect(result.afterPress).toEqual(
+      ["elsewhere", "link"].flatMap((on) =>
+        ["frame", "made-up"].flatMap((kind) =>
+          [50, 500, 2000].map((delay) => ({ on, kind, delay, ...blocked(`/target?${kind}-${delay}`, "user") })),
+        ),
+      ),
+    )
   },
   // Starting Electron takes seconds on a loaded runner.
   60_000,

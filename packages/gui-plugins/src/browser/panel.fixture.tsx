@@ -60,7 +60,6 @@ import { BrowserPane, PluginTabHandle, type PaneEvent, type PromptAnswer, type P
 import { pageShortcut } from "./keys"
 import { normalizeURL, refusal } from "./policy"
 import { navigationNotice } from "./refusal-notice"
-import { windowOpening } from "./window-open"
 import { type BuiltinLayout } from "@opencode/plugin/gui/builtin"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
@@ -1716,46 +1715,6 @@ export function mountBrowserRegion(input: RegionHost) {
         },
         true,
       )
-
-      // A link the person opens with the middle button or a modifier. Chromium's part is the disposition
-      // (`DispositionFromClick`); chromium.ts then asks `windowOpening`, and the pane hears what main reports: the
-      // new tab in its inventory, selected only when it opens in front, or the pop-up notice.
-      const linked: Browser.Tab[] = []
-
-      const openLink = (event: MouseEvent) => {
-        const link = win.document.querySelector("a")
-        const binding = latest()?.binding
-        const modified = event.button === 1 || (mac ? event.metaKey : event.ctrlKey)
-
-        if (!link || !event.composedPath().includes(link) || !binding || (!modified && !event.shiftKey)) return
-        event.preventDefault()
-
-        const opening = windowOpening({
-          artifact: false,
-          openable: true,
-          url: link.href,
-          disposition: modified ? (event.shiftKey ? "foreground-tab" : "background-tab") : "new-window",
-          report: undefined,
-          owner: "user",
-          pressedAt: event.timeStamp,
-          at: event.timeStamp,
-        })
-
-        const send = (event: PaneEvent) => listeners.forEach((listener) => listener({ binding, event }))
-
-        if (opening.type === "block")
-          return send({ type: "refusal", tabID, token: uuid(), notice: { reason: "popup", target: link.href, action: "tab" } })
-
-        if (opening.type !== "open") return
-        const opened = Browser.TabID.make(`tab_66666666-6666-6666-6666-${String(linked.length + 1).padStart(12, "0")}`)
-        linked.push({ ...tab(opened), url: link.href, title: link.textContent })
-        send({ type: "state", state: { tabs: [tab(tabID), ...linked], focusedTabID: opening.background ? tabID : opened } })
-
-        if (!opening.background) send({ type: "focus", tabID: opened })
-      }
-
-      win.addEventListener("click", openLink, true)
-      win.addEventListener("auxclick", openLink, true)
       // As chromium.ts reports the native page taking keyboard focus, which arrives over IPC after the click.
       win.addEventListener("focus", () =>
         setTimeout(() => {
@@ -1991,7 +1950,7 @@ export function mountBrowserRegion(input: RegionHost) {
             </nav>
             <iframe
               title="Browser page"
-              srcdoc='<!doctype html><input aria-label="Editor page input" onkeydown="if ((event.ctrlKey || event.metaKey) &amp;&amp; /^[kw]$/i.test(event.key)) { event.preventDefault(); this.value = &apos;handled:&apos; + event.key.toLowerCase() }" /> <a href="https://example.com/docs">Docs</a>'
+              srcdoc='<!doctype html><input aria-label="Editor page input" onkeydown="if ((event.ctrlKey || event.metaKey) &amp;&amp; /^[kw]$/i.test(event.key)) { event.preventDefault(); this.value = &apos;handled:&apos; + event.key.toLowerCase() }" />'
               onLoad={(event) => wirePage(event.currentTarget)}
               style={{ height: "48px" }}
             />

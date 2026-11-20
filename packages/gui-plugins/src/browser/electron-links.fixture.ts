@@ -12,6 +12,10 @@ import type { TabActivity } from "./policy"
 // middle-clicks the same link, and two more pages ask for a tab with nobody's press. It prints the tabs and notices
 // each press led to as one JSON line.
 //
+// One more page acts on its own 50 ms, 500 ms or 2 s after the person's press, with its renderer slowed: its frame from
+// another site calls `window.open`, or it clicks a link of its own with Shift. Neither is the person's. Each gets a
+// press of its own, since the first request after a press uses that press up.
+//
 // Some links lead to a download, to another app's link or to an address the pane refuses, as the first navigation of
 // the tab they open. Every download here gets its save path in this process's own `will-download` listener, before the
 // page's handler sees it, so none can open the system's save dialog.
@@ -41,6 +45,45 @@ const synthetic = `<!doctype html><title>Synthetic</title><a href="/target?synth
 setTimeout(() => document.querySelector("a").dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true, cancelable: true })), 50)
 </script>`
 
+// What a page does on its own after a real press, as `window.plan` says: it tells its frame from another site, which the
+// press gave no activation, to open a window, or it clicks another link with Shift. A real press on its link navigates
+// nowhere.
+const afterPress = `<!doctype html><title>After press</title>
+<style>a,div{position:fixed;left:0;width:300px;height:40px;display:block}</style>
+<div style="top:0">Elsewhere</div>
+<a href="/target?prevented" style="top:50px">Prevented link</a>
+<a id="other" href="/target" style="top:100px">Other link</a>
+<iframe src="http://localhost:PORT/opener" style="position:fixed;top:200px;left:0;width:300px;height:60px"></iframe>
+<script>
+window.presses = 0
+window.moves = 0
+addEventListener("pointermove", () => window.moves++, true)
+addEventListener("message", () => { window.ready = true })
+addEventListener("click", (event) => {
+  if (!event.isTrusted) return
+  window.presses++
+  if (event.target.closest("a")) event.preventDefault()
+  const { kind, delay } = window.plan
+  if (kind === "frame") return frames[0].postMessage(delay, "*")
+  setTimeout(() => {
+    const other = document.getElementById("other")
+    other.href = "/target?made-up-" + delay
+    other.dispatchEvent(new MouseEvent("click", { shiftKey: true, bubbles: true, cancelable: true }))
+  }, delay)
+}, true)
+</script>`
+
+// The frame keeps its renderer busy before the window it asks for.
+const opener = `<!doctype html><title>Opener</title><script>
+addEventListener("message", (event) => {
+  setTimeout(() => {
+    for (const end = performance.now() + 20; performance.now() < end; );
+    window.open("/target?frame-" + event.data)
+  }, event.data)
+})
+parent.postMessage("ready", "*")
+</script>`
+
 const unprompted = `<!doctype html><title>Unprompted</title><script>setTimeout(() => window.open("/target?timer"), 50)</script>`
 
 // A document that commits, then leaves for a download by itself.
@@ -50,6 +93,8 @@ function served(path: string | undefined) {
   if (path === "/links") return links
 
   if (path === "/then-download") return thenDownload
+
+  if (path === "/opener") return opener
 
   if (path === "/synthetic") return synthetic
 
@@ -84,13 +129,20 @@ void electron.app.whenReady().then(async () => {
     // An address with a password, which the pane opens nowhere.
     if (request.url === "/to-refused")
       return void response.writeHead(302, { location: `http://someone:secret@${request.headers.host}/target?refused` }).end()
+    if (request.url === "/after-press") {
+      response.writeHead(200, { "content-type": "text/html" })
+
+      return void response.end(afterPress.replace("PORT", String(request.headers.host).split(":")[1] ?? ""))
+    }
+
     response.writeHead(200, { "content-type": "text/html" })
     response.end(served(request.url))
   })
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address()
-  const origin = `http://127.0.0.1:${address instanceof Object ? address.port : 0}`
+  const port = address instanceof Object ? address.port : 0
+  const origin = `http://127.0.0.1:${port}`
   // Never shown and never focused: the presses below are Chromium input events, not the system's.
   const win = new electron.BrowserWindow({ show: false, width: 800, height: 600 })
   const partition = "links-fixture"
@@ -236,7 +288,9 @@ void electron.app.whenReady().then(async () => {
     page.contents.setBackgroundThrottling(false)
   }
 
-  const local = (notice: RefusalNotice) => ("target" in notice ? { ...notice, target: notice.target.replace(origin, "") } : notice)
+  // Addresses as paths, whichever of the server's two sites they are on.
+  const local = (notice: RefusalNotice) =>
+    "target" in notice ? { ...notice, target: notice.target.replace(origin, "").replace(`http://localhost:${port}`, "") } : notice
 
   // What happened since `before`: the new tabs, each once its first navigation has ended in a page, a notice, a
   // download or its own closing; the new notices of the pressed page; and the new downloads, once they have ended.
@@ -295,6 +349,8 @@ void electron.app.whenReady().then(async () => {
     const before = mark()
     const seen = await presses()
     const at = { x: 20, y: row * 50 + 20 }
+    // The pointer is on what it presses, as a person's is.
+    page.contents.sendInputEvent({ type: "mouseMove", ...at, modifiers })
     page.contents.sendInputEvent({ type: "mouseDown", ...at, button, clickCount: 1, modifiers })
     page.contents.sendInputEvent({ type: "mouseUp", ...at, button, clickCount: 1, modifiers })
     // The page saw the click, and what it asked the pane for followed: a tab or a notice, or neither.
@@ -337,6 +393,20 @@ void electron.app.whenReady().then(async () => {
     return { ...(await outcome(before, downloading)), refusal }
   }
 
+  // A plain press on the page that then acts on its own: one request follows it, which is not the person's.
+  const pressThenWait = async (row: number, kind: "frame" | "made-up", delay: number) => {
+    await page.contents.executeJavaScript(`window.plan = ${JSON.stringify({ kind, delay })}`)
+    const before = mark()
+    const at = { x: 20, y: row * 50 + 20 }
+    page.contents.sendInputEvent({ type: "mouseMove", ...at })
+    page.contents.sendInputEvent({ type: "mouseDown", ...at, button: "left", clickCount: 1 })
+    page.contents.sendInputEvent({ type: "mouseUp", ...at, button: "left", clickCount: 1 })
+    await until(() => notices.length > before.notices || opened.length > before.opened)
+    await turn()
+
+    return { on: row ? "link" : "elsewhere", kind, delay, ...(await outcome(before)) }
+  }
+
   // A page that asks for a tab by itself, with nobody's press.
   const unasked = async (path: string) => {
     const before = mark()
@@ -377,8 +447,22 @@ void electron.app.whenReady().then(async () => {
   const reclaimed = await press(0, "middle")
   const synthesized = await unasked("/synthetic")
   const timer = await unasked("/unprompted")
+  await go("/after-press")
+  await until(async () => {
+    page.contents.sendInputEvent({ type: "mouseMove", x: 500 + (Date.now() % 2), y: 500 })
+
+    return (await count("moves")) > 0 && (await page.contents.executeJavaScript("window.ready === true"))
+  })
+  // A slow renderer, so a report that could arrive late would.
+  await page.contents.debugger.sendCommand("Emulation.setCPUThrottlingRate", { rate: 4 })
+  const afterwards: Awaited<ReturnType<typeof pressThenWait>>[] = []
+
+  for (const row of [0, 1])
+    for (const kind of ["frame", "made-up"] as const)
+      for (const delay of [50, 500, 2000]) afterwards.push(await pressThenWait(row, kind, delay))
+
   process.stdout.write(
-    `${JSON.stringify({ platform: process.platform, middle, modified, modifiedShift, middleShift, shift, blank, blankMiddle, mail, mailMiddle, nothing, opener, openerMiddle, key, download, blankDownload, mailRedirect, refusedRedirect, thenDownload: thenDownloaded, agent, agentDownload, reclaimed, synthetic: synthesized, timer })}\n`,
+    `${JSON.stringify({ platform: process.platform, middle, modified, modifiedShift, middleShift, shift, blank, blankMiddle, mail, mailMiddle, nothing, opener, openerMiddle, key, download, blankDownload, mailRedirect, refusedRedirect, thenDownload: thenDownloaded, agent, agentDownload, reclaimed, synthetic: synthesized, timer, afterPress: afterwards })}\n`,
   )
   await page.dispose()
   server.closeAllConnections()

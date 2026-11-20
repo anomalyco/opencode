@@ -727,7 +727,6 @@ type MainEvent =
   | { type: "state"; state: { tabs: MainTab[]; focusedTabID: string } | null; error?: string }
   | { type: "page"; tabID: string; zoom: number; viewport: { mode: "auto" }; icon?: string }
   | { type: "embed"; tabID: string; embed: string }
-  | { type: "focus"; tabID: string }
 
 const preview = "tab_33333333-3333-3333-3333-333333333333"
 
@@ -852,6 +851,30 @@ story("holds every restored tab's box, label and icon from the reopen until its 
   expect(first.map((tab) => tab.icon)).toEqual([expect.any(String), previewIcon, docsIcon])
 })
 
+// A page's icon arrives after its tab is drawn: Chromium lists it once the document's head has parsed, and main loads
+// it. The tab draws the globe until then. A site's SVG is drawn as an image, never put in the window as markup.
+story("a tab draws its page's icon in the globe's place as an image, and no tab moves", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const tabs = root.getByRole("tab")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+  await send(root, inventory(reported({ id: preview, url: "http://localhost:4173/", title: "Preview" }), reported({ id: docs, url: "https://example.com/docs", title: "Docs" })))
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const globes = await drawn(tabs)
+  expect(globes.slice(1).map((tab) => tab.icon)).toEqual(["none", "none"])
+
+  // A site's own SVG that would run as markup: a script, and a handler on the element itself.
+  const hostile = `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" onload="window.iconRan = 'onload'"><script>window.iconRan = 'script'</script><rect width="16" height="16" fill="purple"/></svg>`).toString("base64")}`
+  const image = root.getByRole("tab", { name: "Docs", exact: true }).locator("img")
+  await send(root, details(preview, previewIcon))
+  await send(root, details(docs, hostile))
+  await expect(image).toHaveAttribute("src", hostile)
+  await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0)).toBe(true)
+  expect(await page.evaluate(() => "iconRan" in window)).toBe(false)
+  expect(await drawn(tabs)).toEqual([globes[0], { ...globes[1], icon: previewIcon }, { ...globes[2], icon: hostile }])
+})
+
 // A server without a browser left its restored tabs on a loader with no end.
 story("a restored tab on a server without a browser says that the browser could not open, and keeps its box", async ({ page }) => {
   const { root, stable } = await reopen(page)
@@ -907,51 +930,6 @@ story("an agent show request opens the closed pane and leaves the keyboard in th
   await expect(side).toHaveText("open")
   await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(composer).toBeFocused()
-})
-
-story("a link opened with the middle button joins the strip behind the selected tab, and with Shift as well in front", async ({ page }) => {
-  const root = page.getByTestId("browser-region-fixture")
-  const tabs = root.getByRole("tab")
-  const link = page.frameLocator('iframe[title="Browser page"]').getByRole("link", { name: "Docs", exact: true })
-  await root.getByRole("button", { name: "Beta", exact: true }).click()
-  await root.getByRole("button", { name: "First inventory", exact: true }).click()
-  await expect(tabs).toHaveText(["beta.ts", "Preview"])
-  await link.click({ button: "middle" })
-  // The strip gains the tab, the selection stays, and no notice says a pop-up was blocked.
-  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
-  await expect(root.getByRole("tab", { selected: true })).toHaveText("Preview")
-  await expect(root.getByTestId("selected")).toHaveText("browser:tab_33333333-3333-3333-3333-333333333333")
-  await expect(root.getByText("Pop-up blocked")).toHaveCount(0)
-  await link.click({ modifiers: ["ControlOrMeta", "Shift"] })
-  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs", "Docs"])
-  await expect(root.getByTestId("selected")).toHaveText("browser:tab_66666666-6666-6666-6666-000000000002")
-  await expect(root.getByText("Pop-up blocked")).toHaveCount(0)
-})
-
-story("a new tab that closes itself leaves the strip, and in front gives the pane back to the tab that opened it", async ({ page }) => {
-  const root = page.getByTestId("browser-region-fixture")
-  const tabs = root.getByRole("tab")
-  const selected = root.getByTestId("selected")
-  const opener = reported({ id: preview, url: "http://localhost:4173/", title: "Preview" })
-  const linked = reported({ id: docs, url: "about:blank", title: "" })
-  await root.getByRole("button", { name: "Beta", exact: true }).click()
-  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
-  // Behind: main lists the new tab, then drops it once its first navigation became a download.
-  await send(root, inventory(opener, linked))
-  await expect(tabs).toHaveText(["beta.ts", "Preview", "New tab"])
-  await send(root, inventory(opener))
-  await expect(tabs).toHaveText(["beta.ts", "Preview"])
-  await expect(selected).toHaveText(`browser:${preview}`)
-  // In front: main selects the new tab, then selects its opener again before it drops the tab (`tab.closed` in
-  // pane-machine.ts).
-  await send(root, { type: "state", state: { tabs: [opener, linked], focusedTabID: docs } })
-  await send(root, { type: "focus", tabID: docs })
-  await expect(selected).toHaveText(`browser:${docs}`)
-  await send(root, { type: "focus", tabID: preview })
-  await send(root, inventory(opener))
-  await expect(tabs).toHaveText(["beta.ts", "Preview"])
-  await expect(selected).toHaveText(`browser:${preview}`)
-  await expect(root.getByRole("tab", { selected: true })).toHaveText("Preview")
 })
 
 story("?W right after an agent shows another page closes that browser tab, not the session", async ({ page }) => {
