@@ -17,7 +17,7 @@ import { PreviewControls } from "@opencode/ui/preview-controls"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
+import { getIcon } from "@opencode/ui/icons/catalog"
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { Loader } from "@opencode/ui/loader"
 import { showToast } from "@opencode/ui/toast"
@@ -104,8 +104,13 @@ export default function ArtifactView(props: {
   const mode = () => fixedMode() ?? selectArtifactMode(viewerState(), props.content)
 
   const table = createMemo(() =>
-    kind() === "table"
-      ? parseDelimited(props.content.content, props.path.toLowerCase().endsWith(".tsv") ? "\t" : ",")
+    kind() === "table" && mode() === "preview"
+      ? parseDelimited(
+          props.content.content,
+          props.path.toLowerCase().endsWith(".tsv") ? "\t" : ",",
+          TABLE_PARSE_LIMIT,
+          { truncated: props.content.truncated },
+        )
       : undefined,
   )
 
@@ -113,7 +118,7 @@ export default function ArtifactView(props: {
     const parsed = table()
 
     const info: ArtifactInfo = parsed
-      ? { rows: parsed.total, columns: parsed.columns }
+      ? { rows: parsed.truncated ? undefined : parsed.rows.length, columns: parsed.columns }
       : selectArtifactInfo(viewerState(), props.content)
 
     return [
@@ -172,13 +177,28 @@ export default function ArtifactView(props: {
         session={props.session}
         screen={props.screen}
         path={props.path}
-        text={fixedMode() === "preview" ? undefined : props.content.content}
+        text={fixedMode() === "preview" || props.content.truncated ? undefined : props.content.content}
         mode={mode()}
         onModeChange={fixedMode() ? undefined : (mode) => dispatchViewer({ type: "mode.changed", mode })}
         meta={meta()}
         html={kind() === "html"}
       />
-      <Show when={mode() === "preview"} fallback={props.source}>
+      <Show
+        when={mode() === "preview"}
+        fallback={
+          <>
+            <Show when={props.content.truncated}>
+              <div
+                data-slot="artifact-truncated-banner"
+                class="border-b border-v2-border-border-muted bg-v2-background-bg-layer-02 px-5 py-2 text-12-regular text-text-weak"
+              >
+                {ctx.t("view.truncated", { size: size() })}
+              </div>
+            </Show>
+            {props.source}
+          </>
+        }
+      >
         <Switch
           fallback={
             <ArtifactBinary
@@ -203,7 +223,9 @@ export default function ArtifactView(props: {
           <Match when={kind() === "font"}>
             <ArtifactFont path={props.path} content={props.content} />
           </Match>
-          <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} />}</Match>
+          <Match when={table()} keyed>
+            {(parsed) => <ArtifactTable parsed={parsed} />}
+          </Match>
           <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
           {/* Keyed, so another viewer for the file mounts with bytes of its own. */}
           <Match when={viewer()} keyed>
@@ -823,14 +845,30 @@ function ArtifactMermaid(props: { text: string; cacheKey?: string }) {
   )
 }
 
+/** Header row plus up to 1,000 data rows parsed per table preview. */
+const TABLE_PARSE_LIMIT = 1001
+
+/** Initial body rows rendered before revealing more, keeping wide tables responsive on first paint. */
+const INITIAL_TABLE_ROWS = 200
+
+const TABLE_ROW_STEP = 200
+
 function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
   const ctx = usePlugin()
   const controller = new AbortController()
   onCleanup(() => controller.abort())
-  const parsed = () => props.parsed
+
+  const [visibleCount, setVisibleCount] = createSignal(INITIAL_TABLE_ROWS)
+  const copySymbol = `artifact-table-copy-${uuid()}`
+  const copyIcon = getIcon("copy")
+  const copyLabel = createMemo(() => ctx.t("view.table.copyCell"))
+
+  const columns = createMemo(() => Array.from({ length: props.parsed.columns }, (_, index) => index))
   // Pad the header to the widest row so no data column is dropped.
-  const header = () => Array.from({ length: parsed().columns }, (_, index) => parsed().rows[0]?.[index] ?? "")
-  const body = () => parsed().rows.slice(1)
+  const header = createMemo(() => columns().map((index) => props.parsed.rows[0]?.[index] ?? ""))
+  const body = createMemo(() => props.parsed.rows.slice(1))
+  const visibleBody = createMemo(() => body().slice(0, visibleCount()))
+  const hasMore = () => visibleBody().length < body().length
 
   const copy = (text: string) => {
     // Read the parsed value, not the ellipsized presentation, including embedded tabs and newlines.
@@ -839,46 +877,90 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
     })
   }
 
+  // One delegated listener on the table replaces thousands of per-cell IconButton/Icon component instances and effects.
+  const handleClick = (event: MouseEvent) => {
+    const target =
+      event.target instanceof Element ? event.target.closest('button[data-slot="artifact-table-copy"]') : null
+
+    if (!(target instanceof HTMLButtonElement)) return
+    const row = Number(target.dataset.row)
+    const col = Number(target.dataset.col)
+
+    if (!Number.isInteger(row) || !Number.isInteger(col)) return
+    copy(props.parsed.rows[row]?.[col] ?? "")
+  }
+
   return (
     <div class="min-h-0 flex-1 overflow-auto" data-scrollable data-file-find="document">
-      <table data-slot="artifact-table" class="min-w-full text-13-regular text-text-base">
+      <svg width="0" height="0" style={{ position: "absolute", overflow: "hidden" }} aria-hidden="true">
+        <defs>
+          <symbol id={copySymbol} viewBox={copyIcon.viewBox} innerHTML={copyIcon.body} />
+        </defs>
+      </svg>
+      <table data-slot="artifact-table" class="min-w-full text-13-regular text-text-base" onClick={handleClick}>
         <thead>
           <tr>
             <For each={header()}>
-              {(cell) => (
+              {(cell, column) => (
                 <th scope="col">
                   <span data-slot="artifact-table-cell-text">{cell}</span>
-                  <IconButton
+                  <button
+                    type="button"
                     data-slot="artifact-table-copy"
-                    variant="ghost-muted"
-                    size="small"
-                    icon={<Icon name="copy" size="normal" />}
-                    aria-label={ctx.t("view.table.copyCell")}
-                    title={ctx.t("view.table.copyCell")}
-                    onClick={() => copy(cell)}
-                  />
+                    data-component="icon-button-v2"
+                    data-variant="ghost-muted"
+                    data-size="small"
+                    data-row="0"
+                    data-col={column()}
+                    aria-label={copyLabel()}
+                    title={copyLabel()}
+                  >
+                    <svg
+                      data-slot="icon-svg"
+                      width="16"
+                      height="16"
+                      viewBox={copyIcon.viewBox}
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <use href={`#${copySymbol}`} />
+                    </svg>
+                  </button>
                 </th>
               )}
             </For>
           </tr>
         </thead>
         <tbody>
-          <For each={body()}>
-            {(row) => (
+          <For each={visibleBody()}>
+            {(row, rowIndex) => (
               <tr>
-                <For each={header()}>
-                  {(_, column) => (
+                <For each={columns()}>
+                  {(column) => (
                     <td>
-                      <span data-slot="artifact-table-cell-text">{row[column()] ?? ""}</span>
-                      <IconButton
+                      <span data-slot="artifact-table-cell-text">{row[column] ?? ""}</span>
+                      <button
+                        type="button"
                         data-slot="artifact-table-copy"
-                        variant="ghost-muted"
-                        size="small"
-                        icon={<Icon name="copy" size="normal" />}
-                        aria-label={ctx.t("view.table.copyCell")}
-                        title={ctx.t("view.table.copyCell")}
-                        onClick={() => copy(row[column()] ?? "")}
-                      />
+                        data-component="icon-button-v2"
+                        data-variant="ghost-muted"
+                        data-size="small"
+                        data-row={rowIndex() + 1}
+                        data-col={column}
+                        aria-label={copyLabel()}
+                        title={copyLabel()}
+                      >
+                        <svg
+                          data-slot="icon-svg"
+                          width="16"
+                          height="16"
+                          viewBox={copyIcon.viewBox}
+                          fill="none"
+                          aria-hidden="true"
+                        >
+                          <use href={`#${copySymbol}`} />
+                        </svg>
+                      </button>
                     </td>
                   )}
                 </For>
@@ -887,9 +969,24 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
           </For>
         </tbody>
       </table>
-      <Show when={parsed().total > parsed().rows.length}>
-        <div class="px-4 py-3 text-12-regular text-text-weak">
-          {ctx.t("view.table.truncated", { shown: parsed().rows.length - 1, total: parsed().total - 1 })}
+      <Show when={hasMore() || props.parsed.truncated}>
+        <div data-slot="artifact-table-footer">
+          <span>
+            {props.parsed.truncated
+              ? visibleBody().length > 0
+                ? ctx.t("view.table.truncatedPreview", { shown: visibleBody().length })
+                : ctx.t("view.table.previewTruncated")
+              : ctx.t("view.table.truncated", { shown: visibleBody().length, total: body().length })}
+          </span>
+          <Show when={hasMore()}>
+            <button
+              type="button"
+              data-slot="artifact-table-more"
+              onClick={() => setVisibleCount((count) => count + TABLE_ROW_STEP)}
+            >
+              {ctx.t("view.table.showMore")}
+            </button>
+          </Show>
         </div>
       </Show>
     </div>
