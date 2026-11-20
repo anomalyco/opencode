@@ -387,3 +387,22 @@ async fn previews_added_files_as_new_and_deleted_files_as_empty() {
     assert!(permissions[4]["toolCall"].get("name").is_none());
     assert_eq!(decisions(&acp).len(), 8);
 }
+
+// completed-diffs.test.ts
+#[tokio::test]
+async fn leaves_a_scripts_changes_alone_some_have_no_diff_and_a_file_can_change_more_than_once() {
+    let dir = opencode_util::temp::tempdir().unwrap();
+    std::fs::write(dir.path().join("a.txt"), "a\nb\nc\n").unwrap();
+    let update = json!({ "sessionUpdate": "tool_call_update", "toolCallId": "call_1", "status": "completed" });
+    let source = opencode_acp::tools::DiffSource {
+        tool_name: "execute".to_owned(),
+        input: json!({ "code": "1" }),
+        metadata: Some(json!({ "files": [
+            { "file": "a.txt", "status": "modified", "additions": 1, "deletions": 0, "patch": "@@ -1 +1,2 @@\n a\n+b\n" },
+            { "file": "a.txt", "status": "modified", "additions": 1, "deletions": 0, "patch": "@@ -1,2 +1,3 @@\n a\n b\n+c\n" },
+        ] })),
+    };
+    let cwd = dir.path().to_string_lossy();
+    let result = opencode_acp::permission::with_completed_diffs(update.clone(), Some(&source), &cwd).await;
+    assert_eq!(result, update);
+}

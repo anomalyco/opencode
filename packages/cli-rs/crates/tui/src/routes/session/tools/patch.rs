@@ -33,7 +33,8 @@ pub struct File {
     pub kind: String,
     pub relative_path: String,
     pub patch: String,
-    pub deletions: f64,
+    pub additions: Option<f64>,
+    pub deletions: Option<f64>,
 }
 
 impl Patch {
@@ -70,43 +71,13 @@ impl Patch {
         self.root.clear();
         self.paints.clear();
         let blocks = match &shown {
-            Shown::Files { files, view, wrap, common } => files
-                .iter()
-                .map(|file| {
-                    let block = self.block(cx, common, label(&file.kind), &file.relative_path);
-                    let child = if file.kind == "delete" {
-                        let text = Text::new(
-                            cx.app,
-                            format!("-{} line{}", number(file.deletions), if file.deletions == 1.0 { "" } else { "s" }),
-                        );
-                        let painted = text.clone();
-                        self.paints.add(cx.theme, move |theme| {
-                            painted.fg(theme.diff.text.removed);
-                        });
-                        text.as_any()
-                    } else {
-                        let diff = opencode_ui::diff::view_painted(
-                            cx.app,
-                            cx.theme,
-                            cx.syntax,
-                            &file.patch,
-                            *view,
-                            opentui::syntax::filetype_for_path(&file.relative_path),
-                            *wrap,
-                            0,
-                            &self.paints,
-                        );
-                        View::new(cx.app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 1).child(&diff).as_any()
-                    };
-                    block.children().add(&child);
-                    block.show_children(true);
-                    block
-                })
-                .collect(),
+            Shown::Files { files, view, wrap, common } => {
+                file_blocks(cx, files, *view, *wrap, common.permission, common.width, &self.paints)
+            }
             Shown::Applied { applied, common } => applied
                 .iter()
                 .map(|(kind, resource)| {
-                    let block = self.block(cx, common, label(kind), resource);
+                    let block = path_block(cx, common.permission, common.width, label(kind), resource);
                     let text = Text::new(cx.app, truncate_file_path(resource, (common.width - 5).max(2)))
                         .wrap(WrapMode::None)
                         .truncate(true);
@@ -144,19 +115,121 @@ impl Patch {
         *self.blocks.borrow_mut() = blocks;
         *self.shown.borrow_mut() = Some(shown);
     }
+}
 
-    fn block(&self, cx: &Context<'_>, common: &Common, label: &str, path: &str) -> BlockTool {
-        let block = BlockTool::new(cx);
-        block.set(Block {
-            header: Header::Path { label: label.to_owned(), value: format_path(cx, Some(path)) },
-            spinner: false,
-            permission: common.permission,
-            error: None,
-            clickable: false,
-            width: common.width,
-        });
-        block
+/// `PatchedFiles`: one block per file a patch, or a Code Mode script, changed, with its diff, or its counts when the
+/// diff is missing (a deleted file, or a script's change past the size cap). A change without counts shows only its
+/// path.
+pub fn file_blocks(
+    cx: &Context<'_>,
+    files: &[File],
+    view: DiffView,
+    wrap: WrapMode,
+    permission: bool,
+    width: i64,
+    paints: &Paints,
+) -> Vec<BlockTool> {
+    files
+        .iter()
+        .map(|file| {
+            let block = path_block(cx, permission, width, label(&file.kind), &file.relative_path);
+            let child = if file.kind != "delete" && file.patch.contains("@@") {
+                let diff = opencode_ui::diff::view_painted(
+                    cx.app,
+                    cx.theme,
+                    cx.syntax,
+                    &file.patch,
+                    view,
+                    opentui::syntax::filetype_for_path(&file.relative_path),
+                    wrap,
+                    0,
+                    paints,
+                );
+                Some(View::new(cx.app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 1).child(&diff).as_any())
+            } else {
+                change_counts(file.additions, file.deletions).map(|counts| {
+                    let text = Text::new(cx.app, "");
+                    let painted = text.clone();
+                    paints.add(cx.theme, move |theme| {
+                        // The `<text>` has no fg: OpenTUI's default, white, in every theme.
+                        let plain =
+                            |text: &str| Span::styled(text.to_owned(), Style::new().fg(Color::rgb(255, 255, 255)));
+                        let mut spans = Vec::new();
+                        if !counts.additions.is_empty() {
+                            spans.push(Span::styled(counts.additions.clone(), Style::new().fg(theme.diff.text.added)));
+                        }
+                        if !counts.additions.is_empty() && !counts.deletions.is_empty() {
+                            spans.push(plain(" "));
+                        }
+                        if !counts.deletions.is_empty() {
+                            spans
+                                .push(Span::styled(counts.deletions.clone(), Style::new().fg(theme.diff.text.removed)));
+                        }
+                        spans.push(plain(counts.unit));
+                        painted.set_text(spans);
+                    });
+                    text.as_any()
+                })
+            };
+            if let Some(child) = child {
+                block.children().add(&child);
+                block.show_children(true);
+            }
+            block
+        })
+        .collect()
+}
+
+/// The line counts a change shows without its diff (`changeCounts`): "+2 lines", "-40 lines", "+5 -1 lines". None
+/// where they are unknown or zero.
+#[derive(Debug, PartialEq)]
+pub struct Counts {
+    pub additions: String,
+    pub deletions: String,
+    pub unit: &'static str,
+}
+
+pub fn change_counts(additions: Option<f64>, deletions: Option<f64>) -> Option<Counts> {
+    let (additions, deletions) = (additions.unwrap_or(0.0), deletions.unwrap_or(0.0));
+    if additions == 0.0 && deletions == 0.0 {
+        return None;
     }
+    let signed = |sign: &str, count: f64| if count > 0.0 { format!("{sign}{}", number(count)) } else { String::new() };
+    Some(Counts {
+        additions: signed("+", additions),
+        deletions: signed("-", deletions),
+        unit: if additions + deletions == 1.0 { " line" } else { " lines" },
+    })
+}
+
+/// The diff view and wrap `ctx.config.diffs` asks for, or the one `width` suits.
+pub fn diff_layout(cx: &Context<'_>, width: i64) -> (DiffView, WrapMode) {
+    let diffs = cx.tui.config().info.diffs.clone();
+    let diffs = diffs.as_ref();
+    let view = match diffs.and_then(|diffs| diffs.view) {
+        Some(ConfigDiffView::Unified) => DiffView::Unified,
+        Some(ConfigDiffView::Split) => DiffView::Split,
+        _ if width > 120 => DiffView::Split,
+        _ => DiffView::Unified,
+    };
+    let wrap = match diffs.and_then(|diffs| diffs.wrap) {
+        Some(DiffWrap::None) => WrapMode::None,
+        _ => WrapMode::Word,
+    };
+    (view, wrap)
+}
+
+fn path_block(cx: &Context<'_>, permission: bool, width: i64, label: &str, path: &str) -> BlockTool {
+    let block = BlockTool::new(cx);
+    block.set(Block {
+        header: Header::Path { label: label.to_owned(), value: format_path(cx, Some(path)) },
+        spinner: false,
+        permission,
+        error: None,
+        clickable: false,
+        width,
+    });
+    block
 }
 
 fn pending_colors(theme: &Theme, failed: bool) -> BlockColors {
@@ -167,18 +240,7 @@ fn shown(cx: &Context<'_>, props: &Props<'_>) -> Shown {
     let common = Common { permission: props.permission, width: content_width(cx) };
     let files = parse_files(props.metadata.get("files"));
     if !files.is_empty() {
-        let diffs = cx.tui.config().info.diffs.clone();
-        let diffs = diffs.as_ref();
-        let view = match diffs.and_then(|diffs| diffs.view) {
-            Some(ConfigDiffView::Unified) => DiffView::Unified,
-            Some(ConfigDiffView::Split) => DiffView::Split,
-            _ if common.width > 120 => DiffView::Split,
-            _ => DiffView::Unified,
-        };
-        let wrap = match diffs.and_then(|diffs| diffs.wrap) {
-            Some(DiffWrap::None) => WrapMode::None,
-            _ => WrapMode::Word,
-        };
+        let (view, wrap) = diff_layout(cx, common.width);
         return Shown::Files { files, view, wrap, common };
     }
     let applied = applied(props.metadata.get("applied"));
@@ -218,7 +280,7 @@ pub fn parse_files(value: Option<&Value>) -> Vec<File> {
             })?;
             let relative = text("file").or(text("relativePath"))?;
             let absolute = text("filePath").or(Some(relative))?;
-            number("additions")?;
+            let additions = number("additions")?;
             let deletions = number("deletions")?;
             if kind.is_empty() || relative.is_empty() || absolute.is_empty() {
                 return None;
@@ -227,7 +289,37 @@ pub fn parse_files(value: Option<&Value>) -> Vec<File> {
                 kind: kind.to_owned(),
                 relative_path: relative.to_owned(),
                 patch: text("patch")?.to_owned(),
-                deletions,
+                additions: Some(additions),
+                deletions: Some(deletions),
+            })
+        })
+        .collect()
+}
+
+/// `parseScriptChanges`: a script's changes, like a patch's files, but a change may have no patch and, where nothing
+/// could be derived without reading the file, no counts.
+pub fn parse_script_changes(value: Option<&Value>) -> Vec<File> {
+    value
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            let file = item.as_object()?;
+            let text = |key: &str| file.get(key).and_then(Value::as_str);
+            let number = |key: &str| file.get(key).and_then(opencode_ui::tool_info::finite_number);
+            let kind = match text("status")? {
+                "added" => "add",
+                "deleted" => "delete",
+                "modified" => "update",
+                _ => return None,
+            };
+            let relative = text("file").filter(|file| !file.is_empty())?;
+            Some(File {
+                kind: kind.to_owned(),
+                relative_path: relative.to_owned(),
+                patch: text("patch").unwrap_or_default().to_owned(),
+                additions: number("additions"),
+                deletions: number("deletions"),
             })
         })
         .collect()
@@ -269,7 +361,52 @@ fn targets(patch: &str) -> Vec<String> {
 mod tests {
     use serde_json::json;
 
-    use super::{applied, parse_files, targets};
+    use super::{Counts, applied, change_counts, parse_files, parse_script_changes, targets};
+
+    // script-changes.test.ts
+    #[test]
+    fn a_scripts_changes_parse_one_per_change_with_or_without_a_patch_and_counts() {
+        let changes = json!([
+            { "file": "a.ts", "status": "modified", "additions": 1, "deletions": 1, "patch": "@@ -1 +1 @@\n-a\n+b\n" },
+            { "file": "a.ts", "status": "modified", "additions": 2, "deletions": 0 },
+            { "file": "copy.txt", "status": "added" },
+            { "file": "gone.bin", "status": "deleted" },
+            { "file": "", "status": "added" },
+            { "file": "x.ts", "status": "renamed" },
+            "junk",
+        ]);
+        let parsed: Vec<_> = parse_script_changes(Some(&changes))
+            .into_iter()
+            .map(|file| (file.kind, file.relative_path, file.patch, file.additions, file.deletions))
+            .collect();
+        let row = |kind: &str, path: &str, patch: &str, additions, deletions| {
+            (kind.to_owned(), path.to_owned(), patch.to_owned(), additions, deletions)
+        };
+        assert_eq!(
+            parsed,
+            [
+                row("update", "a.ts", "@@ -1 +1 @@\n-a\n+b\n", Some(1.0), Some(1.0)),
+                row("update", "a.ts", "", Some(2.0), Some(0.0)),
+                row("add", "copy.txt", "", None, None),
+                row("delete", "gone.bin", "", None, None),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_change_without_its_diff_shows_its_counts_or_only_its_path() {
+        let text = |additions, deletions| {
+            change_counts(additions, deletions).map(|Counts { additions, deletions, unit }| {
+                [additions, deletions].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" ") + unit
+            })
+        };
+        assert_eq!(text(Some(2.0), Some(0.0)).as_deref(), Some("+2 lines"));
+        assert_eq!(text(None, Some(40.0)).as_deref(), Some("-40 lines"));
+        assert_eq!(text(None, Some(1.0)).as_deref(), Some("-1 line"));
+        assert_eq!(text(Some(5.0), Some(1.0)).as_deref(), Some("+5 -1 lines"));
+        assert_eq!(text(Some(0.0), Some(0.0)), None);
+        assert_eq!(text(None, None), None);
+    }
 
     #[test]
     fn targets_match_the_patch_headers() {
@@ -293,7 +430,7 @@ mod tests {
                 .iter()
                 .map(|file| (file.kind.as_str(), file.relative_path.as_str(), file.deletions))
                 .collect::<Vec<_>>(),
-            [("add", "a.rs", 0.0), ("delete", "b.rs", 3.0)]
+            [("add", "a.rs", Some(0.0)), ("delete", "b.rs", Some(3.0))]
         );
         assert_eq!(
             applied(Some(&json!([{ "type": "add", "resource": "x" }, { "type": "add" }, 1]))),

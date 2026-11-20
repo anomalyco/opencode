@@ -597,7 +597,18 @@ fn a_theme_switch_restyles_these_rows_in_place() {
             ),
         ),
         timed("c7", "apply_patch", failed(json!({ "patchText": "*** Update File: a.rs" }), "context mismatch")),
-        timed("c8", "execute", completed(json!({ "code": "throw 1" }), "Error: boom", json!({ "toolCalls": calls }))),
+        timed(
+            "c8",
+            "execute",
+            completed(
+                json!({ "code": "throw 1" }),
+                "Error: boom",
+                json!({ "toolCalls": calls, "files": [
+                    { "file": "b.rs", "status": "modified", "patch": patch, "additions": 1, "deletions": 1 },
+                    { "file": "c.rs", "status": "modified", "additions": 4, "deletions": 2 },
+                ] }),
+            ),
+        ),
         timed(
             "c9",
             "task",
@@ -735,6 +746,77 @@ fn execute_lists_its_calls_and_opens_the_dialog() {
     ] {
         assert!(screen.contains(text), "{text:?} missing:\n{screen}");
     }
+}
+
+/// A script's changes show below its execute block, one block per change in order, while it runs too; a change without
+/// its diff shows its counts, or only its path (`PatchedFiles`, script-changes.test.ts).
+#[test]
+fn execute_shows_the_files_its_script_changed_below_it() {
+    let patch = "--- src/a.rs\n+++ src/a.rs\n@@ -1 +1 @@\n-old();\n+new();\n";
+    let first = json!({ "file": "src/a.rs", "status": "modified", "additions": 1, "deletions": 1, "patch": patch });
+    let calls = json!([{ "tool": "edit", "status": "completed", "input": { "path": "src/a.rs" } }]);
+    let messages = turn(vec![timed(
+        "c1",
+        "execute",
+        running(json!({ "code": "await edit()" }), json!({ "toolCalls": calls, "files": [first] })),
+    )]);
+    let h = open(100, 60, messages, Vec::new());
+    h.wait_for_all(&[
+        "   ⋯ execute\n     › edit [path=src/a.rs]\n\n  ┃\n  ┃  ← Patched src/a.rs\n",
+        "1 - old();",
+        "1 + new();",
+    ]);
+
+    let files = json!([
+        first,
+        { "file": "src/a.rs", "status": "modified", "additions": 2, "deletions": 0 },
+        { "file": "copy.txt", "status": "added" },
+        { "file": "gone.bin", "status": "deleted", "deletions": 40 },
+        { "file": "big.txt", "status": "modified", "additions": 5, "deletions": 1 },
+    ]);
+    let ids = json!({ "sessionID": "ses_t", "assistantMessageID": "msg_2", "id": "c1" });
+    let progress = support::merge(ids, json!({ "metadata": { "toolCalls": calls, "files": files } }));
+    h.tui.data.apply(&[support::event("ses_t", "session.tool.progress", 1, progress)]);
+    let screen = h.wait_for_all(&["+2 lines", "# Created copy.txt", "# Deleted gone.bin", "-40 lines", "+5 -1 lines"]);
+    let lines: Vec<&str> = screen.lines().collect();
+    let row = |text: &str| lines.iter().position(|line| line.contains(text)).unwrap();
+    assert!(row("+2 lines") < row("copy.txt") && row("copy.txt") < row("gone.bin") && row("gone.bin") < row("big.txt"));
+    // A change without counts shows only its path, so the next block's top padding follows.
+    assert!(lines[row("copy.txt") + 1].trim_start_matches(['┃', ' ']).is_empty(), "{screen}");
+    assert!(lines[row("copy.txt") + 2].trim().is_empty(), "{screen}");
+    let theme = h.tui.page();
+    assert_eq!(h.fg("+2 lines"), theme.diff.text.added);
+    assert_eq!(h.fg("-40 lines"), theme.diff.text.removed);
+    assert_eq!(h.fg("-1 lines"), theme.diff.text.removed);
+    // The space between the counts and the unit have no color of their own: OpenTUI's default, white.
+    let (x, y) = h.find("+5 -1 lines");
+    let capture = h.app.render();
+    for x in [x + 2, x + 6] {
+        assert_eq!(capture.cell(u32::from(x), u32::from(y)).unwrap().fg, Color::rgb(255, 255, 255));
+    }
+}
+
+/// A patch's deleted file shows its counts, nothing for none; an update without hunks shows its counts.
+#[test]
+fn a_patch_without_a_diff_shows_its_counts_like_a_script() {
+    let messages = turn(vec![timed(
+        "c1",
+        "apply_patch",
+        completed(
+            json!({ "patchText": "*** Begin Patch" }),
+            "",
+            json!({ "files": [
+                { "file": "gone.rs", "type": "delete", "patch": "", "additions": 0, "deletions": 1 },
+                { "file": "empty.rs", "type": "delete", "patch": "", "additions": 0, "deletions": 0 },
+                { "file": "mode.sh", "type": "update", "patch": "", "additions": 0, "deletions": 0 },
+                { "file": "bin.dat", "type": "update", "patch": "Binary files differ", "additions": 3, "deletions": 0 },
+            ] }),
+        ),
+    )]);
+    let h = open(100, 60, messages, Vec::new());
+    let screen =
+        h.wait_for_all(&["# Deleted gone.rs", "-1 line\n", "# Deleted empty.rs", "← Patched mode.sh", "+3 lines"]);
+    assert!(!screen.contains("-0 lines"), "{screen}");
 }
 
 /// The dialog's scroll box is as tall as the code and output wrapped by character: the last row shows unscrolled.

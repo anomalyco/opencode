@@ -137,6 +137,11 @@ pub async fn with_completed_diffs(update: Value, source: Option<&DiffSource>, cw
     if update.get("sessionUpdate").and_then(Value::as_str) != Some("tool_call_update") {
         return update;
     }
+    // A script lists each change it made, some without a diff, and the same file more than once; rebuilding them from
+    // the file on disk would show its final text for every change.
+    if canonical_name(&source.tool_name) == "execute" {
+        return update;
+    }
     let hunks = if canonical_name(&source.tool_name) == "patch" { patch_hunks(&source.input) } else { Vec::new() };
     let mut diffs = Vec::new();
     for file in decode_files(source.metadata.as_ref().and_then(|metadata| metadata.get("files"))) {
