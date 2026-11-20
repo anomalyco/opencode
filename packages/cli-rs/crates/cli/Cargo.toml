@@ -53,12 +53,12 @@ libc.workspace = true
 [features]
 # TypeScript TUI plugins on the JS host: the pipe carrier, the JS host and its embedded `host.ts` and `compat.js`
 # (ts-feature). On by default; `OPENCODE_PLUGIN_JS=0` still turns the host off at run time.
-default = ["ts", "luau", "native"]
+default = ["ts", "luau"]
 ts = ["opencode-tui/ts", "opencode-plugin/ts"]
 # Luau plugins, in process (O-178). On by default; `OPENCODE_PLUGIN_LUAU=0` turns them off at run time.
 luau = ["opencode-tui/luau"]
-# Native plugin libraries over the C ABI, `plugin dev` and `plugin test` (native-feature). On by default;
-# `OPENCODE_PLUGIN_NATIVE=0` turns them off at run time.
+# Native plugin libraries over the C ABI, `plugin dev` and `plugin test` (native-feature). Off by default
+# (native-off); `OPENCODE_PLUGIN_NATIVE=0` turns them off at run time in a build with them.
 native = ["opencode-tui/native", "opencode-plugin/native"]
 
 [dev-dependencies]

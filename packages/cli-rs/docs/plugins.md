@@ -27,7 +27,8 @@ Schema, `crates/plugin-abi/schema/v2.json`. A *carrier* runs a plugin against it
   into contract trees. [`F16-v2-compat-layer.md`](../parity/deviations/F16-v2-compat-layer.md) lists what does not
   map.
 - **The JS host, Luau and the C ABI are cargo features**, `ts`, `luau` and `native` (of `opencode-cli`,
-  `opencode-tui` and `opencode-plugin`), all on by default. `OPENCODE_PLUGIN_JS=0`, `OPENCODE_PLUGIN_LUAU=0` and
+  `opencode-tui` and `opencode-plugin`). `ts` and `luau` are on by default; `native` is off, so third-party native
+  plugins load only in a build with `--features native`. `OPENCODE_PLUGIN_JS=0`, `OPENCODE_PLUGIN_LUAU=0` and
   `OPENCODE_PLUGIN_NATIVE=0` turn them off at run time. A plugin of a missing carrier is listed as skipped.
 - **Without `native`** no library is opened and no `dlopen` of a plugin is linked: a library target, a project's
   included, is skipped and never asked about; `plugin dev` and `plugin test` say the build lacks native plugins; the
@@ -37,7 +38,7 @@ Schema, `crates/plugin-abi/schema/v2.json`. A *carrier* runs a plugin against it
 - **The musl builds are fully static** (Rust's default `crt-static`, O-188), so they run on any Linux, but a static
   executable has no dynamic loader: they load no native plugins and have no Zed editor context. The build scripts of
   `opencode-plugin`, `opencode-tui` and `opencode-cli` derive `cfg(native)`, the `native` feature outside a static
-  musl build, and the carrier is behind that, so a plain musl build with the default features behaves as one without
+  musl build, and the carrier is behind that, so a musl build with `--features native` behaves as one without
   `native`, and its skip reason names the static musl build.
 
 `setup` runs once for each activation. The same registrations on each language:

@@ -34,6 +34,8 @@ The bundled `opencode` stays off `PATH`, so your own is untouched. Run the scrip
 
 ```sh
 bun run --cwd packages/cli-rs cargo build --bin opencode-native
+# with third-party native plugins, which are off by default:
+bun run --cwd packages/cli-rs cargo build --bin opencode-native --features native
 ```
 
 Run cargo this way. `bun run cargo` first installs OpenTUI's native library, and cargo reads `.cargo/config.toml`
@@ -64,7 +66,7 @@ On Linux and macOS the library links statically with its own libc++, so neither 
 - **musl** (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`): fully static, with Rust's default
   `crt-static` (O-188), so the binary needs no library and runs on any Linux. A static executable cannot `dlopen`, so
   the musl builds load no native plugins (they are listed as skipped) and have no Zed editor context; the build
-  compiles the native carrier out with the default features, as `docs/plugins.md` describes.
+  compiles the native carrier out even with `--features native`, as `docs/plugins.md` describes.
 
 `--release` keeps line-table debug info (about 180 MB; `strip` brings it to about 40 MB). `--profile dist` adds fat
 LTO for a smaller, faster binary in `target/dist/`; its link takes about 10 minutes.

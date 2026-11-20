@@ -26,13 +26,13 @@ mlua = { workspace = true, optional = true }
 
 [features]
 # Disable the JS host at runtime with `OPENCODE_PLUGIN_JS=0`.
-default = ["ts", "luau", "native"]
+default = ["ts", "luau"]
 ts = []
 # Disable Luau at runtime with `OPENCODE_PLUGIN_LUAU=0`.
 luau = ["dep:mlua"]
 # Native plugin libraries, opened in process over the C ABI (native-feature): the loader's library path, the C ABI's
-# carrier, the conformance harness, macOS quarantine and the library half of approvals. Disable it at runtime with
-# `OPENCODE_PLUGIN_NATIVE=0`. A static musl build compiles them out anyway (build.rs's `cfg(native)`, O-188).
+# carrier, the conformance harness, macOS quarantine and the library half of approvals. Off by default (native-off);
+# `OPENCODE_PLUGIN_NATIVE=0` turns it off at runtime in a build with it. A static musl build compiles them out anyway (build.rs's `cfg(native)`, O-188).
 native = ["opencode-plugin-abi/c-abi"]
 
 [target.'cfg(unix)'.dependencies]

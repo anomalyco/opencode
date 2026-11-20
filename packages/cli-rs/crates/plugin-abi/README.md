@@ -1,6 +1,7 @@
 # opencode-plugin-abi
 
-The SDK of native TUI plugins for `opencode-native`. A plugin is a shared library (`.so`, `.dylib`, `.dll`) that
+The SDK of native TUI plugins for `opencode-native`. Native plugins are off by default: only an `opencode-native`
+built with `--features native` loads them, and has `plugin dev` and `plugin test`. A plugin is a shared library (`.so`, `.dylib`, `.dll`) that
 depends on this crate alone and exports itself with `plugin!`, which holds every `unsafe` the C ABI needs.
 [`docs/plugins.md`](../../docs/plugins.md) explains how plugins work, [`docs/plugin-abi.md`](../../docs/plugin-abi.md)
 is the reference, and `cargo doc -p opencode-plugin-abi --open` documents every type.
