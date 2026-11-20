@@ -375,16 +375,14 @@
   [data-component="timeline-subagent"] {
     display: grid;
 
+    /* Hovered, it underlines its title like the timeline's other rows. A fill would reach into the click area's 6px
+       below the line, which the row's frame clips, so it would be cut flush under the text. */
     > [data-slot="timeline-event-item"] {
       gap: 8px;
-      margin-inline: -6px;
-      padding-inline: 6px;
-      border-radius: var(--radius-sm);
 
       @media (hover: hover) {
         &:hover:not([aria-disabled]) {
           cursor: pointer;
-          background-color: var(--v2-overlay-simple-overlay-hover);
         }
       }
     }
