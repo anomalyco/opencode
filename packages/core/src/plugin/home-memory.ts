@@ -19,24 +19,33 @@ const TOTAL_LIMIT = 200_000
 const State = Schema.Struct({ session: Schema.optional(SessionID), last: Schema.Finite })
 const decodeState = Schema.decodeUnknownOption(State)
 
-const description = (directory: string) =>
+const description = (directory: string, skills: string | undefined) =>
   [
     "Your own long-term workspace for helping this user across sessions. It persists between conversations and nothing in it is loaded automatically, so look here before asking the user something they may have told you before, and before redoing work.",
     `- ${path.join(directory, "memory")}: what you know about the user and want to remember: preferences, people, accounts, decisions, corrections they gave you.`,
     `- ${path.join(directory, "docs")}: documents you write or manage for the user.`,
     `- ${path.join(directory, "scripts")}: reusable scripts you build for recurring tasks.`,
+    ...(skills
+      ? [
+          `- ${skills}: skills you write for the user's recurring workflows, one per ${path.join(skills, "<name>", "SKILL.md")} in the standard SKILL.md format. They load automatically as available skills whenever the user works in their home folder.`,
+        ]
+      : []),
     "Read, write, reorganize and delete anything in it whenever it helps. Keep files small and well named so grep finds them. Don't use it for throwaway scratch work.",
   ].join("\n")
 
-const maintenance = (directory: string, transcripts: string) => `Daily memory maintenance. Nobody is watching; don't ask questions.
+const maintenance = (
+  directory: string,
+  skills: string | undefined,
+  transcripts: string,
+) => `Daily memory maintenance. Nobody is watching; don't ask questions.
 
-Your workspace is ${directory}, with memory/, docs/ and scripts/ folders. Below are the conversations the user had in their home folder since the last run (user and assistant text only, long messages cut).
+Your workspace is ${directory}, with memory/, docs/ and scripts/ folders${skills ? `, plus the skills you wrote for the user in ${skills}, one per <name>/SKILL.md, which load automatically` : ""}. Below are the conversations the user had in their home folder since the last run (user and assistant text only, long messages cut).
 
 1. Pick up anything worth remembering that isn't saved yet: preferences, facts about the user and the people and things in their life, decisions, corrections, recurring tasks. Skip one-off details and anything already saved.
 2. Update what changed and delete what's stale or wrong.
-3. Reorganize: merge duplicates, split files that grew too big, rename unclear files, keep the layout easy to grep.
+3. Reorganize: merge duplicates, split files that grew too big, rename unclear files, keep the layout easy to grep.${skills ? "\n4. Keep skills accurate and working: fix steps, paths and commands that changed, and turn recurring workflows into skills." : ""}
 
-Work only inside ${directory}. Finish with a short summary of what you added, changed and removed.
+Work only inside ${directory}${skills ? ` and ${skills}` : ""}. Finish with a short summary of what you added, changed and removed.
 
 <conversations>
 ${transcripts}
@@ -50,9 +59,14 @@ export const Plugin = define({
     if (path.resolve(ctx.location.directory) !== path.resolve(global.home)) return
     const fs = yield* FSUtil.Service
     const directory = path.join(global.data, "memory", ctx.location.project.id)
-    yield* Effect.forEach(["memory", "docs", "scripts"], (name) => fs.ensureDir(path.join(directory, name)), {
-      discard: true,
-    }).pipe(Effect.catchCause((cause) => Effect.logWarning("failed to create home memory folders", { cause })))
+    const skills = (yield* Flag.enabled("project_overlay"))
+      ? path.join(global.config, "project", ctx.location.project.id, "skills")
+      : undefined
+    yield* Effect.forEach(
+      [...["memory", "docs", "scripts"].map((name) => path.join(directory, name)), ...(skills ? [skills] : [])],
+      (target) => fs.ensureDir(target),
+      { discard: true },
+    ).pipe(Effect.catchCause((cause) => Effect.logWarning("failed to create home memory folders", { cause })))
 
     yield* ctx.reference.transform((editor) => {
       editor.add(
@@ -60,7 +74,7 @@ export const Plugin = define({
         Reference.LocalSource.make({
           type: "local",
           path: AbsolutePath.make(directory),
-          description: description(directory),
+          description: description(directory, skills),
         }),
       )
     })
@@ -78,7 +92,11 @@ export const Plugin = define({
       if (transcripts.length === 0) return yield* ctx.storage.set(key, { ...state, last: now })
       const session = yield* existing(state.session)
       yield* ctx.storage.set(key, { session, last: now })
-      yield* ctx.session.prompt({ sessionID: session, text: maintenance(directory, transcripts), delivery: "queue" })
+      yield* ctx.session.prompt({
+        sessionID: session,
+        text: maintenance(directory, skills, transcripts),
+        delivery: "queue",
+      })
     }).pipe(Effect.catchCause((cause) => Effect.logWarning("home memory maintenance failed", { cause })))
 
     const existing = Effect.fnUntraced(function* (sessionID: SessionID | undefined) {
