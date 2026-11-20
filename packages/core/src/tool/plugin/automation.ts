@@ -89,7 +89,7 @@ export const Plugin = {
         editor.add({
           name: "create",
           description:
-            "Schedule a recurring or one-off job: a prompt or Code Mode action that runs once at a time (\"in 20 minutes\", an ISO time), every interval (\"2 hours\"), on a cron or on a connected MCP server's push event, until it's done or reaches `expires`. A code action runs without a model, which suits cheap checks that send a prompt only when something changes. A prompt can target this session, another session in this project or a new subagent child. Code runs without a model and can return one send: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet.",
+            "Create an automation that runs a prompt or a Code Mode script once at a set time, on an interval, on a cron, or when an MCP server sends an event.",
           input: Automation.Request,
           output: View,
           options: { namespace: "automation", codemode: true },
