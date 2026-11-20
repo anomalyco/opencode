@@ -118,6 +118,34 @@ Use the `question` tool for text-only choices.
 `backdrop` — submits nothing: `{ "title": "v2 is live", "preset": "aurora", "text": "Thanks **everyone**.", "accent": "#2dd4bf" }`
 (`preset`: `plasma`, `aurora` or `waves`).
 
+## Diagrams
+
+Built-in canvas templates for showing data. Each takes `title`; `choose: true` adds a Choose button that submits the
+selected element (for `pie`, `{ label, index, value, share }`). Without `choose` they submit nothing: the user explores
+and you keep talking, so end your turn only if you asked something. Get exact schemas with `widget_template` `list`.
+
+| Template | Data (caps) | Use it for |
+| --- | --- | --- |
+| `pie` | `slices: { label, value }[]` (≤ 12), `donut?`, `unit?` | Parts of one whole; over 6 slices use `chart` bars |
+| `scatter` | `series: { label, points: { x, y, size?, label? }[] }[]`, `xLabel?`, `yLabel?`, `trend?` | How two measures relate; `size` for bubbles |
+| `histogram` | `values: number[]` (raw, ≤ 2,000), `bins?`, `unit?` | The distribution of one measure |
+| `area` | `series: { label, values }[]`, `labels?`, `mode?: stacked \| percent \| stream` | Totals and composition over time |
+| `heatmap` | `layout: "matrix"` (`rows`, `columns`, `values[row][col]`) or `"calendar"` (`days: { date, value }[]`) | Intensity across two categories, or daily activity |
+| `treemap` | `items: { label, value?, children? }[]` (≤ 4 levels) | What takes the space in a hierarchy |
+| `sankey` | `nodes: { id, label? }[]`, `links: { source, target, value }[]` | Flows that split and merge |
+| `graph` | `nodes: { id, label?, group? }[]` (≤ 40), `edges: { source, target, label? }[]`, `directed?` | Networks without a hierarchy |
+| `tree` | `root: { label, note?, children? }` (≤ 6 levels), `orientation?: right \| down` | Hierarchies: org charts, file trees |
+| `timeline` | `tasks: { label, start, end?, group?, progress? }[]`, `today?` | Schedules (Gantt); no `end` is a milestone |
+| `funnel` | `stages: { label, value }[]` (2–10) | Step-by-step drop-off with conversion rates |
+| `radar` | `axes: string[]` (3–12), `series: { label, values }[]`, `max?` | A few items scored on several dimensions |
+| `gauge` | `gauges: { label, value, min?, max, unit?, target?, bands? }[]` (1–4) | Headline KPIs against thresholds |
+| `boxplot` | `groups: { label, values? \| stats? }[]` (≤ 12) | Comparing distributions across groups |
+| `flowchart` | `nodes: { id, label?, shape? }[]`, `edges: { from, to, label? }[]` | Processes and decision logic |
+| `sequence` | `participants: string[]`, `messages: { from, to, label, kind? }[]` | Interactions over time between systems |
+| `table` | `columns: { label, unit?, digits? }[]`, `rows: { cells, trend? }[]` (≤ 50) | Exact values to scan and sort |
+
+For one or two plain series over categories or time, use `chart`.
+
 ## Writing a template
 
 Use `widget_template` with `action: "get"` on `suggestions` or `form` first and copy their patterns, then

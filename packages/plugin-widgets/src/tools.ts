@@ -17,6 +17,7 @@ Built-in templates (data schemas via widget_template action "list"):
 - confirm: a yes/no question with markdown details; submits { confirmed }.
 - chart: an animated bar or line chart of number series; submits nothing, or { series, index, value } on a tap with choose: true.
 - backdrop: a title and text on an animated shader banner (plasma, aurora or waves); submits nothing.
+- diagrams (pie, scatter, histogram, area, heatmap, treemap, sankey, graph, tree, timeline, funnel, radar, gauge, boxplot, flowchart, sequence, table): see the skill.
 
 Usage notes:
 - \`data\` is a JSON object (not a string) matching the template's JSON Schema; fix mismatches from the tool error and call again.

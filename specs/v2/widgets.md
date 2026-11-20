@@ -54,7 +54,9 @@ A template version is immutable. Saving a template with an existing name creates
 latest; old versions stay retrievable forever so old widgets keep rendering.
 
 Built-in templates ship in `@opencode/widget` and are always present: `suggestions`, `form`, `confirm`, `chart`,
-`backdrop`.
+`backdrop`, the live `minigame`, and the diagrams `pie`, `scatter`, `histogram`, `area`, `heatmap`, `treemap`, `sankey`,
+`graph`, `tree`, `timeline`, `funnel`, `radar`, `gauge`, `boxplot`, `flowchart`, `sequence`, `table`
+(`packages/widget/docs/diagrams.md`).
 
 ## Template source
 
@@ -466,6 +468,10 @@ stays after release, and a tap outside the plot clears it.
 `backdrop` — a `shader` demo: `data: { title: string; preset: "plasma" | "aurora" | "waves"; text?: string /* markdown */;
 accent?: string /* #rgb | #rrggbb */ }`, submits nothing. The banner is followed by the title, the text and a speed
 slider (0–2, 0 pauses with `fps: 0`); `values` is `[speed, accent r, g, b]`.
+
+Diagrams — canvas templates for data, listed with their data in `packages/widget/docs/diagrams.md`. Each takes
+`title` and `choose?: boolean`; with `choose` a Choose button submits the selected element, otherwise they submit
+nothing.
 
 ## Client behaviour
 

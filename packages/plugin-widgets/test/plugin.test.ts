@@ -207,6 +207,21 @@ test("the skill's live game example is the one the runtime's guidance tests", as
   expect(run).toContain(game.slice(0, game.indexOf("\n```\n")))
 })
 
+// The runtime's diagram examples, loaded by path because they sit outside this package's sources.
+const fixture = new URL("../../widget/test/fixtures/diagrams.ts", import.meta.url).href
+const { examples }: { examples: Record<string, unknown> } = await import(fixture)
+
+test("every diagram built-in posts with its example data and is listed in the skill", () =>
+  run((fake) =>
+    Effect.gen(function* () {
+      for (const [name, data] of Object.entries(examples)) {
+        const result = yield* execute(fake, "widget", { template: name, data })
+        expect([name, Exit.isSuccess(result) ? "ok" : String(failure(result))]).toEqual([name, "ok"])
+        expect(fake.skills[0]!.content).toContain("| `" + name + "` |")
+      }
+    }),
+  ))
+
 test("the built-in minigame is a live template end to end", () =>
   run((fake) =>
     Effect.gen(function* () {
