@@ -30,21 +30,42 @@ import { registerToolPlugin, toolIdentity } from "./lib/tool"
 // The real write, edit and patch tools, called from a script: their own results are what the script records, so this
 // pins the shape and wording each returns.
 
-const deps = [
-  Tool.node,
-  FileAccess.node,
-  FileMutation.node,
-  FileWrite.node,
-  Environment.node,
-  Formatter.node,
-  Location.node,
-  Permission.node,
-  Config.node,
-  Flag.node,
-]
+const writeNode = makeLocationNode({
+  name: "test/write",
+  layer: Layer.effectDiscard(registerToolPlugin(WriteTool.Plugin)),
+  deps: [Tool.node, FileWrite.node, Config.node, Flag.node],
+})
 
-const plugin = (name: string, value: Parameters<typeof registerToolPlugin>[0]) =>
-  makeLocationNode({ name, layer: Layer.effectDiscard(registerToolPlugin(value)), deps })
+const editNode = makeLocationNode({
+  name: "test/edit",
+  layer: Layer.effectDiscard(registerToolPlugin(EditTool.Plugin)),
+  deps: [
+    Tool.node,
+    FileWrite.node,
+    FileMutation.node,
+    Environment.node,
+    Location.node,
+    Permission.node,
+    Config.node,
+    Flag.node,
+  ],
+})
+
+const patchNode = makeLocationNode({
+  name: "test/patch",
+  layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
+  deps: [
+    Tool.node,
+    FileAccess.node,
+    FileMutation.node,
+    Environment.node,
+    Formatter.node,
+    Location.node,
+    Permission.node,
+    Config.node,
+    Flag.node,
+  ],
+})
 
 const it = testEffect(Layer.succeed(Flag.Overrides, "full_codemode"))
 
@@ -65,9 +86,9 @@ const run = (directory: string, code: string) =>
           FileAccess.node,
           FileMutation.node,
           FileWrite.node,
-          plugin("test/write", WriteTool.Plugin),
-          plugin("test/edit", EditTool.Plugin),
-          plugin("test/patch", PatchTool.Plugin),
+          writeNode,
+          editNode,
+          patchNode,
         ]),
         [
           Environment.node.replace(hostEnvironmentLayer),
