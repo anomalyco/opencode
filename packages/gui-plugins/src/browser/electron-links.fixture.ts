@@ -58,28 +58,6 @@ function served(path: string | undefined) {
   return "<!doctype html><title>Target</title><p>target</p>"
 }
 
-// Downloads whose last bytes wait, so a test decides whether its tab closed before the download ended.
-const held = new Set<ServerResponse>()
-
-const server = createServer((request, response) => {
-  if (request.url === "/favicon.ico") return void response.writeHead(404).end()
-
-  if (request.url === "/download") {
-    response.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": 'attachment; filename="report.bin"' })
-    response.write("made-up ")
-
-    return void held.add(response)
-  }
-
-  if (request.url === "/to-mail") return void response.writeHead(302, { location: "mailto:someone@example.test" }).end()
-
-  // An address with a password, which the pane opens nowhere.
-  if (request.url === "/to-refused")
-    return void response.writeHead(302, { location: `http://someone:secret@${request.headers.host}/target?refused` }).end()
-  response.writeHead(200, { "content-type": "text/html" })
-  response.end(served(request.url))
-})
-
 void electron.app.whenReady().then(async () => {
   const { Schema } = await import("effect")
   const { Browser } = await import("@opencode/plugin-browser/rpc")
@@ -88,6 +66,28 @@ void electron.app.whenReady().then(async () => {
   const { activityOwner } = await import("./policy")
   const { createSitePermissions } = await import("./site-permissions")
   const { createSystemMedia } = await import("./system-media")
+  // Downloads whose last bytes wait, so a test decides whether its tab closed before the download ended.
+  const held = new Set<ServerResponse>()
+
+  const server = createServer((request, response) => {
+    if (request.url === "/favicon.ico") return void response.writeHead(404).end()
+
+    if (request.url === "/download") {
+      response.writeHead(200, { "content-type": "application/octet-stream", "content-disposition": 'attachment; filename="report.bin"' })
+      response.write("made-up ")
+
+      return void held.add(response)
+    }
+
+    if (request.url === "/to-mail") return void response.writeHead(302, { location: "mailto:someone@example.test" }).end()
+
+    // An address with a password, which the pane opens nowhere.
+    if (request.url === "/to-refused")
+      return void response.writeHead(302, { location: `http://someone:secret@${request.headers.host}/target?refused` }).end()
+    response.writeHead(200, { "content-type": "text/html" })
+    response.end(served(request.url))
+  })
+
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address()
   const origin = `http://127.0.0.1:${address instanceof Object ? address.port : 0}`
@@ -96,7 +96,9 @@ void electron.app.whenReady().then(async () => {
   const partition = "links-fixture"
   const verifier = createHandlePath()
   const values = new Map<string, unknown>()
+
   type Page = ReturnType<typeof createBrowserPage>
+
   // Each page by its web contents, as the pane keeps each tab's download handler (`downloads` in pane.ts).
   const pages = new Map<number, Page>()
   const downloads: { url: string; state: string; updated: boolean }[] = []
@@ -153,8 +155,10 @@ void electron.app.whenReady().then(async () => {
   const sites = createSitePermissions(storage, () => undefined)
   const system = createSystemMedia()
   const made = { count: 0 }
+
   // What the page asked the pane for: each tab with whether it stays behind the current one, and each notice.
   type Opened = { readonly background: boolean; readonly owner: string; closed: boolean; readonly notices: RefusalNotice[] }
+
   const opened: Opened[] = []
   const tabs = new Map<Opened, Page>()
   const notices: RefusalNotice[] = []
@@ -271,7 +275,8 @@ void electron.app.whenReady().then(async () => {
         pages.delete(page.contents.id)
         await page.dispose()
 
-        return { ...base, url, ...(opener === undefined ? {} : { opener }), ...(tab.notices.length ? { notices: tab.notices.map(local) } : {}) }
+        // What is undefined is left out of the printed line.
+        return { ...base, url, opener, notices: tab.notices.length ? tab.notices.map(local) : undefined }
       }),
     )
 
@@ -279,7 +284,7 @@ void electron.app.whenReady().then(async () => {
       tabs: listed,
       notices: notices.slice(before.notices).map(local),
       owner: activityOwner(activity),
-      ...(met.length ? { downloads: met.map((item) => ({ url: item.download.url, state: item.download.state, tab: item.tab })) } : {}),
+      downloads: met.length ? met.map((item) => ({ url: item.download.url, state: item.download.state, tab: item.tab })) : undefined,
     }
   }
 
