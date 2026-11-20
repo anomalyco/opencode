@@ -77,6 +77,8 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   muted?: boolean
+  /** Stays visible without holding keyboard focus, while something in the timeline owns the keys. */
+  inactive?: boolean
   onSubmit?: () => void
   onEmptySubmit?: () => boolean | Promise<boolean>
   ref?: (ref: PromptRef | undefined) => void
@@ -735,7 +737,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (props.visible === false || disabled() || dialog.stack.length > 0) {
+    if (props.visible === false || props.inactive || disabled() || dialog.stack.length > 0) {
       if (input.focused) input.blur()
       input.focusable = false
       return

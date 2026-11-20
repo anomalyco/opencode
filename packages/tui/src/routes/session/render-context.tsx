@@ -6,6 +6,7 @@ import type { useConfig } from "../../config"
 import type { ThinkingMode } from "../../context/thinking"
 import type { createTimelineAnchors } from "./anchors"
 import type { GroupKind } from "./grouping/session"
+import type { WidgetFocus } from "../../component/widget/message"
 
 export type PendingAction = "steer" | "queue" | "cancel"
 
@@ -35,6 +36,8 @@ export const context = createContext<{
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
   pendingDelivery: (inboxID: string) => SessionInbox.Delivery | undefined
+  /** Which widget message holds the keyboard; widget messages render only where it is set. */
+  widgetFocus?: WidgetFocus
 }>()
 
 export function use() {
