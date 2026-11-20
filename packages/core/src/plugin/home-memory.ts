@@ -16,7 +16,7 @@ const MESSAGE_LIMIT = 4_000
 const SESSION_LIMIT = 40_000
 const TOTAL_LIMIT = 200_000
 
-const State = Schema.Struct({ session: SessionID, last: Schema.Finite })
+const State = Schema.Struct({ session: Schema.optional(SessionID), last: Schema.Finite })
 const decodeState = Schema.decodeUnknownOption(State)
 
 const description = (directory: string) =>
@@ -71,25 +71,30 @@ export const Plugin = define({
     const tick = Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis
       const state = decodeState(yield* ctx.storage.get(key)).pipe(Option.getOrUndefined)
-      if (state && now - state.last < DAY) return
-      const session = yield* existing(state?.session)
-      const since = state?.last ?? now - DAY
-      const transcripts = yield* collect(since, session)
+      // The first run only marks where to start, since there's nothing to maintain yet.
+      if (!state) return yield* ctx.storage.set(key, { last: now })
+      if (now - state.last < DAY) return
+      const transcripts = yield* collect(state.last, state.session)
+      if (transcripts.length === 0) return yield* ctx.storage.set(key, { ...state, last: now })
+      const session = yield* existing(state.session)
       yield* ctx.storage.set(key, { session, last: now })
-      if (transcripts.length === 0) return
       yield* ctx.session.prompt({ sessionID: session, text: maintenance(directory, transcripts), delivery: "queue" })
     }).pipe(Effect.catchCause((cause) => Effect.logWarning("home memory maintenance failed", { cause })))
 
     const existing = Effect.fnUntraced(function* (sessionID: SessionID | undefined) {
       if (sessionID) {
         const found = yield* ctx.session.get({ sessionID }).pipe(Effect.option)
-        if (Option.isSome(found)) return found.value.id
+        if (Option.isSome(found)) {
+          if (!found.value.time.archived) yield* ctx.session.update({ sessionID, archived: true })
+          return found.value.id
+        }
       }
       const created = yield* ctx.session.create({ title: "Memory maintenance" })
+      yield* ctx.session.update({ sessionID: created.id, archived: true })
       return created.id
     })
 
-    const collect = Effect.fnUntraced(function* (since: number, exclude: SessionID) {
+    const collect = Effect.fnUntraced(function* (since: number, exclude: SessionID | undefined) {
       const page = yield* ctx.session.list({
         directory: AbsolutePath.make(ctx.location.directory),
         parentID: null,
