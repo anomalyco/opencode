@@ -157,7 +157,7 @@ export function createSessionBackground(input: {
     const jobs = (input.jobs?.() ?? []).filter((job) => job.status === "running")
 
     // The latest call for a child names it; its own session or its tree's jobs decide whether it still runs.
-    return sessions.flatMap((info): Subagent[] => {
+    const known = sessions.flatMap((info): Subagent[] => {
       if (!descends(info.id, id)) return []
 
       const owned = jobs.filter((job) => {
@@ -185,6 +185,25 @@ export function createSessionBackground(input: {
 
       return [item]
     })
+
+    // A direct job can arrive before its child session record. Its parent and child IDs are enough to show it.
+    const missing = jobs.flatMap((job): Subagent[] => {
+      if (job.kind !== "subagent" || job.sessionID !== id || parents.has(job.childSessionID)) return []
+
+      return [
+        {
+          id: job.childSessionID,
+          type: "subagent",
+          sessionID: job.childSessionID,
+          label: job.description,
+          agent: job.agent,
+          started: job.time.started,
+          jobs: [job.id],
+        },
+      ]
+    })
+
+    return [...known, ...missing]
   })
 
   // Background work: every running subagent, and the session's live shells outside its blocking calls.
