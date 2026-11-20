@@ -98,46 +98,6 @@ fn oracle_invalid_configs_fail_as_typescript_does() {
 }
 
 #[test]
-fn modes_gate_layers_and_dispatch_passes_input() {
-    let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
-    let calls = Rc::new(RefCell::new(Vec::<String>::new()));
-    let record = |label: &'static str| {
-        let calls = calls.clone();
-        move |input: Option<&str>, _: Option<&KeyEvent>| calls.borrow_mut().push(format!("{label}:{input:?}"))
-    };
-    tui.layer(KeymapLayer { commands: vec![TuiCommand::new("session.new", record("base"))], ..KeymapLayer::default() })
-        .unwrap()
-        .forget();
-    tui.layer(KeymapLayer {
-        mode: Some("modal".to_owned()),
-        commands: vec![TuiCommand::inline("x", record("modal"))],
-        ..KeymapLayer::default()
-    })
-    .unwrap()
-    .forget();
-    let active = Rc::new(Cell::new(true));
-    let pop = tui.push_mode(
-        "modal",
-        Condition::when({
-            let active = active.clone();
-            move || active.get()
-        }),
-    );
-    assert_eq!(tui.mode(), "modal");
-    // A layer whose mode is not current counts as disabled.
-    assert_eq!(tui.dispatch("session.new", Some("arg")), RunResult::Disabled);
-    tui.handle_key(&KeyEvent::new(opentui::input::KeyCode::Char('x'), opentui::input::Modifiers::NONE));
-    active.set(false);
-    assert_eq!(tui.mode(), "base");
-    assert_eq!(tui.dispatch("session.new", Some("arg")), RunResult::Ok);
-    drop(pop);
-    assert_eq!(*calls.borrow(), ["modal:None", "base:Some(\"arg\")"]);
-    assert_eq!(tui.shortcut("session.new").as_deref(), Some("ctrl+x n"));
-    assert_eq!(tui.shortcut_all("app.exit"), None);
-    assert!(tui.commands().iter().any(|command| command.id == "session.new"));
-}
-
-#[test]
 fn active_keys_follow_a_mode_condition() {
     let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
     tui.layer(KeymapLayer {

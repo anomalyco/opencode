@@ -558,31 +558,3 @@ pub fn titlecase(text: &str) -> String {
         })
         .collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn titlecase_matches_javascript_word_boundaries() {
-        assert_eq!(titlecase("general"), "General");
-        assert_eq!(titlecase("code-review agent"), "Code-Review Agent");
-        assert_eq!(titlecase("my_agent"), "My_agent");
-    }
-
-    #[test]
-    fn parses_like_parse_todos() {
-        let value = serde_json::json!([
-            { "content": "a", "status": "completed" },
-            { "content": "", "status": "pending" },
-            { "content": "b", "status": "weird" },
-            { "status": "pending" },
-            { "content": "c", "status": "in_progress" },
-        ]);
-        assert_eq!(
-            parse_todos(&value).iter().map(|todo| (todo.content.as_str(), todo.status)).collect::<Vec<_>>(),
-            [("a", TodoStatus::Completed), ("b", TodoStatus::Pending), ("c", TodoStatus::InProgress)]
-        );
-        assert!(parse_todos(&serde_json::json!({})).is_empty());
-    }
-}

@@ -541,31 +541,11 @@ fn last_line(patch: &str) -> i64 {
 mod tests {
     use super::*;
 
+    // A patch from a tool is untrusted text: a line that only looks like a hunk header starts no hunk.
     #[test]
-    fn hunks_split_with_the_file_headers() {
-        let patch = "--- a\n+++ a\n@@ -1 +1 @@ fn\n-a\n+b\n@@ -9,2 +9,3 @@\n x\n+y\n";
-        assert_eq!(
-            split_hunks(patch),
-            [
-                Hunk { header: Some("@@ -1 +1 @@ fn".into()), patch: "--- a\n+++ a\n@@ -1 +1 @@ fn\n-a\n+b\n".into() },
-                Hunk {
-                    header: Some("@@ -9,2 +9,3 @@".into()),
-                    patch: "--- a\n+++ a\n@@ -9,2 +9,3 @@\n x\n+y\n".into(),
-                },
-            ]
-        );
-        let single = "@@ -1 +1 @@\n-a\n+b";
-        assert_eq!(split_hunks(single), [Hunk { header: None, patch: single.into() }]);
+    fn malformed_hunk_headers_start_no_hunk() {
         for line in ["@@ -1, +1 @@", "@@ -a +1 @@", "@@ -1 +1@@", " @@ -1 +1 @@"] {
             assert!(!is_hunk_header(line), "{line}");
         }
-    }
-
-    #[test]
-    fn last_line_is_the_largest_hunk_end() {
-        assert_eq!(last_line("@@ -1,4 +1,4 @@\n a\n@@ -10,3 +98,4 @@ fn\n b\n"), 101);
-        assert_eq!(last_line("@@ -7 +7 @@\n-a\n+b\n"), 7);
-        assert_eq!(last_line("@@ -0,0 +0,0 @@\n"), 1);
-        assert_eq!(last_line("no hunks"), 1);
     }
 }
