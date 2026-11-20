@@ -13,7 +13,7 @@ workspace = true
 opentui.workspace = true
 opencode-ui.workspace = true
 log.workspace = true
-opencode-plugin-abi.workspace = true
+opencode-plugin-abi = { workspace = true, features = ["c-abi"] }
 opencode-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
