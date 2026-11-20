@@ -37,3 +37,14 @@
 - Reason: a reconnect that the status watch coalesced, or a queue-full drop (A09-bounded-queue),
   never shows a disconnected status, and the events of the old stream are lost (F.7 review,
   carbon-1).
+
+## `session.model.selected` adds its row only to a loaded transcript
+
+- TypeScript: `message.update` creates an empty transcript as a side effect of events that edit one, such as
+  `session.inbox.delivered`, `session.execution.*`, `session.revert.committed` and compaction deltas.
+  `session.model.selected` adds its row to any transcript that exists, so also to one created that way, and reads
+  the row from the server.
+- Rust: those events create no transcript, so `session.model.selected` adds its row (and reads it) only for a
+  loaded transcript or one a head read is filling (`State::on_model_selected`, `crates/store/src/sessions.rs`).
+- Reason: a transcript that was never read shows nothing either way, and its first head read brings the row; TS
+  spends a read on it.

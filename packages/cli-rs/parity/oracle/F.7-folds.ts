@@ -7,10 +7,6 @@
 // fixture is regenerated, then given the IDs of the loaded state. A difference that is a recorded deviation is
 // listed in `allow` below with its deviation file; any other difference fails the Rust test.
 //
-// With `--sequences` it writes no fixture: it reads cases from standard input, one per line, `{ "loaded": <bool>,
-// "events": [...] }`, and writes one line per case, the observation after each event. crates/store/tests/all/
-// fold_oracle.rs generates the sequences.
-//
 // The TUI uses Solid's browser build, whose effects and stores react; the script runs itself again under
 // `bun --conditions=browser` when started without it.
 import type { CreateDataInput } from "@opencode/client/solid"
@@ -18,9 +14,8 @@ import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise
 import { records } from "../lib/records"
 
 if (process.env.F7_BROWSER !== "1") {
-  const proc = Bun.spawnSync(["bun", "--conditions=browser", "run", import.meta.path, ...process.argv.slice(2)], {
+  const proc = Bun.spawnSync(["bun", "--conditions=browser", "run", import.meta.path], {
     env: { ...process.env, F7_BROWSER: "1" },
-    stdin: "inherit",
     stdout: "inherit",
     stderr: "inherit",
   })
@@ -335,7 +330,7 @@ const cases = [
   })),
 ]
 
-async function run(events: OpenCodeEvent[], loaded: boolean) {
+async function run(event: OpenCodeEvent, loaded: boolean) {
   const requests: string[] = []
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
@@ -437,51 +432,31 @@ async function run(events: OpenCodeEvent[], loaded: boolean) {
     quiet(data.location.websearch.refresh())
     await settle()
   }
-  const observed = []
-  for (const event of events) {
-    const before = requests.length
-    apply(event)
+  const before = requests.length
+  apply(event)
+  await settle()
+  // `mcp.status.changed` reads once its burst has been quiet for `settleMs`.
+  if (event.type === "mcp.status.changed") {
+    await Bun.sleep(200)
     await settle()
-    // `mcp.status.changed` reads once its burst has been quiet for `settleMs`.
-    if (event.type === "mcp.status.changed") {
-      await Bun.sleep(200)
-      await settle()
-    }
-    observed.push({ ...(observe() as Record<string, Json>), requests: requests.slice(before).toSorted() })
   }
+  const observed = { ...(observe() as Record<string, Json>), requests: requests.slice(before).toSorted() }
   setup.dispose()
   return observed
 }
 
-async function sequences() {
-  const lines = (await Bun.stdin.text()).split("\n").filter((line) => line !== "")
-  for (const line of lines) {
-    const input = JSON.parse(line) as { loaded: boolean; events: OpenCodeEvent[] }
-    process.stdout.write(JSON.stringify(await run(input.events, input.loaded)) + "\n")
-  }
-}
+const results = []
+for (const item of cases)
+  for (const state of ["empty", "loaded"] as const)
+    results.push({ name: item.name, state, event: item.event, expected: await run(item.event, state === "loaded") })
 
-async function fixture() {
-  const results = []
-  for (const item of cases)
-    for (const state of ["empty", "loaded"] as const)
-      results.push({
-        name: item.name,
-        state,
-        event: item.event,
-        expected: (await run([item.event], state === "loaded"))[0],
-      })
-
-  const file = new URL("../fixtures/F.7/folds.json", import.meta.url).pathname
-  await Bun.write(
-    file,
-    records({ variants: variants.map((variant) => variant.type), routes, allow, cases: results }, [
-      "routes.*",
-      "allow[]",
-      "cases[]",
-    ]),
-  )
-  console.log(`folds: ${variants.length} variants, ${results.length} cases`)
-}
-
-await (process.argv.includes("--sequences") ? sequences() : fixture())
+const file = new URL("../fixtures/F.7/folds.json", import.meta.url).pathname
+await Bun.write(
+  file,
+  records({ variants: variants.map((variant) => variant.type), routes, allow, cases: results }, [
+    "routes.*",
+    "allow[]",
+    "cases[]",
+  ]),
+)
+console.log(`folds: ${variants.length} variants, ${results.length} cases`)
