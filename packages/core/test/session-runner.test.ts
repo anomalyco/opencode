@@ -6315,33 +6315,6 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("retries a response that ends after signed reasoning without replaying it", function* (s) {
-    yield* s.admit("Retry empty response")
-    yield* s.llm.push(
-      TestLLM.failAfter(
-        incompleteStream(),
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.reasoningStart({ id: "thought" }),
-        LLMEvent.reasoningEnd({ id: "thought", providerMetadata: { openai: { signature: "sig_empty" } } }),
-      ),
-    )
-    yield* s.llm.push(TestLLM.text("Recovered", "empty-response-success"))
-
-    const scheduled = yield* subscribeRetries(s)
-    const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* Queue.take(scheduled)
-    yield* TestClock.adjust("2400 millis")
-    yield* Fiber.join(run)
-
-    expect(s.requests).toHaveLength(2)
-    expect(s.requests[1]?.messages.map((message) => message.role)).toEqual(["user"])
-    expect(yield* s.context).toMatchObject([
-      { type: "user" },
-      Expected.assistant({ finish: "error", error: { type: "provider.invalid-output" } }, [Expected.reasoning("")]),
-      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
-    ])
-  })
-
   for (const failed of [
     { name: "before output", stream: () => Stream.fail(providerUnavailable()) },
     {

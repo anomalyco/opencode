@@ -1535,6 +1535,23 @@ describe("Gemini route", () => {
             ]),
             Message.user("Thanks."),
             Message.assistant([{ type: "reasoning", text: "", providerMetadata: signed("sig_unused") }]),
+            Message.assistant([
+              { type: "reasoning", text: "", providerMetadata: signed("sig_thought") },
+              ToolCallPart.make({
+                id: "tool_2",
+                name: "lookup",
+                input: { query: "sports" },
+                providerMetadata: signed("sig_first_call"),
+              }),
+              ToolCallPart.make({
+                id: "tool_3",
+                name: "lookup",
+                input: { query: "films" },
+                providerMetadata: signed("sig_second_call"),
+              }),
+            ]),
+            Message.tool({ id: "tool_2", name: "lookup", result: "none", resultType: "text" }),
+            Message.tool({ id: "tool_3", name: "lookup", result: "none", resultType: "text" }),
           ],
         }),
       )
@@ -1567,6 +1584,27 @@ describe("Gemini route", () => {
         },
         { role: "user", parts: [{ text: "Thanks." }] },
         { role: "model", parts: [{ text: "", thought: true }] },
+        {
+          role: "model",
+          parts: [
+            { text: "", thought: true },
+            {
+              functionCall: { id: "tool_2", name: "lookup", args: { query: "sports" } },
+              thoughtSignature: "sig_thought",
+            },
+            {
+              functionCall: { id: "tool_3", name: "lookup", args: { query: "films" } },
+              thoughtSignature: "sig_second_call",
+            },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            { functionResponse: { id: "tool_2", name: "lookup", response: { name: "lookup", content: "none" } } },
+            { functionResponse: { id: "tool_3", name: "lookup", response: { name: "lookup", content: "none" } } },
+          ],
+        },
       ])
     }),
   )
