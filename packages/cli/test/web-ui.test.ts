@@ -219,6 +219,9 @@ describe("web UI", () => {
           expect(fallback.headers.get("content-security-policy")).toContain("worker-src 'self' blob:")
           expect(fallback.headers.get("content-security-policy")).toContain("frame-src 'self' blob:")
           expect(fallback.headers.get("content-security-policy")).toContain("object-src 'self' blob:")
+          // On password-protected servers media elements cannot carry the Authorization header and load from blob:
+          // URLs instead; without media-src blob: video and audio are rejected by the URL safety check.
+          expect(fallback.headers.get("content-security-policy")).toContain("media-src 'self' data: blob:")
 
           const dotted = yield* Effect.promise(() => fetch(`${origin}/workspace/example.js`))
           expect(dotted.status).toBe(200)
