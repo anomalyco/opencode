@@ -847,6 +847,7 @@ dependencies = [
  "opencode-plugin",
  "opencode-plugin-abi",
  "opencode-ui",
+ "opencode-util",
  "opentui",
  "regex",
  "serde_json",

@@ -23,6 +23,7 @@ opencode-plugin.workspace = true
 opencode-ui.workspace = true
 opentui.workspace = true
 opencode-parity.workspace = true
+opencode-util.workspace = true
 serde_json.workspace = true
 
 [[test]]
