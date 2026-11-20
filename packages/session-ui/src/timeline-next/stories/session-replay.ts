@@ -47,6 +47,8 @@ export type Beat =
     }
   | { kind: "interrupt" }
   | { kind: "idle" }
+  /** Time passes with nothing new on screen, such as a long build. */
+  | { kind: "wait"; ms: number }
 
 const steps: Record<Beat["kind"], number> = {
   user: 1,
@@ -60,6 +62,7 @@ const steps: Record<Beat["kind"], number> = {
   tool: 2,
   interrupt: 1,
   idle: 1,
+  wait: 0,
 }
 
 export function ticks(beat: Beat) {
@@ -813,6 +816,19 @@ const subagentBetweenTools: Beat[] = [
   { kind: "idle" },
 ]
 
+// The user stops a turn that ran for hours, so its "Worked" label needs an hours unit.
+const longTurn: Beat[] = [
+  { kind: "user", text: "Run the full end-to-end suite and fix whatever fails." },
+  {
+    kind: "tool",
+    name: "shell",
+    input: { command: "bun run test:e2e", description: "Run the end-to-end suite" },
+    hold: true,
+  },
+  { kind: "wait", ms: 2 * 60 * 60_000 + 5 * 60_000 },
+  { kind: "interrupt" },
+]
+
 export const scenarios = {
   "Feature work": featureWork,
   "Every tool": everyTool,
@@ -821,15 +837,24 @@ export const scenarios = {
   "Thinking only": thinkingOnly,
   "Thinking after tools": thinkingAfterTools,
   "Encrypted thinking": encryptedThinking,
+  "Long turn": longTurn,
 } as const
 
 export type ScenarioName = keyof typeof scenarios
 
 export function replayScript(script: Beat[], limit: number, start: number) {
   const messages: SessionMessageInfo[] = []
+
   // SAFETY: no step is open yet; the assertion names the step this holds once one starts.
-  const state = { used: 0, busy: false, caption: "Start", assistant: undefined as SessionMessageAssistant | undefined }
-  const at = () => start + state.used * 1_500
+  const state = {
+    used: 0,
+    waited: 0,
+    busy: false,
+    caption: "Start",
+    assistant: undefined as SessionMessageAssistant | undefined,
+  }
+
+  const at = () => start + state.used * 1_500 + state.waited
   const id = (prefix: string) => `${prefix}_${messages.length}_${state.used}`
 
   const closeStep = () => {
@@ -964,6 +989,8 @@ export function replayScript(script: Beat[], limit: number, start: number) {
       messages.push({ id: id("msg_idle"), type: "idle", outcome: "interrupted", time: { created: at() } })
       state.busy = false
     }
+
+    if (beat.kind === "wait") state.waited += beat.ms
 
     if (beat.kind === "idle") {
       closeStep()

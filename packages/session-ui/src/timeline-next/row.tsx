@@ -53,6 +53,7 @@ import { TimelineEventItem, TimelineEventRow } from "./event-row"
 import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
 import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
+import { formatDuration } from "../message/duration"
 import { contentOpens, diffOpens, goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
 import { Separator } from "./separator"
 import { timelineGaps } from "./spacing"
@@ -1292,18 +1293,8 @@ export function createNextTimelineRowRenderer(input: {
         )
 
         if (ms === undefined) return i18n.t("ui.timeline.activity.workedUnknown")
-        const total = Math.round(ms / 1000)
-        const numfmt = new Intl.NumberFormat(i18n.locale())
 
-        return i18n.t("ui.timeline.activity.worked", {
-          duration:
-            total < 60
-              ? i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
-              : i18n.t("ui.message.duration.minutesSeconds", {
-                  minutes: numfmt.format(Math.floor(total / 60)),
-                  seconds: numfmt.format(total % 60),
-                }),
-        })
+        return i18n.t("ui.timeline.activity.worked", { duration: formatDuration(Math.round(ms / 1000), i18n) })
       })
 
       return (
