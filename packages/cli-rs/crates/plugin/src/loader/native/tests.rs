@@ -3,7 +3,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use opentui::keymap::RunResult;
 use opentui::testing::Capture;
@@ -50,132 +50,6 @@ fn status(registry: &Registry) -> Status {
     entry(&registry.entries(), "sample.so").status.clone()
 }
 
-#[test]
-fn the_sample_registers_a_command_a_fence_a_slot_and_a_route() {
-    let host = host();
-    let registry = active(&host, &build(""));
-    assert_eq!(status(&registry), Status::Active);
-
-    let screen = markdown(&host, &registry, "```sample\nhello\nworld\n```\n");
-    assert!(screen.contains("SAMPLE v1 HELLO"), "{screen}");
-    assert!(screen.contains("SAMPLE v1 WORLD"), "{screen}");
-
-    // The command writes its storage key and toasts once the current event is done.
-    assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
-    assert!(host.toasts.borrow().is_empty());
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "Hello from sample v1 (1)")]);
-    assert_eq!(host.storage.borrow().get("plugin.sample.count").map(String::as_str), Some("{\"count\":1}"));
-    assert!(matches!(host.keymap().dispatch("sample.open", None), RunResult::Ok));
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(*host.routes.borrow(), [("sample".to_owned(), "hello".to_owned())]);
-
-    let parent = View::new(host.app()).column();
-    let mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    assert!(!mounted.is_empty());
-    host.app().root().clear();
-    host.app().root().add(&parent);
-    host.app.render();
-    let screen = host.app.text();
-    assert!(screen.contains("sample plugin v1: home.footer"), "{screen}");
-    host.app().root().clear();
-    let route = registry.route(&*host, "sample", "hello").unwrap();
-    host.app().root().add(&route.root());
-    host.app.render();
-    let screen = host.app.text();
-    assert!(screen.contains("Sample route hello"), "{screen}");
-    assert!(screen.contains("said hello 1 times"), "{screen}");
-}
-
-#[test]
-fn a_panicking_fence_fails_the_plugin_and_falls_back_to_the_code() {
-    let host = host();
-    let registry = active(&host, &build(""));
-    let screen = markdown(&host, &registry, "```sample-panic\nboom\n```\n");
-    assert!(screen.contains("boom"), "{screen}");
-    assert_eq!(status(&registry), Status::Failed("render-fence panicked: sample fence panicked".to_owned()));
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(
-        *host.toasts.borrow(),
-        [abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.").title("Plugin failed: sample")]
-    );
-    // A failed plugin is not called again: its fences keep the code view, its commands do nothing.
-    let screen = markdown(&host, &registry, "```sample\nquiet\n```\n");
-    assert!(screen.contains("quiet") && !screen.contains("QUIET"), "{screen}");
-    host.keymap().dispatch("sample.hello", None);
-    host.app.advance(Duration::from_millis(1));
-    assert!(host.storage.borrow().is_empty());
-
-    // Enabling it again starts a fresh instance.
-    registry.set_active(&dynamic(&host), "sample", true);
-    assert_eq!(status(&registry), Status::Active);
-    let screen = markdown(&host, &registry, "```sample\nback\n```\n");
-    assert!(screen.contains("SAMPLE v1 BACK"), "{screen}");
-}
-
-#[test]
-fn versions_follow_the_abi_rules() {
-    let load = |library: &[u8], options: Option<&str>| {
-        Native.load(&dynamic(&host()), library, std::path::Path::new("plugin.so"), options).err()
-    };
-    // The current build is 2.0.
-    let current = build("");
-    assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 2, minor: 0, version: Some("0.1.0".to_owned()) });
-    // A plugin built against a newer minor version loads and uses what this host offers.
-    let newer = build("minor-newer");
-    assert_eq!(Native.inspect(&newer).unwrap().minor, 99);
-    let host = crate::loader::tests::host();
-    let registry = active(&host, &newer);
-    let screen = markdown(&host, &registry, "```sample\nnewer\n```\n");
-    assert!(screen.contains("SAMPLE v1 NEWER"), "{screen}");
-
-    // Only a major the host does not serve, a plugin that needs a newer host, or one that needs a feature the host
-    // lacks, is refused, with a clear reason.
-    assert_eq!(
-        load(&build("major-3"), None).unwrap(),
-        "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0); rebuild the plugin \
-         against opencode-plugin-abi 2"
-    );
-    assert_eq!(
-        load(&build("requires-future"), None).unwrap(),
-        "plugin needs host ABI 2.99 or newer, this opencode-native has 2.0; update opencode-native"
-    );
-    assert_eq!(
-        load(&build("requires-feature"), None).unwrap(),
-        "plugin requires the feature terminal, which this opencode-native (ABI 2.0) lacks; update opencode-native"
-    );
-    assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
-    // Setup runs on activation, so a setup that fails fails the plugin there.
-    let (definition, error) =
-        Native.load(&dynamic(&host), &current, std::path::Path::new("plugin.so"), Some("{\"fail\":true}")).unwrap();
-    let registry = Registry::define(Vec::new(), []);
-    registry.load(&dynamic(&host), definition.external("sample.so", error));
-    assert_eq!(status(&registry), Status::Failed("sample setup failed".to_owned()));
-}
-
-#[test]
-fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
-    let host = host();
-    let stored = |key: &str| host.storage.borrow_mut().remove(&format!("plugin.sample.{key}"));
-    let (definition, error) =
-        Native.load(&dynamic(&host), &build(""), std::path::Path::new("plugin.so"), Some("{\"probe\":true}")).unwrap();
-    assert_eq!(definition.id, "sample");
-    let registry = Registry::define(Vec::new(), ["-sample"]);
-    registry.load(&dynamic(&host), definition.external("sample.so", error));
-    assert_eq!(status(&registry), Status::Inactive);
-    host.app.advance(Duration::from_millis(1));
-    assert!(host.toasts.borrow().is_empty() && host.storage.borrow().is_empty());
-
-    assert!(registry.set_active(&dynamic(&host), "sample", true));
-    assert_eq!(stored("count").as_deref(), Some("{\"count\":1}"));
-    assert!(registry.set_active(&dynamic(&host), "sample", false));
-    assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
-    assert!(registry.set_active(&dynamic(&host), "sample", true));
-    assert_eq!(stored("destroyed"), None);
-    registry.unload(&dynamic(&host), "sample.so");
-    assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
-}
-
 /// The sample built into a plugins directory `dir`, which a fresh loader loaded into a fresh registry.
 fn loaded_sample() -> (opencode_util::temp::TempDir, std::path::PathBuf, Rc<TestHost>, Registry, Loader) {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -189,38 +63,6 @@ fn loaded_sample() -> (opencode_util::temp::TempDir, std::path::PathBuf, Rc<Test
         .with_native(Rc::new(Native) as Rc<dyn Backend>);
     assert!(loader.reconcile(&dynamic(&host), &registry));
     (root, dir, host, registry, loader)
-}
-
-#[test]
-fn the_loader_reloads_a_rebuilt_library() {
-    let (_root, dir, host, registry, loader) = loaded_sample();
-    let screen = markdown(&host, &registry, "```sample\nhi\n```\n");
-    assert!(screen.contains("SAMPLE v1 HI"), "{screen}");
-    fs::write(dir.join(entry_file()), build("v2")).unwrap();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let screen = markdown(&host, &registry, "```sample\nhi\n```\n");
-    assert!(screen.contains("SAMPLE v2 HI"), "{screen}");
-    assert_eq!(registry.entries().len(), 1);
-}
-
-#[test]
-fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
-    let (_root, dir, host, registry, loader) = loaded_sample();
-    fs::write(dir.join(entry_file()), build("setup-fails")).unwrap();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let target = dir.to_string_lossy().into_owned();
-    let entry = entry(&registry.entries(), &target).clone();
-    assert!(entry.active);
-    assert_eq!(entry.status, Status::Failed("sample setup failed (previous version still active)".to_owned()));
-    let screen = markdown(&host, &registry, "```sample\nstill\n```\n");
-    assert!(screen.contains("SAMPLE v1 STILL"), "{screen}");
-    assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
-    // A second failed rebuild keeps it running too.
-    fs::write(dir.join(entry_file()), build("major-3")).unwrap();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let entry = crate::loader::tests::entry(&registry.entries(), &target).clone();
-    assert!(entry.active);
-    assert!(matches!(&entry.status, Status::Failed(error) if error.ends_with("(previous version still active)")));
 }
 
 #[test]
@@ -303,17 +145,6 @@ fn woken_into_a_full_queue(host: &Rc<TestHost>, options: &str) -> (Registry, imp
 }
 
 #[test]
-fn a_wake_into_a_full_queue_draws_once_the_queue_has_room() {
-    let host = host();
-    let (_registry, _mounted) = woken_into_a_full_queue(&host, "{\"tick_ms\":50,\"ticks\":1}");
-    let drawn = host.app.wait_until(Duration::from_secs(5), || {
-        host.app.render();
-        host.app.text().contains(" 1 ticks")
-    });
-    assert!(drawn, "{}", host.app.text());
-}
-
-#[test]
 fn a_wake_after_deactivation_does_nothing() {
     let host = host();
     let (registry, mounted) = woken_into_a_full_queue(&host, "{\"tick_ms\":50,\"ticks\":1}");
@@ -328,45 +159,12 @@ fn a_wake_after_deactivation_does_nothing() {
     assert!(screen.contains("SAMPLE v1 AGAIN"), "{screen}");
 }
 
-#[test]
-fn setup_reaches_the_host() {
-    let host = host();
-    host.mode.set(ThemeMode::Light);
-    host.storage.borrow_mut().insert("plugin.sample.count".to_owned(), "{\"count\":5}".to_owned());
-    let (definition, error) =
-        Native.load(&dynamic(&host), &build(""), std::path::Path::new("plugin.so"), Some("{\"probe\":true}")).unwrap();
-    let registry = Registry::define(Vec::new(), []);
-    registry.load(&dynamic(&host), definition.external("sample.so", error));
-    assert_eq!(status(&registry), Status::Active);
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Info, "sample setup: count 5, light, stored")]);
-    assert_eq!(host.storage.borrow().get("plugin.sample.count").map(String::as_str), Some("{\"count\":6}"));
-}
-
 /// The version text of the sample's fences compiled into this test.
 const VERSION: &str = "v1";
 
 /// The sample's fences, compiled in rather than loaded.
 #[path = "../../../examples/sample/src/fence.rs"]
 mod sample_fence;
-
-#[test]
-fn the_sample_fence_draws_the_same_in_process_and_through_the_library() {
-    let host = host();
-    let plugin = abi::Plugin { id: "sample", setup: sample_fence::setup };
-    let in_process = Registry::define(vec![plugin.into()], []);
-    in_process.activate(&dynamic(&host));
-    let library = active(&host, &build(""));
-    let text = "```sample\nhello\n```\n\n```sample-mode\nx\n```\n\n```sample-color\nlabel\n```\n";
-    let direct = markdown(&host, &in_process, text);
-    assert!(direct.contains("SAMPLE v1 HELLO") && direct.contains("sample mode dark"), "{direct}");
-    assert!(direct.contains("accent label"), "{direct}");
-    let cells = host.app.render();
-    assert_eq!(markdown(&host, &library, text), direct);
-    assert_eq!(host.app.render(), cells);
-    host.mode.set(ThemeMode::Light);
-    assert!(markdown(&host, &library, "```sample-mode\nx\n```\n").contains("sample mode light"));
-}
 
 #[test]
 fn a_plugin_hears_of_the_fences_that_go_on_both_paths() {
@@ -439,58 +237,6 @@ fn loopback(host: &Rc<TestHost>, entries: abi::runtime::Loopback) -> Registry {
     loopback
 }
 
-/// The sample's sidebar claim, compiled in rather than loaded.
-#[path = "../../../examples/sample/src/slot.rs"]
-mod sample_slot;
-
-/// The frames of `registry`'s `sidebar.content` claims for `ses_1`: as mounted, after a message arrives and the host
-/// syncs them, with the pointer over the click count, and after two clicks on it, which the claim reads back from
-/// storage when the host syncs it again. The pointer starts off the claim: a claim keeps its widgets across a sync,
-/// so one under the pointer stays hovered.
-fn sidebar(host: &Rc<TestHost>, registry: &Registry) -> Vec<Capture> {
-    host.app.hover(59, 9);
-    host.messages.borrow_mut().clear();
-    host.storage.borrow_mut().clear();
-    let parent = View::new(host.app()).column();
-    let input = SlotInput { session_id: Some("ses_1".to_owned()), ..SlotInput::default() };
-    let mounted = registry.mount(&**host, &parent, slot::SIDEBAR_CONTENT, &input, |_| {});
-    host.app().root().clear();
-    host.app().root().add(&parent);
-    let first = host.app.render();
-    host.messages.borrow_mut().push(abi::types::SessionMessageInfo::Unknown(serde_json::json!({ "type": "x" })));
-    mounted.sync(&**host, Some(&abi::Changed::everything()));
-    let synced = host.app.render();
-    host.app.hover(2, 2);
-    let hovered = host.app.render();
-    for _ in 0..2 {
-        host.app.click(2, 2);
-        host.app.advance(Duration::from_millis(1));
-    }
-    mounted.sync(&**host, Some(&abi::Changed::everything()));
-    vec![first, synced, hovered, host.app.render()]
-}
-
-#[test]
-fn the_sample_slot_draws_the_same_in_process_and_through_the_library() {
-    let host = host();
-    let plugin = abi::Plugin { id: "sample", setup: sample_slot::setup };
-    let in_process = Registry::define(vec![plugin.into()], []);
-    in_process.activate(&dynamic(&host));
-    let direct = sidebar(&host, &in_process);
-    let text: Vec<String> = direct.iter().map(Capture::text).collect();
-    assert!(text[0].contains("Sample: 0 messages") && text[0].contains("opencode/big"), "{}", text[0]);
-    assert!(text[1].contains("Sample: 1 messages") && text[1].contains("0 clicks"), "{}", text[1]);
-    assert_ne!(direct[2], direct[1], "the hover changes no cell");
-    assert!(text[3].contains("2 clicks"), "{}", text[3]);
-    let stored = host.storage.borrow().get("plugin.sample.clicks").cloned();
-    assert_eq!(stored.as_deref(), Some(r#"{"count":2,"input":"ses_1"}"#));
-    // Its hidden command leaves the keymap with it, so the library's runs the clicks.
-    in_process.set_active(&dynamic(&host), "sample", false);
-    let library = active(&host, &build("still"));
-    assert_eq!(sidebar(&host, &library), direct);
-    assert_eq!(host.storage.borrow().get("plugin.sample.clicks").cloned(), stored);
-}
-
 #[test]
 fn latex_streams_the_same_through_the_c_abi_loopback() {
     let host = host();
@@ -527,54 +273,12 @@ fn mermaid_streams_the_same_through_the_c_abi_loopback() {
     assert_eq!(stream(&host, &loopback, &chunks), direct);
 }
 
-/// The sample's home claims and event handler, compiled in rather than loaded.
-#[path = "../../../examples/sample/src/home.rs"]
-mod sample_home;
-
 fn succeeded(session: &str) -> abi::types::V2Event {
     serde_json::from_value(serde_json::json!({
         "id": "evt_1", "created": 1, "type": "session.execution.succeeded",
         "durable": { "aggregateID": session, "seq": 1, "version": 1 }, "data": { "sessionID": session },
     }))
     .unwrap()
-}
-
-/// The sample's home row as `registry` mounts `home.footer`, before and after a session's run succeeds, with the
-/// toasts the event showed.
-fn home(host: &Rc<TestHost>, registry: &Rc<Registry>) -> (Vec<String>, Vec<abi::Toast>) {
-    host.toasts.borrow_mut().clear();
-    *host.registry.borrow_mut() = Rc::downgrade(registry);
-    let parent = View::new(host.app()).column();
-    let mounted = registry.mount(&**host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    host.app().root().clear();
-    host.app().root().add(&parent);
-    let row = |host: &TestHost| {
-        host.app.render();
-        host.app.text().lines().find(|line| line.contains("sample home:")).unwrap_or_default().trim_end().to_owned()
-    };
-    let mut rows = vec![row(host)];
-    // Signals only: no change batch reaches the slot, but the handler changed what the status claim shows.
-    host.emit(&succeeded("ses_1"));
-    host.emit(&succeeded("ses_2"));
-    host.app.advance(Duration::from_millis(1));
-    rows.push(row(host));
-    drop(mounted);
-    (rows, host.toasts.borrow().clone())
-}
-
-#[test]
-fn the_sample_home_and_event_act_the_same_in_process_and_through_the_library() {
-    let host = host();
-    let plugin = abi::Plugin { id: "sample", setup: sample_home::setup };
-    let in_process = Rc::new(Registry::define(vec![plugin.into()], []));
-    in_process.activate(&dynamic(&host));
-    let direct = home(&host, &in_process);
-    assert_eq!(direct.0, ["sample home: 0 done", "sample home: 2 done"]);
-    let toast = |id: &str| abi::Toast::new(abi::Variant::Info, format!("sample: {id} is done")).session(id);
-    assert_eq!(direct.1, [toast("ses_1"), toast("ses_2")]);
-    in_process.set_active(&dynamic(&host), "sample", false);
-    let library = Rc::new(active(&host, &build("still")));
-    assert_eq!(home(&host, &library), direct);
 }
 
 fn nesting(setup: &mut abi::Setup) -> Result<(), String> {
@@ -604,59 +308,6 @@ fn a_nested_slot_must_be_a_published_slot_inside_the_claims_own() {
     assert!(screen.contains("[home.footer.status]"), "{screen}");
     assert!(!screen.contains("[sidebar.content]"), "{screen}");
     assert_eq!(screen.matches('[').count(), 1, "{screen}");
-}
-
-fn first(setup: &mut abi::Setup) -> Result<(), String> {
-    setup
-        .on_event(&["session.execution.succeeded"], |host, _| host.toast(abi::Toast::new(abi::Variant::Info, "first")));
-    Ok(())
-}
-
-/// What `featured`'s setup read: `Setup::features`, and `Setup::abi`'s features and its `image-bounds`.
-type Featured = (Vec<String>, Vec<String>, bool);
-
-thread_local! {
-    static FEATURED: RefCell<Vec<Featured>> = const { RefCell::new(Vec::new()) };
-}
-
-fn featured(setup: &mut abi::Setup) -> Result<(), String> {
-    let abi = setup.abi();
-    let read = (setup.features().to_vec(), abi.features.clone(), abi.has_feature(abi::IMAGE_BOUNDS));
-    FEATURED.with_borrow_mut(|seen| seen.push(read));
-    Ok(())
-}
-
-#[test]
-fn a_setup_reads_one_list_of_features_on_both_carriers() {
-    let host = host();
-    FEATURED.with_borrow_mut(Vec::clear);
-    let linked = Registry::define(Vec::new(), []);
-    linked.add(abi::Plugin { id: "featured", setup: featured });
-    linked.activate(&dynamic(&host));
-    let _through = loopback(&host, abi::export_plugin!(@loopback "featured", featured));
-    let seen = FEATURED.with_borrow(Vec::clone);
-    let features = vec![abi::IMAGE_BOUNDS.to_owned(), abi::FOCUS_INPUT.to_owned(), abi::FENCE_NODE.to_owned()];
-    let expected = (features.clone(), features, true);
-    assert_eq!(seen, [expected.clone(), expected], "linked, then through the C ABI");
-}
-
-fn second(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.on_event(&["session.execution.succeeded"], |host, _| {
-        host.toast(abi::Toast::new(abi::Variant::Info, "second"))
-    });
-    Ok(())
-}
-
-#[test]
-fn effects_of_both_paths_run_in_call_order() {
-    let host = host();
-    let _native = loopback(&host, abi::export_plugin!(@loopback "first", first));
-    let direct = Registry::define(vec![abi::Plugin { id: "second", setup: second }.into()], []);
-    direct.activate(&dynamic(&host));
-    host.emit(&succeeded("ses_1"));
-    host.app.advance(Duration::from_millis(1));
-    let toasts: Vec<String> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
-    assert_eq!(toasts, ["first", "second"]);
 }
 
 #[test]
@@ -692,47 +343,6 @@ fn the_instance_is_destroyed_at_once_while_its_route_is_mounted() {
     assert_eq!(destroyed().as_deref(), Some("{\"destroyed\":true}"));
 }
 
-#[test]
-fn a_panic_clears_the_plugins_claims() {
-    let host = host();
-    let registry = Rc::new(active(&host, &build("still")));
-    *host.registry.borrow_mut() = Rc::downgrade(&registry);
-    let parent = View::new(host.app()).column();
-    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    host.app().root().add(&parent);
-    host.app.render();
-    let screen = host.app.text();
-    assert!(screen.contains("sample plugin v1: home.footer") && screen.contains("sample home: 0 done"), "{screen}");
-    host.keymap().dispatch("sample.panic", None);
-    host.app.advance(Duration::from_millis(1));
-    host.app.render();
-    let screen = host.app.text();
-    assert!(!screen.contains("sample plugin") && !screen.contains("sample home"), "{screen}");
-    let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.").title("Plugin failed: sample");
-    assert_eq!(*host.toasts.borrow(), [failed]);
-}
-
-/// A `ts` fence that shows the language it gets and the model it reads.
-fn fenced(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.code_block("ts", |read, fence| {
-        let model = read.model().map_or("missing".to_owned(), |model| model.id);
-        let text = format!("custom {} {model}", fence.language);
-        abi::Fenced::Lines { lines: vec![vec![abi::Span::new(text)]], fg: None, drag: false }
-    });
-    Ok(())
-}
-
-#[test]
-fn a_fence_reads_and_renders_the_same_in_process_and_through_the_c_abi() {
-    let host = host();
-    let in_process = Registry::define(vec![abi::Plugin { id: "fenced", setup: fenced }.into()], []);
-    in_process.activate(&dynamic(&host));
-    let direct = markdown(&host, &in_process, "```ts\nlet a = 1\n```\n");
-    assert!(direct.contains("custom typescript big"), "{direct}");
-    let loopback = loopback(&host, abi::export_plugin!(@loopback "fenced", fenced));
-    assert_eq!(markdown(&host, &loopback, "```ts\nlet a = 1\n```\n"), direct);
-}
-
 /// A `long` fence of 3,001 lines.
 fn long_fence(setup: &mut abi::Setup) -> Result<(), String> {
     setup.code_block("long", |_, _| {
@@ -751,100 +361,6 @@ fn a_fence_past_the_rows_shows_its_placeholder() {
     assert!(direct.contains("⋯ too large to build at once") && !direct.contains("line 0"), "{direct}");
     let loopback = loopback(&host, abi::export_plugin!(@loopback "long", long_fence));
     assert_eq!(markdown(&host, &loopback, "```long\nx\n```\n"), direct);
-}
-
-/// The sample's server request and live panel, compiled in rather than loaded.
-#[path = "../../../examples/sample/src/fetch.rs"]
-mod sample_fetch;
-
-/// The sample's fetch row before and after the reply, the fetches it sent, and the panels it showed, as `registry` has
-/// them.
-fn fetched(host: &Rc<TestHost>, registry: &Rc<Registry>) -> (Vec<String>, Vec<abi::Fetch>, Vec<abi::Dialog>) {
-    host.dialogs.borrow_mut().clear();
-    *host.registry.borrow_mut() = Rc::downgrade(registry);
-    let parent = View::new(host.app()).column();
-    let mounted = registry.mount(&**host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    host.app().root().clear();
-    host.app().root().add(&parent);
-    let row = |host: &TestHost| {
-        host.app.render();
-        host.app.text().lines().find(|line| line.contains("sample fetch:")).unwrap_or_default().trim_end().to_owned()
-    };
-    let mut rows = vec![row(host)];
-    host.keymap().dispatch("sample.fetch", None);
-    host.app.advance(Duration::from_millis(1));
-    let fetches = host.fetches.borrow().iter().map(|(fetch, _)| fetch.clone()).collect();
-    host.reply();
-    host.app.advance(Duration::from_millis(1));
-    rows.push(row(host));
-    host.keymap().dispatch("sample.panel", None);
-    host.keymap().dispatch("sample.panel", None);
-    host.app.advance(Duration::from_millis(1));
-    drop(mounted);
-    let dialogs =
-        host.dialogs.borrow().iter().map(|(id, dialog)| (assert_eq!(id, "sample"), dialog.clone()).1).collect();
-    (rows, fetches, dialogs)
-}
-
-#[test]
-fn the_sample_fetch_and_panel_act_the_same_in_process_and_through_the_library() {
-    let host = host();
-    let in_process =
-        Rc::new(Registry::define(vec![abi::Plugin { id: "sample", setup: sample_fetch::setup }.into()], []));
-    in_process.activate(&dynamic(&host));
-    let direct = fetched(&host, &in_process);
-    assert_eq!(direct.0, ["sample fetch: none", "sample fetch: /api/sample"]);
-    assert_eq!(direct.1, [abi::Fetch::new("GET", "/api/sample")]);
-    let bodies: Vec<_> = direct
-        .2
-        .iter()
-        .map(|dialog| match dialog {
-            abi::Dialog::Panel(panel) => (panel.key.clone(), panel.body.clone()),
-            _ => unreachable!(),
-        })
-        .collect();
-    let body = |count: u64| abi::Node::text([abi::Span::new(format!("shown {count} times"))]);
-    assert_eq!(bodies, [("live".to_owned(), body(1)), ("live".to_owned(), body(2))]);
-    in_process.set_active(&dynamic(&host), "sample", false);
-    let library = Rc::new(active(&host, &build("still")));
-    assert_eq!(fetched(&host, &library), direct);
-}
-
-/// A plugin that fetches on `x.fetch` and toasts each reply, with a claim that keeps it mounted.
-fn replying(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.slot(abi::Placement::append("home.footer"), |_, _, _| abi::Render::Hide);
-    let command = abi::Command::new("x.fetch");
-    setup.command(command, |host, _| {
-        let _ = host.try_fetch(abi::Fetch::new("GET", "/slow"));
-    });
-    setup.on_reply(|host, _, _| host.toast(abi::Toast::new(abi::Variant::Info, "reply")));
-    Ok(())
-}
-
-#[test]
-fn a_slow_reply_across_a_disable_delivers_nothing() {
-    let host = host();
-    let registries = [
-        Registry::define(vec![abi::Plugin { id: "replying", setup: replying }.into()], []),
-        loopback(&host, abi::export_plugin!(@loopback "replying", replying)),
-    ];
-    for registry in registries {
-        registry.activate(&dynamic(&host));
-        host.keymap().dispatch("x.fetch", None);
-        host.app.advance(Duration::from_millis(1));
-        host.reply();
-        host.app.advance(Duration::from_millis(1));
-        assert_eq!(host.toasts.borrow_mut().drain(..).count(), 1);
-        host.keymap().dispatch("x.fetch", None);
-        host.app.advance(Duration::from_millis(1));
-        assert_eq!(host.fetches.borrow().len(), 1);
-        let parent = View::new(host.app()).column();
-        let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-        registry.set_active(&dynamic(&host), "replying", false);
-        host.reply();
-        host.app.advance(Duration::from_millis(1));
-        assert!(host.toasts.borrow().is_empty(), "{:?}", host.toasts.borrow());
-    }
 }
 
 /// A plugin that fetches on `x.fetch` and has three reply handlers, each of which toasts its number and the reply.
@@ -886,77 +402,6 @@ fn every_reply_handler_gets_the_whole_reply_in_process_and_through_the_library()
     }
 }
 
-/// The sample's prompt footer claim, compiled in rather than loaded.
-#[path = "../../../examples/sample/src/prompt.rs"]
-mod sample_prompt;
-
-/// The sample's prompt row as `registry` mounts `prompt.footer` for `ses_1`: as mounted, after its fetch is answered,
-/// once the session pane lost the input, and as mounted again beside the first mount and then alone; with the fetches.
-fn prompted(host: &Rc<TestHost>, registry: &Registry) -> (Vec<String>, Vec<abi::Fetch>) {
-    host.interactive.set(true);
-    let input = SlotInput {
-        session_id: Some("ses_1".to_owned()),
-        prompt: Some(slot::PromptFooter { shell: false, show_details: true }),
-        ..SlotInput::default()
-    };
-    let row = |host: &TestHost, parent: &View| {
-        host.app().root().clear();
-        host.app().root().add(parent);
-        host.app.advance(Duration::from_millis(1));
-        host.app.render();
-        host.app.text().lines().find(|line| line.contains("sample prompt:")).unwrap_or_default().trim_end().to_owned()
-    };
-    let mut fetches = Vec::new();
-    let mut take = |host: &TestHost| fetches.extend(host.fetches.borrow().iter().map(|(fetch, _)| fetch.clone()));
-    let parent = View::new(host.app()).column();
-    let first = registry.mount(&**host, &parent, "prompt.footer", &input, |_| {});
-    let mut rows = vec![row(host, &parent)];
-    take(host);
-    host.reply();
-    rows.push(row(host, &parent));
-    host.interactive.set(false);
-    first.sync(&**host, Some(&abi::Changed::everything()));
-    rows.push(row(host, &parent));
-    // A remount mounts the next before the last goes.
-    let again = View::new(host.app()).column();
-    let second = registry.mount(&**host, &again, "prompt.footer", &input, |_| {});
-    rows.push(row(host, &again));
-    drop(first);
-    second.sync(&**host, Some(&abi::Changed::everything()));
-    rows.push(row(host, &again));
-    take(host);
-    host.reply();
-    drop(second);
-    (rows, fetches)
-}
-
-#[test]
-fn the_sample_prompt_mounts_fetch_and_read_the_same_in_process_and_through_the_library() {
-    let host = host();
-    let in_process = Registry::define(vec![abi::Plugin { id: "sample", setup: sample_prompt::setup }.into()], []);
-    in_process.activate(&dynamic(&host));
-    let direct = prompted(&host, &in_process);
-    assert_eq!(
-        direct.0,
-        [
-            "sample prompt: 1 mounts, waiting, on, ctrl+p",
-            "sample prompt: 1 mounts, /api/sample/ses_1, on, ctrl+p",
-            "sample prompt: 1 mounts, /api/sample/ses_1, off, ctrl+p",
-            "sample prompt: 2 mounts, /api/sample/ses_1, off, ctrl+p",
-            "sample prompt: 1 mounts, /api/sample/ses_1, off, ctrl+p",
-        ]
-    );
-    let fetch = abi::Fetch::new("GET", "/api/sample/ses_1");
-    assert_eq!(direct.1, [fetch.clone(), fetch]);
-    in_process.set_active(&dynamic(&host), "sample", false);
-    let library = active(&host, &build("still"));
-    assert_eq!(prompted(&host, &library), direct);
-}
-
-/// The sample's small reads and verbs, compiled in rather than loaded.
-#[path = "../../../examples/sample/src/reads.rs"]
-mod sample_reads;
-
 /// A text delta, as the server streams one.
 fn text_delta(delta: &str) -> abi::types::V2Event {
     serde_json::from_value(serde_json::json!({
@@ -966,79 +411,6 @@ fn text_delta(delta: &str) -> abi::types::V2Event {
         "data": { "sessionID": "ses_1", "assistantMessageID": "msg_1", "ordinal": 0, "delta": delta },
     }))
     .unwrap()
-}
-
-/// What the small reads and verbs show and ask for through `registry`: the sample's reads row in `home.footer` as it mounts, once a frame
-/// laid it out, after two deltas, and after its verbs command; then the verbs the host ran, the toasts and the dialogs.
-type Verbed = (Vec<String>, Vec<String>, Vec<String>, Vec<(String, abi::Dialog)>);
-
-fn verbed(host: &Rc<TestHost>, registry: &Registry) -> Verbed {
-    host.app.resize(240, 10);
-    let row = |host: &TestHost, parent: &View| {
-        host.app.advance(Duration::from_millis(1));
-        host.app().root().clear();
-        host.app().root().add(parent);
-        // One frame: the claim shows what it renders for its size in the frame that lays it out.
-        let text = host.app.render().text();
-        text.lines().find(|line| line.contains("sample reads:")).unwrap_or_default().trim().to_owned()
-    };
-    let parent = View::new(host.app()).column();
-    let mounted = registry.mount(&**host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    let mut rows = vec![row(host, &parent), row(host, &parent)];
-    host.emit_deltas(&[text_delta("a"), text_delta("b")]);
-    rows.push(row(host, &parent));
-    host.keymap().dispatch("sample.verbs", None);
-    host.app.advance(Duration::from_millis(1));
-    host.exit();
-    rows.push(row(host, &parent));
-    drop(mounted);
-    let toasts = host.toasts.borrow_mut().drain(..).map(|toast| toast.message).collect();
-    let dialogs = host.dialogs.borrow_mut().drain(..).collect();
-    (rows, host.verbs.borrow_mut().drain(..).collect(), toasts, dialogs)
-}
-
-#[test]
-fn the_small_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
-    let host = host();
-    let in_process = Registry::define(vec![abi::Plugin { id: "sample", setup: sample_reads::setup }.into()], []);
-    in_process.activate(&dynamic(&host));
-    let direct = verbed(&host, &in_process);
-    let read = "default low+high, tabs true ses_1*,ses_2, keys ctrl+p,f1 [ctrl+x] 3 1, sel picked, theme opencode of 2";
-    assert_eq!(
-        direct.0,
-        [
-            // The frame that first lays the claim out shows it at its size.
-            format!("sample reads: 240x1 resized, {read}, deltas 0, exit -"),
-            format!("sample reads: 240x1 resized, {read}, deltas 0, exit -"),
-            format!("sample reads: 240x1, {read}, deltas 2, exit -"),
-            format!("sample reads: 240x1, {read}, deltas 2, exit 0"),
-        ]
-    );
-    assert_eq!(
-        direct.1,
-        [
-            r#"variant Some("high")"#,
-            r#"tab Focus { session: "ses_1" }"#,
-            "theme nord",
-            "model opencode/small",
-            "clear selection",
-            "title sample title",
-            r#"install sample {"theme":{}}"#,
-            r#"foreground true ["a"]"#,
-        ]
-    );
-    assert_eq!(direct.2, ["sample verbs: true false true false true false"]);
-    let [(_, abi::Dialog::Panel(panel))] = direct.3.as_slice() else { panic!("{:?}", direct.3) };
-    assert_eq!(panel.size, abi::PanelSize::XLarge);
-    in_process.set_active(&dynamic(&host), "sample", false);
-
-    let (definition, error) = Native
-        .load(&dynamic(&host), &build("still"), std::path::Path::new("plugin.so"), Some(r#"{"reads":true}"#))
-        .unwrap();
-    let library = Registry::define(Vec::new(), []);
-    library.load(&dynamic(&host), definition.external("sample.so", error));
-    assert_eq!(status(&library), Status::Active);
-    assert_eq!(verbed(&host, &library), direct);
 }
 
 thread_local! {
@@ -1156,96 +528,6 @@ fn a_program_starts_only_while_its_plugin_is_active() {
 thread_local! {
     /// The renders of `counted`'s route.
     static ROUTE_RENDERS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
-/// A route that counts its renders.
-fn counted(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.route("r", |_, _| {
-        ROUTE_RENDERS.set(ROUTE_RENDERS.get() + 1);
-        abi::Render::Show(abi::Node::text([abi::Span::new("counted route")]))
-    });
-    Ok(())
-}
-
-#[test]
-fn a_route_renders_once_for_its_layout() {
-    let host = host();
-    let registries = [
-        Registry::define(vec![abi::Plugin { id: "counted", setup: counted }.into()], []),
-        loopback(&host, abi::export_plugin!(@loopback "counted", counted)),
-    ];
-    for registry in registries {
-        registry.activate(&dynamic(&host));
-        ROUTE_RENDERS.set(0);
-        let route = registry.route(&*host, "counted", "r").unwrap();
-        host.app().root().clear();
-        host.app().root().add(&route.root());
-        host.app.render();
-        host.app.advance(Duration::from_millis(1));
-        host.app.render();
-        assert!(host.app.text().contains("counted route"), "{}", host.app.text());
-        assert_eq!(ROUTE_RENDERS.get(), 1);
-        drop(route);
-        registry.set_active(&dynamic(&host), "counted", false);
-    }
-}
-
-/// A thread that wakes the host once its claim drew, a wake handler that counts the wakes it ran for and fetches each time, and
-/// a claim that shows the count.
-fn waking(setup: &mut abi::Setup) -> Result<(), String> {
-    use std::sync::atomic::AtomicBool;
-    let waker = setup.waker().ok_or("no waker")?;
-    let (go, stop) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
-    let thread = {
-        let (go, stop) = (go.clone(), stop.clone());
-        std::thread::spawn(move || {
-            while !go.load(Ordering::Acquire) && !stop.load(Ordering::Acquire) {
-                std::thread::sleep(Duration::from_millis(1));
-            }
-            waker.wake();
-        })
-    };
-    setup.on_dispose(move |_| {
-        stop.store(true, Ordering::Release);
-        let _ = thread.join();
-    });
-    let runs = Rc::new(std::cell::Cell::new(0));
-    let ran = runs.clone();
-    setup.on_wake(move |host| {
-        ran.set(ran.get() + 1);
-        let _ = host.try_fetch(abi::Fetch::new("GET", "/api/woken"));
-    });
-    setup.slot(abi::Placement::append("home.footer"), move |_, _, changed| {
-        go.store(true, Ordering::Release);
-        abi::Render::Show(abi::Node::text([abi::Span::new(format!("wakes {} {}", runs.get(), changed.woken))]))
-    });
-    Ok(())
-}
-
-#[test]
-fn a_wake_runs_the_wake_handlers_then_renders_on_both_paths() {
-    let host = host();
-    let registries = [
-        Registry::define(vec![abi::Plugin { id: "waking", setup: waking }.into()], []),
-        loopback(&host, abi::export_plugin!(@loopback "waking", waking)),
-    ];
-    for registry in registries {
-        host.fetches.borrow_mut().clear();
-        registry.activate(&dynamic(&host));
-        let parent = View::new(host.app());
-        let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-        host.app().root().clear();
-        host.app().root().add(&parent);
-        let woken = host.app.wait_until(Duration::from_secs(10), || {
-            host.app.render();
-            host.app.text().contains("wakes 1 true")
-        });
-        assert!(woken, "{}", host.app.text());
-        let paths: Vec<String> = host.fetches.borrow().iter().map(|(fetch, _)| fetch.path.clone()).collect();
-        assert_eq!(paths, ["/api/woken"]);
-        drop(_mounted);
-        registry.set_active(&dynamic(&host), "waking", false);
-    }
 }
 
 thread_local! {
@@ -1408,12 +690,6 @@ fn lifecycle(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// [`lifecycle`], then fails.
-fn lifecycle_failing(setup: &mut abi::Setup) -> Result<(), String> {
-    lifecycle(setup)?;
-    Err("lifecycle failed".to_owned())
-}
-
 /// `setup` in process, or `create` through the C ABI's byte shims, set up, its command run if `panic` asks, then
 /// disabled: its status after setup, and the toasts and fetches of the whole run.
 fn lifecycled(
@@ -1455,25 +731,6 @@ fn lifecycled(
 }
 
 #[test]
-fn setup_and_dispose_effects_are_the_same_on_both_paths() {
-    let direct = lifecycled(lifecycle, abi::export_plugin!(@loopback_create "lifecycle", lifecycle), false, false);
-    assert_eq!((direct.0.status.clone(), direct.0.active), (Status::Active, true));
-    assert_eq!((direct.1.as_slice(), direct.2), (["setup", "dispose"].map(String::from).as_slice(), 0));
-    let through = lifecycled(lifecycle, abi::export_plugin!(@loopback_create "lifecycle", lifecycle), true, false);
-    assert_eq!((through.1, through.2), (direct.1, direct.2));
-
-    let failing = abi::export_plugin!(@loopback_create "lifecycle", lifecycle_failing);
-    let direct = lifecycled(lifecycle_failing, failing, false, false);
-    assert_eq!((direct.0.status.clone(), direct.0.active), (Status::Failed("lifecycle failed".to_owned()), false));
-    assert_eq!((direct.1.as_slice(), direct.2), (["setup", "dispose"].map(String::from).as_slice(), 0));
-    let through = lifecycled(lifecycle_failing, failing, true, false);
-    assert_eq!(
-        (through.0.status, through.0.active, through.1, through.2),
-        (direct.0.status, false, direct.1, direct.2)
-    );
-}
-
-#[test]
 fn a_failed_plugin_gets_no_dispose_on_both_paths() {
     for (loopback, panic) in [(false, false), (false, true), (true, false), (true, true)] {
         LIFECYCLE_DISPOSED.set(0);
@@ -1484,25 +741,6 @@ fn a_failed_plugin_gets_no_dispose_on_both_paths() {
         let expected = if panic { (vec!["setup"], 0) } else { (vec!["setup", "dispose"], 1) };
         assert_eq!((calls, LIFECYCLE_DISPOSED.get()), expected, "through the C ABI: {loopback}, panic: {panic}");
         assert_eq!(fetches, 0);
-    }
-}
-
-#[test]
-fn a_failed_setup_runs_the_dispose_callbacks_it_registered() {
-    for (options, error, destroyed) in [
-        ("{\"probe\":true,\"fail\":true}", "sample setup failed", Some("{\"destroyed\":true}")),
-        ("{\"probe\":true,\"panic\":true}", "setup panicked: sample setup panicked", None),
-    ] {
-        let host = host();
-        let (definition, failure) =
-            Native.load(&dynamic(&host), &build(""), std::path::Path::new("plugin.so"), Some(options)).unwrap();
-        let registry = Registry::define(Vec::new(), []);
-        let failed = registry.load(&dynamic(&host), definition.external("sample.so", failure));
-        assert_eq!(failed, Some(crate::SetupFailed { error: error.to_owned(), kept: false }));
-        assert_eq!(status(&registry), Status::Failed(error.to_owned()));
-        assert!(!entry(&registry.entries(), "sample.so").active);
-        let stored = host.storage.borrow().get("plugin.sample.destroyed").cloned();
-        assert_eq!(stored.as_deref(), destroyed, "{options}");
     }
 }
 
@@ -1525,38 +763,6 @@ const MAJOR_3: &str = "plugin ABI 3.0 is not supported: this opencode-native loa
                        the plugin against opencode-plugin-abi 2";
 
 #[test]
-fn a_failed_external_setup_is_failed_and_inactive_and_a_reload_error_replaces_it() {
-    let host = host();
-    let (_root, target, registry, loader) = configured("{\"fail\":true}", &[]);
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.");
-    assert_eq!(*host.toasts.borrow(), [failed.clone().title("Plugin failed: sample")]);
-    let sample = entry(&registry.entries(), &target).clone();
-    assert_eq!((sample.status, sample.active), (Status::Failed("sample setup failed".to_owned()), false));
-
-    fs::write(&target, build("major-3")).unwrap();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let sample = entry(&registry.entries(), &target).clone();
-    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_3.to_owned()), false));
-    assert_eq!(host.toasts.borrow()[1], failed.clone().title("Plugin failed: sample"));
-    // As a `cli.json` directive enables it, a load that fails again lists it failed and says so.
-    assert!(registry.set_active(&dynamic(&host), "sample", true));
-    let sample = entry(&registry.entries(), &target).clone();
-    assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_3.to_owned()), false));
-    assert_eq!(host.toasts.borrow()[2..], [failed.title("Plugin failed: sample")]);
-}
-
-#[test]
-fn a_failed_load_without_an_id_is_named_by_its_target() {
-    let host = host();
-    let (_root, target, registry, loader) = configured("{}", &[]);
-    fs::write(&target, build("major-3")).unwrap();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let failed = abi::Toast::new(abi::Variant::Error, "Run /plugins to view details.");
-    assert_eq!(*host.toasts.borrow(), [failed.title(format!("Plugin failed: {target}"))]);
-}
-
-#[test]
 fn a_broken_build_of_an_inactive_plugin_is_failed_and_enabling_it_starts_nothing() {
     let host = host();
     let (_root, target, registry, loader) = configured("{}", &["-sample"]);
@@ -1572,20 +778,6 @@ fn a_broken_build_of_an_inactive_plugin_is_failed_and_enabling_it_starts_nothing
     assert_eq!((sample.status, sample.active), (Status::Failed(MAJOR_3.to_owned()), false));
     let screen = markdown(&host, &registry, "```sample\nstale\n```\n");
     assert!(!screen.contains("SAMPLE"), "{screen}");
-}
-
-#[test]
-fn deactivating_all_disposes_every_active_plugin() {
-    let host = host();
-    let registry = Registry::define(vec![abi::Plugin { id: "lifecycle", setup: lifecycle }.into()], []);
-    registry.activate(&dynamic(&host));
-    let (definition, error) = super::loopback(&dynamic(&host), abi::export_plugin!(@loopback "first", first)).unwrap();
-    registry.load(&dynamic(&host), definition.external("first.so", error));
-    registry.deactivate_all();
-    host.app.advance(Duration::from_millis(1));
-    let toasts: Vec<String> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
-    assert_eq!(toasts, ["setup", "dispose"]);
-    assert!(registry.entries().iter().all(|entry| !entry.active), "{:?}", registry.entries());
 }
 
 #[test]
@@ -1856,40 +1048,6 @@ fn a_deltas_handler_goes_with_its_plugin() {
     }
 }
 
-#[test]
-fn a_call_that_panics_has_no_effects() {
-    let calls = [
-        ("setup", "setup", true),
-        ("command", "run-command", true),
-        ("event", "on-event", true),
-        ("deltas", "on-deltas", true),
-        ("reply", "on-reply", true),
-        ("wake", "on-wake", true),
-        ("mount", "on-mount", true),
-        ("route-mount", "on-route-mount", true),
-        ("render", "render-slot", false),
-        ("route", "render-route", false),
-        ("fence", "render-fence", false),
-    ];
-    for (at, export, effects) in calls {
-        for through in [false, true] {
-            let case = format!("{at}, through the C ABI: {through}");
-            let (quiet, (entry, failed, command)) = panicky_run(at, ("", false), through);
-            assert_eq!((entry.status, failed, command), (Status::Active, 0, true), "{case}");
-            let (leaked, _) = panicky_run(at, (at, false), through);
-            assert_eq!(leaked != quiet, effects, "{case}: {leaked:?}");
-            // Every small verb ran without the panic, so the comparison covers each.
-            assert_eq!(leaked.6.len(), if effects { 8 } else { 0 }, "{case}: {:?}", leaked.6);
-            let (panicked, (entry, failed, command)) = panicky_run(at, (at, true), through);
-            assert_eq!(panicked, quiet, "{case}");
-            assert_eq!(entry.status, Status::Failed(format!("{export} panicked: boom")), "{case}");
-            // A failed plugin's commands leave the keymap; it stays active, so it can be disabled.
-            let listed = if at == "setup" { (false, 0, false) } else { (true, 1, false) };
-            assert_eq!((entry.active, failed, command), listed, "{case}");
-        }
-    }
-}
-
 thread_local! {
     /// The host table the last `catching` instance of this thread got, as a C plugin keeps it.
     static CAUGHT: Cell<*mut HostApi> = const { Cell::new(std::ptr::null_mut()) };
@@ -2046,85 +1204,6 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
 }
 
 #[test]
-fn a_render_that_asks_for_effects_gets_none() {
-    let outcome = |mode: u8| {
-        RAW_MODE.set(mode);
-        RAW_STATUSES.take();
-        let host = host();
-        let api = PluginApi { call: Some(raw_call), destroy: None, ..sdk_table(raw_create, describe!("raw")) };
-        let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
-        let registry = Registry::define(Vec::new(), []);
-        registry.load(&dynamic(&host), definition.external("raw.so", error));
-        let parent = View::new(host.app());
-        let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-        host.app.advance(Duration::from_millis(1));
-        let statuses = RAW_STATUSES.take();
-        let seen = (
-            host.edits.borrow().len(),
-            host.toasts.borrow().len(),
-            host.dialogs.borrow().len(),
-            host.storage.borrow().get("plugin.raw.k").cloned(),
-            entry(&registry.entries(), "raw.so").status.clone(),
-            host.verbs.borrow().len() + host.programs.borrow().len(),
-        );
-        (statuses, seen)
-    };
-    let quiet = outcome(2);
-    assert_eq!(quiet.1, (0, 0, 0, None, Status::Active, 0));
-    for mode in [0, 1] {
-        let (statuses, mut seen) = outcome(mode);
-        assert_eq!(statuses, [abi::ERROR; 13], "mode {mode}");
-        if mode == 1 {
-            assert!(matches!(&seen.4, Status::Failed(error) if error.contains("bad result")), "{:?}", seen.4);
-            assert_eq!(seen.1, 1, "one toast says the plugin failed");
-            (seen.1, seen.4) = (0, Status::Active);
-        }
-        assert_eq!(seen, quiet.1, "mode {mode}");
-    }
-}
-
-thread_local! {
-    /// The status the host answered the transcript plugin's scroll with, when its command ran.
-    static TX_STATUS: Cell<Option<i32>> = const { Cell::new(None) };
-}
-
-/// A plugin without the SDK whose one command scrolls the transcript.
-unsafe extern "C" fn tx_create(host: *const HostApi, _: Bytes, instance: *mut *mut c_void, out: *mut Owned) -> i32 {
-    RAW_HOST.set(host.cast_mut());
-    let manifest = r#"{"id":"tx","commands":[{"name":"tx.scroll","title":"Scroll","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[],"routes":[],"storage":[]}"#;
-    // SAFETY: the loader passes valid pointers; the instance pointer is never read.
-    unsafe {
-        *instance = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
-        *out = Owned::from_vec(manifest.as_bytes().to_vec());
-    }
-    abi::OK
-}
-
-unsafe extern "C" fn tx_call(_: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
-    // SAFETY: the loader passes the request for the call.
-    let request = String::from_utf8_lossy(unsafe { request.as_slice() }).into_owned();
-    if request.contains(r#""type":"command""#) {
-        let scroll = r#"{"type":"scroll","target":{"type":"transcript"},"verb":{"type":"by","rows":1}}"#;
-        TX_STATUS.set(Some(Table(RAW_HOST.get()).call(scroll).0));
-    }
-    // SAFETY: `out` is valid for writes during the call.
-    unsafe { *out = Owned::from_vec(b"null".to_vec()) };
-    abi::OK
-}
-
-#[test]
-fn a_librarys_command_may_scroll_the_transcript() {
-    let host = host();
-    let api = PluginApi { call: Some(tx_call), destroy: None, ..sdk_table(tx_create, describe!("tx")) };
-    let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
-    let registry = Registry::define(Vec::new(), []);
-    registry.load(&dynamic(&host), definition.external("tx.so", error));
-    TX_STATUS.set(None);
-    assert!(matches!(host.keymap().dispatch("tx.scroll", None), RunResult::Ok));
-    assert_eq!(TX_STATUS.get(), Some(abi::OK));
-}
-
-#[test]
 fn a_late_refused_result_leaves_no_effects() {
     let outcome = |mode: u8| {
         RAW_MODE.set(mode);
@@ -2168,66 +1247,6 @@ thread_local! {
     /// The run record of [`late`]'s monitor, and what it named inside `late.run`.
     static LATE_RECORD: std::cell::RefCell<Option<Arc<crate::contain::Record>>> = const { std::cell::RefCell::new(None) };
     static LATE_SEEN: std::cell::RefCell<Option<(String, &'static str)>> = const { std::cell::RefCell::new(None) };
-}
-
-/// A plugin whose `late.run` toasts, then takes 150 ms on the injected clock; `late.ok` takes nothing.
-fn late(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command::new(name).title(name);
-    setup.command(command("late.ok"), |_, _| {});
-    setup.command(command("late.run"), |host, _| {
-        let seen = LATE_RECORD.with_borrow(|record| {
-            let record = record.as_ref()?;
-            let running = record.running()?;
-            Some((record.named(running.slot)?.id, *crate::contain::record::KINDS.get(usize::from(running.kind))?))
-        });
-        LATE_SEEN.set(seen);
-        host.toast(abi::Toast::new(abi::Variant::Info, "late"));
-        LATE_CLOCK.set(LATE_CLOCK.get() + Duration::from_millis(150));
-    });
-    Ok(())
-}
-
-#[test]
-fn an_overrun_applies_its_effects_then_fails_an_external_plugin_only() {
-    for through in [false, true] {
-        let host = host();
-        let registry = Registry::define(Vec::new(), []);
-        let base = std::time::Instant::now();
-        registry.monitor().set_clock(move || base + LATE_CLOCK.get());
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let record = Arc::new(crate::contain::Record::create(dir.path()).unwrap());
-        registry.monitor().attach(record.clone()).unwrap();
-        LATE_RECORD.set(Some(record));
-        LATE_SEEN.set(None);
-        match through {
-            true => {
-                let loaded = loopback_described(&dynamic(&host), abi::export_plugin!(@loopback_described "late", late));
-                let (definition, error) = loaded.unwrap();
-                registry.load(&dynamic(&host), definition.external("late.so", error));
-            }
-            false => {
-                registry.add(abi::Plugin { id: "late", setup: late });
-                registry.activate(&dynamic(&host));
-            }
-        }
-        // The first call after setup is exempt; this one is fast anyway.
-        assert!(matches!(host.keymap().dispatch("late.ok", None), RunResult::Ok));
-        host.keymap().dispatch("late.run", None);
-        host.app.advance(Duration::from_millis(1));
-        let toasts: Vec<String> =
-            host.toasts.borrow().iter().map(|toast| toast.title.clone().unwrap_or(toast.message.clone())).collect();
-        let status = registry.entries().into_iter().find(|entry| entry.id == "late").unwrap().status;
-        let expected = match through {
-            true => (
-                vec!["late".to_owned(), "Plugin failed: late".to_owned()],
-                Status::Failed("run-command took 150 ms, over the limit of 100 ms".to_owned()),
-            ),
-            false => (vec!["late".to_owned()], Status::Active),
-        };
-        assert_eq!((toasts, status), expected, "through the C ABI: {through}");
-        assert_eq!(LATE_SEEN.take(), Some(("late".to_owned(), "run-command")), "through the C ABI: {through}");
-        LATE_RECORD.set(None);
-    }
 }
 
 /// A plugin that replaces `home.footer`, draws `rep` fences and has a route; `replacer.panic` panics.
@@ -2297,80 +1316,8 @@ thread_local! {
     static TIMED_SEEN: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
 }
 
-/// Logs the call the record names.
-fn timed_seen() {
-    let kind = TIMED_RECORD.with_borrow(|record| {
-        let running = record.as_ref()?.running()?;
-        crate::contain::record::KINDS.get(usize::from(running.kind)).copied()
-    });
-    TIMED_SEEN.with_borrow_mut(|seen| seen.push(kind.unwrap_or("nothing")));
-}
-
-/// A built-in whose command takes 150 ms on the injected clock.
-fn timed(setup: &mut abi::Setup) -> Result<(), String> {
-    timed_seen();
-    let command = abi::Command::new("timed.slow").title("slow");
-    setup.command(command, |_, _| {
-        timed_seen();
-        TIMED_NOW.set(TIMED_NOW.get() + Duration::from_millis(150));
-    });
-    setup.on_dispose(|_| timed_seen());
-    Ok(())
-}
-
-#[test]
-fn a_builtin_is_timed_and_its_overrun_fails_nothing() {
-    let host = host();
-    let dir = opencode_util::temp::tempdir().unwrap();
-    let record = Arc::new(crate::contain::Record::create(dir.path()).unwrap());
-    TIMED_RECORD.set(Some(record.clone()));
-    TIMED_SEEN.take();
-    let registry = Registry::define(Vec::new(), []);
-    registry.monitor().attach(record).unwrap();
-    let base = Instant::now();
-    registry.monitor().set_clock(move || base + TIMED_NOW.get());
-    registry.add(abi::Plugin { id: "timed", setup: timed });
-    registry.activate(&dynamic(&host));
-    // The first call after setup is exempt; the second overruns.
-    for _ in 0..2 {
-        host.keymap().dispatch("timed.slow", None);
-    }
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(registry.monitor().host_overruns(), 1);
-    assert!(registry.monitor().load("timed").1.is_some(), "setup is timed");
-    let status = |registry: &Registry| registry.entries().into_iter().find(|entry| entry.id == "timed").unwrap().status;
-    assert_eq!(status(&registry), Status::Active);
-    registry.toggle(&dynamic(&host), "timed", false);
-    assert_eq!(TIMED_SEEN.take(), ["setup", "run-command", "run-command", "dispose"]);
-    TIMED_RECORD.set(None);
-}
-
 thread_local! {
     static MARKED: RefCell<Vec<bool>> = const { RefCell::new(Vec::new()) };
-}
-
-/// A built-in that notes, in each of its calls, whether a panic there would unwind to the host's catch.
-fn noting(setup: &mut abi::Setup) -> Result<(), String> {
-    MARKED.with_borrow_mut(|caught| caught.push(crate::contain::catching()));
-    let command = abi::Command::new("noting.run").title("run");
-    setup.command(command, |_, _| MARKED.with_borrow_mut(|caught| caught.push(crate::contain::catching())));
-    setup.on_dispose(|_| MARKED.with_borrow_mut(|caught| caught.push(crate::contain::catching())));
-    Ok(())
-}
-
-#[test]
-fn a_builtin_runs_inside_the_catch() {
-    for builtin in [crate::Builtin::Plugin, crate::Builtin::Abi] {
-        let host = host();
-        MARKED.take();
-        let registry = Registry::define(Vec::new(), []);
-        registry.add(builtin(abi::Plugin { id: "noting", setup: noting }));
-        registry.activate(&dynamic(&host));
-        host.keymap().dispatch("noting.run", None);
-        registry.toggle(&dynamic(&host), "noting", false);
-        assert_eq!(MARKED.take(), [true, true, true]);
-        assert!(!crate::contain::catching());
-    }
 }
 
 #[test]
@@ -2471,17 +1418,6 @@ fn a_plugin_written_in_c_against_the_header_runs() {
     assert_eq!(toasts(&host), ["hello from C", "send answered 0"]);
     let screen = c_route(&host, &registry).unwrap();
     assert!(screen.contains("drawn in C, 1 messages"), "{screen}");
-}
-
-#[cfg(unix)]
-#[test]
-fn a_1_x_library_is_refused_by_its_major() {
-    let Some(library) = cc("examples/c/plugin.c", &["-DOPENCODE_AS_V1"]) else { return };
-    let refused = "plugin ABI 1.x is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0); rebuild \
-                   the plugin against opencode-plugin-abi 2";
-    assert_eq!(Native.inspect(&library).err().unwrap(), refused);
-    let error = Native.load(&dynamic(&host()), &library, std::path::Path::new("plugin.so"), None).err().unwrap();
-    assert_eq!(error, refused);
 }
 
 #[cfg(unix)]

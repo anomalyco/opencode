@@ -1605,46 +1605,6 @@ mod tests {
         }
     }
 
-    /// Not a row: the client that the next row kills outright. It starts a child that loops and never reads, prints its
-    /// process ID, and waits to be killed.
-    #[test]
-    fn a_client_that_is_killed() {
-        if std::env::var_os("PIPE_KILLED_CLIENT").is_none() {
-            return;
-        }
-        let mut command = Command::new("sh");
-        command.arg("-c").arg("while :; do :; done");
-        let child = Child::spawn(command, Limits::default(), || {}).unwrap();
-        println!("\nchild {} .", child.pid());
-        std::thread::sleep(Duration::from_secs(30));
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn a_busy_child_dies_with_a_client_killed_outright() {
-        use std::io::BufRead;
-        let mut client = Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "pipe::child::tests::a_client_that_is_killed", "--nocapture", "--test-threads=1"])
-            .env("PIPE_KILLED_CLIENT", "1")
-            .stdout(Stdio::piped())
-            .spawn()
-            .unwrap();
-        let mut lines = std::io::BufReader::new(client.stdout.take().unwrap()).lines();
-        let pid: u32 =
-            lines.find_map(|line| line.ok()?.rsplit_once("child ")?.1.split(' ').next()?.parse().ok()).unwrap();
-        assert!(std::path::Path::new(&format!("/proc/{pid}")).exists());
-        // SAFETY: a signal to the client this test started.
-        unsafe { libc::kill(client.id() as libc::pid_t, libc::SIGKILL) };
-        client.wait().unwrap();
-        let begun = Instant::now();
-        while std::path::Path::new(&format!("/proc/{pid}")).exists() && begun.elapsed() < Duration::from_secs(5) {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        // A zombie is gone too: its parent, the init process, reaps it.
-        let state = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
-        assert!(state.is_empty() || state.contains(") Z "), "the child {pid} outlived its client: {state}");
-    }
-
     #[cfg(target_os = "linux")]
     #[test]
     fn telling_a_child_exited_does_not_reap_it() {

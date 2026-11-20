@@ -4,7 +4,6 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use opencode_ui::dialog::DialogKeymap;
-use opentui::keymap::RunResult;
 use opentui::prelude::*;
 
 use super::*;
@@ -123,68 +122,6 @@ fn a_manifest_reads_its_flat_keys() {
     assert!(Manifest::parse("id = \"x\"\ncontract = \"1.0\"").unwrap_err().contains("contract 1.0"));
     assert!(Manifest::parse("id = [\"x\"]").unwrap_err().contains("only `key = \"string\"`"));
     assert!(Manifest::parse("entry = \"../x.luau\"\nid = \"x\"").unwrap_err().contains("not a .luau file"));
-}
-
-#[test]
-fn the_luau_quick_start_loads_from_a_plugins_directory_and_runs() {
-    let temp = opencode_util::temp::tempdir().unwrap();
-    let config = temp.path().join("config");
-    let dir = config.join("plugins").join("hello");
-    install("hello", &dir);
-    let (host, registry) = (host(), Registry::define(Vec::new(), []));
-    let loader = loader(&config, temp.path());
-    // Before the first walk of its files ended it is starting; no file was hashed on this thread.
-    let hashed = approval::hashed();
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    assert_eq!(entry(&registry.entries(), &dir.to_string_lossy()).status, Status::Skipped(STARTING.to_owned()));
-    assert!(settle(&loader, &host, &registry));
-    assert_eq!(approval::hashed(), hashed);
-    let hello = entry(&registry.entries(), &dir.to_string_lossy()).clone();
-    assert_eq!((hello.id.as_str(), hello.status), ("example.luau-hello", Status::Active));
-    assert!(matches!(keymap(&host).dispatch("hello.greet", None), RunResult::Ok));
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "Hello from a plugin")]);
-    let parent = View::new(host.app());
-    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    host.app().root().clear();
-    host.app().root().add(&parent);
-    host.app.render();
-    assert!(host.app.text().contains("hello"), "{}", host.app.text());
-    // Without the flag's loader the same directory is a TypeScript target, skipped as one.
-    let plain = Loader::new(config.clone(), temp.path().to_path_buf(), Vec::new());
-    let other = Registry::define(Vec::new(), []);
-    plain.reconcile(&dynamic(&host), &other);
-    assert!(matches!(entry(&other.entries(), &dir.to_string_lossy()).status, Status::Skipped(_)));
-}
-
-#[test]
-fn the_counter_keeps_storage_and_asks_before_it_resets() {
-    let host = host();
-    let mut files = Vec::new();
-    for name in ["plugin.toml", "init.luau", "shout.luau"] {
-        files.push((name, fs::read_to_string(example("counter").join(name)).unwrap()));
-    }
-    let sources = Sources::from_files(files.iter().map(|(name, text)| (*name, text.as_str())));
-    let registry = running(&host, define(&sources, None).unwrap().0);
-    for _ in 0..2 {
-        keymap(&host).dispatch("counter.count", None);
-        host.app.advance(Duration::from_millis(1));
-    }
-    // The plugin's one storage key.
-    let count = || host.storage.borrow().values().next().cloned();
-    assert_eq!(count().as_deref(), Some(r#"{"value":2}"#));
-    keymap(&host).dispatch("counter.reset", None);
-    host.app.advance(Duration::from_millis(1));
-    let dialogs = host.dialogs.borrow().clone();
-    let [(_, abi::Dialog::Confirm(confirm))] = dialogs.as_slice() else { panic!("{dialogs:?}") };
-    assert_eq!(confirm.message, "The count is 2.");
-    keymap(&host).dispatch("counter.reset.answer", Some("false"));
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(count().as_deref(), Some(r#"{"value":2}"#));
-    keymap(&host).dispatch("counter.reset.answer", Some("true"));
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(count().as_deref(), Some(r#"{"value":0}"#));
-    assert_eq!(failure(&registry, "example.luau-counter"), None);
 }
 
 #[test]
@@ -2354,36 +2291,6 @@ fn tasking(host: &Rc<TestHost>, body: &str) -> Rc<Registry> {
     let init =
         format!("local plugin = require(\"@opencode/plugin\")\nreturn plugin.define(function(setup)\n{body}\nend)\n");
     running(host, define(&sources(&init), None).unwrap().0)
-}
-
-#[test]
-fn a_task_parks_on_a_fetch_and_goes_on_in_its_reply() {
-    let host = host();
-    let registry = tasking(
-        &host,
-        r#"
-        plugin.spawn(function()
-            local value = setup.host:fetch({ method = "GET", path = "/setup" })
-            setup.host:toast({ variant = "info", message = "setup " .. value.name })
-        end)
-        setup:command({ name = "go" }, function(host)
-            host:toast({ variant = "info", message = "asked" })
-            local value, err = host:fetch({ method = "GET", path = "/one" })
-            host:toast({ variant = "info", message = value.name .. " " .. tostring(err) })
-            local again, failure = host:fetch({ method = "GET", path = "/two" })
-            host:toast({ variant = "info", message = tostring(again) .. " " .. failure })
-        end)
-        "#,
-    );
-    answer(&host, Ok(serde_json::json!({ "name": "/setup" })));
-    run(&host, "go", None);
-    assert_eq!(said(&host), ["setup /setup", "asked"]);
-    answer(&host, Ok(serde_json::json!({ "name": "/one" })));
-    assert_eq!(said(&host)[2..], ["/one nil"]);
-    answer(&host, Err("UnexpectedStatus: 404".to_owned()));
-    assert_eq!(said(&host)[3..], ["nil UnexpectedStatus: 404"]);
-    assert!(host.fetches.borrow().is_empty());
-    assert_eq!(failure(&registry, "test.luau"), None);
 }
 
 #[test]

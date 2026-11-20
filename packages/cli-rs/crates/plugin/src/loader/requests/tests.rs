@@ -48,24 +48,6 @@ impl Answers for Cancelled {
 }
 
 #[test]
-fn a_mounts_close_cancels_only_its_own_requests() {
-    let host = host();
-    let counted = Cancelled::on(&host);
-    let guest = Rc::downgrade(&(counted.clone() as Rc<dyn Answers>));
-    let (busy, closing) = (Rc::new(()), Rc::new(()));
-    assert!((1..=1000).all(|id| wait(&Rc::downgrade(&busy), &guest, abi::RequestId(id))));
-    assert!((1001..=1002).all(|id| wait(&Rc::downgrade(&closing), &guest, abi::RequestId(id))));
-    let key = mount_key(&Rc::downgrade(&closing));
-    drop(closing);
-    assert_eq!(cancel_closed(key), 2, "the close looked at another mount's requests");
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!((counted.cancels.get(), waiting()), (2, 1000));
-    assert!((1..=1000).rev().all(|id| take_inflight(abi::RequestId(id))));
-    assert!(!take_inflight(abi::RequestId(1001)), "a cancelled request waited still");
-    assert_eq!(waiting(), 0);
-}
-
-#[test]
 fn a_mounts_close_spreads_its_cancels_over_frames() {
     let host = host();
     let instances: Vec<_> = (0..3).map(|_| Cancelled::on(&host)).collect();

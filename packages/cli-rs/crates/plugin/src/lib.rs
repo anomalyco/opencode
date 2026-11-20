@@ -2355,15 +2355,6 @@ impl Setup<'_> {
         self.registration.code_blocks.push((language.into(), Rc::new(render)));
     }
 
-    /// Registers a keymap layer: commands, their palette and slash entries, and keybinds.
-    #[cfg(test)]
-    pub(crate) fn layer(&mut self, layer: opencode_ui::keymap::KeymapLayer<opencode_ui::dialog::FocusId>) {
-        match self.host.keymap().layer(layer) {
-            Ok(disposer) => self.registration.disposers.push(disposer),
-            Err(error) => log::error!("plugin {} keymap layer: {error}", self.id),
-        }
-    }
-
     /// Runs `cleanup` when the plugin deactivates (the cleanup TS `setup` returns).
     pub(crate) fn on_dispose(&mut self, cleanup: impl FnOnce() + 'static) {
         self.registration.cleanups.push(Box::new(cleanup));

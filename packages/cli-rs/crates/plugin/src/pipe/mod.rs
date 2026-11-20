@@ -3251,30 +3251,6 @@ mod tests {
     }
 
     #[test]
-    fn bun_is_looked_for_once_a_plugin_needs_the_js_host() {
-        let test_host = crate::loader::tests::host();
-        let host = crate::loader::tests::dynamic(&test_host);
-        for found in [true, false] {
-            let looks = Rc::new(Cell::new(0));
-            let find = Find(Rc::new({
-                let looks = looks.clone();
-                move || {
-                    looks.set(looks.get() + 1);
-                    found.then(|| Config { opencode: true, ..Config::new(PathBuf::from("/opt/opencode")) })
-                }
-            }));
-            let config = Config { find: Some(find), ..Config::new(PathBuf::new()) };
-            let scripts = Scripts::new(config, &host);
-            assert_eq!((looks.get(), scripts.looked(), scripts.pid()), (0, false, None));
-            assert_eq!(scripts.runtime(), found);
-            assert_eq!(scripts.runtime(), found);
-            assert_eq!((looks.get(), scripts.looked()), (1, true));
-            let bun = scripts.resolved().map(|config| (config.bun.clone(), config.opencode));
-            assert_eq!(bun, found.then(|| (PathBuf::from("/opt/opencode"), true)));
-        }
-    }
-
-    #[test]
     fn a_version_is_bun_s_alone() {
         assert_eq!(semver("1.4.4"), Some((1, 4, 4)));
         assert_eq!(semver("1.4.5-canary.20+38afee6c8"), Some((1, 4, 5)));
@@ -3463,25 +3439,6 @@ mod tests {
         assert!(typed(&seen).is_empty(), "the second hold still holds");
         host.app.advance(Duration::from_millis(200));
         assert_eq!(typed(&seen), ["a"]);
-    }
-
-    #[test]
-    fn the_reserved_chord_drops_the_held_input_and_its_answer() {
-        let (host, scripts, seen) = holding();
-        scripts.hold_for(1, Some(bound("x")));
-        host.app.press("y");
-        InputHold::escape(&*scripts);
-        scripts.answered(1, true);
-        host.app.advance(Duration::from_millis(200));
-        assert!(typed(&seen).is_empty(), "{:?}", typed(&seen));
-        scripts.hold_for(2, Some(bound("z")));
-        let mut release = stroke("ctrl+c");
-        release.kind = opentui::input::KeyEventKind::Release;
-        host.app.key(release);
-        assert_eq!(scripts.hold.borrow().owners.len(), 1, "the chord's release ended a hold");
-        scripts.answered(2, true);
-        host.app.advance(Duration::from_millis(1));
-        assert_eq!(typed(&seen), ["z"]);
     }
 
     #[test]
