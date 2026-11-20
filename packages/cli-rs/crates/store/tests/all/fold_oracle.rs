@@ -3,11 +3,15 @@
 
 use crate::common;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use common::*;
 use opencode_api::generated::{SessionID, V2Event};
 use opencode_store::{Catalog, Data, Location, Options, Shell, State};
+use opencode_util::rng::SplitMix64;
 use serde_json::{Map, Value, json};
 
 const FIXTURE: &str = include_str!("../../../../parity/fixtures/F.7/folds.json");
@@ -45,7 +49,7 @@ async fn every_event_folds_as_in_typescript() {
         let event: V2Event = serde_json::from_value(case["event"].clone())
             .unwrap_or_else(|error| panic!("{name}: the event does not decode: {error}"));
         assert!(!matches!(event, V2Event::Unknown(_)), "{name}: the event decodes as unknown");
-        let actual = fold(&fixture["routes"], event, case["state"] == "loaded").await;
+        let actual = fold(&fixture["routes"], vec![event], case["state"] == "loaded").await.remove(0);
         for (field, expected, actual) in fields(&case["expected"], &actual) {
             if expected == actual {
                 continue;
@@ -66,8 +70,8 @@ async fn every_event_folds_as_in_typescript() {
     assert!(differences.is_empty(), "{} fold differences:\n{}", differences.len(), differences.join("\n"));
 }
 
-/// The store after `event`, with the reads it started, in the shape the TS oracle writes.
-async fn fold(routes: &Value, event: V2Event, loaded: bool) -> Value {
+/// The store after each event, with the reads it started, in the shape the TS oracle writes.
+async fn fold(routes: &Value, events: Vec<V2Event>, loaded: bool) -> Vec<Value> {
     let requests = Log::<String>::default();
     let log = requests.clone();
     let routes = routes.clone();
@@ -107,21 +111,25 @@ async fn fold(routes: &Value, event: V2Event, loaded: bool) -> Value {
         .await;
         quiet(&data, &requests).await;
     }
-    let before = requests.len();
-    let mcp = matches!(event, V2Event::McpStatusChanged(_));
-    data.apply(&[event]);
-    quiet(&data, &requests).await;
-    // `mcp.status.changed` reads once its burst has been quiet for `SETTLE`.
-    if mcp {
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let mut observations = Vec::new();
+    for event in events {
+        let before = requests.len();
+        let mcp = matches!(event, V2Event::McpStatusChanged(_));
+        data.apply(&[event]);
         quiet(&data, &requests).await;
+        // `mcp.status.changed` reads once its burst has been quiet for `SETTLE`.
+        if mcp {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            quiet(&data, &requests).await;
+        }
+        let mut observed = data.read(observe);
+        let mut started = requests.get().split_off(before);
+        started.sort();
+        observed["requests"] = json!(started);
+        observations.push(observed);
     }
-    let mut observed = data.read(observe);
-    let mut started = requests.get().split_off(before);
-    started.sort();
-    observed["requests"] = json!(started);
     data.dispose();
-    observed
+    observations
 }
 
 /// Lets spawned reads run until no request and no change happens for a while.
@@ -244,4 +252,240 @@ fn fields(expected: &Value, actual: &Value) -> Vec<(String, Value, Value)> {
             }
         })
         .collect()
+}
+
+/// Generated event sequences fold as in TypeScript, on an empty and on a loaded store: the recorded events, each given
+/// IDs from a small pool so they meet (two sessions, messages loaded or not, tool calls, inbox items, requests, forms
+/// and shells), new text, and increasing times and `durable.seq`. Text and reasoning parts start in order, as the
+/// server starts them. A difference is shrunk to the fewest events. `MODEL_SEED`, `MODEL_CASES` and `MODEL_LEN` widen
+/// the search; it skips without Bun.
+#[test]
+fn generated_sequences_fold_as_in_typescript() {
+    let Some(root) = ts_root() else { return };
+    let fixture: Value = serde_json::from_str(FIXTURE).unwrap();
+    let templates: Vec<Value> = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| case["state"] == "loaded" && !case["name"].as_str().unwrap().contains("#no-previous"))
+        .map(|case| case["event"].clone())
+        // A reconnect reads again from routes that do not follow the events; the store model covers reconnects.
+        .filter(|event| !matches!(event["type"].as_str(), Some("server.connected" | "mcp.status.changed")))
+        .collect();
+    let mut rng = SplitMix64(env("MODEL_SEED", 1));
+    let len = env("MODEL_LEN", 12);
+    let cases: Vec<(bool, Vec<Value>)> = (0..env("MODEL_CASES", 24))
+        .map(|_| {
+            let loaded = rng.below(4) != 0;
+            (loaded, sequence(&templates, &mut rng, len, loaded))
+        })
+        .collect();
+    let routes = &fixture["routes"];
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
+    let differ = |cases: &[(bool, Vec<Value>)]| -> Vec<Option<String>> {
+        let expected = bun_folds(&root, cases);
+        cases
+            .iter()
+            .zip(expected)
+            .map(|((loaded, events), expected)| {
+                let decoded = events.iter().map(|event| serde_json::from_value(event.clone()).unwrap()).collect();
+                let actual = runtime.block_on(fold(routes, decoded, *loaded));
+                first_difference(&expected, &actual)
+            })
+            .collect()
+    };
+    let found = differ(&cases).into_iter().position(|difference| difference.is_some());
+    let Some(index) = found else { return };
+    // Drops one event at a time while the case still differs, all candidates of a round in one Bun run.
+    let (loaded, mut events) = cases[index].clone();
+    loop {
+        let candidates: Vec<(bool, Vec<Value>)> = (0..events.len())
+            .map(|skip| {
+                (
+                    loaded,
+                    events.iter().enumerate().filter(|(at, _)| *at != skip).map(|(_, event)| event.clone()).collect(),
+                )
+            })
+            .collect();
+        match differ(&candidates).into_iter().position(|difference| difference.is_some()) {
+            Some(at) if events.len() > 1 => events = candidates[at].1.clone(),
+            _ => break,
+        }
+    }
+    let difference = differ(&[(loaded, events.clone())]).remove(0).unwrap_or_default();
+    let types: Vec<&str> = events.iter().map(|event| event["type"].as_str().unwrap()).collect();
+    panic!(
+        "case {index} ({}) differs; shrunk to {types:?}\n{difference}\nevents: {}",
+        if loaded { "loaded" } else { "empty" },
+        serde_json::to_string(&events).unwrap()
+    );
+}
+
+/// The first event after which TS and Rust differ, and how.
+fn first_difference(expected: &[Value], actual: &[Value]) -> Option<String> {
+    expected.iter().zip(actual).enumerate().find_map(|(index, (expected, actual))| {
+        let differences: Vec<String> = fields(expected, actual)
+            .into_iter()
+            .filter(|(_, expected, actual)| expected != actual)
+            .map(|(field, expected, actual)| format!("{field}:\n  ts:   {expected}\n  rust: {actual}"))
+            .collect();
+        (!differences.is_empty()).then(|| format!("after event {index}: {}", differences.join("\n")))
+    })
+}
+
+/// A sequence of `len` events from `templates`, with IDs from small pools.
+fn sequence(templates: &[Value], rng: &mut SplitMix64, len: u64, loaded: bool) -> Vec<Value> {
+    let mut seq: HashMap<String, i64> = HashMap::new();
+    // Text and reasoning parts started per message; the loaded messages hold some already.
+    let mut parts: HashMap<(String, String, &str), i64> = HashMap::new();
+    for kind in ["text", "reasoning"] {
+        parts.insert(("ses_a".into(), "msg_0005".into(), kind), 1);
+    }
+    parts.insert(("ses_a".into(), "msg_0002".into(), "text"), 1);
+    let pick = |rng: &mut SplitMix64, items: &[&str]| items[rng.below(items.len() as u64) as usize].to_owned();
+    // Events for a deleted session are left out until it is created again: Rust drops them, TS recreates the
+    // session's lists (deviations O89-list-snapshots and O89-transcript-refresh).
+    let mut deleted = HashSet::new();
+    let mut calls = vec!["call_1".to_owned(), "call_2".to_owned(), "call_3".to_owned()];
+    (0..len)
+        .map(|serial| {
+            let mut event = templates[rng.below(templates.len() as u64) as usize].clone();
+            event["id"] = json!(format!("evt_{}", 9500 + serial));
+            event["created"] = json!(2000 + serial);
+            let kind = event["type"].as_str().unwrap().to_owned();
+            let data = &mut event["data"];
+            let fields: [(&str, &[&str]); 9] = [
+                ("sessionID", &["ses_a", "ses_a", "ses_b"]),
+                ("assistantMessageID", &["msg_0005", "msg_0005", "msg_0002", "msg_0008", "msg_0012"]),
+                ("inboxID", &["msg_0006", "msg_0007", "msg_0011"]),
+                ("requestID", &["per_1", "per_2", "per_3"]),
+                ("to", &["msg_0002", "msg_0004", "msg_0008"]),
+                ("delta", &["lo", " \u{e9}\u{1f600}", "", "\n"]),
+                ("text", &["hello", "", "\u{4e2d}\u{6587}"]),
+                ("started", &["30", "3000"]),
+                ("inputID", &["msg_0009", "msg_0013"]),
+            ];
+            for (field, pool) in fields {
+                if data.get(field).is_some_and(|value| value.is_string() || value.is_number()) {
+                    let value = pick(rng, pool);
+                    data[field] = if field == "started" { json!(value.parse::<i64>().unwrap()) } else { json!(value) };
+                }
+            }
+            // A tool input starts once per call ID (deviation O5-text-started-replay); other tool events pick any.
+            if kind == "session.tool.input.started" {
+                calls.push(format!("call_new{serial}"));
+                data["id"] = json!(calls.last().unwrap());
+            } else if kind.starts_with("session.tool.") && data.get("id").is_some() {
+                data["id"] = json!(calls[rng.below(calls.len() as u64) as usize]);
+            }
+            if kind.starts_with("shell.") || kind.starts_with("form.") || kind.starts_with("permission.asked") {
+                let prefix = &kind[..kind.find('.').unwrap()];
+                let id = format!(
+                    "{}_{}",
+                    match prefix {
+                        "shell" => "sh",
+                        "form" => "frm",
+                        _ => "per",
+                    },
+                    1 + rng.below(3)
+                );
+                match kind.as_str() {
+                    "shell.created" => data["info"]["id"] = json!(id),
+                    "form.created" => data["form"]["id"] = json!(id),
+                    _ => data["id"] = json!(id),
+                }
+            }
+            if let Some(kind @ ("text" | "reasoning")) =
+                kind.strip_prefix("session.").and_then(|rest| rest.strip_suffix(".started"))
+            {
+                let key = (
+                    data["sessionID"].as_str().unwrap().to_owned(),
+                    data["assistantMessageID"].as_str().unwrap().to_owned(),
+                    if kind == "text" { "text" } else { "reasoning" },
+                );
+                let next = parts.entry(key).or_default();
+                data["ordinal"] = json!(*next);
+                *next += 1;
+            }
+            if event.get("durable").is_some() {
+                let aggregate = event["durable"]["aggregateID"].as_str().unwrap_or_default().to_owned();
+                let next = seq.entry(aggregate).or_insert(100);
+                *next += 1;
+                event["durable"]["seq"] = json!(*next);
+            }
+            event
+        })
+        .filter(|event| {
+            let data = &event["data"];
+            // TS adds the row of `session.model.selected` to a transcript some other event created empty, and reads
+            // it; Rust only to a loaded one. Only the loaded transcript gets one.
+            if event["type"] == "session.model.selected" && !(loaded && data["sessionID"] == "ses_a") {
+                return false;
+            }
+            let session =
+                data["sessionID"].as_str().or(data["form"]["sessionID"].as_str()).unwrap_or_default().to_owned();
+            match event["type"].as_str() {
+                Some("session.deleted") => {
+                    deleted.insert(session);
+                    true
+                }
+                Some("session.created") => {
+                    deleted.remove(&session);
+                    true
+                }
+                _ => !deleted.contains(&session),
+            }
+        })
+        .collect()
+}
+
+fn env(name: &str, default: u64) -> u64 {
+    std::env::var(name).ok().and_then(|value| value.parse().ok()).unwrap_or(default)
+}
+
+/// The TypeScript checkout with its dependencies, or `None` (and a note) without Bun.
+fn ts_root() -> Option<PathBuf> {
+    let root = std::env::var_os("OPENCODE_TS_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap());
+    let present = root.join("node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
+    if !present {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but Bun is missing"
+        );
+        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", root.display());
+    }
+    present.then_some(root)
+}
+
+/// The TypeScript store's observations after each event of each case, in one Bun run.
+fn bun_folds(root: &Path, cases: &[(bool, Vec<Value>)]) -> Vec<Vec<Value>> {
+    let input: String =
+        cases.iter().map(|(loaded, events)| format!("{}\n", json!({ "loaded": loaded, "events": events }))).collect();
+    let mut child = Command::new("bun")
+        .arg("--cwd")
+        .arg(root.join("packages/cli"))
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/F.7-folds.ts"))
+        .arg("--sequences")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let writer = std::thread::spawn(move || stdin.write_all(input.as_bytes()).unwrap());
+    let output = child.wait_with_output().unwrap();
+    writer.join().unwrap();
+    assert!(output.status.success(), "F.7-folds.ts --sequences failed");
+    let lines: Vec<Vec<Value>> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            serde_json::from_str(line)
+                .unwrap_or_else(|error| panic!("{error}: {}", &line[line.len().min(7600)..line.len().min(7800)]))
+        })
+        .collect();
+    assert_eq!(lines.len(), cases.len());
+    lines
 }
