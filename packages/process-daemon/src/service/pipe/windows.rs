@@ -5,8 +5,11 @@
 //! with overlapped I/O. The child is created suspended and joins a
 //! kill-on-close job before it runs, so
 //! `TerminateJobObject` reaches every descendant and a daemon crash takes the
-//! tree with it. No console signals are used: every `signal` is a hard kill of
-//! the tree, and the exit reports the signal the daemon sent.
+//! tree with it. Processes that Windows lets leave the job are put back by the
+//! watcher in [`tree`]. No console signals are used: every `signal` is a hard
+//! kill of the tree, and the exit reports the signal the daemon sent.
+
+mod tree;
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -41,7 +44,7 @@ use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     JOBOBJECT_BASIC_LIMIT_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-    JobObjectExtendedLimitInformation, SetInformationJobObject, TerminateJobObject,
+    JobObjectExtendedLimitInformation, SetInformationJobObject,
 };
 use windows_sys::Win32::System::Pipes::{
     CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
@@ -59,6 +62,7 @@ use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, exit_message, start_pipe};
 use crate::service::{CreatePipe, ProcessSignal, TerminalHandle, TerminalId};
 use crate::transport::retained::Retained;
 use crate::transport::windows::{event, owned_handle, security::PrivateSecurity, wide};
+use tree::Tree;
 
 /// Cancel is first so a pipe that is always readable cannot starve it.
 const CANCEL_READY: u32 = WAIT_OBJECT_0;
@@ -109,8 +113,9 @@ impl TerminalHandle {
     }
 }
 
-/// A pipe child on Windows: the process object, the job that owns its tree
-/// (unless one could not be used), and the signal the daemon sent, if any.
+/// A pipe child on Windows: the process object, the tree of jobs that owns its
+/// descendants (unless no job could be used), and the signal the daemon sent,
+/// if any.
 #[derive(Debug)]
 pub(in crate::service) struct Process {
     pid: u32,
@@ -128,7 +133,7 @@ struct State {
 #[derive(Debug)]
 struct Handles {
     process: Arc<OwnedHandle>,
-    job: Option<Job>,
+    tree: Option<Tree>,
 }
 
 impl Process {
@@ -192,23 +197,18 @@ fn record_kill<'a>(state: &'a mut State, name: &'static str) -> Option<&'a Handl
 
 /// Terminates the whole tree.
 fn terminate(handles: &Handles) -> io::Result<()> {
-    // SAFETY: the handles stay open while they are borrowed here.
-    let terminated = unsafe {
-        match &handles.job {
-            Some(job) => TerminateJobObject(job.handle(), 1),
-            None => TerminateProcess(handles.process.as_raw_handle(), 1),
-        }
+    let result = match &handles.tree {
+        Some(tree) => tree.terminate(),
+        // SAFETY: the process handle stays open while it is borrowed here.
+        None if unsafe { TerminateProcess(handles.process.as_raw_handle(), 1) } != 0 => Ok(()),
+        None => Err(io::Error::last_os_error()),
     };
-    if terminated != 0 {
-        return Ok(());
+    match result {
+        // A process that has already exited refuses termination; signalling
+        // an empty Unix process group is not an error either.
+        Err(error) if error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) => Ok(()),
+        result => result,
     }
-    let error = io::Error::last_os_error();
-    // A process that has already exited refuses termination; signalling an
-    // empty Unix process group is not an error either.
-    if error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) {
-        return Ok(());
-    }
-    Err(error)
 }
 
 /// Returns the process and job handles for a spawned tree.
@@ -227,8 +227,8 @@ fn spawn(
     // anything. PROC_THREAD_ATTRIBUTE_JOB_LIST would be atomic, but Windows
     // then refuses to add a Store app (Store PowerShell 7) to its package's
     // container job while another process of that package is running.
-    let job = job.and_then(|job| match job.assign(created.process()) {
-        Ok(()) => Some(job),
+    let tree = job.and_then(|job| match job.assign(created.process()) {
+        Ok(()) => Some(Tree::watch(id, job, created.pid)),
         Err(error) => {
             // An outer job with UI restrictions refuses new members. Run the
             // command anyway; only the main process can be killed then.
@@ -246,7 +246,7 @@ fn spawn(
         state: Mutex::new(State {
             handles: Some(Handles {
                 process: Arc::new(process),
-                job,
+                tree,
             }),
             killed: None,
         }),
@@ -367,8 +367,8 @@ fn wait_exit(process: &Process) -> io::Result<Exit> {
     if unsafe { GetExitCodeProcess(handle.as_raw_handle(), &mut code) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    if let Some(job) = handles.and_then(|handles| handles.job)
-        && let Err(error) = job.finish(code != 0 && state.killed.is_none())
+    if let Some(tree) = handles.and_then(|handles| handles.tree)
+        && let Err(error) = tree.finish(code != 0 && state.killed.is_none())
     {
         eprintln!("pipe process {}: job cleanup failed: {error}", process.pid);
     }
@@ -746,16 +746,6 @@ impl Job {
         }
         Ok(())
     }
-
-    fn finish(self, failed: bool) -> io::Result<()> {
-        // No console and no SIGTERM grace. If termination fails, closing the
-        // still-armed job is the fallback. For a successful command disarm
-        // kill-on-close before releasing the handle.
-        if failed && unsafe { TerminateJobObject(self.handle(), 1) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        self.set_limits(0)
-    }
 }
 
 fn warn_no_job(id: TerminalId, error: &io::Error) {
@@ -949,9 +939,9 @@ fn compare_keys(a: &[u16], b: &[u16]) -> Ordering {
 /// PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_DISABLE_PROCESS_TREE, which
 /// windows-sys does not define. By default a Store app such as Store
 /// PowerShell 7 starts its children outside its package, and so outside every
-/// job; with this policy they stay in the job. It only helps when the Store app
-/// is the program itself: one started further down the tree, e.g. by cmd.exe,
-/// still breaks away with its children.
+/// job; with this policy they stay in the job. It only reaches the program's
+/// own children: a Store app started further down the tree leaves the job, and
+/// so do its children, until the watcher in [`tree`] puts them back.
 static KEEP_DESKTOP_APP_CHILDREN: u32 = 0x02;
 
 /// An initialized process-attribute list and the buffer it points into, freed
@@ -1046,7 +1036,7 @@ mod tests {
         String::from_utf16(value).unwrap()
     }
 
-    fn test_request(program: &str, args: &[&str]) -> CreatePipe {
+    pub(super) fn test_request(program: &str, args: &[&str]) -> CreatePipe {
         CreatePipe {
             program: program.into(),
             args: args.iter().map(|arg| arg.to_string()).collect(),
@@ -1256,7 +1246,7 @@ mod tests {
                 .lock()
                 .handles
                 .as_ref()
-                .is_some_and(|handles| handles.job.is_some())
+                .is_some_and(|handles| handles.tree.is_some())
         };
 
         let running = start(3, "Start-Sleep 30");
