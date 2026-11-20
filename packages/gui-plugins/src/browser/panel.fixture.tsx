@@ -48,7 +48,10 @@ import {
   type Workspaces,
 } from "@opencode/plugin/gui"
 import barStyles from "./bar.css?inline"
-import type { History } from "./history"
+import { BrowserHistory } from "./history/ipc"
+import { pageKey, type PageVisit } from "./history/page"
+import { createPageIndex, findPages } from "./history/search"
+import type { History } from "./history/visits"
 import browserEn from "./i18n/en"
 import type definition from "./index"
 import { createModel } from "./model"
@@ -116,6 +119,12 @@ type PaneFixtureState = {
   pages: Record<string, PageDetails | undefined>
   /** The browser history store. */
   history: History
+  /** How many pages main's history holds. */
+  historyPages: number
+  /** Main's history store cannot open: every call to it rejects, as with a damaged file. */
+  historyAway: boolean
+  /** What the pane last said in a toast. */
+  toast: string
   /** URLs the pane opened in the system browser. */
   external: string[]
   /** Cookies the page's address can read. */
@@ -127,7 +136,7 @@ type PaneFixtureState = {
   selection: string
 }
 
-export type BrowserScenario = "Page" | "Empty" | "Recent" | "Loading" | "Failed" | "Suspended"
+export type BrowserScenario = "Page" | "Empty" | "Recent" | "History" | "Loading" | "Failed" | "Suspended"
 
 type ElementRect = Pick<DOMRect, "x" | "y" | "width" | "height">
 
@@ -164,6 +173,56 @@ const visits: History["visits"] = [
   { url: "http://localhost:5173/settings", title: "Settings - Preview" },
   { url: "https://alpha.example/", title: "Alpha" },
 ]
+
+const DAY = 86_400_000
+
+// A made-up history as an import from another browser leaves it in main: many GitHub repositories, of which a few
+// have "rune" in their name or title, and other sites. No page has an icon, as imported pages have none.
+const repositories = [
+  "anomalyco/opencode",
+  "anomalyco/opentui",
+  "anomalyco/models.dev",
+  "sst/sst",
+  "solidjs/solid",
+  "oven-sh/bun",
+  "effect-ts/effect",
+  "microsoft/typescript",
+  "vitejs/vite",
+  "electron/electron",
+  "nodejs/node",
+  "denoland/deno",
+  "rust-lang/rust",
+  "ziglang/zig",
+  "neovim/neovim",
+  "zed-industries/zed",
+  "withastro/astro",
+  "sveltejs/svelte",
+  "tailwindlabs/tailwindcss",
+  "oxc-project/oxc",
+  "biomejs/biome",
+  "microsoft/playwright",
+  "tanstack/query",
+  "drizzle-team/drizzle-orm",
+  "example-org/prune-cli",
+]
+
+function importedPages(now: number): PageVisit[] {
+  const page = (url: string, title: string, visits: number, days: number, typed = 0): PageVisit => ({ url, title, visits, typed, visited: now - days * DAY })
+
+  return [
+    page("https://github.com/anomalyco/rune-desktop", "anomalyco/rune-desktop: Rune for the desktop", 46, 1, 3),
+    page("https://github.com/anomalyco/rune-desktop/pulls", "Pull requests · anomalyco/rune-desktop", 18, 2),
+    page("https://github.com/anomalyco/rune-desktop/issues/128", "Rune panel flickers on resize · Issue #128 · anomalyco/rune-desktop", 5, 6),
+    page("https://github.com/runelabs/rune-lang", "runelabs/rune-lang: A small language for layouts", 7, 40),
+    page("https://docs.rune.example/guide/getting-started", "Getting started - Rune guide", 9, 12),
+    page("https://github.com/", "GitHub", 22, 0, 12),
+    page("https://news.ycombinator.com/", "Hacker News", 140, 0, 30),
+    page("https://developer.mozilla.org/en-US/docs/Web/API/Popover_API", "Popover API - Web APIs | MDN", 12, 3),
+    page("http://localhost:5173/", "OpenCode dev", 80, 0, 8),
+    ...repositories.map((name, position) => page(`https://github.com/${name}`, `${name}: ${name.split("/")[1]} on GitHub`, 3 + ((position * 7) % 40), position % 30)),
+    ...repositories.map((name, position) => page(`https://github.com/${name}/issues`, `Issues · ${name}`, 1 + (position % 6), 5 + position)),
+  ]
+}
 
 // Component-test fixture: the real pane on the real host embeds, with the desktop faked at its two
 // boundaries: the model's main-process pane (tab state, picker events) and the host bridge that shows native views.
@@ -225,6 +284,9 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       comments: [],
       pages: {},
       history: { visits: scenario === "Recent" ? structuredClone(visits) : [] },
+      historyPages: 0,
+      historyAway: false,
+      toast: "",
       external: [],
       cookies: 3,
       failSite: false,
@@ -591,10 +653,74 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
     const live = liveAccessor(() => ({ status: "active", generation: 1, value: pane }))
 
+    // Main's history, faked at its Ipc with the real search over an index of its pages: what an import left, and the
+    // visits the model records.
+    const index = createPageIndex()
+    const pages = new Map<number, PageVisit>()
+    const position = (url: string) => Array.from(pages).find((item) => pageKey(item[1].url) === pageKey(url))?.[0]
+
+    const keep = (page: PageVisit, id = pages.size + 1) => {
+      pages.set(id, page)
+      index.set(id, page)
+      setStore("historyPages", pages.size)
+    }
+
+    const seedImported = () => importedPages(Date.now()).forEach((page) => keep(page))
+
+    // As main rejects each call while its store cannot open.
+    const reachable = () => {
+      if (store.historyAway) throw new Error("unable to open database file")
+    }
+
+    const historyClient = {
+      prepare: async () => reachable(),
+      search: async (request: { query: string; limit: number }) => {
+        reachable()
+
+        return findPages(index, request.query, request.limit, Date.now(), {
+          shown: (id) => pages.get(id),
+          front: (host) => Array.from(pages.values()).find((page) => pageKey(page.url) === host),
+        })
+      },
+      visit: async (request: { url: string; title: string }) => {
+        reachable()
+        const id = position(request.url)
+        const known = id === undefined ? undefined : pages.get(id)
+
+        if (pageKey(request.url)) keep({ ...request, visits: (known?.visits ?? 0) + 1, typed: known?.typed ?? 0, visited: Date.now() }, id)
+      },
+      retitle: async () => undefined,
+      remove: async (request: { url: string }) => {
+        reachable()
+        const id = position(request.url)
+
+        if (id === undefined) return
+        pages.delete(id)
+        index.remove(id)
+        setStore("historyPages", pages.size)
+      },
+      clear: async () => {
+        reachable()
+        pages.clear()
+        index.clear()
+        setStore("historyPages", 0)
+      },
+    }
+
+    // SAFETY: the model calls only the six methods above, with the inputs the history's Ipc schemas describe.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const historyMain = historyClient as unknown as IpcClient<(typeof BrowserHistory)["spec"]>
+    const historyLive = liveAccessor(() => ({ status: "active", generation: 1, value: historyMain }))
+
+    if (scenario === "History") seedImported()
+
     const fake = {
       ...base,
       app: { name: "opencode", version: "", channel: "dev", platform: "desktop", packaged: false },
-      use: () => live,
+      use: (token: { readonly id: string }) => (token.id === BrowserHistory.id ? historyLive : live),
+      // The plugin instance's lifetime, which the model's calls to main's history end with.
+      signal: new AbortController().signal,
+      toast: { show: (shown: { title: string }) => setStore("toast", shown.title) },
       sessions: { current: session, list: () => Array.from(views.values()).filter((view) => view.key !== "Empty") },
       screen: { current: () => screen },
       layout: {
@@ -706,6 +832,15 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           <h1 style={{ "font-size": "24px", "margin-bottom": "16px", display: "flex", "justify-content": "space-between" }}>
             Browser pane lifecycle
             <span style={{ display: "flex", gap: "8px" }}>
+              {/* Beside the title too: the pane below is measured where it is. */}
+              <span style={{ "font-size": "14px", "align-self": "center" }}>Main history: {store.historyPages}</span>
+              <span style={{ "font-size": "14px", "align-self": "center" }}>{store.toast}</span>
+              <button style={{ "font-size": "14px" }} onClick={seedImported}>
+                Seed imported history
+              </button>
+              <button style={{ "font-size": "14px" }} onClick={() => setStore("historyAway", (away) => !away)}>
+                History away
+              </button>
               <button style={{ "font-size": "14px" }} onClick={() => setStore("failCommand", true)}>
                 Fail next command
               </button>

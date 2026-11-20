@@ -16,14 +16,16 @@ import {
 const [flights, setFlights] = createSignal(0)
 
 // A resize handle being dragged. On Linux a native view's bounds land on screen frames before the DOM around it, so one
-// kept live through a drag would jump against its panel on every move. macOS puts both on the same frame, so its views
-// stay live and keep laying out through the drag. Windows is untested and keeps the still.
+// kept live through a drag would jump against its panel on every move. macOS and Windows put both on the same frame, or
+// one apart, so their views stay live and keep laying out through the drag. Hiding the view for a still instead blanks
+// the box on the first move, until the window paints the still, and leaves the box's background beside the still as the
+// panel grows.
 const [resizing, setResizing] = createSignal(false)
 
 export const panelsMoving = () => flights() > 0 || resizing()
 
 /** Pass to a resize handle's `onDraggingChange` when its drag moves a panel that can hold a native view. */
-export const setPanelResizing = (dragging: boolean) => setResizing(dragging && !/Mac/.test(navigator.platform))
+export const setPanelResizing = (dragging: boolean) => setResizing(dragging && !/Mac|Win/.test(navigator.platform))
 
 // The left sidebar and the side panel share one spring, so they move as one system. Each panel's flight takes its time
 // scaled by the square root of how far it travels against a 480px panel, between 0.15s and 0.3s, so a narrow sidebar

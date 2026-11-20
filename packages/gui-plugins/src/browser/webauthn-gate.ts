@@ -109,7 +109,7 @@ export function webAuthnGateScript(report: string, answer: string, native: boole
 
 /** Why an agent command stopped: the page it drove asked for a passkey or security key, which was refused. */
 export function agentPasskeyRefusal(site: string | undefined) {
-  return `${site || "The page"} asked for a passkey or security key (WebAuthn). The desktop browser refused it at once with NotAllowedError: agent tools cannot complete a passkey or security-key sign-in. The site may now offer another sign-in method; otherwise ask the user to sign in with their own browser and import the sign-in (Settings > Browser > Import sign-ins). Then continue with browser.snapshot({tabID}).`
+  return `${site || "The page"} asked for a passkey or security key (WebAuthn). The desktop browser refused it at once with NotAllowedError: agent tools cannot complete a passkey or security-key sign-in. The site may now offer another sign-in method; otherwise ask the user to sign in with their own browser and import the sign-in (Settings > Browser > Import from another browser). Then continue with browser.snapshot({tabID}).`
 }
 
 /**

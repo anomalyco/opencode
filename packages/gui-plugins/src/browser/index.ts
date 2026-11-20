@@ -1,7 +1,7 @@
 import { builtinCatalog } from "@opencode/plugin/gui/builtin"
 import { Plugin, Store } from "@opencode/plugin/gui"
 import { Schema } from "effect"
-import { History } from "./history"
+import { History } from "./history/visits"
 import en from "./i18n/en"
 import { SavedTabs } from "./saved-tabs"
 
@@ -21,8 +21,8 @@ const Preferences = Schema.Struct({
 
 export default Plugin.define({
   stores: {
-    // Pages the browser showed, for the new tab page and the address field's suggestions. One list for every
-    // session and server, kept on this device.
+    // The last pages the browser showed, for the new tab page and their icons. One list for every session and server,
+    // kept on this device. The history the address field searches, with every page, is main's (`history/store.ts`).
     history: Store.global(History, { visits: [] }),
     preferences: Store.global(Preferences, { links: true, welcomed: false }),
     // Each session's tabs as the desktop last reported them. A global store is loaded before setup, so the side strip

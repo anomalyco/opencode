@@ -20,7 +20,10 @@ import {
   type ShortcutEvent,
   type Zoom,
 } from "./connection"
-import { recordable, remember, withIcon } from "./history"
+import { BrowserHistory } from "./history/ipc"
+import { pageKey } from "./history/page"
+import { HISTORY_ANSWER } from "./history/suggest"
+import { recordable, remember, withIcon } from "./history/visits"
 import { forgetTabs, saveIcon, saveTabs } from "./saved-tabs"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
@@ -125,6 +128,16 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     return current.status === "active"
       ? { status: "active", generation: current.generation }
       : { status: current.status }
+  }
+
+  // Main's history of every page, which the address field searches. Away on the web and while main's plugin restarts:
+  // the window's own list of the last pages then answers alone.
+  const historyIpc = ctx.use(BrowserHistory)
+
+  const historyClient = () => {
+    const current = historyIpc()
+
+    return current.status === "active" ? current.value : undefined
   }
 
   const owner = getOwner()
@@ -488,7 +501,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (tab.loading || tab.loadError || !attachment.embeds[tab.id] || !recordable(tab.url)) return
       const visit = `${tab.url}\n${tab.title}`
 
-      if (recorded.get(`${sessionKey}\n${tab.id}`) === visit) return
+      const previous = recorded.get(`${sessionKey}\n${tab.id}`)
+
+      if (previous === visit) return
       recorded.set(`${sessionKey}\n${tab.id}`, visit)
       history.set({
         visits: remember(
@@ -497,6 +512,13 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           state.pages[sessionKey]?.[tab.id]?.icon,
         ),
       })
+
+      // Main's history counts the visit; a page that only reported its title since is the same visit. Main keeps web
+      // pages alone, and a visit it misses while it is away is one the window's list still has.
+      const page = { url: tab.url, title: tab.title }
+      const main = pageKey(tab.url) ? historyClient() : undefined
+      const sent = previous?.startsWith(`${tab.url}\n`) ? main?.retitle(page, { signal: ctx.signal }) : main?.visit(page, { signal: ctx.signal })
+      void sent?.catch(() => undefined)
     })
   }
 
@@ -937,9 +959,42 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       return !visit.url.startsWith("workspace:") || (!!session?.id && visit.url.startsWith(workspacePrefix(session.id)))
     }),
+    /**
+     * Whether there may be history to clear: the window's list has pages, or this is the desktop app, where main's
+     * history may hold pages the window never listed, as imported ones.
+     */
+    historyClearable: () => history.value.visits.length > 0 || !!ctx.desktop,
+    /**
+     * Forgets every page: the window's list, and main's history with the pages imported from other browsers. Answers
+     * whether main's history went, so the pane never lets the person believe it did: false when main could not clear
+     * it, or cannot be reached. On the web there is no history but the window's list.
+     */
     clearHistory: () => {
       recorded.clear()
       history.set({ visits: [] })
+      const main = historyClient()
+
+      if (!main) return Promise.resolve(!ctx.desktop)
+
+      return main.clear({ signal: ctx.signal }).then(
+        () => true,
+        () => false,
+      )
+    },
+    /** The person is about to type an address: main reads its history into memory ahead of the first search. */
+    prepareHistory: () => void historyClient()?.prepare({ signal: ctx.signal }).catch(() => undefined),
+    /**
+     * The pages of main's history that match what the person typed in the address field, best first. None while main
+     * is away, as on the web.
+     */
+    searchHistory: (query: string, signal: AbortSignal) =>
+      historyClient()?.search({ query, limit: HISTORY_ANSWER }, { signal: AbortSignal.any([ctx.signal, signal]) }) ?? Promise.resolve([]),
+    /** Forgets one page, as the person asked from the address field's suggestions. */
+    forgetPage: (url: string) => {
+      const key = pageKey(url)
+
+      history.set({ visits: history.value.visits.filter((visit) => visit.url !== url && (!key || pageKey(visit.url) !== key)) })
+      void historyClient()?.remove({ url }, { signal: ctx.signal }).catch(() => undefined)
     },
     pending: (session: SessionRef) => sessionPending(machine(), session),
     /** The browser could not open and has no tabs to show: the pane says so and offers `retry`. */

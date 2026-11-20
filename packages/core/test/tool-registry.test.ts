@@ -1008,6 +1008,22 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("denies a nested-namespace tool by its flattened name in Code Mode and as a direct tool", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { move: make(), rename: make() }, { namespace: "opencode.session" })
+      const deny: Permission.Ruleset = [{ action: "opencode_session_move", resource: "*", effect: "deny" }]
+
+      const codeMode = yield* service.snapshot(deny)
+      const paths = codeModeListings(codeMode.codeModeCatalog!).map((entry) => entry.path)
+      expect(paths).toContain("opencode.session.rename")
+      expect(paths).not.toContain("opencode.session.move")
+
+      const direct = yield* service.snapshot([...deny, { action: "execute", resource: "*", effect: "deny" }])
+      expect(direct.definitions.map((tool) => tool.name)).toEqual(["opencode_session_rename"])
+    }),
+  )
+
   it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
