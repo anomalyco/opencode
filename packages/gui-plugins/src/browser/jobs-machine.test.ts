@@ -18,12 +18,14 @@ const imported = {
   result: { type: "imported" as const, imported: 3, skipped: 0, protected: 1, failed: 0 },
 }
 
-test("a partial import counts every omitted row without blaming malformed or expired cookies on encryption", () => {
+test("a partial import counts only failed or protected rows and ignores skipped expired or partitioned leftovers", () => {
   const result = imported.result
   expect(importLoss({ ...result, protected: 0 })).toBeUndefined()
+  expect(importLoss({ ...result, protected: 0, skipped: 318 })).toBeUndefined()
   expect(importLoss(result)).toEqual({ reason: "protected", count: 1 })
+  expect(importLoss({ ...result, skipped: 318 })).toEqual({ reason: "protected", count: 1 })
   expect(importLoss({ ...result, protected: 0, failed: 1 })).toEqual({ reason: "other", count: 1 })
-  expect(importLoss({ ...result, skipped: 2, failed: 3 })).toEqual({ reason: "other", count: 6 })
+  expect(importLoss({ ...result, skipped: 2, failed: 3 })).toEqual({ reason: "other", count: 4 })
 })
 
 function replay(events: readonly JobsEvent[]) {

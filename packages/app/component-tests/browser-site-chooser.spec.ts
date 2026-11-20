@@ -2,7 +2,16 @@ import type { Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 // What the fixture's faked browser profile answers; see `SiteScenario` in the fixture.
-type SiteScenario = { sites: number | "locked"; hold?: boolean; partial?: boolean; site?: { name: string; choose: boolean }; reveal?: boolean }
+type SiteScenario = {
+  sites: number | "locked"
+  hold?: boolean
+  partial?: boolean
+  skipped?: number
+  protected?: number
+  empty?: boolean
+  site?: { name: string; choose: boolean }
+  reveal?: boolean
+}
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
@@ -53,7 +62,7 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
   // Every site comes over until the person changes that.
   await expect(view.dialog.getByText("5,000 of 5,000 selected")).toBeVisible()
   await expect(
-    view.dialog.getByText("Brings your sign-ins for all 5,000 sites. Copies cookies only. The other browser keeps its own. The sites used most recently come first."),
+    view.dialog.getByText("Copies cookies for all 5,000 sites. The other browser keeps its own."),
   ).toBeVisible()
   expect(await view.options.count()).toBeLessThan(45)
   await expect(view.importButton).toHaveText("Import all")
@@ -169,8 +178,37 @@ story("starts from the site a passkey request came from, and stays open to say w
   // The site the page belongs to is chosen already.
   await expect(view.options).toHaveAttribute("aria-selected", "true")
   await view.importButton.click()
-  await expect(view.dialog.getByRole("status")).toHaveText("Imported 2 cookies. Not imported: 1.")
+  const status = view.dialog.getByRole("status")
+  await expect(status).toHaveText("Imported 2 cookies. Not imported: 1.")
   await expect(view.record).toHaveAttribute("data-closed", "false")
+
+  // Status sits in the dialog body (not crammed into the footer), with top clearance and 0px edge drift.
+  const layout = await view.dialog.evaluate((node) => {
+    const body = node.querySelector('[data-slot="dialog-body"]')?.getBoundingClientRect()
+    const title = node.querySelector('[data-slot="dialog-title"]')?.getBoundingClientRect()
+    const closeSvg = node.querySelector('[data-slot="dialog-close-button"] svg')?.getBoundingClientRect()
+    const search = node.querySelector('[data-component="text-input-v2"]')?.getBoundingClientRect()
+    const select = node.querySelector('[data-component="select-v2"]')?.getBoundingClientRect()
+    const msg = node.querySelector('[data-slot="dialog-body"] [role="status"]')?.getBoundingClientRect()
+    const footerMsg = node.querySelector('[data-slot="dialog-footer"] [role="status"]')
+    const footerBtns = Array.from(node.querySelectorAll('[data-slot="dialog-footer"] button'))
+    const importBtn = footerBtns[footerBtns.length - 1]?.getBoundingClientRect()
+
+    return {
+      footerHasStatus: footerMsg !== null,
+      topClearanceSearch: body && search ? Math.round(search.top - body.top) : -1,
+      topClearanceSelect: body && select ? Math.round(select.top - body.top) : -1,
+      leftDeltas: title && search && msg ? [search.left - title.left, msg.left - title.left].map((v) => Math.round(v)) : [],
+      rightDeltas:
+        importBtn && closeSvg && select ? [closeSvg.right - importBtn.right, select.right - importBtn.right].map((v) => Math.round(v)) : [],
+    }
+  })
+
+  expect(layout.footerHasStatus).toBe(false)
+  expect(layout.topClearanceSearch).toBeGreaterThanOrEqual(4)
+  expect(layout.topClearanceSelect).toBeGreaterThanOrEqual(4)
+  expect(layout.leftDeltas).toEqual([0, 0])
+  expect(layout.rightDeltas).toEqual([0, 0])
 })
 
 story("opened for a site, moves on to the browser profile that has exactly it, and chooses only that one", async ({ page }) => {
@@ -265,13 +303,29 @@ story("an empty profile says so", async ({ page }) => {
 story("opens on one sentence and Import all, which brings every site without the list", async ({ page }) => {
   const view = await open(page, { sites: 5, reveal: false })
 
-  await expect(view.dialog.getByText("Brings your sign-ins for all 5 sites. Copies cookies only. The other browser keeps its own.")).toBeVisible()
+  await expect(view.dialog.getByText("Copies cookies for all 5 sites. The other browser keeps its own.")).toBeVisible()
   await expect(view.list).toHaveCount(0)
   await expect(view.dialog.getByRole("button", { name: "Choose sites" })).toHaveAttribute("aria-expanded", "false")
   await view.importButton.click()
   // No list of sites: main imports the whole profile.
   await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default" })])
   await expect(view.record).toHaveAttribute("data-closed", "true")
+})
+
+story("empty fallback uses a compact fit dialog when no browsers are found", async ({ page }) => {
+  await page.evaluate(
+    async (input) => {
+      const [{ mountSiteChooser }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
+
+      mountSiteChooser({ ui, scenario: { sites: 0, empty: true } })
+    },
+    { modules },
+  )
+
+  const dialog = page.getByRole("dialog", { name: "Import sign-ins" })
+  await expect(dialog.getByText("No other browser found on this computer")).toBeVisible()
+  const box = await page.locator('[data-slot="dialog-container"]').boundingBox()
+  expect(box && box.width <= 480 && box.height < 250).toBe(true)
 })
 
 story("Choose sites shows the list in place, every site ticked, and the button then names how many it brings", async ({ page }) => {
@@ -326,7 +380,7 @@ story("the sign-in bar's import confirmation goes by itself after 5 seconds, and
     async (input) => {
       const [{ mountSiteChooser }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
 
-      mountSiteChooser({ ui, scenario: { sites: 5 }, offer: true })
+      mountSiteChooser({ ui, scenario: { sites: 5, skipped: 318 }, offer: true })
     },
     { modules },
   )

@@ -20,6 +20,9 @@ export type SiteScenario = {
   readonly sites: number | "locked"
   readonly hold?: boolean
   readonly partial?: boolean
+  readonly skipped?: number
+  readonly protected?: number
+  readonly empty?: boolean
   readonly site?: { readonly name: string; readonly choose: boolean }
 }
 
@@ -83,7 +86,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
   const client = {
     state: () => ({ extensions: [], remoteSignIns: false }),
     on: () => () => undefined,
-    sources: async () => sources,
+    sources: async () => (input.scenario.empty ? [] : sources),
     summary: async () => ({ cookies: 0, persistent: true }),
     sites: async (request: { source: string; profile: string }): Promise<SiteList> => {
       setStore("reads", (reads) => [...reads, request.profile])
@@ -99,7 +102,13 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
       // Without a list of sites, main imports the whole profile.
       const count = (request.sites?.length ?? 5) * 2
 
-      return { type: "imported", imported: count, skipped: 0, protected: 0, failed: input.scenario.partial ? 1 : 0 }
+      return {
+        type: "imported",
+        imported: count,
+        skipped: input.scenario.skipped ?? 0,
+        protected: input.scenario.protected ?? 0,
+        failed: input.scenario.partial ? 1 : 0,
+      }
     },
   }
 

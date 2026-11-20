@@ -129,10 +129,13 @@ export function importedCookies(outcome: Outcome) {
   return outcome.type === "imported" && outcome.result.type === "imported" ? outcome.result.imported : 0
 }
 
-/** Give encryption-specific advice only when it accounts for every cookie that stayed behind. */
+/**
+ * Counts cookies that genuinely could not be imported (`failed` or app-bound `protected`), ignoring `skipped` expired
+ * or third-party partitioned leftovers. Give encryption-specific advice only when it accounts for every cookie that
+ * stayed behind.
+ */
 export function importLoss(result: Extract<ImportResult, { type: "imported" }>) {
-  if (result.failed || result.skipped)
-    return { reason: "other", count: result.failed + result.skipped + result.protected } as const
+  if (result.failed) return { reason: "other", count: result.failed + result.protected } as const
 
   if (result.protected) return { reason: "protected", count: result.protected } as const
 }

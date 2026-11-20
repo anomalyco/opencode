@@ -320,9 +320,11 @@ export function SiteChooser(props: {
   return (
     <ui.Dialog
       title={ctx.t("signins.import", { browser: choiceLabel(choice()) })}
-      description={`${result()?.type === "listed" ? ctx.plural("import.description", all().length, { number: number(all().length) }) : ctx.t("import.description.loading")}${
-        state.revealed && listedOrder(result()) ? ` ${ctx.t(listedOrder(result()) === "name" ? "sites.order.name" : "sites.order.recent")}` : ""
-      }`}
+      description={
+        result()?.type === "listed"
+          ? ctx.plural("import.description", all().length, { number: number(all().length) })
+          : ctx.t("import.description.loading")
+      }
       size={state.revealed ? "large" : "fit"}
       footer={
         <>
@@ -331,17 +333,6 @@ export function SiteChooser(props: {
             {ctx.t("settings.import.choose")}
             <Icon name={state.revealed ? "outline-chevron-down" : "outline-chevron-right"} size="small" class="rtl:-scale-x-100" />
           </Button>
-          <Show when={message()}>
-            {(current) => (
-              <p
-                role={current().error ? "alert" : "status"}
-                class="min-w-0 flex-1 self-center text-[13px] leading-[var(--line-height-base)]"
-                classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
-              >
-                {current().text}
-              </p>
-            )}
-          </Show>
           <ui.Button variant="neutral" onClick={props.close}>
             {ctx.t("common.cancel")}
           </ui.Button>
@@ -351,10 +342,25 @@ export function SiteChooser(props: {
         </>
       }
     >
-      <Show when={state.revealed}>
-      {/* The dialog's body scrolls, so it clips at its edges. The search field and the profile select draw their edge and
-          their focus ring just outside their box: the top padding keeps both inside the clip. */}
-      <div data-component="browser-site-chooser" class="flex h-full min-h-0 flex-col gap-3 pb-1 pt-0.5">
+      <Show
+        when={state.revealed}
+        fallback={
+          <Show when={message()}>
+            {(current) => (
+              <p
+                role={current().error ? "alert" : "status"}
+                class="py-1 text-[13px] leading-[var(--line-height-base)]"
+                classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
+              >
+                {current().text}
+              </p>
+            )}
+          </Show>
+        }
+      >
+        {/* The dialog's body scrolls, so it clips at its edges. The search field and the profile select draw their edge and
+            their focus ring just outside their box: the vertical padding keeps both inside the clip. */}
+        <div data-component="browser-site-chooser" class="flex h-full min-h-0 flex-col gap-3 py-1">
         <div class="flex items-center gap-2">
           <TextInput
             appearance="large"
@@ -536,6 +542,17 @@ export function SiteChooser(props: {
             )}
           </Show>
         </div>
+        <Show when={message()}>
+          {(current) => (
+            <p
+              role={current().error ? "alert" : "status"}
+              class="shrink-0 text-[13px] leading-[var(--line-height-base)]"
+              classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
+            >
+              {current().text}
+            </p>
+          )}
+        </Show>
       </div>
       </Show>
     </ui.Dialog>
@@ -565,10 +582,6 @@ type ChooserState = {
 /** The list's scrolling viewport and the listbox in it, once they mount. */
 type ChooserElements = { listbox?: HTMLDivElement }
 
-function listedOrder(list: SiteList | undefined) {
-  return list?.type === "listed" ? list.order : undefined
-}
-
 /**
  * The import dialog with jobs of its own, for a surface that has none, such as a page's passkey notice: it lists the
  * browsers itself and opens on the one used last. `imported` runs after an import that brought cookies.
@@ -596,8 +609,7 @@ export function SiteChooserDialog(props: {
       fallback={
         <ctx.ui.Dialog
           title={ctx.t("settings.import.title")}
-          description={ctx.t("sites.description")}
-          size="large"
+          size="fit"
           footer={
             <ctx.ui.Button variant="neutral" onClick={props.close}>
               {ctx.t("common.cancel")}
@@ -605,7 +617,9 @@ export function SiteChooserDialog(props: {
           }
         >
           <Show when={jobs.sourcesLoaded()} fallback={<ctx.ui.Loader size="small" />}>
-            <p class="text-[13px] text-v2-text-text-muted">{ctx.t("settings.import.none")}</p>
+            <p class="text-[13px] leading-[var(--line-height-base)] text-v2-text-text-muted">
+              {ctx.t("settings.import.none")}
+            </p>
           </Show>
         </ctx.ui.Dialog>
       }

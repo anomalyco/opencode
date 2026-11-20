@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, getOwner, runWithOwner, Show, untrack, type JSX } from "solid-js"
+import { children, createMemo, createSignal, For, getOwner, runWithOwner, Show, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
 import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
@@ -390,12 +390,12 @@ function ExtensionRow(props: {
           fallback="puzzle"
           name={props.extension.name}
           detail={props.extension.version}
+          note={<CompatibilityNote compatibility={props.extension.compatibility} />}
           message={message()}
         />
       }
     >
       <div class="flex items-center gap-2">
-        <CompatibilityNote compatibility={props.extension.compatibility} />
         <ui.Tooltip value={ctx.t("settings.extensions.remove", { name: props.extension.name })}>
           <ui.IconButton
             icon="outline-trash"
@@ -844,15 +844,31 @@ function Identity(props: {
   fallback: IconName
   name: string
   detail?: string
+  note?: JSX.Element
   keep?: boolean
   message?: JobMessage
 }) {
+  const note = children(() => props.note)
+
   return (
     <span class="flex min-w-0 items-center gap-3">
       <Glyph image={props.image} fallback={props.fallback} />
       <span class="flex min-w-0 flex-col gap-1">
         <span class="truncate">{props.name}</span>
-        <Show when={props.message} fallback={<Show when={props.detail}>{(detail) => <Muted>{detail()}</Muted>}</Show>}>
+        <Show
+          when={props.message}
+          fallback={
+            <Show when={props.detail || note()}>
+              <span class="flex flex-wrap items-center gap-x-1.5 text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted">
+                <Show when={props.detail}>{(detail) => <span>{detail()}</span>}</Show>
+                <Show when={props.detail && note()}>
+                  <span aria-hidden="true">·</span>
+                </Show>
+                {note()}
+              </span>
+            </Show>
+          }
+        >
           {(message) => (
             <span class="text-[13px] font-[440] leading-[var(--line-height-base)]">
               <Show when={props.keep && props.detail}>{(detail) => <span class="text-v2-text-text-muted">{detail()} · </span>}</Show>
@@ -882,16 +898,16 @@ function CompatibilityNote(props: { compatibility: ExtensionCompatibility; stack
   return (
     <Show when={level() !== "supported" ? level() : undefined}>
       {(shown) => (
-        // The tooltip wraps its trigger in an element of its own, so this one keeps the note whole in a row.
-        <span class="flex" classList={{ "shrink-0 justify-end": !props.stacked, "w-fit": props.stacked }}>
+        // The tooltip wraps its trigger in an element of its own, so this one keeps the note compact in its row.
+        <span class="inline-flex w-fit">
           <ui.Tooltip value={<CompatibilityDetails compatibility={props.compatibility} />}>
             <span
               data-compatibility={shown()}
               tabIndex={0}
-              class="whitespace-nowrap font-[440]"
+              class="whitespace-nowrap text-start font-[440]"
               classList={{
-                "text-start text-[12px] leading-[var(--line-height-compact)]": props.stacked,
-                "text-end text-[13px] leading-[var(--line-height-base)]": !props.stacked,
+                "text-[12px] leading-[var(--line-height-compact)]": props.stacked,
+                "text-[13px] leading-[var(--line-height-base)]": !props.stacked,
                 "text-v2-state-fg-warning": shown() === "unsupported",
                 "text-v2-text-text-muted": shown() === "partial",
               }}

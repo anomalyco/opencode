@@ -10,12 +10,17 @@ const modules = {
 
 // Any story loads the app styles; the fixture mounts the real Settings > Browser page beside it. `target` is the entry
 // a settings search or the command palette is revealing.
-async function open(page: Page, options?: { target?: string; extensions?: boolean }) {
+async function open(page: Page, options?: { target?: string; extensions?: boolean; installed?: boolean }) {
   await page.evaluate(
     async (input) => {
       const [{ mountBrowserSettings }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
 
-      mountBrowserSettings({ ui, target: input.options?.target, extensions: input.options?.extensions })
+      mountBrowserSettings({
+        ui,
+        target: input.options?.target,
+        extensions: input.options?.extensions,
+        installed: input.options?.installed,
+      })
     },
     { modules, options },
   )
@@ -129,4 +134,35 @@ story("Add an extension aligns controls without top clipping and switches cleanl
   await expect(page.getByRole("dialog", { name: "Add an extension" })).toBeVisible()
   await expect(dialog.getByRole("status")).toContainText("Added LastPass: Free Password Manager.")
   await expect(dialog.getByRole("button", { name: "Added" })).toBeDisabled()
+})
+
+story("installed extension rows stack compatibility under the name and align controls cleanly", async ({ page }) => {
+  const view = await open(page, { extensions: true, installed: true })
+  const section = view.root.locator('section.settings-section[aria-label="Extensions"]')
+
+  await expect(section.getByText("May not fully work here")).toBeVisible()
+  await expect(section.getByText("Probably won't work here")).toBeVisible()
+
+  const metrics = await section.evaluate((node) => {
+    const rows = Array.from(node.querySelectorAll('[data-component="settings-row"]')).slice(0, 3)
+
+    return rows.map((row) => {
+      const compatInControl = row.querySelector('[data-slot="settings-row-control"] [data-compatibility]') !== null
+      const compatInCopy = row.querySelector('[data-slot="settings-row-copy"] [data-compatibility]') !== null
+      const trash = row.querySelector('[data-slot="settings-row-control"] button')?.getBoundingClientRect()
+      const toggle = row.querySelector('[data-slot="settings-row-control"] [data-component="switch"]')?.getBoundingClientRect()
+
+      return {
+        compatInControl,
+        compatInCopy,
+        trashLeft: trash ? Math.round(trash.left) : -1,
+        toggleRight: toggle ? Math.round(toggle.right) : -1,
+      }
+    })
+  })
+
+  expect(metrics.every((row) => !row.compatInControl)).toBe(true)
+  expect(metrics.map((row) => row.compatInCopy)).toEqual([true, true, false])
+  expect(new Set(metrics.map((row) => row.trashLeft)).size).toBe(1)
+  expect(new Set(metrics.map((row) => row.toggleRight)).size).toBe(1)
 })

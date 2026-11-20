@@ -77,7 +77,7 @@ const sampleExtensions = new Map<string, readonly SampleExtension[]>([
 // their Ipcs, and the stored preferences shown beside the page. `target` is the entry a settings search is revealing,
 // which stays set for the whole visit, as the host leaves it. With `extensions`, Chromium browsers and their extensions
 // are populated so the real Add an extension dialog can be driven end to end.
-export function mountBrowserSettings(input: { ui: Ui; target?: string; extensions?: boolean }) {
+export function mountBrowserSettings(input: { ui: Ui; target?: string; extensions?: boolean; installed?: boolean }) {
   const host = document.createElement("main")
   host.dataset.testid = "browser-settings-fixture"
   document.body.appendChild(host)
@@ -101,8 +101,21 @@ export function mountBrowserSettings(input: { ui: Ui; target?: string; extension
 
   const findSample = (source: string, id: string) => sampleExtensions.get(source)?.find((item) => item.id === id)
 
+  const initialInstalled = input.installed
+    ? (sampleExtensions.get("helium") ?? []).map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        version: entry.version,
+        enabled: entry.compatibility.level !== "unsupported",
+        source: "browser" as const,
+        icon: entry.icon,
+        compatibility: { ...entry.compatibility, missing: [...entry.compatibility.missing] },
+        access: [...entry.access],
+      }))
+    : []
+
   const client = {
-    state: () => ({ extensions: [], remoteSignIns: false, decisions: [] }),
+    state: () => ({ extensions: initialInstalled, remoteSignIns: false, decisions: [] }),
     on: () => () => undefined,
     sources: async () => (input.extensions ? [...sampleSources] : []),
     summary: async () => ({ cookies: 0, persistent: true }),
