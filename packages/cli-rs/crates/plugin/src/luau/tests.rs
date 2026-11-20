@@ -2916,3 +2916,129 @@ fn plugin_sleep_keeps_a_part_of_a_millisecond_and_waits_for_ever_on_math_huge() 
     assert_eq!(said(&host), ["fraction"], "math.huge woke");
     assert_eq!(failure(&registry, "test.luau"), None);
 }
+/// A random statement of risky Luau: big allocations, deep recursion, coroutines, errors with hostile metatables,
+/// patterns, formats, packs, buffers, and what the sandbox freezes. It may set `v`.
+fn risky(rng: &mut opencode_util::rng::SplitMix64) -> String {
+    let n = *[0u64, 1, 7, 1000, 100_000, 1 << 20, 4 << 20, 1 << 31, 1 << 40].get(rng.below(9) as usize).unwrap();
+    let m = rng.below(40);
+    let templates = [
+        format!("v = string.rep('xy', {n})"),
+        format!("local t = {{}} for i = 1, {n} do t[i] = i end v = t"),
+        "local function f(n) return f(n + 1) + 1 end v = f(1)".to_owned(),
+        format!("local function f(n) if n == 0 then return 0 end return f(n - 1) + 1 end v = f({n})"),
+        "v = pcall(error, setmetatable({}, { __tostring = function() error('t') end }))".to_owned(),
+        "error(setmetatable({}, { __tostring = function() return {} end }))".to_owned(),
+        format!("error(string.rep('\\27[31m', {m}))"),
+        "error(string.char(255, 254, 0, 27))".to_owned(),
+        "error({})".to_owned(),
+        "error(nil)".to_owned(),
+        format!(
+            "local co = coroutine.create(function() while true do coroutine.yield(string.rep('x', 1e5)) end end) \
+             for i = 1, {m} do v = select(2, coroutine.resume(co)) end"
+        ),
+        "v = coroutine.wrap(function() string.gsub('aaa', 'a', coroutine.yield) end)()".to_owned(),
+        "xpcall(function() error('a') end, function(e) error(e) end)".to_owned(),
+        format!(
+            "v = string.format('%{m}.{m}f %q %s', 1e300, string.char(0, 255, 10), setmetatable({{}}, {{ __tostring = function() return 'k' end }}))"
+        ),
+        format!("v = string.format('%' .. {n} .. 'd', 1)"),
+        format!(
+            "v = string.pack({:?}, 1)",
+            ["i16", "s1", "z", "!17", "Xi4", "c2147483647", "i0", "<i17"][rng.below(8) as usize]
+        ),
+        format!("v = buffer.create({n})"),
+        format!("local b = buffer.create(8) buffer.writestring(b, {n}, 'x') v = buffer.tostring(b)"),
+        format!("v = utf8.char({})", [0x10ffff, 0x110000, -1, 0xd800][rng.below(4) as usize]),
+        format!("v = select('#', table.unpack({{}}, 1, {n}))"),
+        format!("local t = table.create({m}, 'x') v = table.concat(t, string.rep(',', {n}))"),
+        "local t = setmetatable({}, { __index = function(t, k) return t[k + 1] end }) v = t[1]".to_owned(),
+        format!("v = {{}} for i = 1, {n} do v = {{ v }} end"),
+        "v = #setmetatable({}, { __len = function() return -1 end })".to_owned(),
+        format!("v = string.find(string.rep('a', {m}), string.rep('a?', {m}) .. string.rep('a', {m}))"),
+        "v = getfenv and getfenv(0)".to_owned(),
+        "setfenv(1, {})".to_owned(),
+        "v = debug.info(1, 'sln')".to_owned(),
+        "v = newproxy(true)".to_owned(),
+        "rawset(_G, 'x', 1)".to_owned(),
+        "string.x = 1".to_owned(),
+        "setmetatable(string, {})".to_owned(),
+        "getmetatable('').__index = {}".to_owned(),
+        format!("v = table.create({n}, 'x')"),
+        "v = math.floor(2^63)".to_owned(),
+        format!("v = string.rep('x', -{n})"),
+        "v = 0 / 0".to_owned(),
+        "v = 2^1024".to_owned(),
+        format!("v = os.date('%c', {n})"),
+        format!("v = os.date(string.rep('%c', {m}))"),
+        "v = os.time({ year = 1e12, month = 1, day = 1 })".to_owned(),
+        format!("local s = '' for i = 1, {n} do s ..= 'x' end v = s"),
+        "v = vector and vector.create(1, 2, 3)".to_owned(),
+        "v = coroutine.running()".to_owned(),
+        "v = function() end".to_owned(),
+        format!("v = string.split(string.rep('a,', {n}), ',')"),
+        "v = collectgarbage('count')".to_owned(),
+        format!("v = bit32.lshift(1, {m}) + bit32.extract(1, {m}, 5)"),
+        format!("v = select('#', string.byte(string.rep('x', {n}), 1, -1))"),
+        "v = { [1] = 1, [3] = 3, x = 2 }".to_owned(),
+        "v = setmetatable({}, { __index = function() error('read') end, __pairs = function() error('pairs') end })"
+            .to_owned(),
+        "v = { [{}] = 1 }".to_owned(),
+        "local t = {} t.self = t v = t".to_owned(),
+        "v = string.char(255, 0, 27, 128)".to_owned(),
+        format!("v = string.rep('\\u{{1F468}}\\u{{200D}}', {m})"),
+        "v = table.freeze({ 1, 2 }) v[1] = 3".to_owned(),
+        "v = require('@opencode/plugin')".to_owned(),
+        "v = require('./nope')".to_owned(),
+        "v = require('../../../../etc/passwd')".to_owned(),
+        "v = loadstring and loadstring('return 1')()".to_owned(),
+        format!("print(string.rep('\\27]52;c;x\\7', {m}))"),
+        "local co = coroutine.wrap(function() local co = coroutine.running() coroutine.close(co) end) co()".to_owned(),
+        "v = coroutine.close(coroutine.create(function() end))".to_owned(),
+        "while true do end".to_owned(),
+        "while true do pcall(function() while true do end end) end".to_owned(),
+        format!("for i = 1, {n} do local _ = {{}} end"),
+    ];
+    let statement = templates[rng.below(templates.len() as u64) as usize].clone();
+    match rng.below(3) {
+        0 => format!("pcall(function() {statement} end)"),
+        _ => statement,
+    }
+}
+
+/// Random scripts of [`risky`] statements, each run twice by a command: neither holds the thread past the CPU budget,
+/// nor panics the host, and a failure's report is bounded and escaped.
+#[test]
+fn random_scripts_stay_in_the_sandbox() {
+    let number = |key: &str, default: u64| std::env::var(key).ok().map_or(default, |text| text.parse().unwrap());
+    let (cases, seed) = (number("MODEL_CASES", 20), number("MODEL_SEED", 1));
+    let mut rng = opencode_util::rng::SplitMix64(seed);
+    let host = host();
+    for case in 0..cases {
+        let statements: Vec<String> = (0..1 + rng.below(4)).map(|_| risky(&mut rng)).collect();
+        let tell = match rng.below(3) {
+            0 => "host:toast({ variant = 'info', message = v })",
+            1 => "host:toast({ variant = 'info', message = tostring(v) })",
+            _ => "host:dialog({ type = 'alert', title = 't', message = 'm', size = v })",
+        };
+        let init = format!(
+            "local plugin = require('@opencode/plugin')\nreturn plugin.define(function(setup)\n\
+             setup:command({{ name = 'go' }}, function(host)\nlocal v\n{}\n{tell}\nend)\nend)",
+            statements.join("\n")
+        );
+        let at = format!("seed {seed}, case {case}:\n{init}");
+        let (definition, _) = define(&sources(&init), None).unwrap_or_else(|error| panic!("{at}\n{error}"));
+        let registry = running(&host, definition);
+        for _ in 0..2 {
+            let start = Instant::now();
+            keymap(&host).dispatch("go", None);
+            host.app.advance(Duration::from_millis(1));
+            assert!(start.elapsed() < Duration::from_secs(3), "{at}\nheld the thread {:?}", start.elapsed());
+        }
+        // A failure says what happened in a bounded line or two, never a host panic.
+        if let Some(error) = failure(&registry, "test.luau") {
+            assert!(!error.contains("panicked"), "{at}\n{error}");
+            assert!(error.len() < 4 * crate::mailbox::REPORT && !error.contains('\u{1b}'), "{at}\n{error}");
+        }
+        host.toasts.borrow_mut().clear();
+    }
+}
