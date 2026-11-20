@@ -63,17 +63,20 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              // ripgrep matches globs relative to the search root, so search an absolute pattern from its literal directory.
+              const explicit = input.path === "undefined" || input.path === "null" ? undefined : input.path
+              // ripgrep matches globs relative to the search root, so an absolute pattern searches from its literal directory when that exists.
               const segments = path.isAbsolute(input.pattern) ? input.pattern.split("/") : []
-              const literal = segments.findIndex((segment) => /[*?[{]/.test(segment))
-              const split = literal === -1 ? segments.length - 1 : literal
-              const pattern = split > 0 ? `/${segments.slice(split).join("/")}` : input.pattern
-              const searchPath =
-                split > 0
-                  ? segments.slice(0, split).join("/") || "/"
-                  : input.path === "undefined" || input.path === "null"
-                    ? undefined
-                    : input.path
+              const wildcard = segments.findIndex((segment) => /[*?[{]/.test(segment))
+              const split = wildcard === -1 ? segments.length - 1 : wildcard
+              const directory = split > 0 ? segments.slice(0, split).join("/") || "/" : undefined
+              const absolute =
+                directory !== undefined &&
+                (yield* Environment.typeFollowing(environment.files, directory).pipe(
+                  Effect.map((type) => type === "directory"),
+                  Effect.orElseSucceed(() => false),
+                ))
+              const pattern = absolute ? `/${segments.slice(split).join("/")}` : input.pattern
+              const searchPath = absolute ? directory : explicit
               const target = yield* access.resolve({ path: searchPath ?? ".", kind: "directory" })
               // Search walks files with a ripgrep binary on this server, so another machine's files cannot be searched here.
               if (target.environment.id !== environment.id)

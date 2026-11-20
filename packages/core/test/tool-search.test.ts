@@ -392,6 +392,9 @@ describe("search tools", () => {
             ),
           )
           expect(direct.output).toEqual([{ path: path.normalize("src/a.ts"), type: "file" }])
+
+          const anchored = yield* executeTool(registry, call("glob", { pattern: "/src/*.ts" }))
+          expect(anchored.output).toEqual([{ path: path.normalize("src/a.ts"), type: "file" }])
         }),
       )
     }),
