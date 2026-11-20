@@ -837,7 +837,13 @@ impl loader::native::Answers for Scope {
     fn answer(self: Rc<Self>, request: abi::Request) {
         let abi::Request::Reply { id, result } = request else { return };
         let replies = self.replies.borrow().clone();
-        self.run("on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
+        // The last handler takes the reply and the others a copy: a reply may be a large page, and most plugins have one.
+        self.run("on-reply", |host| {
+            if let Some((last, rest)) = replies.split_last() {
+                rest.iter().for_each(|run| run(host, id, result.clone()));
+                last(host, id, result);
+            }
+        });
     }
 
     fn release(&self, request: abi::RequestId) {
