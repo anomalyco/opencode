@@ -32,10 +32,13 @@ Schema, `crates/plugin-abi/schema/v2.json`. A *carrier* runs a plugin against it
 - **Without `native`** no library is opened and no `dlopen` of a plugin is linked: a library target, a project's
   included, is skipped and never asked about; `plugin dev` and `plugin test` say the build lacks native plugins; the
   crash guard (`opencode-native` as the parent of its TUI) starts only for Luau plugins. `native` turns on
-  `opencode-plugin-abi`'s `c-abi`, the C ABI's types and shims, which the linked built-ins do not use. A static musl
-  build (`RUSTFLAGS="-C target-feature=+crt-static"`) needs `native` off: `.cargo/config.toml` links musl dynamically
-  for every build, as target rustflags cannot follow features, and `crates/util/src/dl.rs` refuses a static one only
-  with `native`. On macOS only a build with `native` needs the `disable-library-validation` entitlement.
+  `opencode-plugin-abi`'s `c-abi`, the C ABI's types and shims, which the linked built-ins do not use. On macOS only a
+  build with `native` needs the `disable-library-validation` entitlement.
+- **The musl builds are fully static** (Rust's default `crt-static`, O-188), so they run on any Linux, but a static
+  executable has no dynamic loader: they load no native plugins and have no Zed editor context. The build scripts of
+  `opencode-plugin`, `opencode-tui` and `opencode-cli` derive `cfg(native)`, the `native` feature outside a static
+  musl build, and the carrier is behind that, so a plain musl build with the default features behaves as one without
+  `native`, and its skip reason names the static musl build.
 
 `setup` runs once for each activation. The same registrations on each language:
 
