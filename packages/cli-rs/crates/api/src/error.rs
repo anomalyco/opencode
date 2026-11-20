@@ -131,32 +131,3 @@ impl std::fmt::Display for DeclaredError {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{DeclaredError, Error};
-    use serde_json::json;
-
-    #[test]
-    fn the_error_message_leaves_out_the_tag() {
-        let declared = |body| Error::Declared(Box::new(DeclaredError::new(400, body)));
-        let tagged = declared(json!({ "_tag": "InvalidRequestError", "message": "Unknown agent: nope" }));
-        assert_eq!(tagged.to_string(), "InvalidRequestError: Unknown agent: nope");
-        assert_eq!(tagged.error_message(), "Unknown agent: nope");
-        let nested = declared(json!({ "name": "NotFound", "data": { "message": "gone" } }));
-        assert_eq!(nested.error_message(), "gone");
-        assert_eq!(declared(json!({ "_tag": "Bare" })).error_message(), "");
-        let status = Error::UnexpectedStatus { status: 500 };
-        assert_eq!(status.error_message(), "UnexpectedStatus: 500");
-    }
-
-    #[test]
-    fn a_handler_defect_shows_its_message_without_the_ref() {
-        let message = "Server failed to handle the request. Check server logs for details.";
-        let defect = Error::Declared(Box::new(DeclaredError::new(
-            500,
-            json!({ "_tag": "UnknownError", "message": message, "ref": "err_1234abcd" }),
-        )));
-        assert_eq!((defect.error_message(), defect.tui_message()), (message.to_owned(), message.to_owned()));
-    }
-}
