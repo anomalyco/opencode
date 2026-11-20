@@ -7,5 +7,6 @@
 mod support;
 
 mod config_interop;
+mod fuzz;
 mod interop;
 mod shared_files;
