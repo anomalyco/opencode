@@ -1,4 +1,4 @@
-import { OpenCode, type SessionInfo } from "@opencode/client"
+import { OpenCode, type OpenCodeClient, type SessionInfo } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
 import { Effect, Option, Stream } from "effect"
 import { EOL } from "node:os"
@@ -7,26 +7,36 @@ import { Runtime } from "../../../framework/runtime"
 import { ServerConnection } from "../../../services/server-connection"
 import { errorMessage } from "../../../util/error"
 
+/**
+ * The first page of top-level sessions. `--all` drops the project scope entirely: the protocol treats `project` as
+ * optional, so omitting the key lists every project instead of passing `undefined` and asking for one project.
+ */
+export async function listSessionPage(
+  client: OpenCodeClient,
+  input: { all: boolean; maxCount: Option.Option<number> },
+  directory: string,
+  signal?: AbortSignal,
+) {
+  const options = signal === undefined ? {} : { signal }
+  const project = input.all ? undefined : (await client.location.get({ location: { directory } }, options)).project.id
+  return client.session.list(
+    {
+      ...(project === undefined ? {} : { project }),
+      parentID: null,
+      order: "desc",
+      limit: Option.getOrElse(input.maxCount, () => 100),
+    },
+    options,
+  )
+}
+
 const handler = Effect.fn("cli.session.list")(function* (
   input: Runtime.Input<typeof Commands.commands.session.commands.list>,
 ) {
   const server = yield* ServerConnection.resolve()
   const client = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
-  const location = yield* Effect.tryPromise({
-    try: (signal) => client.location.get({ location: { directory: process.cwd() } }, { signal }),
-    catch: (cause) => cause,
-  })
   const page = yield* Effect.tryPromise({
-    try: (signal) =>
-      client.session.list(
-        {
-          project: location.project.id,
-          parentID: null,
-          order: "desc",
-          limit: Option.getOrElse(input.maxCount, () => 100),
-        },
-        { signal },
-      ),
+    try: (signal) => listSessionPage(client, input, process.cwd(), signal),
     catch: (cause) => cause,
   })
   if (input.format === "table" && page.data.length === 0) return
@@ -44,7 +54,7 @@ const handler = Effect.fn("cli.session.list")(function* (
           null,
           2,
         )
-      : formatList(page.data)) + EOL
+      : formatList(page.data, input.all)) + EOL
   const write = Effect.tryPromise(
     () =>
       new Promise<void>((resolve, reject) => {
@@ -93,13 +103,15 @@ export default Runtime.handler(Commands.commands.session.commands.list, (input) 
   ),
 )
 
-function formatList(sessions: ReadonlyArray<SessionInfo>) {
+/** Tab-separated rows: id, title and updated time, plus the directory when sessions come from every project. */
+export function formatList(sessions: ReadonlyArray<SessionInfo>, all: boolean) {
   return sessions
     .map((session) =>
       [
         session.id,
         (session.title ?? "Untitled session").replace(/[\r\n\t]/g, " "),
         new Date(session.time.updated).toLocaleString(),
+        ...(all ? [session.location.directory.replace(/[\r\n\t]/g, " ")] : []),
       ].join("\t"),
     )
     .join(EOL)
