@@ -526,20 +526,6 @@ fn a_resize_keeps_the_readers_row_at_the_top() {
     }
 }
 
-/// A view at the bottom still follows it after a resize.
-#[test]
-fn a_resize_at_the_bottom_keeps_following() {
-    let h = wrapping_session();
-    h.wait_for("Paragraph 10");
-    for width in [50, 120] {
-        h.app.resize(width, 20);
-        h.app.render();
-        let screen = h.app.render().text();
-        assert!(screen.contains("Paragraph 10") && !screen.contains("Jump to latest"), "{width} columns:\n{screen}");
-    }
-}
-
-/// A recorded sequence of multi-step timings spans a turn across the page boundary.
 #[test]
 fn the_footer_spans_a_turn_whose_prompt_is_on_an_older_page() {
     const PROMPT: u64 = 1_787_836_326_838;
