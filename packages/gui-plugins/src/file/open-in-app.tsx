@@ -16,6 +16,7 @@ import {
 } from "@opencode/plugin/gui"
 import type { OpenApp } from "./apps"
 import { useShared } from "./context"
+import { downloadFile } from "./download"
 
 const MAC_OPEN_APPS = [
   { id: "vscode", label: "open.app.vscode", icon: "vscode", openWith: "Visual Studio Code" },
@@ -308,17 +309,137 @@ export function OpenInAppMenuItemsV2(props: {
   )
 }
 
+/** A context menu for files on a remote server, where no local app can open them. */
+function DownloadContextMenu(
+  props: ParentProps<{
+    screen: SessionScreen
+    resolvePath: (event: MouseEvent) => string | undefined
+    fit?: boolean
+  }>,
+) {
+  const ctx = usePlugin()
+  const [open, setOpen] = createSignal(false)
+  const [path, setPath] = createSignal("")
+  let hoveredRow: HTMLElement | undefined
+
+  const clearHover = () => {
+    if (!hoveredRow) return
+    delete hoveredRow.dataset.itemContextHover
+    hoveredRow = undefined
+  }
+
+  onCleanup(clearHover)
+
+  const closeMenu = () => {
+    setOpen(false)
+    clearHover()
+  }
+
+  const download = () => {
+    const resolved = path()
+
+    if (!resolved) return
+    const workspacePath = props.screen.file.resolve(resolved)
+
+    void downloadFile(ctx, props.screen, workspacePath).then((ok) => {
+      if (!ok)
+        showToast({
+          variant: "error",
+          title: ctx.t("view.loadFailed"),
+        })
+    })
+  }
+
+  const copyPath = () => {
+    const resolved = path()
+
+    if (resolved) navigator.clipboard.writeText(resolved).catch(() => {})
+  }
+
+  return (
+    <Menu.Context
+      modal={false}
+      onOpenChange={(next) => {
+        setOpen(next)
+
+        if (!next) clearHover()
+      }}
+    >
+      <Menu.Context.Trigger
+        as="div"
+        class="h-full w-full flex flex-col min-h-0 flex-1"
+        classList={{ "min-w-max": !props.fit, "min-w-0": props.fit }}
+        data-slot="file-tree-v2-context-trigger"
+        data-context-menu-open={open() ? "" : undefined}
+        on:contextmenu={{
+          capture: true,
+          handleEvent(event: MouseEvent) {
+            clearHover()
+            const next = props.resolvePath(event)
+
+            if (!next) {
+              closeMenu()
+              event.preventDefault()
+              event.stopPropagation()
+
+              return
+            }
+
+            for (const target of event.composedPath()) {
+              if (
+                target instanceof HTMLElement &&
+                (target.dataset.type === "item" || target.dataset.slot === "file-tree-v2-row")
+              ) {
+                hoveredRow = target
+                target.dataset.itemContextHover = "true"
+                break
+              }
+            }
+
+            setPath(next)
+          },
+        }}
+      >
+        {props.children}
+      </Menu.Context.Trigger>
+      <Menu.Context.Portal>
+        <Menu.Context.Content class="open-in-app-v2-menu">
+          <Menu.Item onSelect={download}>
+            <Icon name="download" size="small" class="text-icon-weak" />
+            {ctx.t("view.download")}
+          </Menu.Item>
+          <Menu.Separator />
+          <Menu.Item onSelect={copyPath}>
+            <Icon name="copy" size="small" class="text-icon-weak" />
+            {ctx.t("open.copyPath")}
+          </Menu.Item>
+        </Menu.Context.Content>
+      </Menu.Context.Portal>
+    </Menu.Context>
+  )
+}
+
 export function OpenInAppContextMenuV2(
   props: ParentProps<{
     state?: OpenInAppState
     resolvePath: (event: MouseEvent) => string | undefined
+    /** When provided, a download menu replaces this menu when no app can open the file (e.g. a remote server). */
+    screen?: SessionScreen
     /** Keeps the trigger within its container, for content that clips its own rows rather than scrolling sideways. */
     fit?: boolean
   }>,
 ) {
   const state = props.state
 
-  if (!state) return props.children
+  // Non-desktop: show the download menu when a screen is given, else no menu.
+  if (!state)
+    return props.screen ? (
+      <DownloadContextMenu screen={props.screen} resolvePath={props.resolvePath} fit={props.fit}>
+        {props.children}
+      </DownloadContextMenu>
+    ) : (
+      props.children
+    )
   const [open, setOpen] = createSignal(false)
   const [path, setPath] = createSignal("")
   let hoveredRow: HTMLElement | undefined
@@ -337,7 +458,18 @@ export function OpenInAppContextMenuV2(
   }
 
   return (
-    <Show when={state.canOpen()} fallback={props.children}>
+    <Show
+      when={state.canOpen()}
+      fallback={
+        props.screen ? (
+          <DownloadContextMenu screen={props.screen} resolvePath={props.resolvePath} fit={props.fit}>
+            {props.children}
+          </DownloadContextMenu>
+        ) : (
+          props.children
+        )
+      }
+    >
       <Menu.Context
         modal={false}
         onOpenChange={(next) => {
