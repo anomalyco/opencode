@@ -91,7 +91,7 @@ async fn execute(
         Some(read_stdin()?)
     };
     let message = merge_input(argument, piped).unwrap_or_default();
-    if message.trim().is_empty() {
+    if message.trim_matches(opencode_api::js::is_whitespace).is_empty() {
         return Err("You must provide a message".into());
     }
     let files = args.file.iter().map(|file| files::prepare(file, &root)).collect::<Result<Vec<_>, _>>()?;
