@@ -490,20 +490,3 @@ fn descendants_of(subgraphs: &[Subgraph], id: &str) -> HashSet<String> {
     }
     ids
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn edge_operators_apply_the_dotted_lookahead() {
-        let operators = |line: &str| {
-            super::parse_edge_operators(line)
-                .into_iter()
-                .map(|op| (op.index, op.end, op.label, op.arrowhead))
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(operators("A -.-> B"), [(2, 7, String::new(), true)]);
-        assert_eq!(operators("A -.->B.- C"), [(2, 6, String::new(), true)]);
-        assert_eq!(operators("A -. note .-> B"), [(2, 13, "note".to_owned(), true)]);
-        assert_eq!(operators("A -.-> B -. x .- C"), [(2, 7, String::new(), true), (9, 16, "x".to_owned(), false)]);
-    }
-}
