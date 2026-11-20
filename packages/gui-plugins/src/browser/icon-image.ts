@@ -7,8 +7,8 @@ export const ICON_SIZE = 32
 
 /**
  * An icon file as an image Electron's `nativeImage` reads, which is PNG and JPEG only: the file itself when it is one
- * of those, else the best image of an `.ico` file, which is what most sites serve. Undefined for anything else: an SVG
- * or other markup, an unknown format, or a file cut short. The bytes decide, never the type a server declared.
+ * of those, else the best image of an `.ico` file, which is what most sites serve. Undefined for anything else: markup,
+ * a format read by neither (GIF, WebP, AVIF), or a file cut short. The bytes decide, never the type a server declared.
  */
 export function iconImage(file: Buffer): Buffer | undefined {
   if (starts(file, PNG) || starts(file, [0xff, 0xd8, 0xff])) return file

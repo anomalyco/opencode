@@ -732,10 +732,13 @@ const preview = "tab_33333333-3333-3333-3333-333333333333"
 
 const docs = "tab_66666666-6666-6666-6666-666666666666"
 
-// Two pages' icons as main reports them: a PNG data URL, here a 16px teal square and an orange one.
-const previewIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGklEQVR4nGNgaGj4TxEeNWA0DEbTwf9hEgYAukT/EAfeVj0AAAAASUVORK5CYII="
+// A page's icon, as the data URL main reports.
+const icon = (fill: string) =>
+  `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='${fill}'/%3E%3C/svg%3E`
 
-const docsIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHElEQVR4nGP4v5ThPyWYYdSA0TAYTQf/h0kYAAC+5aMfJU/vagAAAABJRU5ErkJggg=="
+const previewIcon = icon("teal")
+
+const docsIcon = icon("orange")
 
 const reported = (tab: Pick<MainTab, "id" | "url" | "title"> & Partial<MainTab>): MainTab => ({
   loading: false,
@@ -849,8 +852,8 @@ story("holds every restored tab's box, label and icon from the reopen until its 
 })
 
 // A page's icon arrives after its tab is drawn: Chromium lists it once the document's head has parsed, and main loads
-// and redraws it. The tab draws the globe until then.
-story("a tab draws its page's icon in the globe's place, and no tab moves", async ({ page }) => {
+// it. The tab draws the globe until then. A site's SVG is drawn as an image, never put in the window as markup.
+story("a tab draws its page's icon in the globe's place as an image, and no tab moves", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const tabs = root.getByRole("tab")
   await root.getByRole("button", { name: "Beta", exact: true }).click()
@@ -861,10 +864,15 @@ story("a tab draws its page's icon in the globe's place, and no tab moves", asyn
   const globes = await drawn(tabs)
   expect(globes.slice(1).map((tab) => tab.icon)).toEqual(["none", "none"])
 
+  // A site's own SVG that would run as markup: a script, and a handler on the element itself.
+  const hostile = `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" onload="window.iconRan = 'onload'"><script>window.iconRan = 'script'</script><rect width="16" height="16" fill="purple"/></svg>`).toString("base64")}`
+  const image = root.getByRole("tab", { name: "Docs", exact: true }).locator("img")
   await send(root, details(preview, previewIcon))
-  await send(root, details(docs, docsIcon))
-  await expect(root.getByRole("tab", { name: "Docs", exact: true }).locator("img")).toHaveAttribute("src", docsIcon)
-  expect(await drawn(tabs)).toEqual([globes[0], { ...globes[1], icon: previewIcon }, { ...globes[2], icon: docsIcon }])
+  await send(root, details(docs, hostile))
+  await expect(image).toHaveAttribute("src", hostile)
+  await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0)).toBe(true)
+  expect(await page.evaluate(() => "iconRan" in window)).toBe(false)
+  expect(await drawn(tabs)).toEqual([globes[0], { ...globes[1], icon: previewIcon }, { ...globes[2], icon: hostile }])
 })
 
 // A server without a browser left its restored tabs on a loader with no end.

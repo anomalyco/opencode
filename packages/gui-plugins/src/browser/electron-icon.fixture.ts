@@ -7,7 +7,7 @@ import type { TabActivity } from "./policy"
 
 // The Electron main process of `electron-icon.test.ts`, bundled and run by the pinned Electron. It opens one pane page
 // for each made-up site below, each listing its icon the way real sites do, and prints the icon each tab reported as
-// one JSON line: its type, its size in pixels, its length as a data URL and the color in its middle.
+// one JSON line: its type and its length as a data URL and, for a PNG, its size in pixels and the color in its middle.
 
 type File = { type: string; body: Buffer | string; status?: number; location?: string }
 
@@ -89,7 +89,16 @@ void electron.app.whenReady().then(async () => {
         "icon.jpg": { type: "image/jpeg", body: electron.nativeImage.createFromBuffer(pngSample(64, solid(250, 250, 250))).toJPEG(90) },
       },
     },
+    // Only an SVG, as a Vite app has by default.
     svg: { links: ["icon.svg"], files: { "icon.svg": { type: "image/svg+xml", body: svgSample } } },
+    // An SVG too long to report, then a 150px bitmap in an .ico file of about 90 KB.
+    longSvg: {
+      links: ["a.svg", "b.ico"],
+      files: {
+        "a.svg": { type: "image/svg+xml", body: svgSample.replace("</svg>", `<!--${"x".repeat(30_000)}--></svg>`) },
+        "b.ico": { type: "image/x-icon", body: icoSample([{ size: 150, bits: 32, paint: solid(180, 0, 60) }]) },
+      },
+    },
     // Chromium lists a page's icons by address, so the vector one comes first here.
     svgThenPng: {
       links: ["a.svg", "b.png"],
@@ -166,6 +175,9 @@ void electron.app.whenReady().then(async () => {
 
   const describe = (icon: string | undefined) => {
     if (!icon) return null
+    const type = /^data:([^;,]+)/.exec(icon)?.[1] ?? ""
+
+    if (type !== "image/png") return { type, length: icon.length }
     const image = electron.nativeImage.createFromDataURL(icon)
     const size = image.getSize()
     const middle = (Math.floor(size.height / 2) * size.width + Math.floor(size.width / 2)) * 4
@@ -173,7 +185,7 @@ void electron.app.whenReady().then(async () => {
     const [blue = 0, green = 0, red = 0] = image.toBitmap().subarray(middle, middle + 3)
 
     return {
-      type: /^data:([^;,]+)/.exec(icon)?.[1] ?? "",
+      type,
       width: size.width,
       height: size.height,
       length: icon.length,

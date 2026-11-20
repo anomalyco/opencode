@@ -156,7 +156,7 @@ type PageDetails = Pick<Extract<PaneEvent, { type: "page" }>, "zoom" | "viewport
 
 // A 16px blue square, as main reports a page icon.
 const icon =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAG0lEQVR4nGOwbvr2nxLMMGrAaBiMpoP/wyQMAIYYsh/pUfi0AAAAAElFTkSuQmCC"
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiByeD0iMyIgZmlsbD0iIzNiODJmNiIvPjwvc3ZnPg=="
 
 const visits: History["visits"] = [
   {

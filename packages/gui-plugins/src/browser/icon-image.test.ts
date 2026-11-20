@@ -96,6 +96,7 @@ test("a PNG or a JPEG is its own image", () => {
 })
 
 test.each([
+  // An SVG is reported by its type as it is, and never read here.
   ["an SVG", Buffer.from(svgSample)],
   ["an SVG after an XML declaration", Buffer.from(`<?xml version="1.0"?>${svgSample}`)],
   ["a page", Buffer.from("<!doctype html><title>Not found</title>")],
@@ -124,6 +125,6 @@ test.each([
       return file
     })(),
   ],
-])("%s is no icon", (_name, file) => {
+])("%s is no image nativeImage reads", (_name, file) => {
   expect(iconImage(file)).toBeUndefined()
 })
