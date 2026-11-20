@@ -3,7 +3,7 @@ import { builtins } from "@opencode/widget"
 import type { WidgetMessageInfo } from "../../../component/widget/backend"
 
 export const widgetFixtures: Record<
-  "suggestions" | "form" | "confirm",
+  "suggestions" | "form" | "confirm" | "chart" | "backdrop",
   { title: string; data: JsonValue; response: JsonValue }
 > = {
   suggestions: {
@@ -83,6 +83,26 @@ export const widgetFixtures: Record<
       danger: true,
     },
     response: { confirmed: true },
+  },
+  chart: {
+    title: "Weekly signups",
+    data: {
+      title: "Weekly signups",
+      kind: "bar",
+      unit: "k",
+      choose: true,
+      labels: ["W1", "W2", "W3", "W4"],
+      series: [
+        { label: "Organic", values: [4.2, 5.1, 4.8, 6.3] },
+        { label: "Paid", values: [2, 2.4, 3.1, 2.9] },
+      ],
+    },
+    response: { series: "Organic", index: 3, value: 6.3 },
+  },
+  backdrop: {
+    title: "Launch",
+    data: { title: "v2 is live", preset: "aurora", text: "Thanks **everyone** who tested the beta." },
+    response: null,
   },
 }
 

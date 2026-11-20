@@ -153,3 +153,14 @@ test("a submitted widget shows its response summary", async () => {
   const done = await frame(setup, (current) => current.includes("Submitted"))
   expect(done).toContain("name: Spring update · rollout: 50")
 })
+
+test("a canvas shows its alt text and a shader its alt text", async () => {
+  using chart = await render("chart")
+  const drawn = await frame(chart, (current) => current.includes("Weekly signups"))
+  expect(drawn).toContain("◈ Bar chart. Organic: W1 4.2k")
+  expect(drawn).toContain("Tap a bar to choose it")
+  using backdrop = await render("backdrop")
+  const banner = await frame(backdrop, (current) => current.includes("v2 is live"))
+  expect(banner).toContain("◈ Animated aurora backdrop")
+  expect(banner).toContain("Speed")
+})
