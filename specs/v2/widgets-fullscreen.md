@@ -1,14 +1,16 @@
 # Full-screen widgets
 
 Rune desktop, iOS, Android (and the web host) let a widget go full screen, like a video player. The TUI doesn't.
+This is purely client-side: the server stores and validates nothing for it.
 
 ## When the button shows
 
-A template field `fullscreen?: boolean` (stored, part of the version, accepted by `widget_template save`):
+The root node of the current view may carry `fullscreen?: boolean` (e.g. `ui.column({ fullscreen: true }, [...])`;
+unknown props are ignored by the server and the TUI):
 
-- `true`: always offer full screen.
+- `true`: offer full screen.
 - `false`: never.
-- absent: offer it for live templates and whenever the current view contains a `canvas` or `shader` node.
+- absent: offer it for live widgets and whenever the current view contains a `canvas` or `shader` node.
 
 The button is a small expand icon in the widget's top-right corner: shown on hover and keyboard focus on desktop,
 always visible on touch devices. It is not offered for submitted or dismissed widgets.
