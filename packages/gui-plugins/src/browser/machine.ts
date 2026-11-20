@@ -7,6 +7,12 @@ export const RETRY_BASE_MS = 1_000
 
 export const RETRY_MAX_MS = 30_000
 
+/**
+ * How many registrations may fail in a row while a pane with nothing to show yet still counts as on its way. Past
+ * that the retries go on, and the pane says the browser could not open.
+ */
+export const PENDING_RETRIES = 4
+
 /** The pane's main-process Ipc: running in a generation, starting or restarting, or gone. */
 export type Ipc =
   | { readonly status: "active"; readonly generation: number }
@@ -43,6 +49,16 @@ export type Strip = {
   readonly prune: boolean
   /** A tab main asked to select while the strip could not be written. */
   readonly focus: Browser.TabID | undefined
+  /**
+   * Saved tabs the person closed in the strip before an inventory named them. The first native inventory that has one
+   * closes it on the desktop, and the strip does not take it back.
+   */
+  readonly dismissed: readonly string[]
+  /**
+   * The saved tab the person selected in the strip before an inventory named it, not the one the strip mounted with.
+   * The first native inventory that has it, with another tab in front, brings it to the front on the desktop too.
+   */
+  readonly selected: string | undefined
 }
 
 /**
@@ -185,6 +201,8 @@ export type Event =
   | { readonly type: "session.located"; readonly sessionKey: string; readonly located: boolean }
   /** A user or agent edge asks for the pane: focus, a key, the route, or a Session execution. */
   | { readonly type: "session.wake"; readonly sessionKey: string }
+  /** The person asks to open the browser again, from a pane that said it could not (`sessionUnavailable`). */
+  | { readonly type: "session.retry"; readonly sessionKey: string }
   /** The server finished creating the session. */
   | { readonly type: "session.created"; readonly sessionKey: string }
   | {
@@ -210,6 +228,8 @@ export type Event =
   /** The person closed the failure's notice, or its time ran out. */
   | { readonly type: "failure.dismissed"; readonly sessionKey: string; readonly id: number }
   | { readonly type: "address.focused"; readonly sessionKey: string; readonly tabID: Browser.TabID }
+  /** The person closed or selected, in the strip, a tab the strip stored and no inventory has named yet. */
+  | { readonly type: "strip.tab.closed" | "strip.tab.selected"; readonly sessionKey: string; readonly tabID: string }
   | { readonly type: "register.accepted"; readonly sessionKey: string; readonly attempt: number }
   | {
       readonly type: "register.failed"
@@ -302,7 +322,7 @@ export type MachineEffect =
       readonly open: readonly Browser.TabID[]
     }
   | { readonly type: "focus-strip-tab"; readonly sessionKey: string; readonly tabID: Browser.TabID }
-  /** Records the session's loaded pages in the browser history. */
+  /** Records the session's loaded pages in the browser history, and its tabs for the strip of the next launch. */
   | { readonly type: "record-history"; readonly sessionKey: string }
   /** The session is no longer attached: drop its per-session resources. */
   | { readonly type: "detach"; readonly sessionKey: string }
@@ -329,6 +349,15 @@ type SessionEvent = Exclude<
 // No attachment shares an object with another, not even an empty one: the model reconciles the state into its store,
 // which writes into existing objects in place, so a shared object would carry one session's change into the others.
 const noFocus = (): AddressFocus => ({ status: "none" })
+
+const noStrip = (): Strip => ({
+  located: false,
+  mirrored: [],
+  prune: false,
+  focus: undefined,
+  dismissed: [],
+  selected: undefined,
+})
 
 export function createInitialState(ipc: Ipc): State {
   return { status: "open", ipc, issued: 0, sessions: {} }
@@ -371,8 +400,9 @@ export function sessionAttached(state: State, sessionKey: string) {
 }
 
 /**
- * The desktop has not answered with its first inventory yet: the routed session is about to attach, it registered and
- * waits, or it waits for the pane's Ipc to start.
+ * The desktop has not answered with its first inventory yet, and is on its way to: the routed session is about to
+ * attach, it registered and waits, it waits for the pane's Ipc to start, or it registers again after no more than
+ * `PENDING_RETRIES` failures in a row.
  */
 export function sessionPending(state: State, target: Target) {
   if (state.status === "disposed") return false
@@ -384,22 +414,46 @@ export function sessionPending(state: State, target: Target) {
   const phase = attachment.phase
 
   return (
-    phase.status === "registering" ||
     phase.status === "ready" ||
+    ((phase.status === "registering" || phase.status === "backoff") && phase.attempts <= PENDING_RETRIES) ||
     (phase.status === "suspended" && phase.reason === "ipc" && state.ipc.status === "pending")
   )
 }
 
 /**
+ * The session's browser could not open, and no inventory says what it had: its server has no browser, or registering
+ * failed more than `PENDING_RETRIES` times in a row, while the retries go on. The pane says so in place of the page
+ * and offers to try again (`session.retry`), never a loader with no end.
+ */
+export function sessionUnavailable(state: State, sessionKey: string) {
+  const attachment = attachmentOf(state, sessionKey)
+
+  if (!attachment || attachment.browser) return false
+  const phase = attachment.phase
+
+  return (
+    (phase.status === "blocked" && phase.reason === "unsupported") ||
+    ((phase.status === "registering" || phase.status === "backoff") && phase.attempts > PENDING_RETRIES)
+  )
+}
+
+/**
  * Tab IDs to list in the side panel: the desktop's inventory, limited to tabs stored in the strip. Until the first
- * inventory arrives, the stored tabs, so a restored selection holds; that inventory then prunes the ones it lacks.
+ * inventory arrives, the stored tabs, whatever the session's binding does meanwhile, so the strip keeps its tabs and
+ * its selection; that inventory then prunes the ones it lacks. A session another window took, or one the server lacks,
+ * lists none.
  */
 export function sessionTabs(state: State, target: Target, open: readonly string[]) {
-  if (sessionPending(state, target)) return open
+  if (state.status === "disposed") return []
+  const attachment = state.sessions[target.key]
 
-  if (!sessionAttached(state, target.key)) return []
+  // Not attached, as on a server whose version does not work with this app: only a session about to attach lists.
+  if (!attachment) return sessionPending(state, target) ? open : []
 
-  return attachmentOf(state, target.key)?.browser?.tabs.flatMap((tab) => (open.includes(tab.id) ? [tab.id] : [])) ?? []
+  if (attachment.browser) return attachment.browser.tabs.flatMap((tab) => (open.includes(tab.id) ? [tab.id] : []))
+  const phase = attachment.phase
+
+  return phase.status === "blocked" && phase.reason !== "unsupported" ? [] : open
 }
 
 export function sessionBrowser(state: State, sessionKey: string) {
@@ -535,7 +589,7 @@ function attached(state: Open, event: Extract<Event, { type: "session.attached" 
     browser: null,
     embeds: {},
     failure: undefined,
-    strip: { located: event.located, mirrored: [], prune: false, focus: undefined },
+    strip: { ...noStrip(), located: event.located },
     addressFocus: noFocus(),
     side: "unobserved",
     shown: false,
@@ -674,6 +728,19 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       return {...next,effects:[...stop(key,phase),...next.effects]}
     }
 
+    case "session.retry": {
+      // A registration is already under way: it only counts the failures in a row from the start again.
+      if (phase.status === "registering")
+        return phase.attempts === 0 ? { state, effects: [] } : put(state, key, { ...attachment, phase: { ...phase, attempts: 0 } })
+
+      if (phase.status !== "backoff" && !(phase.status === "blocked" && phase.reason === "unsupported"))
+        return { state, effects: [] }
+      // Registers now, in place of a retry timer.
+      const next = wake(state, key, suspend(attachment, "idle"), false)
+
+      return { ...next, effects: [...stop(key, phase), ...next.effects] }
+    }
+
     case "session.located":
       return located(state, key, attachment, event.located)
     case "session.wake":
@@ -712,6 +779,28 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
         return { state, effects: [] }
 
       return put(state, key, { ...attachment, addressFocus: noFocus() })
+    }
+
+    case "strip.tab.closed": {
+      const strip = attachment.strip
+
+      // With an inventory the tab is known, and its close is a command, or gone, and there is nothing to close.
+      if (attachment.browser || strip.dismissed.includes(event.tabID)) return { state, effects: [] }
+
+      return put(state, key, {
+        ...attachment,
+        strip: {
+          ...strip,
+          dismissed: [...strip.dismissed, event.tabID],
+          selected: strip.selected === event.tabID ? undefined : strip.selected,
+        },
+      })
+    }
+
+    case "strip.tab.selected": {
+      if (attachment.browser || attachment.strip.selected === event.tabID) return { state, effects: [] }
+
+      return put(state, key, { ...attachment, strip: { ...attachment.strip, selected: event.tabID } })
     }
 
     case "register.accepted": {
@@ -876,7 +965,7 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
     put(
       state,
       key,
-      { ...attachment, strip: { located: true, mirrored: ids ?? [], prune: false, focus: undefined } },
+      { ...attachment, strip: { ...strip, located: true, mirrored: ids ?? [], prune: false, focus: undefined } },
       [
         ...(ids ? sync(key, ids, strip.mirrored, strip.prune) : []),
         ...(focus && ids?.includes(focus) ? [{ type: "focus-strip-tab" as const, sessionKey: key, tabID: focus }] : []),
@@ -1040,7 +1129,7 @@ function paneState(
         browser: null,
         embeds: {},
         failure: replaced ? { id: state.issued + 1, code: "browser.pane.replaced", action: undefined } : undefined,
-        strip: { located: attachment.strip.located, mirrored: [], prune: false, focus: undefined },
+        strip: { ...noStrip(), located: attachment.strip.located },
         addressFocus: noFocus(),
       },
       stop(key, phase),
@@ -1063,7 +1152,24 @@ function paneState(
     ])
   }
 
-  const mirrored = mirror(key, attachment.strip, event.state, true)
+  // What the person did to saved tabs before this inventory named them reaches the desktop now, as their commands:
+  // a tab they closed closes there and is not mirrored back, and the one they selected comes to the front.
+  const strip = attachment.strip
+  const dismissed = event.state?.tabs.flatMap((tab) => (strip.dismissed.includes(tab.id) ? [tab.id] : [])) ?? []
+  const selected = event.state?.tabs.find((tab) => tab.id === strip.selected)?.id
+
+  const early: Browser.Action[] = [
+    ...dismissed.map((tabID) => ({ type: "tabs.close" as const, tabID })),
+    ...(selected && selected !== event.state?.focusedTabID ? [{ type: "tabs.focus" as const, tabID: selected }] : []),
+  ]
+
+  const mirrored = mirror(
+    key,
+    { ...strip, mirrored: [...strip.mirrored, ...dismissed], dismissed: [], selected: undefined },
+    event.state,
+    true,
+  )
+
   // An inventory that repeats the error it reported last is the same failure, not a new one to read again.
   const repeated = attachment.failure?.action === undefined && attachment.failure?.code === event.error
 
@@ -1077,6 +1183,8 @@ function paneState(
     !!attachment.held &&
     !!attachment.browser?.tabs.some((tab) => tab.id === attachment.held?.tabID) &&
     !event.state?.tabs.some((tab) => tab.id === attachment.held?.tabID)
+
+  const issued = failure === attachment.failure ? state.issued : state.issued + 1
 
   // The strip gets the inventory's tabs first, so a kept request selects a tab the strip already has.
   return settle(
@@ -1095,10 +1203,19 @@ function paneState(
       },
       [
         ...(phase.status === "registering" ? [{ type: "cancel-register-timeout" as const, sessionKey: key }] : []),
-        ...mirrored.effects,
+        // The saved tabs follow the inventory before the strip does, so a tab the strip drops for it is forgotten by
+        // then, not offered as one the person closed.
         ...(event.state ? [{ type: "record-history" as const, sessionKey: key }] : []),
+        ...mirrored.effects,
+        ...early.map((action, index) => ({
+          type: "send-command" as const,
+          sessionKey: key,
+          attempt: phase.attempt,
+          request: issued + index + 1,
+          action,
+        })),
       ],
-      failure === attachment.failure ? state.issued : state.issued + 1,
+      issued + early.length,
     ),
     key,
   )
@@ -1146,7 +1263,7 @@ function backoff(state: Open, key: string, attachment: Attachment, phase: Bound)
 // just closed is not reopened before the desktop confirms. Only a native inventory prunes; suspended and restoring
 // states keep the tabs they will restore. While the strip cannot be written, the prune waits for the location.
 function mirror(key: string, strip: Strip, browser: Browser.State | null, native: boolean) {
-  if (!browser) return { strip: { located: strip.located, mirrored: [], prune: false, focus: undefined }, effects: [] }
+  if (!browser) return { strip: { ...noStrip(), located: strip.located }, effects: [] }
   const ids = browser.tabs.map((tab) => tab.id)
 
   if (!strip.located)

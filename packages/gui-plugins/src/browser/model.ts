@@ -21,6 +21,7 @@ import {
   type Zoom,
 } from "./connection"
 import { recordable, remember, withIcon } from "./history"
+import { forgetTabs, saveIcon, saveTabs } from "./saved-tabs"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
 import { workspacePrefix } from "./remote-address"
@@ -48,6 +49,7 @@ import {
   sessionSuspended,
   sessionTab,
   sessionTabs,
+  sessionUnavailable,
   unseenActivity,
   revealGuard,
   transition,
@@ -127,6 +129,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const owner = getOwner()
   const history = ctx.stores.history
+  const saved = ctx.stores.tabs
   const [state, setState] = createStore<ModelState>({ machine: createInitialState(untrack(ipc)), pages: {}, chrome: {} })
   const machine = () => state.machine
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
@@ -248,12 +251,19 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return
     }
 
-    if (effect.type === "record-history") return record(effect.sessionKey)
+    if (effect.type === "record-history") {
+      save(effect.sessionKey)
+
+      return record(effect.sessionKey)
+    }
 
     if (effect.type === "detach") return detach(effect.sessionKey)
 
     if (effect.type === "forget-tabs") {
       const ref = drives.get(effect.sessionKey)?.ref
+      const rest = forgetTabs(saved.value, effect.sessionKey)
+
+      if (rest) saved.set(rest)
 
       if (ref) void client()?.forget({server: ref.server.id, session:ref.id}).catch(() => undefined)
     }
@@ -458,6 +468,15 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     })
   }
 
+  // The session's tabs as the desktop reports them. The strip draws them when the app opens again, before the desktop
+  // has attached, and holds each label until the tab's page has its own again.
+  const save = (sessionKey: string) => {
+    const tabs = sessionBrowser(machine(), sessionKey)?.tabs
+    const next = tabs && saveTabs(saved.value, sessionKey, tabs)
+
+    if (next) saved.set(next)
+  }
+
   // Pages the user or the agent opened, once loaded: only a tab whose page exists has a real URL and title, as a
   // restored tab's saved URL carries no title until it loads again. Only the desktop's own reports count: a restored
   // tab's embed arrives before its page loads, with the saved URL as if it had.
@@ -487,6 +506,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     const visits = url && event.icon ? withIcon(history.value.visits, url, event.icon) : undefined
 
     if (visits) history.set({ visits })
+    const kept = event.icon ? saveIcon(saved.value, sessionKey, event.tabID, event.icon) : undefined
+
+    if (kept) saved.set(kept)
   }
 
   const detach = (sessionKey: string) => {
@@ -920,6 +942,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       history.set({ visits: [] })
     },
     pending: (session: SessionRef) => sessionPending(machine(), session),
+    /** The browser could not open and has no tabs to show: the pane says so and offers `retry`. */
+    unavailable: (session: Session) => sessionUnavailable(machine(), session.key),
+    retry: (session: Session) => dispatch({ type: "session.retry", sessionKey: session.key }),
     /**
      * Tab IDs to list in the side panel: the desktop's inventory, limited to tabs stored in the strip. Until the first
      * inventory arrives, the stored tabs, so a restored selection holds; that inventory then prunes the ones it lacks.
@@ -968,19 +993,33 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     closeTab(session: Session, tabID: string) {
       const item = tab(session, tabID)
 
-      if (item) command(session, { type: "tabs.close", tabID: item.id })
+      if (item) return command(session, { type: "tabs.close", tabID: item.id })
+      // A tab drawn from the saved state, which the desktop has not reported yet: its attachment remembers the close.
+      const ref = sessions.list().find((entry) => entry.key === session.key)
+
+      if (ref?.server.compatible) attach(ref)
+      dispatch({ type: "strip.tab.closed", sessionKey: session.key, tabID })
     },
     /** Closes a tab through the strip, as its close button does, so ⌘⇧T can reopen it. */
     close(session: SessionRef, tabID: string) {
       if (layout.state(key(tabID), session) === "closed") return this.closeTab(session, tabID)
       layout.close(key(tabID), session)
     },
-    focusTab(session: Session, tabID: string) {
+    /** The strip selected a tab. `restored` is the selection it mounted with, not the person's choice. */
+    focusTab(session: Session, tabID: string, restored: boolean) {
       const item = tab(session, tabID)
 
-      if (item) dispatch({ type: "activity.seen", sessionKey: session.key, tabID: item.id })
+      if (!item) {
+        // A tab drawn from the saved state, which the desktop has not reported yet. The desktop restores the tab it
+        // had in front by itself, so only the person's pick of one waits for it.
+        if (!restored) dispatch({ type: "strip.tab.selected", sessionKey: session.key, tabID })
 
-      if (item && item.id !== sessionBrowser(machine(), session.key)?.focusedTabID)
+        return
+      }
+
+      dispatch({ type: "activity.seen", sessionKey: session.key, tabID: item.id })
+
+      if (item.id !== sessionBrowser(machine(), session.key)?.focusedTabID)
         command(session, { type: "tabs.focus", tabID: item.id })
     },
     /** The page's element picker starting, stopping, or picking an element. */

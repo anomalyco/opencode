@@ -3,6 +3,7 @@ import { Plugin, Store } from "@opencode/plugin/gui"
 import { Schema } from "effect"
 import { History } from "./history"
 import en from "./i18n/en"
+import { SavedTabs } from "./saved-tabs"
 
 /**
  * The browser's preferences on this device.
@@ -24,6 +25,9 @@ export default Plugin.define({
     // session and server, kept on this device.
     history: Store.global(History, { visits: [] }),
     preferences: Store.global(Preferences, { links: true, welcomed: false }),
+    // Each session's tabs as the desktop last reported them. A global store is loaded before setup, so the side strip
+    // draws its stored tabs with these titles from its first render.
+    tabs: Store.global(SavedTabs, { sessions: [] }),
   },
   i18n: builtinCatalog({
     en,

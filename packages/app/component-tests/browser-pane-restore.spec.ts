@@ -1,3 +1,4 @@
+import type { Locator, Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 import type { Accessor, ParentProps } from "solid-js"
 import type { Command, MenuItem } from "@opencode/plugin/gui"
@@ -692,13 +693,13 @@ story("selects side tabs with ⌘1–9 and ⇧⌘[ ] inside the side panel and s
   await expect(selected).toHaveText(/^browser:/)
 })
 
-story("keeps a restored browser tab selected and undrawn until the desktop's first inventory", async ({ page }) => {
+story("keeps a restored browser tab with no saved page selected and undrawn until the desktop's first inventory", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const tabs = root.getByRole("tab")
   await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await expect(tabs).toHaveText(["alpha.ts"])
 
-  // Beta was left on its browser tab, which the desktop has not reported yet.
+  // Beta was left on its browser tab, which the desktop has not reported yet and no earlier run saved a title for.
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
   await expect(root.getByTestId("selected")).toHaveText(/^browser:tab_/)
@@ -707,6 +708,170 @@ story("keeps a restored browser tab selected and undrawn until the desktop's fir
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   await expect(tabs).toHaveText(["beta.ts", "Preview"])
   await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+})
+
+// What main sends for Beta's two tabs, as production builds it: the inventory `pane-machine.ts` publishes and the page
+// details `chromium.ts` reports. `electron-restore.test.ts` reads the titles a restored page publishes in real Electron.
+type MainTab = {
+  id: string
+  url: string
+  title: string
+  loading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  generation: number
+}
+
+// The fixture reads each one through the pane Ipc's own event schema, so a shape main cannot send fails there.
+type MainEvent =
+  | { type: "state"; state: { tabs: MainTab[]; focusedTabID: string } | null; error?: string }
+  | { type: "page"; tabID: string; zoom: number; viewport: { mode: "auto" }; icon?: string }
+  | { type: "embed"; tabID: string; embed: string }
+
+const preview = "tab_33333333-3333-3333-3333-333333333333"
+
+const docs = "tab_66666666-6666-6666-6666-666666666666"
+
+// A page's icon, as the data URL main reports.
+const icon = (fill: string) =>
+  `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='${fill}'/%3E%3C/svg%3E`
+
+const previewIcon = icon("teal")
+
+const docsIcon = icon("orange")
+
+const reported = (tab: Pick<MainTab, "id" | "url" | "title"> & Partial<MainTab>): MainTab => ({
+  loading: false,
+  canGoBack: false,
+  canGoForward: false,
+  generation: 0,
+  ...tab,
+})
+
+const inventory = (...tabs: MainTab[]): MainEvent => ({ type: "state", state: { tabs, focusedTabID: preview } })
+
+const details = (tabID: string, icon?: string): MainEvent =>
+  icon
+    ? { type: "page", tabID, zoom: 1, viewport: { mode: "auto" }, icon }
+    : { type: "page", tabID, zoom: 1, viewport: { mode: "auto" } }
+
+// The tabs as main restores them: saved by id and address, their pages not loaded, so neither reports a title.
+const restoredPreview = reported({ id: preview, url: "http://localhost:4173/", title: "", generation: 1 })
+
+const restoredDocs = reported({ id: docs, url: "https://example.com/docs", title: "", generation: 1 })
+
+const send = async (root: Locator, event: MainEvent) => {
+  await root.getByRole("textbox", { name: "Main event", exact: true }).fill(JSON.stringify(event))
+  await root.getByRole("button", { name: "Send main event", exact: true }).dispatchEvent("click")
+}
+
+// Each strip tab's box, label and icon, as drawn now.
+const drawn = (tabs: Locator) =>
+  tabs.evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const box = node.getBoundingClientRect()
+
+      return { x: box.x, width: box.width, text: node.textContent, icon: node.querySelector("img")?.getAttribute("src") ?? "none" }
+    }),
+  )
+
+// Beta with two loaded browser tabs beside its file tab, then the app quits and opens again.
+const reopen = async (page: Page, quit: () => Promise<void> = async () => {}) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const tabs = root.getByRole("tab")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+  await send(root, inventory(reported({ id: preview, url: "http://localhost:4173/", title: "Preview" }), reported({ id: docs, url: "https://example.com/docs", title: "Docs" })))
+  await send(root, details(preview, previewIcon))
+  await send(root, details(docs, docsIcon))
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
+  await quit()
+  await root.getByRole("button", { name: "Quit and reopen", exact: true }).dispatchEvent("click")
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(root.getByRole("status", { name: "Loading", exact: true })).toBeVisible()
+  const first = await drawn(tabs)
+  const nodes = await tabs.elementHandles()
+
+  // The same boxes, labels and icons as the first frame after the reopen, in the same elements: nothing moved.
+  const stable = async () => {
+    expect(await drawn(tabs)).toEqual(first)
+    expect(
+      await page.evaluate(
+        ([before, after]) => before.length === after.length && before.every((node, index) => node === after[index]),
+        [nodes, await tabs.elementHandles()],
+      ),
+    ).toBe(true)
+  }
+
+  return { root, first, stable }
+}
+
+// After a restart the strip showed no browser tab until the desktop had attached, and then each tab changed its label,
+// and so its width and the place of every tab after it, as its page loaded: saved title, address, title again.
+story("holds every restored tab's box, label and icon from the reopen until its page has loaded", async ({ page }) => {
+  // The pane's Ipc is still starting when the window draws its first frame.
+  const { root, first, stable } = await reopen(page, () => page.getByTestId("browser-region-fixture").getByRole("button", { name: "Pane away", exact: true }).click())
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+
+  await root.getByRole("button", { name: "Pane back", exact: true }).click()
+  await expect(root.getByText("Registrations: 3", { exact: true })).toBeVisible()
+  await stable()
+
+  // Main attached and restored both tabs. Docs is never selected, so its page never loads and it never reports a title.
+  await send(root, inventory(restoredPreview, restoredDocs))
+  await expect(address).toHaveValue("http://localhost:4173/")
+  await expect(root.getByRole("status", { name: "Loading", exact: true })).toHaveCount(0)
+  await stable()
+
+  // The pane shows Preview, so main creates its page, which starts to load.
+  await send(root, { type: "embed", tabID: preview, embed: "embed-preview" })
+  await send(root, inventory({ ...restoredPreview, loading: true }, restoredDocs))
+  await expect(root.getByRole("button", { name: "Stop", exact: true })).toBeVisible()
+  await stable()
+
+  // The document commits where its address redirected to, with no title and no icon yet.
+  const committed = { ...restoredPreview, url: "http://localhost:4173/app", loading: true }
+  await send(root, inventory(committed, restoredDocs))
+  await send(root, details(preview))
+  await expect(address).toHaveValue("http://localhost:4173/app")
+  await stable()
+
+  // It names itself, its icon arrives, and it stops loading.
+  await send(root, inventory({ ...committed, title: "Preview" }, restoredDocs))
+  await stable()
+  await send(root, details(preview, previewIcon))
+  await stable()
+  await send(root, inventory({ ...committed, title: "Preview", loading: false }, restoredDocs))
+  await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeVisible()
+  await stable()
+  // What held all along is the saved icon of each page, not the globe.
+  expect(first.map((tab) => tab.icon)).toEqual([expect.any(String), previewIcon, docsIcon])
+})
+
+// A server without a browser left its restored tabs on a loader with no end.
+story("a restored tab on a server without a browser says that the browser could not open, and keeps its box", async ({ page }) => {
+  const { root, stable } = await reopen(page)
+  const failed = root.getByRole("alert").filter({ hasText: "The browser couldn't open" })
+  const loading = root.getByRole("status", { name: "Loading", exact: true })
+  await expect(root.getByText("Registrations: 3", { exact: true })).toBeVisible()
+
+  // Main closes the binding: the session's server has no browser.
+  await send(root, { type: "state", state: null, error: "browser.pane.unsupported" })
+  await expect(failed).toBeVisible()
+  await expect(loading).toHaveCount(0)
+  await stable()
+
+  // Trying again registers once more and waits for it; the tabs stay where they are, and the browser opens.
+  await failed.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(root.getByText("Registrations: 4", { exact: true })).toBeVisible()
+  await expect(loading).toBeVisible()
+  await stable()
+  await send(root, inventory(restoredPreview, restoredDocs))
+  await expect(root.getByRole("combobox", { name: "Browser address", exact: true })).toHaveValue("http://localhost:4173/")
+  await stable()
 })
 
 // An agent's tabs.open or tabs.focus shows its tab: it comes to the front over the file the person had selected.
