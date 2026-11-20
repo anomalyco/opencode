@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, ProviderInternalError, TransportError } from "@opencode/ai/effect"
+import {
+  ai,
+  AIError,
+  InvalidProviderOutputError,
+  ProviderInternalError,
+  RateLimitError,
+  TransportError,
+} from "@opencode/ai/effect"
+import { configure } from "@opencode/ai/providers/openai-compatible"
+import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { ModelRetry } from "@opencode/core/model-retry"
 import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
@@ -7,14 +16,24 @@ import { Provider } from "@opencode/core/provider"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 import { toSessionError } from "@opencode/core/session/to-session-error"
-import { Clock, Duration, Effect } from "effect"
+import { Clock, Duration, Effect, Fiber, Layer } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
+import { advance } from "./lib/clock"
 import { it } from "./lib/effect"
 
 const timeout = new AIError({
   reason: new TransportError({ message: "Timed out", transport: "http", operation: "request", code: "Timeout" }),
 })
 const internal = new AIError({ reason: new ProviderInternalError({ message: "internal" }) })
+const rateLimit = new AIError({ reason: new RateLimitError({ message: "rate limited" }) })
+const incompleteStream = new AIError({
+  reason: new InvalidProviderOutputError({
+    message: "OpenAI Chat stream ended without finish_reason",
+    classification: "incomplete-stream",
+    route: "openai-chat",
+  }),
+})
 const dnsFailure = new AIError({
   reason: new TransportError({
     message: "getaddrinfo ENOTFOUND opencode.ai",
@@ -32,6 +51,47 @@ const refused = new AIError({
     code: "ECONNREFUSED",
   }),
 })
+
+const sse = (...chunks: ReadonlyArray<unknown>) =>
+  `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`
+
+const emptyUsageSse = sse({
+  id: "chatcmpl_empty",
+  choices: [],
+  usage: { prompt_tokens: 157_000, completion_tokens: 0, total_tokens: 157_000 },
+})
+
+const recoveredSse = sse(
+  { id: "chatcmpl_ok", choices: [{ delta: { content: "Recovered" }, finish_reason: null }], usage: null },
+  { id: "chatcmpl_ok", choices: [{ delta: {}, finish_reason: "stop" }], usage: null },
+)
+
+const openAICompatibleRequest = ai.request({
+  model: configure({ baseURL: "https://api.example.test/v1", apiKey: "test-key" }).model("gemini-4-neon"),
+  prompt: "Hello",
+})
+
+const sseClientLayer = (bodyForAttempt: (attempt: number) => string) => {
+  let attempts = 0
+  const http = Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response(bodyForAttempt(++attempts), {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          }),
+        ),
+      ),
+    ),
+  )
+  return {
+    attempts: () => attempts,
+    layer: LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer), Layer.provide(http)),
+  }
+}
 
 const input = (cause: AIError) => ({
   cause,
@@ -58,9 +118,16 @@ describe("SessionRunnerRetry.policy", () => {
     }),
   )
 
+  it.effect("stops retrying incomplete streams after two retries", () =>
+    Effect.gen(function* () {
+      expect(yield* decisions(incompleteStream, 3)).toEqual([true, true, false])
+    }),
+  )
+
   it.effect("keeps the general allowance for other transient failures", () =>
     Effect.gen(function* () {
       expect(yield* decisions(internal, 11)).toEqual([...Array(10).fill(true), false])
+      expect(yield* decisions(rateLimit, 11)).toEqual([...Array(10).fill(true), false])
     }),
   )
 
@@ -99,6 +166,41 @@ describe("SessionRunnerRetry.policy", () => {
       expect(results).toEqual([...Array(10).fill(true), false])
     }),
   )
+})
+
+describe("ModelRetry.retry", () => {
+  it.effect("caps retries when OpenAI Chat ends with HTTP 200, usage, zero output tokens, and no finish_reason", () =>
+    Effect.gen(function* () {
+      const client = sseClientLayer(() => emptyUsageSse)
+      const run = yield* ModelRetry.retry(LLMClient.generate(openAICompatibleRequest)).pipe(
+        Effect.provide(client.layer),
+        Effect.forkChild({ startImmediately: true }),
+      )
+      yield* advance(() => run.pollUnsafe() !== undefined)
+      const error = yield* Fiber.join(run).pipe(Effect.flip)
+      expect(client.attempts()).toBe(3)
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream", route: "openai-chat" },
+        message: "OpenAI Chat stream ended without finish_reason",
+      })
+    }),
+  )
+
+  for (const succeedOnAttempt of [2, 3]) {
+    it.effect(`recovers cleanly when OpenAI Chat succeeds on attempt ${succeedOnAttempt}`, () =>
+      Effect.gen(function* () {
+        const client = sseClientLayer((attempt) => (attempt < succeedOnAttempt ? emptyUsageSse : recoveredSse))
+        const run = yield* ModelRetry.retry(LLMClient.generate(openAICompatibleRequest)).pipe(
+          Effect.provide(client.layer),
+          Effect.forkChild({ startImmediately: true }),
+        )
+        yield* advance(() => run.pollUnsafe() !== undefined)
+        const response = yield* Fiber.join(run)
+        expect(client.attempts()).toBe(succeedOnAttempt)
+        expect(response.text).toBe("Recovered")
+      }),
+    )
+  }
 })
 
 describe("ModelRetry.retryOneShot", () => {

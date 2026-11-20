@@ -568,6 +568,24 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("rejects an empty stream with usage and no finish reason as incomplete-stream", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(usageChunk({ prompt_tokens: 157_000, completion_tokens: 0, total_tokens: 157_000 })),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream", route: "openai-chat" },
+        message: "OpenAI Chat stream ended without finish_reason",
+      })
+    }),
+  )
+
   it.effect("infers stop when finish reasons are optional", () =>
     Effect.gen(function* () {
       const compatible = OpenAICompatibleChat.route
