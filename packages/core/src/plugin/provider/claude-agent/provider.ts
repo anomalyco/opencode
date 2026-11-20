@@ -20,6 +20,7 @@ const CatalogModel = Schema.Struct({
   efforts: Schema.Array(Schema.String),
   contextWindow: Schema.optionalKey(Schema.Number),
   resolvedModel: Schema.optionalKey(Schema.String),
+  hidden: Schema.optionalKey(Schema.Boolean),
 })
 type CatalogModel = typeof CatalogModel.Type
 const Catalog = Schema.Struct({
@@ -69,11 +70,15 @@ export const register = Effect.fn("ClaudeProvider.register")(function* (
       Effect.gen(function* () {
         if (state.type !== "ready") return
         const baseURL = (yield* connection(ctx)).ANTHROPIC_BASE_URL ?? io.env().ANTHROPIC_BASE_URL
+        // Another project folder may have saved IDs since this one loaded
+        const stored = Schema.decodeUnknownOption(Catalog)(yield* ctx.storage.get(CATALOG_KEY))
         const next = {
           priceSource: priceSource(state.probe.account, baseURL),
-          models: fromClaude(state.probe.models, current.catalog.models),
+          models: fromClaude(state.probe.models, Option.getOrElse(stored, () => current.catalog).models),
         }
-        const unknown = next.models.filter((model) => model.contextWindow === undefined && !checked.has(model.id))
+        const unknown = next.models.filter(
+          (model) => !model.hidden && model.contextWindow === undefined && !checked.has(model.id),
+        )
         if (state.fromChat && unknown.length > 0) {
           for (const model of unknown) checked.add(model.id)
           yield* status.refresh().pipe(Effect.forkScoped)
@@ -100,23 +105,41 @@ export const connection = Effect.fn("ClaudeProvider.connection")(function* (ctx:
   return ClaudeQueryOptions.connectionEnv({ settings: info.settings, headers: info.headers, body: info.body })
 })
 
+// Claude Code lists Fable under whatever name the chat was started with, and each account caches its own list, while a
+// chat or the config may hold any ID that was ever listed. So no ID is dropped, and a model already offered under one
+// ID keeps it when Claude Code lists it under another.
 // Context windows only come from the full check, so a chat's startup report keeps the saved ones.
 function fromClaude(models: readonly ClaudeProbe.Model[], saved: readonly CatalogModel[]): CatalogModel[] {
-  const known = new Map<string, number | undefined>()
-  for (const model of saved) known.set(model.id, model.contextWindow)
-  const result: CatalogModel[] = []
-  for (const model of models) {
-    // "default" follows Claude Code's own default, which can change under a running opencode session
-    if (model.value === "default") continue
-    result.push({
+  // "default" follows Claude Code's own default, which can change under a running opencode session
+  const listed = models.filter((model) => model.value !== "default")
+  const result = new Map<string, CatalogModel>()
+  for (const model of listed) {
+    const own = saved.find((item) => item.id === model.value)
+    const offered =
+      own && !own.hidden
+        ? undefined
+        : saved.find(
+            (item) =>
+              !item.hidden &&
+              item.resolvedModel !== undefined &&
+              item.resolvedModel === model.resolvedModel &&
+              // An alias that is still listed has moved to another version, and this row is the old one
+              !listed.some((other) => other.value === item.id),
+          )
+    const entry = {
       id: model.value,
       name: model.displayName,
       efforts: model.supportedEffortLevels ?? [],
-      contextWindow: model.contextWindow ?? known.get(model.value),
+      contextWindow: model.contextWindow ?? (offered ?? own)?.contextWindow,
       resolvedModel: model.resolvedModel,
-    })
+    }
+    if (offered) result.set(offered.id, { ...entry, id: offered.id })
+    result.set(entry.id, offered ? { ...entry, hidden: true } : entry)
   }
-  return result
+  for (const model of saved) {
+    if (!result.has(model.id)) result.set(model.id, { ...model, hidden: true })
+  }
+  return [...result.values()]
 }
 
 // A subscription covers usage, and a custom base URL or an enterprise gateway can bill anything, so they show no cost.
@@ -143,5 +166,7 @@ function toModel(model: CatalogModel, prices: ReadonlyMap<string, Model.Info> | 
     capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
     variants: model.efforts.map((effort) => ({ id: Model.VariantID.make(effort), settings: { effort } })),
     cost: priced?.cost ?? [],
+    // opencode keeps a deprecated model out of its pickers and still runs chats on it
+    status: model.hidden ? "deprecated" : defaults.status,
   }
 }

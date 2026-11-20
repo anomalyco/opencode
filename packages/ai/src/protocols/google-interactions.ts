@@ -46,6 +46,7 @@ const Options = Schema.Struct({
   thinkingLevel: lenient(ThinkingLevel),
   thinkingSummaries: lenient(knownString<"auto" | "none">()),
   serviceTier: lenient(knownString<"standard" | "flex" | "priority" | "deferred">()),
+  safetySettings: lenient(Schema.Array(GeminiGenerateContent.SafetySetting)),
 })
 export type OptionsInput = typeof Options.Encoded
 export type ProviderOptionsInput = OptionsInput
@@ -98,6 +99,7 @@ const Body = Schema.Struct({
   continuation_token: Schema.optional(Schema.String),
   system_instruction: Schema.optional(Schema.String),
   service_tier: Schema.optional(Schema.String),
+  safety_settings: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String, threshold: Schema.String }))),
   tools: Schema.optional(
     Schema.Array(
       Schema.Struct({
@@ -240,13 +242,28 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 // =============================================================================
 // Request Body Construction
 // =============================================================================
+// https://aistudio.google.com/docs/document-processing#office-documents
+const OFFICE_DOCUMENT_MIME_TYPES = new Set([
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.oasis.opendocument.presentation",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.oasis.opendocument.spreadsheet",
+])
+
 export const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
   if (
     asset.kind !== "image" &&
     asset.kind !== "audio" &&
     asset.kind !== "video" &&
     asset.mediaType !== "application/pdf" &&
-    asset.mediaType !== "text/csv"
+    asset.mediaType !== "text/csv" &&
+    !OFFICE_DOCUMENT_MIME_TYPES.has(asset.mediaType)
   )
     return yield* ProviderShared.invalidRequest(
       `Google Interactions does not support ${asset.mediaType} document input`,
@@ -376,6 +393,10 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
     previous_interaction_id: options.previousInteractionId,
     system_instruction: request.system.length ? ProviderShared.joinText(request.system) : undefined,
     service_tier: options.serviceTier,
+    safety_settings: options.safetySettings?.map((setting) => ({
+      type: setting.category.replace(/^HARM_CATEGORY_/, "").toLowerCase(),
+      threshold: setting.threshold.toLowerCase(),
+    })),
     tools: flattened.tools.length
       ? flattened.tools.map((tool) => ({
           type: "function" as const,

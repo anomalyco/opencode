@@ -40,8 +40,7 @@ export function make() {
     const limit =
       limited && !failure ? `Claude Code subscription limit reached${window ? ` (${window})` : ""}.` : failure
     const reset = limited && rejected?.resetsAt ? ` Resets at ${new Date(rejected.resetsAt * 1000).toISOString()}.` : ""
-    const billing = code === "billing_error" ? " Check your Claude plan and extra-usage settings." : ""
-    const text = limit + reset + billing
+    const text = limit + reset
 
     if (text) return new Failure(text, limited)
     if (status) return new Failure(`Claude Code could not finish its reply (HTTP ${status})`, limited)
