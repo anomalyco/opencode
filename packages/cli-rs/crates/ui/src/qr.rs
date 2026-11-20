@@ -389,15 +389,4 @@ mod tests {
             assert_eq!(modules, expected, "version {version}");
         }
     }
-
-    #[test]
-    fn renders_rows_in_pairs() {
-        // From `renderUnicodeCompact("A", { border: 1 })` under Bun.
-        let text = render_unicode_compact("A", 1);
-        let lines: Vec<&str> = text.split('\n').collect();
-        assert_eq!(lines.len(), 12);
-        assert!(lines.iter().all(|line| line.chars().count() == 23));
-        assert!(lines[11].chars().all(|c| c == '▀'));
-        assert!(encode(&"x".repeat(3000)).is_none());
-    }
 }

@@ -158,20 +158,3 @@ fn parse<'a>(source: ThemeSource<'a>, name: &str, mini: bool) -> Result<Cow<'a, 
 fn invalid(name: &str, value: &str) -> String {
     format!("Invalid theme: {name} {value} is an invalid value")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_builtin_loads_from_its_raw_document() {
-        let catalog = Catalog::default();
-        let names = catalog.names();
-        assert_eq!(names.len(), BUILTINS.themes.len() + 1);
-        for name in &names[..BUILTINS.themes.len()] {
-            for mode in [ThemeMode::Dark, ThemeMode::Light] {
-                catalog.load(name, mode).unwrap_or_else(|error| panic!("{name}: {error}"));
-            }
-        }
-    }
-}

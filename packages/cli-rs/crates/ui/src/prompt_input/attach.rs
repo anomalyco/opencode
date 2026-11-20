@@ -381,138 +381,30 @@ pub fn parse_pasted_filepaths(value: &str, windows: bool) -> Vec<String> {
 mod tests {
     use super::*;
 
+    // Windows paste shapes, which no test on another system reaches: drive and UNC file URLs, and `\` as a separator.
     #[test]
-    fn pasted_paths_normalize_like_typescript() {
-        let cases = [
-            ("'/tmp/a b.png'", "/tmp/a b.png"),
-            ("\"/tmp/x.png\"", "/tmp/x.png"),
-            ("/tmp/a\\ b.png", "/tmp/a b.png"),
-            ("file:///tmp/a%20b.png", "/tmp/a b.png"),
-            ("file://localhost/tmp/c.png", "/tmp/c.png"),
-            // Another host is not a local path; the text stays as typed.
-            ("file://server/tmp/c.png", "file://server/tmp/c.png"),
-            ("file://Bücher/tmp/c.png", "file://Bücher/tmp/c.png"),
-            ("file:///tmp/a%2Fb.png", "file:///tmp/a%2Fb.png"),
-        ];
-        for (input, expected) in cases {
-            assert_eq!(normalize_pasted_filepath(input, false), expected, "{input}");
-        }
+    fn windows_pastes_normalize_and_split_as_typescript_does() {
         assert_eq!(normalize_pasted_filepath("file:///C:/Users/a.png", true), "C:\\Users\\a.png");
         assert_eq!(normalize_pasted_filepath("file://host/share/a.png", true), "\\\\host\\share\\a.png");
-    }
-
-    #[test]
-    fn pasted_path_lists_split_on_whitespace_and_quotes() {
-        assert_eq!(
-            parse_pasted_filepaths("/a.png '/b c.png' \"/d\\\"e.png\" /f\\ g.png", false),
-            ["/a.png", "/b c.png", "/d\"e.png", "/f g.png"]
-        );
-        assert_eq!(
-            parse_pasted_filepaths("# comment\nfile:///a.png\r\nfile:///b%20c.png", false),
-            ["/a.png", "/b c.png"]
-        );
-        // Windows: `\` separates, it does not escape.
         assert_eq!(
             parse_pasted_filepaths("'C:\\a\\b c.png' C:\\d\\e.png \"C:\\f\\\"", true),
             ["C:\\a\\b c.png", "C:\\d\\e.png", "C:\\f\\"]
         );
-        assert!(parse_pasted_filepaths("'/open.png", false).is_empty());
-        let many = (0..33).map(|i| format!("/{i}.png")).collect::<Vec<_>>().join(" ");
-        assert!(parse_pasted_filepaths(&many, false).is_empty());
-        let limit = (0..32).map(|i| format!("/{i}.png")).collect::<Vec<_>>().join(" ");
-        assert_eq!(parse_pasted_filepaths(&limit, false).len(), 32);
     }
 
     #[test]
-    fn only_attachable_names_go_to_the_filesystem() {
-        assert!(may_attach("/tmp/shot.PNG", false));
-        assert!(may_attach("/a.png /b.pdf", false));
-        assert!(!may_attach("/a.png notes.txt", false));
-        assert!(!may_attach("https://example.com/a.png", false));
-        assert!(!may_attach("hello world", false));
+    fn a_pasted_list_holds_at_most_32_paths() {
+        let paths = |count: usize| (0..count).map(|i| format!("/{i}.png")).collect::<Vec<_>>().join(" ");
+        assert_eq!(parse_pasted_filepaths(&paths(32), false).len(), 32);
+        assert!(parse_pasted_filepaths(&paths(33), false).is_empty());
     }
 
+    // `pathToFileURL("/tmp/a b.png")` on Windows: the working directory's drive.
+    #[cfg(windows)]
     #[test]
-    fn files_resolve_within_the_byte_budget() {
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let png = dir.path().join("a b.png");
-        std::fs::write(&png, b"\x89PNG").unwrap();
-        let svg = dir.path().join("logo.svg");
-        std::fs::write(&svg, "<svg/>").unwrap();
-        // Windows pastes keep `\`, which elsewhere escapes the next character.
-        let windows = cfg!(windows);
-        let quoted = format!("'{}'", png.display());
-        assert_eq!(
-            resolve(&quoted, windows),
-            Some(vec![Resolved::File {
-                uri: "data:image/png;base64,iVBORw==".into(),
-                filename: "a b.png".into(),
-                path: png.display().to_string(),
-            }])
-        );
-        let both = format!("{} {}", quoted, svg.display());
-        assert_eq!(
-            resolve(&both, windows).unwrap()[1],
-            Resolved::Text { content: "<svg/>".into(), filename: "logo.svg".into() }
-        );
-        // One missing file drops the whole list.
-        assert_eq!(resolve(&format!("{quoted} /missing.png"), windows), None);
-    }
-
-    #[test]
-    fn labels_count_up_and_reuse_an_identical_image() {
-        let files = vec![
-            json!({ "uri": "data:image/png;base64,AA", "name": "clipboard", "mention": { "text": "[Image 1]" } }),
-            json!({ "uri": "data:application/pdf;base64,AA", "mention": { "text": "[PDF 3]" } }),
-        ];
-        assert_eq!(label(&files, "data:image/png;base64,AA", Some("clipboard")), Ok("[Image 1]".into()));
-        assert_eq!(label(&files, "data:image/png;base64,BB", Some("clipboard")), Ok("[Image 2]".into()));
-        assert_eq!(label(&files, "data:application/pdf;base64,AA", None), Ok("[PDF 4]".into()));
-        assert!(label(&files, "https://x", None).is_err());
-    }
-
-    #[test]
-    fn data_uris_decode_their_payload() {
-        assert_eq!(data_uri("data:image/png;base64,AAE="), Some(vec![0, 1]));
-        assert_eq!(data_uri("data:text/plain,hi"), Some(b"hi".to_vec()));
-        assert_eq!(data_uri("https://example.com/a.png"), None);
-    }
-
-    #[test]
-    fn server_files_drop_the_path_and_a_local_server_gets_its_url() {
-        let (path, url) = if cfg!(windows) {
-            ("C:\\tmp\\a b.png", "file:///C:/tmp/a%20b.png")
-        } else {
-            ("/tmp/a b.png", "file:///tmp/a%20b.png")
-        };
-        let entry = json!({ "files": [{ "uri": "data:image/png;base64,AA", "path": path }] });
-        assert_eq!(
-            files_for_server(&entry, true),
-            json!([{ "uri": "data:image/png;base64,AA", "source": { "type": "uri", "uri": url } }])
-        );
-        assert_eq!(files_for_server(&entry, false), json!([{ "uri": "data:image/png;base64,AA" }]));
-        // `pathToFileURL("/tmp/a b.png")` on Windows: the working directory's drive.
-        if cfg!(windows) {
-            let entry = json!({ "files": [{ "uri": "data:image/png;base64,AA", "path": "/tmp/a b.png" }] });
-            let uri = files_for_server(&entry, true)[0]["source"]["uri"].as_str().unwrap().to_owned();
-            assert!(uri.starts_with("file:///") && uri.ends_with(":/tmp/a%20b.png"), "{uri}");
-        }
-    }
-
-    #[test]
-    fn images_show_a_repeated_paste_once() {
-        let prompt = json!({ "files": [
-            { "uri": "data:image/png;base64,AA", "mention": { "text": "[Image 1]" } },
-            { "uri": "data:image/png;base64,AA", "mention": { "text": "[Image 1]" } },
-            { "uri": "data:application/pdf;base64,AA", "mention": { "text": "[PDF 1]" } },
-            { "uri": "data:image/png;base64,BB", "mention": { "text": "[Image 2]" } },
-        ] });
-        assert_eq!(
-            images(&prompt),
-            [
-                ("data:image/png;base64,AA".to_owned(), Some("[Image 1]".to_owned())),
-                ("data:image/png;base64,BB".to_owned(), Some("[Image 2]".to_owned())),
-            ]
-        );
+    fn a_rooted_path_takes_the_working_directorys_drive() {
+        let entry = json!({ "files": [{ "uri": "data:image/png;base64,AA", "path": "/tmp/a b.png" }] });
+        let uri = files_for_server(&entry, true)[0]["source"]["uri"].as_str().unwrap().to_owned();
+        assert!(uri.starts_with("file:///") && uri.ends_with(":/tmp/a%20b.png"), "{uri}");
     }
 }

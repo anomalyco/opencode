@@ -199,57 +199,9 @@ pub fn file_url(flavor: Flavor, path: &str) -> String {
 mod tests {
     use super::*;
 
+    // A recent directory under the home shows as `~`; no test writes recents under the real home.
     #[test]
-    fn triggers_open_at_word_starts() {
-        assert_eq!(mention_trigger("@"), Some(0));
-        assert_eq!(mention_trigger("fix @src/ma"), Some(4));
-        assert_eq!(mention_trigger("a@b"), None);
-        assert_eq!(mention_trigger("@src done"), None);
-        assert_eq!(mention_trigger("日本 @x"), Some(7));
-        assert_eq!(mention_trigger("\t@x"), Some(1));
-        assert_eq!(slash_trigger("/"), Some(0));
-        assert_eq!(slash_trigger("/rev"), Some(0));
-        assert_eq!(slash_trigger("/review x"), None);
-        assert_eq!(slash_trigger("see /a/b"), None);
-        assert_eq!(slash_trigger("a/b"), None);
-        assert_eq!(slash_trigger("x\n/s"), Some(2));
-    }
-
-    #[test]
-    fn line_ranges_and_slash_heads() {
-        let range = |start, end| Some(LineRange { start, end });
-        assert_eq!(file_line_range("src/a.ts#12"), ("src/a.ts", range(12, None)));
-        assert_eq!(file_line_range("src/a.ts#12-20"), ("src/a.ts", range(12, Some(20))));
-        assert_eq!(file_line_range("src/a.ts#12-"), ("src/a.ts", range(12, None)));
-        assert_eq!(file_line_range("src/a.ts#20-12"), ("src/a.ts", range(20, None)));
-        assert_eq!(file_line_range("#12"), ("#12", None));
-        assert_eq!(file_line_range("a#x"), ("a#x", None));
-        assert_eq!(slash_head("/cd ../x"), Some(("cd", "../x", 3)));
-        assert_eq!(slash_head("/init"), Some(("init", "", 5)));
-        assert_eq!(slash_head("hi"), None);
-    }
-
-    #[test]
-    fn directory_searches_follow_typescript() {
-        let search = |query| directory_search(Flavor::Posix, query, "/p/app", "/home/u");
-        let dir = |directory: &str, prefix: &str, query: &str| DirectorySearch {
-            directory: directory.into(),
-            prefix: prefix.into(),
-            query: query.into(),
-        };
-        assert_eq!(search("~"), dir("/home/u", "~/", ""));
-        assert_eq!(search("~/src/o"), dir("/home/u/src", "~/src/", "o"));
-        assert_eq!(search("../.."), dir("/", "../../", ""));
-        assert_eq!(search("/usr/lo"), dir("/usr", "/usr/", "lo"));
-        assert_eq!(search("pack"), dir("/p/app", "", "pack"));
-        assert_eq!(search("packages/t"), dir("/p/app/packages", "packages/", "t"));
-        let found = search("~/src/");
-        assert_eq!(directory_exact("~/src/", &found).as_deref(), Some("~/src/"));
-        assert_eq!(directory_exact("pack", &search("pack")), None);
-        assert_eq!(directory_value("opencode/", &found), "~/src/opencode/");
-        assert!(directory_matches("Packages", "pa"));
-        assert!(!directory_matches(".git", ""));
-        assert!(directory_matches(".git", ".g"));
+    fn recent_directories_under_the_home_start_with_a_tilde() {
         let recent = |directory| directory_recent_value(Flavor::Posix, directory, "/home/u");
         assert_eq!(recent("/home/u"), "~");
         assert_eq!(recent("/home/u/src/x"), "~/src/x");
@@ -281,14 +233,10 @@ mod tests {
         assert_eq!(recent("D:/x/../y"), "D:/x/../y");
     }
 
+    // Characters a URL escapes and Windows paths, which no fixture path has.
     #[test]
     fn paths_and_urls() {
         let p = Flavor::Posix;
-        assert_eq!(resolve(p, "/p", "a/../b/./c"), "/p/b/c");
-        assert_eq!(mention_path(p, "/p", "/p/src/a.ts"), "src/a.ts");
-        assert_eq!(mention_path(p, "/p", "/q/a.ts"), "/q/a.ts");
-        assert_eq!(mention_path(p, "/p", "/p"), "/p");
-        assert_eq!(basename(p, "/p/src/"), "src");
         assert_eq!(file_url(p, "/p/a b#1.ts"), "file:///p/a%20b%231.ts");
         assert_eq!(file_url(p, "/p/a\\b"), "file:///p/a%5Cb");
         let w = Flavor::Windows;
@@ -301,15 +249,5 @@ mod tests {
         // `pathToFileURL` resolves first and keeps a trailing separator.
         assert_eq!(file_url(p, "/p/./x/../a/"), "file:///p/a/");
         assert_eq!(file_url(w, "C:/p/x/../a/"), "file:///C:/p/a/");
-    }
-
-    // The editor's cells at OpenTUI's defaults: a tab is two, a wide character two, a line break one.
-    #[test]
-    fn measure_counts_as_a_default_buffer() {
-        let app = opentui::testing::TestApp::new(10, 2);
-        assert_eq!(measure(&app, "ab\tcd"), 6);
-        assert_eq!(measure(&app, "\t\nX"), 4);
-        assert_eq!(measure(&app, "日本\n\nx"), 7);
-        assert_eq!(measure(&app, ""), 0);
     }
 }
