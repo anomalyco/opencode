@@ -46,8 +46,6 @@ type Template = {
                         // mode is part of the content address; declared capabilities follow as
                         // "\n" + JSON(capabilities)
   capabilities?: { https?: { hosts: string[] } }  // live templates only (widgets-live.md, Capabilities)
-  fullscreen?: boolean  // offer full screen always / never; absent: clients decide (widgets-fullscreen.md). When set,
-                        // the version hash ends with "\nfullscreen:" + value
   builtin: boolean
 }
 ```
@@ -300,7 +298,6 @@ type State = {
   response?: unknown                    // the submitted value
   wait: boolean                         // the tool call waits for the answer (see Tools)
   capabilities?: { https?: { hosts: string[] } }   // the template's, for the client's grant chip
-  fullscreen?: boolean                  // the template's (widgets-fullscreen.md)
   time: { created: number; responded?: number }   // epoch ms
 }
 ```
@@ -324,7 +321,6 @@ A widget goes `open → submitted` or `open → dismissed`, once. States of a de
 type Summary = {
   name: string; version: string; description: string; data: JSONSchema; mode: "step" | "live"
   capabilities?: { https?: { hosts: string[] } }   // live templates only
-  fullscreen?: boolean
   builtin: boolean
 }
 type Program = Summary & { source: string; program: string }   // program = prelude + "\n" + source
@@ -394,7 +390,6 @@ input: {
   source?: string                  // save
   mode?: "step" | "live"           // save; default "step"
   capabilities?: { https?: { hosts: string[] } }   // save; live templates only (widgets-live.md, Capabilities)
-  fullscreen?: boolean             // save (widgets-fullscreen.md)
   example?: object                 // save
 }
 ```

@@ -45,8 +45,6 @@ export interface SaveInput {
   readonly mode?: Widget.Mode
   /** Live templates only. */
   readonly capabilities?: Widget.Capabilities
-  /** Offer full screen always (`true`) or never (`false`); absent lets clients decide (widgets-fullscreen.md). */
-  readonly fullscreen?: boolean
   /**
    * Data checked against `data` and, for a step template, run through `init` (which renders the first view) before the
    * template is stored. A live template is only compiled.
@@ -160,10 +158,9 @@ export const make = (storage: StorageDomain) => {
     if (problem) return yield* invalid(problem)
     const template = decode({
       name: input.name,
-      version: version(input.source, input.data, mode, input.capabilities, input.fullscreen),
+      version: version(input.source, input.data, mode, input.capabilities),
       mode,
       ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
-      ...(input.fullscreen === undefined ? {} : { fullscreen: input.fullscreen }),
       description: input.description.trim(),
       data: input.data,
       source: input.source,

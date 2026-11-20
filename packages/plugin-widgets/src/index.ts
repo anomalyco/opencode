@@ -263,7 +263,6 @@ export default Plugin.define({
                 status: "open",
                 wait: input.wait === true,
                 ...(template.capabilities === undefined ? {} : { capabilities: template.capabilities }),
-                ...(template.fullscreen === undefined ? {} : { fullscreen: template.fullscreen }),
                 time: { created: yield* Clock.currentTimeMillis },
               }
               if (!state.wait) {
@@ -309,7 +308,6 @@ export default Plugin.define({
                   source: yield* required("source", input.source),
                   ...(input.mode === undefined ? {} : { mode: input.mode }),
                   ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
-                  ...(input.fullscreen === undefined ? {} : { fullscreen: input.fullscreen }),
                   example: yield* required("example", input.example),
                 })
                 .pipe(Effect.mapError(toolError))

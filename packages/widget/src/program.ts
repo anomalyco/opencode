@@ -18,21 +18,14 @@ export function entry(mode: Mode) {
 
 /**
  * A template's content address: the first 16 hex chars of sha256(program(source) + "\n" + JSON.stringify(data)); a
- * live template adds "\nlive", then "\n" + JSON.stringify(capabilities) when it declares any; a template that sets
- * `fullscreen` adds "\nfullscreen:" + its value last. It covers the prelude because clients cache the served program by
- * `name@version` forever, and the mode, capabilities and full-screen choice because they decide how the program runs.
+ * live template adds "\nlive", then "\n" + JSON.stringify(capabilities) when it declares any. It covers the prelude
+ * because clients cache the served program by `name@version` forever, and the mode and capabilities because they
+ * decide how the program runs.
  */
-export function version(
-  source: string,
-  data: JSONSchema,
-  mode: Mode = "step",
-  capabilities?: Capabilities,
-  fullscreen?: boolean,
-) {
+export function version(source: string, data: JSONSchema, mode: Mode = "step", capabilities?: Capabilities) {
   const live = mode === "live" ? "\nlive" + (capabilities === undefined ? "" : "\n" + JSON.stringify(capabilities)) : ""
-  const screen = fullscreen === undefined ? "" : "\nfullscreen:" + fullscreen
   return createHash("sha256")
-    .update(program(source) + "\n" + JSON.stringify(data) + live + screen)
+    .update(program(source) + "\n" + JSON.stringify(data) + live)
     .digest("hex")
     .slice(0, 16)
 }

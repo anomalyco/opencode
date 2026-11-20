@@ -225,38 +225,6 @@ test("the built-in minigame is a live template end to end", () =>
     }),
   ))
 
-test("stores fullscreen in the version, summary, program and widget states, and accepts filling canvases", () =>
-  run((fake) =>
-    Effect.gen(function* () {
-      const source = `function view(state, data) {
-  return ui.column({}, [ui.canvas({ id: "board", height: 200, fill: true, alt: "Board" })])
-}`
-      const save = (input: Record<string, unknown>) =>
-        execute(fake, "widget_template", {
-          action: "save",
-          name: "board",
-          description: "A board",
-          data: pickerSchema,
-          source,
-          example: { items: ["a"] },
-          ...input,
-        })
-      expect(Exit.isSuccess(yield* save({}))).toBe(true)
-      const plain = yield* fake.call<Widget.Program>("program", { name: "board" })
-      yield* save({ fullscreen: true })
-      const full = yield* fake.call<Widget.Program>("program", { name: "board" })
-
-      expect(plain.fullscreen).toBeUndefined()
-      expect(full).toMatchObject({ fullscreen: true, version: version(source, pickerSchema, "step", undefined, true) })
-      expect(full.version).not.toBe(plain.version)
-      expect(
-        (yield* fake.call<ReadonlyArray<Widget.Summary>>("templates", {})).find((item) => item.name === "board"),
-      ).toMatchObject({ fullscreen: true })
-      yield* execute(fake, "widget", { template: "board", data: { items: ["x"] } })
-      expect((yield* states(fake))[0]).toMatchObject({ fullscreen: true })
-    }),
-  ))
-
 describe("capabilities", () => {
   const source = `async function main(data) {
   const response = await widget.fetch("https://api.github.com/zen")

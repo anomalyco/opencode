@@ -195,8 +195,6 @@ widget.send(value, { wake })             a message to you while the widget stays
 - Never run 50 ms without an `await`; keep each `draw` under 2,000 commands.
 - The program pauses when the widget is out of view; `widget.next` then gives `{ type: "resumed", pausedMs }` first.
 - `Math.random()` is fine. Always set the canvas `alt`.
-- Save games and big visualizations with `fullscreen: true` so clients offer a full-screen button; give their canvas
-  `fill: true` to take the screen's height, and switch layouts on the `{ id: "", type: "fullscreen", value }` event.
 
 ```js
 // Catch the ball: it bounces around; tap it to score. Submits { score }.

@@ -50,8 +50,6 @@ export const Summary = Schema.Struct({
   mode: Mode,
   /** Live templates only. */
   capabilities: optional(Capabilities),
-  /** Offer full screen always (`true`), never (`false`), or, when absent, for live and canvas/shader views. */
-  fullscreen: optional(Schema.Boolean),
   builtin: Schema.Boolean,
 }).annotate({ identifier: "Widget.Summary" })
 
@@ -100,8 +98,6 @@ export const State = Schema.Struct({
   wait: Schema.Boolean,
   /** The template's capabilities, so clients can show what the widget is granted. */
   capabilities: optional(Capabilities),
-  /** The template's `fullscreen` choice (widgets-fullscreen.md). */
-  fullscreen: optional(Schema.Boolean),
   /** Epoch milliseconds. */
   time: Schema.Struct({ created: Schema.Number, responded: optional(Schema.Number) }),
 }).annotate({ identifier: "Widget.State" })
