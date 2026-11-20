@@ -62,7 +62,8 @@ void electron.app.whenReady().then(async () => {
 
     const grown = before === undefined ? 0 : (await handles())! - before
 
-    console.log(JSON.stringify({ opened, closed, reopened, overlapping, afterPrevious, cycles: [...new Set(cycles)], leaked: grown > 5 }))
+    // A 1-handle-per-cycle leak grows by at least 50; tolerate Electron's startup thread handle jitter.
+    console.log(JSON.stringify({ opened, closed, reopened, overlapping, afterPrevious, cycles: [...new Set(cycles)], leaked: grown >= 25 }))
   } finally {
     await file.close()
     await rm(dir, { recursive: true, force: true })
