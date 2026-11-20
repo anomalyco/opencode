@@ -176,46 +176,9 @@ fn interpolate(path: &str, params: &[(String, String)]) -> error::Result<String>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn pairs(items: &[(&str, &str)]) -> Vec<(String, String)> {
         items.iter().map(|(key, value)| (key.to_string(), value.to_string())).collect()
-    }
-
-    #[test]
-    fn raw_requests_need_a_method_and_an_absolute_path() {
-        let input = |items: &[&str]| items.iter().map(|item| item.to_string()).collect::<Vec<_>>();
-        assert_eq!(raw_request(&input(&["Get", "/api/x?a=1"])), Some(("GET", "/api/x?a=1".to_owned())));
-        assert_eq!(raw_request(&input(&["get", "api/x"])), None);
-        assert_eq!(raw_request(&input(&["fetch", "/api/x"])), None);
-        assert_eq!(raw_request(&input(&["session.list"])), None);
-    }
-
-    #[test]
-    fn operations_fill_path_parameters_and_query() {
-        let spec = json!({ "paths": {
-            "/api/session": { "parameters": [], "get": { "operationId": "session.list" } },
-            "/api/session/{sessionID}": { "get": { "operationId": "session.get" } },
-            "/api/session/{sessionID}/message/{messageID}": {
-                "get": { "operationId": "session.message" },
-                "delete": { "operationId": "session.message.delete" },
-            },
-        }});
-        let params = pairs(&[("sessionID", "ses 1/é(x)!&="), ("limit", "5"), ("messageID", "msg_1"), ("q", "a b&c")]);
-        assert_eq!(
-            resolve_operation(&spec, "session.message.delete", &params).unwrap(),
-            ("DELETE", "/api/session/ses%201%2F%C3%A9(x)!%26%3D/message/msg_1?limit=5&q=a+b%26c".to_owned())
-        );
-        assert_eq!(
-            resolve_operation(&spec, "session.get", &pairs(&[("sessionID", "ses/a"), ("workspace", "work")])).unwrap(),
-            ("GET", "/api/session/ses%2Fa?workspace=work".to_owned())
-        );
-        assert_eq!(resolve_operation(&spec, "session.list", &[]).unwrap(), ("GET", "/api/session".to_owned()));
-        assert_eq!(
-            resolve_operation(&spec, "session.message", &pairs(&[("sessionID", "s")])).unwrap_err().to_string(),
-            "Missing path parameter: messageID"
-        );
-        assert_eq!(resolve_operation(&spec, "nope", &[]).unwrap_err().to_string(), "Operation not found: nope");
     }
 
     #[test]

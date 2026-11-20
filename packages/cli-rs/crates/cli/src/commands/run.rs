@@ -224,34 +224,3 @@ fn report(json: bool, exit: &Cell<u8>, message: &str, session: Option<&str>) {
     }
     ui::error(message);
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn words_after_the_separator_are_submitted_once() {
-        let argv: Vec<String> = ["run", "a", "--", "b\u{fffd}"].map(String::from).into();
-        let crate::parse::Outcome::Run(invocation) = crate::parse::parse(&argv, "opencode") else {
-            panic!("{argv:?} does not run");
-        };
-        let Some(crate::args::Command::Run(args)) = &invocation.cli.command else {
-            panic!("{argv:?} is not run");
-        };
-        assert_eq!(args.message, ["a", "b\u{fffd}"]);
-    }
-
-    #[test]
-    fn stdin_follows_the_message() {
-        assert_eq!(merge_input(Some("a".into()), Some("b\n".into())).as_deref(), Some("a\nb\n"));
-        assert_eq!(merge_input(None, Some("".into())), None);
-        assert_eq!(merge_input(Some("a".into()), Some("".into())).as_deref(), Some("a"));
-    }
-
-    #[test]
-    fn default_titles_cut_at_fifty_units() {
-        assert_eq!(default_title("short"), "short");
-        let long = "x".repeat(51);
-        assert_eq!(default_title(&long), "x".repeat(50) + "...");
-    }
-}

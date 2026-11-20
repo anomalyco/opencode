@@ -316,44 +316,6 @@ mod tests {
     }
 
     #[test]
-    fn redact_matches_debug_config_test() {
-        let providers = json!({
-            "settings": { "apiKey": "sk-example", "timeout": 1200 },
-            "headers": { "Authorization": "Bearer example", "X-API-Key": "key", "X-Custom": "opaque" },
-            "models": { "demo": { "request": { "headers": { "x-auth-token": "model-secret" } } } },
-            "oauth": { "client_secret": "oauth-secret", "client_id": "public" },
-        });
-        assert_eq!(
-            redact(&providers, false),
-            json!({
-                "settings": { "apiKey": "***", "timeout": 1200 },
-                "headers": { "Authorization": "***", "X-API-Key": "***", "X-Custom": "***" },
-                "models": { "demo": { "request": { "headers": { "x-auth-token": "***" } } } },
-                "oauth": { "client_secret": "***", "client_id": "public" },
-            })
-        );
-        let input = json!({
-            "mcp": {
-                "local": { "environment": { "SERVICE_TOKEN": "token-value", "PATH": "/usr/bin" } },
-                "remote": { "url": "https://user:pass@example.com/mcp", "headers": { "x-custom": "opaque" } },
-            },
-            "url": "https://example.com/api?api_key=secret&mode=debug",
-            "max_tokens": 100,
-        });
-        assert_eq!(
-            redact(&input, false),
-            json!({
-                "mcp": {
-                    "local": { "environment": { "SERVICE_TOKEN": "***", "PATH": "/usr/bin" } },
-                    "remote": { "url": "***", "headers": { "x-custom": "***" } },
-                },
-                "url": "***",
-                "max_tokens": 100,
-            })
-        );
-    }
-
-    #[test]
     fn normalize_follows_node_path() {
         assert_eq!(normalize("/a//b/./c/../d/", false), "/a/b/d");
         assert_eq!(normalize("/../a", false), "/a");

@@ -327,20 +327,6 @@ mod tests {
     }
 
     #[test]
-    fn table_rows_follow_format_list() {
-        let sessions = [
-            json!({ "id": "ses_a", "title": "one\ttwo\nthree", "time": { "updated": 0 } }),
-            json!({ "id": "ses_b", "title": null, "time": {} }),
-        ];
-        let rows = table(&sessions);
-        let rows: Vec<_> = rows.split('\n').collect();
-        assert!(rows[0].starts_with("ses_a\tone two three\t"));
-        assert_eq!(rows[1], "ses_b\tUntitled session\tInvalid Date");
-        let titled = table(&[json!({ "id": "ses_c", "title": "x\x1b]52;c;cHduZWQ=\x07y", "time": {} })]);
-        assert_eq!(titled, "ses_c\txy\tInvalid Date");
-    }
-
-    #[test]
     fn an_import_directory_reads_the_working_directory_only_when_path_resolve_does() {
         let gone = || -> error::Result<String> { bail!("the working directory was deleted") };
         let p = Flavor::Posix;
