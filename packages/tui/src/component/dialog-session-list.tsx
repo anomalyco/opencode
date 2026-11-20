@@ -21,6 +21,7 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
 import { useConfig, useNewDesigns } from "../config"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
+import { parseSessionMention } from "@opencode/util/session-mention"
 import { projectName } from "../util/project"
 import { useLocation } from "../context/location"
 
@@ -75,11 +76,13 @@ export function DialogSessionList() {
           parentID: null,
           archived: false,
         })
+        // A pasted full ID may belong to another project, an archived session or a subagent, which the scoped list omits.
+        const exactID = parseSessionMention(query)?.id
         const exact =
-          /^ses_[0-9A-Za-z]{26}$/.test(query) && !response.data.some((session) => session.id === query)
+          exactID && !response.data.some((session) => session.id === exactID)
             ? await client.api.session
-                .get({ sessionID: query })
-                .then((session) => (session.id === query ? session : undefined))
+                .get({ sessionID: exactID })
+                .then((session) => (session.id === exactID ? session : undefined))
                 .catch(() => undefined)
             : undefined
         return { query, allProjects, sessions: exact ? [exact, ...response.data] : response.data, error: undefined }
@@ -154,7 +157,7 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    const exactID = filter().trim()
+    const exactID = parseSessionMention(filter().trim())?.id
     const visible = sessions().filter((session) => !session.parentID || session.id === exactID)
     const sessionMap = new Map(visible.map((session) => [session.id, session]))
     const pinned = sessionTabs.enabled() ? [] : local.session.pinned().filter((sessionID) => sessionMap.has(sessionID))

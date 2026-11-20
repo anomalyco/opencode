@@ -348,7 +348,8 @@ test("falls back to direct session.get when pasting an exact ses_ ID outside the
     await app.waitForFrame(
       (frame) => frame.includes("Sessions") && app.renderer.currentFocusedRenderable instanceof InputRenderable,
     )
-    await app.mockInput.typeText(exactID)
+    // The @session:<id> form copied from a transcript resolves to the same session.
+    await app.mockInput.typeText(`@session:${exactID}`)
     await app.waitForFrame((frame) => fetched.includes(exactID) && frame.includes("Foreign project session"))
 
     app.mockInput.pressEnter()

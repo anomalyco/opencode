@@ -23,7 +23,7 @@ test("/sessions opens picker on Enter and /sessions <id> (and aliases) navigate 
   await using state = await tmpdir()
   const first = makeSession("ses_first_target", "First target session")
   const second = makeSession("ses_second_target", "Second target session")
-  const third = makeSession("ses_third_target", "Third target session")
+  const third = makeSession("ses_0123456789abcdefghijABCDEF", "Third target session")
   const sessions = new Map([first, second, third].map((session) => [session.id, session]))
 
   await using setup = await createAppFixture({
@@ -109,7 +109,7 @@ test("/sessions opens picker on Enter and /sessions <id> (and aliases) navigate 
   )
   expect(setup.captureCharFrame()).toContain(second.title)
 
-  // /continue <id> alias navigates directly to another session.
+  // /continue <id> alias navigates directly with a full generated ID.
   await setup.mockInput.typeText(`/continue ${third.id}`)
   setup.mockInput.pressEnter()
   await setup.waitForFrame(

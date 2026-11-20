@@ -162,6 +162,8 @@ const layer = Layer.effect(
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
         if (input.search) {
           const titleMatch = sql`${SessionTable.title} GLOB ${titlePattern(input.search)}`
+          // Only a term with the session prefix also matches IDs, by prefix: a short title query such as "a" would
+          // otherwise match the random characters of nearly every ID and bury the title matches.
           const trimmed = input.search.trim()
           conditions.push(
             trimmed.startsWith("ses_")
