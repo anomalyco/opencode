@@ -46,7 +46,8 @@ impl Controls {
         let latest_text = Text::new(app, "Jump to latest ↓").fg(theme.text.action.secondary.base);
         let latest = View::new(app).padding_edge(Edge::Left, 1).visible(false).child(&latest_text);
         transcript.status().add(&latest);
-        let slack = View::new(app).shrink(0.0).height(0).visible(false);
+        // Visible while empty too, so its place marks the end of the rows.
+        let slack = View::new(app).shrink(0.0).height(0);
         transcript.scroll().add(&slack);
         let inner = Rc::new_cyclic(|this| Inner {
             tui: tui.weak(),
@@ -347,8 +348,15 @@ impl Inner {
         }
     }
 
-    fn height(&self) -> f64 {
+    pub(super) fn height(&self) -> f64 {
         f64::from(self.transcript.scroll().rect().height)
+    }
+
+    /// The height of what the slack follows. The content fills the viewport at least, so its own height can count
+    /// rows that are not there.
+    pub(super) fn rows_height(&self) -> f64 {
+        let top = self.transcript.scroll().content_view().rect().screen_y;
+        self.slack.rect().screen_y - top
     }
 
     /// `moveTranscript`: scrolls by `delta` rows. Near the top, older rows mount first and the move
@@ -441,8 +449,7 @@ impl Inner {
                 let viewport = inner.height();
                 if target > (content - viewport).max(0.0) {
                     if !inner.transcript.mount_newer(&tui) {
-                        let current = inner.slack_height.get();
-                        inner.set_slack(super::navigation::slack(target, viewport, content, current));
+                        inner.set_slack(super::navigation::slack(target, viewport, inner.rows_height()));
                     }
                     inner.restore_step(&tui, anchor);
                     return;
@@ -473,7 +480,6 @@ impl Inner {
 
     pub(super) fn set_slack(&self, height: f64) {
         self.slack_height.set(height);
-        self.slack.visible(height > 0.0);
         self.slack.height(height.max(0.0) as u16);
         self.transcript.scroll().sticky(self.navigation.borrow().is_none() && height <= 0.0);
     }
