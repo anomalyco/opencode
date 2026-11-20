@@ -95,7 +95,7 @@ export function render(segment: ReadonlyArray<Event>) {
   return kept.join("\n")
 }
 
-/** An entry the session knows (in its standing block, injected, read or published by it), which a correction may reverse. */
+/** An entry the session knows (injected, read or published by it), which a correction may reverse. */
 export interface Known {
   readonly id: string
   readonly title: string

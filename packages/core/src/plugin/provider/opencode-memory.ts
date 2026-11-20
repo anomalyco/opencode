@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { fileURLToPath } from "url"
-import { Message, SystemPart, ToolFailure } from "@opencode/ai/effect"
+import { Message, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
 import type { Document } from "@opencode/schema/config"
@@ -84,7 +84,6 @@ const VERIFIED = "verified-fix"
 const DELIVERED = "memory.delivered"
 const CORRECTION = "memory.correction"
 /** Per-session state that outlives the process, removed with the session. */
-const standingKey = (sessionID: string) => `memory-standing:${sessionID}`
 const taintedKey = (sessionID: string) => `memory-tainted:${sessionID}`
 
 // Console's answers, read leniently: only what the tools show.
@@ -107,20 +106,6 @@ const Injected = Schema.Struct({
   body: Schema.String,
   revision: Schema.Number,
   score: Schema.Number,
-})
-const Standing = Schema.Struct({
-  id: Schema.String,
-  kind: Schema.optional(Kind),
-  title: Schema.String,
-  body: Schema.String,
-  revision: Schema.Number,
-  status: Schema.optional(Schema.Literals(["live", "provisional"])),
-  tainted: Schema.optional(Schema.Boolean),
-  retired: Schema.optional(Schema.Unknown),
-  repo: Schema.optional(Schema.String),
-  tags: Schema.optional(Schema.Array(Schema.String)),
-  verifiedAt: Schema.optional(Schema.String),
-  updatedAt: Schema.optional(Schema.String),
 })
 const Source = Schema.Struct({
   repo: Schema.optional(Schema.String),
@@ -245,8 +230,6 @@ type Tracked = {
   /** Entries injected into the session, whole, to deliver once more after a compaction drops them. */
   readonly delivered: Map<string, OpencodeMemoryPolicy.Injected>
   compactions: number
-  /** The session's standing block as stored at its first request: "" when none applies. */
-  standing?: string
   /** The session's events since its last work boundary. */
   readonly segment: Array<OpencodeMemoryCapture.Event>
   /** What the current user turn still allows for boundaries inside it. */
@@ -1279,58 +1262,8 @@ export const make = Effect.fnUntraced(function* (
       ),
       Effect.forkIn(lease, { startImmediately: true }),
     )
-    /**
-     * The session's standing block: its repository's live conventions from Console, chosen and rendered by the policy.
-     * Its entries count as given, so injections don't send them again; Console logs the delivery with the session.
-     */
-    const standing = (sessionID: Session.ID) =>
-      Effect.gen(function* () {
-        const source = yield* repository
-        const name = "repo" in source && source.repo ? repoName(source.repo) : undefined
-        if (name === undefined || !("repo" in source) || !source.repo) return ""
-        const repo = source.repo
-        // The reader's set and Console's answer together wait at most the policy's timeout.
-        const answer = yield* Effect.gen(function* () {
-          const keys = yield* reachable
-          return yield* call(Schema.Struct({ entries: Schema.Array(Standing) }), "POST", "/api/memory/standing", {
-            repo,
-            sessionID,
-            ...(keys.length === 0 ? {} : { reachable: keys }),
-          })
-        }).pipe(Effect.timeout(policy.timeout))
-        const block = policy.standing(answer.entries, name)
-        if (block.dropped.length > 0)
-          yield* Effect.logDebug("memory standing block over its cap", {
-            dropped: block.dropped.map((entry) => `${entry.id}@${entry.revision}`),
-          })
-        if (block.text === undefined) return ""
-        const state = tracked(sessionID)
-        block.shown.forEach((entry) =>
-          give(state, { id: entry.id, revision: entry.revision, title: entry.title, text: entry.body }),
-        )
-        return block.text
-      }).pipe(Effect.catch((cause) => Effect.logDebug("no memory standing block", { cause }).pipe(Effect.as(""))))
-    /**
-     * The block a session carries: built at its first request and stored, then the same bytes in every request after
-     * it, across restarts and reconnects, so the cached prefix stays intact. A session that already ran without one
-     * never gets one: adding it later would change every later request's prefix.
-     */
-    const carried = (sessionID: Session.ID, messages: ReadonlyArray<{ readonly role: string }>) =>
-      Effect.gen(function* () {
-        const state = tracked(sessionID)
-        if (state.standing !== undefined) return state.standing
-        const stored = yield* ctx.storage.get(standingKey(sessionID))
-        if (typeof stored === "string") return (state.standing = stored)
-        const text = messages.some((message) => message.role === "assistant") ? "" : yield* standing(sessionID)
-        yield* ctx.storage.set(standingKey(sessionID), text)
-        return (state.standing = text)
-      })
-
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
-        // A system part, never a user message.
-        const block = yield* carried(event.sessionID, event.messages)
-        if (block) event.system.push(SystemPart.make(block))
         // The request after a task's first prompt waits for its injection, at most the policy's timeout. It's persisted
         // so later requests keep it, and lands after this step, so this request gets it at the end, which keeps the
         // cached prefix.
@@ -1625,7 +1558,6 @@ export const make = Effect.fnUntraced(function* (
     Stream.runForEach((event) =>
       Effect.gen(function* () {
         sessions.delete(event.data.sessionID)
-        yield* ctx.storage.remove(standingKey(event.data.sessionID))
         yield* ctx.storage.remove(taintedKey(event.data.sessionID))
       }),
     ),
