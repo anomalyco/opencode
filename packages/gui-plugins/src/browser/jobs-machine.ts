@@ -22,7 +22,8 @@ export type Job =
 export type Outcome =
   | { readonly type: "imported"; readonly result: ImportResult }
   | { readonly type: "installed"; readonly result: InstallResult }
-  | { readonly type: "cleared" }
+  /** Signed out everywhere; `history` is whether the browsing history went too. */
+  | { readonly type: "cleared"; readonly history: boolean }
   /** An extension was removed, or turned on or off; the list shows it, so there is nothing to say. */
   | { readonly type: "changed" }
   /** The call rejected or timed out: main is gone, or the job did not answer in time. */

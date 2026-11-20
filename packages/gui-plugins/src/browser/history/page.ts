@@ -53,3 +53,34 @@ export function pageTitle(title: string) {
 export function bare(url: string) {
   return url.replace(/^https?:\/\//i, "").replace(/^www\./i, "")
 }
+
+/**
+ * The address a row of the address field's list puts in the field, as Chrome fills it: without `http://` and without
+ * the slash that ends a bare host. `https://` stays.
+ */
+export function filled(url: string) {
+  return hostOnly(url).replace(/^http:\/\//i, "")
+}
+
+/**
+ * The rest of a page's address after `text`, when the address begins with it: `ub.com` for `gith` and
+ * `https://github.com/`. Empty when the text is the whole address; undefined when the address does not begin with
+ * it, or the text holds a space. The text may leave out the scheme and a leading `www.`, as people type an address,
+ * and its case does not count.
+ */
+export function completion(text: string, url: string) {
+  if (!text || /\s/.test(text)) return undefined
+  const typed = text.toLowerCase()
+
+  // The slash that ends a bare host is not completed, yet a text that types it is still the whole address.
+  const shown = [hostOnly(url), url]
+    .flatMap((whole) => [bare(whole), whole.replace(/^https?:\/\//i, ""), whole])
+    .find((form) => form.toLowerCase().startsWith(typed))
+
+  return shown?.slice(text.length)
+}
+
+/** The address without the slash that ends a bare host, which nobody types. */
+function hostOnly(url: string) {
+  return url.replace(/^([a-z][a-z\d+.-]*:\/\/[^/?#]+)\/$/i, "$1")
+}

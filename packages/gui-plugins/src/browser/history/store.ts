@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs"
+import { rm } from "node:fs/promises"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import { MAX_PAGES, pageKey, pageTitle, type PageVisit } from "./page"
@@ -14,6 +15,19 @@ type Loaded = { index?: PageIndex }
 /** How many pages a full store drops at once, so that a visit seldom has to make room. */
 const ROOM = 500
 
+const FILE = "history.sqlite"
+
+/**
+ * Deletes a history store's file, with its write-ahead log: what clearing comes to for a store that cannot be opened
+ * or cleared, as one whose file is damaged. The store must be closed. Rejects while any of the files stays.
+ */
+export async function removeHistoryStore(directory: string) {
+  // Windows refuses to delete a file a scanner holds open for a moment, so each is tried once more.
+  await Promise.all(
+    ["", "-wal", "-shm", "-journal"].map((suffix) => rm(path.join(directory, `${FILE}${suffix}`), { force: true, maxRetries: 1, retryDelay: 200 })),
+  )
+}
+
 /**
  * The browsing history on this computer: one row per page (see `pageKey`) in a SQLite file of the app's own data. It
  * holds the pages visited here and the pages imported from other browsers, at most `MAX_PAGES`; past that the ones
@@ -24,10 +38,10 @@ const ROOM = 500
  */
 export function createHistoryStore(input: { readonly directory: string }) {
   mkdirSync(input.directory, { recursive: true, mode: 0o700 })
-  const db = new DatabaseSync(path.join(input.directory, "history.sqlite"))
+  const db = new DatabaseSync(path.join(input.directory, FILE))
 
   // `secure_delete` overwrites what a delete frees, so a cleared history is not left in the file's unused pages.
-  db.exec(`
+  const schema = `
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous = NORMAL;
     PRAGMA secure_delete = ON;
@@ -41,7 +55,16 @@ export function createHistoryStore(input: { readonly directory: string }) {
       visited INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
-  `)
+  `
+
+  // A file that is not a database fails at its first statement, which has no form that does not throw. The file is
+  // let go before the failure goes on, so that it can be deleted.
+  try {
+    db.exec(schema)
+  } catch (cause) {
+    db.close()
+    throw cause
+  }
 
   const columns = "id, url, title, visits, typed, visited"
   const byID = db.prepare(`SELECT ${columns} FROM pages WHERE id = ?`)

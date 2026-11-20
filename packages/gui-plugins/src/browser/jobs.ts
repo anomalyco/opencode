@@ -184,7 +184,9 @@ export function createProfileJobs(
       return { text: ctx.t(type === "import-browser" || type === "import-file" ? "settings.failed.import" : "settings.failed.install"), error: true }
     }
 
-    if (outcome.type === "cleared") return { text: ctx.t("settings.cleared"), error: false }
+    // The sign-out worked; history that stayed behind is said, or "everywhere" would be a false claim.
+    if (outcome.type === "cleared")
+      return outcome.history ? { text: ctx.t("settings.cleared"), error: false } : { text: ctx.t("settings.cleared.history"), error: true }
 
     if (outcome.type === "installed") {
       const result = outcome.result
@@ -342,8 +344,6 @@ async function perform(client: Client, job: Job, history: boolean, signal: Abort
 
       return { type: "changed" }
     case "clear":
-      await client.clear({ signal })
-
-      return { type: "cleared" }
+      return { type: "cleared", history: (await client.clear({ signal })).history }
   }
 }

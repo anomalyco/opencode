@@ -80,23 +80,24 @@ const setup: Plugin.MainSetup = (ctx) => {
   // it at startup. An opening that failed is forgotten, so the next request tries again.
   const opened: OpenedHistory = {}
 
-  const openHistory = async () => {
+  const historyDirectory = async () => {
     const { app } = await import("electron")
+
+    return path.join(app.getPath("userData"), "browser-history")
+  }
+
+  // With `adopt`, the store takes over the pages the windows listed before it existed: read once, the first time a
+  // store opens. A store that replaces a deleted one starts empty.
+  const openHistory = async (adopt: boolean) => {
     const { createHistoryStore } = await import("./history/store")
     const { earlierVisits } = await import("./history/earlier")
-    const store = createHistoryStore({ directory: path.join(app.getPath("userData"), "browser-history") })
-    // The pages the windows listed before this store existed; read once, the first time the store opens.
-    store.adopt(() => earlierVisits(builtinMainContext(ctx).storage))
+    const store = createHistoryStore({ directory: await historyDirectory() })
+    store.adopt(() => (adopt ? earlierVisits(builtinMainContext(ctx).storage) : []))
 
     return store
   }
 
-  const history = () => {
-    if (ctx.signal.aborted) return Promise.reject(new Error("browser.history.unavailable"))
-
-    if (opened.store) return opened.store
-    const pending = openHistory()
-
+  const opening = (pending: Promise<HistoryStore>) => {
     opened.store = pending
     pending.catch((cause: unknown) => {
       ctx.log.write("warn", "browser history failed to open", { cause: String(cause) })
@@ -105,6 +106,36 @@ const setup: Plugin.MainSetup = (ctx) => {
     })
 
     return pending
+  }
+
+  const history = () => {
+    if (ctx.signal.aborted) return Promise.reject(new Error("browser.history.unavailable"))
+
+    return opened.store ?? opening(openHistory(true))
+  }
+
+  // Forgets every page. A store that cannot be opened or cleared, as one whose file is damaged, is cleared by
+  // deleting its file: nothing in it can be kept anyway. Rejects only while the pages are still on disk.
+  const clearHistory = async () => {
+    const store = await history().catch(() => undefined)
+
+    const cleared = store
+      ? await Promise.try(() => store.clear()).then(
+          () => true,
+          () => false,
+        )
+      : false
+
+    if (cleared) return
+    const { removeHistoryStore } = await import("./history/store")
+    const directory = await historyDirectory()
+
+    // The file is let go before it is deleted. Whoever asks meanwhile waits for the store that replaces it, which
+    // starts empty: the windows clear their own lists, and those are not taken over a second time.
+    store?.close()
+    const removed = removeHistoryStore(directory)
+    void opening(removed.then(() => openHistory(false)))
+    await removed
   }
 
   // The history of the other browser comes with its sign-ins. It never fails an import that brought cookies: history
@@ -265,14 +296,30 @@ const setup: Plugin.MainSetup = (ctx) => {
       }),
     importFile: (input) => serial(async () => (await profile()).importFile(input.path)),
     summary: async () => (await profile()).summary(),
-    // Signing out everywhere also forgets where the person has been.
+    // Signing out everywhere also forgets where the person has been. The sign-out runs first and is whole whatever
+    // the history store does, and the history is cleared whether or not the sign-out worked. Neither failure hides
+    // the other: a sign-out that failed rejects, as it always did, and `history` says whether the history went.
     clear: () =>
       serial(async () => {
-        const current = await profile()
-        const store = await history()
+        const signedOut = await profile()
+          .then((current) => current.clear())
+          .then(
+            () => undefined,
+            (cause: unknown) => ({ cause }),
+          )
 
-        await current.clear()
-        store.clear()
+        const forgotten = await clearHistory().then(
+          () => true,
+          (cause: unknown) => {
+            ctx.log.write("warn", "browser history could not be cleared", { cause: String(cause) })
+
+            return false
+          },
+        )
+
+        if (signedOut) throw signedOut.cause
+
+        return { history: forgotten }
       }),
     browserExtensions: async (input) => (await profile()).browserExtensions(input.source, input.profile),
     install: (input) => serial(async () => (await profile()).install(input)),
@@ -314,7 +361,8 @@ const setup: Plugin.MainSetup = (ctx) => {
     visit: async (input) => (await history()).visit(input.url, input.title),
     retitle: async (input) => (await history()).retitle(input.url, input.title),
     remove: async (input) => (await history()).remove(input.url),
-    clear: async () => (await history()).clear(),
+    // Rejects while the pages are still on disk, so the window can say that they are.
+    clear: () => serial(clearHistory),
   })
 
   const sitesIpc = ctx.provide(BrowserSites, {

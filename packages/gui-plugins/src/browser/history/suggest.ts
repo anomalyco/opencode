@@ -1,13 +1,16 @@
 import type { HistoryPage } from "./ipc"
-import { completes, matchQuality, MISS, parseQuery, searchText } from "./match"
-import { pageKey } from "./page"
+import { matchQuality, MISS, parseQuery, searchText } from "./match"
+import { completion, pageKey } from "./page"
 import type { Visit } from "./visits"
 
 /** How many pages the address field asks main for: a few more than it lists, as the window's own pages join them. */
 export const HISTORY_ANSWER = 8
 
-/** A page the address field suggests. `completes`: its address begins with what was typed. */
-export type Suggestion = Visit & { readonly completes: boolean }
+/**
+ * A page the address field suggests. `completion` is the rest of its address after what was typed: empty when the
+ * text is the whole address, undefined when the address does not begin with it.
+ */
+export type Suggestion = Visit & { readonly completion: string | undefined }
 
 /**
  * The pages the address field lists for what the person typed, best first: by how well each matches, then by how
@@ -38,12 +41,11 @@ export function suggestPages(text: string, visits: readonly Visit[], answer: rea
 
   return candidates
     .flatMap((candidate) => {
-      const searched = searchText(candidate.visit.url, candidate.visit.title)
-      const quality = matchQuality(query, searched)
+      const quality = matchQuality(query, searchText(candidate.visit.url, candidate.visit.title))
 
-      return quality === MISS ? [] : [{ ...candidate, quality, completes: completes(query, searched) }]
+      return quality === MISS ? [] : [{ ...candidate, quality }]
     })
     .toSorted((a, b) => b.quality - a.quality || b.score - a.score)
     .slice(0, limit)
-    .map((found) => ({ ...found.visit, completes: found.completes }))
+    .map((found) => ({ ...found.visit, completion: completion(text.trimStart(), found.visit.url) }))
 }

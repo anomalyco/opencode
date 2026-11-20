@@ -937,11 +937,27 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       return !visit.url.startsWith("workspace:") || (!!session?.id && visit.url.startsWith(workspacePrefix(session.id)))
     }),
-    /** Forgets every page: the window's list, and main's history with the pages imported from other browsers. */
+    /**
+     * Whether there may be history to clear: the window's list has pages, or this is the desktop app, where main's
+     * history may hold pages the window never listed, as imported ones.
+     */
+    historyClearable: () => history.value.visits.length > 0 || !!ctx.desktop,
+    /**
+     * Forgets every page: the window's list, and main's history with the pages imported from other browsers. Answers
+     * whether main's history went, so the pane never lets the person believe it did: false when main could not clear
+     * it, or cannot be reached. On the web there is no history but the window's list.
+     */
     clearHistory: () => {
       recorded.clear()
       history.set({ visits: [] })
-      void historyClient()?.clear({ signal: ctx.signal }).catch(() => undefined)
+      const main = historyClient()
+
+      if (!main) return Promise.resolve(!ctx.desktop)
+
+      return main.clear({ signal: ctx.signal }).then(
+        () => true,
+        () => false,
+      )
     },
     /** The person is about to type an address: main reads its history into memory ahead of the first search. */
     prepareHistory: () => void historyClient()?.prepare({ signal: ctx.signal }).catch(() => undefined),

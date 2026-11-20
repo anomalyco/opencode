@@ -3,21 +3,44 @@
 // `nextAddressEpoch`, and a submit keeps the counts it saw, so the next URL change, finished load or rejection ends
 // the hold, even one that repeats a value, while focusing and leaving the field in between keeps it.
 //
-// Suggestions come from two places: the window's own list of the last pages, at once, and main's history, which is
-// asked on each change of the text and answers a moment later. The field never waits for it: each question takes the
-// next number, and only the answer to the last one is kept.
+// The pages of the list come from two places: the window's own list of the last pages, at once, and main's history,
+// which is asked on each change of the text and answers a moment later. The field never waits for it: each question
+// takes the next number, and only the answer to the last one is kept.
+//
+// The list and its keys copy Chrome's address bar (`components/omnibox/browser` in Chromium). Its first row is what
+// Enter opens and is always the chosen one: the typed text as a search or an address, or the page whose address the
+// typing completes, which the field shows after the typed text, selected. Moving through the list puts each row's
+// text in the field and holds the rows as they are.
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { resolveAddress } from "./address"
+import { resolveAddress, searchAddress, searches } from "./address"
 import type { HistoryPage } from "./history/ipc"
-import { pageKey } from "./history/page"
+import { filled, pageKey } from "./history/page"
 import { suggestPages, type Suggestion } from "./history/suggest"
 import type { Visit } from "./history/visits"
 
-/** Suggestions the address field lists, and pages the new tab page lists. */
+/** Pages of the history the address field lists, and pages the new tab page lists. */
 export const ADDRESS_SUGGESTIONS = 5
 
-/** Long text scrolls the input, which the inline hint cannot follow, so only a query this short shows it. */
-export const ADDRESS_HINT_MAX_LENGTH = 48
+/** A row of the address field's list. `url` is what it opens. */
+export type AddressRow =
+  /** A web search for what was typed. */
+  | { readonly type: "search"; readonly text: string; readonly url: string }
+  /** What was typed, opened as an address. */
+  | { readonly type: "address"; readonly text: string; readonly url: string }
+  /** A page of the history. */
+  | { readonly type: "page"; readonly page: Suggestion; readonly url: string }
+
+/** The list under the field while the person types. */
+export type AddressList =
+  /** It follows the typing, and its first row is the chosen one. */
+  | { readonly type: "following" }
+  /**
+   * The person moved through it. Its rows stay as they were, whatever main answers later, and the field shows the
+   * text of the row at `line`.
+   */
+  | { readonly type: "held"; readonly rows: readonly AddressRow[]; readonly line: number }
+  /** Escape closed it. Typing or an arrow key opens it again. */
+  | { readonly type: "closed" }
 
 /** What the page reports, read on every change. */
 export type AddressPage = {
@@ -56,13 +79,11 @@ export type AddressState = {
   | { readonly status: "rest" }
   | {
       readonly status: "editing"
+      /** What the person typed. The field shows more: a completed address after it, or the text of a row. */
       readonly text: string
-      /** The user typed since focusing; suggestions follow typing, not a focused URL. */
+      /** The user typed since focusing; the list follows typing, not a focused URL. */
       readonly typed: boolean
-      /** The suggestion Enter opens; -1 opens the typed text. */
-      readonly active: number
-      /** Escape closed the suggestions; typing opens them again. */
-      readonly dismissed: boolean
+      readonly list: AddressList
       /** A submitted address that had not been reported yet when the user focused; leaving the field keeps it. */
       readonly hold: SubmittedHold | undefined
       /**
@@ -70,10 +91,11 @@ export type AddressState = {
        * narrows at once instead of emptying until the answer comes.
        */
       readonly answer: readonly HistoryPage[]
-      /** The last change of the text may complete a suggestion: it typed, and did not delete. */
+      /**
+       * The last change of the text may complete an address: it typed at the end of the text, and did not delete,
+       * paste or move the caret.
+       */
       readonly completing: boolean
-      /** The person moved through the list since the last change of the text; an answer then keeps their choice. */
-      readonly stepped: boolean
     }
   | { readonly status: "submitted"; readonly hold: SubmittedHold }
 )
@@ -81,18 +103,23 @@ export type AddressState = {
 export type AddressEvent =
   | { readonly type: "focused"; readonly epoch: AddressEpoch }
   | { readonly type: "blurred"; readonly epoch: AddressEpoch }
+  /**
+   * The field's text is `value`: the person typed, deleted or pasted, or moved the caret off a completed address,
+   * which takes it into the text. `completing` is whether an address may complete it: text typed at its end.
+   */
   | {
       readonly type: "input.changed"
       readonly value: string
-      readonly deleting: boolean
+      readonly completing: boolean
       readonly visits: readonly Visit[]
     }
   | {
       readonly type: "key.pressed"
-      readonly key: "ArrowDown" | "ArrowUp" | "Escape"
+      readonly key: "ArrowDown" | "ArrowUp" | "Tab" | "Shift+Tab" | "Escape"
+      readonly epoch: AddressEpoch
       readonly visits: readonly Visit[]
     }
-  /** Shift+Delete: forgets the chosen suggestion's page. */
+  /** Shift+Delete: forgets the chosen row's page. */
   | { readonly type: "forget.pressed"; readonly visits: readonly Visit[] }
   /** Main answered question `attempt`; a question that failed is answered with no pages. */
   | {
@@ -108,11 +135,13 @@ export type AddressEvent =
       readonly visits: readonly Visit[]
       readonly failed: boolean
     }
-  /** A click on a suggestion or a recent page. */
+  /** A click on a row of the list or a recent page. */
   | { readonly type: "navigated"; readonly url: string; readonly epoch: AddressEpoch }
 
 export type AddressEffect =
   | { readonly type: "select-input" }
+  /** Selects the completed address: the field's text from `start`, after what was typed, to its end. */
+  | { readonly type: "select-completion"; readonly start: number }
   | { readonly type: "blur-input" }
   | { readonly type: "prevent-default" }
   | { readonly type: "navigate"; readonly tabID: Browser.TabID; readonly url: string }
@@ -135,6 +164,12 @@ const PREVENT: AddressEffect = { type: "prevent-default" }
 
 const PREPARE: AddressEffect = { type: "prepare" }
 
+const FOLLOWING: AddressList = { type: "following" }
+
+const CLOSED: AddressList = { type: "closed" }
+
+type Editing = Extract<AddressState, { status: "editing" }>
+
 export function transitionAddress(state: AddressState, event: AddressEvent): AddressTransition {
   switch (event.type) {
     case "focused": {
@@ -148,12 +183,10 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
           asked: state.asked + 1,
           text: hold ? hold.text : event.epoch.url,
           typed: false,
-          active: -1,
-          dismissed: false,
+          list: FOLLOWING,
           hold,
           answer: [],
           completing: false,
-          stepped: false,
         },
         effects: [SELECT, PREPARE],
       }
@@ -173,73 +206,92 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
       const text = event.value
       // Text with nothing to search for asks nothing, and no answer to an earlier text fits it.
       const searching = text.trim().length > 0
-      const next = { ...state, asked, text, typed: true, dismissed: false, completing: !event.deleting, stepped: false, answer: searching ? state.answer : [] }
+      const next: Editing = { ...state, asked, text, typed: true, list: FOLLOWING, completing: event.completing, answer: searching ? state.answer : [] }
 
       return {
-        state: { ...next, active: completed(next, event.visits) },
-        effects: searching ? [{ type: "ask", attempt: asked, query: text }] : [],
+        state: next,
+        effects: [...(searching ? [{ type: "ask" as const, attempt: asked, query: text }] : []), ...selecting(next, event.visits)],
       }
     }
 
     case "answered": {
-      if (state.status !== "editing" || event.attempt !== state.asked) return unchanged(state)
-      const next = { ...state, answer: event.pages }
+      // Rows the person moved through stay as they were: Chrome ends its search at the first step.
+      if (state.status !== "editing" || event.attempt !== state.asked || state.list.type === "held") return unchanged(state)
+      const next: Editing = { ...state, answer: event.pages }
 
-      // Typing completes the best suggestion, which the answer may be; a choice the person made stays theirs.
-      if (!state.stepped) return { state: { ...next, active: completed(next, event.visits) }, effects: [] }
-      const picked = addressSuggestions(state, event.visits)[state.active]
-
-      return {
-        state: { ...next, active: picked ? addressSuggestions(next, event.visits).findIndex((item) => item.url === picked.url) : -1 },
-        effects: [],
-      }
+      // The answer may bring the page whose address the typing completes.
+      return { state: next, effects: selecting(next, event.visits) }
     }
 
     case "forget.pressed": {
-      const picked = chosen(state, addressSuggestions(state, event.visits))
+      if (state.status !== "editing") return unchanged(state)
+      const rows = addressRows(state, event.visits)
+      const line = state.list.type === "held" ? state.list.line : 0
+      const picked = listed(state, rows) ? rows[line] : undefined
 
-      // Without a chosen suggestion the key is the input's own.
-      if (state.status !== "editing" || !picked) return unchanged(state)
+      // Only a page of the history can be forgotten. On any other row the key is the input's own.
+      if (picked?.type !== "page") return unchanged(state)
       const key = pageKey(picked.url)
+      const left = listRows(state.text, rows.flatMap((row) => (row.type === "page" && row !== picked ? [row.page] : [])), state.completing)
 
+      // The row that takes its place is the chosen one, and the list is held: the page may still be in an answer.
       return {
-        state: { ...state, stepped: true, answer: state.answer.filter((page) => page.url !== picked.url && (!key || pageKey(page.url) !== key)) },
+        state: {
+          ...state,
+          answer: state.answer.filter((page) => page.url !== picked.url && (!key || pageKey(page.url) !== key)),
+          list: { type: "held", rows: left, line: Math.min(line, left.length - 1) },
+        },
         effects: [PREVENT, { type: "forget", url: picked.url }],
       }
     }
 
     case "key.pressed": {
       if (state.status !== "editing") return unchanged(state)
-      const suggestions = addressSuggestions(state, event.visits)
+      const rows = addressRows(state, event.visits)
+      const open = listed(state, rows)
 
+      // Escape undoes one thing at a time: the row's text, the list, the typed text, then the focus.
       if (event.key === "Escape") {
-        if (listed(state, suggestions)) return { state: { ...state, dismissed: true, active: -1 }, effects: [PREVENT] }
+        if (state.list.type === "held") {
+          const next: Editing = { ...state, list: FOLLOWING }
 
-        return { state, effects: [PREVENT, BLUR] }
+          return { state: next, effects: [PREVENT, ...selecting(next, event.visits)] }
+        }
+
+        if (open) return { state: { ...state, list: CLOSED }, effects: [PREVENT] }
+
+        if (!state.typed) return { state, effects: [PREVENT, BLUR] }
+        const hold = activeHold(state.hold, event.epoch)
+
+        return {
+          state: { ...state, asked: state.asked + 1, text: hold ? hold.text : event.epoch.url, typed: false, list: FOLLOWING, hold, answer: [], completing: false },
+          effects: [PREVENT, SELECT],
+        }
       }
 
-      const count = suggestions.length
+      if (!open) {
+        // Without a list Tab leaves the field, and an empty field has nothing to list.
+        if (event.key === "Tab" || event.key === "Shift+Tab" || !state.text.trim()) return unchanged(state)
+        const asked = state.asked + 1
+        // An arrow opens the list for the text in the field. A focused address was not typed, so nothing completes it.
+        const next: Editing = { ...state, asked, typed: true, list: FOLLOWING, completing: state.typed && state.completing }
 
-      if (!count) return unchanged(state)
-      const by = event.key === "ArrowDown" ? 1 : -1
-
-      return {
-        state: {
-          ...state,
-          dismissed: false,
-          stepped: true,
-          active: state.active + by < -1 ? count - 1 : ((state.active + by + 1) % (count + 1)) - 1,
-        },
-        effects: [PREVENT],
+        return { state: next, effects: [PREVENT, { type: "ask", attempt: asked, query: state.text }, ...selecting(next, event.visits)] }
       }
+
+      const line = state.list.type === "held" ? state.list.line : 0
+      const by = event.key === "ArrowDown" || event.key === "Tab" ? 1 : -1
+
+      // Past either end the choice goes to the other one.
+      return { state: { ...state, list: { type: "held", rows, line: (line + by + rows.length) % rows.length } }, effects: [PREVENT] }
     }
 
     case "submitted": {
-      const suggestions = addressSuggestions(state, event.visits)
-      const picked = chosen(state, suggestions)
+      const rows = addressRows(state, event.visits)
+      const picked = chosen(state, rows)
 
       if (picked) return navigate(state, picked.url, event.epoch)
-      const text = field(state, event.epoch).trim()
+      const text = typedText(state, event.epoch).trim()
 
       if (text || event.failed) return navigate(state, resolveAddress(text), event.epoch)
 
@@ -283,36 +335,73 @@ export function nextAddressEpoch(previous: AddressEpoch | undefined, page: Addre
 }
 
 /**
- * Suggestions follow what the user typed; a focused address is not a query. `visits` is the window's list of the
- * last pages, which main's answer joins.
+ * The rows of the list: they follow what the user typed, and a focused address is not typed. `visits` is the
+ * window's list of the last pages, which main's answer joins.
  */
-export function addressSuggestions(state: AddressState, visits: readonly Visit[]): readonly Suggestion[] {
-  return state.status === "editing" && state.typed ? suggestPages(state.text, visits, state.answer, ADDRESS_SUGGESTIONS) : []
+export function addressRows(state: AddressState, visits: readonly Visit[]): readonly AddressRow[] {
+  if (state.status !== "editing" || !state.typed) return []
+
+  if (state.list.type === "held") return state.list.rows
+
+  return listRows(state.text, suggestPages(state.text, visits, state.answer, ADDRESS_SUGGESTIONS), state.completing)
 }
 
 /** What the address field draws. */
-export function addressView(state: AddressState, epoch: AddressEpoch, suggestions: readonly Suggestion[]) {
+export function addressView(state: AddressState, epoch: AddressEpoch, rows: readonly AddressRow[]) {
   const editing = state.status === "editing"
-  const shown = listed(state, suggestions)
-  // A suggestion that went, as one the person removed, leaves the one that took its place chosen, or none.
-  const active = shown && state.status === "editing" && state.active < suggestions.length ? state.active : -1
+  const shown = listed(state, rows)
+  const picked = chosen(state, rows)
+  const completed = completion(state, rows)
   const hold = state.status === "rest" ? undefined : state.hold
 
   return {
     editing,
-    /** The user's text while editing, a submitted address until the page reports, otherwise the page's URL. */
-    field: field(state, epoch),
-    /** What the user typed, which suggestions highlight; empty at rest. */
+    /**
+     * The chosen row's text once the person moved through the list; else the user's text while editing, with the
+     * address it completes after it, a submitted address until the page reports, otherwise the page's URL.
+     */
+    field: state.status === "editing" && state.list.type === "held" && picked ? rowText(picked) : typedText(state, epoch) + completed,
+    /** What the user typed, whose words the pages of the list highlight; empty at rest. */
     query: state.status === "editing" ? state.text : "",
     typed: state.status === "editing" && state.typed,
-    /** The suggestions popover is open. */
+    /** The list is open. */
     listed: shown,
-    active,
-    /** The suggestion Enter opens. */
-    chosen: active >= 0 ? suggestions[active] : undefined,
+    /** The chosen row's place in the list; -1 without a list. */
+    active: picked ? rows.indexOf(picked) : -1,
+    /** The row Enter opens. */
+    chosen: picked,
+    /** The end of `field` that completes what was typed, which the field selects; empty when nothing does. */
+    completion: completed,
+    /** Typing may complete an address: a caret that leaves the end of the text takes that away. */
+    completing: state.status === "editing" && state.typed && state.list.type === "following" && state.completing,
     /** A submitted navigation the browser has not reported yet; keeps the empty state hidden meanwhile. */
     navigating: !!hold && hold.moved === epoch.moved,
   }
+}
+
+/** What a row puts in the field when the person moves to it: what was typed, or the page's address. */
+export function rowText(row: AddressRow) {
+  return row.type === "page" ? filled(row.url) : row.text
+}
+
+/**
+ * The list for a text, in Chrome's order. The first row is the one Enter opens: the best page when its address is
+ * the text, or begins with it while typing completes; else the text itself, as a search or as an address. A search
+ * for the text follows when it is not first, then the pages. A page that only matches is never first.
+ */
+function listRows(text: string, pages: readonly Suggestion[], completing: boolean): readonly AddressRow[] {
+  const typed = text.trim()
+
+  if (!typed) return []
+  const search: AddressRow = { type: "search", text: typed, url: searchAddress(typed) }
+  const rows = pages.map((page): AddressRow => ({ type: "page", page, url: page.url }))
+  const lead = pages[0]
+
+  if (lead && (lead.completion === "" || (completing && lead.completion !== undefined))) return [...rows.slice(0, 1), search, ...rows.slice(1)]
+
+  if (searches(typed)) return [search, ...rows]
+
+  return [{ type: "address", text: typed, url: resolveAddress(typed) }, search, ...rows]
 }
 
 function navigate(state: AddressState, url: string, epoch: AddressEpoch): AddressTransition {
@@ -334,26 +423,39 @@ function navigate(state: AddressState, url: string, epoch: AddressEpoch): Addres
   }
 }
 
-function field(state: AddressState, epoch: AddressEpoch) {
+/** The user's text while editing, a submitted address until the page reports, otherwise the page's URL. */
+function typedText(state: AddressState, epoch: AddressEpoch) {
   if (state.status === "editing") return state.text
 
   return state.status === "submitted" && activeHold(state.hold, epoch) ? state.hold.text : epoch.url
 }
 
-function listed(state: AddressState, suggestions: readonly Suggestion[]) {
-  return state.status === "editing" && suggestions.length > 0 && !state.dismissed
+function listed(state: AddressState, rows: readonly AddressRow[]) {
+  return state.status === "editing" && state.typed && state.list.type !== "closed" && rows.length > 0
 }
 
-function chosen(state: AddressState, suggestions: readonly Suggestion[]) {
-  return listed(state, suggestions) && state.status === "editing" ? suggestions[state.active] : undefined
+/** The row Enter opens: the one the person moved to, else the first. */
+function chosen(state: AddressState, rows: readonly AddressRow[]) {
+  if (state.status !== "editing" || !listed(state, rows)) return undefined
+
+  return rows[state.list.type === "held" ? state.list.line : 0]
 }
 
 /**
- * The suggestion a change of the text completes: the best one, when its address begins with what was typed, so Enter
- * opens it in place of the typed text. Deleting never completes, and neither does a page that only matches.
+ * The rest of the first row's address after the typed text, which the field shows selected: only while the list
+ * follows the typing and the last change of the text may complete. Deleting never completes.
  */
-function completed(state: Extract<AddressState, { status: "editing" }>, visits: readonly Visit[]) {
-  return state.completing && addressSuggestions(state, visits)[0]?.completes ? 0 : -1
+function completion(state: AddressState, rows: readonly AddressRow[]) {
+  const first = rows[0]
+
+  if (state.status !== "editing" || !state.typed || state.list.type !== "following" || !state.completing || first?.type !== "page") return ""
+
+  return first.page.completion ?? ""
+}
+
+/** Selects the completed address, when the field now shows one. */
+function selecting(state: Editing, visits: readonly Visit[]): readonly AddressEffect[] {
+  return completion(state, addressRows(state, visits)) ? [{ type: "select-completion", start: state.text.length }] : []
 }
 
 /** The hold, while the page has not reported a URL change, a finished load or a rejection since the submit. */

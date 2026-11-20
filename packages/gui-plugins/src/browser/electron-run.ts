@@ -32,6 +32,23 @@ try {
 }
 `
 
+/**
+ * A file imported with `?raw` is its text, as the app's bundler reads it: the profile ships its page scripts so.
+ */
+const rawText: Bun.BunPlugin = {
+  name: "raw-text",
+  setup(build) {
+    build.onResolve({ filter: /\?raw$/ }, (args) => ({
+      path: path.resolve(path.dirname(args.importer), args.path.slice(0, -"?raw".length)),
+      namespace: "raw-text",
+    }))
+    build.onLoad({ filter: /.*/, namespace: "raw-text" }, async (args) => ({
+      contents: `export default ${JSON.stringify(await readFile(args.path, "utf8"))}`,
+      loader: "js",
+    }))
+  },
+}
+
 /** The fixture's one JSON line; otherwise a failure with its exit code, its log and its stderr. */
 export async function runElectronFixture(input: {
   /** Absolute path to the fixture's source. */
@@ -55,6 +72,7 @@ export async function runElectronFixture(input: {
       splitting: true,
       naming: { entry: "fixture.mjs", chunk: "[name]-[hash].mjs" },
       external: ["electron"],
+      plugins: [rawText],
     })
 
     if (!built.success) throw new AggregateError(built.logs, "The Electron fixture did not build.")

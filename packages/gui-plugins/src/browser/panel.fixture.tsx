@@ -119,6 +119,10 @@ type PaneFixtureState = {
   history: History
   /** How many pages main's history holds. */
   historyPages: number
+  /** Main's history store cannot open: every call to it rejects, as with a damaged file. */
+  historyAway: boolean
+  /** What the pane last said in a toast. */
+  toast: string
   /** URLs the pane opened in the system browser. */
   external: string[]
   /** Cookies the page's address can read. */
@@ -279,6 +283,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       pages: {},
       history: { visits: scenario === "Recent" ? structuredClone(visits) : [] },
       historyPages: 0,
+      historyAway: false,
+      toast: "",
       external: [],
       cookies: 3,
       failSite: false,
@@ -659,14 +665,23 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
     const seedImported = () => importedPages(Date.now()).forEach((page) => keep(page))
 
+    // As main rejects each call while its store cannot open.
+    const reachable = () => {
+      if (store.historyAway) throw new Error("unable to open database file")
+    }
+
     const historyClient = {
-      prepare: async () => undefined,
-      search: async (request: { query: string; limit: number }) =>
-        findPages(index, request.query, request.limit, Date.now(), {
+      prepare: async () => reachable(),
+      search: async (request: { query: string; limit: number }) => {
+        reachable()
+
+        return findPages(index, request.query, request.limit, Date.now(), {
           shown: (id) => pages.get(id),
           front: (host) => Array.from(pages.values()).find((page) => pageKey(page.url) === host),
-        }),
+        })
+      },
       visit: async (request: { url: string; title: string }) => {
+        reachable()
         const id = position(request.url)
         const known = id === undefined ? undefined : pages.get(id)
 
@@ -674,6 +689,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       },
       retitle: async () => undefined,
       remove: async (request: { url: string }) => {
+        reachable()
         const id = position(request.url)
 
         if (id === undefined) return
@@ -682,6 +698,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         setStore("historyPages", pages.size)
       },
       clear: async () => {
+        reachable()
         pages.clear()
         index.clear()
         setStore("historyPages", 0)
@@ -701,6 +718,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       use: (token: { readonly id: string }) => (token.id === BrowserHistory.id ? historyLive : live),
       // The plugin instance's lifetime, which the model's calls to main's history end with.
       signal: new AbortController().signal,
+      toast: { show: (shown: { title: string }) => setStore("toast", shown.title) },
       sessions: { current: session, list: () => Array.from(views.values()).filter((view) => view.key !== "Empty") },
       screen: { current: () => screen },
       layout: {
@@ -812,8 +830,12 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             <span style={{ display: "flex", gap: "8px" }}>
               {/* Beside the title too: the pane below is measured where it is. */}
               <span style={{ "font-size": "14px", "align-self": "center" }}>Main history: {store.historyPages}</span>
+              <span style={{ "font-size": "14px", "align-self": "center" }}>{store.toast}</span>
               <button style={{ "font-size": "14px" }} onClick={seedImported}>
                 Seed imported history
+              </button>
+              <button style={{ "font-size": "14px" }} onClick={() => setStore("historyAway", (away) => !away)}>
+                History away
               </button>
               <button style={{ "font-size": "14px" }} onClick={() => setStore("failCommand", true)}>
                 Fail next command

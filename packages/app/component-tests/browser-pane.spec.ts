@@ -1338,32 +1338,35 @@ story("keeps the current page and restores its URL when an empty address is subm
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeEnabled()
 })
 
-story("suggests visited pages and opens the first one that completes the typed address", async ({ page }) => {
+story("lists the typed text with visited pages, and opens the first row: the page the typing completes, else the text", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Seed history", exact: true }).click()
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
   await address.pressSequentially("localhost")
   const options = page.getByRole("listbox", { name: "Suggestions" }).getByRole("option")
-  await expect(options).toHaveCount(1)
+  // The page whose address begins with the text is first and chosen; the search for the text follows it.
+  await expect(options).toHaveCount(2)
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
-  // Arrow keys that pick IME candidates leave the suggestions alone.
+  await expect(address).toHaveValue("localhost:5173/settings")
+  // Arrow keys that pick IME candidates leave the list alone.
   await address.dispatchEvent("keydown", { key: "ArrowDown", isComposing: true })
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
   await address.press("Enter")
   await expect(address).toHaveValue("http://localhost:5173/settings")
 
-  // Words that only match a page list it without choosing it, so Enter still searches; a step down opens it.
+  // Words that only match a page list it below the search for them, which is first and chosen; a step down opens it.
   await address.click()
   await address.pressSequentially("color format")
-  await expect(options).toHaveCount(1)
-  await expect(options.first()).toHaveAttribute("aria-selected", "false")
+  await expect(options).toHaveCount(2)
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  await expect(options.first()).toHaveText("color format-Google Search")
   await address.press("Enter")
   await expect(address).toHaveValue("https://www.google.com/search?q=color%20format")
   await address.click()
   await address.pressSequentially("color format")
   await address.press("ArrowDown")
-  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
   await address.press("Enter")
   await expect(address).toHaveValue("https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Colors/Color_format_converter")
 })
@@ -1376,19 +1379,22 @@ story("finds imported pages by their words, completes the site a host begins, an
   const options = page.getByRole("listbox", { name: "Suggestions" }).getByRole("option")
   const addresses = () => options.locator('[data-slot="browser-page-row-url"]')
 
-  // Main answers after the field shows the text: the list fills with the best matches of 59 pages, the most visited
-  // first, and a word found only inside another ("prune") last.
+  // Main answers after the field shows the text: under the search for it, the list fills with the best matches of 59
+  // pages, the most visited first, and a word found only inside another ("prune") last.
   await address.click()
   await address.pressSequentially("rune")
   await expect(addresses()).toHaveText([
+    "Google Search",
     "github.com/anomalyco/rune-desktop",
     "github.com/anomalyco/rune-desktop/pulls",
     "docs.rune.example/guide/getting-started",
     "github.com/anomalyco/rune-desktop/issues/128",
     "github.com/runelabs/rune-lang",
   ])
-  await expect(options.first().locator("mark")).toHaveText(["rune", "Rune", "rune"])
-  await expect(options.first()).toHaveAttribute("aria-selected", "false")
+  await expect(options.nth(1).locator("mark")).toHaveText(["rune", "Rune", "rune"])
+  // The search row is the typed text itself, so it draws no match.
+  await expect(options.first().locator("mark")).toHaveCount(0)
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
   // Imported pages have no icon of their own: the globe stands in, and none is fetched.
   await expect(options.locator("img")).toHaveCount(0)
 
@@ -1396,21 +1402,24 @@ story("finds imported pages by their words, completes the site a host begins, an
   await address.fill("")
   await address.pressSequentially("desk anom")
   await expect(addresses()).toHaveText([
+    "Google Search",
     "github.com/anomalyco/rune-desktop",
     "github.com/anomalyco/rune-desktop/pulls",
     "github.com/anomalyco/rune-desktop/issues/128",
   ])
 
-  // Shift+Delete forgets the chosen page, in main's history too; with none chosen the key is the field's own.
+  // Shift+Delete forgets the chosen page, in main's history too; on the typed text's row the key is the field's own.
   await address.fill("")
   await address.pressSequentially("rune")
-  await expect(options).toHaveCount(5)
+  await expect(options).toHaveCount(6)
   await address.press("Shift+Delete")
   await expect(root.getByText("Main history: 59", { exact: true })).toBeVisible()
   await address.press("ArrowDown")
   await address.press("Shift+Delete")
-  await expect(addresses().first()).toHaveText("github.com/anomalyco/rune-desktop/pulls")
-  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  // The row that takes its place is the chosen one, and the field shows its address.
+  await expect(addresses().nth(1)).toHaveText("github.com/anomalyco/rune-desktop/pulls")
+  await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
+  await expect(address).toHaveValue("https://github.com/anomalyco/rune-desktop/pulls")
   await expect(root.getByText("Main history: 58", { exact: true })).toBeVisible()
 
   // Text that begins a host completes its site, which Enter opens.
@@ -1420,6 +1429,121 @@ story("finds imported pages by their words, completes the site a host begins, an
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
   await address.press("Enter")
   await expect(address).toHaveValue("https://github.com/")
+})
+
+story("keeps the first row chosen and moves through the list with Chrome's keys", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  const list = page.getByRole("listbox", { name: "Suggestions" })
+  const options = list.getByRole("option")
+  const addresses = options.locator('[data-slot="browser-page-row-url"]')
+  const selection = () => address.evaluate((input: HTMLInputElement) => input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0))
+  // The places of the chosen rows: always exactly one while the list is open.
+  const chosen = () => options.evaluateAll((rows) => rows.flatMap((row, place) => (row.getAttribute("aria-selected") === "true" ? [place] : [])))
+
+  // The typed text completes to the site: the rest of its address is in the field, selected, and its row is chosen.
+  await address.click()
+  await address.pressSequentially("gith")
+  await expect(address).toHaveValue("github.com")
+  await expect.poll(selection).toBe("ub.com")
+  await expect(addresses.first()).toHaveText("github.com/")
+  await expect(options.nth(1)).toHaveText("gith-Google Search")
+  await expect(options).toHaveCount(6)
+  await expect.poll(chosen).toEqual([0])
+
+  // Backspace removes the completed part only; deleting never completes, so the typed text is first and chosen.
+  await address.press("Backspace")
+  await expect(address).toHaveValue("gith")
+  await expect(options.first()).toHaveText("gith-Google Search")
+  await expect(addresses.nth(1)).toHaveText("github.com/")
+  await expect.poll(chosen).toEqual([0])
+  // The next character completes again, and typing goes on through the selected part.
+  await address.pressSequentially("ub")
+  await expect(address).toHaveValue("github.com")
+  await expect.poll(selection).toBe(".com")
+
+  // Down and Up choose a row and put its text in the field; past either end the choice goes around.
+  await address.press("ArrowDown")
+  await expect(address).toHaveValue("github")
+  await expect.poll(chosen).toEqual([1])
+  await address.press("ArrowUp")
+  await expect(address).toHaveValue("https://github.com")
+  await address.press("ArrowUp")
+  await expect.poll(chosen).toEqual([5])
+  await expect(address).toHaveValue(/^https:\/\/github\.com\/.+/)
+  // Tab moves as Down does while the list is open, and keeps the focus in the field.
+  await address.press("Tab")
+  await expect.poll(chosen).toEqual([0])
+  await address.press("Tab")
+  await expect.poll(chosen).toEqual([1])
+  await expect(address).toBeFocused()
+
+  // Escape undoes one thing at a time: the row's text, the list, the typed text, then the focus.
+  await address.press("Escape")
+  await expect(address).toHaveValue("github.com")
+  await expect.poll(selection).toBe(".com")
+  await expect.poll(chosen).toEqual([0])
+  await address.press("Escape")
+  await expect(list).toBeHidden()
+  await expect(address).toHaveValue("github")
+  await address.press("Escape")
+  await expect(address).toHaveValue("https://alpha.example/")
+  await expect.poll(selection).toBe("https://alpha.example/")
+  await expect(address).toBeFocused()
+  await address.press("Escape")
+  await expect(address).not.toBeFocused()
+
+  // A caret that leaves the end takes the completed address into the text: the page stays first, and nothing is selected.
+  await address.focus()
+  await address.pressSequentially("gith")
+  await expect.poll(selection).toBe("ub.com")
+  await address.press("ArrowRight")
+  await expect(address).toHaveValue("github.com")
+  await expect.poll(selection).toBe("")
+  await expect(addresses.first()).toHaveText("github.com/")
+  await expect(options.nth(1)).toHaveText("github.com-Google Search")
+
+  // A click opens the row it is on, chosen or not.
+  await options.nth(2).click()
+  await expect(address).toHaveValue(/^https:\/\/github\.com\/.+/)
+  await expect(address).not.toBeFocused()
+})
+
+story("keeps the address bar working, and says so, while main's history cannot be read or cleared", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Seed history", exact: true }).click()
+  await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
+  await root.getByRole("button", { name: "History away", exact: true }).click()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  const options = page.getByRole("listbox", { name: "Suggestions" }).getByRole("option")
+
+  // Main rejects every question. The list still has the typed text and the window's own last pages.
+  await address.click()
+  await address.pressSequentially("localhost")
+  await expect(options).toHaveCount(2)
+  await expect(address).toHaveValue("localhost:5173/settings")
+  // The imported pages are out of reach, so their words find only the search for them, which Enter opens.
+  await address.fill("")
+  await address.pressSequentially("rune")
+  await expect(options).toHaveText(["rune-Google Search"])
+  await address.press("Enter")
+  await expect(address).toHaveValue("https://www.google.com/search?q=rune")
+
+  // Clearing empties the window's list at once and says that main's history stayed.
+  const clear = async () => {
+    await root.getByRole("button", { name: "Browser options", exact: true }).click()
+    await page.getByRole("menuitem", { name: "More tools", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Clear history", exact: true }).click()
+  }
+
+  await clear()
+  await expect(root.getByText("Couldn't clear the history. Try again.", { exact: true })).toBeVisible()
+  await expect(root.getByText("Main history: 59", { exact: true })).toBeVisible()
+  // The item stays although the window's list is empty: main's history is still there to clear once it is back.
+  await root.getByRole("button", { name: "History away", exact: true }).click()
+  await clear()
+  await expect(root.getByText("Main history: 0", { exact: true })).toBeVisible()
 })
 
 story("lists recent pages on a blank tab and opens one", async ({ page }) => {

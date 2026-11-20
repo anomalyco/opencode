@@ -10,7 +10,7 @@ const modules = {
 
 // Any story loads the app styles; the fixture mounts the real Settings > Browser page beside it. `target` is the entry
 // a settings search or the command palette is revealing.
-async function open(page: Page, options?: { target?: string; extensions?: boolean; installed?: boolean }) {
+async function open(page: Page, options?: { target?: string; extensions?: boolean; installed?: boolean; historyKept?: boolean }) {
   await page.evaluate(
     async (input) => {
       const [{ mountBrowserSettings }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
@@ -20,6 +20,7 @@ async function open(page: Page, options?: { target?: string; extensions?: boolea
         target: input.options?.target,
         extensions: input.options?.extensions,
         installed: input.options?.installed,
+        historyKept: input.options?.historyKept,
       })
     },
     { modules, options },
@@ -68,6 +69,17 @@ story("an import brings history until the person turns that off under Advanced, 
   await history.click({ force: true })
   await expect(view.stored).toContainText('"importHistory":false')
   await expect(view.root.getByText("Copies cookies only. The other browser keeps its own.")).toBeVisible()
+})
+
+story("a sign-out that left the history behind says so in its row, and still forgets the window's last pages", async ({ page }) => {
+  const view = await open(page, { target: "settings-browser-cookies", historyKept: true })
+
+  await expect(view.root.getByTestId("browser-settings-visits")).toHaveText("1")
+  await view.root.getByRole("button", { name: "Sign out everywhere", exact: true }).click()
+  // The sign-out itself worked, so the row does not call it failed; "everywhere" alone would be a false claim.
+  await expect(view.root.getByText("Signed out everywhere. The history could not be cleared.", { exact: true })).toBeVisible()
+  await expect(view.root.getByTestId("browser-settings-visits")).toHaveText("0")
+  await expect(view.root.getByRole("button", { name: "Sign out everywhere", exact: true })).toBeEnabled()
 })
 
 story("Add an extension aligns controls without top clipping and switches cleanly into a confirmation step", async ({ page }) => {

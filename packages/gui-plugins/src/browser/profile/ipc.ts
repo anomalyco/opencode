@@ -240,9 +240,11 @@ export const BrowserProfile = Ipc.define({
     shareSignIns: { input: Schema.Struct({ enabled: Schema.Boolean }) },
     /**
      * Signs out everywhere: deletes every cookie, cache, site's stored data and HTTP sign-in, and the browsing history.
-     * Extensions and the site permissions the user kept stay.
+     * Extensions and the site permissions the user kept stay. The sign-out does not depend on the history: it rejects
+     * only when the sign-out itself failed, and `history` is false when the history could not be cleared, so the window
+     * never says that it went.
      */
-    clear: {},
+    clear: { output: Schema.Struct({ history: Schema.Boolean }) },
     /** The extensions a Chromium profile has installed. */
     browserExtensions: {
       input: Schema.Struct(SourceProfile),
