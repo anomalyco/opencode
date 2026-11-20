@@ -3649,7 +3649,11 @@ export type SessionInboxUpdateInput = {
 
 export type SessionInboxUpdateOutput = void
 
-export type SessionGenerateInput = { readonly sessionID: string; readonly prompt: string }
+export type SessionGenerateInput = {
+  readonly sessionID: string
+  readonly prompt: string
+  readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null | undefined
+}
 
 export type SessionGenerateOutput = SessionGenerateResponse["data"]
 
