@@ -10,6 +10,8 @@ export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("Deep
 
 export class MenuCommandTriggered extends Schema.TaggedClass<MenuCommandTriggered>()("MenuCommandTriggered", {
   id: Schema.String,
+  /** A key equivalent chose the item, rather than a click on the menu. */
+  accelerator: Schema.Boolean,
 }) {}
 
 export class WindowFullscreenChanged extends Schema.TaggedClass<WindowFullscreenChanged>()("WindowFullscreenChanged", {

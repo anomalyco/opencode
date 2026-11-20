@@ -26,7 +26,7 @@ const sshServer: PromptServer = {
   label: "SSH",
 }
 
-type LocationScenario = { multipleServers?: boolean; step?: "branches" | "worktrees" }
+type LocationScenario = { multipleServers?: boolean; worktrees?: boolean }
 
 function LocationDialogStory(props: LocationScenario) {
   const [store, setStore] = createStore<{
@@ -91,7 +91,7 @@ function LocationDialogStory(props: LocationScenario) {
     onDone: () => {},
   })
 
-  const open = () => openLocation(props.step ? { step: props.step, project: project.selected() } : undefined)
+  const open = () => openLocation(props.worktrees ? { project: project.selected() } : undefined)
 
   onMount(open)
 
@@ -119,6 +119,4 @@ export const Default = story()
 
 export const MultipleServers = story({ multipleServers: true })
 
-export const Worktrees = story({ step: "worktrees" })
-
-export const BaseBranch = story({ step: "branches" })
+export const Worktrees = story({ worktrees: true })

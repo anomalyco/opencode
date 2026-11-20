@@ -51,4 +51,5 @@ export default {
   "error.commandTimeout": "انتهت مهلة {{command}} {{args}} بعد {{timeout}}ms",
   "error.failedPort": "فشل الحصول على المنفذ",
   "menu.remove": "إزالة",
+  "error.busy": "{{distro}} مشغولة بمهمة أخرى. حاول مرة أخرى عند انتهائها.",
 }

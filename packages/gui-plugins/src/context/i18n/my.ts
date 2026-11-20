@@ -5,7 +5,6 @@ export default {
   "usage.usage": "အသုံးပြုမှု",
   "usage.cost": "ကုန်ကျစရိတ်",
   "usage.view": "ဆက်စပ်အကြောင်းအရာ အသုံးပြုမှုကို ကြည့်ပါ။",
-  "systemPrompt.title": "System prompt",
   "rawMessages.title": "အကြမ်း မက်ဆေ့ချ်များ",
   "export.session": "စက်ရှင်ကို ထုတ်ယူရန်",
   "stats.session": "အပိုင်း",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "စက်ရှင်ကို {{filename}} သို့ သိမ်းထားသည်။",
   "export.failed.title": "စက်ရှင်ကို ထုတ်ယူ၍မရပါ။",
   "export.failed.description": "စက်ရှင်ကို ထုတ်ယူနေစဉ် အမှားအယွင်းတစ်ခု ဖြစ်ပွားခဲ့သည်။",
+  "usage.toggle": "စက်ရှင် ဆက်စပ်အကြောင်းအရာ ဖွင့်/ပိတ်",
 }

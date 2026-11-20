@@ -27,6 +27,7 @@ export function RedirectPasteForm(props: {
 }) {
   const i18n = useI18n()
   const errorID = createUniqueId()
+  const inputID = createUniqueId()
   let input: HTMLInputElement | undefined
 
   const error = () => {
@@ -47,10 +48,12 @@ export function RedirectPasteForm(props: {
       }}
       class="flex flex-col items-start gap-2 self-stretch"
     >
-      <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
-        {i18n.t("ui.redirectPaste.label")}
+      {/* Labelled by `for`, not by wrapping: a wrapping label would name the field after the trailing button too. */}
+      <div class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
+        <label for={inputID}>{i18n.t("ui.redirectPaste.label")}</label>
         <TextInput
           ref={input}
+          id={inputID}
           class="!w-full"
           appearance="large"
           name="redirect"
@@ -76,7 +79,7 @@ export function RedirectPasteForm(props: {
             )
           }
         />
-      </label>
+      </div>
       <Show when={error()}>
         {(message) => (
           <div id={errorID} role="alert" class="text-xs text-v2-state-fg-danger">

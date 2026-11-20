@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Penggunaan",
   "usage.cost": "Kos",
   "usage.view": "Lihat penggunaan konteks",
-  "systemPrompt.title": "Arahan Sistem",
   "rawMessages.title": "Mesej mentah",
   "export.session": "Eksport sesi",
   "stats.session": "Sesi",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sesi disimpan ke {{filename}}",
   "export.failed.title": "Gagal mengeksport sesi",
   "export.failed.description": "Ralat berlaku semasa mengeksport sesi",
+  "usage.toggle": "Togol konteks sesi",
 }

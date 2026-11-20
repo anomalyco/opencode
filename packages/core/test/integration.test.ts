@@ -312,6 +312,45 @@ describe("Integration", () => {
     }),
   )
 
+  it.effect("revokes an OAuth credential before removing it, even when revocation fails", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("openai")
+      const methodID = Integration.MethodID.make("chatgpt")
+      const revoked = new Array<string>()
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "ChatGPT" },
+          authorize: () => Effect.die("unused authorize"),
+          revoke: (credential) =>
+            Effect.sync(() => revoked.push(credential.refresh)).pipe(
+              Effect.andThen(credential.refresh === "broken" ? Effect.fail(new Error("offline")) : Effect.void),
+            ),
+        }),
+      )
+      const create = (refresh: string) =>
+        credentials.create({
+          integrationID,
+          value: Credential.OAuth.make({ type: "oauth", methodID, access: "access", refresh, expires: 1 }),
+        })
+      const working = yield* create("working")
+      const broken = yield* create("broken")
+      const key = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "sk-test" }),
+      })
+
+      yield* integrations.connection.remove(working.id)
+      yield* integrations.connection.remove(broken.id)
+      yield* integrations.connection.remove(key.id)
+
+      expect(revoked).toEqual(["working", "broken"])
+      expect(yield* credentials.list(integrationID)).toEqual([])
+    }),
+  )
+
   it.effect("keeps code attempts open when the code is missing and closes them on cancel", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

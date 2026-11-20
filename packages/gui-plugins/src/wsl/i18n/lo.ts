@@ -50,4 +50,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} ໝົດເວລາຫຼັງຈາກ {{timeout}}ms",
   "error.failedPort": "ລົ້ມເຫລວໃນການເອົາພອດ",
   "menu.remove": "ລຶບ",
+  "error.busy": "{{distro}} ກຳລັງເຮັດວຽກອື່ນຢູ່. ລອງອີກຄັ້ງເມື່ອມັນສຳເລັດ.",
 }

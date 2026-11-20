@@ -29,7 +29,7 @@ export function sampledChecksum(content: string, limit = 500_000): string | unde
     Math.floor(content.length * 0.25),
     Math.floor(content.length * 0.5),
     Math.floor(content.length * 0.75),
-    content.length - size,
+    content.length,
   ]
     .map((point) => {
       const start = Math.max(0, Math.min(content.length - size, point - Math.floor(size / 2)))

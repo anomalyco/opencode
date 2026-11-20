@@ -26,6 +26,25 @@ describe("CodeMode host failure boundary", () => {
     })
   })
 
+  test("a caught tool failure has a stack at the awaited call", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.make({
+        tools: {
+          host: {
+            call: Tool.make({
+              description: "Fail",
+              input: Schema.Struct({}),
+              output: Schema.String,
+              execute: () => Effect.fail(toolError("Authorized request was refused")),
+            }),
+          },
+        },
+      }).execute("try { await tools.host.call({}) } catch (e) { return e.stack }"),
+    )
+
+    expect(result.ok ? result.value : undefined).toBe("Error: Authorized request was refused\n    at <program>:1:7")
+  })
+
   test("does not rewrite explicit tool failures", async () => {
     const result = await run(
       Tool.make({
@@ -648,6 +667,41 @@ describe("CodeMode schema flexibility", () => {
     expect(Object.hasOwn(received, "q")).toBe(false)
   })
 
+  test("tool arguments leave functions out and await promises, as JSON did", async () => {
+    const observed: Array<unknown> = []
+    const show = Tool.make({
+      description: "Show raw input",
+      input: { type: "object" },
+      execute: (input) =>
+        Effect.sync(() => {
+          observed.push(input)
+          return "ok"
+        }),
+    })
+    const runtime = CodeMode.make({ tools: { shop: { show } } })
+    for (const code of [
+      `await tools.shop.show({ q: "x", format(v) { return v } })`,
+      `await tools.shop.show({ n: Promise.resolve(5) })`,
+      // A toJSON method is a function too: left out, not run.
+      `await tools.shop.show({ item: "book", price: { cents: 1999, toJSON() { return "$19.99" } } })`,
+      `await tools.shop.show({ later: (async () => { await null; return [1, () => 2] })() })`,
+    ]) {
+      const result = await Effect.runPromise(runtime.execute(code))
+      expect(result.ok).toBe(true)
+    }
+    expect(observed).toStrictEqual([
+      { q: "x" },
+      { n: 5 },
+      { item: "book", price: { cents: 1999 } },
+      { later: [1, null] },
+    ])
+    const rejected = await Effect.runPromise(
+      runtime.execute(`await tools.shop.show({ n: Promise.reject(new Error("no price")) })`),
+    )
+    expect(rejected.ok ? undefined : rejected.error.message).toContain("no price")
+    expect(observed).toHaveLength(4)
+  })
+
   test("dropping undefined values lets optionalKey schemas accept conditional arguments", async () => {
     const observed: Array<unknown> = []
     const find = Tool.make({
@@ -1138,10 +1192,16 @@ describe("CodeMode public contract", () => {
       return result.ok ? (result.value as { items: Array<{ path: string }> }).items[0]?.path : undefined
     }
     // Same tools registered in a different order index identically.
-    const first = CodeMode.make({ tools: { mail: { send: simple("Send an email"), archive: simple("Archive a thread") } } })
-    const reordered = CodeMode.make({ tools: { mail: { archive: simple("Archive a thread"), send: simple("Send an email") } } })
+    const first = CodeMode.make({
+      tools: { mail: { send: simple("Send an email"), archive: simple("Archive a thread") } },
+    })
+    const reordered = CodeMode.make({
+      tools: { mail: { archive: simple("Archive a thread"), send: simple("Send an email") } },
+    })
     // Same paths and count, different descriptions: must not reuse the other index.
-    const changed = CodeMode.make({ tools: { mail: { send: simple("Archive a thread"), archive: simple("Send an email") } } })
+    const changed = CodeMode.make({
+      tools: { mail: { send: simple("Archive a thread"), archive: simple("Send an email") } },
+    })
 
     expect(await top(first, "email")).toBe("tools.mail.send")
     expect(await top(reordered, "email")).toBe("tools.mail.send")

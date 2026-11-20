@@ -486,7 +486,10 @@ export interface ComposerNote {
   title?: string
   /** Plain-text footer with or without a comment, e.g. `Browser annotation`. Defaults to `label` when omitted. */
   subtitle?: string
-  /** Chip icon. */
+  /**
+   * Chip icon. The name stays with the draft and the sent message; one of the plugin's own icons draws while the
+   * plugin is active.
+   */
   icon: IconName
   /** What the comment is about, for the model. Quote untrusted text such as page content. */
   subject: string
@@ -524,7 +527,7 @@ export interface ComposerQuote {
   source: {
     /** Chip text while the quote has no comment, e.g. `Terminal`. */
     readonly label: string
-    /** Chip icon. */
+    /** Chip icon; one of the plugin's own icons draws while the plugin is active. */
     readonly icon: IconName
     /** Where the text came from, for the model, e.g. `the terminal`. Not localized. */
     readonly subject: string
@@ -1098,8 +1101,8 @@ export interface System {
     readonly content: string
   }): Promise<boolean>
   /**
-   * Opens a URL in the system browser; desktop opens file:// URLs with the default app. For links inside the app,
-   * use `Links.open`.
+   * Opens an HTTP, HTTPS or mail URL in the system application. Files and other schemes are not launched. For links
+   * inside the app, use `Links.open`.
    *
    * @param url - The URL to open.
    */
@@ -1682,7 +1685,7 @@ export interface Embeds {
 
 /** Props of `Ui.Icon`. */
 export interface UiIconProps {
-  /** The artwork, by its name in the app's icon catalog. */
+  /** The artwork: one of the app's icons by name, or one of the plugin's own from `ctx.icons`. */
   readonly name: IconName
   /**
    * The icon's size. Defaults to `normal`.
@@ -2058,13 +2061,15 @@ export interface UiSettingsRowProps {
  */
 export interface Ui {
   /**
-   * An icon from the app's catalog, the artwork every `icon` field of the SDK names.
+   * An icon, by the name every `icon` field of the SDK takes: one of the app's own icons, or one the plugin declared
+   * in `Plugin.define({ icons })`.
    *
    * @param props - The icon and its size.
    *
    * @example
    * ```tsx
    * <ctx.ui.Icon name="branch" size="small" />
+   * <ctx.ui.Icon name={ctx.icons.logo} size="small" />
    * ```
    */
   Icon(props: UiIconProps): JSX.Element

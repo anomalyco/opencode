@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Kasutamine",
   "usage.cost": "Maksumus",
   "usage.view": "Vaadake kontekstikasutust",
-  "systemPrompt.title": "Süsteemi viip",
   "rawMessages.title": "Toores sõnumid",
   "export.session": "Ekspordiseanss",
   "stats.session": "Seanss",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Seanss salvestatud asukohta {{filename}}",
   "export.failed.title": "Seansi eksportimine ebaõnnestus",
   "export.failed.description": "Seansi eksportimisel ilmnes viga",
+  "usage.toggle": "Lülita seansi kontekst",
 }

@@ -20,8 +20,10 @@ const setting = [
   "app/src/settings/model.tsx",
   "app/src/settings/experimental/experimental.tsx",
   "app/src/settings/search-catalog.ts",
-  "app/src/runtime/i18n/en.ts",
 ]
+
+// Every locale's dictionary names the setting.
+const dictionary = /^app\/src\/runtime\/i18n\/[a-z]+\.ts$/
 
 const root = '[data-timeline="next"]'
 
@@ -37,7 +39,9 @@ describe("New timeline boundary", () => {
   test("only the setting's own files and the switches read the experiment", async () => {
     const readers = (await sources()).filter((file) => !inFolder(file.path) && /\bnewTimeline\b/.test(file.text))
 
-    expect(readers.map((file) => file.name).filter((name) => !setting.includes(name))).toEqual([])
+    expect(
+      readers.map((file) => file.name).filter((name) => !setting.includes(name) && !dictionary.test(name)),
+    ).toEqual([])
   })
 
   test("every style in the folder is scoped to the New timeline", async () => {

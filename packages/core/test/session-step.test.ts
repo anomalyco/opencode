@@ -16,6 +16,7 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStep } from "@opencode/core/session/runner/step"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionHistory } from "@opencode/core/session/history"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Tool } from "@opencode/core/tool"
 import { Permission } from "@opencode/core/permission"
@@ -131,11 +132,10 @@ for (const fixture of [
         )
       expect(yield* llm.requests()).toHaveLength(1)
       expect(captures).toBe(2)
-      const message = yield* db
-        .select()
-        .from(SessionMessageTable)
-        .where(eq(SessionMessageTable.id, assistantMessageID))
-        .get()
+      const [message] = yield* SessionHistory.withParts(
+        db,
+        yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, assistantMessageID)).all(),
+      )
       expect(message?.data).toMatchObject({
         finish: fixture.finish,
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } },
@@ -319,11 +319,10 @@ const stopTwoTools = (how: {
     yield* Deferred.await(stuck)
     yield* Fiber.interrupt(attempt)
     const exit = yield* Fiber.await(attempt)
-    const message = yield* db
-      .select()
-      .from(SessionMessageTable)
-      .where(eq(SessionMessageTable.id, assistantMessageID))
-      .get()
+    const [message] = yield* SessionHistory.withParts(
+      db,
+      yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, assistantMessageID)).all(),
+    )
     return { exit, data: message?.data, requests: (yield* llm.requests()).length, interrupted }
   })
 

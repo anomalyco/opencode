@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { symlink } from "node:fs/promises"
 import path from "node:path"
 import { isolatedEnv } from "../fixture/environment"
 import { tmpdir } from "../fixture/tmpdir"
@@ -66,20 +67,33 @@ function spawnRun(url: string, directory: string, message: string[], stdin: "pip
     cwd: path.join(import.meta.dir, "../.."),
     env: isolatedEnv(directory, { PWD: directory }),
     signal: AbortSignal.timeout(25_000),
+    killSignal: "SIGKILL",
     stdin,
     stdout: "pipe",
     stderr: "pipe",
   })
 }
 
-test("run sends the message as typed", async () => {
+test("run sends the message as typed with regular file attachments", async () => {
   await using directory = await tmpdir()
+  const file = path.join(directory.path, "context.txt")
+  const link = path.join(directory.path, "linked.txt")
+  await Bun.write(file, "attached context")
+  // Creating symlinks requires privileges on Windows.
+  if (process.platform !== "win32") await symlink(file, link)
   const fake = await serve(directory.path)
-  const child = spawnRun(fake.server.url.toString(), directory.path, ["say hello world", `it's "quoted"`], "ignore")
+  const child = spawnRun(
+    fake.server.url.toString(),
+    directory.path,
+    ["--file", file, ...(process.platform === "win32" ? [] : ["--file", link]), "say hello world", `it's "quoted"`],
+    "ignore",
+  )
   try {
     await fake.prompted
     expect(fake.requests.find((item) => item.path.endsWith("/prompt"))?.body).toMatchObject({
-      text: `say hello world it's "quoted"`,
+      text:
+        `say hello world it's "quoted"\n\n<file name="context.txt">\nattached context\n</file>` +
+        (process.platform === "win32" ? "" : `\n\n<file name="linked.txt">\nattached context\n</file>`),
     })
   } finally {
     child.kill("SIGKILL")
@@ -89,6 +103,40 @@ test("run sends the message as typed", async () => {
 }, 30_000)
 
 const posix = test.skipIf(process.platform === "win32")
+
+// Windows has no POSIX FIFO filesystem nodes.
+posix(
+  "run rejects a FIFO attachment without waiting for a writer",
+  async () => {
+    await using directory = await tmpdir()
+    const file = path.join(directory.path, "attachment.txt")
+    expect(Bun.spawnSync(["mkfifo", file]).exitCode).toBe(0)
+    const fake = await serve(directory.path)
+    const child = spawnRun(
+      fake.server.url.toString(),
+      directory.path,
+      ["--file", file, "--format", "json", "hello"],
+      "ignore",
+    )
+    try {
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ])
+      expect({ stdout, stderr, exitCode }).toMatchObject({
+        stdout: expect.stringContaining("Cannot attach a directory, special file, or file larger than 10 MiB"),
+        exitCode: 1,
+      })
+      expect(fake.requests.some((item) => item.path === "/api/session")).toBe(false)
+    } finally {
+      child.kill("SIGKILL")
+      await child.exited
+      await fake.server.stop(true)
+    }
+  },
+  30_000,
+)
 
 // Windows has no SIGTERM delivery: kill() terminates the process outright.
 posix(

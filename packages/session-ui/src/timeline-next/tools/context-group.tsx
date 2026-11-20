@@ -25,7 +25,7 @@ import {
   type ContextGroupPart,
 } from "../../tools/tool-renderer"
 import { TimelineEventRow } from "../event-row"
-import { kindKeys, launchKeys, summarizeEvents, toolEvent, verbKeys, workKey, type TimelineEvent } from "../events"
+import { launchKeys, summarizeShells, toolEvent, verbKeys, workKey, type TimelineEvent } from "../events"
 import { toolRule, toolStopped, type ToolMode } from "../rules"
 import { FileGroup } from "./file-group"
 import { ThoughtRow } from "./thought"
@@ -64,13 +64,7 @@ export function ContextGroup(props: {
   const thoughtsOnly = createMemo(() => reasoning().length > 0 && reasoning().length === props.parts.length)
   const events = createMemo(() => [...workEvents(props.parts).values()])
 
-  // A group of only subagents and work reporting back reads as the events row it is, not a group around one. Until a
-  // call has anything to count, it stays a group, so the row never renders empty.
-  const workOnly = createMemo(
-    () =>
-      events().length > 0 &&
-      props.parts.every((part) => part.type === "event" || (part.type === "tool" && toolRule(part).name === "subagent")),
-  )
+  const workOnly = createMemo(() => events().length > 0 && props.parts.every((part) => part.type === "event"))
 
   const activity = createMemo(() => activityLabel(tools(), events(), i18n))
 
@@ -95,25 +89,9 @@ export function ContextGroup(props: {
     >((groups, tool) => {
       const previous = groups.at(-1)
 
-      // Subagents started one after another, and work reporting back, read as one events row nested in the group:
-      // "Started 3 subagents". The rows keep the order things happened in, which the label does not.
-      if (tool.type === "event" || (tool.type === "tool" && toolRule(tool).name === "subagent")) {
-        // A subagent still being asked for has nothing to list yet.
-        const event = tool.type === "event" ? tool.event : toolEvent(tool)
-
-        if (!event) return groups
+      if (tool.type === "event") {
+        const event = tool.event
         const run = previous && !Array.isArray(previous) && previous.type === "work" ? previous : undefined
-        const key = tool.type === "event" ? workKey(event) : undefined
-
-        // Work reporting back right after its launch, with nothing between, finishes the launch's row. With
-        // anything between, the launch and the report each keep their row.
-        const launch = key && run ? run.events.findIndex((item) => item.verb === "started" && workKey(item) === key) : -1
-
-        if (run && launch >= 0) {
-          run.events[launch] = { ...run.events[launch]!, verb: event.verb, failed: event.failed }
-
-          return groups
-        }
 
         if (run) {
           run.events.push(event)
@@ -544,7 +522,7 @@ function usedLabel(parts: ActivityGroupPart[], i18n: UiI18n) {
 }
 
 /**
- * What each subagent or background shell in a group did, for its label. Work that reports back anywhere in the group
+ * What each background shell in a group did, for its label. Work that reports back anywhere in the group
  * that started it is counted once, as how it ended: "Finished", not "Started" and "Finished".
  */
 function workEvents(parts: ActivityGroupPart[]) {
@@ -603,16 +581,12 @@ const decodeChangedPath = Schema.decodeUnknownOption(Schema.Struct({ file: Schem
 
 /**
  * Names a stretch of the agent's work by its main mode, then what its other calls did: "Edited 4 files · 2 commands,
- * started 1 shell". Work that runs on is counted by what happened to it, not among the calls that started it; a
- * stretch of only that reads like an events row: "Started 2 subagents · finished 2 subagents".
+ * started 1 shell". A background shell is counted once by its outcome.
  */
 function activityLabel(group: SessionMessageAssistantTool[], events: TimelineEvent[], i18n: UiI18n) {
   const tools = group.filter((tool) => toolRule(tool).layout !== "event")
-  const launches = summarizeEvents(events).verbs
-
-  const launched = launches.flatMap((bucket) =>
-    bucket.kinds.map((item) => i18n.plural(launchKeys[bucket.verb][item.kind], item.count)),
-  )
+  const launches = summarizeShells(events).verbs
+  const launched = launches.map((bucket) => i18n.plural(launchKeys[bucket.verb], bucket.count))
 
   const modes = new Set(tools.map((tool) => toolRule(tool).mode))
   const mode = modePriority.find((item) => modes.has(item))
@@ -624,8 +598,8 @@ function activityLabel(group: SessionMessageAssistantTool[], events: TimelineEve
 
     return {
       verb: i18n.t(verbKeys[first.verb]),
-      main: first.kinds.map((item) => i18n.plural(kindKeys[item.kind], item.count)).join(", "),
-      others: rest.length ? launched.slice(first.kinds.length) : [],
+      main: i18n.plural("ui.timeline.event.shells", first.count),
+      others: rest.map((bucket) => i18n.plural(launchKeys[bucket.verb], bucket.count)),
     }
   }
 

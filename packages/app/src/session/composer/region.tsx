@@ -2,9 +2,11 @@ import type { SessionUserActions } from "@opencode/session-ui/message"
 import type { ShellOutputInput } from "@opencode/client/promise"
 import { getFilename, sameDirectory } from "@opencode/util/path"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { focusField, handOffFocus } from "@opencode/ui/context/field-focus"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
+import { Match } from "effect"
 import { createEffect, createMemo, on, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { Composer } from "@/composer/composer"
 import { VoiceComposer } from "@/voice/composer"
@@ -140,10 +142,6 @@ export function createActiveSessionRegion(input: {
     void platform.revealPath(path).then((revealed) => {
       if (!revealed) download()
     }, download)
-  }
-
-  const focus = () => {
-    if (!input.session.data.isChild()) promptRef?.focus()
   }
 
   const openParent = () => {
@@ -319,7 +317,10 @@ export function createActiveSessionRegion(input: {
     navigateMessageByOffset: input.timeline.actions.navigateMessage,
     jumpToMessage: input.timeline.actions.jumpToMessage,
     revert,
-    focusInput: focus,
+    // A shortcut moved focus, so the ring shows.
+    focusInput: () => {
+      if (promptRef && !input.session.data.isChild()) focusField(promptRef, true)
+    },
     model: () => {
       const selection = controls().model.selection
       const model = selection.current()
@@ -371,7 +372,7 @@ export function createActiveSessionRegion(input: {
 
   const focusPrompt = () => {
     if (!promptRef) return
-    promptRef.focus()
+    handOffFocus(promptRef)
     setCursorPosition(promptRef, prompt.cursor() ?? promptLength(prompt.current()))
   }
 
@@ -467,6 +468,10 @@ export function ActiveSessionComposerRegion(props: {
       .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
   )
 
+  const scripts = createMemo<SessionActivityItem[]>(() =>
+    props.model.region.state.background.scripts().map((task) => ({ ...task, key: task.id, target: task.id })),
+  )
+
   const alignment = useComposerLaneAlignment()
   const todos = createMemo(() => sessionTodos(props.session.history.messages(), props.session.data.revertMessageID()))
   // Like the old dock: the plan shows while the turn runs and still has work left, so stale todos never linger.
@@ -483,13 +488,26 @@ export function ActiveSessionComposerRegion(props: {
       .at(-1)?.todo === true
 
   const stop = (item: SessionActivityItem) => {
-    const request =
-      item.type === "subagent"
-        ? server.api.session.interrupt({ sessionID: item.sessionID })
-        : server.api.shell.remove({
-            id: item.target,
-            location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
-          })
+    const background = props.model.region.state.background
+
+    // A subagent stops with everything its tree still runs.
+    const request: Promise<unknown> = Match.value(item).pipe(
+      Match.when({ type: "subagent" }, (subagent) =>
+        Promise.all([
+          ...(data.session.status(subagent.sessionID) === "running"
+            ? [server.api.session.interrupt({ sessionID: subagent.sessionID })]
+            : []),
+          ...(subagent.jobs ?? []).map(background.cancelJob),
+        ]),
+      ),
+      Match.when({ type: "script" }, (script) => background.cancelJob(script.target)),
+      Match.orElse((shell) =>
+        server.api.shell.remove({
+          id: shell.target,
+          location: { directory: data.shell.get(shell.target)?.location.directory ?? location().directory },
+        }),
+      ),
+    )
 
     return request.then(
       () => true,
@@ -581,6 +599,7 @@ export function ActiveSessionComposerRegion(props: {
             <SessionActivityChips
               subagents={subagents()}
               shells={shells()}
+              scripts={scripts()}
               shell={shell}
               onOpen={(item) => {
                 const current = props.session.identity.params.id

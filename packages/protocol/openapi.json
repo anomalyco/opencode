@@ -1076,7 +1076,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<subagent>` report to the parent's inbox and wakes the parent unless it has a staged revert."
+                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<background-result kind=\"subagent\">` report to the parent's inbox and wakes the parent unless it has a staged revert."
                   },
                   "title": {
                     "anyOf": [
@@ -5467,6 +5467,196 @@
           },
           "required": true
         }
+      }
+    },
+    "/api/experimental/generate/video": {
+      "post": {
+        "tags": ["generate"],
+        "operationId": "experimental.generate.video.create",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "GenerateVideoCreateResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateVideoCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ModelNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UnsupportedModelError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedModelErrorEncoded"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ProviderRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished videos as blobs; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Create a video generation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Generate.VideoRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/generate/video/{id}": {
+      "get": {
+        "tags": ["generate"],
+        "operationId": "experimental.generate.video.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Generate.VideoID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "GenerateVideoGetResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateVideoGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "VideoNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/VideoNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Read a video job: running, completed with its videos' blobs, or error with a reason. Jobs survive a server restart, which resumes polling running ones. A job is not found 24 hours after it finished, or once none of its blobs remain. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Read a video generation"
       }
     },
     "/api/experimental/generate/decisions": {
@@ -10165,6 +10355,7 @@
                     "shell.created",
                     "shell.exited",
                     "shell.deleted",
+                    "experimental.job.updated",
                     "form.created",
                     "form.replied",
                     "form.cancelled",
@@ -10276,6 +10467,7 @@
                           "shell.created",
                           "shell.exited",
                           "shell.deleted",
+                          "experimental.job.updated",
                           "form.created",
                           "form.replied",
                           "form.cancelled",
@@ -12087,10 +12279,72 @@
         "summary": "Read media blob"
       }
     },
-    "/api/experimental/schedule": {
+    "/api/experimental/blob/{id}": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.blob.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Blob.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "BlobNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlobNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Blobs are kept until removed. Experimental: may change without compatibility guarantees.",
+        "summary": "Read a blob"
+      }
+    },
+    "/api/experimental/automation": {
       "post": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.create",
+        "operationId": "experimental.automation.create",
         "parameters": [],
         "security": [],
         "responses": {
@@ -12102,7 +12356,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
+                      "$ref": "#/components/schemas/Automation.Info"
                     }
                   },
                   "required": ["data"],
@@ -12152,13 +12406,13 @@
             }
           }
         },
-        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Create schedule",
+        "description": "Create an automation that sends a prompt or runs a Code Mode program at a time, every interval, or on a cron. Creating an MCP event watch requires the automation_create tool in a local session; a session ID over HTTP is not a watch authorization. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "summary": "Create automation",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Schedule.CreatePayload"
+                "$ref": "#/components/schemas/Automation.CreatePayload"
               }
             }
           },
@@ -12167,15 +12421,33 @@
       },
       "get": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.list",
+        "operationId": "experimental.automation.list",
         "parameters": [
           {
             "name": "sessionID",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Session.ID"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Session.ID"
+                }
+              ],
+              "description": "Only automations created by this Session."
             },
-            "required": true
+            "required": false
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Only automations in the project that owns this directory."
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -12190,7 +12462,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/Schedule.Info"
+                        "$ref": "#/components/schemas/Automation.Info"
                       }
                     }
                   },
@@ -12241,20 +12513,20 @@
             }
           }
         },
-        "description": "List a Session's schedules, oldest first. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "List schedules"
+        "description": "List automations, oldest first. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "summary": "List automations"
       }
     },
-    "/api/experimental/schedule/{scheduleID}": {
+    "/api/experimental/automation/{automationID}": {
       "get": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.get",
+        "operationId": "experimental.automation.get",
         "parameters": [
           {
-            "name": "scheduleID",
+            "name": "automationID",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
+              "$ref": "#/components/schemas/Automation.ID"
             },
             "required": true
           }
@@ -12269,7 +12541,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
+                      "$ref": "#/components/schemas/Automation.Info"
                     }
                   },
                   "required": ["data"],
@@ -12309,28 +12581,28 @@
             }
           },
           "404": {
-            "description": "ScheduleNotFoundError",
+            "description": "AutomationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/AutomationNotFoundErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Read one schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Get schedule"
+        "description": "Read one automation. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "summary": "Get automation"
       },
       "delete": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.delete",
+        "operationId": "experimental.automation.delete",
         "parameters": [
           {
-            "name": "scheduleID",
+            "name": "automationID",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
+              "$ref": "#/components/schemas/Automation.ID"
             },
             "required": true
           }
@@ -12371,30 +12643,30 @@
             }
           },
           "404": {
-            "description": "ScheduleNotFoundError",
+            "description": "AutomationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/AutomationNotFoundErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Delete a schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Delete schedule"
+        "description": "Delete an automation. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "summary": "Delete automation"
       }
     },
-    "/api/experimental/schedule/{scheduleID}/pause": {
+    "/api/experimental/automation/{automationID}/pause": {
       "post": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.pause",
+        "operationId": "experimental.automation.pause",
         "parameters": [
           {
-            "name": "scheduleID",
+            "name": "automationID",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
+              "$ref": "#/components/schemas/Automation.ID"
             },
             "required": true
           }
@@ -12409,7 +12681,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
+                      "$ref": "#/components/schemas/Automation.Info"
                     }
                   },
                   "required": ["data"],
@@ -12449,30 +12721,30 @@
             }
           },
           "404": {
-            "description": "ScheduleNotFoundError",
+            "description": "AutomationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/AutomationNotFoundErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Stop a schedule from firing until it is resumed. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Pause schedule"
+        "description": "Stop an automation from running until it is resumed. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "summary": "Pause automation"
       }
     },
-    "/api/experimental/schedule/{scheduleID}/resume": {
+    "/api/experimental/automation/{automationID}/resume": {
       "post": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.resume",
+        "operationId": "experimental.automation.resume",
         "parameters": [
           {
-            "name": "scheduleID",
+            "name": "automationID",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
+              "$ref": "#/components/schemas/Automation.ID"
             },
             "required": true
           }
@@ -12487,7 +12759,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
+                      "$ref": "#/components/schemas/Automation.Info"
                     }
                   },
                   "required": ["data"],
@@ -12527,18 +12799,18 @@
             }
           },
           "404": {
-            "description": "ScheduleNotFoundError",
+            "description": "AutomationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/AutomationNotFoundErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Resume schedule"
+        "description": "Resume a paused automation. A missed `at` runs once; repeating timers resume at their next slot. Event watches request replay from their saved cursor. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "summary": "Resume automation"
       }
     },
     "/api/experimental/artifacts/providers": {
@@ -13389,7 +13661,7 @@
                   "$ref": "#/components/schemas/Job.Kind"
                 }
               ],
-              "description": "Filter by background job kind (shell, subagent, or image)."
+              "description": "Filter by background job kind."
             },
             "required": false
           },
@@ -13476,6 +13748,50 @@
         },
         "description": "List active and unconsumed background jobs, optionally filtered by owning session, descendants, or kind. Experimental: may change without compatibility guarantees.",
         "summary": "List background jobs"
+      }
+    },
+    "/api/experimental/job/{id}/cancel": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.job.cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel a running background job, interrupting the work it started. Cancelling a job that already finished does nothing. Experimental: may change without compatibility guarantees.",
+        "summary": "Cancel background job"
       }
     },
     "/api/shell": {
@@ -16047,6 +16363,399 @@
         "required": ["_tag", "artifactID", "message"],
         "additionalProperties": false
       },
+      "Automation.Action": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Automation.Action.Prompt"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.Action.Code"
+          }
+        ]
+      },
+      "Automation.Action.Code": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["code"]
+          },
+          "code": {
+            "type": "string"
+          },
+          "args": {}
+        },
+        "required": ["type", "code"],
+        "additionalProperties": false
+      },
+      "Automation.Action.Prompt": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["prompt"]
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "to": {
+            "$ref": "#/components/schemas/Automation.Target"
+          }
+        },
+        "required": ["type", "prompt", "to"],
+        "additionalProperties": false
+      },
+      "Automation.ActionInput": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Automation.PromptActionInput"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.CodeActionInput"
+          }
+        ],
+        "description": "What it does: { type: \"prompt\", prompt, to? } sends a prompt; { type: \"code\", code, args? } runs Code Mode with no model."
+      },
+      "Automation.CodeActionInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["code"]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Code Mode JavaScript run on each trigger with no model (no fetch; 30s, 20 tool calls, 32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs. Event triggers also receive input.event = { id, timestamp, data }; data follows the event type's payloadSchema. Return nothing, or { state?, done?, send? }. JSON state is kept for the next run; done: true stops. lastOutput shows the delivery target and any logs. Return at most one send per run. { send: { prompt } } steers the creating session; { send: { prompt, to: { subagent } } } starts a permitted child that does not report back. No session IDs. Omit send to stay quiet. A rejected send commits neither state nor done. Example code string: if (runs < 2) return; return { done: true, send: { prompt: \"Three checks elapsed. Review the build.\" } }"
+          },
+          "args": {}
+        },
+        "required": ["type", "code"],
+        "additionalProperties": false
+      },
+      "Automation.CreatePayload": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "directory": {
+            "type": "string",
+            "description": "Where it runs when there is no Session. Defaults to the server user's home folder."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A short label shown in lists."
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/Automation.Trigger"
+          },
+          "action": {
+            "$ref": "#/components/schemas/Automation.ActionInput"
+          },
+          "expires": {
+            "type": "string"
+          }
+        },
+        "required": ["name", "trigger", "action"],
+        "additionalProperties": false
+      },
+      "Automation.Duration": {
+        "type": "string",
+        "description": "A duration such as \"90 seconds\", \"5 minutes\" or \"2 hours\"."
+      },
+      "Automation.ID": {
+        "type": "string",
+        "pattern": "^aut_"
+      },
+      "Automation.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Automation.ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "projectID": {
+            "$ref": "#/components/schemas/Project.ID"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/Automation.Trigger_1"
+          },
+          "tz": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/components/schemas/Automation.Action"
+          },
+          "expires": {
+            "type": "number"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Automation.Status"
+          },
+          "nextDueAt": {
+            "type": "number"
+          },
+          "runCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "lastRunAt": {
+            "type": "number"
+          },
+          "lastOutcome": {
+            "$ref": "#/components/schemas/Automation.Outcome"
+          },
+          "lastOutput": {
+            "type": "string"
+          },
+          "state": {},
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "name", "projectID", "directory", "trigger", "tz", "action", "status", "runCount", "time"],
+        "additionalProperties": false
+      },
+      "Automation.Outcome": {
+        "type": "string",
+        "enum": ["fired", "late", "skipped", "disabled", "failed", "expired"]
+      },
+      "Automation.PromptActionInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["prompt"]
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The message the target Session receives, with enough context to act on it without this conversation."
+          },
+          "to": {
+            "$ref": "#/components/schemas/Automation.Target"
+          }
+        },
+        "required": ["type", "prompt"],
+        "additionalProperties": false
+      },
+      "Automation.Status": {
+        "type": "string",
+        "enum": ["active", "paused", "done"]
+      },
+      "Automation.Target": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "session": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "subagent": {
+                "not": {}
+              }
+            },
+            "required": ["session"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "subagent": {
+                "$ref": "#/components/schemas/Agent.ID"
+              },
+              "session": {
+                "not": {}
+              }
+            },
+            "required": ["subagent"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Automation.Trigger": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Automation.Trigger.At"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.Trigger.Every"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.Trigger.Cron"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.Trigger.Event"
+          }
+        ],
+        "description": "When it runs: { type: \"at\", at: \"in 20 minutes\" | \"2026-10-27T09:00\" }, { type: \"every\", every: \"1 hour\" } or { type: \"cron\", cron: \"0 9 * * 1-5\" }, each with an optional tz. Or { type: \"event\", server, event, args? } for a connected MCP server advertising push delivery (requires mcp_events)."
+      },
+      "Automation.Trigger.At": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["at"]
+          },
+          "at": {
+            "type": "string",
+            "description": "An instant with an offset, a wall-clock time in tz such as \"2026-10-27T09:00\", or \"in 10 minutes\"."
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "at"],
+        "additionalProperties": false
+      },
+      "Automation.Trigger.Cron": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["cron"]
+          },
+          "cron": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "cron"],
+        "additionalProperties": false
+      },
+      "Automation.Trigger.Event": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["event"]
+          },
+          "server": {
+            "type": "string",
+            "minLength": 1
+          },
+          "event": {
+            "type": "string",
+            "minLength": 1
+          },
+          "args": {
+            "type": "object"
+          }
+        },
+        "required": ["type", "server", "event"],
+        "additionalProperties": false
+      },
+      "Automation.Trigger.Every": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["every"]
+          },
+          "every": {
+            "$ref": "#/components/schemas/Automation.Duration"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "every"],
+        "additionalProperties": false
+      },
+      "Automation.Trigger_1": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Automation.Trigger.At"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.Trigger.Every"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.Trigger.Cron"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.Trigger.Event"
+          }
+        ]
+      },
+      "AutomationNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["AutomationNotFoundError"]
+          },
+          "automationID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "automationID", "message"],
+        "additionalProperties": false
+      },
+      "Blob.ID": {
+        "type": "string",
+        "pattern": "^blob_[0-9a-f]{12}[0-9A-Za-z]{14}$",
+        "description": "A stored blob, such as a generated video, which outlives the job that made it"
+      },
+      "Blob.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Blob.ID"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "mime", "bytes"],
+        "additionalProperties": false
+      },
+      "BlobNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["BlobNotFoundError"]
+          },
+          "blobID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "blobID", "message"],
+        "additionalProperties": false
+      },
       "Command.Info": {
         "type": "object",
         "properties": {
@@ -16541,6 +17250,9 @@
               "auto": {
                 "type": "boolean"
               },
+              "background": {
+                "type": "boolean"
+              },
               "keep": {
                 "type": "object",
                 "properties": {
@@ -16659,22 +17371,77 @@
               "todo": {
                 "type": "boolean"
               },
-              "background_compaction": {
-                "type": "boolean"
-              },
               "media_blob": {
                 "type": "boolean"
               },
-              "schedules": {
+              "automations": {
                 "type": "boolean"
               },
               "artifacts": {
                 "type": "boolean"
               },
+              "video_generate": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string",
+                                "pattern": "^[^/#]+$"
+                              },
+                              "model": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              }
+                            },
+                            "required": ["providerID", "model"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "console_watches": {
                 "type": "boolean"
               },
               "mcp_events": {
+                "type": "boolean"
+              },
+              "recommended_api": {
+                "type": "boolean"
+              },
+              "full_codemode": {
+                "type": "boolean"
+              },
+              "machines": {
+                "type": "boolean"
+              },
+              "home_memory": {
+                "type": "boolean"
+              },
+              "sqlite_fts": {
+                "type": "boolean"
+              },
+              "schedules": {
                 "type": "boolean"
               },
               "part_rows": {
@@ -18936,6 +19703,22 @@
         "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?:[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$",
         "description": "Aspect ratio as width:height, for example 16:9"
       },
+      "Generate.ImageFile": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Prompt.Base64"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["data", "mime"],
+        "additionalProperties": false
+      },
       "Generate.ImageOutput": {
         "type": "object",
         "properties": {
@@ -19169,6 +19952,145 @@
         "additionalProperties": false,
         "description": "Token counts, when the provider reports them"
       },
+      "Generate.VideoAspect": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Generate.ImageAspect"
+          },
+          {
+            "type": "string",
+            "enum": ["auto"]
+          }
+        ],
+        "description": "Aspect ratio as width:height, or auto to follow the start image"
+      },
+      "Generate.VideoCompleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Generate.VideoID"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["completed"]
+          },
+          "blobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Blob.Info"
+            },
+            "description": "The finished videos, usually one. Read each with GET /api/experimental/blob/:id"
+          }
+        },
+        "required": ["id", "status", "blobs"],
+        "additionalProperties": false
+      },
+      "Generate.VideoError": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Generate.VideoID"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["error"]
+          },
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/Generate.VideoErrorReason"
+          }
+        },
+        "required": ["id", "status", "error", "reason"],
+        "additionalProperties": false
+      },
+      "Generate.VideoErrorReason": {
+        "type": "string",
+        "enum": ["failed", "cancelled", "expired", "unknown"],
+        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time"
+      },
+      "Generate.VideoID": {
+        "type": "string",
+        "pattern": "^video_[0-9a-f]{12}[0-9A-Za-z]{14}$"
+      },
+      "Generate.VideoJob": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Generate.VideoRunning"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.VideoCompleted"
+          },
+          {
+            "$ref": "#/components/schemas/Generate.VideoError"
+          }
+        ]
+      },
+      "Generate.VideoRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "start": {
+            "$ref": "#/components/schemas/Generate.ImageFile"
+          },
+          "end": {
+            "$ref": "#/components/schemas/Generate.ImageFile"
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Generate.File"
+            }
+          },
+          "duration": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          },
+          "aspect": {
+            "$ref": "#/components/schemas/Generate.VideoAspect"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/Generate.VideoResolution"
+          },
+          "sound": {
+            "type": "boolean"
+          }
+        },
+        "required": ["model", "prompt"],
+        "additionalProperties": false
+      },
+      "Generate.VideoResolution": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["480p", "720p", "1080p", "4k"]
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "Generate.VideoRunning": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Generate.VideoID"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running"]
+          }
+        },
+        "required": ["id", "status"],
+        "additionalProperties": false
+      },
       "GenerateDecisionsResponse": {
         "type": "object",
         "properties": {
@@ -19201,6 +20123,26 @@
             },
             "required": ["text"],
             "additionalProperties": false
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
+      "GenerateVideoCreateResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Generate.VideoRunning"
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
+      "GenerateVideoGetResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Generate.VideoJob"
           }
         },
         "required": ["data"],
@@ -19962,6 +20904,32 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "Job.CodeMode": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["codemode"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time"],
+        "additionalProperties": false
+      },
       "Job.Image": {
         "type": "object",
         "properties": {
@@ -20004,12 +20972,18 @@
           },
           {
             "$ref": "#/components/schemas/Job.Image"
+          },
+          {
+            "$ref": "#/components/schemas/Job.Video"
+          },
+          {
+            "$ref": "#/components/schemas/Job.CodeMode"
           }
         ]
       },
       "Job.Kind": {
         "type": "string",
-        "enum": ["shell", "subagent", "image"]
+        "enum": ["shell", "subagent", "image", "video", "codemode"]
       },
       "Job.Shell": {
         "type": "object",
@@ -20094,6 +21068,35 @@
           }
         },
         "required": ["started"],
+        "additionalProperties": false
+      },
+      "Job.Video": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["video"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "path"],
         "additionalProperties": false
       },
       "Location.PublicInfo": {
@@ -20803,7 +21806,7 @@
         "anyOf": [
           {
             "type": "string",
-            "enum": ["chat", "decision", "image"]
+            "enum": ["chat", "decision", "image", "video"]
           },
           {
             "type": "string"
@@ -22334,454 +23337,6 @@
           }
         },
         "required": ["_tag", "type", "message"],
-        "additionalProperties": false
-      },
-      "Schedule.Action": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Schedule.Action.Prompt"
-          }
-        ]
-      },
-      "Schedule.Action.Prompt": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["prompt"]
-          },
-          "prompt": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "prompt"],
-        "additionalProperties": false
-      },
-      "Schedule.Condition": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Schedule.Condition.Shell"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.Condition.Code"
-          }
-        ]
-      },
-      "Schedule.Condition.Code": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["code"]
-          },
-          "code": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "code"],
-        "additionalProperties": false
-      },
-      "Schedule.Condition.Shell": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["shell"]
-          },
-          "run": {
-            "type": "string"
-          },
-          "is": {
-            "type": "string"
-          },
-          "matches": {
-            "type": "string"
-          },
-          "changes": {
-            "type": "boolean"
-          }
-        },
-        "required": ["type", "run"],
-        "additionalProperties": false
-      },
-      "Schedule.ConditionInput": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "run": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
-              },
-              "is": {
-                "type": "string"
-              },
-              "matches": {
-                "type": "string"
-              },
-              "changes": {
-                "type": "boolean"
-              },
-              "code": {
-                "not": {}
-              }
-            },
-            "required": ["run"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs. Return a boolean or { wake, state?, message? } (message is appended to prompt on wake), e.g.: const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: \"New reply\" }"
-              },
-              "run": {
-                "not": {}
-              },
-              "is": {
-                "not": {}
-              },
-              "matches": {
-                "not": {}
-              },
-              "changes": {
-                "not": {}
-              }
-            },
-            "required": ["code"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "Schedule.CreatePayload": {
-        "type": "object",
-        "properties": {
-          "sessionID": {
-            "$ref": "#/components/schemas/Session.ID"
-          },
-          "name": {
-            "type": "string"
-          },
-          "when": {
-            "$ref": "#/components/schemas/Schedule.WhenInput"
-          },
-          "if": {
-            "$ref": "#/components/schemas/Schedule.ConditionInput"
-          },
-          "until": {
-            "$ref": "#/components/schemas/Schedule.ConditionInput"
-          },
-          "ends": {
-            "$ref": "#/components/schemas/Schedule.Ends"
-          },
-          "prompt": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The message the Session receives when the schedule wakes."
-          }
-        },
-        "required": ["sessionID", "prompt"],
-        "additionalProperties": false
-      },
-      "Schedule.Duration": {
-        "type": "string",
-        "description": "A duration such as \"90 seconds\", \"5 minutes\" or \"2 hours\"."
-      },
-      "Schedule.Ends": {
-        "type": "object",
-        "properties": {
-          "after": {
-            "$ref": "#/components/schemas/Schedule.Duration"
-          },
-          "at": {
-            "type": "string"
-          },
-          "times": {
-            "type": "integer",
-            "maximum": 9007199254740991,
-            "exclusiveMinimum": 0
-          }
-        },
-        "additionalProperties": false
-      },
-      "Schedule.ID": {
-        "type": "string",
-        "pattern": "^sch_"
-      },
-      "Schedule.Info": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/Schedule.ID"
-          },
-          "sessionID": {
-            "$ref": "#/components/schemas/Session.ID"
-          },
-          "name": {
-            "type": "string"
-          },
-          "when": {
-            "$ref": "#/components/schemas/Schedule.When"
-          },
-          "tz": {
-            "type": "string"
-          },
-          "if": {
-            "$ref": "#/components/schemas/Schedule.Condition"
-          },
-          "until": {
-            "$ref": "#/components/schemas/Schedule.Condition"
-          },
-          "action": {
-            "$ref": "#/components/schemas/Schedule.Action"
-          },
-          "status": {
-            "$ref": "#/components/schemas/Schedule.Status"
-          },
-          "nextDueAt": {
-            "type": "number"
-          },
-          "endsAt": {
-            "type": "number"
-          },
-          "remainingRuns": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          },
-          "runCount": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          },
-          "lastFiredAt": {
-            "type": "number"
-          },
-          "lastOutcome": {
-            "$ref": "#/components/schemas/Schedule.Outcome"
-          },
-          "lastOutput": {
-            "type": "string"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "type": "number"
-              },
-              "updated": {
-                "type": "number"
-              }
-            },
-            "required": ["created", "updated"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "when", "tz", "action", "status", "runCount", "time"],
-        "additionalProperties": false
-      },
-      "Schedule.Outcome": {
-        "type": "string",
-        "enum": ["fired", "late", "checked", "expired", "skipped", "disabled", "failed"]
-      },
-      "Schedule.Status": {
-        "type": "string",
-        "enum": ["active", "paused", "done"]
-      },
-      "Schedule.When": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Schedule.When.In"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.When.At"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.When.Every"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.When.Cron"
-          }
-        ]
-      },
-      "Schedule.When.At": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["at"]
-          },
-          "at": {
-            "type": "string"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "at"],
-        "additionalProperties": false
-      },
-      "Schedule.When.Cron": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["cron"]
-          },
-          "cron": {
-            "type": "string"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "cron"],
-        "additionalProperties": false
-      },
-      "Schedule.When.Every": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["every"]
-          },
-          "every": {
-            "$ref": "#/components/schemas/Schedule.Duration"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "every"],
-        "additionalProperties": false
-      },
-      "Schedule.When.In": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["in"]
-          },
-          "in": {
-            "$ref": "#/components/schemas/Schedule.Duration"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "in"],
-        "additionalProperties": false
-      },
-      "Schedule.WhenInput": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "in": {
-                "$ref": "#/components/schemas/Schedule.Duration"
-              },
-              "at": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["in"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "at": {
-                "type": "string"
-              },
-              "in": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["at"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "every": {
-                "$ref": "#/components/schemas/Schedule.Duration"
-              },
-              "in": {
-                "not": {}
-              },
-              "at": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["every"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "cron": {
-                "type": "string"
-              },
-              "in": {
-                "not": {}
-              },
-              "at": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["cron"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "ScheduleNotFoundErrorEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ScheduleNotFoundError"]
-          },
-          "scheduleID": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "scheduleID", "message"],
         "additionalProperties": false
       },
       "ServerInfo": {
@@ -25607,6 +26162,9 @@
             "$ref": "#/components/schemas/shell.deleted"
           },
           {
+            "$ref": "#/components/schemas/experimental.job.updated"
+          },
+          {
             "$ref": "#/components/schemas/form.created"
           },
           {
@@ -25839,6 +26397,23 @@
           }
         },
         "required": ["_tag", "providerID", "message"],
+        "additionalProperties": false
+      },
+      "VideoNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["VideoNotFoundError"]
+          },
+          "videoID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "videoID", "message"],
         "additionalProperties": false
       },
       "VoiceModel": {
@@ -26363,6 +26938,39 @@
               }
             },
             "required": ["integrationID", "credentialID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.job.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.job.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/Job.Info"
+              }
+            },
+            "required": ["info"],
             "additionalProperties": false
           }
         },

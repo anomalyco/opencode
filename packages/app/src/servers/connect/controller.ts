@@ -144,7 +144,11 @@ export function createServerConnectController(options: ServerConnectControllerOp
           (server): server is ServerConnection.Http => server.type === "http" && server.http.url === action.http.url,
         )
 
-        servers.add(existing ? { ...existing, http: action.http } : { type: "http", http: action.http })
+        servers.add(
+          existing
+            ? { ...existing, http: action.http }
+            : { type: "http", displayName: action.displayName, http: action.http },
+        )
 
         return
       }
