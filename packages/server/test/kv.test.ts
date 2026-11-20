@@ -162,6 +162,14 @@ it.live("syncs requested spaces to another client, catching up from revisions ac
             }),
           )
           expect(empty.status).toBe(400)
+          const large = await handler(
+            new Request("http://opencode.local/api/experimental/kv/app/c", {
+              method: "PUT",
+              headers: { authorization, "content-type": "application/json" },
+              body: JSON.stringify({ value: "x".repeat(1024 * 1024) }),
+            }),
+          )
+          expect(large.status).toBe(400)
         })
       }),
     )

@@ -25,6 +25,9 @@ export const Value = Schema.Union([
 ]).annotate({ identifier: "Space.Value" })
 export type Value = typeof Value.Type
 
+/** A value always goes out as one event, so a write is capped at 1 MiB of JSON. */
+export const MaxValueBytes = 1024 * 1024
+
 export interface Entry extends Schema.Schema.Type<typeof Entry> {}
 export const Entry = Schema.Struct({ key: Key, value: Value }).annotate({ identifier: "Space.Entry" })
 

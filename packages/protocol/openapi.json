@@ -13861,7 +13861,7 @@
             }
           }
         },
-        "description": "Store a client-defined JSON value, replacing any previous value, and send it to the space's subscribers. The server does not interpret it. Subscribers read values through `experimental.kv` on /api/event. Experimental: may change without compatibility guarantees.",
+        "description": "Store a client-defined JSON value of at most 1 MiB, replacing any previous value, and send it to the space's subscribers. The server does not interpret it. Subscribers read values through `experimental.kv` on /api/event. Experimental: may change without compatibility guarantees.",
         "summary": "Set value",
         "requestBody": {
           "content": {
