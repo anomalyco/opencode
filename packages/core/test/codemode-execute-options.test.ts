@@ -9,6 +9,7 @@ import { Flag } from "@opencode/core/flag"
 import { Job } from "@opencode/core/job"
 import type { Permission } from "@opencode/core/permission"
 import { Session } from "@opencode/core/session"
+import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -50,18 +51,26 @@ const harness = Effect.gen(function* () {
   const jobs = yield* Job.Service
   const notices: Array<{ text: string; metadata?: Record<string, unknown> }> = []
   const notified = yield* Deferred.make<void>()
+  const blocking = yield* Deferred.make<void>()
   const run = yield* CodeModeJob.make(
-    jobs,
+    // Resolves once the call starts its blocking wait, whose timeout is forked in the same step.
+    { ...jobs, block: (input) => Deferred.succeed(blocking, undefined).pipe(Effect.andThen(jobs.block(input))) },
     (input) =>
       Effect.sync(() => notices.push(input)).pipe(
         Effect.andThen(Deferred.succeed(notified, undefined)),
-        // The runner ignores the created message.
-        Effect.as(input as never),
+        Effect.as({
+          type: "synthetic" as const,
+          payload: { text: input.text, description: input.description, metadata: input.metadata },
+          delivery: "queue" as const,
+          id: input.id ?? SessionMessage.ID.create(),
+          sessionID: input.sessionID,
+          time: { created: 0 },
+        }),
       ),
     yield* Scope.make(),
   )
   if (!run) throw new Error("no job runner")
-  return { jobs, run, notices, notified }
+  return { jobs, run, notices, notified, blocking }
 })
 
 describe("execute timeout and background", () => {
@@ -106,6 +115,7 @@ describe("execute timeout and background", () => {
     Effect.gen(function* () {
       const h = yield* harness
       const fiber = yield* h.run(context("ses_fg"), script(600), { timeout: 150 }).pipe(Effect.forkChild)
+      yield* Deferred.await(h.blocking)
       yield* TestClock.adjust("149 millis")
       expect(fiber.pollUnsafe()).toBeUndefined()
       yield* TestClock.adjust("1 millis")
