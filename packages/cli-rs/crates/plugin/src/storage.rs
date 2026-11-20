@@ -1,20 +1,14 @@
 //! An undotted key keeps its TS name `plugin.{id}.{key}`. Dotted keys use `..` as the separator so
-//! `(acme.cloud, token)` and `(acme, cloud.token)` cannot collide. Reads fall back to the old name until the
-//! first write; merges must migrate the old object before applying fields.
+//! `(acme.cloud, token)` and `(acme, cloud.token)` cannot collide. A dotted key's TS name is not read: it is also
+//! another plugin's undotted key's name.
 
 use crate::Host;
 
 pub const KEYS: usize = 128;
 pub const VALUE_BYTES: usize = 256 << 10;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Name {
-    pub now: String,
-    pub before: Option<String>,
-}
-
-/// The names of plugin `id`'s key `key`, or why the pair has none.
-pub(crate) fn name(id: &str, key: &str) -> Result<Name, String> {
+/// The name of plugin `id`'s key `key`, or why the pair has none.
+pub(crate) fn name(id: &str, key: &str) -> Result<String, String> {
     if !part(id) {
         return Err(format!("plugin ID {id:?} cannot name storage"));
     }
@@ -22,8 +16,8 @@ pub(crate) fn name(id: &str, key: &str) -> Result<Name, String> {
         return Err(format!("storage key {key:?} is not letters, digits, '.', '_' and '-' between them"));
     }
     match key.contains('.') {
-        false => Ok(Name { now: format!("plugin.{id}.{key}"), before: None }),
-        true => Ok(Name { now: format!("plugin.{id}..{key}"), before: Some(format!("plugin.{id}.{key}")) }),
+        false => Ok(format!("plugin.{id}.{key}")),
+        true => Ok(format!("plugin.{id}..{key}")),
     }
 }
 
@@ -34,24 +28,6 @@ fn part(text: &str) -> bool {
         && !text.starts_with('.')
         && !text.ends_with('.')
         && !text.contains("..")
-}
-
-/// The value of `name`: its own, else what TS kept under its old name.
-pub(crate) fn read(host: &dyn Host, name: &Name) -> Option<String> {
-    host.storage_read(&name.now).or_else(|| host.storage_read(name.before.as_deref()?))
-}
-
-/// Before a write to `name`: moves what its old name holds to it, while it holds nothing of its own, so a merge keeps
-/// those fields and later reads find them.
-pub(crate) fn migrate(host: &dyn Host, name: &Name) -> Result<(), String> {
-    let Some(before) = &name.before else { return Ok(()) };
-    if host.storage_read(&name.now).is_some() {
-        return Ok(());
-    }
-    match host.storage_read(before) {
-        Some(json) => host.storage_write(&name.now, &json),
-        None => Ok(()),
-    }
 }
 
 /// Declares `key` among `keys`, a plugin's, within [`KEYS`].
@@ -71,10 +47,10 @@ pub(crate) fn declare(keys: &mut Vec<String>, key: &str) -> Result<(), String> {
 /// that replaces a field with one of its size keeps the value's size, so it stays legal.
 pub(crate) fn bounded_merge(
     host: &dyn Host,
-    name: &Name,
+    name: &str,
     fields: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<(), String> {
-    bounded(merged(read(host, name), fields.iter().map(|(k, v)| (k.clone(), v.clone()))).len())
+    bounded(merged(host.storage_read(name), fields.iter().map(|(k, v)| (k.clone(), v.clone()))).len())
 }
 
 pub(crate) fn merged(

@@ -11,9 +11,9 @@ write the same value.
 - A key with no dot keeps TS's name, so a TS and a Rust client share it as before.
 - A key with a dot lives in `plugin.{id}..{key}.json`. No pair of an ID and a key shares a name with another
   (`crates/plugin/src/storage.rs`).
-- What TS stored under a dotted key's old name stays readable: a read finds it there while the new file is missing,
-  and the plugin's first write moves it to the new file. From then on a TS client and a Rust client keep that key
-  apart.
+- What TS stored under a dotted key is not read: its name `plugin.{id}.{key}` is also another plugin's dot-free key's
+  (`acme`'s `cloud.token` is `acme.cloud`'s `token`), so reading it would hand one plugin the other's value. A TS
+  client and a Rust client keep a dotted key apart.
 - An ID or a key that starts or ends with a dot, holds two in a row, or holds a character other than letters, digits,
   `.`, `_` and `-` cannot name storage: the read or write is refused.
 - A plugin declares 128 keys at most, and a stored value is 256 KiB of JSON at most. TS bounds neither: opencodebar's
