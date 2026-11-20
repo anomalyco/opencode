@@ -45,7 +45,8 @@ type Template = {
 A template version is immutable. Saving a template with an existing name creates a new version and makes it the
 latest; old versions stay retrievable forever so old widget messages keep rendering.
 
-Built-in templates ship in `@opencode/widget` and are always present: `suggestions`, `form`, `confirm`.
+Built-in templates ship in `@opencode/widget` and are always present: `suggestions`, `form`, `confirm`, `chart`,
+`backdrop`.
 
 ## Template source
 
@@ -74,7 +75,7 @@ The prelude is canonical JavaScript in `packages/widget/src/prelude.js`. It defi
   `image(src, props?)`, `button(id, label, props?)`, `checkbox(id, label, checked, props?)`, `slider(id, props)`
   (`props` holds `value`, `min`, `max`), `select(id, options, props?)`, `input(id, value, props?)`, `divider()`.
   `children` may nest arrays and contain `null`/`undefined`/`false`, which are dropped (`cond && ui.text(...)`).
-  `canvas(props)`, `shader(wgsl, props)`, and `draw()`, the draw command builder (see Canvas).
+  Also `canvas(props)`, `shader(wgsl, props)` and `draw()`, the draw command builder (see Canvas).
 - `submit(value, state)` and `dismiss(state)`. An omitted `state` keeps the previous state; `submit(undefined)`
   submits `null`. Both are final: the widget closes.
 - `send(value, state, { wake = true })`: a non-final message to the agent; the widget stays open and can send again,
@@ -202,7 +203,8 @@ animations: `{ fps: 60, duration: 0.6 }`); `t` keeps counting from when the canv
 per frame; a canvas that exceeds it three frames in a row stops animating and keeps its last frame.
 
 Commands are compact arrays, built with the prelude's `ui.draw()` builder (`const g = ui.draw(); g.rect(...);
-return g.commands`). Coordinates are logical pixels, origin top-left.
+return g.commands`). Coordinates are logical pixels, origin top-left. A `text` command's `y` is the alphabetic
+baseline; `size` defaults to 13 and `color` to `"text"`.
 
 ```ts
 type Command =
@@ -247,6 +249,9 @@ struct Widget { resolution: vec2f, time: f32, scale: f32, pointer: vec4f, values
 @fragment fn widget_main(@builtin(position) p: vec4f) -> @location(0) vec4f { return shade(p.xy); }
 ```
 
+`frag`, `widget.resolution` and `widget.pointer` are in physical pixels (logical × `widget.scale`), `widget.time` in
+seconds since the shader appeared. Colors are sRGB-encoded: clients write them to the surface without a linear-to-sRGB
+conversion. With `fps: 0` the shader renders once, and again when its `values` change.
 `widget.pointer` is `(x, y, down, 0)`; `widget.values` carries the node's `values` (up to 16 floats, row-major, zero
 padded), which the template sets from state in `view`. Rune passes WGSL to wgpu as is; iOS gets MSL and Android GLSL
 ES 3.00 translated with naga (`opencode-widget-ffi`). Source is capped at 16 KB. A shader that fails to compile shows
@@ -406,6 +411,28 @@ submit: Record<string, string | number | boolean | string[]>
 
 `confirm` — `data: { title: string; message: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean }`,
 `submit: { confirmed: boolean }`.
+
+`chart` — a `canvas` demo: an animated bar or line chart.
+
+```ts
+data: {
+  title: string
+  kind: "bar" | "line"
+  series: { label: string; values: number[]; color?: string /* #rgb | #rrggbb */ }[]  // 1..6 series, 1..60 values
+  labels?: string[]   // x axis labels per value index
+  unit?: string       // "%" and other one-character units attach ("12%"), longer ones are spaced ("12 ms")
+  choose?: boolean    // default false
+}
+submit: { series: string /* label */; index: number; value: number }   // only with choose, on a tap
+```
+
+It animates in over 0.65 s (`fps: 60, duration: 0.65`), then draws only on state changes, except while the pointer is
+down. Pressing or dragging shows the value under the pointer (a tooltip and a caption under the chart); the selection
+stays after release, and a tap outside the plot clears it.
+
+`backdrop` — a `shader` demo: `data: { title: string; preset: "plasma" | "aurora" | "waves"; text?: string /* markdown */;
+accent?: string /* #rgb | #rrggbb */ }`, submits nothing. The banner is followed by the title, the text and a speed
+slider (0–2, 0 pauses with `fps: 0`); `values` is `[speed, accent r, g, b]`.
 
 ## Client behaviour
 

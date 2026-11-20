@@ -114,7 +114,13 @@ describe("Widget templates", () => {
       expect(latest).toMatchObject({ name: "suggestions", version: suggestions.version, builtin: true })
       expect(yield* widgets.get("suggestions", suggestions.version)).toEqual(latest)
       expect(Widget.toProgram(latest).program).toBe(program(suggestions.source))
-      expect((yield* widgets.list()).map((template) => template.name)).toEqual(["confirm", "form", "suggestions"])
+      expect((yield* widgets.list()).map((template) => template.name)).toEqual([
+        "backdrop",
+        "chart",
+        "confirm",
+        "form",
+        "suggestions",
+      ])
       expect(yield* widgets.list()).not.toContainEqual(expect.objectContaining({ source: expect.anything() }))
     }),
   )

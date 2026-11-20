@@ -48,6 +48,8 @@ it.live("serves widget templates and records one response per widget", () =>
 
       yield* Effect.promise(async () => {
         expect((await api.experimental.widget.template.list()).map((template) => template.name)).toEqual([
+          "backdrop",
+          "chart",
           "confirm",
           "form",
           "suggestions",
