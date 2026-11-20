@@ -321,7 +321,7 @@ test("disposing aborts only an active attempt and ends the machine", () => {
   expect(result.effects).toEqual([])
 })
 
-test("the view names worktree creation and shows MCP preparation only during those phases", () => {
+test("the view names worktree creation, shows MCP preparation only during those phases and targets the start's directory", () => {
   expect(
     [
       replay([start(fresh, { figma: true })]).state,
@@ -330,9 +330,9 @@ test("the view names worktree creation and shows MCP preparation only during tho
       createNewSessionStartState(),
     ].map(viewNewSessionStart),
   ).toEqual([
-    { status: "session.new.worktree.creating", preparingMcp: false },
-    { status: "session.new.starting", preparingMcp: true },
-    { status: "session.new.starting", preparingMcp: false },
-    { status: "session.new.starting", preparingMcp: false },
+    { status: "session.new.worktree.creating", preparingMcp: false, directory: "/repo" },
+    { status: "session.new.starting", preparingMcp: true, directory: "/wt" },
+    { status: "session.new.starting", preparingMcp: false, directory: "/repo" },
+    { status: "session.new.starting", preparingMcp: false, directory: undefined },
   ])
 })

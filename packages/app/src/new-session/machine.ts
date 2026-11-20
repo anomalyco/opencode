@@ -21,7 +21,13 @@ export type NewSessionWorkspace =
 // worktree this attempt created, which a rollback keeps as the draft's workspace.
 export type NewSessionStartState =
   | { readonly type: "idle"; readonly attempt: number }
-  | { readonly type: "worktree"; readonly attempt: number; readonly sessionID: Session.ID; readonly mcp: McpStates }
+  | {
+      readonly type: "worktree"
+      readonly attempt: number
+      readonly sessionID: Session.ID
+      readonly projectDirectory: string
+      readonly mcp: McpStates
+    }
   | {
       readonly type: "mcp"
       readonly attempt: number
@@ -175,12 +181,16 @@ export type NewSessionStartView = {
   // The pending session screen's status line.
   readonly status: "session.new.worktree.creating" | "session.new.starting"
   readonly preparingMcp: boolean
+  // Where the Session will run. The project root stands in until the new worktree exists.
+  readonly directory: string | undefined
 }
 
 export function viewNewSessionStart(state: NewSessionStartState): NewSessionStartView {
   return {
     status: state.type === "worktree" ? "session.new.worktree.creating" : "session.new.starting",
     preparingMcp: state.type === "mcp",
+    directory:
+      state.type === "worktree" ? state.projectDirectory : isNewSessionStartActive(state) ? state.directory : undefined,
   }
 }
 
@@ -197,15 +207,24 @@ function start(
   const attempt = state.attempt + 1
 
   if (event.workspace.type === "new") {
-    return changed({ type: "worktree", attempt, sessionID: event.sessionID, mcp: event.mcp }, [
+    return changed(
       {
-        type: "worktree.create",
+        type: "worktree",
         attempt,
+        sessionID: event.sessionID,
         projectDirectory: event.workspace.projectDirectory,
-        branch: event.workspace.branch,
-        timeoutMs: NEW_SESSION_WORKTREE_TIMEOUT_MS,
+        mcp: event.mcp,
       },
-    ])
+      [
+        {
+          type: "worktree.create",
+          attempt,
+          projectDirectory: event.workspace.projectDirectory,
+          branch: event.workspace.branch,
+          timeoutMs: NEW_SESSION_WORKTREE_TIMEOUT_MS,
+        },
+      ],
+    )
   }
 
   return prepare(
