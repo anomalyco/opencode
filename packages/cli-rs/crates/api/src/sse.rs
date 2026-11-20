@@ -29,6 +29,9 @@ pub enum Error {
 pub struct Decoder {
     /// Bytes of the unterminated last line.
     line: Vec<u8>,
+    /// Its length in UTF-16 code units, and the continuation bytes its last lead byte still expects.
+    line_units: usize,
+    owed: u8,
     /// `data:` values of the open block, joined with newlines.
     data: String,
     /// Whether the open block has a `data:` line, so an empty value still adds a newline.
@@ -53,7 +56,8 @@ impl Decoder {
         // unit count never exceeds the byte count, so the units are counted only when the bytes pass the limit.
         let carriage_return = usize::from(self.carriage_return);
         if self.block_bytes + self.line.len() + carriage_return + chunk.len() > MAX_EVENT_UNITS
-            && self.block_units + utf16_units(&self.line) + carriage_return + utf16_units(chunk) > MAX_EVENT_UNITS
+            && self.block_units + self.line_units + carriage_return + utf16_units(chunk, &mut self.owed.clone())
+                > MAX_EVENT_UNITS
         {
             return Err(Error::EventTooLarge);
         }
@@ -65,7 +69,7 @@ impl Decoder {
         }
         while let Some(index) = memchr::memchr2(b'\n', b'\r', rest) {
             if rest[index] == b'\r' && index + 1 == rest.len() {
-                self.line.extend_from_slice(&rest[..index]);
+                self.extend_line(&rest[..index]);
                 self.carriage_return = true;
                 return Ok(());
             }
@@ -73,8 +77,13 @@ impl Decoder {
             self.end_line(&rest[..index], payloads);
             rest = &rest[index + 1 + usize::from(crlf)..];
         }
-        self.line.extend_from_slice(rest);
+        self.extend_line(rest);
         Ok(())
+    }
+
+    fn extend_line(&mut self, bytes: &[u8]) {
+        self.line_units += utf16_units(bytes, &mut self.owed);
+        self.line.extend_from_slice(bytes);
     }
 
     /// Ends the stream: an unterminated last block still counts, as in the TypeScript reader.
@@ -87,6 +96,7 @@ impl Decoder {
 
     /// Ends the line made of the buffered bytes and `tail`, keeping the buffer's capacity.
     fn end_line(&mut self, tail: &[u8], payloads: &mut VecDeque<String>) {
+        (self.line_units, self.owed) = (0, 0);
         if self.line.is_empty() {
             return self.decode_line(tail, payloads);
         }
@@ -108,7 +118,7 @@ impl Decoder {
             return;
         }
         self.block_bytes += line.len() + 1;
-        self.block_units += utf16_units(line) + 1;
+        self.block_units += utf16_units(line, &mut 0) + 1;
         // The prefix is ASCII, so decoding only the value gives the same text as decoding the whole line.
         if let Some(value) = bytes.strip_prefix(b"data:") {
             let value = String::from_utf8_lossy(value);
@@ -129,17 +139,27 @@ impl Decoder {
     }
 }
 
-/// UTF-16 code units of UTF-8 bytes, counted per lead byte so a split code point counts once.
-fn utf16_units(bytes: &[u8]) -> usize {
+/// UTF-16 code units of UTF-8 bytes, counted per lead byte so a split code point counts once. `owed` carries the
+/// continuation bytes the last lead byte still expects; any other continuation byte counts as the U+FFFD it decodes to.
+fn utf16_units(bytes: &[u8], owed: &mut u8) -> usize {
     if bytes.is_ascii() {
+        if !bytes.is_empty() {
+            *owed = 0;
+        }
         return bytes.len();
     }
     bytes
         .iter()
-        .map(|byte| match byte {
-            0x80..=0xbf => 0,
-            0xf0.. => 2,
-            _ => 1,
+        .map(|byte| {
+            let (units, next) = match byte {
+                0x80..=0xbf if *owed > 0 => (0, *owed - 1),
+                0xc2..=0xdf => (1, 1),
+                0xe0..=0xef => (1, 2),
+                0xf0..=0xf4 => (2, 3),
+                _ => (1, 0),
+            };
+            *owed = next;
+            units
         })
         .sum()
 }
@@ -219,6 +239,19 @@ mod tests {
         let half = "x".repeat(MAX_EVENT_UNITS / 2);
         assert!(push(&mut decoder, format!("data:{half}\n\n").as_bytes()).is_ok());
         assert!(push(&mut decoder, format!("data:{half}\n\n").as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn invalid_utf8_counts_toward_the_limit() {
+        // Each stray continuation byte decodes to one U+FFFD; the rest of a sequence started in an earlier chunk does not.
+        for (filler, units, chunk) in
+            [(&b"\x80"[..], 1, 4096), (b"\xff", 1, 4096), (b"\xe2\x98", 1, 4096), (b"\xf0\x9f\x98\x80", 2, 4093)]
+        {
+            let mut decoder = Decoder::new();
+            let open = [b"data:".as_slice(), &filler.repeat(MAX_EVENT_UNITS / units)].concat();
+            let error = open.chunks(chunk).find_map(|chunk| push(&mut decoder, chunk).err());
+            assert_eq!(error, Some(Error::EventTooLarge), "{filler:?}");
+        }
     }
 
     #[test]
