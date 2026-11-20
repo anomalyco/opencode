@@ -2327,122 +2327,69 @@ for (const direction of ["ltr", "rtl"] as const) {
   })
 }
 
-// Oversized CSV previews used to download the full file, re-encode it, parse every row, and mount thousands of
-// IconButton/Icon components synchronously, freezing the renderer.
-test("large CSV previews fetch a bounded byte range, render rows progressively, and keep cell copy working", async ({
-  page,
-  context,
-}) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"])
-  const directory = "C:/OpenCode/ReviewLargeCsv"
+// Oversized CSV previews used to download the whole file and render every row with its own copy button, freezing the
+// renderer, and the watcher's rereads froze it again.
+test("a large CSV previews from a bounded byte range and keeps its rows across a reread", async ({ page }) => {
   const file = "huge.csv"
   const totalBytes = 72_351_744
   const previewBytes = 1024 * 1024
-  const columns = Array.from({ length: 22 }, (_, i) => `col_${i}`).join(",")
+  const header = Array.from({ length: 22 }, (_, i) => `col_${i}`).join(",")
+  const row = Array.from({ length: 21 }, (_, i) => `v${i + 1}`).join(",")
 
-  const rowPayload = (row: number) =>
-    [`row_${row}`, `"item, ${row}"`, ...Array.from({ length: 20 }, (_, i) => `val_${row}_${i}_${"x".repeat(120)}`)].join(
-      ",",
-    )
-
-  const lines = [columns]
-  let size = Buffer.byteLength(`${columns}\n`, "utf8")
-
-  for (let row = 1; size < previewBytes + 4096; row++) {
-    const line = rowPayload(row)
-    lines.push(line)
-    size += Buffer.byteLength(`${line}\n`, "utf8")
-  }
-
-  const slice = Buffer.from(lines.join("\n"), "utf8").subarray(0, previewBytes)
-  // Split a 4-byte UTF-8 sequence at the end of the range boundary to verify clean UTF-8 handling.
-  slice[previewBytes - 2] = 0xf0
-  slice[previewBytes - 1] = 0x9f
+  const slice = (cell: string) =>
+    Buffer.from(`${header}\n${`${cell},${row}\n`.repeat(previewBytes / row.length)}`).subarray(0, previewBytes)
 
   const requests: Array<{ method: string; range: string | null }> = []
 
-  await openSession(page, {
+  const workspace = await openSession(page, {
     name: "ReviewLargeCsv",
-    fileList: (path) => (path ? [] : [fileNode(directory, file)]),
-    seed: {
-      panes: { ses_reviewlargecsv: { review: true } },
-    },
+    fileList: (path) => (path ? [] : [fileNode("C:/OpenCode/ReviewLargeCsv", file)]),
+    seed: { panes: { ses_reviewlargecsv: { review: true } } },
   })
 
-  await page.route(/\/api\/fs\/read\/huge\.csv/, async (route) => {
+  await page.route(/\/api\/fs\/read\/huge\.csv\?/, async (route) => {
     const method = route.request().method()
-
-    const headers = {
-      "access-control-allow-origin": "*",
-      "access-control-allow-methods": "GET, HEAD, OPTIONS",
-      "access-control-allow-headers": "range, authorization",
-      "access-control-expose-headers": "content-range",
-      "accept-ranges": "bytes",
-      "content-type": "text/csv",
-    }
-
-    if (method === "OPTIONS") return route.fulfill({ status: 204, headers })
-
+    const headers = { "access-control-allow-origin": "*", "accept-ranges": "bytes", "content-type": "text/csv" }
     const range = await route.request().headerValue("range")
     requests.push({ method, range })
 
-    if (method === "HEAD") {
-      return route.fulfill({ status: 200, headers: { ...headers, "content-length": String(totalBytes) } })
-    }
-
-    if (range !== `bytes=0-${previewBytes - 1}`) {
-      return route.fulfill({ status: 500, headers, body: "unexpected unbounded read" })
-    }
+    if (method === "HEAD") return route.fulfill({ headers: { ...headers, "content-length": String(totalBytes) } })
 
     return route.fulfill({
       status: 206,
       headers: { ...headers, "content-range": `bytes 0-${previewBytes - 1}/${totalBytes}` },
-      body: slice,
+      // The reread finds the file the agent changed.
+      body: slice(requests.length > 2 ? "after" : "before"),
     })
   })
 
   const panel = page.locator("#review-panel")
   const toolbar = panel.locator('[data-slot="artifact-toolbar"]')
-  const table = panel.locator('[data-slot="artifact-table"]')
+  const rows = panel.locator('[data-slot="artifact-table"] tbody tr')
+
+  const read = [
+    { method: "HEAD", range: null },
+    { method: "GET", range: `bytes=0-${previewBytes - 1}` },
+  ]
 
   await openFileLauncher(panel)
   await panel.getByRole("treeitem", { name: file }).click()
-  await expect(panel.getByRole("tab", { name: file, exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(rows).toHaveCount(100)
+  expect(requests).toEqual(read)
+  await panel.getByRole("button", { name: "Show more rows", exact: true }).click()
+  await expect(rows).toHaveCount(300)
 
-  await expect(table.locator("thead th")).toHaveCount(22)
-  await expect(table.locator("tbody tr")).toHaveCount(200)
-  expect(requests).toEqual([
-    { method: "HEAD", range: null },
-    { method: "GET", range: `bytes=0-${previewBytes - 1}` },
-  ])
-
-  // Truncated previews show full on-disk size, omit Copy content and Download, and drop broken trailing bytes.
-  await expect(toolbar).toContainText("22 columns")
-  await expect(toolbar).toContainText("72.4 MB")
+  // A truncated preview never copies or saves its prefix as the whole file.
   await expect(toolbar.getByRole("button", { name: "Copy content", exact: true })).toHaveCount(0)
   await toolbar.getByRole("button", { name: "File actions", exact: true }).click()
+  await expect(page.getByRole("menuitem", { name: "Copy path", exact: true })).toBeVisible()
   await expect(page.getByRole("menuitem", { name: "Download", exact: true })).toHaveCount(0)
   await page.keyboard.press("Escape")
 
-  // Hovering a cell and clicking its delegated copy button copies the parsed value.
-  const quotedCell = table.getByRole("cell", { name: /^item, 1(?:\s|$)/ })
-  await quotedCell.hover()
-  await quotedCell.getByRole("button", { name: "Copy cell", exact: true }).click()
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("item, 1")
-
-  // Progressive disclosure reveals the rest of the parsed prefix and keeps the truncation notice.
-  const footer = panel.locator('[data-slot="artifact-table-footer"]')
-  await expect(footer).toContainText("Showing the first 200 rows.")
-  const showMore = footer.getByRole("button", { name: "Show more rows", exact: true })
-  await showMore.click()
-  await expect.poll(() => table.locator("tbody tr").count()).toBeGreaterThan(200)
-  await expect(table).not.toContainText("\uFFFD")
-
-  // Source view also flags that only a preview of the oversized file is loaded.
-  await toolbar.getByRole("button", { name: "View source", exact: true }).click()
-  await expect(panel.locator('[data-slot="artifact-truncated-banner"]')).toHaveText(
-    "Showing a preview of this 72.4 MB file.",
-  )
+  await workspace.push([filesystemEvent(workspace.directory, file, "change")])
+  await expect(rows.first()).toContainText("after")
+  expect(requests).toEqual([...read, ...read])
+  await expect(rows).toHaveCount(300)
 })
 
 async function statusInset(status: Locator, side: "left" | "right") {

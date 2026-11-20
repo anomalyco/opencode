@@ -104,7 +104,7 @@ export default function ArtifactView(props: {
   const mode = () => fixedMode() ?? selectArtifactMode(viewerState(), props.content)
 
   const table = createMemo(() =>
-    kind() === "table" && mode() === "preview"
+    kind() === "table"
       ? parseDelimited(
           props.content.content,
           props.path.toLowerCase().endsWith(".tsv") ? "\t" : ",",
@@ -223,9 +223,8 @@ export default function ArtifactView(props: {
           <Match when={kind() === "font"}>
             <ArtifactFont path={props.path} content={props.content} />
           </Match>
-          <Match when={table()} keyed>
-            {(parsed) => <ArtifactTable parsed={parsed} />}
-          </Match>
+          {/* Not keyed, so a reread (the watcher while an agent still writes the file) keeps the table, its scroll and its revealed rows. */}
+          <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} />}</Match>
           <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
           {/* Keyed, so another viewer for the file mounts with bytes of its own. */}
           <Match when={viewer()} keyed>
@@ -848,8 +847,8 @@ function ArtifactMermaid(props: { text: string; cacheKey?: string }) {
 /** Header row plus up to 1,000 data rows parsed per table preview. */
 const TABLE_PARSE_LIMIT = 1001
 
-/** Initial body rows rendered before revealing more, keeping wide tables responsive on first paint. */
-const INITIAL_TABLE_ROWS = 200
+/** Body rows rendered before the reader asks for more. A wide table's layout grows with its rows, about 1ms per row of 22 cells. */
+const INITIAL_TABLE_ROWS = 100
 
 const TABLE_ROW_STEP = 200
 
