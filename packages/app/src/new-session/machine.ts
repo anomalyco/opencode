@@ -44,7 +44,8 @@ export type NewSessionStartState =
       readonly created: boolean
       readonly mcp: McpStates
     }
-  | { readonly type: "started"; readonly attempt: number }
+  // Keeps the directory for the pending tab, which stays mounted until the promotion settles.
+  | { readonly type: "started"; readonly attempt: number; readonly directory: string }
   | { readonly type: "disposed" }
 
 type ActiveState = Extract<NewSessionStartState, { type: "worktree" | "mcp" | "session" }>
@@ -167,7 +168,7 @@ export function transitionNewSessionStart(
     return rollback(state, event.message === undefined ? undefined : toast(state, event.message))
 
   if (state.type === "session" && event.type === "session.created") {
-    return changed({ type: "started", attempt: state.attempt }, [
+    return changed({ type: "started", attempt: state.attempt, directory: state.directory }, [
       { type: "session.promote", attempt: state.attempt, sessionID: state.sessionID, directory: state.directory },
     ])
   }
@@ -190,7 +191,11 @@ export function viewNewSessionStart(state: NewSessionStartState): NewSessionStar
     status: state.type === "worktree" ? "session.new.worktree.creating" : "session.new.starting",
     preparingMcp: state.type === "mcp",
     directory:
-      state.type === "worktree" ? state.projectDirectory : isNewSessionStartActive(state) ? state.directory : undefined,
+      state.type === "worktree"
+        ? state.projectDirectory
+        : isNewSessionStartActive(state) || state.type === "started"
+          ? state.directory
+          : undefined,
   }
 }
 

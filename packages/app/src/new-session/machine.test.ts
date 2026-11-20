@@ -327,12 +327,18 @@ test("the view names worktree creation, shows MCP preparation only during those 
       replay([start(fresh, { figma: true })]).state,
       replay([start(fresh, { figma: true }), { type: "worktree.created", attempt: 1, directory: "/wt" }]).state,
       replay([start(main)]).state,
+      replay([
+        start(fresh),
+        { type: "worktree.created", attempt: 1, directory: "/wt" },
+        { type: "session.created", attempt: 1 },
+      ]).state,
       createNewSessionStartState(),
     ].map(viewNewSessionStart),
   ).toEqual([
     { status: "session.new.worktree.creating", preparingMcp: false, directory: "/repo" },
     { status: "session.new.starting", preparingMcp: true, directory: "/wt" },
     { status: "session.new.starting", preparingMcp: false, directory: "/repo" },
+    { status: "session.new.starting", preparingMcp: false, directory: "/wt" },
     { status: "session.new.starting", preparingMcp: false, directory: undefined },
   ])
 })
