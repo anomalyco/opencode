@@ -146,7 +146,10 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   }))
 
   const refreshProjects = () =>
-    loadProjects({ scope: serverSDK.scope, project: serverSDK.api.project, setGlobalStore, queryClient })
+    loadProjects(
+      { scope: serverSDK.scope, project: serverSDK.api.project, setGlobalStore, queryClient },
+      { afterRegistration: true },
+    )
 
   const unsub = serverSDK.event.listen((event) => {
     connection.handleEvent({ type: event.type })
