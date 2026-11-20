@@ -173,8 +173,8 @@ const followed = (files: Environment.Files, absolute: string) =>
         ),
   )
 
-// As in Bun, `delete` removes a file, never a directory. It holds the file's mutation lock, as a patch that deletes
-// a file does.
+// As in Bun, `delete` removes a file, never a directory. Edit permission is obtained before acquiring the file's
+// mutation lock for the removal.
 const remove = (handle: Handle) =>
   call("unlink", handle.name, (host) =>
     Effect.gen(function* () {
@@ -182,8 +182,16 @@ const remove = (handle: Handle) =>
       if (info.type === "directory")
         return yield* new Environment.WrongKind({ path: handle.target.absolute, actual: info.type })
       yield* host.fileWrite.authorize(handle.target, host.context)
-      yield* handle.target.environment.files.remove(handle.target.absolute)
-    }).pipe(host.fileMutation.withLock([handle.target])),
+      yield* host.fileMutation.withLock([handle.target])(
+        Effect.gen(function* () {
+          const current = yield* handle.target.environment.files.stat(handle.target.absolute)
+          if (current.type === "directory")
+            return yield* new Environment.WrongKind({ path: handle.target.absolute, actual: current.type })
+          yield* handle.target.environment.files.remove(handle.target.absolute)
+          host.fileMutation.recordMutation(handle.target)
+        }),
+      )
+    }),
   )
 
 // `Bun.write`: the bytes written. The destination is a path or a BunFile; the data is text, bytes, a BunFile to copy,
@@ -205,8 +213,8 @@ const write = (to: string | Handle, data: unknown, parents = true) => {
 
 // Writes exactly these bytes, with no formatting and no BOM handling, after asking edit permission. The request shows
 // the change as a diff when both sides are text, like the write tool's. An append never reads the file: its diff
-// shows only what it adds. Like an edit, it holds the file's mutation lock from reading the file to writing it, and
-// writes through `FileMutation`.
+// shows only what it adds. Permission is obtained before taking the file's mutation lock for the write through
+// `FileMutation`.
 const put = (
   to: string | Handle,
   bytes: Uint8Array,
@@ -215,7 +223,7 @@ const put = (
   call("open", typeof to === "string" ? to : to.name, (host) =>
     Effect.gen(function* () {
       const target = typeof to === "string" ? yield* host.fileWrite.target(to, host.context) : to.target
-      return yield* Effect.gen(function* () {
+      const validateTarget = Effect.gen(function* () {
         const type = yield* typeOf(target.environment.files, target.absolute)
         if (type === "directory") return yield* new Environment.WrongKind({ path: target.absolute, actual: type })
         if (
@@ -224,23 +232,31 @@ const put = (
           (yield* typeOf(target.environment.files, path.dirname(target.absolute))) === undefined
         )
           return yield* new Environment.NotFound({ path: target.absolute })
-        const after = options.diff ? text(bytes) : undefined
-        const before =
-          after === undefined || options.append || type === undefined
-            ? ""
-            : text((yield* target.environment.files.read(target.absolute)).bytes)
-        yield* host.fileWrite.authorize(
-          target,
-          host.context,
-          after !== undefined && before !== undefined
-            ? fileDiff(target.resource, before, after, type === undefined ? "added" : "modified")
-            : undefined,
-        )
-        yield* options.append
-          ? host.fileMutation.append({ target, content: bytes })
-          : host.fileMutation.write({ target, content: bytes })
-        return bytes.byteLength
-      }).pipe(host.fileMutation.withLock([target]))
+        return type
+      })
+      const revision = host.fileMutation.revision(target)
+      const type = yield* validateTarget
+      const after = options.diff ? text(bytes) : undefined
+      const before =
+        after === undefined || options.append || type === undefined
+          ? ""
+          : text((yield* target.environment.files.read(target.absolute)).bytes)
+      yield* host.fileWrite.authorize(
+        target,
+        host.context,
+        after !== undefined && before !== undefined
+          ? fileDiff(target.resource, before, after, type === undefined ? "added" : "modified")
+          : undefined,
+      )
+      return yield* host.fileMutation.withLock([target])(
+        Effect.gen(function* () {
+          if (host.fileMutation.revision(target) !== revision) yield* validateTarget
+          yield* options.append
+            ? host.fileMutation.append({ target, content: bytes })
+            : host.fileMutation.write({ target, content: bytes })
+          return bytes.byteLength
+        }),
+      )
     }),
   )
 

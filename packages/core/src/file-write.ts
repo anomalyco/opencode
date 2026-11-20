@@ -96,7 +96,7 @@ const layer = Layer.effect(
         context,
         fileDiff(resolved.resource, current?.text ?? "", Bom.split(input.content).text, current ? "modified" : "added"),
       )
-      return yield* commit(resolved, input.content)
+      return yield* fileMutation.withLock([resolved])(commit(resolved, input.content))
     })
 
     return Service.of({ target, authorize, commit, write })

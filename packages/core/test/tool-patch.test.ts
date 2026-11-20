@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
@@ -49,6 +49,7 @@ let failWriteTarget: string | undefined
 let readsBeforeEditApproval = 0
 let editApproved = false
 let afterEditApproval = (): Effect.Effect<void> => Effect.void
+let onPermissionAssert = (_input: Permission.AssertInput): Effect.Effect<void> => Effect.void
 let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 
 const permission = permissionLayer({
@@ -57,6 +58,7 @@ const permission = permissionLayer({
       assertions.push(input)
       if (input.action === "edit") editApproved = true
     }).pipe(
+      Effect.andThen(Effect.suspend(() => onPermissionAssert(input))),
       Effect.andThen(input.action === "edit" ? Effect.suspend(afterEditApproval) : Effect.void),
       Effect.andThen(
         input.action === denyAction
@@ -85,6 +87,7 @@ const reset = () => {
   readsBeforeEditApproval = 0
   editApproved = false
   afterEditApproval = () => Effect.void
+  onPermissionAssert = () => Effect.void
   formatFile = () => Effect.succeed(false)
 }
 
@@ -1299,6 +1302,44 @@ describe("PatchTool", () => {
           ),
         ),
       )
+    }),
+  )
+
+  it.live("does not block other patches to the same file while waiting for permission approval", () =>
+    withTempDir((tmp) => {
+      reset()
+      const target = path.join(tmp.path, "shared.txt")
+      return Effect.gen(function* () {
+        const parked = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        onPermissionAssert = (input) =>
+          input.source?.id === "call-patch-a"
+            ? Deferred.succeed(parked, undefined).pipe(Effect.andThen(Deferred.await(release)))
+            : Effect.void
+        yield* Effect.promise(() => fs.writeFile(target, "one\ntwo\n"))
+
+        yield* withTool(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const first = yield* executeTool(
+              registry,
+              call("*** Begin Patch\n*** Update File: shared.txt\n@@\n-one\n+ONE\n*** End Patch", "call-patch-a"),
+            ).pipe(Effect.forkChild)
+            yield* Deferred.await(parked)
+
+            const second = yield* executeTool(
+              registry,
+              call("*** Begin Patch\n*** Update File: shared.txt\n@@\n-two\n+TWO\n*** End Patch", "call-patch-b"),
+            )
+            expect(second).toMatchObject({ status: "completed" })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("one\nTWO\n")
+
+            yield* Deferred.succeed(release, undefined)
+            const settled = yield* Fiber.join(first)
+            expect(settled).toMatchObject({ status: "completed" })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
+          }),
+        )
+      })
     }),
   )
 })

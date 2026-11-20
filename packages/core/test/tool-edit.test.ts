@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
@@ -49,6 +49,7 @@ const makeEditFixture = () => {
     denyAction?: string
     readAllowed: boolean
     afterRead: () => Effect.Effect<void>
+    onPermissionAssert: (input: Permission.AssertInput) => Effect.Effect<void>
     formatFile: (target: string) => Effect.Effect<boolean>
   } = {
     assertions: [],
@@ -56,6 +57,7 @@ const makeEditFixture = () => {
     reads: 0,
     readAllowed: true,
     afterRead: () => Effect.void,
+    onPermissionAssert: () => Effect.void,
     formatFile: () => Effect.succeed(false),
   }
 
@@ -63,6 +65,7 @@ const makeEditFixture = () => {
     allows: (input) => Effect.succeed(input.action === "read" && fixture.readAllowed),
     assert: (input) =>
       Effect.sync(() => fixture.assertions.push(input)).pipe(
+        Effect.andThen(Effect.suspend(() => fixture.onPermissionAssert(input))),
         Effect.andThen(
           input.action === fixture.denyAction
             ? Effect.fail(
@@ -883,6 +886,95 @@ describe("EditTool", () => {
           }),
         ),
       )
+    }),
+  )
+
+  it.live("does not block other edits to the same file while waiting for permission approval", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "shared.txt")
+      return Effect.gen(function* () {
+        const parked = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        edit.onPermissionAssert = (input) =>
+          input.source?.id === "call-edit-a"
+            ? Deferred.succeed(parked, undefined).pipe(Effect.andThen(Deferred.await(release)))
+            : Effect.void
+        yield* Effect.promise(() => fs.writeFile(target, "one\ntwo\n"))
+
+        yield* withTool(tmp.path, edit, (registry) =>
+          Effect.gen(function* () {
+            const first = yield* executeTool(
+              registry,
+              call({ path: "shared.txt", oldString: "one", newString: "ONE" }, "call-edit-a"),
+            ).pipe(Effect.forkChild)
+            yield* Deferred.await(parked)
+
+            const second = yield* executeTool(
+              registry,
+              call({ path: "shared.txt", oldString: "two", newString: "TWO" }, "call-edit-b"),
+            )
+            expect(second).toMatchObject({
+              status: "completed",
+              output: "Edited shared.txt (1 replacement)",
+              metadata: { files: [{ additions: 1, deletions: 1 }] },
+            })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("one\nTWO\n")
+
+            yield* Deferred.succeed(release, undefined)
+            const settled = yield* Fiber.join(first)
+            expect(settled).toMatchObject({
+              status: "completed",
+              output: "Edited shared.txt (1 replacement)",
+              metadata: { files: [{ additions: 1, deletions: 1 }] },
+            })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
+          }),
+        )
+      })
+    }),
+  )
+
+  it.live("re-validates under the lock when another edit modifies the matched lines during permission wait", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "shared.txt")
+      return Effect.gen(function* () {
+        const parked = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        edit.onPermissionAssert = (input) =>
+          input.source?.id === "call-edit-a"
+            ? Deferred.succeed(parked, undefined).pipe(Effect.andThen(Deferred.await(release)))
+            : Effect.void
+        yield* Effect.promise(() => fs.writeFile(target, "before\n"))
+
+        yield* withTool(tmp.path, edit, (registry) =>
+          Effect.gen(function* () {
+            const first = yield* executeTool(
+              registry,
+              call({ path: "shared.txt", oldString: "before", newString: "A" }, "call-edit-a"),
+            ).pipe(Effect.forkChild)
+            yield* Deferred.await(parked)
+
+            const second = yield* executeTool(
+              registry,
+              call({ path: "shared.txt", oldString: "before", newString: "B" }, "call-edit-b"),
+            )
+            expect(second).toMatchObject({ status: "completed" })
+
+            yield* Deferred.succeed(release, undefined)
+            const settled = yield* Fiber.join(first)
+            expect(settled).toMatchObject({
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: expect.stringContaining("Could not find oldString in shared.txt"),
+              },
+            })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("B\n")
+          }),
+        )
+      })
     }),
   )
 })

@@ -946,7 +946,7 @@ on.effect("locks a machine file apart from a local file with the same path, and 
       for (let turn = 0; turn < 5; turn++) yield* Effect.yieldNow
       expect(order).toEqual(["local"])
 
-      // The edit tool takes the same machine lock: it cannot finish, or even ask for edit approval, while the file is held.
+      // The edit tool asks for approval outside the lock, then waits on the same machine lock before writing.
       const edited = yield* Deferred.make<void>()
       const edit = yield* Effect.forkChild(
         executeTool(
@@ -956,11 +956,13 @@ on.effect("locks a machine file apart from a local file with the same path, and 
         { startImmediately: true },
       )
       for (let turn = 0; turn < 1000; turn++) {
-        if ((yield* Deferred.isDone(edited)) || tools.assertions.some((entry) => entry.action === "edit")) break
+        if (tools.assertions.some((entry) => entry.action === "edit")) break
         yield* Effect.yieldNow
       }
+      expect(tools.assertions.some((entry) => entry.action === "edit")).toBe(true)
+      for (let turn = 0; turn < 5; turn++) yield* Effect.yieldNow
       expect(yield* Deferred.isDone(edited)).toBe(false)
-      expect(tools.assertions.some((entry) => entry.action === "edit")).toBe(false)
+      expect(new TextDecoder().decode((yield* machine.files.read("/work/a")).bytes)).toBe("one")
 
       yield* Deferred.succeed(release, undefined)
       yield* Fiber.join(first)
