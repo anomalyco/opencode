@@ -205,6 +205,9 @@ function SessionScreenContent(props: {
     distance: screen.side.width,
   })
 
+  // The pinned header toggle tabs in the chat's order, so a settled open panel shows its own copy in its strip.
+  const toggleInPanel = createMemo(() => sideVisible() && sideMotion.openAtRest())
+
   const hideTimelineScrollbar = () => setStore("timelineScrollbarHidden", true)
 
   const revealTimelineScrollbar = (event: Event) => {
@@ -313,6 +316,7 @@ function SessionScreenContent(props: {
             reviewToggle={
               <div
                 data-slot="session-review-toggle"
+                classList={{ invisible: toggleInPanel() }}
                 onPointerDown={(event) => {
                   event.stopPropagation()
                   hideTimelineScrollbar()
@@ -534,6 +538,16 @@ function SessionScreenContent(props: {
                       size={screen.size}
                       contentWidth={screen.side.contentWidth}
                       drag={drag}
+                      toggle={
+                        <div
+                          data-slot="session-review-panel-toggle"
+                          classList={{ invisible: !toggleInPanel() }}
+                          onPointerDown={hideTimelineScrollbar}
+                          onClick={hideTimelineScrollbar}
+                        >
+                          <SessionReviewToggle onToggle={region.toggle} />
+                        </div>
+                      }
                     />
                   </div>
                 </div>
