@@ -223,7 +223,9 @@ fn integrations_match_typescript() {
         .into_iter()
         .find(|command| command.id == "provider.connect")
         .expect("provider.connect is not registered");
-    assert_eq!(command.slash.as_ref().map(|slash| slash.name.as_str()), Some("connect"));
+    let slash = command.slash.as_ref().expect("provider.connect has a slash command");
+    assert_eq!(slash.name, "connect");
+    assert_eq!(slash.aliases, ["login", "auth"]);
     assert_eq!(command.group.as_deref(), Some("Integration"));
 
     kit.connect();

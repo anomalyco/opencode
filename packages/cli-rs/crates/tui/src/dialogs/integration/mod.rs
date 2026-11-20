@@ -15,6 +15,7 @@ use opencode_api::generated::{
 use opencode_api::js::locale_compare;
 use opencode_store::Catalog;
 use opencode_ui::dialog::{DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, FooterAction, FooterProps, footer, layout_view};
+use opencode_ui::keymap::Slash;
 use opencode_ui::prompt::{PromptAction, PromptProps, prompt};
 use opencode_ui::select::{Gutter, SelectAction};
 
@@ -37,7 +38,7 @@ pub fn install(tui: &Rc<Tui>) {
         .group("Integration")
         .palette()
         .suggested(Condition::when(bind!(local, |local| !local.connected())))
-        .slash("connect");
+        .slash(Slash::new("connect").aliases(["login", "auth"]));
     tui.keymap.install(
         "integration",
         [KeymapLayer::global(vec![command]), KeymapLayer::global(Vec::new()).bindings(["provider.connect"])],

@@ -612,7 +612,11 @@ fn keymap_reads_have_every_field() {
             group: Some("Integration".into()),
             enabled: true,
             palette: true,
-            slash: slash("connect", false),
+            slash: Some(abi::KeymapSlash {
+                name: "connect".into(),
+                aliases: vec!["login".into(), "auth".into()],
+                arguments: false,
+            }),
             suggested: true,
         };
         assert_eq!(command("provider.connect"), Some(connect), "loopback {loopback}");
