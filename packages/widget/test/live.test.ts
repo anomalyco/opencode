@@ -69,6 +69,43 @@ test("render, draw, events and submit", async () => {
   expect(messages[3]).toEqual({ type: "send", value: { got: "go" }, wake: false })
 })
 
+test("capturePointer and releasePointer post capture messages; key, focus and capture events reach the program", async () => {
+  const { widget, messages } = start(`
+    async function main() {
+      widget.capturePointer()
+      const seen = []
+      while (seen.length < 4) {
+        const event = await widget.event()
+        seen.push(event.type + ":" + JSON.stringify(event.value))
+      }
+      widget.releasePointer()
+      widget.submit(seen)
+    }
+  `)
+  await widget.when(() => messages.length > 0)
+  widget.event({ id: "", type: "focus", value: true })
+  widget.event({ id: "", type: "capture", value: true })
+  widget.event({ id: "view", type: "pointer", value: { kind: "move", dx: 3, dy: -2 } })
+  widget.event({
+    id: "",
+    type: "key",
+    value: { kind: "down", key: " ", code: "Space", repeat: false, shift: false, alt: false, ctrl: false, meta: false },
+  })
+  expect(await widget.done).toMatchObject({
+    type: "submit",
+    value: [
+      "focus:true",
+      "capture:true",
+      'pointer:{"kind":"move","dx":3,"dy":-2}',
+      expect.stringContaining('"code":"Space"'),
+    ],
+  })
+  expect(messages.filter((message) => message.type === "capture")).toEqual([
+    { type: "capture", value: true },
+    { type: "capture", value: false },
+  ])
+})
+
 test("frames are requested once and events that arrive meanwhile wait", async () => {
   const { widget, messages } = start(`
     async function main() {

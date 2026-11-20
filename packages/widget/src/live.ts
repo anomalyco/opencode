@@ -26,6 +26,8 @@ export type LiveMessage =
   | { readonly type: "submit"; readonly value: unknown }
   | { readonly type: "dismiss" }
   | { readonly type: "send"; readonly value: unknown; readonly wake: boolean }
+  /** Ask for pointer capture (granted on the next click inside the widget) or give it back (widgets-input.md). */
+  | { readonly type: "capture"; readonly value: boolean }
 
 /** What a client sends a live program. */
 export type LiveInput =
@@ -368,6 +370,10 @@ export const LiveWidget = {
       if (message.type === "submit") return { type: "submit", value: message.value ?? null }
       if (message.type === "dismiss") return { type: "dismiss" }
       if (message.type === "send") return { type: "send", value: message.value ?? null, wake: message.wake !== false }
+      if (message.type === "capture") {
+        if (typeof message.value !== "boolean") return warn(`Ignored a capture post without a boolean value`)
+        return { type: "capture", value: message.value }
+      }
       return warn(`Ignored a post of unknown type "${message.type}"`)
     }
 

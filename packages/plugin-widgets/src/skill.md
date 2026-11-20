@@ -118,6 +118,10 @@ WGSL, ≤ 64 march steps). With an `id` it sends `pointer` events like a canvas.
 only; the local network is blocked; ≤ 4 requests in flight and 10 a second; 15 s timeout; 2 MB responses. Fetch from
 the widget only for dashboards that must refresh while open; otherwise fetch the data yourself and pass it in `data`.
 
+**Keys and capture**: a focused widget gets `key` (`{ kind, key, code, shift, alt, ctrl, meta }`) and `focus` events;
+`widget.capturePointer()` / `releasePointer()` (or root `capture: "pointer"`) gives relative `pointer` moves `{ dx, dy }`.
+Esc is reserved (it releases both); mobile has hardware keys only and no capture.
+
 **Limits.** A step must finish in 250 ms; a live program must `await` at least every 50 ms; ≤ 240 posts a second;
 pausing (out of view, background) freezes timers and frames. Always set `alt` on canvas and shader nodes: the terminal
 shows it, and it can't run live widgets.

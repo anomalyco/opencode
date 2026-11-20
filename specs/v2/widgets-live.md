@@ -50,6 +50,7 @@ The prelude exposes a `widget` object inside `main` (implemented with `__host`):
 | `await widget.next({ frame?, timeout? })` | whichever comes first: `{ type: "event", event }`, `{ type: "frame", frame }` or `{ type: "timeout" }` |
 | `widget.submit(value)` / `widget.dismiss()` | final answer; the client stops the program |
 | `widget.send(value, { wake })` | non-final message to the agent (as in step mode) |
+| `widget.capturePointer()` / `widget.releasePointer()` | ask for pointer capture (granted on the next click) / give it back; see `widgets-input.md` |
 
 `Math.random()` is allowed in live mode.
 
@@ -63,7 +64,8 @@ drive a game (`widget.event()` / `widget.next()`).
 ## Client ↔ program messages
 
 Program → client (`post`): `{ type: "render", node }`, `{ type: "draw", id, commands }`, `{ type: "frame" }` (one
-frame wanted), `{ type: "submit", value }`, `{ type: "dismiss" }`, `{ type: "send", value, wake }`.
+frame wanted), `{ type: "submit", value }`, `{ type: "dismiss" }`, `{ type: "send", value, wake }`, `{ type: "capture", value: true |
+false }` (`capturePointer` / `releasePointer`; clients without capture ignore it).
 
 Client → program (`receive`): `{ type: "event", event }`, `{ type: "frame", frame }` (only after a frame request, at
 the next vsync while the widget is visible), `{ type: "resumed", pausedMs }` (after a pause, see below).

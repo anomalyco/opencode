@@ -237,6 +237,8 @@ const widget = (() => {
       }
     },
     send: (value, options) => post({ type: "send", value: value ?? null, wake: options?.wake !== false }),
+    capturePointer: () => post({ type: "capture", value: true }),
+    releasePointer: () => post({ type: "capture", value: false }),
   }
 })()
 

@@ -2,6 +2,7 @@ export { type JSONSchema, type JSONSchemaType, validateData } from "./json-schem
 export {
   type Button,
   type Canvas,
+  type CapturedPointer,
   type Card,
   type Carousel,
   type Checkbox,
@@ -16,6 +17,7 @@ export {
   type Gradient,
   type Image,
   type Input,
+  type Key,
   type Markdown,
   MAX_COMMANDS,
   Node,

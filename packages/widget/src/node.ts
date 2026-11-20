@@ -149,9 +149,31 @@ export interface Pointer {
   readonly height: number
 }
 
+/** Pointer input while the widget holds pointer capture (widgets-input.md): relative movement, buttons on down/up. */
+export type CapturedPointer =
+  | { readonly kind: "move"; readonly dx: number; readonly dy: number }
+  | { readonly kind: "down" | "up"; readonly button: number }
+
+/** A key while the widget has keyboard focus; `key` and `code` as in DOM `KeyboardEvent`. Esc is never delivered. */
+export interface Key {
+  readonly kind: "down" | "up"
+  readonly key: string
+  readonly code: string
+  readonly repeat: boolean
+  readonly shift: boolean
+  readonly alt: boolean
+  readonly ctrl: boolean
+  readonly meta: boolean
+}
+
 export type WidgetEvent =
   | { readonly id: string; readonly type: "press" | "change"; readonly value?: unknown }
-  | { readonly id: string; readonly type: "pointer"; readonly value: Pointer }
+  | { readonly id: string; readonly type: "pointer"; readonly value: Pointer | CapturedPointer }
+  | { readonly id: string; readonly type: "key"; readonly value: Key }
+  /** Keyboard focus gained or lost. */
+  | { readonly id: string; readonly type: "focus"; readonly value: boolean }
+  /** Pointer capture granted or released. */
+  | { readonly id: string; readonly type: "capture"; readonly value: boolean }
 
 /** What `draw` gets: the canvas being drawn, the time, its size and the pointer over it. */
 export interface Frame {
