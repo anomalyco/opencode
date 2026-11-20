@@ -684,13 +684,13 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             "Family",
             object!(Family, "A session's family: its subagent sessions.", {
                 members: array(reference("Member")), cost: number(),
-            } { shells: uint64() }),
+            } { shells: uint64(), scripts: uint64() }),
         ),
         (
             "Member",
             object!(Member, "A session of a family.", {
                 id: string(), status: reference("SessionStatus"), updated: number(),
-            } { parent: nullable(string()) }),
+            } { parent: nullable(string()), jobs: uint64() }),
         ),
         (
             "Info",

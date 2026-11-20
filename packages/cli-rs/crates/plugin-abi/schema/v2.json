@@ -6888,6 +6888,11 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 18446744073709551615
+        },
+        "scripts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
         }
       },
       "required": ["members", "cost"],
@@ -6914,6 +6919,11 @@
               "type": "null"
             }
           ]
+        },
+        "jobs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
         }
       },
       "required": ["id", "status", "updated"],

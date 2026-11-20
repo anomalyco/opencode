@@ -43,8 +43,8 @@ pub type Model = Option<(Option<Usage>, f64)>;
 
 /// What the section last read for its session. It reads the session again only when its info or status changed,
 /// the models when its location changed, and the messages when their list changed or a message changed in place from
-/// the one the last usage came from on. Its family also counts the running subagents and the shells, which it reads
-/// again when a location changed.
+/// the one the last usage came from on. Its family also counts the busy subagents, the scripts, and the shells, which
+/// it reads again when a location changed.
 #[derive(Default)]
 pub struct Last {
     session: String,
@@ -57,8 +57,11 @@ pub struct Last {
     cost: f64,
     /// The IDs of the session's family at the last cost read.
     family: Vec<String>,
+    /// Subagents that run or own running background jobs.
     pub running: usize,
     pub shells: usize,
+    /// Code Mode scripts the session runs in the background.
+    pub scripts: usize,
     pub shown: Option<Model>,
 }
 
@@ -92,10 +95,13 @@ impl Last {
             })
         {
             let family = read.family(&self.session);
-            let running =
-                |member: &&abi::Member| member.id != self.session && member.status == abi::SessionStatus::Running;
+            // A subagent with background jobs running in its tree still has work running (TS `busyCounts`).
+            let running = |member: &&abi::Member| {
+                member.id != self.session && (member.status == abi::SessionStatus::Running || member.jobs > 0)
+            };
             self.running = family.members.iter().filter(running).count();
             self.shells = family.shells;
+            self.scripts = family.scripts;
             self.family = family.members.into_iter().map(|member| member.id).collect();
             self.cost = family.cost;
         }
@@ -282,8 +288,9 @@ mod tests {
                 parent: None,
                 status: abi::SessionStatus::Idle,
                 updated: 1.0,
+                jobs: 0,
             };
-            abi::Family { members: vec![member("ses_a"), member("ses_b")], cost: 1.0, shells: 0 }
+            abi::Family { members: vec![member("ses_a"), member("ses_b")], cost: 1.0, shells: 0, scripts: 0 }
         }
     }
 

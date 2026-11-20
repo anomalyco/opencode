@@ -1283,7 +1283,7 @@ pub struct Changed {
     /// Anything may have changed.
     #[serde(default, skip_serializing_if = "is_false")]
     pub all: bool,
-    /// Sessions whose info or status changed.
+    /// Sessions whose info, status or running background jobs changed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sessions: Vec<String>,
     /// Sessions whose message list changed: a message came or went, or the list was read again or paged. Such a
@@ -1366,6 +1366,10 @@ pub struct Family {
     /// [`Changed::locations`] when they change.
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub shells: usize,
+    /// The Code Mode scripts the session itself runs in the background. Claims render again with the sessions in
+    /// [`Changed::sessions`] when they change.
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub scripts: usize,
 }
 
 /// The host, from [`Read::info`].
@@ -1465,6 +1469,10 @@ pub struct Member {
     pub status: SessionStatus,
     /// When it last changed, in milliseconds since the epoch.
     pub updated: f64,
+    /// The background jobs running in its tree, among the jobs of the session the family was read for. A subagent
+    /// that is idle but owns running jobs still has work running.
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub jobs: usize,
 }
 
 /// From the host to the plugin. Results: `RenderFence` → [`Fenced`], `Render` and `RenderRoute` → [`Render`], `View`
