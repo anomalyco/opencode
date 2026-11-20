@@ -168,7 +168,7 @@ export const CodeActionInput = Schema.Struct({
   type: Schema.tag("code"),
   code: Schema.String.check(Schema.isMinLength(1)).annotate({
     description: [
-      "Code Mode JavaScript run on each trigger with no model (no fetch; 30s, 20 tool calls, 32 KB output cap).",
+      "Code Mode JavaScript run on each trigger with no model (32 KB output cap).",
       'Call tools statically as tools.<ns>.<tool>(...) or tools["ns-name"].tool(...); each is authorized once at creation to run unattended.',
       "Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs.",
       "Event triggers also receive input.event = { id, timestamp, data }; data follows the event type's payloadSchema.",

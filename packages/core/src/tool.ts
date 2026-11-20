@@ -79,7 +79,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly snapshot: (permissions?: Permission.Ruleset, options?: SnapshotOptions) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
-   * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
+   * whole-tool permission filtering and each tool's own executor policy).
    */
   readonly check: (input: CheckInput) => Effect.Effect<CodeMode.Result>
 }
@@ -90,6 +90,7 @@ export interface CheckInput {
   readonly bindings: Readonly<Record<string, CodeMode.DataValue>>
   readonly permissions: Permission.Ruleset
   readonly limits: CodeMode.ExecutionLimits
+  readonly services?: Context.Context<CodeModeTool.Services>
   readonly context: Omit<Tool.Context, "id">
 }
 
@@ -420,11 +421,15 @@ const layer = Layer.effect(
           ),
         )
         const callSeq = yield* Ref.make(0)
+        const full = input.services !== undefined && (yield* flags.enabled("full_codemode"))
         return yield* CodeModeTool.check(
           { tools, namespaces: data.namespaces },
-          input.code,
-          input.bindings,
-          input.limits,
+          {
+            ...input,
+            context: { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) },
+            permission,
+            services: full ? input.services : undefined,
+          },
           (name, tool, toolInput) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callSeq, (value) => value + 1)

@@ -89,6 +89,9 @@ export type Inventory = {
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
 }
 
+const extensions = [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension] as const
+const runExtensions = (full: boolean) => (full ? extensions : [CodeModeFetch.extension])
+
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions. With `full_codemode`,
 // the runtime also has Bun's file APIs.
 const description = (full: boolean) =>
@@ -148,9 +151,7 @@ export const create = (
           )
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
-            extensions: services
-              ? [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension]
-              : [CodeModeFetch.extension],
+            extensions: runExtensions(services !== undefined),
           })
           .pipe(
             Effect.provideService(Run, {
@@ -323,39 +324,45 @@ function runtime(inventory: Inventory) {
   if (cached) return cached
   const tools = inventoryTools(inventory)
   // Every extension a run may get; `create` picks each run's.
-  const created = CodeMode.make<
-    typeof tools,
-    [typeof CodeModeFetch.extension, typeof CodeModePath.extension, typeof CodeModeBun.extension]
-  >({
-    tools,
-    extensions: [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension],
-    hooks: runHooks,
-  })
+  const created = CodeMode.make({ tools, extensions, hooks: runHooks })
   runtimes.set(inventory, created)
   return created
 }
 
 /**
- * Runs one program over `inventory` alone with no model step and no `fetch`, binding `bindings` as outer globals.
+ * Runs one program over `inventory` with no model step, binding `bindings` as outer globals.
  */
 export const check = (
   inventory: Inventory,
-  code: string,
-  bindings: Readonly<Record<string, CodeMode.DataValue>>,
-  limits: CodeMode.ExecutionLimits,
+  input: {
+    readonly code: string
+    readonly bindings: Readonly<Record<string, CodeMode.DataValue>>
+    readonly limits: CodeMode.ExecutionLimits
+    readonly context: ToolContext
+    readonly permission: Permission.Interface
+    readonly services?: Context.Context<Services>
+  },
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
 ) =>
   CodeMode.make({
     tools: inventoryTools(inventory),
+    extensions,
     hooks: runHooks,
-    limits,
+    limits: input.limits,
   })
-    .execute(code, bindings)
+    .execute(input.code, input.bindings, { extensions: runExtensions(input.services !== undefined) })
     .pipe(
       Effect.provideService(Run, {
         executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
         hooks: {},
       }),
+      Effect.provideServiceEffect(
+        CodeModeExecution.Service,
+        Effect.map(Effect.abortSignal, (signal) => ({ ...input.context, signal })),
+      ),
+      Effect.provideService(Permission.Service, input.permission),
+      (program) => (input.services ? Effect.provideContext(program, input.services) : program),
+      Effect.scoped,
     )
 
 function inventoryTools(inventory: Inventory) {

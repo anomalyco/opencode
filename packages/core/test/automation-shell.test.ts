@@ -216,3 +216,106 @@ it.live("rejects a shell action that changes to a denied external directory", ()
     expect(yield* automations.list()).toEqual([])
   }),
 )
+
+// Run the scheduled action without waiting for the one-hour interval.
+const tickCode = (id: Automation.ID) =>
+  Effect.gen(function* () {
+    const database = yield* Database.Service
+    yield* database.db
+      .update(AutomationTable)
+      .set({ next_due_at: yield* Clock.currentTimeMillis })
+      .where(eq(AutomationTable.id, id))
+      .run()
+    const automations = yield* Automation.Service
+    yield* automations.tick
+    return yield* automations.get(id)
+  })
+
+it.live("scheduled code can fetch with full Code Mode off", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("ready") })),
+      (server) => Effect.promise(() => server.stop(true)),
+    )
+    const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(directory, "opencode.json"),
+        JSON.stringify({
+          experimental: { automations: true, full_codemode: false },
+          permission: { execute: "allow", webfetch: "allow" },
+        }),
+      ),
+    )
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ location: { directory } })
+    const automations = yield* Automation.Service
+    const created = yield* automations.create({
+      sessionID: session.id,
+      name: "fetch",
+      trigger,
+      action: {
+        type: "code",
+        code: `const res = await fetch(${JSON.stringify(server.url.href)}); return { state: await res.text(), done: true }`,
+      },
+    })
+    expect(yield* tickCode(created.id)).toMatchObject({ status: "done", lastOutcome: "fired", state: "ready" })
+  }),
+)
+
+it.live("scheduled code uses the session files and runs shell after one approval in full Code Mode", () =>
+  Effect.gen(function* () {
+    const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(directory, "opencode.json"),
+        JSON.stringify({
+          experimental: { automations: true, full_codemode: true },
+          permission: { execute: "allow", read: "allow", shell: "ask" },
+        }),
+      ),
+    )
+    yield* Effect.promise(() => Bun.write(path.join(directory, "fixture.txt"), "fixture contents"))
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ location: { directory } })
+    const instances = yield* Instance.Service
+    const automations = yield* Automation.Service
+    const creating = yield* automations
+      .create({
+        name: "code shell",
+        sessionID: session.id,
+        trigger,
+        action: {
+          type: "code",
+          code: `
+          const file = await Bun.file(path.resolve("fixture.txt")).text()
+          const shell = await tools.shell({ command: "echo automation-output", description: "Print a test line" })
+          return { state: { file, output: shell.output.trim(), exitCode: shell.exitCode }, done: true }
+        `,
+        },
+      })
+      .pipe(Effect.forkChild)
+
+    yield* Effect.gen(function* () {
+      const permission = yield* Permission.Service
+      const asks = yield* permission
+        .forSession(session.id)
+        .pipe(
+          Effect.repeat({ until: (asks) => asks.length > 0, schedule: Schedule.spaced("10 millis") }),
+          Effect.timeout("10 seconds"),
+        )
+      expect(asks).toMatchObject([
+        { action: "shell", resources: ["*"], metadata: { unattended: true, tools: ["shell"] } },
+      ])
+      expect(asks[0]?.save).toBeUndefined()
+      for (const ask of asks) yield* permission.reply({ requestID: ask.id, reply: "once" })
+    }).pipe(instances.provide(session))
+
+    const created = yield* Fiber.join(creating)
+    expect(yield* tickCode(created.id)).toMatchObject({
+      status: "done",
+      lastOutcome: "fired",
+      state: { file: "fixture contents", output: "automation-output", exitCode: 0 },
+    })
+  }),
+)

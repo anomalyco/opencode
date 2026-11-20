@@ -20,7 +20,6 @@ export const TIMEOUT_MS = 30_000
 const MAX_OUTPUT_BYTES = 32 * 1024
 const CODE_LIMITS: CodeMode.ExecutionLimits = {
   timeoutMs: TIMEOUT_MS,
-  maxToolCalls: 20,
   maxOutputBytes: MAX_OUTPUT_BYTES,
 }
 
@@ -37,8 +36,6 @@ export function handoffOutput(delivery: string, logs?: string) {
 
 /** Tools that must not receive an unattended grant from an automation. */
 const FORBIDDEN_TOOLS = new Set([
-  // Approving the shell tool unattended would approve every command, not a particular command.
-  "shell",
   "automation.create",
   "automation.pause",
   "automation.resume",
@@ -186,6 +183,7 @@ export const run = Effect.fnUntraced(
         bindings: { ...bindings, input: bindings },
         permissions: rules,
         limits: CODE_LIMITS,
+        services: yield* CodeModeTool.services,
         context: {
           sessionID: session.id,
           agent: agent.id,
