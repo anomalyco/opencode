@@ -11,7 +11,7 @@ const binding = text(128)
 
 export const PluginTabHandle = text(128).pipe(Schema.brand("ExperimentalBrowserTab"))
 
-/** The longest page icon data URL main reports: a 32px PNG is a few kilobytes; larger icons are dropped. */
+/** The longest page icon data URL main reports. Main redraws every icon as a PNG of at most 32px, a few kilobytes. */
 export const MAX_ICON_URL = 24_576
 
 const dimension = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4096 }))
@@ -196,7 +196,8 @@ export const PaneEvent = Schema.Union([
       type: Schema.Literal("page"),
       tabID: Browser.TabID,
       retryOnly: Schema.optionalKey(Schema.Boolean),
-    icon: Schema.optionalKey(detail(MAX_ICON_URL).check(Schema.isStartingWith("data:image/"))),
+    // Only the PNG main drew: the window never draws a site's own file.
+    icon: Schema.optionalKey(detail(MAX_ICON_URL).check(Schema.isStartingWith("data:image/png;base64,"))),
     zoom: Schema.Finite.check(Schema.isBetween({ minimum: 0.25, maximum: 5 })),
     viewport: Viewport,
     viewportNotice: Schema.optionalKey(Schema.Literals(["zoom", "failed"])),

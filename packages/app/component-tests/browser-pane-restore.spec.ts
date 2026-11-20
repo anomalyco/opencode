@@ -732,13 +732,10 @@ const preview = "tab_33333333-3333-3333-3333-333333333333"
 
 const docs = "tab_66666666-6666-6666-6666-666666666666"
 
-// A page's icon, as the data URL main reports.
-const icon = (fill: string) =>
-  `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='${fill}'/%3E%3C/svg%3E`
+// Two pages' icons as main reports them: a PNG data URL, here a 16px teal square and an orange one.
+const previewIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGklEQVR4nGNgaGj4TxEeNWA0DEbTwf9hEgYAukT/EAfeVj0AAAAASUVORK5CYII="
 
-const previewIcon = icon("teal")
-
-const docsIcon = icon("orange")
+const docsIcon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHElEQVR4nGP4v5ThPyWYYdSA0TAYTQf/h0kYAAC+5aMfJU/vagAAAABJRU5ErkJggg=="
 
 const reported = (tab: Pick<MainTab, "id" | "url" | "title"> & Partial<MainTab>): MainTab => ({
   loading: false,
@@ -849,6 +846,25 @@ story("holds every restored tab's box, label and icon from the reopen until its 
   await stable()
   // What held all along is the saved icon of each page, not the globe.
   expect(first.map((tab) => tab.icon)).toEqual([expect.any(String), previewIcon, docsIcon])
+})
+
+// A page's icon arrives after its tab is drawn: Chromium lists it once the document's head has parsed, and main loads
+// and redraws it. The tab draws the globe until then.
+story("a tab draws its page's icon in the globe's place, and no tab moves", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const tabs = root.getByRole("tab")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+  await send(root, inventory(reported({ id: preview, url: "http://localhost:4173/", title: "Preview" }), reported({ id: docs, url: "https://example.com/docs", title: "Docs" })))
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const globes = await drawn(tabs)
+  expect(globes.slice(1).map((tab) => tab.icon)).toEqual(["none", "none"])
+
+  await send(root, details(preview, previewIcon))
+  await send(root, details(docs, docsIcon))
+  await expect(root.getByRole("tab", { name: "Docs", exact: true }).locator("img")).toHaveAttribute("src", docsIcon)
+  expect(await drawn(tabs)).toEqual([globes[0], { ...globes[1], icon: previewIcon }, { ...globes[2], icon: docsIcon }])
 })
 
 // A server without a browser left its restored tabs on a loader with no end.
