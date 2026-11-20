@@ -29,6 +29,7 @@ PsychoScript itself (`anomalyco/psychoscript`) does not change: its repo holds o
 type Template = {
   name: string          // /^[a-z][a-z0-9-]{0,47}$/, unique per server
   version: string       // first 16 hex chars of sha256(source + "\n" + JSON.stringify(data)); content address
+                        // (`version()` in @opencode/widget, synchronous)
   description: string   // one line, shown to the model when listing templates
   data: JSONSchema      // JSON Schema (draft 2020-12 subset) for the data the template takes
   source: string        // the template's PsychoScript source (see "Template source")
@@ -62,9 +63,15 @@ randomness.
 
 The prelude is canonical JavaScript in `packages/widget/src/prelude.js`. It defines:
 
-- `ui`: pure node builders, one per node type (`ui.column(props, children)`, `ui.text(text, props)`, ...).
-- `submit(value, state)` and `dismiss(state)`.
-- `__widget_step(input)`: runs one step.
+- `ui`: pure node builders, one per node type. Required fields are positional, optional ones go in `props`:
+  `column|row|carousel|card(props, children)` (or `(children)`), `text(text, props?)`, `markdown(text)`,
+  `image(src, props?)`, `button(id, label, props?)`, `checkbox(id, label, checked, props?)`, `slider(id, props)`
+  (`props` holds `value`, `min`, `max`), `select(id, options, props?)`, `input(id, value, props?)`, `divider()`.
+  `children` may nest arrays and contain `null`/`undefined`/`false`, which are dropped (`cond && ui.text(...)`).
+- `submit(value, state)` and `dismiss(state)`. An omitted `state` keeps the previous state; `submit(undefined)`
+  submits `null`.
+- `__widget_step(input)`: runs one step. `init` returning `undefined` gives `{}`; `update` returning `undefined` keeps
+  the state.
 
 The server serves the full **program** = `prelude + "\n" + source`. Clients never need their own prelude copy.
 
@@ -76,7 +83,8 @@ return __widget_step(__input())
 ```
 
 with one global sync host function `__input` returning the step input, and reruns it per step. No other globals.
-Limits: 250 ms timeout per step; a client may use smaller limits.
+Limits: 250 ms timeout per step; a client may use smaller limits. (The TypeScript `psychoscript` 0.2.1 has no
+separate compile step, so `@opencode/widget` parses the program on each step; a step of a built-in takes a few ms.)
 
 Step input:
 
@@ -117,7 +125,9 @@ type WidgetEvent = { id: string; type: "press" | "change"; value?: unknown }
 
 ## Nodes
 
-Every node is `{ type, ...props }`. Unknown props are ignored; unknown node types render as nothing plus a dev warning.
+Every node is `{ type, ...props }`. Unknown props are ignored; unknown node types render as nothing plus a dev warning
+(the TypeScript runtime drops them from `children` before validating and reports them in `StepOutput.warnings`; an
+unknown root node is an invalid view).
 Keep the set small; add types here before using them.
 
 ```ts

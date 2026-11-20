@@ -871,6 +871,20 @@
         "jsqr": "1.4.0",
       },
     },
+    "packages/widget": {
+      "name": "@opencode/widget",
+      "version": "2.3.0",
+      "dependencies": {
+        "effect": "catalog:",
+        "psychoscript": "0.2.1",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "services/data": {
       "name": "@opencode/data",
       "devDependencies": {
@@ -1882,6 +1896,8 @@
     "@opencode/update": ["@opencode/update@workspace:services/update"],
 
     "@opencode/util": ["@opencode/util@workspace:packages/util"],
+
+    "@opencode/widget": ["@opencode/widget@workspace:packages/widget"],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
 
