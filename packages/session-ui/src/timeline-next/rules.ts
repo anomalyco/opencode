@@ -2,8 +2,9 @@ import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessa
 import { currentToolInput } from "../message/current-tool-state"
 import { toolName } from "../timeline/facts"
 import type { TimelineDetail } from "../timeline/detail"
-import { isInterruptedError } from "../timeline/turn-phase-machine"
 import { Predicate } from "effect"
+
+export { goal, sessionEvent } from "../timeline/place"
 
 /**
  * How the New timeline shows a call or notice. Where each shows under the detail setting is `timeline/place`'s to say.
@@ -13,9 +14,6 @@ import { Predicate } from "effect"
 
 type Content = SessionMessageAssistant["content"][number]
 
-/** What the agent was doing with a call. It names the group the call folds into: Explored, Edited, Ran. */
-export type ToolMode = "explore" | "edit" | "run" | "tool"
-
 /**
  * How a call shows when it stands on its own:
  * - `line`: one line of activity, a command's included: commands run long, so its row cuts the command to a line.
@@ -24,34 +22,21 @@ export type ToolMode = "explore" | "edit" | "run" | "tool"
  */
 export type ToolLayout = "line" | "file" | "event"
 
-export type ToolRule = { mode: ToolMode; layout: ToolLayout }
+export type ToolRule = { layout: ToolLayout }
 
-const explore: ToolRule = { mode: "explore", layout: "line" }
+const file: ToolRule = { layout: "file" }
 
-const file: ToolRule = { mode: "edit", layout: "file" }
-
-/** Every tool the timeline knows, by its current name. Any other tool is a line of activity under Tools. */
+/** The tools that do not show as a line of activity, by their current name. */
 const tools = new Map<string, ToolRule>(
   Object.entries({
-    read: explore,
-    list: explore,
-    glob: explore,
-    grep: explore,
-    webfetch: explore,
-    websearch: explore,
-    skill: explore,
     edit: file,
     write: file,
     patch: file,
-    shell: { mode: "run", layout: "line" },
-    execute: { mode: "run", layout: "line" },
-    subagent: { mode: "tool", layout: "event" },
-    question: { mode: "tool", layout: "line" },
-    todowrite: { mode: "tool", layout: "line" },
+    subagent: { layout: "event" },
   } satisfies Record<string, ToolRule>),
 )
 
-const other: ToolRule = { mode: "tool", layout: "line" }
+const other: ToolRule = { layout: "line" }
 
 /** A call's rule, under the tool's current name. */
 export function toolRule(tool: SessionMessageAssistantTool): ToolRule & { name: string } {
@@ -62,16 +47,6 @@ export function toolRule(tool: SessionMessageAssistantTool): ToolRule & { name: 
   if (name === "shell" && currentToolInput(tool).background === true) return { ...rule, name, layout: "event" }
 
   return { ...rule, name }
-}
-
-/**
- * Whether the user stopped a call, by stopping the turn or cancelling its command. The shell reports a cancelled
- * command as its own error, "Command cancelled".
- */
-export function toolStopped(tool: SessionMessageAssistantTool) {
-  if (tool.state.status !== "error") return false
-
-  return isInterruptedError(tool.state.error) || tool.state.error.message === "Command cancelled"
 }
 
 // A thought shows while it streams, before its first words arrive, so the timeline never hides that the model is
@@ -108,27 +83,7 @@ export function echoesUserShell(message: SessionMessageInfo, userShellIDs: Reado
   )
 }
 
-/** What the user did and what changed the session: a goal, a switch of agent, model or place, and a compaction. */
-export function sessionEvent(message: SessionMessageInfo) {
-  if (
-    message.type === "agent-switched" ||
-    message.type === "model-switched" ||
-    message.type === "location-switched" ||
-    message.type === "compaction"
-  )
-    return true
-
-  return goal(message)
-}
-
 /** A move to where the session already is changes nothing, so it shows nothing. */
 export function movedInPlace(message: SessionMessageInfo) {
   return message.type === "location-switched" && message.previous?.location.directory === message.location.directory
-}
-
-/** A goal the user set, which reads as their own message. */
-export function goal(
-  message: SessionMessageInfo | undefined,
-): message is Extract<SessionMessageInfo, { type: "synthetic" }> {
-  return message?.type === "synthetic" && message.metadata?.source === "goal"
 }

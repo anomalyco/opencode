@@ -1,6 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { timelineNoticeRequired, type TimelineDetail, type TimelinePlacement } from "./detail"
-import { factsOf, type Fact } from "./facts"
+import { placeFactOf, type Fact, type PlaceFact } from "./facts"
 
 /**
  * Where each fact shows, under the Timeline detail setting: its category, whether it stands alone, joins a group or
@@ -8,6 +8,14 @@ import { factsOf, type Fact } from "./facts"
  */
 
 type Content = SessionMessageAssistant["content"][number]
+
+type Tool = Extract<Content, { type: "tool" }>
+
+/** What can be placed: a call, a thought or text. Files and outcomes show through the call or notice they belong to. */
+export type Placeable = PlaceFact | { kind: "thought"; id?: string } | { kind: "text"; id?: string }
+
+/** Reads what placing a call needs. The projections read it through a signal, so a streamed delta moves nothing. */
+export type PlaceFactOf = (tool: Tool) => PlaceFact
 
 export type TimelineKind = "current" | "next"
 
@@ -23,7 +31,7 @@ export type Place = {
 }
 
 /** The detail setting that shows or hides a fact. */
-export function categoryOf(fact: Fact): keyof TimelineDetail | undefined {
+export function categoryOf(fact: Fact | Placeable): keyof TimelineDetail | undefined {
   if (fact.kind === "thought") return "thinking"
 
   if (fact.kind === "file") return "edit"
@@ -41,58 +49,62 @@ export function categoryOf(fact: Fact): keyof TimelineDetail | undefined {
   return "tools"
 }
 
-/** Places each fact, by id. `commentary` holds the ids of text that reads as commentary between calls. */
+/** Places each fact, in order. `commentary` marks, by index, the text that reads as commentary between calls. */
 export function place(
-  facts: readonly Fact[],
+  facts: readonly Placeable[],
   detail: TimelineDetail,
-  options: { timeline: TimelineKind; commentary?: ReadonlySet<string> },
-) {
-  return new Map(
-    facts.map((fact) => [fact.id, placeFact(fact, detail, options.timeline, !!options.commentary?.has(fact.id))]),
-  )
-}
-
-/** Places a run of message parts, in order. */
-export function placeItems(
-  items: readonly { messageID: string; partID: string; content: Content }[],
-  detail: TimelineDetail,
-  timeline: TimelineKind,
-  commentary: ReadonlySet<Content> = new Set(),
-) {
-  const facts = factsOf(
-    items.map((item) =>
-      item.content.type === "tool"
-        ? { ...item.content, messageID: item.messageID }
-        : { type: item.content.type, id: item.partID, messageID: item.messageID },
-    ),
-  ).filter((fact) => fact.kind !== "file")
-
-  const placed = place(facts, detail, {
-    timeline,
-    commentary: new Set(
-      items.flatMap((item) => (commentary.has(item.content) ? [`${item.messageID}:${item.partID}`] : [])),
-    ),
-  })
-
-  return facts.map((fact) => placed.get(fact.id)!)
+  options: { timeline: TimelineKind; commentary?: readonly boolean[] },
+): Place[] {
+  return facts.map((fact, index) => placeFact(fact, detail, options.timeline, !!options.commentary?.[index]))
 }
 
 /** Places one message part. */
-export function placeContent(content: Content, detail: TimelineDetail, timeline: TimelineKind, commentary = false) {
-  const fact = factsOf([content.type === "tool" ? content : { type: content.type }])[0]!
-
-  return placeFact(fact, detail, timeline, commentary)
+export function placeContent(
+  content: Content,
+  detail: TimelineDetail,
+  timeline: TimelineKind,
+  commentary = false,
+  factOf: PlaceFactOf = placeFactOf,
+) {
+  return placeFact(placeableOf(content, factOf), detail, timeline, commentary)
 }
 
-function placeFact(fact: Fact, detail: TimelineDetail, timeline: TimelineKind, commentary: boolean): Place {
+/** Places message parts for one build of the rows, each call once however often it is asked. */
+export function placer(detail: TimelineDetail, timeline: TimelineKind, factOf: PlaceFactOf = placeFactOf) {
+  const placed = new Map<Content, Place>()
+
+  return (content: Content, commentary = false) => {
+    if (content.type !== "tool") return placeContent(content, detail, timeline, commentary)
+    const known = placed.get(content)
+
+    if (known) return known
+    const result = placeContent(content, detail, timeline, false, factOf)
+    placed.set(content, result)
+
+    return result
+  }
+}
+
+function placeableOf(content: Content, factOf: PlaceFactOf): Placeable {
+  if (content.type === "tool") return factOf(content)
+
+  return { kind: content.type === "reasoning" ? "thought" : "text" }
+}
+
+function placeFact(fact: Placeable, detail: TimelineDetail, timeline: TimelineKind, commentary: boolean): Place {
   const category = categoryOf(fact)
 
-  if (fact.kind === "text")
+  if (fact.kind === "text") {
+    if (!commentary) return { placement: "separate", group: "part", opens: timeline === "next" ? false : undefined }
+    const placement = detail.commentary.placement
+
     return {
-      placement: commentary ? "grouped" : "separate",
-      group: commentary ? "context" : "part",
+      category: "commentary",
+      placement,
+      group: placement === "separate" ? "part" : "context",
       opens: timeline === "next" ? false : undefined,
     }
+  }
 
   if (fact.kind === "thought") {
     const placement = detail.thinking.placement
@@ -101,7 +113,7 @@ function placeFact(fact: Fact, detail: TimelineDetail, timeline: TimelineKind, c
     return { category, placement, group: placement === "grouped" ? "context" : "part", opens }
   }
 
-  if (fact.kind !== "call" || !category) return { category, placement: "hidden", group: "part" }
+  if (!category) return { category, placement: "hidden", group: "part" }
 
   const setting = detail[category].placement
   const settled = fact.status !== "streaming" && fact.status !== "running"
@@ -193,9 +205,8 @@ export function placeNotice(
   message: SessionMessageInfo,
   detail: TimelineDetail,
   timeline: TimelineKind,
-  sessionEvent = false,
 ): TimelinePlacement {
-  if (sessionEvent) return "separate"
+  if (timeline === "next" && sessionEvent(message)) return "separate"
   const source = message.type === "synthetic" ? message.metadata?.source : undefined
 
   const placement =
@@ -208,4 +219,24 @@ export function placeNotice(
   if (placement === "hidden") return timelineNoticeRequired(message) ? "separate" : "hidden"
 
   return source === "subagent" || source === "shell" ? "separate" : placement
+}
+
+/** What the user did and what changed the session: a goal, a switch of agent, model or place, and a compaction. */
+export function sessionEvent(message: SessionMessageInfo) {
+  if (
+    message.type === "agent-switched" ||
+    message.type === "model-switched" ||
+    message.type === "location-switched" ||
+    message.type === "compaction"
+  )
+    return true
+
+  return goal(message)
+}
+
+/** A goal the user set, which reads as their own message. */
+export function goal(
+  message: SessionMessageInfo | undefined,
+): message is Extract<SessionMessageInfo, { type: "synthetic" }> {
+  return message?.type === "synthetic" && message.metadata?.source === "goal"
 }

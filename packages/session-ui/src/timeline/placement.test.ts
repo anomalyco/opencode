@@ -3,15 +3,18 @@ import { Predicate } from "effect"
 import type { SessionMessageAssistant } from "@opencode/client/promise"
 import type { TimelineDetail } from "./detail"
 import { placeContent } from "./place"
-import { placementDetails, placementMessages } from "./placement-fixtures"
+import { openMark, placementDetails, placementMessages } from "./placement-fixtures"
 import { Timeline, TimelineRow } from "./projection"
 
-// Pins where the current timeline puts every part for each setting: rows, groups, what each holds, what starts open.
+// Pins where the current timeline puts every part for each setting: rows, groups, what each holds, and, where a row or
+// activity group opens each part on its own, whether it starts open (`*`), closed (`-`) or as the row decides.
 
 const messageByID = new Map(placementMessages.map((message) => [message.id, message]))
 
-function opens(item: SessionMessageAssistant["content"][number], detail: TimelineDetail) {
-  return placeContent(item, detail, "current").opens
+function mark(item: SessionMessageAssistant["content"][number] | undefined, detail: TimelineDetail) {
+  const open = item ? placeContent(item, detail, "current").opens : undefined
+
+  return openMark(open)
 }
 
 function describeRows(detail: TimelineDetail) {
@@ -33,9 +36,10 @@ function describeRows(detail: TimelineDetail) {
     return `${TimelineRow.key(row)} [${row.group.type}] ${refs
       .map((ref) => {
         const content = Timeline.resolveContent(messageByID.get(ref.messageID), ref.partID)
-        const open = content ? opens(content, detail) : undefined
 
-        return `${ref.partID}${open ? "*" : ""}`
+        return row.group.type === "part" || row.group.type === "context"
+          ? ref.partID + mark(content, detail)
+          : ref.partID
       })
       .join(", ")}`
   })

@@ -50,7 +50,7 @@ import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "./detail"
-import { placeContent } from "./place"
+import { diffOpens, placeContent } from "./place"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
 import {
@@ -429,7 +429,7 @@ export function createSessionTimelineRowRenderer(input: {
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
             fileOpen={(path) =>
-              input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
+              input.disclosure.value(`patch:${path}`) ?? (!!input.timelineDetail && diffOpens(input.timelineDetail()))
             }
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
             open={input.disclosure.value(key()) === true}
@@ -501,7 +501,7 @@ export function createSessionTimelineRowRenderer(input: {
 
             if (open !== undefined) return open
 
-            if (input.timelineDetail) return input.timelineDetail().edit.details === "expanded"
+            if (input.timelineDetail) return diffOpens(input.timelineDetail())
 
             if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
 
@@ -600,11 +600,7 @@ export function createSessionTimelineRowRenderer(input: {
   function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
     if (item.type === "tool" && item.name === "execute") return true
 
-    if (input.timelineDetail) {
-      const opens = placeContent(item, input.timelineDetail(), "current").opens
-
-      if (opens !== undefined || item.type !== "reasoning") return opens
-    }
+    if (input.timelineDetail) return placeContent(item, input.timelineDetail(), "current").opens
 
     if (item.type === "reasoning") return input.reasoningMode() === "full"
 

@@ -3,8 +3,8 @@ import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/
 import { timelinePresets, type TimelineDetail } from "../timeline/detail"
 import { toolEvent } from "./events"
 import { placeContent, placeNotice } from "../timeline/place"
-import { factsOf } from "../timeline/facts"
-import { echoesUserShell, sessionEvent, thoughtOpens, toolStopped } from "./rules"
+import { factsOf, toolStopped } from "../timeline/facts"
+import { echoesUserShell, thoughtOpens } from "./rules"
 import { timelineStatus } from "./status"
 
 const preset = (id: string) => timelinePresets.find((item) => item.id === id)!.value
@@ -22,8 +22,7 @@ const contentOpens = (detail: TimelineDetail, content: Content) => placeContent(
 const contentShows = (detail: TimelineDetail, content: Content) =>
   placeContent(content, detail, "next").placement !== "hidden"
 
-const noticePlacement = (detail: TimelineDetail, message: SessionMessageInfo) =>
-  placeNotice(message, detail, "next", sessionEvent(message))
+const noticePlacement = (detail: TimelineDetail, message: SessionMessageInfo) => placeNotice(message, detail, "next")
 
 const toolFailed = (tool: SessionMessageAssistantTool) =>
   factsOf([tool]).some((fact) => fact.kind === "call" && fact.failed)

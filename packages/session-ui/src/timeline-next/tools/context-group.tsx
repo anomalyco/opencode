@@ -24,7 +24,8 @@ import {
 } from "../../tools/tool-renderer"
 import { TimelineEventRow } from "../event-row"
 import { toolEvent, workKey, type TimelineEvent } from "../events"
-import { toolRule, toolStopped } from "../rules"
+import { toolRule } from "../rules"
+import { toolStopped } from "../../timeline/facts"
 import { activityLabel, activityText, usedLabel } from "./activity-label"
 import { FileGroup } from "./file-group"
 import { ThoughtRow } from "./thought"
@@ -319,6 +320,7 @@ function GroupItem(props: {
 }) {
   const tool = createMemo(() => props.tools[0]!)
   const name = createMemo(() => toolRule(tool()).name)
+  const defaultOpen = createMemo(() => props.toolDefaultOpen?.(tool()))
 
   return (
     <Switch
@@ -332,8 +334,8 @@ function GroupItem(props: {
           error={currentToolError(tool())}
           stopped={toolStopped(tool())}
           status={tool().state.status}
-          defaultOpen={props.toolDefaultOpen?.(tool()) ?? false}
-          open={props.toolOpen?.(tool().id) ?? props.toolDefaultOpen?.(tool())}
+          defaultOpen={defaultOpen() ?? false}
+          open={props.toolOpen?.(tool().id) ?? defaultOpen()}
           onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
           deferContent
           virtualizeDiff={false}
