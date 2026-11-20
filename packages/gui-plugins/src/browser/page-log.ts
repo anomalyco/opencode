@@ -37,8 +37,12 @@ export type ProcessMemory = {
 
 /** What one page's log remembers between lines. */
 type PageLogState = {
-  /** Set by the first signal of the page's end; `held` until its line is written. */
-  end?: { readonly at: number; readonly held?: { readonly end: PageEnd; readonly timer: ReturnType<typeof setTimeout>; readonly page: Readonly<Record<string, Field>> } }
+  /** Set by the first signal of the page's end; `held` until its line is written, which settles `account`. */
+  end?: {
+    readonly at: number
+    readonly account: Promise<PageEnd>
+    readonly held?: { readonly end: PageEnd; readonly timer: ReturnType<typeof setTimeout>; readonly page: Readonly<Record<string, Field>>; readonly settle: (end: PageEnd) => void }
+  }
   /** When Chromium reported the page unresponsive. */
   hung?: number
   loadFailed: boolean
@@ -189,7 +193,11 @@ export function createPageLog(input: {
   return {
     /** Whether a signal already reported the page's end. */
     ended: () => !!state.end,
-    end(end: PageEnd) {
+    /**
+     * A signal of the page's end. Resolves to the end as the line records it: the process's own account when it came
+     * within `PROCESS_ACCOUNT_MS`, whichever signal was first, and else the first signal.
+     */
+    end(end: PageEnd): Promise<PageEnd> {
       const first = state.end
 
       if (!first) {
@@ -197,27 +205,34 @@ export function createPageLog(input: {
         const page = context()
 
         if (end.cause === "renderer-gone") {
-          state.end = { at: Date.now() }
+          state.end = { at: Date.now(), account: Promise.resolve(end) }
+          input.write("error", "browser page ended", { ...ending(end), ...page })
 
-          return input.write("error", "browser page ended", { ...ending(end), ...page })
+          return state.end.account
         }
 
+        const account = Promise.withResolvers<PageEnd>()
+
         const timer = setTimeout(() => {
-          state.end = { at: Date.now() }
+          state.end = { at: Date.now(), account: account.promise }
           input.write("error", "browser page ended", { ...ending(end), ...page })
+          account.resolve(end)
         }, PROCESS_ACCOUNT_MS)
 
         // The line is not worth keeping the app alive for.
         timer.unref()
-        state.end = { at: Date.now(), held: { end, timer, page } }
+        state.end = { at: Date.now(), account: account.promise, held: { end, timer, page, settle: account.resolve } }
 
-        return
+        return account.promise
       }
 
-      if (!first.held || end.cause !== "renderer-gone") return
+      if (!first.held || end.cause !== "renderer-gone") return first.account
       clearTimeout(first.held.timer)
-      state.end = { at: first.at }
+      state.end = { at: first.at, account: first.account }
       input.write("error", "browser page ended", { ...ending(end), first: first.held.end.cause, firstMs: Date.now() - first.at, ...first.held.page })
+      first.held.settle(end)
+
+      return first.account
     },
     /** Chromium's hang monitor gave up on the page. It does not say so while a debugger is attached, as the pane's is. */
     unresponsive() {

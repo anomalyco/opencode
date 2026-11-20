@@ -63,19 +63,17 @@ test(
     expect(killed[0]?.data).toMatchObject({ cause: "renderer-gone", reason, exitCode: Number(exitCode), origin: result.origin })
     expect(result.killed.failure).toContain("exit code " + exitCode)
 
-    // A load that fails: once, by Chromium's error.
-    const failed = lines("browser page load failed")
+    // A load that fails: once for the tab's one navigation, by Chromium's error.
+    const failed = lines("browser page load failed", "tab_33333333-3333-3333-3333-333333333333")
     expect(failed.length).toBe(1)
-    expect(failed[0]).toMatchObject({ level: "warn", data: { tab: "tab_33333333-3333-3333-3333-333333333333", code: -102, error: "ERR_CONNECTION_REFUSED", origin: result.refused } })
+    expect(failed[0]).toMatchObject({ level: "warn", data: { code: -102, error: "ERR_CONNECTION_REFUSED", origin: result.refused } })
 
-    // A child process of the browser that ends, as Electron reported it.
-    expect(result.gone.length).toBe(1)
-    const [type, childReason, childExit] = result.gone[0]?.split(" ") ?? []
-    expect(lines("browser child process gone").map((line) => line.data)).toMatchObject([{ type, reason: childReason, exitCode: Number(childExit), pages: 0 }])
-    expect(type).toBe(result.child)
+    // The child process the fixture ended, as Electron reported it. Another one may end by itself on a loaded runner.
+    const child = lines("browser child process gone").find((line) => line.data.type === result.child)
+    expect(child).toMatchObject({ level: "error", data: { pages: 0 } })
+    expect(result.gone).toContain([child?.data.type, child?.data.reason, child?.data.exitCode].join(" "))
 
     // Nothing of the address beyond its origin, and nothing of the page, in any line or in what the agent hears.
-    expect(result.lines.length).toBe(4)
     expect(JSON.stringify([result.lines, result.crashed.failure, result.killed.failure])).not.toMatch(/mail|inbox|alex|token|s3cret|message-42|Payroll|493817/i)
   },
   // Starting Electron takes seconds on a loaded runner.

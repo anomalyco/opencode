@@ -148,13 +148,39 @@ test.each([
 
   signals.forEach((signal) => {
     if (signal === "wait") return void jest.advanceTimersByTime(PROCESS_ACCOUNT_MS)
-    tab.log.end(signal)
+    void tab.log.end(signal)
   })
   expect(tab.lines.length).toBe(after ? 0 : 1)
   jest.advanceTimersByTime(PROCESS_ACCOUNT_MS)
   expect(tab.lines.map((line) => line.message)).toEqual(["browser page ended"])
   expect(tab.lines[0]?.data).toMatchObject({ tab: "tab_1", cause, origin: "https://mail.example.com" })
   expect(tab.log.ended()).toBe(true)
+})
+
+test("whichever signal of a crash comes first, the pane hears the process's own account, and the first signal when none comes", async () => {
+  const detached = { cause: "debugger-detached", reason: "target closed" } as const
+  const gone = { cause: "renderer-gone", reason: "oom", exitCode: -536870904 } as const
+
+  // The debugger's detach before the process's report: both resolve to the process's reason, in one line.
+  const reversed = page()
+  const first = reversed.log.end(detached)
+  const second = reversed.log.end(gone)
+  expect(await first).toEqual(gone)
+  expect(await second).toEqual(gone)
+  expect(reversed.lines.map((line) => line.data)).toMatchObject([{ cause: "renderer-gone", reason: "oom", first: "debugger-detached" }])
+
+  // The process's report first: a later detach hears it too.
+  const ordered = page()
+  expect(await ordered.log.end(gone)).toEqual(gone)
+  expect(await ordered.log.end(detached)).toEqual(gone)
+
+  // No report of the process: the wait ends, and the detach is what the page ended with.
+  const silent = page()
+  const waiting = silent.log.end(detached)
+  jest.advanceTimersByTime(PROCESS_ACCOUNT_MS)
+  expect(await waiting).toEqual(detached)
+  expect(await silent.log.end(gone)).toEqual(detached)
+  expect(silent.lines.map((line) => line.data)).toMatchObject([{ cause: "debugger-detached" }])
 })
 
 test("a page that answers again is logged, with the length of the stall when Chromium reported its start", () => {

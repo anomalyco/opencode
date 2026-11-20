@@ -622,7 +622,14 @@ export function createBrowserPage(
   const end = (cause: PageEnd) => {
     // A page the pane closed did not end. One that ended may still hear its process's own account.
     if (closed() && !journal.ended()) return
-    journal.end(cause)
+    const account = journal.end(cause)
+
+    // The debugger also leaves a process that is gone, and may say so before Electron says why. Nothing runs in the
+    // page then, so the pane waits with the log, for the same bounded moment, and hears the process's own account.
+    if (cause.cause === "debugger-detached" && !contents.isDestroyed() && contents.isCrashed())
+      return void account.then((recorded) => {
+        if (!closed()) options.fail(recorded)
+      })
 
     if (!closed()) options.fail(cause)
   }
@@ -881,7 +888,7 @@ export function createBrowserPage(
   contents.debugger.on("detach", (_event, reason) => end({ cause: "debugger-detached", reason }))
   // The debugger's own report of a crash carries no reason; it is logged only when the process's report did not come first.
   cdp.on("Inspector.targetCrashed", (_event, sessionID) => {
-    if (!sessionID && !closed()) journal.end({ cause: "target-crashed" })
+    if (!sessionID && !closed()) void journal.end({ cause: "target-crashed" })
   })
   contents.on("unresponsive", () => {
     if (!closed()) journal.unresponsive()
