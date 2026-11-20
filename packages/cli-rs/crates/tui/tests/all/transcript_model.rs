@@ -5,6 +5,7 @@ use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -94,8 +95,9 @@ impl Session {
     }
 }
 
+/// The sessions, and the requests in flight and answered, which a settled frame waits for.
 #[derive(Clone, Default)]
-struct Server(Arc<Mutex<HashMap<String, Session>>>);
+struct Server(Arc<Mutex<HashMap<String, Session>>>, Arc<(AtomicUsize, AtomicUsize)>);
 
 impl Transport for Server {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
@@ -128,7 +130,13 @@ impl Transport for Server {
             _ => support::not_found(),
         };
         drop(sessions);
-        Box::pin(async move { Ok(support::respond(status, &body)) })
+        self.1.0.fetch_add(1, Ordering::SeqCst);
+        let requests = self.1.clone();
+        Box::pin(async move {
+            requests.0.fetch_sub(1, Ordering::SeqCst);
+            requests.1.fetch_add(1, Ordering::SeqCst);
+            Ok(support::respond(status, &body))
+        })
     }
 }
 
@@ -312,6 +320,9 @@ struct Walk {
     /// Whether the last explicit scroll left the view at the bottom, which OpenTUI's scroll box then follows. A
     /// resize that brings the bottom into view does not.
     stuck: bool,
+    /// A commit removed rows: the window's start then follows the tail until the tail passes it again, and rows
+    /// that leave above move the view (TS too), so new rows no longer hold it.
+    unpinned: bool,
 }
 
 type Check = Result<(), (&'static str, String)>;
@@ -362,8 +373,9 @@ impl Walk {
             ..support::deps(Arc::new(server.clone()))
         };
         deps.builtins.push(opencode_plugin::abi::Plugin { id: "test.reader", setup: reader }.into());
-        let harness = support::mount(80, 24, deps);
-        Self { harness, server, id, other, next, seq: 1, navigation: Navigation::None, stuck: true }
+        // A still plugin clock: on a loaded machine a slow built-in's toast would cover the rows.
+        let harness = support::mount_still(80, 24, deps);
+        Self { harness, server, id, other, next, seq: 1, navigation: Navigation::None, stuck: true, unpinned: false }
     }
 
     fn session(&self) -> Session {
@@ -402,13 +414,19 @@ impl Walk {
         let session = SessionID(self.id.clone());
         let mut last = String::new();
         let mut stable = 0;
+        let mut answered = usize::MAX;
         for _ in 0..3000 {
             app.advance(Duration::from_millis(1));
             let text = app.render().text();
-            // Store flushes reach the views through a task on the runtime.
+            // Store flushes reach the views through a task on the runtime, and an answer reaches the store through
+            // another.
+            let requests = &self.server.1;
+            let fresh = requests.1.load(Ordering::SeqCst);
             let loading = self.harness.tui.data.read(|state| state.messages_loading(&session))
                 || text.contains("Loading session history")
-                || !self.harness.tui.synced();
+                || !self.harness.tui.synced()
+                || requests.0.load(Ordering::SeqCst) > 0
+                || std::mem::replace(&mut answered, fresh) != fresh;
             let busy = loading || app.needs_frame();
             stable = if !busy && text == last { stable + 1 } else { 0 };
             if stable == 3 {
@@ -439,9 +457,11 @@ impl Walk {
     fn step(&mut self, command: &Command) -> Check {
         let before = self.shown()?;
         let following = self.stuck && self.navigation == Navigation::None && before.at_tail() && !before.latest;
-        // OpenTUI's scroll box also follows from one row short of the bottom, and a box that does not follow can still
-        // sit at the bottom, so a view stuck short of it may follow or hold.
-        let either = self.stuck && !matches!(self.navigation, Navigation::At(_)) && !following;
+        // OpenTUI's scroll box also follows from one row short of the bottom, a program scroll that lands at the bottom
+        // (a row pinned through a re-render) follows it again, and one that does not follow can still sit there, so
+        // such a view may follow or hold.
+        let resting = before.at_tail() && !before.latest && self.navigation == Navigation::None;
+        let either = !following && (resting || self.stuck && !matches!(self.navigation, Navigation::At(_)));
         let staged = self.session().revert.is_some();
         let sid = self.id.clone();
         // Whether the command added content at the end.
@@ -557,6 +577,7 @@ impl Walk {
                 self.event("session.revert.cleared", self.next * 1000, json!({ "sessionID": sid }));
             }
             Command::Commit if staged => {
+                self.unpinned = true;
                 let to = self.edit(|session| {
                     let to = session.revert.take().unwrap();
                     session.messages.retain(|message| message.id < to);
@@ -609,6 +630,7 @@ impl Walk {
                 if following {
                     tail("follow")?;
                 } else if !either
+                    && !self.unpinned
                     && let Some((marker, row)) =
                         before.markers.iter().find(|(marker, row)| after.row(marker) != Some(*row))
                 {
@@ -678,9 +700,11 @@ impl Walk {
                             self.navigation = Navigation::Unknown;
                         }
                         // A jump the wheel moved away from still steps from it, so only a view no jump aligned has
-                        // a direction.
+                        // a direction. Rows that mount above first leave the target to the old offset, as TS's
+                        // unpinned mount does.
                         if let (Some(from), Some(to)) = (owner(&before), owner(&after))
                             && was_none
+                            && before.view.above == 0
                             && (next && to < from || !next && to > from)
                         {
                             return fail("jump-direction", context());

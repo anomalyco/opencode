@@ -200,6 +200,9 @@ impl Model for Stack {
                 // The TUI's own app options, which decide what keys no widget takes do.
                 let app = opentui::testing::TestApp::with_options(80, 24, opencode_tui::app::options());
                 let harness = support::mount_on(app, deps, opencode_tui::Args::default());
+                // A still plugin clock: on a loaded machine a slow built-in's toast would come and go between steps.
+                let now = std::time::Instant::now();
+                harness.tui.plugins.monitor().set_clock(move || now);
                 harness.wait_for("Fix the parser");
                 harness
             };
