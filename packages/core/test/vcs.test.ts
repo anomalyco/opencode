@@ -779,6 +779,23 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("strips ANSI colour codes from patches when git forces colour on", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await $`git config color.ui always`.cwd(directory).quiet()
+          await fs.writeFile(path.join(directory, "example.txt"), "one\n")
+          await commitAll(directory, "initial")
+          await fs.writeFile(path.join(directory, "example.txt"), "one\ntwo\n")
+        })
+        const vcs = yield* Vcs.Service
+        const diff = yield* vcs.diff("working")
+        expect(diff).toHaveLength(1)
+        expect(diff[0]!.patch).not.toMatch(/\u001b\[/)
+      }),
+    ),
+  )
+
   it.live("caches branch info and publishes HEAD changes", () =>
     withGit((directory) =>
       Effect.gen(function* () {

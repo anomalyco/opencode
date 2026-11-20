@@ -177,6 +177,12 @@ const cfg = [
   "core.symlinks=true",
   "-c",
   "core.quotepath=false",
+  // Force colour off so `git diff --patch` never emits ANSI codes, even when a
+  // repository or the user's config sets `color.ui always`. The review pane only
+  // accepts a patch that begins with a bare `@@ ` hunk header, so colour prefixes
+  // make every row render as an empty diff body (#65075).
+  "-c",
+  "color.ui=false",
 ] as const
 
 const kind = (code: string): Kind => {
