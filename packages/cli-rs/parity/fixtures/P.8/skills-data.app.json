@@ -4,10 +4,10 @@
  "height": 34,
  "directory": "/tmp/opencode/packages/tui",
  "config": {
-  "theme": {"name":"opencode-classic"},
   "experimental": {"new-designs":true},
   "plugins": ["./out/npm/node_modules/opencode-skills-tui"],
-  "animations": false
+  "animations": false,
+  "theme": {"name":"opencode"}
  },
  "args": {
   "sessionID": "ses_k"

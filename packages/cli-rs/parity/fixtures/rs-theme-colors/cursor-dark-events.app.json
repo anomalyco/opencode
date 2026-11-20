@@ -4,8 +4,8 @@
  "height": 30,
  "directory": "/tmp/opencode/packages/tui",
  "config": {
-  "theme": {"name":"cursor","mode":"dark"},
   "tabs": {"mode":"off"},
+  "theme": {"name":"cursor","mode":"dark"},
   "animations": false,
   "experimental": {"new-designs":true}
  },

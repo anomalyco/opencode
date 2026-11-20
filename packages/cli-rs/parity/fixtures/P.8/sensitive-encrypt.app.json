@@ -4,10 +4,10 @@
  "height": 34,
  "directory": "/tmp/opencode/packages/tui",
  "config": {
-  "theme": {"name":"opencode-classic"},
   "experimental": {"new-designs":true},
   "plugins": ["./out/npm/node_modules/@max10240/opencode-plugin-sensitive-encrypt"],
-  "animations": false
+  "animations": false,
+  "theme": {"name":"opencode"}
  },
  "args": {
   "sessionID": "ses_e"

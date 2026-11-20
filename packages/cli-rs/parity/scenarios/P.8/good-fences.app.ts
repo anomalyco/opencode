@@ -31,8 +31,12 @@ const answer = [
 ].join("\n")
 
 // TS 0.9.4's default code view paints its glyphs on the page color inside the plugin's box; Rust keeps the box's
-// background (`parity/deviations/F16-plugin-fence-margin.md`). Color only.
-const margin = (cells: number) => [{ file: "F16-plugin-fence-margin", cells }]
+// background (`parity/deviations/F16-plugin-fence-margin.md`). The fence with no language draws in the `default`
+// scope's color in Rust (`parity/deviations/OT-plain-fence-fg.md`). Color only.
+const margin = (cells: number) => [
+  { file: "F16-plugin-fence-margin", cells },
+  { file: "OT-plain-fence-fg", cells: 16 },
+]
 
 const delta = (seq: number, text: string) => ({
   event: {

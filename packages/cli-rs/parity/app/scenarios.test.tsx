@@ -50,10 +50,7 @@ for (const file of files) {
 
 async function record(name: string, file: string) {
   const scenario: AppScenario = (await import(`${parity}${file}`)).default
-  // Scenarios run in `opencode-classic`, as TS's own app tests do: in the default `opencode` theme OpenTUI's Rust
-  // Markdown colors prose with the syntax theme's `default` rather than `markdown.text`
-  // (parity/deviations/OT-markdown-default-scope.md, OT/markdown-default-scope.app.ts). A scenario may name its theme.
-  const config = withNewDesigns({ theme: { name: "opencode-classic" }, ...scenario.config, animations: false })
+  const config = withNewDesigns({ ...scenario.config, animations: false })
   const routes = scenario.routes ?? []
   const defaults = createFetch().fetch
   const log: Logged[] = []
