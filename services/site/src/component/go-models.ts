@@ -54,7 +54,7 @@ export const goModels: GoModel[] = [
     allowance: 100,
     featured: true,
   },
-  { id: "longcat-2.5", name: "LongCat 2.5", requests: 11400, allowance: 60 },
+  { id: "longcat-2.5", name: "LongCat 2.5", requests: 11400, allowance: 60, fresh: true },
   {
     id: "mimo-v2.6-flash",
     name: "MiMo-V2.6-Flash",
