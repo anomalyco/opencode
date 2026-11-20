@@ -73,7 +73,10 @@ pub fn decode(text: &str) -> Option<Message> {
                 None => None,
                 Some(number) => Some(number.as_f64()?),
             },
-            size: size(field("info")?.get("size")?)?,
+            size: size(field("info")?.get("size")?).filter(|_| {
+                let cell = |name| value["info"]["size"][name].as_f64();
+                [cell("cols"), cell("rows")].into_iter().all(|cell| cell.is_some_and(positive_int))
+            })?,
             role: match optional("role")? {
                 None => None,
                 Some(role) => Some(match role.as_str()? {
@@ -105,6 +108,11 @@ pub fn decode(text: &str) -> Option<Message> {
         _ => return None,
     };
     Some(message)
+}
+
+/// `PositiveInt`: a safe integer above 0.
+fn positive_int(number: f64) -> bool {
+    (1.0..=9_007_199_254_740_991.0).contains(&number) && number.fract() == 0.0
 }
 
 /// `{cols, rows}` as JSON numbers. A size beyond `u16` saturates.
@@ -259,6 +267,12 @@ mod tests {
         // A title cut inside a surrogate pair.
         assert_eq!(decode(&attached(info()).to_string().replace(r#""zsh""#, r#""\ud83d""#)), expected);
         assert_eq!(decoded(attached(json!({ "id": "pty_1" }))), None);
+        // `PositiveInt` cells.
+        for size in
+            [json!({ "cols": 0, "rows": 24 }), json!({ "cols": 80, "rows": 1.5 }), json!({ "cols": 2e16, "rows": 24 })]
+        {
+            assert_eq!(decoded(attached(json!({ "size": size }))), None, "{size}");
+        }
     }
 
     #[test]
