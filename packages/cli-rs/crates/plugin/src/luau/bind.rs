@@ -3,7 +3,7 @@
 use std::any::Any;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
-use std::sync::OnceLock;
+use std::sync::{OnceLock, mpsc};
 use std::time::Duration;
 
 use mlua::chunk::Compiler;
@@ -145,6 +145,42 @@ pub(crate) fn out<T: Serialize + Any>(lua: &Lua, value: &T) -> mlua::Result<Valu
     }
     let value = serde_json::to_value(value).map_err(|error| mlua::Error::runtime(error.to_string()))?;
     json::luau(lua, &value)
+}
+
+/// Frees a reply's `value`, which Luau has its own copy of, on the process's drop thread when it holds more than
+/// [`DROP_HERE`] values: a page of messages is thousands of small allocations, which take about half as long to free as
+/// to copy into Luau. A smaller value is freed here, as is any where the system gives no thread.
+fn drop_later(value: serde_json::Value) {
+    static DROPS: OnceLock<Option<mpsc::Sender<serde_json::Value>>> = OnceLock::new();
+    let mut left = DROP_HERE;
+    if !larger(&value, &mut left) {
+        return;
+    }
+    let drops = DROPS.get_or_init(|| {
+        let (send, receive) = mpsc::channel::<serde_json::Value>();
+        let spawned = std::thread::Builder::new()
+            .name("plugin-drop".to_owned())
+            .spawn(move || receive.into_iter().for_each(drop));
+        spawned.ok().map(|_| send)
+    });
+    // A send that fails hands the value back in its error, which frees it here.
+    if let Some(drops) = drops {
+        drop(drops.send(value));
+    }
+}
+
+/// The most values a reply's value holds and is still freed on the UI thread ([`drop_later`]).
+const DROP_HERE: usize = 64;
+
+/// Whether `value` holds more than `left` values, each array, object and scalar one, counting no further.
+fn larger(value: &serde_json::Value, left: &mut usize) -> bool {
+    let Some(rest) = left.checked_sub(1) else { return true };
+    *left = rest;
+    match value {
+        serde_json::Value::Array(items) => items.iter().any(|item| larger(item, left)),
+        serde_json::Value::Object(fields) => fields.values().any(|field| larger(field, left)),
+        _ => false,
+    }
 }
 
 /// What the prelude's `plugin.json` is built on: `decode(text, nulls)`, `encode(value)`, `null`, and the array and object
@@ -356,6 +392,9 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
                 };
                 run.call::<()>((&plugin.host, id.0, value, error))
             });
+            if let Ok(value) = result {
+                drop_later(value);
+            }
         });
         Ok(())
     })?;
