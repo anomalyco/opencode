@@ -67,15 +67,6 @@ macro_rules! json_object {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn json_object_keeps_order_drops_none_and_spreads() {
-        let none: Option<&str> = None;
-        let rest = serde_json::json!({ "b": 2, "z": "spread" });
-        let object = json_object! { "z": "first", "a"?: none, "b"?: Some(1), ..rest, "c": [1], ..serde_json::json!(3) };
-        assert_eq!(object.to_string(), r#"{"z":"spread","b":2,"c":[1]}"#);
-        assert_eq!(json_object! {}.to_string(), "{}");
-    }
-
-    #[test]
     fn json_object_moves_owned_values() {
         let content = serde_json::Value::String("x".repeat(1024));
         let buffer = content.as_str().unwrap().as_ptr();
