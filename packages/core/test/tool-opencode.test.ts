@@ -283,7 +283,7 @@ it.effect("adapts the worktree session_move hint to execute, direct tools, or ne
         .pipe(Effect.map((event) => event.system.map((part) => part.text)))
 
     expect(yield* trigger({ execute: { description: "execute", input: {} } })).toEqual([
-      "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
+      "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session.move` and make the worktree the session's working directory.",
     ])
     expect(yield* trigger({ opencode_session_move: { description: "move", input: {} } })).toEqual([
       "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider calling `opencode_session_move` to make the worktree the session's working directory.",

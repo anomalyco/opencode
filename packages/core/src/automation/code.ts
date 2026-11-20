@@ -43,8 +43,8 @@ const FORBIDDEN_TOOLS = new Set([
   "opencode.automation_pause",
   "opencode.automation_resume",
   "opencode.automation_delete",
-  "opencode.session_move",
-  "opencode.session_rename",
+  "opencode.session.move",
+  "opencode.session.rename",
   "opencode.worktree_create",
   "opencode.worktree_remove",
 ])

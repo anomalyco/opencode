@@ -103,7 +103,7 @@ export const Plugin = {
       Effect.sync(() => {
         const text =
           "execute" in event.tools
-            ? "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory."
+            ? "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session.move` and make the worktree the session's working directory."
             : "opencode_session_move" in event.tools
               ? "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider calling `opencode_session_move` to make the worktree the session's working directory."
               : undefined
@@ -120,12 +120,12 @@ export const Plugin = {
             "Tools for managing OpenCode itself, such as working with sessions and worktrees, searching the available models, and reading MCP resources.",
         })
         draft.add({
-          name: "session_rename",
+          name: "rename",
           description:
             "Rename a session, or omit sessionID to rename the current session. Use a short, specific title that summarizes the work being done.",
           input: RenameInput,
           output: RenameOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "opencode.session", codemode: true },
           execute: (input, context) => {
             const sessionID = input.sessionID ?? context.sessionID
             const title = input.title.trim()
@@ -140,12 +140,12 @@ export const Plugin = {
           },
         })
         draft.add({
-          name: "session_move",
+          name: "move",
           description:
             "Move a session to another directory, or omit sessionID to move the current session. The current session moves at the next safe boundary; do not run destination-dependent tools in the same execute call.",
           input: MoveInput,
           output: MoveOutput,
-          options: { namespace: "opencode", codemode: { pinned: true } },
+          options: { namespace: "opencode.session", codemode: { pinned: true } },
           execute: (input, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID
