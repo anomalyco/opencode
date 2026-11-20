@@ -25,17 +25,16 @@ export const appHandlers = AppRpcs.toLayer(
     return AppRpcs.of({
       AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
-      AppReadyDeepLinks: (_request, context) =>
+      AppTakeDeepLink: (_request, context) =>
         Effect.sync(() => {
           const contents = sender(handoff, context)
           const win = BrowserWindow.fromWebContents(contents)
-          // Only an app window's own renderer receives deep links, not one embedded in it.
-          const id = win?.webContents === contents ? getWindowID(win) : undefined
 
-          if (id) lifecycle.deepLinks.ready(id, context.client.id)
+          // Only an app window's own renderer receives deep links, not one embedded in it.
+          if (!win || win.webContents !== contents || !getWindowID(win)) return null
+
+          return lifecycle.deepLinks.take() ?? null
         }),
-      AppAcknowledgeDeepLinks: ({ attempt }, context) =>
-        Effect.sync(() => lifecycle.deepLinks.acknowledge(context.client.id, attempt)),
       AppIsFirstLaunchOnboardingPending: isFirstLaunchOnboardingPending,
       AppFinishFirstLaunchOnboarding: ({ createDefaultProject }) =>
         finishFirstLaunchOnboarding(createDefaultProject).pipe(Effect.orDie),

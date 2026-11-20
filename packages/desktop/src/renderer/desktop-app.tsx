@@ -19,6 +19,7 @@ import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, lazy, onCleanup, Show, Suspense, untrack } from "solid-js"
 import type { ElectronAPI } from "./api-types"
+import { DesktopDeepLinks } from "./deep-links"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
@@ -124,6 +125,10 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
               dispatch={startup.dispatch}
             />
             <DesktopEffects api={props.api} />
+            {/* Links look for their session on the local server first, so they wait for it. */}
+            <Show when={activeSidecar()}>
+              <DesktopDeepLinks api={props.api} local={ServerConnection.key(sidecarServer)} />
+            </Show>
             <Suspense fallback={null}>
               <Show when={activeSidecar()} keyed>
                 {(server) => <MigrationStatus server={server} />}

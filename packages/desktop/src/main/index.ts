@@ -1,6 +1,7 @@
 // Imported first so its evaluation stamps the moment Electron handed control to this module.
 import { marks } from "./lifecycle/marks"
 import { app } from "electron"
+import { captureLaunchDeepLink } from "./deep-links/launch"
 import { acquireApplicationLock, configureApplication } from "./lifecycle/configure"
 import { startSidecarProbe } from "./service/sidecar-probe"
 import { registerStorageSnapshotHandler } from "./storage/snapshot"
@@ -15,6 +16,7 @@ import { registerRendererScheme } from "./windows/scheme"
 configureApplication()
 
 if (acquireApplicationLock()) {
+  captureLaunchDeepLink()
   registerRendererScheme()
   // Window first, then the bundle: starting the import before ready delays ready itself, because the
   // module graph evaluates on the same thread Chromium needs to finish initialising.

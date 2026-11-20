@@ -4,6 +4,7 @@ import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DeepLinks } from "../deep-links"
+import { isDeepLink } from "../deep-links/launch"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
@@ -100,23 +101,21 @@ const runtime = Layer.effect(
       win.focus()
     }
 
-    const deepLinks = yield* DeepLinks.make(focusWindow)
+    // Registered in the same tick as the `open-url` handler below, so no link falls between the two listeners.
+    const deepLinks = DeepLinks.make(focusWindow)
 
     const secondInstance = (_event: Event, argv: string[]) => {
-      const urls = argv.filter((arg) => arg.startsWith("opencode://"))
+      const url = argv.find(isDeepLink)
 
-      if (urls.length) {
-        runFork(Effect.logInfo("deep link received via second-instance", { urls }))
-        deepLinks.receive(urls)
-      }
-
-      if (!urls.length) focusWindow(getLastFocusedWindow())
+      if (!url) return focusWindow(getLastFocusedWindow())
+      runFork(Effect.logInfo("deep link received via second-instance", { url }))
+      deepLinks.receive(url)
     }
 
     const openUrl = (event: Event, url: string) => {
       event.preventDefault()
       runFork(Effect.logInfo("deep link received via open-url", { url }))
-      deepLinks.receive([url])
+      deepLinks.receive(url)
     }
 
     const beforeQuit = (event: Event) => {

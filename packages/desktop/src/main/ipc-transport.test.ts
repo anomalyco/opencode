@@ -113,7 +113,7 @@ describe("desktop RPC transport", () => {
 
     expect(reloadedFocused.exit).toEqual(success(true))
     expect(stillUnfocused.exit).toEqual(success(false))
-    // Deep link delivery returns unacknowledged links to the queue when a reload replaces a renderer's port.
+    // A reload that replaces a renderer's port disconnects its old client.
     expect(disconnected).toEqual([0])
 
     for (const port of [first.port2, second.port2, reloaded.port2]) port.close()
