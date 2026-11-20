@@ -16,6 +16,7 @@ const CONTROL = 0
 const TREE = 1
 const PIECE = 2
 const CONTROL_CAP = 256 << 10
+const TREE_CAP = 8 << 20
 
 // Redirect console and stream writes together: some Bun console methods bypass console.log.
 const stderr = (text: string) => process.stderr.write(text.endsWith("\n") ? text : text + "\n")
@@ -104,8 +105,10 @@ function trace(line: string) {
   if (TRACE) require("node:fs").appendFileSync(TRACE, line.slice(0, 2000) + "\n")
 }
 
+// The length of a tree it did not send, past its cap: the client would end the JS host, every plugin's, on it.
 function frame(kind: number, message: unknown) {
   const body = Buffer.from(JSON.stringify(message))
+  if (kind === TREE && body.length > TREE_CAP) return body.length
   trace(`up ${body.toString()}`)
   // The final control frame terminates the preceding fragments.
   const frames: Buffer[] = []
@@ -119,8 +122,12 @@ function frame(kind: number, message: unknown) {
     if (last) break
   }
   write(Buffer.concat(frames))
+  return 0
 }
 const send = (message: unknown) => frame(CONTROL, message)
+function tooLarge(plugin: Plugin, bytes: number) {
+  if (bytes > 0) fail(plugin, `its tree of ${bytes} bytes is past the ${TREE_CAP} bytes a tree may take`)
+}
 
 // A spinning plugin can block the main thread. The watchdog also checks for parent death and terminates
 // descendants; on Linux the client acts as a subreaper.
@@ -465,7 +472,7 @@ function view(plugin: Plugin, mount: Mount) {
   // The registrations this view made go first. The reload they take mounts the surface again: a tree sent before them
   // would show, then give way to the new mount's placeholder until its first tree.
   if (unsettled.has(plugin)) tell(plugin)
-  frame(TREE, {
+  const over = frame(TREE, {
     id: plugin.id,
     mount: mount.id,
     rev: mount.rev,
@@ -477,6 +484,7 @@ function view(plugin: Plugin, mount: Mount) {
     released,
     memo: mount.staged.size,
   })
+  tooLarge(plugin, over)
 }
 
 function viewAll(plugin: Plugin) {
@@ -510,7 +518,7 @@ function viewClaim(plugin: Plugin, mount: ClaimMount) {
   mount.rev += 1
   mount.inflight = true
   mount.last = hash
-  frame(TREE, {
+  const over = frame(TREE, {
     id: plugin.id,
     mount: mount.id,
     rev: mount.rev,
@@ -520,6 +528,7 @@ function viewClaim(plugin: Plugin, mount: ClaimMount) {
     node: error === undefined ? node : null,
     ...(error === undefined ? {} : { error }),
   })
+  tooLarge(plugin, over)
 }
 
 function within(plugin: Plugin, run: () => void) {
