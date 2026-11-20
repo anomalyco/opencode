@@ -28,7 +28,7 @@ const sampleSources: readonly ProfileSource[] = [
   { id: "chrome", name: "Chrome", engine: "chromium", profiles: [{ id: "Default", name: "Default" }] },
 ]
 
-const sampleExtensions = new Map<string, readonly SampleExtension[]>([
+const sampleExtensionEntries: readonly (readonly [string, readonly SampleExtension[]])[] = [
   [
     "helium",
     [
@@ -71,7 +71,7 @@ const sampleExtensions = new Map<string, readonly SampleExtension[]>([
       },
     ],
   ],
-])
+]
 
 // Component-test fixture: the real Settings > Browser page with main's browser profile and site decisions faked at
 // their Ipcs, and the stored preferences shown beside the page. `target` is the entry a settings search is revealing,
@@ -96,6 +96,7 @@ export function mountBrowserSettings(input: { ui: Ui; target?: string; extension
     welcomed: true,
   })
 
+  const sampleExtensions = new Map(sampleExtensionEntries)
   const installed = new Set<string>()
   const staged = new Map<string, SampleExtension>()
 
