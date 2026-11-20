@@ -1,6 +1,6 @@
 export * as Identity from "./identity.js"
 
-import { createPrivateKey, createPublicKey, generateKeyPairSync, sign } from "node:crypto"
+import crypto from "node:crypto"
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -9,6 +9,8 @@ import { Context, Effect, Layer, Schema } from "effect"
 
 const FILE = path.join("machine", "home-key")
 const SEED_BYTES = 32
+const KEY_BYTES = 32
+const SIGNATURE_BYTES = 64
 // PKCS8 and SPKI DER wrap an Ed25519 key with a fixed prefix each, so the file itself stays a raw 32-byte seed.
 const PKCS8 = Buffer.from("302e020100300506032b657004220420", "hex")
 const SPKI = Buffer.from("302a300506032b6570032100", "hex")
@@ -33,13 +35,48 @@ const invalid = (file: string, reason: string) => new InvalidKey({ file, reason 
 
 const code = (cause: unknown) => (cause instanceof Error && "code" in cause ? cause.code : undefined)
 
-const keys = (seed: Uint8Array) => {
-  const privateKey = createPrivateKey({ key: Buffer.concat([PKCS8, seed]), format: "der", type: "pkcs8" })
+/** An Ed25519 key that can sign: the home's, or a worker's on its side of the link. */
+export interface Key {
+  readonly publicKey: Uint8Array
+  readonly sign: (bytes: Uint8Array) => Uint8Array
+}
+
+/**
+ * The key of a raw 32-byte Ed25519 seed. Any other length is a programmer error and throws: callers check it first,
+ * as the home key's loader does with its own message.
+ */
+export const fromSeed = (seed: Uint8Array): Key => {
+  // The runtime would ignore bytes past the DER it expects and use the first 32.
+  if (seed.length !== SEED_BYTES) throw new RangeError(`An Ed25519 seed is ${SEED_BYTES} bytes, not ${seed.length}`)
+  const privateKey = crypto.createPrivateKey({ key: Buffer.concat([PKCS8, seed]), format: "der", type: "pkcs8" })
   return {
-    privateKey,
     publicKey: new Uint8Array(
-      createPublicKey(privateKey).export({ format: "der", type: "spki" }).subarray(SPKI.length),
+      crypto.createPublicKey(privateKey).export({ format: "der", type: "spki" }).subarray(SPKI.length),
     ),
+    sign: (bytes) => new Uint8Array(crypto.sign(null, bytes, privateKey)),
+  }
+}
+
+/**
+ * Whether `signature` is `publicKey`'s Ed25519 signature of `bytes`: false, never a throw, for a malformed key or
+ * signature.
+ *
+ * Like this runtime, it accepts small-order and non-canonically encoded public keys, which a strict verifier refuses.
+ * That is deliberate: a worker's key is chosen by whoever holds its invitation, and choosing a key anyone can sign for
+ * is no more than publishing its own private key. The home's key is real, and honest signatures verify either way.
+ */
+export const verify = (publicKey: Uint8Array, bytes: Uint8Array, signature: Uint8Array) => {
+  // The runtime ignores bytes past a key's DER, so a longer key would verify as its first 32 bytes.
+  if (publicKey.length !== KEY_BYTES || signature.length !== SIGNATURE_BYTES) return false
+  try {
+    return crypto.verify(
+      null,
+      bytes,
+      crypto.createPublicKey({ key: Buffer.concat([SPKI, publicKey]), format: "der", type: "spki" }),
+      signature,
+    )
+  } catch {
+    return false
   }
 }
 
@@ -51,7 +88,8 @@ const read = (file: string) =>
 
 const create = (file: string) =>
   Effect.gen(function* () {
-    const seed = generateKeyPairSync("ed25519")
+    const seed = crypto
+      .generateKeyPairSync("ed25519")
       .privateKey.export({ format: "der", type: "pkcs8" })
       .subarray(PKCS8.length)
     yield* Effect.tryPromise({
@@ -90,7 +128,7 @@ const load = (file: string) =>
           `its mode ${(mode & 0o777).toString(8)} lets other users read it; run "chmod 600 ${file}"`,
         )
     }
-    return keys(seed)
+    return fromSeed(seed)
   })
 
 const layer = Layer.effect(
@@ -107,7 +145,7 @@ const layer = Layer.effect(
       })
     return Service.of({
       publicKey: () => Effect.map(identity(), (key) => key.publicKey),
-      sign: (bytes) => Effect.map(identity(), (key) => new Uint8Array(sign(null, bytes, key.privateKey))),
+      sign: (bytes) => Effect.map(identity(), (key) => key.sign(bytes)),
     })
   }),
 )
