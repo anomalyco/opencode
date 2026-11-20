@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from "electron"
+import { sameLoopbackServer } from "@opencode/app/loopback"
 import { builtins } from "@opencode/gui-plugins/main"
 import {
   pluginIdAvailable,
@@ -329,7 +330,8 @@ export function createHost(input: {
       id,
       url: endpoint.url,
       headers: authorization ? { authorization } : {},
-      sameMachine: !!sidecar && URL.canParse(endpoint.url) && new URL(endpoint.url).origin === sidecar.url,
+      // The window's rule for a local server, so the pane offers extensions exactly where pages share the profile.
+      sameMachine: sameLoopbackServer(endpoint.url, sidecar?.url),
       password: endpoint.password,
     }
   }

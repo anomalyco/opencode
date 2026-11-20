@@ -1,6 +1,20 @@
 import { expect, test } from "bun:test"
-import { addressParts, resolveAddress } from "./address"
+import { addressParts, externalAction, externalPage, pageHandoff, resolveAddress } from "./address"
 import { remember, suggest } from "./history"
+import { normalizeURL, refusal } from "./policy"
+
+test("typed file paths never become a host or a search query, regardless of the desktop OS", () => {
+  const policy = { fileRoots: ["/work/repo"], home: "/work" }
+
+  for (const input of ["C:\\Users\\fixture\\x", "C:/Users/fixture/x", "\\\\server\\share\\x", "/other/x", "~/other/x", "../other/x", "file:/other/x"])
+    expect(refusal(resolveAddress(input), policy)).toBe("browser.address.workspace")
+
+  for (const input of ["./index.html", "~/repo/index.html", "/work/repo/index.html", "file:/work/repo/index.html"])
+    expect(normalizeURL(resolveAddress(input), policy)).toBe("file:///work/repo/index.html")
+
+  for (const [input, destination] of [["localhost:3000", "http://localhost:3000"], ["example.com/path", "https://example.com/path"], ["c.com", "https://c.com"], ["//example.com", "https://example.com"], ["find cats/dogs", "https://www.google.com/search?q=find%20cats%2Fdogs"]])
+    expect(normalizeURL(resolveAddress(input), policy)).toBe(destination)
+})
 
 test("the address field navigates to what reads as an address and searches for anything else", () => {
   const search = (query: string) => `https://www.google.com/search?q=${encodeURIComponent(query)}`
@@ -103,4 +117,46 @@ test("history keeps one newest-first visit per URL and suggests addresses that c
       visits,
     ),
   ).toHaveLength(30)
+})
+
+test("a local preview may be revealed by tab ID but never launched by URL", () => {
+  for (const suffix of ["html", "exe", "bat", "cmd", "lnk", "ps1", "app"]) {
+    expect(externalAction(`file:///repo/test.${suffix}`, true)).toBe("reveal")
+    expect(externalAction(`file:///repo/test.${suffix}`, false)).toBeUndefined()
+  }
+
+  expect(externalAction("https://example.org", false)).toBe("browser")
+  expect(externalAction("oc-preview://other/repo/x", true)).toBeUndefined()
+})
+
+test("only a main-reported HTTP(S) failure can be handed off without a matching committed document", () => {
+  const web = "https://localhost:4000/"
+  const file = "file:///work/report.html"
+  const preview = "oc-preview://grant/work/report.html"
+  expect(pageHandoff("chrome-error://chromewebdata/", "about:blank", web, true, true)).toEqual({ kind: "web", url: web })
+  expect(pageHandoff(web, web, "https://other.invalid/", false, true)).toBeUndefined()
+  expect(pageHandoff(preview, file, file, true, true)).toBeUndefined()
+  expect(pageHandoff(preview, file, file, false, true)).toEqual({ kind: "preview", url: file })
+  expect(pageHandoff(file, file, file, false, true)).toBeUndefined()
+})
+
+test.each([
+  ["https://example.org/page", false, true],
+  ["http://localhost:4000", true, true],
+  ["http://localhost:4000", false, false],
+  ["http://localhost.:4000", false, false],
+  ["http://foo.localhost.:4000", false, false],
+  ["http://0.0.0.0:4000", false, false],
+  ["http://[::]:4000", false, false],
+  ["http://[::ffff:127.0.0.1]:4000", false, false],
+  ["http://[::ffff:126.0.0.1]:4000", false, true],
+  ["file:///work/report.HTM#view", true, true],
+  ["file:///work/report.html.exe", true, false],
+  ["file:///work/report.html", false, false],
+  ["workspace://session/report.html", true, false],
+  ["artifact://item/report.html", true, false],
+  ["oc-preview://unknown/report.html", true, false],
+  ["mailto:hello@example.org", true, false],
+] as const)("the current page %s on this machine %s offers a hand-off: %s", (url, local, open) => {
+  expect(externalPage(url, local)).toBe(open)
 })

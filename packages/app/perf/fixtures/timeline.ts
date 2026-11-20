@@ -76,6 +76,8 @@ type TimelineOptions = {
   tools?: SessionMessageAssistant["content"]
   /** Events arrive from a real SSE endpoint (`source`); otherwise the mock's own stream stays idle. */
   stream?: boolean
+  /** Called each time a prompt request reaches the server. */
+  onPrompt?: () => void
 }
 
 /**
@@ -130,6 +132,7 @@ export async function mockTimelineSession(page: Page, options: TimelineOptions) 
     vcsDiff: options.vcsDiff,
     sessionStatus: options.busy ? { [sessionID]: { type: "busy" } } : undefined,
     pageMessages: () => ({ items: messages }),
+    onPrompt: options.onPrompt,
   })
   await page.addInitScript((general) => localStorage.setItem("settings.v3", JSON.stringify({ general })), {
     editToolPartsExpanded: true,

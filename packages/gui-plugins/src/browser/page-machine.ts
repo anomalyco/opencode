@@ -8,6 +8,8 @@ type Document = {
   /** Bumped when a navigation replaces the document; refs and operations from an older one are stale. */
   readonly generation: number
   readonly url: string
+  /** An unissued user navigation. Shown and saved, but never used as the committed document's identity. */
+  readonly retry?: string
   /**
    * Chromium names a document after its URL until its <title> parses. A navigation on the same site keeps the shown
    * title until the new document names itself or stops loading, so a page that reloads or redirects to itself does
@@ -43,6 +45,7 @@ export type DocumentState =
   | { readonly status: "closed" }
 
 export type DocumentEvent =
+  | { readonly type: "navigation.held-stopped"; readonly address?: string }
   | { readonly type: "loading.started" }
   | { readonly type: "loading.stopped"; readonly title: string }
   | {
@@ -56,7 +59,6 @@ export type DocumentEvent =
       readonly type: "navigation.committed"
       readonly url: string
       readonly status: number
-      readonly statusText: string
       readonly title: string
     }
   | {
@@ -64,6 +66,7 @@ export type DocumentEvent =
       readonly code: number
       readonly description: string
       readonly url: string
+      readonly preview?: string
       readonly isMainFrame: boolean
     }
   | { readonly type: "navigation.in-page"; readonly url: string; readonly title: string; readonly isMainFrame: boolean }
@@ -125,6 +128,8 @@ export function transitionDocument(state: DocumentState, event: DocumentEvent): 
   if (state.status === "closed") return unchanged(state)
 
   switch (event.type) {
+    case "navigation.held-stopped":
+      return settle(state, { ...state, retry: state.status === "loaded" ? undefined : event.address, busy: false, pending: undefined }, [PUBLISH])
     case "disposed":
       return { state: CLOSED, effects: [] }
     case "loading.started":
@@ -134,7 +139,7 @@ export function transitionDocument(state: DocumentState, event: DocumentEvent): 
     case "navigation.started":
       if (!event.isMainFrame || event.isSameDocument) return unchanged(state)
 
-      return settle(state, { ...state, pending: event.url }, [CLEAR, PUBLISH])
+      return settle(state, { ...state, retry: undefined, pending: event.url }, [CLEAR, PUBLISH])
     case "navigation.committed":
       return committed(state, event)
     case "navigation.failed":
@@ -177,9 +182,25 @@ export function documentGeneration(state: DocumentState) {
   return state.status === "closed" ? 0 : state.generation
 }
 
+/** Whether a main-frame navigation started that has not committed, failed, or stopped. */
+export function isNavigationPending(state: DocumentState) {
+  return state.status !== "closed" && state.pending !== undefined
+}
+
+/** A requested redraw can answer only for its original document and route, not a pending or replaced document. */
+export function frameStillCurrent(before: DocumentState, after: DocumentState) {
+  return before.status !== "closed" && before.status !== "restoring" && before.status === after.status && before.pending === undefined &&
+    after.pending === undefined && before.generation === after.generation && before.url === after.url
+}
+
 /** Whether the native surface holds a document worth exposing over the themed background. */
 export function documentVisible(state: DocumentState) {
   return state.status === "loaded" && state.revealed
+}
+
+/** The address bar offers another load, not a site whose storage can be inspected or cleared. */
+export function retryOnly(state: DocumentState) {
+  return state.status !== "closed" && state.status !== "loaded" && !!state.retry
 }
 
 export function documentIcon(state: DocumentState) {
@@ -198,6 +219,7 @@ export function isDocumentLoading(state: DocumentState) {
 export function documentTab(
   state: DocumentState,
   history: { readonly id: Browser.TabID; readonly canGoBack: boolean; readonly canGoForward: boolean },
+  display = true,
 ): Browser.Tab {
   if (state.status === "closed") return { ...history, url: "", title: "", loading: false, generation: 0 }
 
@@ -205,7 +227,7 @@ export function documentTab(
 
   const tab = {
     id: history.id,
-    url: state.url.slice(0, 16_384),
+    url: ((display && state.retry) || state.url).slice(0, 16_384),
     title: state.title.slice(0, 2_048),
     loading,
     canGoBack: history.canGoBack,
@@ -214,7 +236,7 @@ export function documentTab(
   }
 
   // A reload of a failed page shows its progress, and the error again if it stops without a document.
-  return state.status === "failed" && !loading ? { ...tab, loadError: state.message } : tab
+  return state.status === "failed" && !loading && !state.retry ? { ...tab, loadError: state.message } : tab
 }
 
 function committed(state: Open, event: Extract<DocumentEvent, { type: "navigation.committed" }>): DocumentTransition {
@@ -240,7 +262,7 @@ function committed(state: Open, event: Extract<DocumentEvent, { type: "navigatio
       : // The server-network proxy answers an unreachable HTTP target with an empty 502. Other error statuses are
         // real documents from the user's server and stay visible.
         event.status === 502
-        ? { ...document, status: "failed", message: `${event.status} ${event.statusText}`.trim().slice(0, 2_048) }
+        ? { ...document, status: "failed", message: String(event.status) }
         : { ...document, status: "loaded", revealed: documentVisible(state) }
 
   return settle(state, next, [RESET, PUBLISH, DETAIL])
@@ -253,12 +275,17 @@ function failed(state: Open, event: Extract<DocumentEvent, { type: "navigation.f
   // A failure with a navigation in flight commits an error page in place of the document. One without, after the
   // document committed, fails that document, which keeps its generation.
   const replaced = state.pending !== undefined || state.status === "restoring"
+  // A failed preview never supplied a validated file. The error document has no external destination.
+  const local = /^(?:oc-preview|file):/i.test(event.url)
+  // A previous commit (or stored restore) is evidence; navigation.started alone is not. In particular never
+  // promote a failed virtual History API entry or a raw file: URL to an address the OS could reveal.
+  const retained = local && event.preview === state.url
 
   const next: Open = {
     status: "failed",
     generation: replaced && state.status !== "restoring" ? state.generation + 1 : state.generation,
-    url: event.url,
-    title: state.title,
+    url: retained ? state.url : local ? "about:blank" : event.url,
+    title: local && !retained ? "" : state.title,
     origin: state.origin,
     icon: state.icon,
     iconAttempt: state.iconAttempt,
@@ -290,7 +317,9 @@ function settle(previous: Open, next: Open, effects: readonly DocumentEffect[]):
   const shown: readonly DocumentEffect[] = visible === documentVisible(previous) ? [] : [{ type: "show", visible }]
   const publish = isDocumentLoading(next) !== isDocumentLoading(previous) && !effects.includes(PUBLISH)
 
-  return { state: next, effects: [...shown, ...effects, ...(publish ? [PUBLISH] : [])] }
+  const siteChanged = retryOnly(previous) !== retryOnly(next) && !effects.includes(DETAIL)
+
+  return { state: next, effects: [...shown, ...(siteChanged ? [DETAIL] : []), ...effects, ...(publish ? [PUBLISH] : [])] }
 }
 
 function unchanged(state: DocumentState): DocumentTransition {

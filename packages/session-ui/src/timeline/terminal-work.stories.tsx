@@ -225,7 +225,7 @@ export const ExecuteFailed = {
           },
           {
             output:
-              "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths and file:// URLs are not browser URLs; use browser.preview to show a local file to the user. The connected server must be able to reach the address; localhost refers to that server.",
+              "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths and file:// URLs are not browser URLs; use browser.tabs.open({ path }) to show a local file to the user. The connected server must be able to reach the address; localhost refers to that server.",
             metadata: {
               error: true,
               toolCalls: [
@@ -262,7 +262,7 @@ export const ExecuteFailed = {
           },
           {
             output:
-              "[browser.operation_failed] browser.screenshot failed. Screenshot needs a visible tab. Call browser.tabs.focus and keep its desktop window visible.",
+              "[browser.operation_failed] browser.screenshot failed. A full-page screenshot needs this tab on screen in the Review pane, and it is not shown now. Omit fullPage to capture the viewport, which works while the tab is hidden, and scroll to capture the rest.",
             metadata: {
               error: true,
               toolCalls: [

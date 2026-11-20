@@ -23,6 +23,7 @@ import { DesktopCli } from "./service/desktop-cli"
 import { setStorageSnapshotObserver } from "./storage/snapshot"
 import { getLastFocusedWindow } from "./windows"
 import { isRendererUrl } from "./windows/scheme"
+import { receivesPluginPort } from "./windows/security"
 
 const services = Layer.mergeAll(DesktopFiles.layer, Plugins.layer)
 
@@ -68,8 +69,9 @@ export const registerIpcHandlers = Effect.gen(function* () {
       win.webContents.send(DragCancelEvent)
     })
 
+    // The check on each call (`caller` in ipc-handlers/plugins.ts) then names the window this document belongs to.
     const post = () => {
-      if (win.isDestroyed() || win.webContents.isDestroyed()) return
+      if (!receivesPluginPort(win)) return
       const channel = new MessageChannelMain()
       handoff.bind(win.webContents, channel.port1)
       win.webContents.postMessage(IpcTransportPort, null, [channel.port2])

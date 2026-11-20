@@ -112,6 +112,16 @@
     color: var(--v2-text-text-base);
   }
 
+  /* Drop path text first. If the authority itself is too long, keep its right edge, not the page-chosen prefix. */
+  [data-slot="browser-address-url"][data-web] {
+    display: flex;
+    width: 100%;
+    [data-slot="browser-address-authority"] { display: flex; flex: none; max-width: 100%; }
+    [data-slot="browser-address-muted"] { flex: none; }
+    [data-slot="browser-address-host"] { direction: rtl; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    [data-slot="browser-address-rest"] { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  }
+
   /* The page's zoom when it is not 100%, drawn like the zoom badge in the browser options. */
   [data-slot="browser-address-zoom"] {
     flex: none;
@@ -501,11 +511,34 @@
     border-radius: 4px;
   }
 
-  /* Centers the icon on the first line of the row's text. */
+  /* The row that leads to "Site settings": a button drawn as a row. */
+  button[data-slot="browser-site-row"] {
+    width: 100%;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    cursor: default;
+
+    &:hover {
+      background: var(--v2-overlay-simple-overlay-hover);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-border-border-focus);
+      outline-offset: -1px;
+    }
+  }
+
+  /* The icon column: centers the icon on the first line of the row's text. A control wider than the column, such as
+     the back button, is centered on it too, so its glyph stays in the column. */
   [data-slot="browser-site-icon"] {
     display: flex;
     flex: none;
     align-items: center;
+    justify-content: center;
+    width: 16px;
     height: 20px;
     color: var(--v2-icon-icon-muted);
   }
