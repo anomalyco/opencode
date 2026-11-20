@@ -92,6 +92,12 @@ it.live("manages a session whose directory was deleted", () =>
     const session = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
       yield* Effect.promise(() => created.json()),
     ).data
+    // Seed the shape a pin takes in session metadata, so the update after the
+    // deletion drops a key instead of writing the record it already holds.
+    const seeded = yield* request(`/api/session/${session.id}`, "PATCH", {
+      metadata: { pinned: { at: 1 }, note: "keep" },
+    })
+    expect(seeded.status).toBe(204)
     yield* Effect.promise(() => fs.rm(directory, { recursive: true }))
 
     const statuses = [
@@ -99,8 +105,10 @@ it.live("manages a session whose directory was deleted", () =>
       yield* request(`/api/session/${session.id}`, "PATCH", { archived: true }),
       yield* request(`/api/session/${session.id}/interrupt`, "POST"),
       yield* request(`/api/experimental/session/${session.id}/instructions/entries`, "GET"),
+      // Dropping a metadata key, the way a client unpins a session.
+      yield* request(`/api/session/${session.id}`, "PATCH", { metadata: { note: "keep" } }),
     ].map((response) => response.status)
-    expect(statuses).toEqual([204, 204, 200, 200])
+    expect(statuses).toEqual([204, 204, 200, 200, 204])
 
     const fetched = yield* request(`/api/session/${session.id}`, "GET")
     const updated = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
@@ -108,6 +116,7 @@ it.live("manages a session whose directory was deleted", () =>
     ).data
     expect(updated.title).toBe("Renamed")
     expect(updated.time.archived).toBeDefined()
+    expect(updated.metadata).toEqual({ note: "keep" })
 
     // Title generation still runs in the session's folder.
     const generated = yield* request(`/api/session/${session.id}`, "PATCH", { title: "" })
