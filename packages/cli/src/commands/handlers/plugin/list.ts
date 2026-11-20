@@ -1,4 +1,5 @@
 import { EOL } from "node:os"
+import { existsSync, statSync } from "node:fs"
 import path from "node:path"
 import { Effect } from "effect"
 import { OpenCode, type PluginInfo } from "@opencode/client"
@@ -12,6 +13,12 @@ import { Npm } from "@opencode/util/npm"
 import { Host } from "@opencode/plugin/host"
 import { fileURLToPath } from "node:url"
 import { discoverPluginTargets, localPluginDirectories, localSource } from "@opencode/tui/plugin/discovery"
+
+/** The id of a plugin that has no server-side registry entry: its package name, or its directory name. */
+function tuiPluginID(target: string) {
+  if (existsSync(target) && statSync(target).isDirectory()) return Host.packageID({ directory: target })
+  return target
+}
 
 export default Runtime.handler(
   Commands.commands.plugin.commands.list,
@@ -84,7 +91,7 @@ export function format(
         ),
     )
     .filter((plugin, index, all) => all.findIndex((candidate) => candidate.target === plugin.target) === index)
-    .map((plugin) => ({ id: "-", version: plugin.version ?? "-", target: plugin.target }))
+    .map((plugin) => ({ id: tuiPluginID(plugin.target), version: plugin.version ?? "-", target: plugin.target }))
   const rows = [...server, ...targets]
     .toSorted((a, b) => a.id.localeCompare(b.id) || a.target.localeCompare(b.target))
     .map((item) => [
