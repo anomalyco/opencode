@@ -631,13 +631,23 @@ export const make = Effect.fnUntraced(function* (
    * by anyone's request, never on the agent's own judgement. Their words go with it as confirmation, and Console records
    * who asked; its history stays, so anyone can restore it.
    */
-  const forget = (sessionID: Session.ID, entry: OpencodeMemoryPolicy.Given, quote: string, reason: string) =>
+  const forget = (
+    sessionID: Session.ID,
+    entry: OpencodeMemoryPolicy.Given,
+    quote: string,
+    reason: string,
+    supersededBy?: string,
+  ) =>
     Effect.gen(function* () {
+      const fields = yield* shared("retire", {
+        reason: reason.slice(0, 500).trim() || "The user asked to forget it",
+        ...(supersededBy === undefined ? {} : { supersededBy }),
+        evidence: [{ kind: "confirmation", ref: quote.slice(0, 500).trim() }],
+      })
       const expectedRevision = based(sessionID, entry.id, entry.revision)
       const written = yield* call(Written, "POST", `/api/memory/entries/${encodeURIComponent(entry.id)}/retire`, {
         expectedRevision,
-        reason: reason.slice(0, 500).trim() || "The user asked to forget it",
-        evidence: [{ kind: "confirmation", ref: quote.slice(0, 500).trim() }],
+        ...fields,
         source: { ...(yield* checkout), sessionID },
       })
       wrote(sessionID, entry.id, expectedRevision, written)
@@ -1677,6 +1687,9 @@ export const make = Effect.fnUntraced(function* (
           id: Schema.String,
           revision: Schema.Int,
           reason: Schema.String.annotate({ description: "Why the user wants it forgotten, in one sentence" }),
+          supersededBy: Schema.optional(
+            Schema.String.annotate({ description: "The id of the entry that replaces it" }),
+          ),
         }),
         output: Written,
         options: { namespace, codemode: true, pinned: true },
@@ -1690,9 +1703,9 @@ export const make = Effect.fnUntraced(function* (
                 content: `${done.id} is already retired (r${done.revision}), as the user asked.`,
               }
             const entry = state.given.get(input.id)
-            if (entry === undefined)
+            if (entry === undefined || !state.shown.get(input.id)?.has(input.revision))
               return yield* new ToolFailure({
-                message: `Nothing was sent: call ${namespace}.read with id "${input.id}" first, so what the user asked can be checked against it.`,
+                message: `Nothing was sent: retire acts on the whole of ${input.id}, so it starts from text you were shown, and this session hasn't been shown r${input.revision} whole${state.compactions > 0 ? " since the conversation was compacted" : ""}. Call ${namespace}.read with id "${input.id}", then call ${namespace}.retire again with the revision it shows.`,
               })
             // The newest of the user's own messages that asks to forget it; none, and it stays live.
             const asked = yield* Effect.forEach(state.said.toReversed(), (message) =>
@@ -1710,6 +1723,7 @@ export const make = Effect.fnUntraced(function* (
               { ...entry, revision: input.revision },
               request.message,
               input.reason,
+              input.supersededBy,
             )
             return {
               output: written,

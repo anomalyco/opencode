@@ -2428,7 +2428,7 @@ describe("OpencodePlugin memory forgetting", () => {
             .execute({ id: "mem_1", revision: 1, reason: "Outdated" }, context(session.id))
             .pipe(Effect.flip)
           expect(unread.message).toBe(
-            'Nothing was sent: call memory.read with id "mem_1" first, so what the user asked can be checked against it.',
+            'Nothing was sent: retire acts on the whole of mem_1, so it starts from text you were shown, and this session hasn\'t been shown r1 whole. Call memory.read with id "mem_1", then call memory.retire again with the revision it shows.',
           )
           yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
 
@@ -2450,8 +2450,21 @@ describe("OpencodePlugin memory forgetting", () => {
           yield* prompt(other.id, "Then run the tests")
           yield* judged(other.id)
           yield* (yield* memoryTool("read")).execute({ id: "mem_2" }, context(other.id))
+          // It starts from the revision the session was shown, not another one.
+          const stale = yield* retire
+            .execute({ id: "mem_2", revision: 5, reason: "Builds use Node 24 now" }, context(other.id))
+            .pipe(Effect.flip)
+          expect(stale.message).toStartWith(
+            "Nothing was sent: retire acts on the whole of mem_2, so it starts from text you were shown, and this session hasn't been shown r5 whole.",
+          )
+          // A reason holding a secret isn't sent, as for any write.
+          const leaky = yield* retire
+            .execute({ id: "mem_2", revision: 1, reason: "Token AKIAABCDEFGHIJKLMNOP is gone" }, context(other.id))
+            .pipe(Effect.flip)
+          expect(leaky.message).toStartWith("Nothing was sent: reason holds an AWS access key")
+          expect(retires(console)).toEqual([])
           const done = yield* retire.execute(
-            { id: "mem_2", revision: 1, reason: "Builds use Node 24 now" },
+            { id: "mem_2", revision: 1, reason: "Builds use Node 24 now", supersededBy: "mem_9" },
             context(other.id),
           )
           expect(done.content).toBe("mem_2 is retired (r2), as the user asked; it's no longer searched or injected.")
@@ -2459,6 +2472,7 @@ describe("OpencodePlugin memory forgetting", () => {
             {
               expectedRevision: 1,
               reason: "Builds use Node 24 now",
+              supersededBy: "mem_9",
               evidence: [{ kind: "confirmation", ref: words }],
               source: { sessionID: other.id },
             },
