@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  correctFlyoutPosition,
   createDialogFlyoutState,
   createModelDrawerState,
   FLYOUT_KEYBOARD_DELAY_MS,
@@ -10,6 +11,7 @@ import {
   selectFlyoutMenu,
   selectFlyoutMenuKeys,
   selectFlyoutOpenId,
+  selectFlyoutPlacement,
   transitionDialogFlyout,
   transitionModelDrawer,
   type DialogFlyoutEvent,
@@ -363,6 +365,106 @@ describe("model dialog flyout", () => {
     expect(inside({ x: 250, y: 150 }, apex, flyoutRect)).toBe(true)
     expect(inside({ x: 250, y: 90 }, apex, flyoutRect)).toBe(false)
     expect(inside({ x: 250, y: 150 }, apex, undefined)).toBe(false)
+  })
+
+  test("placed ignores sub-pixel rounding residuals from fractional zoom while applying real moves", () => {
+    const open = keyboardOpened("a")
+    const attempt = open.status === "open" ? open.attempt : -1
+
+    // Chromium device-pixel quantization at 110% / 125% / 90% zoom can leave a ~0.09–0.45px residual.
+    expect(
+      transitionDialogFlyout(open, {
+        type: "placed",
+        attempt,
+        position: { left: position.left + 0.0909, top: position.top - 0.0909 },
+      }).state,
+    ).toBe(open)
+    expect(
+      transitionDialogFlyout(open, {
+        type: "placed",
+        attempt,
+        position: { left: position.left - 0.45, top: position.top + 0.45 },
+      }).state,
+    ).toBe(open)
+
+    const moved = transitionDialogFlyout(open, {
+      type: "placed",
+      attempt,
+      position: { left: position.left, top: position.top + 1 },
+    })
+
+    expect(moved.state).not.toBe(open)
+    expect(moved.state).toMatchObject({ status: "open", position: { left: position.left, top: position.top + 1 } })
+  })
+
+  test("selectFlyoutPlacement stays stable across position and menu updates and changes per open attempt", () => {
+    const open = keyboardOpened("a")
+    const first = selectFlyoutPlacement(open)
+    expect(first).toEqual({ attempt: 1, id: "a" })
+
+    const refined = transitionDialogFlyout(open, {
+      type: "placed",
+      attempt: 1,
+      position: { left: position.left + 20, top: position.top + 20 },
+    }).state
+
+    expect(selectFlyoutPlacement(refined)).toEqual(first)
+
+    const menuHighlighted = transitionDialogFlyout(refined, {
+      type: "menu.highlighted",
+      index: 1,
+      input: "pointer",
+    }).state
+
+    expect(selectFlyoutPlacement(menuHighlighted)).toEqual(first)
+
+    const switched = flyoutReplay(menuHighlighted, [
+      { type: "keyboard", id: "a", repeat: false },
+      { type: "highlighted", id: "b" },
+    ]).state
+
+    expect(selectFlyoutPlacement(switched)).toEqual({ attempt: 2, id: "b" })
+  })
+
+  test("correctFlyoutPosition ignores sub-pixel zoom residuals and accounts for containing blocks and CSS zoom", () => {
+    const target = { left: 742.3636, top: 215.4545 }
+
+    // 110% browser zoom device-pixel quantization (~0.09px) leaves the viewport target untouched.
+    expect(
+      correctFlyoutPosition(
+        target,
+        { left: 742.4545, top: 215.3636, width: 160.0909 },
+        { left: 742.3636, top: 215.4545, width: 160 },
+      ),
+    ).toBe(target)
+
+    // Contained dialog preview (e.g. contain: layout at left 240, top 48) subtracts the container origin.
+    expect(
+      correctFlyoutPosition(
+        { left: 740, top: 248 },
+        { left: 980, top: 296, width: 160 },
+        { left: 740, top: 248, width: 160 },
+      ),
+    ).toEqual({ left: 500, top: 200 })
+
+    // CSS zoom (e.g. document.documentElement.style.zoom = 1.1) maps viewport coordinates into zoomed CSS px.
+    const zoomed = correctFlyoutPosition(
+      { left: 1084, top: 220 },
+      { left: 1192.4, top: 242, width: 176 },
+      { left: 1084, top: 220, width: 160 },
+    )
+
+    expect(zoomed.left).toBeCloseTo(1084 / 1.1, 4)
+    expect(zoomed.top).toBeCloseTo(220 / 1.1, 4)
+
+    // Unset inline styles (NaN) fall back cleanly without producing NaN coordinates.
+    expect(
+      correctFlyoutPosition(
+        target,
+        { left: 742, top: 215, width: 160 },
+        { left: Number.NaN, top: Number.NaN, width: 160 },
+      ),
+    ).toBe(target)
   })
 })
 

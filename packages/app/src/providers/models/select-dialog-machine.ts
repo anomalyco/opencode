@@ -16,6 +16,12 @@ export const FLYOUT_WIDTH_PX = 160
 
 export const FLYOUT_GAP_PX = 6
 
+/**
+ * Tolerance for sub-pixel rounding residuals (e.g. Chromium device-pixel quantization under fractional browser zoom)
+ * when comparing or offsetting fixed-position coordinates.
+ */
+export const FLYOUT_POSITION_EPSILON_PX = 0.5
+
 export type FlyoutPoint = { readonly x: number; readonly y: number }
 
 export type FlyoutPosition = { readonly left: number; readonly top: number }
@@ -267,7 +273,7 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
       if (!event.position)
         return { state: { status: "closed", attempt, input: state.input, warm: false }, effects: NO_EFFECTS }
 
-      if (state.position?.left === event.position.left && state.position.top === event.position.top) return same(state)
+      if (state.position && sameFlyoutPosition(state.position, event.position)) return same(state)
 
       return same({ ...state, position: event.position })
     case "open.due":
@@ -545,6 +551,39 @@ export function selectFlyoutPosition(state: DialogFlyoutState) {
   if (state.status !== "open" && state.status !== "aiming") return undefined
 
   return state.position
+}
+
+/** The open placement attempt whose rendered flyout needs post-render measurement, independent of its coordinates. */
+export function selectFlyoutPlacement(state: DialogFlyoutState) {
+  if (state.status !== "open" || !state.position) return undefined
+
+  return { attempt: state.attempt, id: state.id }
+}
+
+function sameFlyoutPosition(a: FlyoutPosition, b: FlyoutPosition) {
+  return Math.abs(a.left - b.left) < FLYOUT_POSITION_EPSILON_PX && Math.abs(a.top - b.top) < FLYOUT_POSITION_EPSILON_PX
+}
+
+/**
+ * A fixed element is placed against the viewport unless an ancestor contains it, as a component preview that holds
+ * its dialogs does, or CSS zoom scales it. Maps a viewport target into the flyout's style coordinates from where it
+ * landed, ignoring sub-pixel rounding residuals from fractional zoom.
+ */
+export function correctFlyoutPosition(
+  target: FlyoutPosition,
+  rendered: { readonly left: number; readonly top: number; readonly width: number },
+  styled: { readonly left: number; readonly top: number; readonly width: number },
+): FlyoutPosition {
+  const rawScale = styled.width > 0 ? rendered.width / styled.width : 1
+  const scale = Number.isFinite(rawScale) && Math.abs(rawScale - 1) >= 0.01 ? rawScale : 1
+  const rawX = rendered.left - styled.left * scale
+  const rawY = rendered.top - styled.top * scale
+  const x = Number.isFinite(rawX) && Math.abs(rawX) >= FLYOUT_POSITION_EPSILON_PX ? rawX : 0
+  const y = Number.isFinite(rawY) && Math.abs(rawY) >= FLYOUT_POSITION_EPSILON_PX ? rawY : 0
+
+  if (scale === 1 && !x && !y) return target
+
+  return { left: (target.left - x) / scale, top: (target.top - y) / scale }
 }
 
 /**
