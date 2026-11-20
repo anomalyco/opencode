@@ -400,6 +400,19 @@ describe("search tools", () => {
     }),
   )
 
+  it.live("keeps a root-anchored glob in the project when the same folder exists at the filesystem root", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => Bun.write(path.join(tmp.path, "bin/a.ts"), "needle\n"))
+      yield* withTools(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const anchored = yield* executeTool(registry, call("glob", { pattern: "/bin/*.ts" }))
+          expect(anchored.output).toEqual([{ path: path.normalize("bin/a.ts"), type: "file" }])
+        }),
+      )
+    }),
+  )
+
   it.live("globs through an in-location external symlink without external approval", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
