@@ -36,6 +36,8 @@ export interface AssertInput extends Omit<Request, "id" | "message"> {
   readonly agent?: Agent.ID
 }
 
+type CheckInput = Omit<AssertInput, "sessionID"> & { readonly sessionID?: SessionSchema.ID }
+
 /** The requester fields of a permission request made by a tool call. */
 export const invocation = (context: Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id">) => ({
   sessionID: context.sessionID,
@@ -124,6 +126,8 @@ export interface Interface {
   readonly assert: (input: AssertInput) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
   /** Fails only when the rules deny the request; never asks the user. */
   readonly assertNotDenied: (input: AssertInput) => Effect.Effect<void, BlockedError | SessionErrors.NotFoundError>
+  /** Uses the Location's default agent when there is no Session to own an ask. */
+  readonly assertNotDeniedWithoutSession: (input: Omit<AssertInput, "sessionID">) => Effect.Effect<void, BlockedError>
   /** True only when the rules already allow the request; never asks the user. */
   readonly allows: (input: AssertInput) => Effect.Effect<boolean, SessionErrors.NotFoundError>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
@@ -183,18 +187,18 @@ const layer = Layer.effect(
       )
     })
 
-    const configured = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, agentID?: Agent.ID) {
-      const session = yield* sessions.get(sessionID)
-      if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
-      const agent = yield* agents.resolve(agentID ?? session.agent)
-      return merge(agent?.permissions ?? missingAgentPermissions, session.permissions ?? [])
+    const configured = Effect.fnUntraced(function* (sessionID?: SessionSchema.ID, agentID?: Agent.ID) {
+      const session = sessionID === undefined ? undefined : yield* sessions.get(sessionID)
+      if (sessionID !== undefined && !session) return yield* new SessionErrors.NotFoundError({ sessionID })
+      const agent = yield* agents.resolve(agentID ?? session?.agent)
+      return merge(agent?.permissions ?? missingAgentPermissions, session?.permissions ?? [])
     })
 
     function denied(input: Pick<Request, "action" | "resources">, rules: Permission.Ruleset) {
       return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
     }
 
-    function relevant(input: AssertInput, rules: Permission.Ruleset) {
+    function relevant(input: CheckInput, rules: Permission.Ruleset) {
       return rules.filter((rule) => Wildcard.match(input.action, rule.action))
     }
 
@@ -209,22 +213,26 @@ const layer = Layer.effect(
       return parent ? { ...source, id: parent } : source
     }
 
-    const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
+    const evaluateInput = Effect.fnUntraced(function* (input: CheckInput) {
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
-      const event = yield* hooks.trigger("permission", "evaluate", {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        action: input.action,
-        resources: input.resources,
-        metadata: input.metadata,
-        source: row(input.source),
-        effect,
-      })
-      const unattended = yield* Unattended
+      // A session-less caller has the default agent's rules but no Session for a hook or an interactive ask.
+      const event =
+        input.sessionID === undefined
+          ? { effect, message: undefined }
+          : yield* hooks.trigger("permission", "evaluate", {
+              sessionID: input.sessionID,
+              agent: input.agent,
+              action: input.action,
+              resources: input.resources,
+              metadata: input.metadata,
+              source: row(input.source),
+              effect,
+            })
+      const unattended = (yield* Unattended) ?? (input.sessionID === undefined ? [] : undefined)
       if (event.effect !== "ask" || unattended === undefined)
         return { effect: event.effect, message: event.message, rules: all }
       const settled = [...all, ...unattended]
@@ -315,7 +323,7 @@ const layer = Layer.effect(
       }),
     )
 
-    const assertNotDenied = Effect.fn("Permission.assertNotDenied")(function* (input: AssertInput) {
+    const assertNotDenied = Effect.fn("Permission.assertNotDenied")(function* (input: CheckInput) {
       const result = yield* evaluateInput(input)
       if (result.effect !== "deny") return
       return yield* new BlockedError({
@@ -406,7 +414,20 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
-    return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, nested, close })
+    return Service.of({
+      ask,
+      assert,
+      assertNotDenied,
+      assertNotDeniedWithoutSession: (input) =>
+        assertNotDenied({ ...input, sessionID: undefined }).pipe(Effect.catchTag("Session.NotFoundError", Effect.die)),
+      allows,
+      reply,
+      get,
+      forSession,
+      list,
+      nested,
+      close,
+    })
   }),
 )
 

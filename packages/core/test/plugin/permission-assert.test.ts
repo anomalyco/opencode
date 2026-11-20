@@ -27,6 +27,7 @@ const permission = Layer.succeed(
       return Effect.void
     },
     assertNotDenied: () => Effect.void,
+    assertNotDeniedWithoutSession: () => Effect.void,
     allows: () => Effect.succeed(false),
     reply: () => Effect.void,
     get: () => Effect.succeed(undefined),

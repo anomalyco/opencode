@@ -89,7 +89,7 @@ export const Plugin = {
         editor.add({
           name: "create",
           description:
-            "Create an automation that runs a prompt or a Code Mode script once at a set time, on an interval, on a cron, or when an MCP server sends an event.",
+            "Create an automation that runs a prompt, a Code Mode script, or a shell command once at a set time, on an interval, on a cron, or when an MCP server sends an event.",
           input: Automation.Request,
           output: View,
           options: { namespace: "automation", codemode: true },
@@ -198,14 +198,16 @@ function summary(view: View) {
   const action =
     view.action.type === "prompt"
       ? `prompt ${view.action.to.session ?? `subagent ${view.action.to.subagent}`}: ${JSON.stringify(clip(view.action.prompt))}`
-      : `code: ${JSON.stringify(
-          clip(
-            view.action.code
-              .split("\n")
-              .find((line) => line.trim() !== "")
-              ?.trim() ?? "",
-          ),
-        )}`
+      : view.action.type === "shell"
+        ? `shell: ${JSON.stringify(clip(view.action.command))}`
+        : `code: ${JSON.stringify(
+            clip(
+              view.action.code
+                .split("\n")
+                .find((line) => line.trim() !== "")
+                ?.trim() ?? "",
+            ),
+          )}`
   return [
     `${view.id} "${view.name}": ${trigger} (${view.tz})`,
     view.status,
