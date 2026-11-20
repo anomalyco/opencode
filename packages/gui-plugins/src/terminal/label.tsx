@@ -25,7 +25,7 @@ export function TerminalTabLabel(props: {
   return (
     <Menu.Context>
       <Menu.Context.Trigger as="div" class="relative flex min-w-0 items-center gap-1.5">
-        <Icon name="terminal" size="small" />
+        <Icon name="terminal" />
         <span
           class="max-w-40 truncate"
           data-slot="terminal-tab-title"

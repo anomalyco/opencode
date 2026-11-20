@@ -20,12 +20,17 @@ const TEXT_FIELD = [
 ].join(", ")
 
 export interface DialogProps extends ParentProps {
+  /**
+   * normal: 480px wide, for confirmations and small forms. large: 680×600, for palettes, pickers and lists.
+   * x-large: 880×680, for long documents and settings-like panels. Each clamps to the window.
+   */
   size?: "normal" | "large" | "x-large"
+  /** Height follows the content, up to the size's height. Large sizes grow down from a fixed top edge. */
+  fit?: boolean
   variant?: "default" | "settings"
   class?: ComponentProps<"div">["class"]
   containerClass?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
-  fit?: boolean
   onCloseAutoFocus?: ComponentProps<typeof Content>["onCloseAutoFocus"]
   preventBackdropDismiss?: boolean
 }
@@ -128,6 +133,7 @@ export function Dialog(props: DialogProps) {
       <div data-slot="dialog-container" class={local.containerClass}>
         <Content
           data-slot="dialog-content"
+          data-focus-scope
           onCloseAutoFocus={local.onCloseAutoFocus}
           onPointerDownOutside={(event) => {
             if (local.preventBackdropDismiss) event.preventDefault()

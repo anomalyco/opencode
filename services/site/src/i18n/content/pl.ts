@@ -306,9 +306,9 @@ export const content = {
       body: "Pozwól agentom korzystać z Twojej przeglądarki.",
       title: "OpenCode | Browse, Twoja prawdziwa przeglądarka dla agentów",
       description:
-        "Browse pozwala OpenCode i innym klientom MCP korzystać z Twojej prawdziwej przeglądarki. Agenci sterują kartami w tle przez Playwright i oddają Ci logowanie i 2FA.",
+        "Browse pozwala OpenCode i innym klientom MCP korzystać z Twojej prawdziwej przeglądarki. Agenci czytają, klikają, piszą, robią zrzuty, nagrywają karty i oddają Ci logowanie i 2FA.",
       intro:
-        "Serwer MCP i rozszerzenie Chromium, dzięki którym agenci korzystają z Twojej prawdziwej przeglądarki, z Twoimi kartami, logowaniami i rozszerzeniami. Otwierają karty i sterują nimi przez Playwright, robią zrzuty ekranu i nagrywają ekran w kartach w tle, zgrupowanych tak, by Ci nie przeszkadzały. Gdy przychodzi Twoja kolej, przy logowaniu, kodzie 2FA czy płatności, oddają Ci kartę i działają dalej, gdy klikniesz Continue.",
+        "Serwer MCP i rozszerzenie Chromium, dzięki którym agenci korzystają z Twojej prawdziwej przeglądarki, z Twoimi kartami, logowaniami i rozszerzeniami. Otwierają karty w tle, zgrupowane tak, by Ci nie przeszkadzały, i czytają strony, klikają, piszą, robią zrzuty ekranu i nagrywają karty. Gdy przychodzi Twoja kolej, przy logowaniu, kodzie 2FA czy płatności, oddają Ci kartę i działają dalej, gdy klikniesz Continue.",
       features: {
         "your-real-browser": {
           title: "Twoja przeglądarka",
@@ -328,7 +328,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Nagrania",
-          body: "Zrzuty ekranu, nagrania ekranu i ruch sieciowy jako HAR.",
+          body: "Zrzuty ekranu, nagrania kart i ruch sieciowy.",
         },
         "any-mcp-client": {
           title: "Każdy klient MCP",
@@ -338,9 +338,9 @@ export const content = {
           title: "Wszystkie twoje logowania",
           body: "Agenci korzystają ze stron, na których już jesteś zalogowany. Bez kluczy, bez konfiguracji.",
         },
-        allowlists: {
-          title: "Listy stron",
-          body: "Ogranicz karty sesji do wskazanych przez Ciebie stron.",
+        "allowed-sites": {
+          title: "Dozwolone strony",
+          body: "Trzymaj kartę agenta na wskazanych przez Ciebie stronach.",
         },
       },
       install:
@@ -508,7 +508,7 @@ export const content = {
     },
     colors: {
       title: "Kolory",
-      body: "Logo i logotyp używają jednego koloru w trzech stopniach krycia, z jaśniejszym kolorem na ciemne tła. Wartości poniżej to ten kolor na bieli lub #0B0B0B, tak jak pokazują go standardowe pliki. Kliknij wartość, aby ją skopiować.",
+      body: "Logo i logotyp używają jednego koloru w trzech stopniach krycia, z jaśniejszym kolorem na ciemne tła. Wartości poniżej to kolory użyte w standardowych plikach. Używaj ich wyłącznie w logo i logotypie, nie w innych tekstach ani tłach. Kliknij wartość, aby ją skopiować.",
       palettes: {
         light: {
           name: "Jasna",

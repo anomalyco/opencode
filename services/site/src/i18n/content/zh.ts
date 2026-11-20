@@ -149,9 +149,9 @@ export const content = {
       body: "让代理使用您真实的浏览器。",
       title: "OpenCode | Browse，为编程代理准备的真实浏览器",
       description:
-        "Browse 让 OpenCode 和其他 MCP 客户端使用您真实的浏览器。代理通过 Playwright 操作后台标签页，并把登录和双重验证交还给您。",
+        "Browse 让 OpenCode 和其他 MCP 客户端使用您真实的浏览器。代理会阅读页面、点击、输入、截图、录制标签页，并把登录和双重验证交还给您。",
       intro:
-        "一个 MCP 服务器加一个 Chromium 扩展，让您的代理使用真实的浏览器，包括您的标签页、登录状态和扩展。代理通过 Playwright 打开和操作标签页、截图和录屏，这些标签页都在后台分组，不会打扰您。轮到您操作时，比如登录、双重验证或付款，代理会把标签页交还给您，您点击“继续”后它再接着工作。",
+        "一个 MCP 服务器加一个 Chromium 扩展，让您的代理使用真实的浏览器，包括您的标签页、登录状态和扩展。代理在后台打开标签页，分组收好，不打扰您，并阅读页面、点击、输入、截图和录制标签页。轮到您操作时，比如登录、双重验证或付款，代理会把标签页交还给您，您点击“继续”后它再接着工作。",
       features: {
         "your-real-browser": {
           title: "真实的浏览器",
@@ -160,7 +160,7 @@ export const content = {
         "out-of-your-way": { title: "不打扰您", body: "代理的标签页在后台打开，并收进折叠的分组中。" },
         handoffs: { title: "交接", body: "自己完成登录或双重验证，然后点击“继续”。" },
         "lend-a-tab": { title: "借出标签页", body: "点击工具栏按钮，把已打开的标签页交给代理。" },
-        "record-and-capture": { title: "录制和捕获", body: "截图、录屏，以及 HAR 格式的网络流量。" },
+        "record-and-capture": { title: "录制和捕获", body: "截图、标签页录制和网络流量。" },
         "any-mcp-client": {
           title: "任意 MCP 客户端",
           body: "OpenCode、Claude Code、Cursor、Codex、Zed 等众多客户端。",
@@ -169,7 +169,7 @@ export const content = {
           title: "沿用你的所有登录",
           body: "智能体直接使用你已登录的网站。无需密钥，无需设置。",
         },
-        allowlists: { title: "允许列表", body: "将会话的标签页限制在您指定的网站内。" },
+        "allowed-sites": { title: "允许的网站", body: "让代理的标签页只停留在您指定的网站。" },
       },
       install:
         "请先安装 [Chrome 扩展]，它会引导你完成其余步骤。如需直接安装 CLI（通常不需要），可使用以下任一命令。",
@@ -246,7 +246,7 @@ export const content = {
     },
     colors: {
       title: "颜色",
-      body: "Logo 和文字标识使用同一种墨色的三种不透明度，深色背景则使用更浅的墨色。下方数值是该墨色叠加在白色或 #0B0B0B 上的效果，与标准文件一致。点击数值即可复制。",
+      body: "Logo 和文字标识使用同一种墨色的三种不透明度，深色背景则使用更浅的墨色。下方数值是标准文件中的颜色。它们仅用于 Logo 和文字标识，请勿用于其他文本或背景。点击数值即可复制。",
       palettes: {
         light: {
           name: "浅色",

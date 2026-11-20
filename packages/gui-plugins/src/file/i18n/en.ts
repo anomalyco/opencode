@@ -1,4 +1,5 @@
 export default {
+  "tab.activity": "Agent activity",
   "tree.all": "All files",
   "tab.notFound": "File not found: {{name}}",
   "load.failed": "Failed to load file",
@@ -53,4 +54,6 @@ export default {
   "search.failed": "Couldn't search files",
   "search.timeout": "The server took too long to answer",
   "search.offline": "Can't reach this server",
+  "preview.unavailable": "Can't open this workspace file in the browser pane. Check the browser plugin and try again.",
+  "preview.outside": "This HTML file is outside this session's workspace and cannot open in the browser pane.",
 }

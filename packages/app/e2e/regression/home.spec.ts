@@ -28,6 +28,77 @@ async function openHome(page: Page, input: Parameters<typeof mockStressTimeline>
   await page.goto("/")
 }
 
+test("Home projects, utility rows, search and recent sessions show keyboard focus", async ({ page }) => {
+  const workspace = await mockWorkspace(page, { name: "HomeFocus" })
+
+  await seed(page, { usedProjects: { local: [workspace.projectID] } })
+  await page.goto("/")
+
+  const projects = page.getByRole("complementary", { name: "Projects" })
+
+  const viewport = page.getByRole("main").getByRole("region", { name: "scrollable content", exact: true })
+
+  const projectButton = projects.getByRole("button", { name: /HomeFocus/ })
+
+  const settings = projects.getByRole("button", { name: "Settings", exact: true })
+
+  const help = projects.getByRole("button", { name: "Help", exact: true })
+
+  await expect(projectButton).toBeVisible()
+  await expect(viewport).toHaveAttribute("tabindex", "-1")
+  await projects.getByRole("button", { name: "Add project", exact: true }).press("Tab")
+  await expect(projectButton).toBeFocused()
+  await expect
+    .poll(() =>
+      projectButton.evaluate((button) => {
+        const row = button.closest("[data-home-row]")
+
+        return row && getComputedStyle(row, "::after").outlineStyle
+      }),
+    )
+    .toBe("solid")
+
+  // The two project row actions come before the utility buttons.
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
+  await expect(settings).toBeFocused()
+  await expect(settings).toHaveCSS("outline-style", "solid")
+  await expect(settings).not.toHaveCSS("transition-property", /\b(all|outline)\b/)
+  await page.keyboard.press("Tab")
+  await expect(help).toBeFocused()
+  await expect(help).toHaveCSS("outline-style", "solid")
+
+  const search = page.getByRole("textbox", { name: "Search sessions", exact: true })
+
+  const field = page.locator('[data-slot="home-session-search-field"]')
+
+  await page.keyboard.press("Tab")
+  await expect(search).toBeFocused()
+  await expect(field).toHaveCSS("outline-style", "solid")
+  await search.click()
+  await expect(search).toBeFocused()
+  await expect(field).toHaveCSS("outline-style", "none")
+
+  const recent = page.getByRole("region", { name: "Recent sessions" })
+
+  const sessionRow = row(page, "HomeFocus")
+
+  await sessionRow.hover()
+  await expect(sessionRow).toHaveCSS("outline-style", "none")
+  await recent.getByRole("button", { name: "New session", exact: true }).press("Tab")
+  await expect(sessionRow).toBeFocused()
+  await expect(sessionRow).toHaveCSS("outline-style", "solid")
+  await expect(sessionRow).toHaveCSS("outline-offset", "-2px")
+
+  await page.setViewportSize({ width: 1280, height: 200 })
+  await expect(viewport).toHaveAttribute("tabindex", "0")
+  await viewport.press("Shift+Tab")
+  await page.keyboard.press("Tab")
+  await expect(viewport).toBeFocused()
+  await expect(viewport).toHaveCSS("outline-offset", "-2px")
+})
+
 test("Home keeps the session list in every interface mode", async ({ page }) => {
   const earlier = { id: "ses_home_earlier", title: "Finished earlier" }
   await mockWorkspace(page, { name: "Home", sessions: [earlier] })
@@ -51,6 +122,30 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
     await expect(search).toBeVisible()
     await expect(row(page, earlier.title)).toBeVisible()
   }
+})
+
+test("choosing Customize replaces Home with Settings in desktop side tabs", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "Website",
+    sessions: [],
+    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+  })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  const sidebar = page.locator("#vertical-tabs-sidebar")
+
+  const main = page.getByRole("main")
+
+  await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toBeVisible()
+  await main.getByRole("button", { name: "Settings", exact: true }).click()
+  await main.getByRole("tab", { name: "Experimental", exact: true }).click()
+  await main.locator('[data-action="settings-sidebar-organize"]').click()
+  await page.getByRole("option", { name: "Customize", exact: true }).click()
+  await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toHaveCount(0)
+  await main.getByRole("button", { name: "Back to app", exact: true }).click()
+  await expect(main.getByRole("button", { name: "New session", exact: true })).toBeVisible()
+  await expect(sidebar.getByRole("button", { name: "View options", exact: true })).toBeVisible()
+  await sidebar.getByRole("button", { name: "Settings", exact: true }).click()
+  await expect(page.getByTestId("settings-screen")).toBeVisible()
 })
 
 test("a working Home session keeps its project avatar and shows its activity ring at the end of the row", async ({
@@ -103,7 +198,7 @@ test("the session context menu renames, exports, and deletes a Home session", as
   const box = await target.boundingBox()
   await target.click({ button: "right", position: { x: 48, y: 12 } })
   await expect(page).toHaveURL("/")
-  await expect(page.getByRole("menuitem")).toHaveText(["Rename", "Export…", "Delete…"])
+  await expect(page.getByRole("menuitem")).toHaveText(["Open", "Open in background", "Rename", "Export…", "Delete…"])
   const menu = await page.locator('[data-component="menu-v2-content"]').boundingBox()
   expect(Math.abs((menu?.x ?? 0) - (box?.x ?? 0) - 48)).toBeLessThan(4)
 
@@ -124,7 +219,7 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await renamedRow.click()
   await expect(page).toHaveURL(new RegExp(`/session/${fixture.targetID}$`))
   await expect(page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: "Renamed from Home" })).toBeVisible()
-  await page.getByRole("button", { name: "Home" }).click()
+  await page.getByRole("button", { name: "Home", exact: true }).click()
   await expect(page).toHaveURL("/")
 
   await renamedRow.click({ button: "right" })
@@ -151,6 +246,29 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await expect(dialog).toBeHidden()
   await expect(renamedRow).toBeHidden()
   expect(removed.requests).toHaveLength(1)
+})
+
+test("Open in background and a middle click add a Home session's tab without leaving Home, and Open goes to it", async ({
+  page,
+}) => {
+  const background = { id: "ses_home_open_background", title: "Opened in the background" }
+  const middle = { id: "ses_home_open_middle", title: "Opened with a middle click" }
+  const open = { id: "ses_home_open", title: "Opened from the menu" }
+  await mockWorkspace(page, { name: "HomeOpen", sessions: [background, middle, open], seed: { tabs: [] } })
+  await page.goto("/")
+  const tabs = page.locator('[data-slot="titlebar-tabs"] a')
+
+  await row(page, background.title).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Open in background", exact: true }).click()
+  await expect(tabs.filter({ hasText: background.title })).toBeVisible()
+
+  await row(page, middle.title).click({ button: "middle" })
+  await expect(tabs.filter({ hasText: middle.title })).toBeVisible()
+  await expect(page).toHaveURL("/")
+
+  await row(page, open.title).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Open", exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/session/${open.id}$`))
 })
 
 test("a failed session list says so and loads again on Try again, instead of showing the empty state", async ({
@@ -205,6 +323,17 @@ test("tabbing out of session search closes its results, and tabbing back reopens
   await page.keyboard.press("Shift+Tab")
   await page.keyboard.press("Shift+Tab")
   await expect(search).toBeFocused()
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+
+  // The results are active descendants, not independent Tab stops before the search input.
+  await search.press("Shift+Tab")
+  await expect(panel).toHaveCount(0)
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  await page.keyboard.press(`${modifier}+f`)
+  await expect(search).toBeFocused()
+  await expect(page.locator('[data-slot="home-session-search-field"]')).toHaveCSS("outline-style", "solid")
   await expect(panel.getByRole("option")).toContainText(earlier.title)
 })
 

@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, SchemaGetter } from "effect"
-import { CodeMode, Tool } from "./lib/index.js"
+import { CodeMode, Tool } from "../src/index.js"
 import {
   decodeInput,
   inputProperties,
   inputTypeScript,
   jsonSchemaToTypeScript,
   outputTypeScript,
-} from "../src/tool-schema.js"
+} from "../src/codemode/tool-schema.js"
 
 // A raw JSON Schema tool in the shape an MCP adapter produces: render-only input schema
 // whose property descriptions and constraints must surface as JSDoc in pretty signatures.

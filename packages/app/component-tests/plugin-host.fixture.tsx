@@ -1,5 +1,6 @@
 import type { PluginInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { DialogProvider, useDialog } from "@opencode/ui/context/dialog"
+import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { Toast } from "@opencode/ui/toast"
 import {
@@ -85,6 +86,7 @@ type Json = string | number | boolean | null | readonly Json[] | { readonly [key
 export { createComponent, createMemo, createRoot, createSignal, getOwner, onCleanup, runWithOwner, useDialog }
 
 const layout: BuiltinLayout = {
+  fitsSide: () => true,
   narrow: () => false,
   ready: () => true,
   open() {},
@@ -821,6 +823,22 @@ export function mountComposerPills(input: { definitions: readonly Entry[] }) {
   return {
     status: (id: string) => hosts[0]?.status(id),
     failure: (id: string) => hosts[0]?.failure(id),
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/** Mounts the app's own icon component outside every plugin and host, as any part of the app draws an icon by name. */
+export function mountAppIcon(name: string) {
+  const container = document.createElement("div")
+  container.dataset.testid = "app-icon"
+  document.body.appendChild(container)
+
+  const dispose = render(() => <Icon name={name} />, container)
+
+  return {
     unmount: () => {
       dispose()
       container.remove()

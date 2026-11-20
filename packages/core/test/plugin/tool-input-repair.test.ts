@@ -10,8 +10,17 @@ import { it } from "../lib/effect"
 import { host } from "./host"
 
 function run(input: unknown, inputSchema: JsonSchema.JsonSchema) {
+  const tool = {
+    id: "test",
+    name: "test",
+    description: "Test repair",
+    input: inputSchema,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
   const event: ToolHooks["execute.before"] = {
     tool: "test",
+    info: tool,
+    codemode: false,
     input,
     sessionID: Session.ID.make("ses_repair"),
     agent: Agent.ID.make("build"),
@@ -21,13 +30,6 @@ function run(input: unknown, inputSchema: JsonSchema.JsonSchema) {
   const events: ToolHooks = {
     "execute.before": event,
     "execute.after": { ...event, status: "error", error: new Tool.Error({ message: "unused" }) },
-  }
-  const tool = {
-    id: "test",
-    name: "test",
-    description: "Test repair",
-    input: inputSchema,
-    execute: () => Effect.succeed({ content: "unused" }),
   }
   const base = host()
   return ToolInputRepairPlugin.Plugin.effect(

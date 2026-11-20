@@ -2,19 +2,21 @@ import type { HomeScrollController } from "../scroll"
 import type { HomeSessionSearchController } from "./search"
 import type { HomeSessionsController } from "./controller"
 import { HomeSessionsView } from "./view"
-import { Show } from "solid-js"
+import { Show, type JSX } from "solid-js"
 
 export function HomeSessions(props: {
   sessions: HomeSessionsController
   search: HomeSessionSearchController
   scroll: HomeScrollController
+  searchScope?: JSX.Element
+  searchInline?: boolean
 }) {
   return (
     <Show when={props.sessions.session.server()}>
       {(server) => (
         <HomeSessionsView
           language={props.sessions.copy.language}
-          groups={props.sessions.data.groups()}
+          groups={props.search.result.groups()}
           listView={props.sessions.data.listView()}
           onRetry={props.sessions.data.retry}
           desktop={props.sessions.platform.desktop}
@@ -26,6 +28,7 @@ export function HomeSessions(props: {
           searchValue={props.search.query.value()}
           searchPlaceholder={props.search.query.placeholder()}
           searchOpen={props.search.query.open()}
+          searchInline={props.searchInline}
           searchLoading={props.search.result.loading()}
           searchResults={props.search.result.list()}
           searchActive={props.search.result.active()}
@@ -55,6 +58,7 @@ export function HomeSessions(props: {
           onSearchSelectActive={props.search.result.selectActive}
           onSearchHighlight={props.search.result.highlight}
           onSearchSelect={props.search.result.select}
+          searchScope={props.searchScope}
         />
       )}
     </Show>

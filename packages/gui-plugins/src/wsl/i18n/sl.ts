@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "Časovna omejitev {{command}} {{args}} je potekla po {{timeout}}ms",
   "error.failedPort": "Vrat ni bilo mogoče pridobiti",
   "menu.remove": "Odstrani",
+  "error.busy": "{{distro}} je zaposlen z drugo nalogo. Poskusite znova, ko jo konča.",
 }

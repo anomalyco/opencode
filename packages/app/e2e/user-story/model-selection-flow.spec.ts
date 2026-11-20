@@ -84,13 +84,15 @@ test("creates a session in a new project and selects its model", async ({ page }
     return url.pathname === "/api/fs/list" && url.searchParams.get("path") === "C:/OpenCode"
   })
 
-  await picker.getByRole("button", { name: "Parent", exact: true }).click()
+  await picker
+    .getByRole("navigation", { name: "Folder path", exact: true })
+    .getByRole("button", { name: "OpenCode", exact: true })
+    .click()
   expect(new URL((await listing).url()).searchParams.get("location[directory]")).toBe(directory)
   const directoryItem = picker.getByRole("treeitem", { name: "NewProject", exact: true })
   await expect(directoryItem).toBeVisible()
   await directoryItem.click()
   await expect(directoryItem).toHaveAttribute("aria-selected", "true")
-  await expect(picker.getByText("C:\\OpenCode\\NewProject", { exact: true })).toBeVisible()
   const selectFolder = picker.getByRole("button", { name: "Select folder", exact: true })
   await expect(selectFolder).toBeEnabled()
   await selectFolder.click()

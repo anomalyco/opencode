@@ -281,9 +281,9 @@ export const content = {
       body: "Laissez les agents utiliser votre vrai navigateur.",
       title: "OpenCode | Browse, votre vrai navigateur pour agents de code",
       description:
-        "Browse permet à OpenCode et à d'autres clients MCP d'utiliser votre vrai navigateur. Les agents pilotent des onglets en arrière-plan avec Playwright et vous rendent la main pour les connexions et la 2FA.",
+        "Browse permet à OpenCode et à d'autres clients MCP d'utiliser votre vrai navigateur. Les agents lisent, cliquent, tapent, font des captures, enregistrent des onglets et vous rendent la main pour les connexions et la 2FA.",
       intro:
-        "Un serveur MCP et une extension Chromium qui permettent à vos agents d'utiliser votre vrai navigateur, avec vos onglets, vos connexions et vos extensions. Ils ouvrent et pilotent des onglets avec Playwright, font des captures d'écran et enregistrent l'écran, dans des onglets en arrière-plan regroupés à l'écart. Quand c'est votre tour, pour une connexion, une demande de 2FA ou un paiement, ils vous rendent l'onglet et reprennent dès que vous cliquez sur Continuer.",
+        "Un serveur MCP et une extension Chromium qui permettent à vos agents d'utiliser votre vrai navigateur, avec vos onglets, vos connexions et vos extensions. Ils ouvrent des onglets en arrière-plan, regroupés à l'écart, et lisent les pages, cliquent, tapent, font des captures d'écran et enregistrent des onglets. Quand c'est votre tour, pour une connexion, une demande de 2FA ou un paiement, ils vous rendent l'onglet et reprennent dès que vous cliquez sur Continuer.",
       features: {
         "your-real-browser": {
           title: "Votre vrai navigateur",
@@ -303,7 +303,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Enregistrer et capturer",
-          body: "Captures d'écran, enregistrements d'écran et trafic réseau au format HAR.",
+          body: "Captures d'écran, enregistrements d'onglets et trafic réseau.",
         },
         "any-mcp-client": {
           title: "Tout client MCP",
@@ -313,9 +313,9 @@ export const content = {
           title: "Toutes vos connexions",
           body: "Les agents utilisent les sites où vous êtes déjà connecté. Pas de clés, pas de configuration.",
         },
-        allowlists: {
-          title: "Liste blanche",
-          body: "Limitez les onglets d'une session aux sites que vous indiquez.",
+        "allowed-sites": {
+          title: "Sites autorisés",
+          body: "Gardez l'onglet d'un agent sur les sites que vous indiquez.",
         },
       },
       install:
@@ -466,7 +466,7 @@ export const content = {
     },
     colors: {
       title: "Couleurs",
-      body: "Le logo et le logotype utilisent une seule encre à trois opacités, avec une encre plus claire pour les fonds sombres. Les valeurs ci-dessous sont cette encre sur du blanc ou du #0B0B0B, comme dans les fichiers standards. Cliquez sur une valeur pour la copier.",
+      body: "Le logo et le logotype utilisent une seule encre à trois opacités, avec une encre plus claire pour les fonds sombres. Les valeurs ci-dessous sont les couleurs des fichiers standards. Utilisez-les uniquement pour le logo et le logotype, pas pour d’autres textes ou arrière-plans. Cliquez sur une valeur pour la copier.",
       palettes: {
         light: {
           name: "Clair",

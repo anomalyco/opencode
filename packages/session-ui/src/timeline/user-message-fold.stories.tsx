@@ -1,4 +1,5 @@
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import { createMemo } from "solid-js"
 import type { SessionDocument } from "../document"
 import { SessionTimeline, type SessionUserPresentation } from "./session-timeline"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
@@ -8,16 +9,35 @@ export default {
   title: "OpenCode/Conversation/Long user messages",
   id: "user-message-fold",
   parameters: { layout: "fullscreen" },
-  render: () => <LongUserMessages />,
+  args: { width: 760, turn: "thread" },
+  argTypes: {
+    width: { control: { type: "range", min: 320, max: 960, step: 10 } },
+    turn: { options: ["thread", "one_liner", "three_lines", "pasted", "code", "image", "voice", "short_last"] },
+  },
+  render: (args: { width: number; turn: string }) => <LongUserMessages {...args} />,
 }
 
 export const Thread = {}
 
-function LongUserMessages() {
+function LongUserMessages(props: { width: number; turn: string }) {
+  const document = createMemo(() => {
+    if (props.turn === "thread") return thread
+    const prompt = `msg_fold_${props.turn}`
+
+    return {
+      ...thread,
+      messages: thread.messages.filter((message) => message.id === prompt || message.id === `${prompt}_reply`),
+    }
+  })
+
   return (
-    <section data-story="user-message-fold" class="mx-auto w-full max-w-[760px] px-6 py-8">
-      <CurrentSessionProviders document={thread}>
-        <SessionTimeline document={thread} presentation={presentation} />
+    <section
+      data-story="user-message-fold"
+      class="mx-auto w-full px-6 py-8"
+      style={{ "max-width": `${props.width}px` }}
+    >
+      <CurrentSessionProviders document={document()}>
+        <SessionTimeline document={document()} presentation={presentation} />
       </CurrentSessionProviders>
     </section>
   )

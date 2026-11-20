@@ -20,6 +20,28 @@ export const activeCredential = Effect.fnUntraced(function* (
 })
 
 /**
+ * Reads the active connection's stored credential without resolving it, so it never refreshes a token. Use it to
+ * classify a connection by its method or metadata: a failed refresh must not make it look like another kind.
+ */
+export const storedCredential = Effect.fnUntraced(function* (
+  ctx: Context,
+  integrationID: string,
+): Effect.fn.Return<
+  {
+    readonly connection: Effect.Success<ReturnType<Context["integration"]["connection"]["active"]>>
+    readonly credential: Credential.Value | undefined
+  },
+  never,
+  Credential.Service
+> {
+  const credentials = yield* Credential.Service
+  const connection = yield* ctx.integration.connection.active(integrationID)
+  const stored =
+    connection?.type === "credential" ? yield* credentials.get(Credential.ID.make(connection.id)) : undefined
+  return { connection, credential: stored?.value }
+})
+
+/**
  * Tracks provider settings a plugin derives from the active connection's stored credential, such as login form
  * answers kept as credential metadata. The model resolver does not pass credential metadata to packages, so a
  * plugin that needs it applies these settings in its provider transform. Switching this integration's active
@@ -30,13 +52,9 @@ export const credentialSettings = Effect.fn("ProviderPlugin.credentialSettings")
   integrationID: string,
   select: (value: Credential.Value) => Provider.Settings,
 ) {
-  const credentials = yield* Credential.Service
   const load = Effect.fn("ProviderPlugin.credentialSettings.load")(function* () {
-    const connection = yield* ctx.integration.connection.active(integrationID)
-    // Reads the stored value rather than resolving the connection, so startup never refreshes anything.
-    const stored =
-      connection?.type === "credential" ? yield* credentials.get(Credential.ID.make(connection.id)) : undefined
-    return stored ? select(stored.value) : {}
+    const { credential } = yield* storedCredential(ctx, integrationID)
+    return credential ? select(credential) : {}
   })
   const current = { settings: yield* load() }
   yield* ProviderRefresh.onSwitch(

@@ -1,5 +1,8 @@
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js"
 import { useLocation, useNavigate } from "@solidjs/router"
+import { useSettingsSurface } from "@/settings/surface"
+import { useProjectNavigation } from "@/shell/project-navigation"
+import { tabHref, useTabs } from "@/shell/tabs/tabs"
 import {
   INITIAL_TITLEBAR_HISTORY_STATE,
   transitionTitlebarHistory,
@@ -11,6 +14,12 @@ import {
 export function createTitlebarHistory() {
   const navigate = useNavigate()
   const location = useLocation()
+  const projectNavigation = useProjectNavigation()
+
+  const settings = useSettingsSurface()
+
+  const tabs = useTabs()
+
   const [historyState, setHistoryState] = createSignal(INITIAL_TITLEBAR_HISTORY_STATE)
   let settleTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -42,7 +51,14 @@ export function createTitlebarHistory() {
   onCleanup(() => dispatch({ type: "disposed" }))
 
   return {
-    back: () => dispatch({ type: "back" }),
+    back: () => {
+      if (!projectNavigation() || !settings.active()) return dispatch({ type: "back" })
+      const source = settings.route()
+
+      const tab = tabs.restoreReady() && tabs.restoreTab(source)
+
+      dispatch({ type: "back", destination: tab ? { url: tabHref(tab) } : { url: "/", state: { source } } })
+    },
     forward: () => dispatch({ type: "forward" }),
   }
 }

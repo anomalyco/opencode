@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Mức sử dụng",
   "usage.cost": "Chi phí",
   "usage.view": "Xem cách sử dụng ngữ cảnh",
-  "systemPrompt.title": "Lời nhắc hệ thống",
   "rawMessages.title": "Tin nhắn thô",
   "export.session": "Xuất phiên",
   "stats.session": "Phiên",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Đã lưu phiên vào {{filename}}",
   "export.failed.title": "Không thể xuất phiên",
   "export.failed.description": "Đã xảy ra lỗi khi xuất phiên",
+  "usage.toggle": "Bật/tắt ngữ cảnh phiên",
 }

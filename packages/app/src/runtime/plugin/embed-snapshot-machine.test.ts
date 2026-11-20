@@ -9,6 +9,7 @@ import {
   selectSnapshotHidesNative,
   selectSnapshotNeedsSync,
   selectSnapshotUrl,
+  selectSnapshotWantsStill,
   transitionEmbedSnapshot,
   type EmbedSnapshotEffect,
   type EmbedSnapshotEvent,
@@ -74,7 +75,7 @@ describe("bug replays", () => {
     expect(selectSnapshotHidesNative(next.state, "embed-Alpha", true)).toBe(true)
   })
 
-  test("a failed or corrupt capture hides the native view without a still and thaws at once", () => {
+  test("a failed capture still gives the warm fallback a thaw interval", () => {
     const failed = transitionEmbedSnapshot(capturing, settled(1, undefined))
     expect(failed.state).toEqual({ status: "frozen", issued: 1, id: "embed-Alpha", url: undefined })
     expect(failed.effects).toEqual([{ type: "capture-timer.stop" }, { type: "layout.schedule" }])
@@ -82,8 +83,24 @@ describe("bug replays", () => {
     expect(selectSnapshotHidesNative(failed.state, "embed-Alpha", true)).toBe(true)
 
     const uncovered = transitionEmbedSnapshot(failed.state, sync(false))
-    expect(uncovered.state).toEqual({ status: "live", issued: 1 })
-    expect(uncovered.effects).toEqual([])
+    expect(uncovered.state).toMatchObject({ status: "thawing", url: undefined })
+    expect(uncovered.effects).toEqual([{ type: "thaw-timer.start", delayMs: SNAPSHOT_THAW_DELAY_MS, attempt: 2 }])
+    expect(selectSnapshotHidesNative(uncovered.state, "embed-Alpha", false)).toBe(false)
+
+    const live = transitionEmbedSnapshot(uncovered.state, { type: "thaw.settled", attempt: 2 })
+    expect(live).toEqual({ state: { status: "live", issued: 2 }, effects: [{ type: "layout.schedule" }] })
+  })
+
+  test("a warm still hides the native view only once the capture, which needs the view visible, has returned", () => {
+    expect(selectSnapshotHidesNative(capturing, "embed-Alpha", true, true)).toBe(false)
+    expect(selectSnapshotHidesNative(painting, "embed-Alpha", true, false)).toBe(false)
+    expect(selectSnapshotHidesNative(painting, "embed-Alpha", true, true)).toBe(true)
+    expect(selectSnapshotHidesNative(painting, "embed-Beta", true, true)).toBe(false)
+    expect(selectSnapshotHidesNative(painting, "embed-Alpha", false, true)).toBe(false)
+    // The warm still keeps covering through the thaw, when the cover itself has ended.
+    expect(selectSnapshotWantsStill(thawing, "embed-Alpha", false)).toBe(true)
+    expect(selectSnapshotWantsStill(INITIAL_SNAPSHOT_STATE, "embed-Alpha", false)).toBe(false)
+    expect(selectSnapshotWantsStill(thawing, "embed-Beta", false)).toBe(false)
   })
 
   test("another embed taking a covered box gives up the previous still in the same step", () => {
@@ -114,6 +131,7 @@ describe("lifecycle", () => {
     expect(decoded.effects).toEqual([
       { type: "capture-timer.stop" },
       { type: "paint-timer.start", attempt: 1, delayMs: SNAPSHOT_PAINT_TIMEOUT_MS },
+      { type: "layout.schedule" },
     ])
 
     const presented = transitionEmbedSnapshot(decoded.state, { type: "snapshot.painted", url: "blob:a" })
@@ -128,7 +146,7 @@ describe("lifecycle", () => {
 
     const released = transitionEmbedSnapshot(uncovered.state, { type: "thaw.settled", attempt: 2 })
     expect(released.state).toEqual({ status: "live", issued: 2 })
-    expect(released.effects).toEqual([{ type: "url.revoke", url: "blob:a" }])
+    expect(released.effects).toEqual([{ type: "url.revoke", url: "blob:a" }, { type: "layout.schedule" }])
   })
 
   test("covering again while thawing keeps the still and ignores the old thaw", () => {

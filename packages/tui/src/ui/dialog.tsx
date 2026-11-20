@@ -170,15 +170,28 @@ export function DialogLayout(
      * 0 lets a raised `DialogBleed` body meet the footer band.
      */
     footerGap?: number
+    /** Fill the parent's height, keeping the footer at the bottom. */
+    grow?: boolean
   }>,
 ) {
   const inset = () => props.inset ?? DIALOG_INSET
   const newDesigns = useNewDesigns()
   const footerGap = () => (newDesigns() && props.footer && props.buttons === undefined ? (props.footerGap ?? 1) : 1)
   return (
-    <box id={props.id} paddingLeft={inset()} paddingRight={inset()} paddingBottom={1} gap={1}>
+    <box
+      id={props.id}
+      paddingLeft={inset()}
+      paddingRight={inset()}
+      paddingBottom={1}
+      gap={1}
+      flexGrow={props.grow ? 1 : undefined}
+    >
       {props.header}
-      <box paddingBottom={Math.max(0, footerGap() - 1)} marginBottom={Math.min(0, footerGap() - 1)}>
+      <box
+        paddingBottom={Math.max(0, footerGap() - 1)}
+        marginBottom={Math.min(0, footerGap() - 1)}
+        flexGrow={props.grow ? 1 : undefined}
+      >
         {props.children}
       </box>
       <Show when={props.buttons === undefined} fallback={props.buttons}>
@@ -198,26 +211,49 @@ export function DialogLayout(
 
 export type DialogButton = { label: string; run: () => void }
 
-/** A right-aligned row of buttons; the active one is highlighted. Arrow keys and Enter are bound by the dialog. */
-export function DialogButtons(props: { buttons: DialogButton[]; active: number; onActive?: (index: number) => void }) {
+/**
+ * A right-aligned row of buttons; the active one is highlighted. Arrow keys and Enter are bound by the dialog.
+ * `hints` are extra key actions, shown on the left.
+ */
+export function DialogButtons(props: {
+  buttons: DialogButton[]
+  active: number
+  onActive?: (index: number) => void
+  hints?: DialogFooterAction[]
+}) {
   const theme = useTheme().surface("dialog")
+  const shortcuts = Keymap.useShortcuts()
+  const hints = () =>
+    (props.hints ?? []).flatMap((action) => {
+      if (action.key !== undefined || action.command === undefined) return [action]
+      const key = shortcuts.get(action.command)
+      return key ? [{ ...action, key }] : []
+    })
   return (
-    <box flexDirection="row" justifyContent="flex-end">
-      <For each={props.buttons}>
-        {(button, index) => (
-          <box
-            paddingLeft={1}
-            paddingRight={1}
-            backgroundColor={props.active === index() ? theme.background.action.primary.focused : undefined}
-            onMouseOver={() => props.onActive?.(index())}
-            onMouseUp={() => button.run()}
-          >
-            <text fg={props.active === index() ? theme.text.action.primary.focused : theme.text.muted}>
-              {button.label}
-            </text>
-          </box>
-        )}
-      </For>
+    <box flexDirection="row" justifyContent={hints().length > 0 ? "space-between" : "flex-end"}>
+      <Show when={hints().length > 0}>
+        {/* Hint items pad one cell for hover, so pull them back to line up with the body. */}
+        <box flexDirection="row" marginLeft={-1}>
+          <For each={hints()}>{(action) => <DialogFooterItem action={action} variant="secondary" />}</For>
+        </box>
+      </Show>
+      <box flexDirection="row">
+        <For each={props.buttons}>
+          {(button, index) => (
+            <box
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={props.active === index() ? theme.background.action.primary.focused : undefined}
+              onMouseOver={() => props.onActive?.(index())}
+              onMouseUp={() => button.run()}
+            >
+              <text fg={props.active === index() ? theme.text.action.primary.focused : theme.text.muted}>
+                {button.label}
+              </text>
+            </box>
+          )}
+        </For>
+      </box>
     </box>
   )
 }

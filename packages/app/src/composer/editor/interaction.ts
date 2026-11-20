@@ -2,6 +2,7 @@ import { Predicate } from "effect"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { unwrap } from "solid-js/store"
 import { useFilteredList } from "@opencode/ui/hooks"
+import { focusField, handOffFocus, handoffRing } from "@opencode/ui/context/field-focus"
 import { abort } from "@opencode/util/abort"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
 import type { Upload } from "../attachments/uploads"
@@ -115,24 +116,26 @@ export function createComposerEditor(input: {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
   let focusFrame: number | undefined
-  let focusCursor: number | undefined
+  let focusRequest: { cursor: number; visible: boolean | undefined } | undefined
 
   const cancelFocus = () => {
     if (focusFrame === undefined) return
     cancelAnimationFrame(focusFrame)
     focusFrame = undefined
-    focusCursor = undefined
+    focusRequest = undefined
   }
 
   const flushFocus = () => {
-    const cursor = focusCursor
+    const request = focusRequest
 
-    if (cursor === undefined) return
+    if (!request) return
     cancelFocus()
 
     if (!editor) return
-    editor.focus()
-    setCursorPosition(editor, cursor)
+
+    if (request.visible === undefined) editor.focus()
+    else focusField(editor, request.visible)
+    setCursorPosition(editor, request.cursor)
   }
 
   onCleanup(cancelFocus)
@@ -201,7 +204,9 @@ export function createComposerEditor(input: {
           },
         }),
         editor: () => editor,
-        focusEditor: () => editor?.focus(),
+        focusEditor: () => {
+          if (editor) handOffFocus(editor)
+        },
         addPart,
         setDraggingType: (type) => dispatch({ type: type ? "drag.enter" : "drag.leave" }),
       })
@@ -287,9 +292,12 @@ export function createComposerEditor(input: {
   })
   onCleanup(() => dispatchMentionSearch({ type: "disposed" }))
 
+  const contextOpen = createMemo(() => state.popover.type === "context")
+  const fileRows = createMemo(() => selectMentionFiles(mentionSearch()))
+
   const contextList = useFilteredList<ComposerSuggestion>({
     items: (query) => {
-      if (state.popover.type !== "context") return []
+      if (!contextOpen()) return []
 
       const sessions = input.searchSessions?.(query) ?? []
 
@@ -301,12 +309,7 @@ export function createComposerEditor(input: {
 
       const seen = new Set(recent.map((item) => item.id))
 
-      return [
-        ...fixed,
-        ...sessions,
-        ...recent,
-        ...selectMentionFiles(mentionSearch()).filter((item) => !seen.has(item.id)),
-      ]
+      return [...fixed, ...sessions, ...recent, ...fileRows().filter((item) => !seen.has(item.id))]
     },
     key: (item) => item.id,
     filterKeys: ["label"],
@@ -476,19 +479,6 @@ export function createComposerEditor(input: {
 
     flushFocus()
 
-    if (
-      mode() === "normal" &&
-      (event.metaKey || event.ctrlKey) &&
-      !event.altKey &&
-      !event.shiftKey &&
-      event.key.toLowerCase() === "u"
-    ) {
-      event.preventDefault()
-      attach()
-
-      return true
-    }
-
     const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
     const open = isComposerPopoverOpen(readState())
 
@@ -539,18 +529,6 @@ export function createComposerEditor(input: {
       return true
     }
 
-    const stop =
-      (input.view.submit.working?.() || input.view.submit.held?.()) &&
-      ((event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") ||
-        event.key === "Escape")
-
-    if (stop) {
-      event.preventDefault()
-      input.view.submit.onStop()
-
-      return true
-    }
-
     if (
       !event.altKey &&
       !event.ctrlKey &&
@@ -585,9 +563,9 @@ export function createComposerEditor(input: {
     if (contextList.grouped.state === "ready" && contextList.flat().length === 0) dispatch({ type: "popover.close" })
   })
 
-  const restoreFocus = (cursor = draft.state.cursor ?? promptLength(draft.state.prompt)) => {
+  const restoreFocus = (cursor = draft.state.cursor ?? promptLength(draft.state.prompt), visible?: boolean) => {
     cancelFocus()
-    focusCursor = cursor
+    focusRequest = { cursor, visible: visible ?? handoffRing(editor) }
     focusFrame = requestAnimationFrame(flushFocus)
   }
 
@@ -726,6 +704,9 @@ export function createComposerEditor(input: {
     setEditor(element: HTMLElement) {
       editor = element
       input.onEditor?.(element)
+    },
+    restoreCaret() {
+      if (editor) setCursorPosition(editor, draft.state.cursor ?? promptLength(draft.state.prompt))
     },
     restoreFocus,
     onInput(value: string, prompt?: ComposerPersistedState["prompt"], cursor?: number) {

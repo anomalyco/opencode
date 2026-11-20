@@ -13,4 +13,12 @@ export default {
   "settings.wrapLines.title": "Bungkus garis",
   "settings.wrapLines.description":
     "Bungkus garis panjang dalam perbedaan seluler alih-alih menggulir secara horizontal",
+  "menu.count.one": "{{count}} berkas berubah",
+  "menu.count.other": "{{count}} berkas berubah",
+  "folder.more": "{{count}} · lainnya tidak ditampilkan",
+  "folder.failed": "Tidak dapat memuat perubahan",
+  "command.open": "Buka tinjauan",
+  "load.failed": "Tidak dapat memuat perubahan",
+  "load.timeout": "Server terlalu lama menjawab",
+  offline: "Tidak dapat menjangkau server ini",
 }

@@ -1,3 +1,4 @@
+import { Space } from "@opencode/schema/space"
 import { Event } from "@opencode/schema/event"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { Location } from "@opencode/schema/location"
@@ -23,6 +24,8 @@ const rpcEvent = Schema.Struct({
 const schema = <const Definitions extends ReadonlyArray<Definition>>(definitions: Definitions) =>
   Schema.Union([
     ...definitions,
+    // Sent only by the event feed to subscribers of their space, never on the bus, so plugins do not see them.
+    ...Space.Event.Definitions,
     rpcEvent,
     ...(definitions.some((definition) => definition.type === "server.connected")
       ? []
@@ -49,6 +52,10 @@ const query = <const Definitions extends ReadonlyArray<Definition>>(definitions:
     ).annotate({
       description:
         "Only send events of these types, plus the initial server.connected event. When omitted, all events are sent.",
+    }),
+    "experimental.kv": Schema.optional(Schema.ArrayEnsure(Space.Subscription)).annotate({
+      description:
+        "Experimental: spaces to sync, each as `space` or `space:revision`. After server.connected, sends per space an experimental.kv.delta with the keys changed since that revision when it is one this server issued, otherwise an experimental.kv.snapshot; then every later experimental.kv.updated and experimental.kv.deleted in those spaces, with nothing missed or repeated. experimental.kv.* events reach only subscribers that request their space, whatever `types` says.",
     }),
   }).annotate({ identifier: "EventSubscribeQuery" })
 

@@ -43,6 +43,8 @@ const markdown: Record<number, string> = {
   0x2026: "...",
   0x2191: "up",
   0x2193: "down",
+  0x2610: "[ ]",
+  0x2611: "[x]",
 }
 
 const asciiBorder: BorderCharacters = {
@@ -68,13 +70,15 @@ export const monoMarkdownTableOptions = {
 }
 
 export function monoMarkdownRenderable(renderable: MarkdownRenderable): void {
+  // Native code writes unhooked prose itself, so a hook keeps every paragraph and heading on the JavaScript path.
+  renderable.inlineHook = (spans) => spans.map((span) => ({ ...span, text: monoText(span.text) }))
   monoRenderable(renderable)
 }
 
 function monoRenderable(renderable: Renderable): void {
   if (hooked.has(renderable)) return
   hooked.add(renderable)
-  // Markdown reconciles nested lists and tables without calling renderNode.
+  // Markdown builds nested lists and tables without calling renderBlock.
   // Hook the actual tree so future descendants are transformed before layout.
   const add = renderable.add.bind(renderable)
   renderable.add = (child, index) => {
@@ -84,7 +88,7 @@ function monoRenderable(renderable: Renderable): void {
 
   if (renderable instanceof BoxRenderable) renderable.customBorderChars = asciiBorder
   if (renderable instanceof CodeRenderable) monoCode(renderable)
-  if (renderable instanceof TextRenderable) renderable.content = monoStyledText(renderable.content)
+  if (renderable instanceof TextRenderable) monoTextContent(renderable)
   if (renderable instanceof TextTableRenderable) monoTable(renderable)
   renderable.getChildren().forEach(monoRenderable)
 }
@@ -151,6 +155,23 @@ function monoTreeSitter(client: TreeSitterClient): TreeSitterClient {
         target.highlightOnce(...args).catch(() => ({ highlights: [] }))
     },
   })
+}
+
+// List markers and HTML blocks get their text after they are added.
+function monoTextContent(renderable: TextRenderable): void {
+  let proto: object | null = Object.getPrototypeOf(renderable)
+  let descriptor: PropertyDescriptor | undefined
+  while (proto && !(descriptor = Object.getOwnPropertyDescriptor(proto, "content")))
+    proto = Object.getPrototypeOf(proto)
+  if (!descriptor?.get || !descriptor.set) return
+  const content = renderable.content
+  Object.defineProperty(renderable, "content", {
+    configurable: true,
+    get: () => descriptor.get!.call(renderable),
+    set: (value: TextRenderable["content"] | string) =>
+      descriptor.set!.call(renderable, typeof value === "string" ? monoText(value) : monoStyledText(value)),
+  })
+  renderable.content = content
 }
 
 function monoTable(renderable: TextTableRenderable): void {

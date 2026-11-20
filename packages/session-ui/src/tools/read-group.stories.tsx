@@ -1,5 +1,5 @@
 import type { JsonValue, SessionMessageAssistant } from "@opencode/client/promise"
-import { createSignal } from "solid-js"
+import { createEffect, createSignal } from "solid-js"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { STORY_TIME } from "../storybook/current-session-fixtures"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
@@ -109,7 +109,7 @@ const parts = steps.flatMap<ContextGroupPart>((step, index) => {
     return [storyTool(`read_group_shell_${index}`, "shell", "completed", { command: step.shell }, { output: "ok" })]
 
   return step.map((read, item) => {
-    const [path, args] = typeof read === "string" ? [read, {}] : read
+    const [path, args] = Array.isArray(read) ? read : [read, {}]
 
     return storyTool(`read_group_read_${index}_${item}`, "read", "completed", { path, ...args })
   })
@@ -124,8 +124,10 @@ const content = parts.flatMap<SessionMessageAssistant["content"][number]>((part)
 })
 
 export const UsedGroup = {
-  render: (args: { width: number }) => {
-    const [open, setOpen] = createSignal(true)
+  args: { open: true },
+  render: (args: { width: number; open: boolean }) => {
+    const [open, setOpen] = createSignal(args.open)
+    createEffect(() => setOpen(args.open))
 
     return (
       <section style={{ width: "100%", "max-width": `${args.width}px`, padding: "16px" }}>
@@ -138,13 +140,18 @@ export const UsedGroup = {
 }
 
 export const WithoutUsedGroup = {
-  render: (args: { width: number }) => {
+  args: { preset: timelinePresets[0].id },
+  argTypes: { preset: { options: timelinePresets.map((preset) => preset.id) } },
+  render: (args: { width: number; preset: string }) => {
     const document = storyDocument(content)
 
     return (
       <section style={{ width: "100%", "max-width": `${args.width}px`, padding: "16px" }}>
         <CurrentSessionProviders document={document}>
-          <SessionTimeline document={document} timelineDetail={timelinePresets[0].value} />
+          <SessionTimeline
+            document={document}
+            timelineDetail={timelinePresets.find((preset) => preset.id === args.preset)!.value}
+          />
         </CurrentSessionProviders>
       </section>
     )

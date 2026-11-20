@@ -47,8 +47,10 @@ describe("Open Responses-compatible route", () => {
       })
       expect(prepared.body).toEqual({
         model: "example-model",
-        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
-        instructions: "You are concise.",
+        input: [
+          { type: "message", role: "developer", content: "You are concise." },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "Say hello." }] },
+        ],
         stream: true,
         store: false,
         include: ["reasoning.encrypted_content"],
@@ -87,8 +89,9 @@ describe("Open Responses-compatible route", () => {
         }),
       )
 
-      expect(prepared.body.instructions).toBe("Initial instructions.")
+      expect(prepared.body).not.toHaveProperty("instructions")
       expect(prepared.body.input).toEqual([
+        { type: "message", role: "developer", content: "Initial instructions." },
         { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
         { type: "message", role: "developer", content: "Operator update." },
         { type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "After." }] },

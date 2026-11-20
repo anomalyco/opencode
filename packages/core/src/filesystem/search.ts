@@ -6,6 +6,7 @@ import { Clock, Context, Deferred, Duration, Effect, Layer, Scope } from "effect
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "@opencode/schema/filesystem"
+import { Environment } from "../environment/index.js"
 import { Location } from "../location.js"
 import { Ripgrep } from "../ripgrep.js"
 import { RelativePath } from "../schema.js"
@@ -53,6 +54,7 @@ const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
+    const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const scope = yield* Scope.Scope
     const clock = yield* Clock.Clock
@@ -66,8 +68,10 @@ const ripgrepLayer = Layer.effect(
       const previous = index
       if (!initialized) index = next
       yield* ripgrep.find({
+        environment,
         cwd: location.directory,
         pattern: "*",
+        hidden: true,
         limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
         onEntry: (entry) =>
@@ -235,7 +239,11 @@ const layer = (options?: Options) =>
   )
 
 export function configured(options?: Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [Location.node, Ripgrep.node] })
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [Location.node, Environment.node, Ripgrep.node],
+  })
 }
 
 export const node = configured()
