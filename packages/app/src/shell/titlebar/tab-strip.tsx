@@ -513,8 +513,11 @@ export function createSessionRowNavigation(input: {
 
 /** Loads what an unselected session row shows: metadata, and the inbox and requests that keep it busy or waiting. */
 export function syncInactiveSession(ctx: ServerCtx, id: string) {
-  const running = [id, ...ctx.data.session.family(id)].some(
-    (sessionID) => ctx.data.session.status(sessionID) === "running",
+  const requestIDs = [...new Set([id, ...ctx.data.session.family(id)])].filter(
+    (sessionID) =>
+      ctx.data.session.status(sessionID) === "running" ||
+      !!ctx.data.session.permission.list(sessionID)?.length ||
+      !!ctx.data.session.form.list(sessionID)?.length,
   )
 
   void Promise.allSettled([
@@ -522,7 +525,10 @@ export function syncInactiveSession(ctx: ServerCtx, id: string) {
     // The selected timeline loads the transcript; inactive tabs need metadata and the inbox,
     // whose waiting work keeps the tab busy. Only a running session can wait on a permission
     // or form, and reading either boots the session's location on the server.
-    ...(running ? [ctx.data.session.permission.sync(id), ctx.data.session.form.sync(id)] : []),
+    ...requestIDs.flatMap((sessionID) => [
+      ctx.data.session.permission.sync(sessionID),
+      ctx.data.session.form.sync(sessionID),
+    ]),
     ctx.data.session.pending.sync(id),
   ])
 }

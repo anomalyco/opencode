@@ -270,14 +270,22 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
     const entry = byKey().get(effect.key)
 
-    void Promise.allSettled(
-      entry
-        ? [
-            Promise.try(() => entry.ctx.data.session.permission.sync(entry.session.id)),
-            Promise.try(() => entry.ctx.data.session.form.sync(entry.session.id)),
-          ]
-        : [],
-    ).then(() => dispatchSettle({ type: "requests.settled", key: effect.key }))
+    const requests = entry
+      ? [...new Set([entry.session.id, ...entry.ctx.data.session.family(entry.session.id)])]
+          .filter(
+            (id) =>
+              id === entry.session.id ||
+              entry.ctx.data.session.status(id) === "running" ||
+              !!entry.ctx.data.session.permission.list(id)?.length ||
+              !!entry.ctx.data.session.form.list(id)?.length,
+          )
+          .flatMap((id) => [
+            Promise.try(() => entry.ctx.data.session.permission.sync(id)),
+            Promise.try(() => entry.ctx.data.session.form.sync(id)),
+          ])
+      : []
+
+    void Promise.allSettled(requests).then(() => dispatchSettle({ type: "requests.settled", key: effect.key }))
   }
 
   // Synchronous, so a warm cache settles before the first paint without flashing the loader. A server that never

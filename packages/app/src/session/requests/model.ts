@@ -51,20 +51,21 @@ export function createSessionRequestModel() {
   })
 
   createEffect(() => {
-    const id = params.id
-
-    if (!id || serverSDK.connection.status() !== "connected") return
-    void Promise.all([data.shell.sync({ directory: sdk().directory }), data.session.permission.sync(id)]).catch(
-      () => undefined,
-    )
+    if (!params.id || serverSDK.connection.status() !== "connected") return
+    void data.shell.sync({ directory: sdk().directory }).catch(() => undefined)
   })
 
-  // Only a running Session can hold a pending form, and events keep loaded forms current. Comparing by value
-  // keeps every session update in a large subagent tree from re-requesting forms.
-  const formSessions = createMemo(
+  // Only a running Session can hold a pending permission or form, and events keep loaded requests current.
+  // Keep tree sessions with cached requests too so a reconnect clears requests resolved while offline.
+  // Comparing by value keeps every session update in a large subagent tree from re-requesting them.
+  const requestSessions = createMemo(
     () =>
       sessionTreeIDs(data.session.list(), params.id).filter(
-        (id) => id === params.id || data.session.status(id) === "running",
+        (id) =>
+          id === params.id ||
+          data.session.status(id) === "running" ||
+          !!data.session.permission.list(id)?.length ||
+          !!data.session.form.list(id)?.length,
       ),
     [],
     { equals: (a, b) => a.join() === b.join() },
@@ -72,7 +73,12 @@ export function createSessionRequestModel() {
 
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
-    void Promise.all(formSessions().map((sessionID) => data.session.form.sync(sessionID))).catch(() => undefined)
+    void Promise.all(
+      requestSessions().flatMap((sessionID) => [
+        data.session.permission.sync(sessionID),
+        data.session.form.sync(sessionID),
+      ]),
+    ).catch(() => undefined)
   })
 
   const formRequest = createMemo((): FormInfo | undefined => {
