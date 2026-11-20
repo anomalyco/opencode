@@ -115,7 +115,23 @@ async function read(file?: string) {
   const text = await readFile(file ?? fallback(), "utf8").catch(() => undefined)
   if (text === undefined) return undefined
   try {
-    return JSON.parse(text) as Info
+    const value: unknown = JSON.parse(text)
+    if (typeof value !== "object" || value === null) return
+    if (!("url" in value) || typeof value.url !== "string" || !URL.canParse("/api/info", value.url)) return
+    if (!("pid" in value) || typeof value.pid !== "number" || !Number.isSafeInteger(value.pid) || value.pid <= 0) return
+    const id = "id" in value ? value.id : undefined
+    const version = "version" in value ? value.version : undefined
+    const password = "password" in value ? value.password : undefined
+    if (id !== undefined && typeof id !== "string") return
+    if (version !== undefined && typeof version !== "string") return
+    if (password !== undefined && typeof password !== "string") return
+    return {
+      url: value.url,
+      pid: value.pid,
+      id,
+      version,
+      password,
+    }
   } catch {
     return undefined
   }

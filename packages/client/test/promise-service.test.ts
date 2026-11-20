@@ -12,6 +12,61 @@ import { accelerate } from "./fixture/service-timing"
 const ensure = accelerate(Service.ensure)
 const stop = accelerate(Service.stop)
 
+test.each([
+  "null",
+  "{}",
+  "[]",
+  "42",
+  '"invalid"',
+  '{"url":"invalid","pid":123456789}',
+  '{"url":"data:text/plain,invalid","pid":123456789}',
+  "{",
+])("ignores a malformed service registration: %s", async (text) => {
+  await using fixture = await serviceFixture()
+  await Bun.write(fixture.registration, text)
+
+  await expect(Service.discover({ file: fixture.registration })).resolves.toBeUndefined()
+})
+
+test("does not probe a registration with invalid process or credential fields", async () => {
+  await using fixture = await serviceFixture()
+  const requests: string[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      requests.push(request.url)
+      return Response.json({ version: "test", pid: process.pid })
+    },
+  })
+
+  try {
+    for (const fields of [
+      { pid: 0 },
+      { pid: -1 },
+      { pid: 1.5 },
+      { pid: Number.MAX_SAFE_INTEGER + 1 },
+      { pid: "123" },
+      { id: 1 },
+      { version: null },
+      { password: false },
+    ]) {
+      await Bun.write(fixture.registration, JSON.stringify({ url: server.url.href, pid: process.pid, ...fields }))
+      await expect(Service.discover({ file: fixture.registration })).resolves.toBeUndefined()
+    }
+
+    expect(requests).toEqual([])
+    await Bun.write(fixture.registration, JSON.stringify({ url: server.url.href, pid: process.pid }))
+    await expect(Service.discover({ file: fixture.registration })).resolves.toEqual({
+      url: server.url.href,
+      auth: undefined,
+    })
+    expect(requests).toEqual([new URL("/api/info", server.url).href])
+  } finally {
+    await server.stop(true)
+  }
+})
+
 test("discovers a registered service", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
