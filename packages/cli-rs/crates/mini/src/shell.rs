@@ -1436,9 +1436,7 @@ impl Mini {
                 match result {
                     Ok(messages) => {
                         if let Some(transcript) = mini.transcript.borrow_mut().as_mut() {
-                            for message in &messages {
-                                output.extend(transcript.message(message, true));
-                            }
+                            output = transcript.settled(&messages);
                         }
                     }
                     Err(error) => log::warn!("mini settle failed: {error}"),

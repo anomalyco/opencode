@@ -374,8 +374,28 @@ impl Transcript {
     }
 
     /// The first or a reconnecting hydration (`hydrate`): every listed message, shown unless this is the first
-    /// hydration and replay is off.
+    /// hydration and replay is off. A reconnect's rows are remembered as live rows are.
     pub fn hydrate(&mut self, messages: &[SessionMessageInfo], active: bool) -> Output {
+        let reconnect = !self.initial;
+        let output = self.list(messages, active);
+        if reconnect {
+            self.remember_all(&output.commits);
+        }
+        output
+    }
+
+    /// The messages listed once a turn settled (`settleSession`): what the live stream missed, remembered as live
+    /// rows are.
+    pub fn settled(&mut self, messages: &[SessionMessageInfo]) -> Output {
+        let mut output = Output::default();
+        for message in messages {
+            output.extend(self.message(message, true));
+        }
+        self.remember_all(&output.commits);
+        output
+    }
+
+    fn list(&mut self, messages: &[SessionMessageInfo], active: bool) -> Output {
         let render = !self.initial || self.replay;
         let mut output = Output::default();
         for message in messages {
@@ -454,7 +474,7 @@ impl Transcript {
         self.active_compaction = None;
         let mut output = Output::default();
         let local = std::mem::take(&mut self.local);
-        output.extend(self.hydrate(messages, active));
+        output.extend(self.list(messages, active));
         let mut restored = Vec::new();
         for commit in &local {
             if let Some(commit) = self.restore(commit) {
@@ -2050,6 +2070,20 @@ mod tests {
         assert_eq!(transcript.event(&ended).patch, Some(idle));
         transcript.begin_wait("msg_p");
         assert_eq!(transcript.event(&ended).patch, None);
+    }
+
+    /// Rows a reconnect or a settled turn printed stay when a resize lists without them (`--replay-limit`).
+    #[test]
+    fn rows_a_reconnect_or_a_settle_printed_survive_a_resize() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        transcript.hydrate(&[], true);
+        transcript.disconnected();
+        let user = |id: &str, text: &str| message(json!({ "id": id, "type": "user", "text": text }));
+        assert_eq!(texts(&transcript.hydrate(&[user("msg_1", "one")], true)), [(EntryKind::User, "one".into())]);
+        assert_eq!(texts(&transcript.settled(&[user("msg_2", "two")])), [(EntryKind::User, "two".into())]);
+        transcript.begin_replay();
+        let restored = [(EntryKind::User, "one".into()), (EntryKind::User, "two".into())];
+        assert_eq!(texts(&transcript.replayed(&[], true)), restored);
     }
 
     /// One message the client cannot read does not fail the list.
