@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use base64::Engine;
 use bytes::Bytes;
+use opencode_api_types::de::well_formed;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -173,7 +174,9 @@ impl Client {
     pub async fn json<T: DeserializeOwned>(&self, call: Call) -> Result<T, Error> {
         let bytes = json_body(self.execute(call).await?).await?;
         // Reads the value only, so bytes after it are not checked.
-        T::deserialize(&mut serde_json::Deserializer::from_slice(&bytes))
+        let decode = |bytes: &[u8]| T::deserialize(&mut serde_json::Deserializer::from_slice(bytes));
+        decode(&bytes)
+            .or_else(|error| well_formed(&bytes).map_or(Err(error), |bytes| decode(&bytes)))
             .map_err(|error| Error::MalformedResponse(error.to_string()))
     }
 
@@ -198,7 +201,7 @@ impl Client {
         if bytes.is_empty() {
             return Ok(Value::Null);
         }
-        serde_json::from_slice(&bytes).map_err(|error| Error::MalformedResponse(error.to_string()))
+        from_slice(&bytes).map_err(|error| Error::MalformedResponse(error.to_string()))
     }
 
     /// [`Client::reply`] for a body that is not JSON, such as a file the server reads: its bytes on any 2xx status.
@@ -341,7 +344,7 @@ async fn response_error(response: Response, declared: &[u16]) -> Error {
         Ok(body) => body,
         Err(error) => return error,
     };
-    match serde_json::from_slice(&body) {
+    match from_slice(&body) {
         Ok(body) => Error::Declared(Box::new(DeclaredError::new(status, body))),
         Err(error) => Error::MalformedResponse(error.to_string()),
     }
@@ -357,7 +360,7 @@ async fn status_error(response: Response) -> Error {
         Err(error) => return Error::Transport(error),
     };
     let declared = json
-        .then(|| serde_json::from_slice(&bytes).ok())
+        .then(|| from_slice(&bytes).ok())
         .flatten()
         .map(|body| DeclaredError::new(status, body))
         .filter(|declared| declared.tag.is_some() || declared.message.is_some());
@@ -387,6 +390,12 @@ async fn json_body(response: Response) -> Result<Bytes, Error> {
         return Err(Error::MalformedResponse("empty body".to_owned()));
     }
     Ok(bytes)
+}
+
+/// `serde_json::from_slice`, reading a lone surrogate escape as `JSON.parse` does, as far as Rust strings allow.
+fn from_slice<T: DeserializeOwned>(bytes: &[u8]) -> serde_json::Result<T> {
+    serde_json::from_slice(bytes)
+        .or_else(|error| well_formed(bytes).map_or(Err(error), |bytes| serde_json::from_slice(&bytes)))
 }
 
 fn is_content_type(response: &Response, expected: &str) -> bool {
