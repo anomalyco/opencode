@@ -764,6 +764,8 @@ export function createBrowserPane(input: {
       readonly activity?: TabActivity
       /** The tab whose page opened this one, which joins its pop-up group. */
       readonly opener?: Browser.TabID
+      /** Shows the opener's tab why an address this tab was opened for could not open. */
+      readonly refused?: (url: string) => void
     } = {},
   ) {
     const entry = selectBinding(machine.state, binding)
@@ -810,6 +812,12 @@ export function createBrowserPane(input: {
       initialize: options.initialize,
       restore: options.restore,
       popupOptions: options.popupOptions,
+      opened: options.refused && {
+        close: () => {
+          if (current()) dispatchBinding(binding, { type: "tab.closed", tabID: id, opener: options.opener })
+        },
+        refused: options.refused,
+      },
       fileRoots: () => selectFileRoots(machine.state, binding),
       workspace: handle.workspace?.(),
       previewFailure: handle.previewFailure,
@@ -881,8 +889,8 @@ export function createBrowserPane(input: {
       hidden: () => {
         if (handle.shared) input.profile.extensionTabs.hidden(page.contents.id)
       },
-      popup: (popupOptions, background, activity) => {
-        const popup = create(binding, { initialize: false, popupOptions, activity, opener: id })
+      popup: (popupOptions, background, activity, refused) => {
+        const popup = create(binding, { initialize: false, popupOptions, activity, opener: id, refused })
 
         if (activityOwner(activity) === "agent") {
           announce(binding, popup.state().id, "none", !background)

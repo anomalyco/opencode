@@ -3,11 +3,24 @@ import path from "node:path"
 import { runElectronFixture } from "./electron-run"
 
 type Outcome = {
-  /** The tabs the page asked the pane for: behind the current tab or in front, whose, where, and with what opener. */
-  readonly tabs: readonly { readonly background: boolean; readonly owner: string; readonly url: string; readonly opener: string }[]
+  /**
+   * The tabs the page asked the pane for: behind the current tab or in front, and whose. One that stayed says where it
+   * is, with what opener once it has a document, and its own notices; one that closed itself says only that.
+   */
+  readonly tabs: readonly {
+    readonly background: boolean
+    readonly owner: string
+    readonly url?: string
+    readonly opener?: string
+    readonly notices?: readonly object[]
+    readonly closed?: boolean
+  }[]
+  /** The notices of the pressed tab. */
   readonly notices: readonly object[]
   /** Whose the pressed tab is afterwards. */
   readonly owner: string
+  /** Each download that started, how it ended, and whether its tab had closed before its last bytes came. */
+  readonly downloads?: readonly { readonly url: string; readonly state: string; readonly tab: string }[]
 }
 
 const behind = (url: string): Outcome => ({ tabs: [{ background: true, owner: "user", url, opener: "none" }], notices: [], owner: "user" })
@@ -21,7 +34,7 @@ const blocked = (url: string, owner: string): Outcome => ({ tabs: [], notices: [
 // a new tab with no such report (`setWindowOpenHandler` in chromium.ts, window-open.ts). This presses links in the
 // pinned Electron with Chromium's input events, so an upgrade that changes any of that fails here.
 test(
-  "the person's middle-click and modified clicks on a link open tabs as in Chrome, and the agent's and a page's own stay blocked pop-ups",
+  "the person's middle-click and modified clicks on a link open tabs as in Chrome, a tab left with nothing to show closes, and the agent's and a page's own stay blocked pop-ups",
   async () => {
     const result: Record<string, Outcome> & { agent: Outcome & { refusal?: string }; platform: string } = JSON.parse(
       await runElectronFixture({ fixture: path.join(import.meta.dir, "electron-links.fixture.ts") }),
@@ -49,10 +62,38 @@ test(
     expect(result.opener).toEqual({ tabs: [{ background: false, owner: "user", url: "/target?opener", opener: "opener" }], notices: [], owner: "user" })
     expect(result.openerMiddle).toEqual(behind("/target?opener"))
 
+    // A new tab whose first navigation became a download has nothing to show: it closes itself, behind or in front,
+    // and the download ends as it would have, after its tab has gone.
+    const downloaded = [{ url: "/download", state: "completed", tab: "closed" }]
+    expect(result.download).toEqual({ tabs: [{ background: true, owner: "user", closed: true }], notices: [], owner: "user", downloads: downloaded })
+    expect(result.blankDownload).toEqual({ tabs: [{ background: false, owner: "user", closed: true }], notices: [], owner: "user", downloads: downloaded })
+    // One that had shown a page stays when a download starts in it.
+    expect(result.thenDownload).toEqual({
+      tabs: [{ background: true, owner: "user", url: "/then-download", opener: "none" }],
+      notices: [],
+      owner: "user",
+      downloads: [{ url: "/download", state: "completed", tab: "open" }],
+    })
+    // A link that redirects to a mail link leaves no empty tab: the pressed tab gets the offer a click on a mail link gets.
+    expect(result.mailRedirect).toEqual({ tabs: [{ background: true, owner: "user", closed: true }], notices: result.mail.notices, owner: "user" })
+    // One that redirects to an address the pane refuses keeps its tab, which says why in its own notice.
+    expect(result.refusedRedirect).toEqual({
+      tabs: [{ background: true, owner: "user", url: "about:blank", notices: [{ reason: "browser.address.credentials" }] }],
+      notices: [],
+      owner: "user",
+    })
+
     // The agent's middle-click is not the person's: it stays a blocked pop-up, or on Linux is refused before it is
     // sent, as it can paste the system selection.
     if (result.platform === "linux") expect(result.agent).toEqual({ tabs: [], notices: [], owner: "agent", refusal: expect.stringContaining("Middle-click") })
     else expect(result.agent).toEqual(blocked("/target?plain", "agent"))
+    // The agent's tab keeps its download, so it stays, as before.
+    expect(result.agentDownload).toEqual({
+      tabs: [{ background: false, owner: "agent", url: "about:blank" }],
+      notices: [],
+      owner: "agent",
+      downloads: [{ url: "/download", state: "completed", tab: "open" }],
+    })
     // The person's next middle-click takes the tab back and opens the link.
     expect(result.reclaimed).toEqual(behind("/target?plain"))
 

@@ -89,7 +89,7 @@ import { pageHandoff } from "./address"
 import { defaultBrowser } from "./default-browser"
 import { FileVerificationError } from "./file-verification"
 import type { workspacePages } from "./workspace-pages"
-import { windowOpening } from "./window-open"
+import { closesUnshown, windowOpening, type Unshown } from "./window-open"
 import { artifactLinks } from "./artifact-links"
 import { createPagePrompts, RESTORE_PROMPT, takeDialogs } from "./page-prompts"
 import type { SitePermissions } from "./site-permissions"
@@ -261,13 +261,21 @@ export function createBrowserPage(
     /** The page left the screen: another tab or a preview took its place, or the pane closed. */
     hidden?: () => void
     fail: () => void
-    /** Adopts a page the document opened; a background one leaves the current tab selected. */
-    popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean, activity: TabActivity) => WebContents
+    /**
+     * Adopts a page the document opened; a background one leaves the current tab selected. `refused` shows this tab
+     * why an address could not open, for a link the new tab was opened for and hands back (`opened`).
+     */
+    popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean, activity: TabActivity, refused: (url: string) => void) => WebContents
     activity: TabActivity
     userInput: () => void
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
+    /**
+     * A page opened this tab (`popup`). While it has shown no document, a first navigation that leaves it none ends it:
+     * `close` closes the tab, and `refused` shows the tab that opened it why the address could not open.
+     */
+    opened?: { readonly close: () => void; readonly refused: (url: string) => void }
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
     /** This binding's isolated origin for workspace previews. */
@@ -563,6 +571,14 @@ export function createBrowserPage(
   constructing.defer(notices.clear)
   const registerArtifactLinks = artifactLinks(cdp, () => artifactHost, target => notices.show({reason:"popup",target,action:"tab"}))
   const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner(activity), documentInput))
+
+  // Whether this tab ends with a first navigation that left it nothing to show (window-open.ts).
+  const leaves = (outcome: Unshown) =>
+    closesUnshown(
+      { opened: !!options.opened, committed: documentGeneration(documentState) > 0, owner: activityOwner(activity) },
+      outcome,
+    )
+
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
   let dialogGate = createDialogGateState()
@@ -888,7 +904,17 @@ export function createBrowserPage(
     if (!local && (allowedDestination(event.url, policy) || (!event.isMainFrame && /^(?:blob:|data:|about:srcdoc$)/i.test(event.url)))) return
     event.preventDefault()
     // The same reason a typed address gets, so a blocked link and a blocked address read alike.
-    refused(event.url)
+    const notice = navigationNotice(event.url, policy, activityOwner(activity), documentInput)
+
+    // Another app's link that a new tab was opened for is offered in the tab the person opened it from, as a click on
+    // that link is, and the empty tab goes.
+    if (event.isMainFrame && leaves(notice.reason === "external" ? "app" : "refused")) {
+      options.opened?.refused(event.url)
+
+      return options.opened?.close()
+    }
+
+    notices.show(notice)
   }
 
   contents.on("will-frame-navigate", guard)
@@ -956,7 +982,7 @@ export function createBrowserPage(
           partition: options.partition,
         },
       },
-      createWindow: (popupOptions) => options.popup(popupOptions, opening.background, childActivity(activity)),
+      createWindow: (popupOptions) => options.popup(popupOptions, opening.background, childActivity(activity), refused),
     }
   })
 
@@ -969,7 +995,23 @@ export function createBrowserPage(
       chain: item.getURLChain(),
     })
 
-    if (owner === "user") return
+    if (owner === "user") {
+      if (!leaves("download")) return
+
+      // A new tab whose first navigation became a download has nothing to show. It closes once the download has its
+      // place: while the person is still choosing in the save dialog, the item has no save path.
+      const placed = () => {
+        if (!leaves(item.getSavePath() || item.getState() !== "progressing" ? "download" : "download.choosing")) return
+        item.off("updated", placed)
+        item.off("done", placed)
+        options.opened?.close()
+      }
+
+      item.on("updated", placed)
+      item.on("done", placed)
+
+      return
+    }
 
     if (owner === "block") return item.cancel()
 

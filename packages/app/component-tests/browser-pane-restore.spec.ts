@@ -727,6 +727,7 @@ type MainEvent =
   | { type: "state"; state: { tabs: MainTab[]; focusedTabID: string } | null; error?: string }
   | { type: "page"; tabID: string; zoom: number; viewport: { mode: "auto" }; icon?: string }
   | { type: "embed"; tabID: string; embed: string }
+  | { type: "focus"; tabID: string }
 
 const preview = "tab_33333333-3333-3333-3333-333333333333"
 
@@ -925,6 +926,32 @@ story("a link opened with the middle button joins the strip behind the selected 
   await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs", "Docs"])
   await expect(root.getByTestId("selected")).toHaveText("browser:tab_66666666-6666-6666-6666-000000000002")
   await expect(root.getByText("Pop-up blocked")).toHaveCount(0)
+})
+
+story("a new tab that closes itself leaves the strip, and in front gives the pane back to the tab that opened it", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const tabs = root.getByRole("tab")
+  const selected = root.getByTestId("selected")
+  const opener = reported({ id: preview, url: "http://localhost:4173/", title: "Preview" })
+  const linked = reported({ id: docs, url: "about:blank", title: "" })
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+  // Behind: main lists the new tab, then drops it once its first navigation became a download.
+  await send(root, inventory(opener, linked))
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "New tab"])
+  await send(root, inventory(opener))
+  await expect(tabs).toHaveText(["beta.ts", "Preview"])
+  await expect(selected).toHaveText(`browser:${preview}`)
+  // In front: main selects the new tab, then selects its opener again before it drops the tab (`tab.closed` in
+  // pane-machine.ts).
+  await send(root, { type: "state", state: { tabs: [opener, linked], focusedTabID: docs } })
+  await send(root, { type: "focus", tabID: docs })
+  await expect(selected).toHaveText(`browser:${docs}`)
+  await send(root, { type: "focus", tabID: preview })
+  await send(root, inventory(opener))
+  await expect(tabs).toHaveText(["beta.ts", "Preview"])
+  await expect(selected).toHaveText(`browser:${preview}`)
+  await expect(root.getByRole("tab", { selected: true })).toHaveText("Preview")
 })
 
 story("?W right after an agent shows another page closes that browser tab, not the session", async ({ page }) => {

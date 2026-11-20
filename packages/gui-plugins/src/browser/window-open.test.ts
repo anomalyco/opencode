@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { ACTIVATION_LIFESPAN_MS, windowOpening } from "./window-open"
+import { ACTIVATION_LIFESPAN_MS, closesUnshown, windowOpening, type Unshown } from "./window-open"
 
 const url = "https://docs.example/guide"
 
@@ -51,4 +51,24 @@ const rows: readonly (readonly [name: string, request: Partial<Request>, expecte
 
 test.each(rows)("%s", (_name, request, expected) => {
   expect(windowOpening({ ...pressed, ...request })).toEqual(expected)
+})
+
+// A tab the person's link opened, which has shown no document yet.
+const unshown = { opened: true, committed: false, owner: "user" } as const
+
+const leaving: readonly (readonly [name: string, tab: Partial<Parameters<typeof closesUnshown>[0]>, outcome: Unshown, closes: boolean])[] = [
+  ["a new tab whose first navigation became a download closes once the download has its place", {}, "download", true],
+  ["it stays while the person is still choosing where to save", {}, "download.choosing", false],
+  ["a new tab whose first navigation went to another app closes", {}, "app", true],
+  ["a new tab whose first navigation was refused stays, with its notice", {}, "refused", false],
+  ["a tab that has shown a document stays when a download starts in it", { committed: true }, "download", false],
+  ["a tab that has shown a document stays when it is sent to another app", { committed: true }, "app", false],
+  ["a tab no page opened stays when the address typed into it downloads", { opened: false }, "download", false],
+  ["a tab no page opened stays when it is sent to another app", { opened: false }, "app", false],
+  ["the agent's new tab keeps its download and stays", { owner: "agent" }, "download", false],
+  ["the agent's new tab stays when it is sent to another app", { owner: "agent" }, "app", false],
+]
+
+test.each(leaving)("%s", (_name, tab, outcome, closes) => {
+  expect(closesUnshown({ ...unshown, ...tab }, outcome)).toBe(closes)
 })

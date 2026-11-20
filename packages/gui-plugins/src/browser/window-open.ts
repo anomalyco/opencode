@@ -63,3 +63,28 @@ export function windowOpening(request: {
   // The pane has no windows: what Chrome opens in a new window is a tab in front here.
   return { type: "open", background: request.disposition === "background-tab" }
 }
+
+/** Where the first navigation of a tab ended, when it left the tab no document to show. */
+export type Unshown =
+  /** A download the person is still placing in the save dialog. */
+  | "download.choosing"
+  /** A download that has its place, or that ended. */
+  | "download"
+  /** Another app's link, which the pane offers to open. */
+  | "app"
+  /** An address the pane refuses, which the tab says in its own notice. */
+  | "refused"
+
+/**
+ * Whether a tab closes itself because its first navigation left it nothing to show, as Chrome closes a new tab whose
+ * navigation became a download (`DownloadUIController::OnDownloadUpdated` in chrome/browser/download) or went to
+ * another app (`LaunchUrlWithoutSecurityCheckWithDelegate` in chrome/browser/external_protocol). Only a tab a page
+ * opened (`opened`) that has shown no document (`committed`) does, so nothing the person saw goes with it. Chrome waits
+ * until the download has its place. The agent's tabs keep their downloads, so they stay.
+ */
+export function closesUnshown(
+  tab: { readonly opened: boolean; readonly committed: boolean; readonly owner: "agent" | "user" },
+  outcome: Unshown,
+) {
+  return tab.opened && !tab.committed && tab.owner === "user" && (outcome === "download" || outcome === "app")
+}
