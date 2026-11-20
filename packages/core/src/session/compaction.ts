@@ -23,9 +23,12 @@ import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { llmClient } from "../effect/app-node-platform.js"
+import { Flag } from "../flag.js"
+import { Job } from "../job.js"
 import { Model } from "../model.js"
 import { State } from "../state.js"
 import { Token } from "../util/token.js"
+import { SessionCompactionSubagents } from "./compaction-subagents.js"
 import type { SessionContext } from "./context.js"
 import { SessionEvent } from "./event.js"
 import { SessionHistory } from "./history.js"
@@ -35,6 +38,7 @@ import { SessionRunnerModel } from "./runner/model.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 import { SessionRecentText } from "./recent-text.js"
+import { SessionStore } from "./store.js"
 import { contentFilterError, toSessionError } from "./to-session-error.js"
 import { SessionUsage } from "./usage.js"
 
@@ -208,9 +212,10 @@ const SUMMARY_RULES = `Rules:
 - Preserve consequential workflow state, including whether changes are uncommitted, committed, pushed, under review, or merged.
 - Do not mention the summary process or that context was compacted.`
 
-export const buildPrompt = (update: boolean, legacy = false) => {
+/** `subagents`: the `compaction_subagents` flag, under which the checkpoint lists the session's subagents itself. */
+export const buildPrompt = (update: boolean, legacy = false, subagents = false) => {
   const shared = [
-    "Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
+    `Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like ${subagents ? "this session's ID" : "the session ID"}. The next agent receives current versions of all of these separately.`,
     SUMMARY_TEMPLATE,
     SUMMARY_RULES,
     "Do not continue the task or call tools.",
@@ -236,7 +241,7 @@ export const buildPrompt = (update: boolean, legacy = false) => {
       : []),
     "Newer history always takes precedence over the existing checkpoint. Preserve previous information unless newer history clearly contradicts, supersedes, resolves, or makes it stale. If something is no longer relevant to continuing the work, you may remove it.",
     "Incorporate newer requirements, decisions, progress, and context. Reconcile Work State and Next Move: move completed work out of Active, remove resolved blockers and answered questions, and preserve unresolved or pending work.",
-    "Return only the updated Markdown sections. Do not reproduce the `<conversation-checkpoint>`, `<summary>`, or `<recent-context>` wrapper tags from the previous checkpoint.",
+    `Return only the updated Markdown sections. Do not reproduce the ${subagents ? "`<conversation-checkpoint>`, `<summary>`, `<recent-context>`, or `<subagents>`" : "`<conversation-checkpoint>`, `<summary>`, or `<recent-context>`"} wrapper tags from the previous checkpoint.`,
     ...shared,
   ].join("\n\n")
 }
@@ -252,11 +257,14 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const agents = yield* Agent.Service
     const bus = yield* Bus.Service
+    const flags = yield* Flag.Service
+    const jobs = yield* Job.Service
     const llm = yield* LLMClient.Service
     const catalog = yield* Model.Service
     const models = yield* SessionRunnerModel.Service
     const db = (yield* Database.Service).db
     const requests = yield* SessionModelRequest.Service
+    const store = yield* SessionStore.Service
 
     const scope = yield* Scope.Scope
     const precomputed = new Map<SessionContext.Loaded["session"]["id"], Precomputed>()
@@ -472,7 +480,11 @@ export const layer = Layer.effect(
       const keepID = background ? undefined : split.keepID
 
       const previous = previousCompaction(messages)
-      const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
+      const prompt = buildPrompt(
+        previous !== undefined,
+        previous?.summary.includes(LEGACY_HEADING) ?? false,
+        yield* flags.enabled("compaction_subagents"),
+      )
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
       const prepared = yield* prepare(context, messages, budget)
@@ -915,6 +927,12 @@ export const layer = Layer.effect(
         return { status: "failed", error: outcome.error }
       }
 
+      // Read when the compaction lands, not when its summary was written: a background summary may predate subagents.
+      const subagents = (yield* flags.enabled("compaction_subagents"))
+        ? yield* SessionCompactionSubagents.collect(store, jobs, sessionID)
+        : []
+      const metadata = subagents.length > 0 ? { subagents, ...outcome.metadata } : outcome.metadata
+
       yield* bus.publish(
         SessionEvent.Compaction.Ended,
         {
@@ -925,7 +943,7 @@ export const layer = Layer.effect(
           text: outcome.text,
           ...usage,
         },
-        { metadata: outcome.metadata },
+        { metadata },
       )
       return { status: "completed" }
     })
@@ -951,7 +969,18 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Agent.node, Bus.node, Database.node, llmClient, Model.node, SessionModelRequest.node, SessionRunnerModel.node],
+  deps: [
+    Agent.node,
+    Bus.node,
+    Database.node,
+    Flag.node,
+    Job.node,
+    llmClient,
+    Model.node,
+    SessionModelRequest.node,
+    SessionRunnerModel.node,
+    SessionStore.node,
+  ],
 })
 
 /**

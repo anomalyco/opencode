@@ -231,6 +231,37 @@ Earlier work
     ])
   })
 
+  test("lists a checkpoint's subagents after its summary, and after a native window", () => {
+    const metadata = { subagents: [{ id: "ses_child", agent: "explore", title: "Search", status: "running" }] }
+    const block = [
+      "<subagents>",
+      "Direct subagent sessions of this session, with their status when this checkpoint was written:",
+      "- ses_child (explore, running): Search",
+      "</subagents>",
+    ].join("\n")
+    const checkpoint = (native?: SessionMessage.Native) =>
+      SessionMessage.Compaction.make({
+        id: id("compaction-subagents"),
+        type: "compaction",
+        status: "completed",
+        reason: "auto",
+        summary: native ? "" : "Earlier work",
+        native,
+        metadata,
+        time: { created },
+      })
+
+    const [summary] = toLLMMessages([checkpoint()], model)
+    expect(summary?.content).toEqual([
+      { type: "text", text: expect.stringContaining(`</summary>\n\n${block}\n</conversation-checkpoint>`) },
+    ])
+    const native = toLLMMessages(
+      [checkpoint({ messages: [{ role: "user", content: [{ type: "text", text: "kept" }] }] })],
+      model,
+    )
+    expect(native.map((message) => message.content)).toEqual([[Message.text("kept")], [Message.text(block)]])
+  })
+
   describe("model-switched", () => {
     const ref = (variant?: string) =>
       Model.Ref.make({
