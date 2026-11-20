@@ -745,7 +745,8 @@ fn parse_int(text: &str) -> Result<i64, &'static str> {
     }
 }
 
-// HTTP(S) URL without credentials, query, fragment or trailing slash.
+// HTTP(S) URL without credentials, query, fragment or trailing slash. An empty `?` or `#` passes, as WHATWG's
+// `search` and `hash` are then empty.
 fn pairing_url(value: &str) -> Result<String, &'static str> {
     let error = "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment";
     let url = opencode_api::js::parse_url(value).map_err(|parse| match parse {
@@ -755,8 +756,8 @@ fn pairing_url(value: &str) -> Result<String, &'static str> {
     let plain = matches!(url.scheme(), "http" | "https")
         && url.username().is_empty()
         && url.password().is_none()
-        && url.query().is_none()
-        && url.fragment().is_none();
+        && url.query().is_none_or(str::is_empty)
+        && url.fragment().is_none_or(str::is_empty);
     if !plain {
         return Err(error);
     }

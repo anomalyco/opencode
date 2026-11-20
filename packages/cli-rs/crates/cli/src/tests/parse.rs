@@ -215,6 +215,9 @@ fn aliases_and_values_match() {
     assert!(matches!(parse(&["update", "1.2.3", "-m", "brew"]).unwrap().cli.command, Some(Command::Upgrade(_))));
     let url = command!(&["pair", "--url", "https://example.com/base//"], Command::Pair(args) => args.url);
     assert_eq!(url.as_deref(), Some("https://example.com/base"));
+    for (url, kept) in [("http://a.b?", "http://a.b/?"), ("http://a.b#", "http://a.b/#")] {
+        assert_eq!(command!(&["pair", "--url", url], Command::Pair(args) => args.url).as_deref(), Some(kept));
+    }
     for url in ["https://bücher.example", "https://Bücher.example", "https://%42%C3%BCcher.example"] {
         assert_eq!(
             error(&["pair", "--url", url]),
