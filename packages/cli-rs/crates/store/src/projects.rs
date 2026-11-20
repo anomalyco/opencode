@@ -149,55 +149,22 @@ impl Data {
 mod tests {
     use super::*;
 
-    fn event(directory: &str, adopted: &[&str]) -> WorktreeResolvedData {
+    fn event(directory: &str) -> WorktreeResolvedData {
         WorktreeResolvedData {
             project_id: ProjectID("repository".into()),
             directory: AbsolutePath(directory.into()),
             previous: ProjectID("global".into()),
-            adopted: Some(adopted.iter().map(|id| ProjectID((*id).into())).collect()),
+            adopted: Some(Vec::new()),
         }
     }
 
+    /// Windows: backslashes, and a drive root that matches whatever the case. Case folding can change a string's
+    /// length (`İ`), so the root matches by segments, not by its byte length.
     #[test]
-    fn projects_that_sort_equal_keep_their_first_read_order() {
-        let project = |id: &str, active: i64| Project {
-            id: ProjectID(id.into()),
-            time: ProjectTime { active, ..ProjectTime::default() },
-            ..Project::default()
-        };
-        let order = |state: &State| state.projects().iter().map(|project| project.id.0.clone()).collect::<Vec<_>>();
-        let mut state = State::default();
-        let ids = ["p", "c", "x", "a", "m", "k", "z", "b"];
-        state.replace_projects(ids.iter().map(|id| project(id, 1)).collect());
-        assert_eq!(order(&state), ids);
-        // A later read in another order with one project gone and one new keeps the kept ones in place.
-        let mut again: Vec<Project> =
-            ["new", "b", "z", "k", "m", "a", "x", "c"].iter().map(|id| project(id, 1)).collect();
-        again.push(project("recent", 2));
-        state.replace_projects(again);
-        assert_eq!(order(&state), ["recent", "c", "x", "a", "m", "k", "z", "b", "new"]);
-        // `Object.values` puts array-index keys first, ascending; `"02"` and `"4294967295"` are not indices.
-        let ids = ["10", "local", "2", "02", "4294967295", "4294967294", "+1"];
-        state.replace_projects(ids.iter().map(|id| project(id, 1)).collect());
-        assert_eq!(order(&state), ["2", "10", "4294967294", "local", "02", "4294967295", "+1"]);
-    }
-
-    #[test]
-    fn adopts_sessions_under_the_repository_root() {
-        let resolved = event("/repo", &["directory-root"]);
-        let adopt = |project: &str, directory: &str| adopt(project, directory, &resolved);
-        assert_eq!(adopt("directory-root", "/repo"), Some(("repository".into(), None)));
-        assert_eq!(adopt("global", "/repo/alias/../app/"), Some(("repository".into(), Some("app".into()))));
-        assert_eq!(adopt("global", "/repo/../other"), None);
-        assert_eq!(adopt("global", "/repo-other"), None);
-        assert_eq!(adopt("other-repository", "/repo/vendor"), None);
-        assert_eq!(adopt("repository", "/repo/app"), None);
-        assert_eq!(adopt("global", "\\repo\\.\\Legacy"), Some(("repository".into(), Some("Legacy".into()))));
-        let windows = event("C:\\Repo", &[]);
-        assert_eq!(super::adopt("global", "c:/repo/App", &windows), Some(("repository".into(), Some("App".into()))));
-        // Case folding can change string length (`İ`); match root segments rather than slicing by the original
-        // length.
-        let folded = event("c:\\i\u{307}", &[]);
-        assert_eq!(super::adopt("global", "C:\\\u{130}\\ä", &folded), Some(("repository".into(), Some("ä".into()))));
+    fn a_windows_root_adopts_sessions_whatever_their_case_or_slashes() {
+        let adopted = |subpath: &str| Some(("repository".to_owned(), Some(subpath.to_owned())));
+        assert_eq!(adopt("global", "\\repo\\.\\Legacy", &event("/repo")), adopted("Legacy"));
+        assert_eq!(adopt("global", "c:/repo/App", &event("C:\\Repo")), adopted("App"));
+        assert_eq!(adopt("global", "C:\\\u{130}\\ä", &event("c:\\i\u{307}")), adopted("ä"));
     }
 }

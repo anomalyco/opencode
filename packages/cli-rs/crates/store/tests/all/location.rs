@@ -118,6 +118,41 @@ async fn updates_authoritative_cached_project_metadata_from_live_events() {
     assert_eq!(requests.get(), ["/api/project"]);
 }
 
+/// Most recently active first. Projects that sort equal keep TS's `Object.values` order: array-index IDs ascending,
+/// then the rest in the order Solid's `reconcile` leaves them, where a re-read keeps a kept project in place and adds a
+/// new one last.
+#[tokio::test]
+async fn projects_list_by_activity_then_in_first_read_order() {
+    let reads = Arc::new(Mutex::new(vec![
+        vec![("p", 1), ("c", 1), ("x", 1), ("a", 1), ("m", 1)],
+        vec![("new", 1), ("m", 1), ("a", 1), ("x", 1), ("c", 1), ("recent", 2)],
+        vec![("10", 1), ("local", 1), ("2", 1), ("02", 1), ("4294967295", 1), ("4294967294", 1), ("+1", 1)],
+    ]));
+    let data = data(
+        handler(move |req: Req| {
+            let read = if req.path == "/api/project" { reads.lock().unwrap().remove(0) } else { Vec::new() };
+            let list: Vec<Value> = read
+                .into_iter()
+                .map(|(id, active)| json!({ "id": id, "canonical": "/p", "time": { "created": 1, "updated": 1, "active": active }, "sandboxes": [] }))
+                .collect();
+            async move { ok(json!(list)) }
+        }),
+        Options::default(),
+    );
+    let order = || data.read(|state| state.projects().iter().map(|project| project.id.0.clone()).collect::<Vec<_>>());
+    // Each reconnect after the first stream invalidates every read.
+    let reconnect = || emit(&data, json!({ "id": "evt_connected", "type": "server.connected", "data": {} }));
+    reconnect();
+    data.project_sync().await.unwrap();
+    assert_eq!(order(), ["p", "c", "x", "a", "m"]);
+    reconnect();
+    data.project_sync().await.unwrap();
+    assert_eq!(order(), ["recent", "c", "x", "a", "m", "new"]);
+    reconnect();
+    data.project_sync().await.unwrap();
+    assert_eq!(order(), ["2", "10", "4294967294", "local", "02", "4294967295", "+1"]);
+}
+
 #[tokio::test]
 async fn adopts_cached_directory_project_sessions_when_their_repository_is_resolved() {
     let data = data(

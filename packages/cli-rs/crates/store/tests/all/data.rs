@@ -311,6 +311,32 @@ async fn follows_a_changed_omit_setting_and_restores_dropped_tool_files_from_the
     assert_eq!(gets.load(Ordering::SeqCst), 1);
 }
 
+/// Each write is one revision. What changed since a revision holds every session a later write touched, and only
+/// those, until that revision leaves the log; then it is everything.
+#[tokio::test]
+async fn changes_since_a_revision_hold_every_later_write_or_everything() {
+    let data = data(handler(|_| async { ok(json!({})) }), Options::default());
+    let base = data.read(|state| state.revision());
+    let sessions = [id("ses_0"), id("ses_1"), id("ses_2")];
+    let mut writes = Vec::new();
+    for at in 0..opencode_store::changes::LOG_LIMIT + 20 {
+        let status = if (at / 3) % 2 == 0 { SessionStatus::Running } else { SessionStatus::Idle };
+        data.set_status(&sessions[at % 3], status);
+        writes.push((data.read(|state| state.revision()), at % 3));
+    }
+    let revision = data.read(|state| state.revision());
+    assert_eq!(revision, base + writes.len() as u64);
+    for seen in base..=revision {
+        let (now, changes) = data.changes_since(seen);
+        assert_eq!(now, revision);
+        assert_eq!(changes.all, seen + (opencode_store::changes::LOG_LIMIT as u64) < revision, "since {seen}");
+        let touched: Vec<usize> = writes.iter().filter(|(at, _)| *at > seen).map(|(_, session)| *session).collect();
+        for (index, session) in sessions.iter().enumerate() {
+            assert_eq!(changes.status(session), changes.all || touched.contains(&index), "since {seen}: {index}");
+        }
+    }
+}
+
 #[tokio::test]
 async fn refreshes_a_loaded_sessions_execution_start_when_it_starts_running() {
     let data = data(
