@@ -138,7 +138,12 @@ pub fn js_string(value: &serde_json::Value) -> String {
             (_, _, Some(value)) => number_to_string(value),
             _ => number.to_string(),
         },
-        Value::Array(items) => items.iter().map(js_string).collect::<Vec<_>>().join(","),
+        // `Array.prototype.join` writes `null` as an empty string.
+        Value::Array(items) => items
+            .iter()
+            .map(|item| if item.is_null() { String::new() } else { js_string(item) })
+            .collect::<Vec<_>>()
+            .join(","),
         Value::Object(_) => "[object Object]".to_owned(),
     }
 }
@@ -352,6 +357,12 @@ mod tests {
         for (value, text) in cases {
             assert_eq!(number_to_string(value), text, "{value}");
         }
+    }
+
+    #[test]
+    fn values_convert_to_strings_as_javascript_does() {
+        let value = serde_json::json!([null, "a", [null, 1.5, [true]], {}, 1e21]);
+        assert_eq!(js_string(&value), ",a,,1.5,true,[object Object],1e+21");
     }
 
     #[test]
