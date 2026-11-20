@@ -3,10 +3,12 @@ import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Effect, Fiber, Layer, Logger } from "effect"
+import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Git } from "@opencode/core/git"
 import { Global } from "@opencode/util/global"
 import { Location } from "@opencode/core/location"
+import { Project } from "@opencode/core/project"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Hash } from "@opencode/util/hash"
@@ -449,6 +451,149 @@ describe("Snapshot", () => {
         }),
       ),
     { timeout: 15_000 },
+  )
+
+  testEffect(Layer.empty).live(
+    "evicts untracked files that grow past 2 MiB and prunes newly ignored directories on later captures",
+    () =>
+      withTempDir((tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.bin"), "small\n")
+            await initGit(project, true)
+            await fs.writeFile(path.join(project, "grow.log"), "small file\n")
+            await fs.mkdir(path.join(project, "data"))
+            await fs.writeFile(path.join(project, "data", "a.dat"), "a\n")
+            await fs.writeFile(path.join(project, "data", "b.dat"), "b\n")
+          })
+
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const first = yield* snapshot.capture()
+            expect(first).toBeDefined()
+            if (!first) return
+
+            const large = new Uint8Array(Snapshot.MAXIMUM_UNTRACKED_FILE_BYTES + 1).fill(120)
+            yield* Effect.promise(async () => {
+              await fs.writeFile(path.join(project, "grow.log"), large)
+              await fs.writeFile(path.join(project, "tracked.bin"), large)
+              await fs.writeFile(path.join(project, ".gitignore"), "data/\n")
+              await fs.writeFile(path.join(project, "data", "a.dat"), large)
+              await fs.writeFile(path.join(project, "data", "new.dat"), large)
+            })
+
+            const second = yield* snapshot.capture()
+            expect(second).toBeDefined()
+            if (!second) return
+
+            const storage = yield* snapshotDirectory(tmp.path)
+            const indexed = (yield* Effect.promise(() => $`git --git-dir ${storage} ls-files`.text()))
+              .split("\n")
+              .filter(Boolean)
+            expect(indexed).toEqual([".gitignore", "tracked.bin"])
+
+            const tree = (yield* Effect.promise(() =>
+              $`git --git-dir ${storage} ls-tree -r --name-only ${second}`.text(),
+            ))
+              .split("\n")
+              .filter(Boolean)
+            expect(tree).toEqual([".gitignore", "tracked.bin"])
+
+            const trackedSize = Number(
+              (yield* Effect.promise(() =>
+                $`git --git-dir ${storage} cat-file -s ${second}:tracked.bin`.text(),
+              )).trim(),
+            )
+            expect(trackedSize).toBe(large.byteLength)
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+        }),
+      ),
+  )
+
+  testEffect(Layer.empty).effect("passes capture bounds and degrades to undefined when capture times out", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const project = AbsolutePath.make(yield* Effect.promise(() => fs.realpath(tmp.path)))
+        const source = new Git.Repository({
+          worktree: project,
+          gitDirectory: AbsolutePath.make(path.join(project, ".git")),
+          commonDirectory: AbsolutePath.make(path.join(project, ".git")),
+        })
+        const started = yield* Deferred.make<Git.CaptureInput>()
+        let interrupted = false
+        const warnings: string[] = []
+        const baseGit = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
+        const git = Layer.succeed(
+          Git.Service,
+          Git.Service.of({
+            ...baseGit,
+            repo: {
+              ...baseGit.repo,
+              discover: () => Effect.succeed(source),
+              create: (input) =>
+                Effect.succeed(
+                  new Git.Repository({
+                    worktree: input.worktree,
+                    gitDirectory: input.gitDirectory,
+                    commonDirectory: input.gitDirectory,
+                  }),
+                ),
+            },
+            tree: {
+              ...baseGit.tree,
+              capture: (input) =>
+                Deferred.succeed(started, input).pipe(
+                  Effect.andThen(Effect.never),
+                  Effect.onInterrupt(() =>
+                    Effect.sync(() => {
+                      interrupted = true
+                    }),
+                  ),
+                ),
+            },
+          }),
+        )
+        const location = Layer.succeed(
+          Location.Service,
+          Location.Service.of({
+            directory: project,
+            project: { id: Project.ID.make("proj-timeout"), directory: project, canonical: project },
+            vcs: { type: "git", store: source.gitDirectory },
+          }),
+        )
+        const layer = AppNodeBuilder.build(Snapshot.node, [
+          Location.node.replace(location),
+          Global.node.replace(Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })),
+          Git.node.replace(git),
+        ])
+
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          const fiber = yield* snapshot.capture().pipe(Effect.forkChild({ startImmediately: true }))
+          const input = yield* Deferred.await(started)
+          yield* Effect.yieldNow
+          expect(input.maximumUntrackedFileBytes).toBe(Snapshot.MAXIMUM_UNTRACKED_FILE_BYTES)
+          expect(input.maximumUntrackedFiles).toBe(Snapshot.MAXIMUM_UNTRACKED_FILES)
+          expect(input.maximumUntrackedTotalBytes).toBe(Snapshot.MAXIMUM_UNTRACKED_TOTAL_BYTES)
+
+          yield* TestClock.adjust(Snapshot.CAPTURE_TIMEOUT)
+          expect(yield* Fiber.join(fiber)).toBeUndefined()
+          expect(interrupted).toBe(true)
+          expect(warnings.some((entry) => entry.includes("timed out capturing snapshot"))).toBe(true)
+        }).pipe(
+          Effect.provide(layer),
+          Effect.provide(
+            Logger.layer([
+              Logger.make((entry) => {
+                if (entry.logLevel === "Warn") warnings.push(Bun.inspect(entry.message, { depth: 4 }))
+              }),
+            ]),
+          ),
+        )
+      }),
+    ),
   )
 })
 

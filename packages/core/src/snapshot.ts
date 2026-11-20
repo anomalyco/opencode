@@ -2,7 +2,7 @@ export * as Snapshot from "./snapshot.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
-import { Clock, Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
+import { Clock, Context, Effect, Fiber, Layer, Option, Schema, Scope } from "effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "./git.js"
@@ -14,6 +14,11 @@ import { Hash } from "@opencode/util/hash"
 import { State } from "./state.js"
 
 export { ID }
+
+export const MAXIMUM_UNTRACKED_FILE_BYTES = 2 * 1024 * 1024
+export const MAXIMUM_UNTRACKED_FILES = 4096
+export const MAXIMUM_UNTRACKED_TOTAL_BYTES = 64 * 1024 * 1024
+export const CAPTURE_TIMEOUT = "15 seconds"
 
 export class Error extends Schema.TaggedError<Error>()("Snapshot.Error", {
   operation: Schema.Literals(["capture", "files", "diff", "restore"]),
@@ -138,11 +143,24 @@ const layer = Layer.effect(
           repository: repo.snapshotRepository,
           scopes: [yield* scope(repo.worktree)],
           ignores: repo.source,
-          maximumUntrackedFileBytes: 2 * 1024 * 1024,
+          maximumUntrackedFileBytes: MAXIMUM_UNTRACKED_FILE_BYTES,
+          maximumUntrackedFiles: MAXIMUM_UNTRACKED_FILES,
+          maximumUntrackedTotalBytes: MAXIMUM_UNTRACKED_TOTAL_BYTES,
         })
         yield* packWhenDue(repo.snapshotRepository)
         return ID.make(tree)
       }).pipe(
+        Effect.timeoutOption(CAPTURE_TIMEOUT),
+        Effect.flatMap(
+          Option.match({
+            onSome: (id) => Effect.succeed(id),
+            onNone: () =>
+              Effect.logWarning("timed out capturing snapshot", {
+                directory: location.directory,
+                timeout: CAPTURE_TIMEOUT,
+              }).pipe(Effect.as(undefined)),
+          }),
+        ),
         Effect.catch((cause) => Effect.logWarning("failed to capture snapshot", { cause }).pipe(Effect.as(undefined))),
       )
     })
