@@ -15,9 +15,12 @@ This document is the contract between the server, the shared TypeScript runtime 
 | Widget message, events, template store, `widget` and `widget_template` tools, HTTP API | `packages/schema`, `packages/core`, `packages/protocol`, `packages/server`, `packages/client` | core |
 | TUI renderer | `packages/tui` | tui |
 | Rune desktop renderer (Rust PsychoScript) | `anomalyco/rune-desktop` (`crates/opencode-widget` runner, `crates/opencode-widget-view` renderer) | rune |
+| Mobile runner bindings (UniFFI: step, draw, WGSL translation via naga) | `anomalyco/rune-desktop` `crates/opencode-widget-ffi` | ffi |
+| iOS renderer (SwiftUI, Metal for `shader`) | `anomalyco/opencode-ios` | ios |
+| Android renderer (Jetpack Compose, GLES 3 for `shader`) | `anomalyco/opencode-android` | android |
 
-Clients in scope: TUI and Rune desktop. Web/Electron is out. Mobile (native iOS/Android, no JavaScript) comes later by
-embedding the Rune renderer and the Rust runner.
+Clients in scope: TUI, Rune desktop, native iOS and Android. Web/Electron is out. Mobile apps run no JavaScript: they
+run programs with the Rust PsychoScript through `opencode-widget-ffi` and render natively.
 
 PsychoScript itself (`anomalyco/psychoscript`) does not change: its repo holds only the language. The widget
 "extension" is the prelude and the step ABI below, layered on the stock interpreter, with no host functions besides
@@ -113,7 +116,7 @@ error inline. The first `init` step failing shows an error card with the message
 ## Events
 
 ```ts
-type WidgetEvent = { id: string; type: "press" | "change"; value?: unknown }
+type WidgetEvent = { id: string; type: "press" | "change" | "pointer"; value?: unknown }
 ```
 
 | Node | Event |
@@ -124,6 +127,7 @@ type WidgetEvent = { id: string; type: "press" | "change"; value?: unknown }
 | `select` | `change`, `value: string` or `string[]` when `multiple` |
 | `input` | `change`, `value: string` (on commit / blur / debounce >= 300 ms) |
 | `carousel` with `id` | `change`, `value: number` (new page index) |
+| `canvas` with `id` | `pointer`, `value: { kind, x, y }` (see Canvas) |
 
 ## Nodes
 
@@ -149,7 +153,12 @@ type Node =
       value?: string | string[]; multiple?: boolean }
   | { type: "input"; id: string; label?: string; value: string; placeholder?: string; multiline?: boolean }
   | { type: "divider" }
+  | { type: "canvas"; id?: string; height: number; width?: number; fps?: number; alt?: string }
+  | { type: "shader"; id?: string; height: number; width?: number; wgsl: string; values?: number[]; fps?: number;
+      alt?: string; poster?: string }
 ```
+
+`canvas` and `shader` take the full available width unless `width` is set; sizes are logical pixels.
 
 Gap units are client-relative (TUI: rows/cols; GUI: 4/8/12 px).
 
@@ -159,6 +168,74 @@ file name) plus the source instead of pixels where it cannot draw images.
 
 Carousel: one child visible at a time with paging (swipe on touch, arrows on desktop, left/right keys in the TUI) and a
 page indicator. A carousel without `id` pages locally; with `id` it also emits `change`.
+
+## Canvas
+
+A `canvas` node is drawn by the template's optional `draw(state, data, frame)` function, which returns draw commands.
+`draw` is pure: it can't change state. Animate with `frame.t`; keep anything that must persist in state via events.
+
+Draw step input / output (same `__widget_step` entry point):
+
+```ts
+type StepInput = ... | { phase: "draw"; data: unknown; state: unknown; frame: Frame }
+type Frame = {
+  id: string | null   // the canvas node's id (templates with several canvases switch on it)
+  t: number           // seconds since the canvas appeared
+  dt: number          // seconds since the previous frame
+  width: number; height: number; scale: number   // logical size and device pixel ratio
+  pointer: { x: number; y: number; down: boolean } | null
+  dark: boolean
+}
+type DrawOutput = { commands: Command[] }
+```
+
+Clients call it once when the canvas appears or state changes, then every frame while `fps > 0` (default 0, max 60;
+clients may lower it, e.g. off screen, in low-power mode, or in the TUI). Budget: 8 ms per draw step and 2,000 commands
+per frame; a canvas that exceeds it three frames in a row stops animating and keeps its last frame.
+
+Commands are compact arrays, built with the prelude's `ui.draw()` builder (`const g = ui.draw(); g.rect(...);
+return g.commands`). Coordinates are logical pixels, origin top-left.
+
+```ts
+type Command =
+  | ["save"] | ["restore"] | ["translate", x, y] | ["rotate", radians] | ["scale", sx, sy] | ["alpha", a]
+  | ["rect", x, y, w, h, Paint] | ["rrect", x, y, w, h, r, Paint] | ["circle", cx, cy, r, Paint]
+  | ["line", x1, y1, x2, y2, Paint]
+  | ["path", Segment[], Paint]   // Segment: ["M", x, y] | ["L", x, y] | ["Q", cx, cy, x, y] | ["C", c1x, c1y, c2x, c2y, x, y] | ["Z"]
+  | ["text", x, y, string, { size?: number; weight?: 400 | 500 | 600 | 700; align?: "left" | "center" | "right"; color?: Color; mono?: boolean }]
+  | ["image", src, x, y, w, h]
+type Paint = { fill?: Color | Gradient; stroke?: Color; width?: number; cap?: "butt" | "round" }
+type Color = string   // "#rgb" | "#rrggbb" | "#rrggbbaa" | a theme token: "text" | "muted" | "accent" | "bg" | "surface" | "border" | "success" | "warning" | "error"
+type Gradient = { linear: [x1, y1, x2, y2]; stops: [offset: number, color: Color][] }
+              | { radial: [cx, cy, r]; stops: [offset: number, color: Color][] }
+```
+
+Pointer input on a canvas with an `id` goes to `update`:
+`{ id, type: "pointer", value: { kind: "down" | "move" | "up", x, y } }`, with `move` only while down and at most once
+per frame.
+
+## Shader
+
+A `shader` node runs a WGSL fragment shader on the GPU, free-running at `fps` (default 60). The node's `wgsl` must define
+
+```wgsl
+fn shade(frag: vec2f) -> vec4f   // frag: pixel position, origin top-left; returns premultiplied RGBA
+```
+
+Clients prepend this header and append the entry point (and provide a full-screen-triangle vertex stage):
+
+```wgsl
+struct Widget { resolution: vec2f, time: f32, scale: f32, pointer: vec4f, values: array<vec4f, 4> }
+@group(0) @binding(0) var<uniform> widget: Widget;
+// ... template wgsl ...
+@fragment fn widget_main(@builtin(position) p: vec4f) -> @location(0) vec4f { return shade(p.xy); }
+```
+
+`widget.pointer` is `(x, y, down, 0)`; `widget.values` carries the node's `values` (up to 16 floats, row-major, zero
+padded), which the template sets from state in `view`. Rune passes WGSL to wgpu as is; iOS gets MSL and Android GLSL
+ES 3.00 translated with naga (`opencode-widget-ffi`). Source is capped at 16 KB. A shader that fails to compile shows
+`poster` (an image src) or `alt` with the error inline; one that takes over 50 ms per frame three frames in a row stops
+and shows its last frame. The TUI shows `poster`/`alt` for `shader` and `alt` for `canvas`.
 
 ## Widget message
 
