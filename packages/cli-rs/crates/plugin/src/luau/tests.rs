@@ -785,6 +785,18 @@ fn a_long_error_is_cut_and_escaped() {
     let end = message.get(message.len().saturating_sub(60)..);
     assert!(message.ends_with(&format!("... ({} bytes)", 6 * 1024 * 1024 + 10)), "{end:?}");
     assert_eq!(frames, "\tinit.luau:5: in function <init.luau:4>");
+    // A stack overflow's traceback, a frame a level, keeps its first frames and its last.
+    let deep = init.replace(
+        r#"error("\27]0;title\7" .. string.rep("E", 6 * 1024 * 1024), 0)"#,
+        "local function f(n) return f(n + 1) + 1 end f(1)",
+    );
+    let registry = running(&host, define(&sources(&deep), None).unwrap().0);
+    keymap(&host).dispatch("fail", None);
+    host.app.advance(Duration::from_millis(1));
+    let error = failure(&registry, "test.luau").expect("failed");
+    assert!(error.len() < 4096 + 100, "{} bytes: {:?}", error.len(), error.get(..200));
+    assert_eq!(error.lines().filter(|line| line.starts_with("\tinit.luau:")).count(), 20, "{error}");
+    assert!(error.lines().any(|line| line.starts_with("\t... (") && line.ends_with(" frames)")), "{error}");
 }
 
 #[test]

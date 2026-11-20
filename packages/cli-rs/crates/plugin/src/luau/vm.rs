@@ -355,6 +355,7 @@ impl Drop for Outer<'_> {
 /// functions, of mlua's `require` and of the host's `@opencode/plugin`, which say nothing about the plugin. An
 /// allocation over the heap's `cap` says so, with the cap.
 fn report(id: &str, error: &str, cap: usize) -> String {
+    const FRAMES: usize = 10;
     let (message, traceback) = error.split_once("\nstack traceback:\n").unwrap_or((error, ""));
     let message = message.trim_end().strip_prefix("runtime error: ").unwrap_or(message.trim_end());
     // Luau's text for an allocation the cap refused, "not enough memory" (mlua's "memory error: " before it on a call,
@@ -362,12 +363,17 @@ fn report(id: &str, error: &str, cap: usize) -> String {
     let capped = format!("out of memory: an allocation went past its {} MiB Luau heap cap", cap >> 20);
     let refused = message.strip_prefix("memory error: ").unwrap_or(message) == "not enough memory";
     let message = if refused { &capped } else { message };
-    let frames: Vec<String> = traceback
+    let mut frames: Vec<String> = traceback
         .lines()
         .map(|line| line.trim_start_matches(['\t', ' ', '>']))
         .filter(|frame| frame.split(':').next().is_some_and(|file| file.ends_with(".luau")))
         .map(|frame| plain(frame, crate::mailbox::REPORT))
         .collect();
+    // A stack overflow has a frame a level: the first ones and the last ones say where it went.
+    if frames.len() > 2 * FRAMES {
+        let skipped = frames.len() - 2 * FRAMES;
+        frames.splice(FRAMES..frames.len() - FRAMES, [format!("... ({skipped} frames)")]);
+    }
     let message = plain(message, crate::mailbox::REPORT);
     if frames.is_empty() {
         return format!("{id}: {message}");
