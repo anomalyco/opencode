@@ -47,6 +47,7 @@ test("new-session project picker and provider tip show keyboard focus", async ({
   await newSessionWorktree(page).press("Shift+Tab")
   await expect(projectPicker).toBeFocused()
   await expect(projectPicker).toHaveCSS("outline-style", "solid")
+  await expect(projectPicker).not.toHaveCSS("transition-property", /\b(all|outline)\b/)
 
   await expect(connect).toBeVisible()
   await dismiss.press("Shift+Tab")
