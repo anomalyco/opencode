@@ -248,7 +248,8 @@ function usePins() {
     void (async () => {
       // The shared event client multiplexes one stream, so space subscriptions open their own.
       const query = new URLSearchParams([
-        ...SpaceEvents.map((type) => ["types", type]),
+        // Space events always pass the type filter, so one rare bus type keeps everything else off this stream.
+        ["types", "location.shutdown"],
         ["experimental.kv", revision === undefined ? "pins" : `pins:${revision}`],
       ])
       const response = await fetch(new URL(`/api/event?${query}`, url), {
