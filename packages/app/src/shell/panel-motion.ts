@@ -5,6 +5,7 @@ import {
   createPanelMotionState,
   PANEL_FLIGHT_TIMEOUT_MS,
   selectPanelMounted,
+  selectPanelOpenAtRest,
   selectPanelPresent,
   transitionPanelMotion,
   type PanelMotionEffect,
@@ -385,6 +386,7 @@ export function createPanelMotion(input: {
     present: createMemo(() => selectPanelPresent(motionState())),
     /** From the first open on, for contents that stay mounted once closed. */
     mounted: createMemo(() => selectPanelMounted(motionState())),
+    openAtRest: createMemo(() => selectPanelOpenAtRest(motionState())),
     /** How far closed the panel is now, from 0 (open) to 1 (closed); not reactive, as it moves every frame. */
     closed,
     /** Shows `open` at once, also when the change hasn't reached this motion yet, e.g. inside a batch. */

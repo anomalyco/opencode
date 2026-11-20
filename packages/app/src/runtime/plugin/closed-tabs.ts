@@ -189,5 +189,6 @@ function inSide(event: Event, fallback: boolean) {
   const placed =
     target instanceof Element && target !== document.body && target !== document.documentElement && target.isConnected
 
-  return placed ? !!target.closest("#review-panel") : fallback
+  // The review toggle in the panel's strip belongs to the session.
+  return placed ? !!target.closest("#review-panel") && !target.closest('[data-slot="session-review-toggle"]') : fallback
 }
