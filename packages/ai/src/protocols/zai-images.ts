@@ -61,6 +61,11 @@ const limits = (model: string) =>
     : { multiple: 16, minEdge: 512, maxEdge: 2048, maxPixels: 2 ** 21 }
 
 const fromRequest = Effect.fn("ZAIImages.fromRequest")(function* (request: Request) {
+  if (request.n !== undefined && request.n > 1)
+    return yield* route.unsupported(
+      "media.n",
+      `${route.name} generates one image per request; call it once per image instead of n=${request.n}`,
+    )
   const size = yield* ImageSizing.exact(route, request, limits(request.model.id))
   return MediaProtocol.json(
     mergeJsonRecords(
@@ -106,7 +111,7 @@ const decodeResponse = Effect.fn("ZAIImages.decodeResponse")(function* (
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
-  unsupported: ["images", "n"],
+  unsupported: ["images"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })

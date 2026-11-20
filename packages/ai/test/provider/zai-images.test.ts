@@ -160,4 +160,53 @@ describe("Z.ai Images", () => {
       )
     }),
   )
+
+  it.effect("accepts a single-image request without forwarding n", () =>
+    Effect.gen(function* () {
+      const response = yield* ai.image.generate({
+        model: ZAI.configure({ apiKey: "test" }).image("glm-image"),
+        prompt: "A red circle on a white background",
+        n: 1,
+      })
+
+      expect(response.images).toHaveLength(1)
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                expect(JSON.parse(input.text)).toEqual({
+                  model: "glm-image",
+                  prompt: "A red circle on a white background",
+                })
+                return input.respond(JSON.stringify({ data: [{ url: "https://cdn.z.ai/generated.png" }] }), {
+                  headers: { "content-type": "application/json" },
+                })
+              }),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("rejects n above one before any request", () =>
+    ai.image
+      .generate({ model: ZAI.configure({ apiKey: "test" }).image("glm-image"), prompt: "test", n: 2 })
+      .pipe(
+        Effect.provide(
+          ImageClient.layer.pipe(
+            Layer.provide(dynamicResponse(() => Effect.die(new Error("unexpected HTTP request")))),
+          ),
+        ),
+        Effect.flip,
+        Effect.tap((error) =>
+          Effect.sync(() => {
+            expect(error.reason._tag).toBe("UnsupportedOperation")
+            expect(error.reason.operation).toBe("media.n")
+          }),
+        ),
+      ),
+  )
 })
