@@ -142,7 +142,11 @@ fn layout_node(node: &Node, context: &Context) -> Block {
         Node::Brace { body, over } => layout_brace(body, *over, context),
         Node::Accent { accent, body } => layout_accent(*accent, body, context),
         Node::Variant { variant, body } => layout_node(body, &with_variant(context, *variant)),
-        Node::OverUnder { base, over, under } => layout_over_under(base, over.as_deref(), under.as_deref(), context),
+        Node::OverUnder { base, over, under } => over_under(
+            layout_node(base, context),
+            over.as_deref().map(|node| layout_node(node, context)),
+            under.as_deref().map(|node| layout_node(node, context)),
+        ),
         Node::Color { color, body } => {
             let mut context = context.clone();
             context.style.color = Some(color.clone());
@@ -215,32 +219,33 @@ fn layout_root(body: &Node, index: Option<&Node>, context: &Context) -> Block {
 }
 
 fn layout_scripts(base: &Node, superscript: Option<&Node>, subscript: Option<&Node>, context: &Context) -> Block {
-    // An empty script adds no geometry.
-    let present = |node: &Node| layout_node(node, context).width > 0;
-    let (superscript, subscript) = (superscript.filter(|n| present(n)), subscript.filter(|n| present(n)));
     let limits = match script_target(base) {
         Node::Brace { .. } | Node::Operator { limits: Limits::Always, .. } => true,
         Node::Operator { limits: Limits::Display, .. } => context.display,
         _ => false,
     };
+    let base = layout_node(base, context);
+    // An empty script adds no geometry. Each script is laid out once: nested scripts would otherwise double the work
+    // at every level.
+    let superscript = superscript.map(|node| (node, layout_node(node, context))).filter(|s| s.1.width > 0);
+    let subscript = subscript.map(|node| (node, layout_node(node, context))).filter(|s| s.1.width > 0);
     if limits {
-        return layout_over_under(base, superscript, subscript, context);
+        return over_under(base, superscript.map(|s| s.1), subscript.map(|s| s.1));
     }
 
-    let base = layout_node(base, context);
     if context.compact && base.height == 1 {
-        let compact = |node: Option<&Node>, superscript: bool| match node {
-            Some(node) => script_text(node, superscript, context.inline),
+        let compact = |script: &Option<(&Node, Block)>, superscript: bool| match script {
+            Some((node, _)) => script_text(node, superscript, context.inline),
             None => Some(String::new()),
         };
-        if let (Some(superscript), Some(subscript)) = (compact(superscript, true), compact(subscript, false)) {
+        if let (Some(superscript), Some(subscript)) = (compact(&superscript, true), compact(&subscript, false)) {
             let scripts = text_box(&(superscript + &subscript), &context.style);
             return hpack(vec![base, scripts]);
         }
     }
 
-    let superscript = superscript.map(|node| layout_node(node, context));
-    let subscript = subscript.map(|node| layout_node(node, context));
+    let superscript = superscript.map(|s| s.1);
+    let subscript = subscript.map(|s| s.1);
     let script_width = superscript.as_ref().map_or(0, |s| s.width).max(subscript.as_ref().map_or(0, |s| s.width));
     let top = superscript.as_ref().map_or(0, |s| s.height);
     let bottom = subscript.as_ref().map_or(0, |s| s.height);
@@ -255,10 +260,7 @@ fn layout_scripts(base: &Node, superscript: Option<&Node>, subscript: Option<&No
     result
 }
 
-fn layout_over_under(base: &Node, over: Option<&Node>, under: Option<&Node>, context: &Context) -> Block {
-    let base = layout_node(base, context);
-    let over = over.map(|node| layout_node(node, context));
-    let under = under.map(|node| layout_node(node, context));
+fn over_under(base: Block, over: Option<Block>, under: Option<Block>) -> Block {
     let width = base.width.max(over.as_ref().map_or(0, |b| b.width)).max(under.as_ref().map_or(0, |b| b.width));
     let over_height = over.as_ref().map_or(0, |b| b.height);
     let height = over_height + base.height + under.as_ref().map_or(0, |b| b.height);

@@ -502,6 +502,8 @@ fn sources_layouts_and_nesting_are_bounded() {
         assert!(crate::render(&source).is_err(), "{} bytes", source.len());
     }
     assert!(crate::render(&format!("{}x{}", "\\sqrt[".repeat(100), "]{x}".repeat(100))).is_err());
+    // Each script is laid out once, so nested scripts stay within the cell budget.
+    assert_eq!(crate::render(&format!("{}x{}", "x^{".repeat(25), "}".repeat(25))).unwrap().height, 26);
     let matrix = format!("\\begin{{matrix}}{}{}\\end{{matrix}}", "&".repeat(1500), "\\\\".repeat(1500));
     assert!(matrix.len() < 10_000 && crate::render(&matrix).is_err());
     let small = format!("\\begin{{matrix}}{}{}\\end{{matrix}}", "x&".repeat(60), "x\\\\".repeat(60));
