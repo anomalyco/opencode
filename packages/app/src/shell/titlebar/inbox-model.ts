@@ -14,7 +14,12 @@ import { pathKey } from "@/workspaces/path-key"
 import { parseHomeSessionIndex } from "@/home/sessions/index"
 import { rawTime } from "@/runtime/server/data"
 import { mergeRootSessionIndex } from "@/runtime/server/session-index"
-import { sessionFormRequest, sessionPermissionRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
+import {
+  sessionFormRequest,
+  sessionMayHoldRequests,
+  sessionPermissionRequest,
+  sessionTreeIDs,
+} from "@/session/requests/session-request-tree"
 import { notifySessionTabsRemoved } from "./session-events"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
@@ -272,13 +277,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
     const requests = entry
       ? [...new Set([entry.session.id, ...entry.ctx.data.session.family(entry.session.id)])]
-          .filter(
-            (id) =>
-              id === entry.session.id ||
-              entry.ctx.data.session.status(id) === "running" ||
-              !!entry.ctx.data.session.permission.list(id)?.length ||
-              !!entry.ctx.data.session.form.list(id)?.length,
-          )
+          .filter((id) => id === entry.session.id || sessionMayHoldRequests(entry.ctx.data, id))
           .flatMap((id) => [
             Promise.try(() => entry.ctx.data.session.permission.sync(id)),
             Promise.try(() => entry.ctx.data.session.form.sync(id)),

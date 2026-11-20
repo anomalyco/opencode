@@ -34,7 +34,7 @@ import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { sessionMayHoldRequests, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { sessionTitle } from "@/session/title"
 import { errorMessage } from "@/shell/layout/helpers"
 import { notifySessionTabsRemoved } from "./session-events"
@@ -513,18 +513,15 @@ export function createSessionRowNavigation(input: {
 
 /** Loads what an unselected session row shows: metadata, and the inbox and requests that keep it busy or waiting. */
 export function syncInactiveSession(ctx: ServerCtx, id: string) {
-  const requestIDs = [...new Set([id, ...ctx.data.session.family(id)])].filter(
-    (sessionID) =>
-      ctx.data.session.status(sessionID) === "running" ||
-      !!ctx.data.session.permission.list(sessionID)?.length ||
-      !!ctx.data.session.form.list(sessionID)?.length,
+  const requestIDs = [...new Set([id, ...ctx.data.session.family(id)])].filter((sessionID) =>
+    sessionMayHoldRequests(ctx.data, sessionID),
   )
 
   void Promise.allSettled([
     ctx.data.session.sync(id, { children: true }),
     // The selected timeline loads the transcript; inactive tabs need metadata and the inbox,
-    // whose waiting work keeps the tab busy. Only a running session can wait on a permission
-    // or form, and reading either boots the session's location on the server.
+    // whose waiting work keeps the tab busy. Reading a permission or form boots the session's
+    // location on the server, so only sessions that may hold one are read.
     ...requestIDs.flatMap((sessionID) => [
       ctx.data.session.permission.sync(sessionID),
       ctx.data.session.form.sync(sessionID),

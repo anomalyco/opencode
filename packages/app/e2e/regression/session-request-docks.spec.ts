@@ -557,7 +557,7 @@ test("recovers a running child session's permission on load and across reconnect
   const childID = "ses_request_running_child"
   const idleIDs = Array.from({ length: 5 }, (_, index) => `ses_request_idle_perm_${index}`)
   const replies: { sessionID: string; permissionID: string; body: unknown }[] = []
-  let childStatus: "running" | "idle" = "running"
+  const child = { idle: false }
 
   const childPermission = (id: string, command: string) => ({
     id,
@@ -585,7 +585,7 @@ test("recovers a running child session's permission on load and across reconnect
       ...idleIDs.map((id) => ({ id, title: id, parentID: sessionID })),
     ],
     seed: { tabs: [sessionID] },
-    sessionStatus: () => ({ [childID]: { type: childStatus } }),
+    sessionStatus: () => ({ [childID]: { type: child.idle ? "idle" : "running" } }),
     sessionPermissions,
     onPermissionReply: (reply) => replies.push(reply),
   })
@@ -615,14 +615,14 @@ test("recovers a running child session's permission on load and across reconnect
 
   // Resolved while offline and the child finished: reconnect must clear the cached request.
   childPermissions.length = 0
-  childStatus = "idle"
+  child.idle = true
   await transport.disconnect()
   const second = await transport.waitForConnection({ after: first.id })
   await expect(permission).toHaveCount(0)
   await expect(composer).toBeVisible()
 
   // Asked while offline with no `permission.asked` event: reconnect must recover it for the child.
-  childStatus = "running"
+  child.idle = false
   childPermissions.push(childPermission("perm_child_reconnect", "git diff"))
   await transport.disconnect()
   await transport.waitForConnection({ after: second.id })

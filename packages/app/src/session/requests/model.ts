@@ -12,7 +12,12 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useLanguage } from "@/runtime/i18n/language"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
+import {
+  sessionFormRequest,
+  sessionMayHoldRequests,
+  sessionPermissionRequest,
+  sessionTreeIDs,
+} from "@/session/requests/session-request-tree"
 import { createWebSearchRequest } from "./websearch"
 import { createSessionBackground, mergeJobList } from "@/session/requests/background"
 import { createSteerBackground } from "@/session/requests/steer-background"
@@ -55,17 +60,12 @@ export function createSessionRequestModel() {
     void data.shell.sync({ directory: sdk().directory }).catch(() => undefined)
   })
 
-  // Only a running Session can hold a pending permission or form, and events keep loaded requests current.
-  // Keep tree sessions with cached requests too so a reconnect clears requests resolved while offline.
-  // Comparing by value keeps every session update in a large subagent tree from re-requesting them.
+  // Permissions and forms are per Session, so each one in the tree that may hold a request is read. Comparing by value
+  // keeps every session update in a large subagent tree from re-requesting them.
   const requestSessions = createMemo(
     () =>
       sessionTreeIDs(data.session.list(), params.id).filter(
-        (id) =>
-          id === params.id ||
-          data.session.status(id) === "running" ||
-          !!data.session.permission.list(id)?.length ||
-          !!data.session.form.list(id)?.length,
+        (id) => id === params.id || sessionMayHoldRequests(data, id),
       ),
     [],
     { equals: (a, b) => a.join() === b.join() },
