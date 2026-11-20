@@ -1,6 +1,6 @@
 export * as ShellPermissions from "./permissions.js"
 
-import { Effect } from "effect"
+import { Effect, Result } from "effect"
 import { FileAccess } from "../file-access.js"
 import { ShellParse } from "./parse.js"
 
@@ -14,9 +14,19 @@ export const requests = Effect.fnUntraced(function* (
     readonly once?: boolean
   },
 ) {
-  const parsed = yield* ShellParse.scan(input.command, input.program, input.target.absolute, {
-    home: input.local ? undefined : null,
-  })
+  const scanned = yield* Effect.result(
+    ShellParse.scan(input.command, input.program, input.target.absolute, {
+      home: input.local ? undefined : null,
+    }),
+  )
+  // An unanalyzed command may reach any directory, so only rules allowing every directory settle it, and approval
+  // is never saved as a pattern.
+  if (Result.isFailure(scanned))
+    return [
+      { action: "external_directory", resources: ["*"], save: undefined },
+      { action: "shell", resources: [input.command], save: undefined, metadata: { reason: scanned.failure.reason } },
+    ]
+  const parsed = scanned.success
   // Directory arguments are relative to the command's working directory on the same machine.
   const directories = yield* Effect.forEach(parsed.directories, (directory) =>
     access.resolve({ path: directory, base: input.target, kind: "directory" }),

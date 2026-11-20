@@ -423,6 +423,66 @@ describe("ShellTool scanner permissions", () => {
       }),
     ))
 
+  test("unanalyzable commands run under allow-all rules", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [{ action: "*", resource: "*", effect: "allow" }]
+          }),
+        )
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, "alias p=true; printf hello > marker", marker, [])
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({ _tag: "Success", value: { status: "completed", metadata: { exit: 0 } } })
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+      }),
+    ))
+
+  test("unanalyzable commands ask for the exact command and any directory without saving", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const saved = yield* PermissionSaved.Service
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [
+              { action: "shell", resource: "alias *", effect: "allow" },
+              { action: "external_directory", resource: path.join(fixture.outside, "*"), effect: "allow" },
+            ]
+          }),
+        )
+        const marker = path.join(fixture.active, "marker")
+        const command = "alias p=true; printf hello > marker"
+        const approved = yield* runPermissionCommand(registry, command, marker, ["always"])
+
+        expect(approved.requests).toMatchObject([{ action: "external_directory", resources: ["*"] }])
+        expect(approved.exit).toMatchObject({ _tag: "Success", value: { status: "completed", metadata: { exit: 0 } } })
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [{ action: "external_directory", resource: "*", effect: "allow" }]
+          }),
+        )
+        yield* Effect.promise(() => fs.rm(marker))
+        const asked = yield* runPermissionCommand(registry, command, marker, ["always"])
+        expect(asked.requests).toMatchObject([
+          { action: "shell", resources: [command], metadata: { reason: "dynamic-execution" } },
+        ])
+        expect(asked.requests.map((request) => request.save)).toEqual([undefined])
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+        expect(yield* saved.list()).toEqual([])
+
+        yield* Effect.promise(() => fs.rm(marker))
+        const repeat = yield* runPermissionCommand(registry, command, marker, ["reject"])
+        expect(repeat.requests).toHaveLength(1)
+        expect(Exit.isFailure(repeat.exit)).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+      }),
+    ))
+
   test("pipeline redirect keeps the redirect target visible to exact approval and denial", () =>
     withScanner((registry, fixture) =>
       Effect.gen(function* () {
@@ -1292,7 +1352,7 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("rejects malformed syntax across channels without partial execution", () =>
+  it.live("asks for malformed syntax across channels without partial execution", () =>
     Effect.gen(function* () {
       if (isWindows) return
       for (const channel of ["local", "dev", "latest"] as const) {
@@ -1321,21 +1381,23 @@ describe("ShellTool", () => {
         yield* withTempDir((tmp) =>
           Effect.gen(function* () {
             reset()
+            denyAction = "shell"
+            const command = 'printf hello > marker\necho "'
             const settled = yield* withSession(tmp.path, (registry) =>
               Effect.gen(function* () {
                 const selection = yield* ShellSelect.Service
                 yield* selection.transform((editor) => editor.configure("sh"))
-                return yield* executeTool(
-                  registry,
-                  call({ command: 'printf hello > marker\necho "' }, `call-channel-${channel}`),
-                )
+                return yield* executeTool(registry, call({ command }, `call-channel-${channel}`))
               }),
             )
             expect(settled).toMatchObject({
               status: "error",
-              error: { message: expect.stringContaining("unterminated-quote") },
+              error: { message: expect.stringContaining("Permission denied: shell") },
             })
-            expect(assertions).toEqual([])
+            expect(assertions).toMatchObject([
+              { action: "external_directory", resources: ["*"], save: undefined },
+              { action: "shell", resources: [command], save: undefined, metadata: { reason: "unterminated-quote" } },
+            ])
             expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).exists())).toBe(false)
           }).pipe(
             Effect.provide(
