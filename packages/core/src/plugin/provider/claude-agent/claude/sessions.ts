@@ -193,8 +193,8 @@ export function registry() {
           const probe = yield* restore(
             attempt(() => process.session.ready).pipe(
               Effect.timeoutOrElse({
-                duration: "30 seconds",
-                orElse: () => Effect.fail(new Error("claude did not start within 30 seconds")),
+                duration: "60 seconds",
+                orElse: () => Effect.fail(new Error("claude did not start within 60 seconds")),
               }),
             ),
           ).pipe(Effect.onError(() => stop(entry).pipe(Effect.ignore)))
