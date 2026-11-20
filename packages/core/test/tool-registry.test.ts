@@ -628,7 +628,15 @@ describe("Tool", () => {
   it.effect("runs a Code Mode tool called at the top level and says to call it inside execute", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
       yield* transform(service, { echo: make() }, { namespace: "acme.tools" })
+      // Plugins see the call as the tool that runs, inside Code Mode, like a program's call.
+      const seen: Array<{ tool: string; info: boolean; codemode: boolean }> = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(
+          () => void seen.push({ tool: event.tool, info: event.info !== undefined, codemode: event.codemode }),
+        ),
+      )
       const snapshot = yield* service.snapshot()
       for (const name of ["acme.tools.echo", "tools.acme.tools.echo", "acme_tools_echo"]) {
         const result = yield* snapshot.execute(call(name))
@@ -638,6 +646,9 @@ describe("Tool", () => {
           text: expect.stringContaining("call it there, as `await tools.acme.tools.echo(input)`"),
         })
       }
+      expect(seen.filter((event) => event.info)).toEqual(
+        Array.from({ length: 3 }, () => ({ tool: "acme_tools_echo", info: true, codemode: true })),
+      )
       // A tool this request doesn't offer stays unknown.
       const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
       expect((yield* denied.execute(call("acme.tools.echo")).pipe(Effect.flip)).message).toContain(

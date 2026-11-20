@@ -396,13 +396,14 @@ const layer = Layer.effect(
               if (tool) return yield* executeTool(tool, name, event.input, context)
               // Weaker models sometimes call a Code Mode tool at the top level, by its path or flattened name. When
               // this request offered execute, run it as a program would and say how to call it next time.
-              const offered = codemode && (!input.definitions || input.definitions.has("execute"))
+              const programs =
+                codemode && (!input.definitions || input.definitions.has("execute")) ? codemode.tools : undefined
               const id = name.replace(/^tools\./, "").replace(/[^a-zA-Z0-9_-]/g, "_")
-              const fallback = offered ? codemode.tools.get(id) : undefined
-              if (fallback) {
+              const fallback = programs?.get(id)
+              if (programs && fallback) {
                 const path = CodeModeTool.qualifiedName(fallback)
                 const note = `Note: ${path} is a Code Mode tool, so it is only callable inside execute. This call ran anyway; next time call it there, as \`await tools.${path}(input)\`.`
-                const result = yield* executeTool(fallback, id, event.input, context).pipe(
+                const result = yield* run(programs, fallback, id, event.input, { ...context, codemode: true }).pipe(
                   Effect.mapError(
                     (error) =>
                       new Tool.Error({
