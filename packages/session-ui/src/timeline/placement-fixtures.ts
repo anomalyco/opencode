@@ -303,6 +303,37 @@ export const placementMessages: SessionMessageInfo[] = [
       { type: "text", text: "Script done." },
     ],
   },
+  { id: "msg_u13", type: "user", text: "live script edits", time: { created: 130 } },
+  {
+    id: "msg_a13",
+    type: "assistant",
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    time: { created: 131 },
+    content: [
+      storyTool(
+        "exec_live",
+        "execute",
+        "running",
+        { code: "await patch(); await write()" },
+        {
+          metadata: {
+            background: true,
+            toolCalls: [{ tool: "patch", status: "completed" }],
+            files: [
+              {
+                file: "/repo/live.ts",
+                status: "modified",
+                additions: 1,
+                deletions: 1,
+                patch: "--- a/repo/live.ts\n+++ b/repo/live.ts\n@@ -1 +1 @@\n-a\n+b\n",
+              },
+            ],
+          },
+        },
+      ),
+    ],
+  },
 ]
 
 const preset = (id: string): TimelineDetail => timelinePresets.find((item) => item.id === id)!.value
