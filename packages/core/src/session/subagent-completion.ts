@@ -77,9 +77,8 @@ export const deliver = Effect.fnUntraced(function* <E>(
     sessionID: recovery.parentSessionID,
     description: recovery.description,
     text: BackgroundResult.render(
-      "subagent",
-      `Subagent ${recovery.childSessionID} (${JSON.stringify(recovery.description)}) ${BackgroundResult.outcome(state)}.`,
-      { label: "Report", text: formatted },
+      `kind="subagent" sessionID="${recovery.childSessionID}" state="${state}" description="${recovery.description}"`,
+      formatted,
     ),
     metadata: { source: "subagent", childID: recovery.childSessionID, agent: recovery.agent, state: input.status },
   })

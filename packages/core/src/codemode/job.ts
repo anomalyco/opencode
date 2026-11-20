@@ -15,10 +15,7 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
   const body = job.status === "running" ? "Interrupted by server restart." : (job.output ?? job.error ?? state)
   return {
     description: "Script",
-    text: BackgroundResult.render("codemode", `Code Mode script ${job.id} ${BackgroundResult.outcome(state)}.`, {
-      label: "Result",
-      text: body,
-    }),
+    text: BackgroundResult.render(`kind="codemode" id="${job.id}" state="${state}"`, body),
     metadata: { source: "codemode", jobID: job.id, state },
   }
 }

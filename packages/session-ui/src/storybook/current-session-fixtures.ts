@@ -1098,7 +1098,7 @@ export function subagentReport(id: string, created: number, report: SubagentRepo
     id,
     type: "synthetic",
     description: report.description,
-    text: `<background-result kind="subagent">\nSubagent ${report.childID} (${JSON.stringify(report.description)}) finished.\nReport:\n${report.body}\n</background-result>`,
+    text: `<background-result kind="subagent" sessionID="${report.childID}" state="${report.state}" description="${report.description}">\n${report.body}\n</background-result>`,
     metadata: { source: "subagent", childID: report.childID, agent: report.agent, state: report.state },
     time: { created },
   }

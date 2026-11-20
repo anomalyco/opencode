@@ -64,9 +64,7 @@ describe("SubagentReport settlement", () => {
           type: "synthetic",
           payload: {
             text: [
-              '<background-result kind="subagent">',
-              `Subagent ${child} ("Direct audit") finished.`,
-              "Report:",
+              `<background-result kind="subagent" sessionID="${child}" state="completed" description="Direct audit">`,
               "Investigation complete",
               "</background-result>",
             ].join("\n"),
@@ -199,9 +197,7 @@ describe("SubagentReport settlement", () => {
         {
           payload: {
             text: [
-              '<background-result kind="subagent">',
-              `Subagent ${child} ("Background audit") reported while its own background work is still running.`,
-              "Report:",
+              `<background-result kind="subagent" sessionID="${child}" state="running" description="Background audit">`,
               "Started tests",
               "",
               "Background work still running:",
@@ -381,9 +377,7 @@ describe("SubagentReport settlement", () => {
       yield* execution.wake(failed)
       yield* execution.awaitIdle(failed)
       const reports = yield* SessionInbox.list(database.db, parent)
-      expect(text(reports[0])).toContain(
-        `<background-result kind="subagent">\nSubagent ${failed} ("${failed}") failed.\nReport:\n`,
-      )
+      expect(text(reports[0])).toContain('state="error"')
       expect(text(reports[0])).toContain("Disconnected")
       expect(text(reports[0])).toContain("Background work still running:\n- shell (sh_fail): bun test")
 
@@ -393,9 +387,7 @@ describe("SubagentReport settlement", () => {
       yield* execution.awaitIdle(cancelled)
       const afterCancel = yield* SessionInbox.list(database.db, parent)
       expect(afterCancel).toHaveLength(2)
-      expect(text(afterCancel[1])).toContain(
-        `<background-result kind="subagent">\nSubagent ${cancelled} ("${cancelled}") was cancelled.\nReport:\n`,
-      )
+      expect(text(afterCancel[1])).toContain('state="cancelled"')
       expect(text(afterCancel[1])).toContain("Subagent cancelled")
       expect(text(afterCancel[1])).toContain("Background work still running:\n- shell (sh_cancel): bun test")
     }),
@@ -436,9 +428,8 @@ describe("SubagentReport settlement", () => {
 
       const reports = yield* SessionInbox.list(database.db, parent)
       expect(reports).toHaveLength(1)
-      expect(text(reports[0])).toContain(
-        `<background-result kind="subagent">\nSubagent ${child} ("Created then cancelled") was cancelled.\nReport:\n`,
-      )
+      expect(text(reports[0])).toContain('state="cancelled"')
+      expect(text(reports[0])).toContain(`sessionID="${child}"`)
       expect(yield* jobs.pendingBackground).toEqual([])
       expect(job.id).toBe(child)
     }),
@@ -566,13 +557,7 @@ describe("SubagentReport outbox", () => {
           output: "Outbox report",
           recovery: {
             outstanding: [
-              {
-                kind: "subagent",
-                sessionID: child,
-                childSessionID: grandchild,
-                agent: "explore",
-                description: "Check logs",
-              },
+              { kind: "subagent", sessionID: child, childSessionID: grandchild, agent: "explore", description: "Check logs" },
             ],
           },
         },

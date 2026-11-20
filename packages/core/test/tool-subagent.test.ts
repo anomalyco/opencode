@@ -269,7 +269,7 @@ describe("SubagentTool", () => {
             expect.objectContaining({
               id: marker.notificationID,
               description: "background review",
-              text: `<background-result kind="subagent">\nSubagent ${outputSessionID(result.metadata)} ("background review") finished.\nReport:\n${childText}\n</background-result>`,
+              text: `<background-result kind="subagent" sessionID="${outputSessionID(result.metadata)}" state="completed" description="background review">\n${childText}\n</background-result>`,
               metadata: {
                 source: "subagent",
                 childID: outputSessionID(result.metadata),
@@ -637,7 +637,7 @@ describe("SubagentTool", () => {
             .filter((message) => message.metadata?.source === "subagent")
           expect(notices).toHaveLength(1)
           expect(notices[0]?.text).toContain(
-            `<background-result kind="subagent">\nSubagent ${childID} ("review") finished.\nReport:\n`,
+            `<background-result kind="subagent" sessionID="${childID}" state="completed"`,
           )
           expect(yield* jobs.pendingBackground).toEqual([])
         }),
@@ -856,7 +856,7 @@ describe("SubagentTool", () => {
           expect(admission?.data.item.type).toBe("synthetic")
           if (admission?.data.item.type !== "synthetic") return yield* Effect.die("Expected synthetic inbox item")
           expect(admission?.data.item.payload.text).toContain(
-            `<background-result kind="subagent">\nSubagent ${childID} ("background review") finished.\nReport:\n`,
+            `<background-result kind="subagent" sessionID="${childID}" state="completed"`,
           )
           expect(admission?.data.item.payload).toMatchObject({
             description: "background review",
@@ -872,7 +872,7 @@ describe("SubagentTool", () => {
           const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
           expect(synthetic).toHaveLength(1)
           expect(synthetic[0]?.text).toContain(
-            `<background-result kind="subagent">\nSubagent ${childID} ("background review") finished.\nReport:\n`,
+            `<background-result kind="subagent" sessionID="${childID}" state="completed"`,
           )
           expect(synthetic[0]?.text).toContain(childText)
           expect(yield* jobs.pendingBackground).toEqual([])
@@ -933,9 +933,7 @@ describe("SubagentTool reporting", () => {
 
       const reports = (yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")
       expect(reports).toHaveLength(1)
-      expect(reports[0]?.text).toContain(
-        `<background-result kind="subagent">\nSubagent ${childID} ("review") finished.\nReport:\n`,
-      )
+      expect(reports[0]?.text).toContain(`<background-result kind="subagent" sessionID="${childID}" state="completed"`)
       expect(reports[0]?.text).toContain(childText)
     }),
   )
@@ -993,9 +991,7 @@ describe("SubagentTool reporting", () => {
 
       const reports = (yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")
       expect(reports).toHaveLength(1)
-      expect(reports[0]?.text).toContain(
-        `<background-result kind="subagent">\nSubagent ${childID} ("fail review") failed.\nReport:\n`,
-      )
+      expect(reports[0]?.text).toContain(`<background-result kind="subagent" sessionID="${childID}" state="error"`)
       expect(reports[0]?.text).toContain("provider exploded")
     }),
   )

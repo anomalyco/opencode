@@ -83,12 +83,8 @@ export function notification(input: {
 }) {
   return {
     text: BackgroundResult.render(
-      "shell",
-      `Shell ${input.jobID ?? input.shellID} (${input.command.replace(/\s+/g, " ")}) ${status(input)}.`,
-      {
-        label: "Output",
-        text: input.text,
-      },
+      `kind="shell" id="${input.jobID ?? input.shellID}" state="${input.state}" command="${input.command}"`,
+      input.text,
     ),
     metadata: {
       source: "shell",
@@ -98,13 +94,6 @@ export function notification(input: {
       ...(input.output ? metadata(input.output) : {}),
     },
   }
-}
-
-function status(input: { state: "completed" | "cancelled" | "error"; output?: Output }) {
-  if (input.output?.timeout) return "timed out"
-  if (input.state === "completed" && (input.output?.exit !== undefined || input.output?.signal !== undefined))
-    return `finished with exit code ${exitCode(input.output)}`
-  return BackgroundResult.outcome(input.state)
 }
 
 export function userNotification(result: Result) {

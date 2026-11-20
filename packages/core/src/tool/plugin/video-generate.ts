@@ -89,12 +89,9 @@ export const Output = Schema.Struct({
   model: Schema.String.annotate({ description: "providerID/modelID" }),
 })
 
-/** The completion notice for a background video job, naming its job ID like image notices do. */
+/** The completion notice for a background video job, tagged with its job ID like `<background-result kind="image" id=…>` notices. */
 export function notice(input: { id: string; state: string; body: string }) {
-  return BackgroundResult.render("video", `Video job ${input.id} ${BackgroundResult.outcome(input.state)}.`, {
-    label: "Result",
-    text: input.body,
-  })
+  return BackgroundResult.render(`kind="video" id="${input.id}" state="${input.state}"`, input.body)
 }
 
 /** Where the job's `index`th video is saved: the path itself for the first, then `cat-1.mp4`, `cat-2.mp4`, … */

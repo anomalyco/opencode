@@ -1027,7 +1027,7 @@ describe("SessionRestart background recovery", () => {
         {
           type: "synthetic",
           payload: {
-            text: '<background-result kind="shell">\nShell call-completed-shell (exit 7) finished.\nOutput:\nExited with code 7\n</background-result>',
+            text: '<background-result kind="shell" id="call-completed-shell" state="completed" command="exit 7">\nExited with code 7\n</background-result>',
           },
         },
       ])
@@ -1072,8 +1072,8 @@ describe("SessionRestart background recovery", () => {
 
       const inbox = yield* SessionInbox.list(database.db, sessionID)
       expect(inbox.map((item) => (item.type === "synthetic" ? item.payload.text : undefined)).toSorted()).toEqual([
-        '<background-result kind="image">\nImage job image_done finished.\nResult:\nImage request finished. Saved image: /tmp/done.png (test/painter).\n</background-result>',
-        '<background-result kind="image">\nImage job image_running was cancelled.\nResult:\nImage request for /tmp/running.png was cancelled because the server restarted.\n</background-result>',
+        '<background-result kind="image" id="image_done" state="completed">\nImage request finished. Saved image: /tmp/done.png (test/painter).\n</background-result>',
+        '<background-result kind="image" id="image_running" state="cancelled">\nImage request for /tmp/running.png was cancelled because the server restarted.\n</background-result>',
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
     }),
@@ -1130,7 +1130,7 @@ describe("SessionRestart background recovery", () => {
         Effect.timeout("10 seconds"),
       )
       expect(texts).toEqual([
-        `<background-result kind="video">\nVideo job ${videoID} finished.\nResult:\nVideo request finished. Saved video: /tmp/running.mp4.\n</background-result>`,
+        `<background-result kind="video" id="${videoID}" state="completed">\nVideo request finished. Saved video: /tmp/running.mp4.\n</background-result>`,
       ])
       expect(waited).toEqual([videoID])
       expect((yield* files.read("/tmp/running.mp4")).bytes).toEqual(Uint8Array.of(1, 2, 3))
@@ -1511,7 +1511,7 @@ describe("SessionRestart background recovery", () => {
       expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
         {
           payload: {
-            text: `<background-result kind="subagent">\nSubagent ${child} ("Completed inspection") finished.\nReport:\n${output}\n</background-result>`,
+            text: `<background-result kind="subagent" sessionID="${child}" state="completed" description="Completed inspection">\n${output}\n</background-result>`,
             metadata: { state: "completed" },
           },
         },
@@ -1565,7 +1565,7 @@ describe("SessionRestart background recovery", () => {
         {
           type: "synthetic",
           payload: {
-            text: `<background-result kind="subagent">\nSubagent ${child} ("Outbox inspection") reported while its own background work is still running.\nReport:\nStarted tests\n\nBackground work still running:\n- shell (sh_1): bun test\n</background-result>`,
+            text: `<background-result kind="subagent" sessionID="${child}" state="running" description="Outbox inspection">\nStarted tests\n\nBackground work still running:\n- shell (sh_1): bun test\n</background-result>`,
             metadata: { source: "subagent", childID: child, agent: "explore", state: "completed" },
           },
         },

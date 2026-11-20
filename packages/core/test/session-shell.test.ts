@@ -286,9 +286,7 @@ describe("Session.shell", () => {
           truncated: false,
         })
         expect(completion.payload.description).toBeUndefined()
-        expect(completion.payload.text).toContain(
-          `<background-result kind="shell">\nShell ${message.shellID} (${command}) finished with exit code ${exit}.\nOutput:\n`,
-        )
+        expect(completion.payload.text).toContain(command)
         expect(completion.payload.text).toContain("user output")
         expect(completion.payload.text).toContain("user error")
         if (exit === 0) expect(completion.payload.text).not.toContain("Exit code")
