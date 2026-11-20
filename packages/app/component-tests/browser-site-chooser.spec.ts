@@ -513,6 +513,22 @@ story("the sign-in bar says that some sites will ask again when sign-ins stayed 
   await expect(bar.confirmation).toHaveText("Imported from Google Chrome. Some sites will ask you to sign in again.")
 })
 
+story("the bar's own dialog brings history alone when Sign-ins is unticked, and the bar says so without loading the page again", async ({ page }) => {
+  const bar = await offer(page, { sites: 5, pages: 4210 })
+
+  await page.getByRole("button", { name: "Import from another browser", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Choose sites to import", exact: true }).click()
+  const dialog = page.getByRole("dialog", { name: /^Import from Google Chrome/ })
+  await dialog.getByText("Sign-ins", { exact: true }).click()
+  await expect(dialog.getByRole("checkbox", { name: "Sign-ins", exact: true })).not.toBeChecked()
+  await dialog.getByRole("button", { name: "Import", exact: true }).click()
+  await expect(bar.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", cookies: false, history: true })])
+  await expect(dialog).toHaveCount(0)
+  await expect(bar.confirmation).toHaveText("Imported history from Google Chrome")
+  // No sign-in came, so the page has nothing new to load with.
+  await expect(bar.record).toHaveAttribute("data-imported", "0")
+})
+
 story("the offer card has a title and no paragraph, and its Import brings both", async ({ page }) => {
   const card = await offer(page, { sites: 5, pages: 4210 }, true)
   const region = page.getByRole("region", { name: "Bring your sign-ins and history", exact: true })

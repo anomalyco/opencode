@@ -1,6 +1,6 @@
 import { DialogProvider, useDialog } from "@opencode/ui/context/dialog"
 import { createStore } from "solid-js/store"
-import { For, onMount } from "solid-js"
+import { For, onMount, type JSX } from "solid-js"
 import { render } from "solid-js/web"
 import { liveAccessor, PluginContext } from "@opencode/plugin/gui/host"
 import type { Context, IpcClient, SetupContext, Ui } from "@opencode/plugin/gui"
@@ -84,6 +84,8 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
   }>({ imports: [], reads: [], closed: false, imported: 0, closes: 0 })
 
   const held = Promise.withResolvers<void>()
+  // The dialog host, once the opener mounts under it: the offer opens its own import dialog there.
+  const hosted: { dialog?: ReturnType<typeof useDialog> } = {}
 
   const client = {
     state: () => ({ extensions: [], remoteSignIns: false }),
@@ -134,7 +136,14 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     desktop: { os: "windows" },
     stores: { preferences: { value: { links: true, welcomed: !input.offer }, set() {} } },
     layout: { settings() {} },
-    dialogs: { open: () => ({ close() {} }) },
+    dialogs: {
+      open: (content: (handle: { close: () => void }) => JSX.Element) => {
+        const handle = { close: () => hosted.dialog?.close() }
+        hosted.dialog?.show(() => <PluginContext.Provider value={plugin}>{content(handle)}</PluginContext.Provider>)
+
+        return handle
+      },
+    },
   }
 
   // SAFETY: the dialog uses only the context properties implemented above.
@@ -143,6 +152,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
 
   function Opener() {
     const dialog = useDialog()
+    hosted.dialog = dialog
 
     // With `offer`, the pane's sign-in bar instead of the dialog: the bar's import and its confirmation.
     if (input.offer)
