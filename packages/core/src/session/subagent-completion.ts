@@ -43,15 +43,17 @@ export function formatBody(
   background?: ReadonlyArray<RunningBackgroundItem>,
 ): string {
   if (!background || background.length === 0) return body
-  const lines = background.map((item) => {
-    const location = item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""
-    if (item.kind === "codemode") return `- Code Mode script (${item.jobID}${location})`
-    if (item.kind === "shell") return `- shell (${item.shellID}${location}): ${clean(item.command)}`
-    if (item.kind === "image") return `- image (${item.model}${location}): ${item.path}`
-    if (item.kind === "video") return `- video (${item.path}${location})`
-    return `- subagent (${item.agent}, sessionID: ${item.childSessionID}): ${clean(item.description)}`
-  })
-  return `${body}${STILL_RUNNING}${lines.join("\n")}`
+  return `${body}${STILL_RUNNING}${background.map((item) => line(item, childSessionID)).join("\n")}`
+}
+
+/** One running background item as a list line, naming the session it runs in when that is not `owner`. */
+export function line(item: RunningBackgroundItem, owner: SessionSchema.ID) {
+  const location = item.sessionID !== owner ? `, in ${item.sessionID}` : ""
+  if (item.kind === "codemode") return `- Code Mode script (${item.jobID}${location})`
+  if (item.kind === "shell") return `- shell (${item.shellID}${location}): ${clean(item.command)}`
+  if (item.kind === "image") return `- image (${item.model}${location}): ${item.path}`
+  if (item.kind === "video") return `- video (${item.path}${location})`
+  return `- subagent (${item.agent}, sessionID: ${item.childSessionID}): ${clean(item.description)}`
 }
 
 export const deliver = Effect.fnUntraced(function* <E>(
