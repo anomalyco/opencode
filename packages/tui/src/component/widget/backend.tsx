@@ -80,8 +80,9 @@ export function widgetNotice(message: SessionMessageInfo | undefined) {
 export class WidgetConflict extends Error {}
 
 /**
- * The widget states of a Session, from the widgets plugin's RPC: fetched when the Session changes or the server
- * reconnects, since changes published meanwhile were missed, and kept current from its `changed` events.
+ * The widget states of a Session, from the widgets plugin's RPC: fetched when the Session changes, the server
+ * reconnects (changes published meanwhile were missed) or plugins finish loading (a cold Location answers
+ * `rpc.unavailable` until then), and kept current from its `changed` events.
  */
 export function createWidgetStates(sessionID: Accessor<string | undefined>) {
   const client = useClient()
@@ -114,6 +115,13 @@ export function createWidgetStates(sessionID: Accessor<string | undefined>) {
   )
   onCleanup(
     client.event.on("server.connected", () => {
+      const id = sessionID()
+      if (id) load(id)
+    }),
+  )
+  // Plugins load after a Location boots, and until then the RPC answers `rpc.unavailable`; reload once they settle.
+  onCleanup(
+    client.event.on("plugin.updated", () => {
       const id = sessionID()
       if (id) load(id)
     }),

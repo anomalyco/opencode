@@ -330,6 +330,11 @@ Event `changed`, `{ sessionID, state: State }`, published (as `rpc.opencode.widg
 whenever a widget is posted or answered. A client fetches `states` when it opens a Session or reconnects, since changes
 published meanwhile were missed, and applies `changed` after that.
 
+Plugins load asynchronously after a Location boots, and the server never waits for them: on a cold server (or right
+after `experimental.widgets` is turned on) calls answer `rpc.unavailable` until the plugin is up. Clients treat that as
+"not loaded yet": retry when `plugin.updated` arrives for the Location (or poll `plugin.list`), not as "no widgets".
+The plugin follows the flag while the server runs, so a config edit starts or stops it without a restart.
+
 `program` responses never change for a given `name@version`; clients cache them forever. Every version a widget refers
 to stays retrievable, including built-in versions from older releases (the plugin stores a built-in's version when a
 widget uses it). `send` allows 10 messages per widget per second (process-local); past that it fails with
