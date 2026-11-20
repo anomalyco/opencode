@@ -95,7 +95,7 @@ export default {
   argTypes: {
     scenario: {
       control: "select",
-      options: ["Page", "Empty", "Recent", "Loading", "Failed", "Suspended"] satisfies BrowserScenario[],
+      options: ["Page", "Empty", "Recent", "History", "Loading", "Failed", "Suspended"] satisfies BrowserScenario[],
     },
   },
   render: (props: { scenario: BrowserScenario }) => <BrowserStory {...props} />,
@@ -106,6 +106,9 @@ export const Page = { args: { scenario: "Page" } }
 export const Empty = { args: { scenario: "Empty" } }
 
 export const RecentPages = { args: { scenario: "Recent" } }
+
+// A history as an import from another browser leaves it: type in the address field, for example "rune" or "gith".
+export const ImportedHistory = { args: { scenario: "History" } }
 
 export const Loading = { args: { scenario: "Loading" } }
 

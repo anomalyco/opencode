@@ -125,15 +125,15 @@ describe("desktop RPC transport", () => {
     const handoff = await runtime.runPromise(IpcPortHandoff)
     const win = sender(1)
     // A window that has not asked for its snapshot has no document to hold events for.
-    expect(emitIpcEvent(win, new MenuCommandTriggered({ id: "early" }))).toBe(false)
+    expect(emitIpcEvent(win, new MenuCommandTriggered({ id: "early", accelerator: false }))).toBe(false)
 
     handoff.prepare(win)
     // On dev these were dropped: the window had no event queue until its port bound.
-    expect(emitIpcEvent(win, new MenuCommandTriggered({ id: "a" }))).toBe(true)
-    expect(emitIpcEvent(win, new MenuCommandTriggered({ id: "b" }))).toBe(true)
+    expect(emitIpcEvent(win, new MenuCommandTriggered({ id: "a", accelerator: false }))).toBe(true)
+    expect(emitIpcEvent(win, new MenuCommandTriggered({ id: "b", accelerator: false }))).toBe(true)
     const channel = new MessageChannel()
     handoff.bind(win, serverPort(channel.port1))
-    emitIpcEvent(win, new MenuCommandTriggered({ id: "c" }))
+    emitIpcEvent(win, new MenuCommandTriggered({ id: "c", accelerator: false }))
 
     expect(await chunks(channel.port2, 0, "DesktopEvents", 3)).toEqual(["a", "b", "c"].map(menuCommand))
 
@@ -156,7 +156,7 @@ describe("desktop RPC transport", () => {
     // The new document's snapshot: the old one stops receiving events but still answers its RPCs.
     handoff.prepare(win)
     expect((await firstEvents).chunks).toEqual([])
-    emitIpcEvent(win, new MenuCommandTriggered({ id: "during reload" }))
+    emitIpcEvent(win, new MenuCommandTriggered({ id: "during reload", accelerator: false }))
     Effect.runSync(Deferred.succeed(flushGate, undefined))
     expect((await flush).exit).toEqual(success("flushed"))
 
@@ -187,7 +187,7 @@ const eventsLive = RpcServer.layer(EventRpcs.merge(FlushRpcs)).pipe(
 )
 
 function menuCommand(id: string) {
-  return Schema.encodeSync(MenuCommandTriggered)(new MenuCommandTriggered({ id }))
+  return Schema.encodeSync(MenuCommandTriggered)(new MenuCommandTriggered({ id, accelerator: false }))
 }
 
 class TestEvent extends Schema.TaggedClass<TestEvent>()("TestEvent", { value: Schema.String }) {}

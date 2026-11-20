@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Notkun",
   "usage.cost": "Kostnaður",
   "usage.view": "Skoða samhengisnotkun",
-  "systemPrompt.title": "Kerfisboð",
   "rawMessages.title": "Hrá skilaboð",
   "export.session": "Flytja út setu",
   "stats.session": "Lota",

@@ -1161,7 +1161,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} shell",
   "session.activity.scripts.one": "{{count}} szkript",
   "session.activity.scripts.other": "{{count}} szkript",
-  "session.activity.background": "Háttérmunka",
   "session.activity.shell.back": "Vissza a háttérfolyamatokhoz",
   "session.activity.shell.stop": "Leállítás",
   "session.activity.shell.stopping": "Leállítás…",

@@ -4,6 +4,7 @@ import { batch, createMemo } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
+import { sameLoopbackServer } from "./loopback"
 import type { PluginServerStatus } from "./plugin-machine"
 import { ServerHttp, ServerHttpBase, ServerKey, ServerState } from "./persistence"
 
@@ -36,15 +37,6 @@ export function serverLabel(conn: ServerConnection.Any, current?: { hostname?: s
   if (current) return current.hostname || current.fallback
 
   return serverName(conn)
-}
-
-function loopbackOrigin(url: string) {
-  if (!URL.canParse(url)) return
-  const parsed = new URL(url)
-
-  if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1" && parsed.hostname !== "[::1]") return
-
-  return `${parsed.protocol}//127.0.0.1:${parsed.port || (parsed.protocol === "https:" ? "443" : "80")}`
 }
 
 // Project data comes from the server; this keeps which projects this client has used and the last one.
@@ -220,10 +212,7 @@ export namespace ServerConnection {
 
     if (builtin(conn)) return true
 
-    if (conn.type !== "http" || !ownUrl) return false
-    const origin = loopbackOrigin(conn.http.url)
-
-    return !!origin && origin === loopbackOrigin(ownUrl)
+    return conn.type === "http" && sameLoopbackServer(conn.http.url, ownUrl)
   }
 }
 

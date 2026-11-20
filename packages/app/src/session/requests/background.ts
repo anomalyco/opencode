@@ -18,8 +18,6 @@ type Subagent = {
   label: string
   agent?: string
   started: number
-  // Set while the subagent is idle and only work it started still runs, counted by kind.
-  idle?: { subagents: number; scripts: number; shells: number }
   // Running jobs in its tree, which its Stop cancels.
   jobs?: string[]
 }
@@ -174,9 +172,6 @@ export function createSessionBackground(input: {
 
       const latest = current.calls.get(info.id)
 
-      const count = (kind: JobInfo["kind"]) =>
-        owned.filter((job) => job.kind === kind && !(job.kind === "subagent" && job.childSessionID === info.id)).length
-
       const item: Subagent = {
         id: info.id,
         type: "subagent",
@@ -185,8 +180,6 @@ export function createSessionBackground(input: {
         agent: latest?.agent,
         started: latest?.started ?? info.time.created,
       }
-
-      if (!running) item.idle = { subagents: count("subagent"), scripts: count("codemode"), shells: count("shell") }
 
       if (owned.length > 0) item.jobs = owned.map((job) => job.id)
 
@@ -260,4 +253,17 @@ function executeShellCommands(calls: JsonValue | undefined) {
       onSome: (item) => (item.tool === "shell" && item.status === "running" ? [item.input.command] : []),
     }),
   )
+}
+
+// Applies the job.updated events that arrived while the list request was in flight on top of its response, which may
+// predate them.
+export function mergeJobList<T extends Pick<JobInfo, "id"> & { status: string }>(
+  listed: readonly T[],
+  updates: ReadonlyMap<string, T>,
+) {
+  const jobs = new Map(listed.map((job) => [job.id, job]))
+
+  updates.forEach((info, id) => (info.status === "running" ? jobs.set(id, info) : jobs.delete(id)))
+
+  return jobs
 }

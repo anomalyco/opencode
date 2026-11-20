@@ -20,7 +20,7 @@ import { Session } from "../../session.js"
 import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
-import { ShellParse } from "../../shell/parse.js"
+import { ShellPermissions } from "../../shell/permissions.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
 import { toolFailure } from "../runtime.js"
@@ -302,6 +302,7 @@ export const Plugin = {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
     const access = yield* FileAccess.Service
+    const environment = yield* Environment.Service
     const location = yield* Location.Service
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
@@ -317,28 +318,32 @@ export const Plugin = {
       context: Tool.Context,
       requested: { readonly cwd: string; readonly target: FileAccess.Target },
     ) {
-      // Resolved before the hooks ran; only a hook that moved the working directory needs it resolved again.
+      // Resolved before the hooks ran; only a hook that moved the working directory needs it resolved again. It always
+      // resolves from a base, so a moved path is a plain path on the machine the command was asked for.
       const target =
         invocation.cwd === requested.cwd
           ? requested.target
-          : yield* access.resolve({ path: invocation.cwd, kind: "directory" })
+          : yield* access.resolve({
+              path: invocation.cwd,
+              base:
+                requested.target.environment.id === environment.id
+                  ? { absolute: location.directory, environment }
+                  : requested.target,
+              kind: "directory",
+            })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
-      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
-      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-        access.resolve({
-          path: FileAccess.resolvePath(target.absolute, directory),
-          kind: "directory",
-        }),
+      const requests = yield* ShellPermissions.requests(access, {
+        command: invocation.command,
+        program: invocation.shell,
+        target,
+        local: target.environment.id === environment.id,
+      })
+      yield* Effect.forEach(
+        requests,
+        (request) => permission.assert({ ...request, ...Permission.invocation(context) }),
+        { discard: true },
       )
-      yield* access.authorizeExternal([target, ...directories], context)
-      if (parsed.commands.length > 0)
-        yield* permission.assert({
-          action: name,
-          resources: parsed.commands.map((command) => command.resource),
-          save: parsed.commands.map((command) => command.save),
-          ...Permission.invocation(context),
-        })
       // Approval can outlive the directory, so validate immediately before spawning.
       const workdir = yield* Environment.typeFollowing(target.environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () =>

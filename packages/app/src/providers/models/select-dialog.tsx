@@ -195,7 +195,7 @@ const ModelList: Component<{
               data-component="settings-row"
               data-option-key={modelKey(item)}
               aria-pressed={controller.current() === modelKey(item)}
-              class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+              class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
               classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
               onMouseEnter={() => setStore("active", modelKey(item))}
               onMouseLeave={() => setStore("active", "")}
@@ -496,15 +496,10 @@ function createModelSelectorController(input: {
 
       return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
     },
-    groups: (models: ModelItem[]) => {
-      const byProvider = new Map<string, ModelItem[]>()
-
-      for (const item of models) {
-        byProvider.set(item.provider.id, [...(byProvider.get(item.provider.id) ?? []), item])
-      }
-
-      return Array.from(byProvider, ([category, items]) => ({ category, items })).sort(sortModelGroups)
-    },
+    groups: (models: ModelItem[]) =>
+      [...Map.groupBy(models, (item) => item.provider.id)]
+        .map(([category, items]) => ({ category, items }))
+        .sort(sortModelGroups),
     current: () => {
       const value = model.current()
 
@@ -589,7 +584,7 @@ const clamp = (value: number) => Math.max(0, Math.min(1, value))
 
 const round = (value: number) => Math.round(value * 1000) / 1000
 
-type ModelRow = { id: string; item: ModelItem; group: ModelGroup }
+type ModelRow = { id: string; item: ModelItem; section: string; title?: string }
 
 function createChatgptPlan(current: () => string | undefined) {
   const data = useData()
@@ -664,9 +659,21 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     })
   })
 
-  const rows = createMemo(() =>
-    groups().flatMap((group) => group.items.map((item): ModelRow => ({ id: modelKey(item), item, group }))),
-  )
+  // A row that still shows the same model in the same section keeps its object, so a narrower search re-renders none of
+  // the rows that stay.
+  const rows = createMemo((previous: ModelRow[]) => {
+    const kept = new Map(previous.map((row) => [row.id, row]))
+
+    return groups().flatMap((group) =>
+      group.items.map((item): ModelRow => {
+        const row = kept.get(modelKey(item))
+
+        return row?.item === item && row.section === group.category && row.title === group.title
+          ? row
+          : { id: modelKey(item), item, section: group.category, title: group.title }
+      }),
+    )
+  }, [])
 
   const rowItem = (id: string) => rows().find((row) => row.id === id)?.item
   const flyoutId = createMemo(() => selectFlyoutOpenId(flyout()))
@@ -970,6 +977,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     const item = () => row.model.item
     const selected = () => controller.current() === modelKey(item())
     const active = () => row.attrs["data-active"] !== undefined
+    const budget = createMemo(() => usage(item()))
 
     return (
       <button
@@ -1012,7 +1020,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             <SearchHighlight text={item().name} />
           </span>
           {/* Favorites and Recent mix providers, so their rows name one, with its workspace when its header has one. */}
-          <Show when={row.model.group.title}>
+          <Show when={row.model.title}>
             <span class="min-w-0 shrink-[999] truncate text-v2-text-text-faint">{labels.name(item().provider)}</span>
             <Show when={labels.workspace(item().provider)}>
               {(workspace) => <Badge class="shrink-0">{workspace()}</Badge>}
@@ -1026,7 +1034,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
           </Show>
         </span>
         {/* The active row shows its variant instead; its flyout leads with the budget. */}
-        <Show when={!active() && usage(item())}>
+        <Show when={!active() && budget()}>
           {(value) => (
             <span data-slot="model-dialog-variant">
               <ModelUsageTag usage={value()} />
@@ -1110,11 +1118,11 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             }
             items={rows()}
             key={(row) => row.id}
-            section={(row) => row.group.category}
+            section={(row) => row.section}
             header={(row) => (
               <span data-slot="model-dialog-header-label" class="flex min-w-0 items-center gap-1.5">
-                <span class="min-w-0 truncate">{row.group.title ?? labels.name(row.item.provider)}</span>
-                <Show when={!row.group.title && labels.workspace(row.item.provider)}>
+                <span class="min-w-0 truncate">{row.title ?? labels.name(row.item.provider)}</span>
+                <Show when={!row.title && labels.workspace(row.item.provider)}>
                   {(workspace) => <Badge class="shrink-0">{workspace()}</Badge>}
                 </Show>
               </span>
@@ -1130,97 +1138,100 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
           <ChatgptPlanFooter />
         </Show>
       </DialogBody>
-      <Show when={flyoutItem()}>
-        {(item) => (
-          // Inside the dialog content, so clicks here are not outside clicks that dismiss the dialog.
-          <div
-            ref={(element) => (flyoutRef = element)}
-            data-component="menu-v2-content"
-            data-slot="model-dialog-flyout"
-            style={{
-              left: `${selectFlyoutPosition(flyout())?.left ?? 0}px`,
-              top: `${selectFlyoutPosition(flyout())?.top ?? 0}px`,
-            }}
-            onMouseEnter={() => dispatch({ type: "flyout.entered" })}
-          >
-            <MenuScroll>
-              <Show when={usage(item())}>
-                {(value) => (
-                  <>
-                    <div
-                      data-slot="model-dialog-flyout-usage"
-                      class="cursor-default px-3 py-1.5 font-[440] tabular-nums select-none"
-                    >
+      {/* Stays in the dialog while the flyout comes and goes: adding or removing a child of the dialog restyles every row. */}
+      <div class="contents">
+        <Show when={flyoutItem()}>
+          {(item) => (
+            // Inside the dialog content, so clicks here are not outside clicks that dismiss the dialog.
+            <div
+              ref={(element) => (flyoutRef = element)}
+              data-component="menu-v2-content"
+              data-slot="model-dialog-flyout"
+              style={{
+                left: `${selectFlyoutPosition(flyout())?.left ?? 0}px`,
+                top: `${selectFlyoutPosition(flyout())?.top ?? 0}px`,
+              }}
+              onMouseEnter={() => dispatch({ type: "flyout.entered" })}
+            >
+              <MenuScroll>
+                <Show when={usage(item())}>
+                  {(value) => (
+                    <>
                       <div
-                        class="text-[13px] leading-5"
-                        classList={{
-                          "text-v2-state-fg-danger": value().reached,
-                          "text-v2-text-text-base": !value().reached,
-                        }}
+                        data-slot="model-dialog-flyout-usage"
+                        class="cursor-default px-3 py-1.5 font-[440] tabular-nums select-none"
                       >
-                        {value().label}
+                        <div
+                          class="text-[13px] leading-5"
+                          classList={{
+                            "text-v2-state-fg-danger": value().reached,
+                            "text-v2-text-text-base": !value().reached,
+                          }}
+                        >
+                          {value().label}
+                        </div>
+                        <div class="text-[12px] leading-5 text-v2-text-text-muted">
+                          {language.t("usage.footer.resets", { time: value().resets })}
+                        </div>
                       </div>
-                      <div class="text-[12px] leading-5 text-v2-text-text-muted">
-                        {language.t("usage.footer.resets", { time: value().resets })}
-                      </div>
-                    </div>
-                    <div data-slot="menu-v2-separator" role="separator" />
-                  </>
-                )}
-              </Show>
-              {/* A model without variants still lists Default, its only option. */}
-              <For each={menuOptions(item())}>
-                {(value, index) => (
-                  <div
-                    data-component="menu-v2-item"
-                    role="menuitemradio"
-                    aria-checked={controller.variant(item()) === value}
-                    data-checked={controller.variant(item()) === value ? "" : undefined}
-                    data-highlighted={menu() === index() ? "" : undefined}
-                    onMouseEnter={() => dispatch({ type: "menu.highlighted", index: index(), input: "pointer" })}
-                    onMouseLeave={() => dispatch({ type: "menu.highlighted", index: undefined, input: "pointer" })}
-                    onClick={() => activateMenu(item(), index(), "pointer")}
-                  >
-                    <span data-slot="menu-v2-item-content" class="capitalize">
-                      {value ?? language.t("common.default")}
-                    </span>
-                    <span
-                      data-slot="menu-v2-item-indicator"
+                      <div data-slot="menu-v2-separator" role="separator" />
+                    </>
+                  )}
+                </Show>
+                {/* A model without variants still lists Default, its only option. */}
+                <For each={menuOptions(item())}>
+                  {(value, index) => (
+                    <div
+                      data-component="menu-v2-item"
+                      role="menuitemradio"
+                      aria-checked={controller.variant(item()) === value}
                       data-checked={controller.variant(item()) === value ? "" : undefined}
+                      data-highlighted={menu() === index() ? "" : undefined}
+                      onMouseEnter={() => dispatch({ type: "menu.highlighted", index: index(), input: "pointer" })}
+                      onMouseLeave={() => dispatch({ type: "menu.highlighted", index: undefined, input: "pointer" })}
+                      onClick={() => activateMenu(item(), index(), "pointer")}
                     >
-                      <Icon name="check" />
-                    </span>
-                  </div>
-                )}
-              </For>
-              <div data-slot="menu-v2-separator" role="separator" />
-              <div
-                data-component="menu-v2-item"
-                role="menuitem"
-                data-highlighted={menu() === menuOptions(item()).length ? "" : undefined}
-                onMouseEnter={() =>
-                  dispatch({ type: "menu.highlighted", index: menuOptions(item()).length, input: "pointer" })
-                }
-                onMouseLeave={() => dispatch({ type: "menu.highlighted", index: undefined, input: "pointer" })}
-                onClick={() => toggleFavorite(item(), "pointer")}
-              >
-                <span data-slot="menu-v2-item-content">
-                  {favorite(item()) ? language.t("dialog.model.unfavorite") : language.t("dialog.model.favorite")}
-                </span>
-                <Keybind keys={formatKeybindParts("mod+f", language.t)} variant="neutral" class="shrink-0" />
-              </div>
-              <div data-slot="menu-v2-separator" role="separator" />
-              {/* The full name, "Workspace / Provider", where a workspace badge tells the connections apart. */}
-              <ModelDetails
-                model={item()}
-                provider={labels.workspace(item().provider) ? item().provider.name : labels.name(item().provider)}
-                compact
-                standalone
-              />
-            </MenuScroll>
-          </div>
-        )}
-      </Show>
+                      <span data-slot="menu-v2-item-content" class="capitalize">
+                        {value ?? language.t("common.default")}
+                      </span>
+                      <span
+                        data-slot="menu-v2-item-indicator"
+                        data-checked={controller.variant(item()) === value ? "" : undefined}
+                      >
+                        <Icon name="check" />
+                      </span>
+                    </div>
+                  )}
+                </For>
+                <div data-slot="menu-v2-separator" role="separator" />
+                <div
+                  data-component="menu-v2-item"
+                  role="menuitem"
+                  data-highlighted={menu() === menuOptions(item()).length ? "" : undefined}
+                  onMouseEnter={() =>
+                    dispatch({ type: "menu.highlighted", index: menuOptions(item()).length, input: "pointer" })
+                  }
+                  onMouseLeave={() => dispatch({ type: "menu.highlighted", index: undefined, input: "pointer" })}
+                  onClick={() => toggleFavorite(item(), "pointer")}
+                >
+                  <span data-slot="menu-v2-item-content">
+                    {favorite(item()) ? language.t("dialog.model.unfavorite") : language.t("dialog.model.favorite")}
+                  </span>
+                  <Keybind keys={formatKeybindParts("mod+f", language.t)} variant="neutral" class="shrink-0" />
+                </div>
+                <div data-slot="menu-v2-separator" role="separator" />
+                {/* The full name, "Workspace / Provider", where a workspace badge tells the connections apart. */}
+                <ModelDetails
+                  model={item()}
+                  provider={labels.workspace(item().provider) ? item().provider.name : labels.name(item().provider)}
+                  compact
+                  standalone
+                />
+              </MenuScroll>
+            </div>
+          )}
+        </Show>
+      </div>
     </Dialog>
   )
 }

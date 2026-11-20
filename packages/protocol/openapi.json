@@ -1076,7 +1076,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<subagent>` report to the parent's inbox and wakes the parent unless it has a staged revert."
+                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<background-result kind=\"subagent\">` report to the parent's inbox and wakes the parent unless it has a staged revert."
                   },
                   "title": {
                     "anyOf": [
@@ -12406,7 +12406,7 @@
             }
           }
         },
-        "description": "Create an automation that sends a prompt or runs a Code Mode program at a time, every interval, or on a cron. Creating an MCP event watch requires the automation_create tool in a local session; a session ID over HTTP is not a watch authorization. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Create an automation that sends a prompt, runs a Code Mode program, or runs a shell command at a time, every interval, or on a cron. Creating an MCP event watch requires the automation_create tool in a local session; a session ID over HTTP is not a watch authorization. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
         "summary": "Create automation",
         "requestBody": {
           "content": {
@@ -16370,6 +16370,9 @@
           },
           {
             "$ref": "#/components/schemas/Automation.Action.Code"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.Action.Shell"
           }
         ]
       },
@@ -16405,6 +16408,21 @@
         "required": ["type", "prompt", "to"],
         "additionalProperties": false
       },
+      "Automation.Action.Shell": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["type", "command"],
+        "additionalProperties": false
+      },
       "Automation.ActionInput": {
         "anyOf": [
           {
@@ -16412,9 +16430,12 @@
           },
           {
             "$ref": "#/components/schemas/Automation.CodeActionInput"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.ShellActionInput"
           }
         ],
-        "description": "What it does: { type: \"prompt\", prompt, to? } sends a prompt; { type: \"code\", code, args? } runs Code Mode with no model."
+        "description": "What it does: { type: \"prompt\", prompt, to? } sends a prompt; { type: \"code\", code, args? } runs Code Mode; { type: \"shell\", command } runs a fixed shell command."
       },
       "Automation.CodeActionInput": {
         "type": "object",
@@ -16558,6 +16579,22 @@
           }
         },
         "required": ["type", "prompt"],
+        "additionalProperties": false
+      },
+      "Automation.ShellActionInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The fixed shell command to run on each trigger without a model."
+          }
+        },
+        "required": ["type", "command"],
         "additionalProperties": false
       },
       "Automation.Status": {
@@ -17426,7 +17463,22 @@
               "mcp_events": {
                 "type": "boolean"
               },
+              "recommended_api": {
+                "type": "boolean"
+              },
               "full_codemode": {
+                "type": "boolean"
+              },
+              "machines": {
+                "type": "boolean"
+              },
+              "home_memory": {
+                "type": "boolean"
+              },
+              "project_overlay": {
+                "type": "boolean"
+              },
+              "sqlite_fts": {
                 "type": "boolean"
               },
               "schedules": {

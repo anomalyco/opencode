@@ -1171,7 +1171,6 @@ export const dict = {
   "session.activity.scripts.one": "{{count}} skripta",
   "session.activity.scripts.few": "{{count}} skripte",
   "session.activity.scripts.other": "{{count}} skripti",
-  "session.activity.background": "Rad u pozadini",
   "session.activity.shell.back": "Natrag na pozadinski rad",
   "session.activity.shell.stop": "Zaustavi",
   "session.activity.shell.stopping": "Zaustavljanje…",

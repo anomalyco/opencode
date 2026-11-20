@@ -111,7 +111,12 @@ export const CodeAction = Schema.Struct({
 }).annotate({ identifier: "Automation.Action.Code" })
 export interface CodeAction extends Schema.Schema.Type<typeof CodeAction> {}
 
-export const Action = Schema.Union([PromptAction, CodeAction]).pipe(
+const shellFields = { type: Schema.tag("shell"), command: Schema.NonEmptyString }
+
+export const ShellAction = Schema.Struct(shellFields).annotate({ identifier: "Automation.Action.Shell" })
+export interface ShellAction extends Schema.Schema.Type<typeof ShellAction> {}
+
+export const Action = Schema.Union([PromptAction, CodeAction, ShellAction]).pipe(
   Schema.toTaggedUnion("type"),
   Schema.annotate({ identifier: "Automation.Action" }),
 )
@@ -176,7 +181,15 @@ export const CodeActionInput = Schema.Struct({
 }).annotate({ identifier: "Automation.CodeActionInput" })
 export interface CodeActionInput extends Schema.Schema.Type<typeof CodeActionInput> {}
 
-export const ActionInput = Schema.Union([PromptActionInput, CodeActionInput]).pipe(
+export const ShellActionInput = Schema.Struct({
+  ...shellFields,
+  command: shellFields.command.annotate({
+    description: "The fixed shell command to run on each trigger without a model.",
+  }),
+}).annotate({ identifier: "Automation.ShellActionInput" })
+export interface ShellActionInput extends Schema.Schema.Type<typeof ShellActionInput> {}
+
+export const ActionInput = Schema.Union([PromptActionInput, CodeActionInput, ShellActionInput]).pipe(
   Schema.toTaggedUnion("type"),
   Schema.annotate({ identifier: "Automation.ActionInput" }),
 )
@@ -191,7 +204,7 @@ export const Request = Schema.Struct({
   }),
   action: ActionInput.annotate({
     description:
-      'What it does: { type: "prompt", prompt, to? } sends a prompt; { type: "code", code, args? } runs Code Mode with no model.',
+      'What it does: { type: "prompt", prompt, to? } sends a prompt; { type: "code", code, args? } runs Code Mode; { type: "shell", command } runs a fixed shell command.',
   }),
   expires: Schema.String.pipe(optional).annotate({
     description: 'When it stops for good: an instant, a wall-clock time in tz, or "in 8 hours".',

@@ -86,7 +86,7 @@ const files: Environment.Files = {
 }
 const environment = Layer.succeed(
   Environment.Service,
-  Environment.Service.of({ files, spawner: Environment.makeMemoryDriver().spawner }),
+  Environment.Service.of({ id: Environment.localID, files, spawner: Environment.makeMemoryDriver().spawner }),
 )
 const seed = (file: string, content: string | Uint8Array = "x\n") =>
   files.write(AbsolutePath.make(file), typeof content === "string" ? encoder.encode(content) : content)

@@ -1,8 +1,8 @@
 # @opencode/codemode
 
 This is our take on code mode: a lightweight, pure interpreter for a JavaScript-like language built around calling
-tools. It supports familiar JavaScript syntax with a few key differences and limitations. See the
-[interpreter support checklist](./interpreter-support.md) for more details.
+tools. The language itself is [psychoscript](https://github.com/anomalyco/psychoscript); see its interpreter support
+checklist for what is supported.
 
 Rather than trying to sandbox arbitrary JavaScript, CodeMode only runs the language features we implement. Programs
 cannot directly access the network, filesystem, processes, or application APIs. They can interact with the outside
@@ -21,20 +21,15 @@ The idea of code mode was originally introduced by Cloudflare. See
 - **REPL-style results.** Without an explicit `return`, the final top-level expression becomes the result. `undefined`
   becomes `null`.
 
-Unsupported syntax returns an `UnsupportedSyntax` diagnostic with a source location. Current gaps are tracked in the
-[interpreter support checklist](./interpreter-support.md).
+Unsupported syntax returns an `UnsupportedSyntax` diagnostic with a source location. Current gaps are tracked in
+psychoscript's interpreter support checklist.
 
 ## Layout
 
-The package is two layers, as folders under `src/`:
-
-- `src/language/` is the language: the compiler, VM, runtime, standard library, prelude, scheduler, snapshots, and the
-  Effect driver. It knows nothing about tools. A host gives programs its functions with `Host` and runs them with
-  `Runtime.make` (see [The language layer](#the-language-layer)).
-- `src/codemode/` is Code Mode, built on the language: tools and their schemas, the catalog and namespaces, `search`,
-  `scanTools`, OpenAPI, hooks, `maxToolCalls`, `CodeMode.make`, and `Extension.make`.
-
-Nothing in `src/language/` imports from `src/codemode/`; a test checks it. The package's public API is Code Mode's.
+The language (compiler, VM, runtime, standard library, snapshots, and the Effect driver) is the
+[`psychoscript`](https://www.npmjs.com/package/psychoscript) package. `src/codemode/` is Code Mode, built on it: tools
+and their schemas, the catalog and namespaces, search, scanTools, OpenAPI, hooks, maxToolCalls, CodeMode.make,
+and Extension.make.
 
 ## Quick Start
 
@@ -218,13 +213,10 @@ can't be saved or is too large fails the suspend the same way.
 
 A resumed run keeps the limits it was saved with: `timeoutMs` counts active time across every resume, and `maxToolCalls`
 counts every admitted call of the run (Code Mode keeps them in the run's `metadata`, saved with the state). A state
-resumes only on the same build of this package and with the same host globals (the same extension globals, with the
+resumes only on the same build of psychoscript and with the same host globals (the same extension globals, with the
 same `snapshot` hooks). The state is checked when the resumed program runs: its `run()` fails with a
 `CodeMode.SnapshotError` when it can't be resumed here or is malformed. Built-ins are saved by name and only their
 changes are copied.
-
-Set `CODEMODE_ROUNDTRIP=1` (`bun run test:roundtrip`) to run the tests with every run saved to bytes and
-restored into a brand-new runtime at every host call and every few steps.
 
 ### `Extension.make`
 
@@ -342,54 +334,8 @@ responses pass through unchanged. See `src/codemode/openapi/types.ts` for option
 
 ## The language layer
 
-Code Mode is built on the language layer in `src/language/`, which runs programs over any host globals. It is not part
-of the package's public API yet.
-
-```ts
-import { Host, Runtime } from "./src/language/index.js"
-
-const runtime = Runtime.make({
-  // Called when a run starts, and again when it resumes, so globals can keep the run's own state.
-  globals: (run) => ({
-    hash: Host.fn(([text]) => sha256(text as string)), // "sync" (the default): the program waits for it
-    sleep: Host.fn(([ms]) => Effect.sleep(ms as number), { type: "async" }), // the program gets a promise
-    find: Host.fn(([query]) => searchIndex(query), { type: "sync-thenable" }), // the object now, also awaitable
-    lookup: Host.fn(([id], { key }) => Db.get(id, key), { type: "async", idempotent: true }), // rerun on resume
-    review: Host.durableFn({ start, wait, cancel }), // keeps running across a suspend
-    api: Host.namespace({
-      keys: (path) => childrenOf(path), // Object.keys and for...in
-      resolve: (path) => fnAt(path) ?? Host.missing(`No api.${path.join(".")}`, suggestionsFor(path)),
-    }),
-    fs: { readFile: Host.fn(([file]) => read(file), { type: "async" }) }, // plain objects of functions work too
-  }),
-  limits: { timeoutMs: 30_000, maxOutputBytes: 1_000_000 },
-})
-
-const program = runtime.program(code, { bindings: { repo: "…" }, runId })
-yield* program.run() // Result | Suspended
-yield* program.suspend({ maxBytes })
-yield* runtime.resume(bytes).run()
-```
-
-- **`Host.fn(f, { type, idempotent })`.** `f` gets the program's arguments, as they crossed, and the call, `{ key }`
-  (`<runId>:<callId>`). `sync` (the default) blocks the program: an Effect runs until it ends, and a returned Promise
-  is a promise. `async` hands the program a promise. `sync-thenable` returns the result at once, with hidden
-  `then`/`catch`/`finally`. `idempotent: true`, only with `async`, lets a suspend interrupt a call in progress, which
-  runs again on resume under the same key; any other call in progress refuses a suspend. `constructible: true` lets
-  the program call it with `new`. `takesFunctions: true` lets the program pass back a function that was inside a
-  result, which arrives as the host function itself, and a call holding one refuses a suspend until it completes;
-  without it, such a function is treated like any other function in an argument: refused, or left out when the
-  runtime's `translate.functions` is `"drop"`.
-- **`Host.durableFn({ start, wait, cancel })`.** `start` gives JSON data, saved with the run; `wait(data)` runs right
-  after, and again after a resume; `cancel(data)` only when the run is interrupted or ends with the work still running.
-- **`Host.namespace({ keys, resolve })`.** A lazy object of functions addressed by path, for catalogs too large to
-  build as objects. Any path can be read; calling one asks `resolve` for its function, or a failure it throws.
-- **`Host.fail(kind, message, suggestions?)`.** A failure with its own diagnostic kind, to throw or fail with.
-- **`run.metadata`.** The host's own JSON state for the run: saved with a suspended run, given back on resume, and in
-  the run's result. Code Mode keeps `toolCalls` and `maxToolCalls` there.
-
-Every host function gets the same structured translation: arguments and results cross as copies (plain data, `Date`,
-`Map`, `Set`, `Uint8Array`, `URL`, `Headers`, errors), and a function inside a result is callable.
+Code Mode is built on [psychoscript](https://github.com/anomalyco/psychoscript), which runs programs over any host
+globals given through Host and Runtime.make. See its README for that API.
 
 ## Results
 

@@ -5,6 +5,7 @@ import { Cause, Context, Deferred, Effect, Exit, Option, type Scope, Semaphore }
 import { extension } from "mime-types"
 import { Flag } from "../flag.js"
 import { Job } from "../job.js"
+import { BackgroundResult } from "../session/background-result.js"
 import type { Session } from "../session.js"
 import type { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -14,10 +15,12 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
   const body = job.status === "running" ? "Interrupted by server restart." : (job.output ?? job.error ?? state)
   return {
     description: "Script",
-    text: `<codemode id="${job.id}" state="${state}">\n${body}\n</codemode>`,
+    text: BackgroundResult.render(`kind="codemode" id="${job.id}" state="${state}"`, body),
     metadata: { source: "codemode", jobID: job.id, state },
   }
 }
+
+const BLOCK_TIMEOUT = "2 minutes"
 
 type Execute = (context: Tool.Context) => Effect.Effect<Tool.NormalizedResult, Tool.Error>
 type Run = (context: Tool.Context, execute: Execute) => ReturnType<Execute>
@@ -78,7 +81,7 @@ export const make = Effect.fnUntraced(function* (
             return body
           }),
         })
-        const blocked = yield* restore(jobs.block({ id, sessionID }).pipe(Effect.timeoutOption("10 seconds"))).pipe(
+        const blocked = yield* restore(jobs.block({ id, sessionID }).pipe(Effect.timeoutOption(BLOCK_TIMEOUT))).pipe(
           Effect.onInterrupt(() => jobs.cancel(id)),
         )
         if (Option.isSome(blocked) && blocked.value?.type === "finished") return yield* Deferred.await(result)

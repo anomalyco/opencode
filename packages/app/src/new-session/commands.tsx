@@ -5,7 +5,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { projectSearchCommand } from "@/shell/titlebar/titlebar"
 
 export function useNewSessionCommands(input: {
-  restoreFocus: () => void
+  restoreFocus: (cursor?: number, visible?: boolean) => void
   project: {
     empty: () => boolean
     open: () => void
@@ -37,7 +37,8 @@ export function useNewSessionCommands(input: {
       title: language.t("command.input.focus"),
       category: language.t("command.category.view"),
       keybind: "ctrl+l",
-      onSelect: input.restoreFocus,
+      // A shortcut moved focus, so the ring shows.
+      onSelect: () => input.restoreFocus(undefined, true),
     },
     {
       id: "session.location.cycle",

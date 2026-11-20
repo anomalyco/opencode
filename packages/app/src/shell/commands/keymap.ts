@@ -208,8 +208,8 @@ function physicalKey(event: Pick<KeyboardEvent, "key" | "code">) {
   return event.key
 }
 
-// The HTML host, except that it drops keys while an IME composes or while command keybinds are blocked, and that
-// its owner can destroy it, which disposes the keymap.
+// The HTML host, except that it drops keys while an IME composes, while command keybinds are blocked or while the
+// keyboard is inside a modal alert dialog, and that its owner can destroy it, which disposes the keymap.
 function createAppKeymapHost(root: HTMLElement, blocked: () => boolean) {
   const host = createHtmlKeymapHost(root)
   const destroyed = new Set<() => void>()
@@ -237,6 +237,10 @@ function createAppKeymapHost(root: HTMLElement, blocked: () => boolean) {
         if (original && (original.isComposing || original.keyCode === 229)) return
 
         if (blocked()) return
+
+        // A modal alert dialog the app's dialog stack does not track, such as a page's prompt in the browser pane, is
+        // modal for less than the window: its keys are its own.
+        if (original?.target instanceof Element && original.target.closest('[role="alertdialog"][aria-modal="true"]')) return
 
         listener(event)
       }),

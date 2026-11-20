@@ -1149,7 +1149,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} shell",
   "session.activity.scripts.one": "{{count}} სკრიპტი",
   "session.activity.scripts.other": "{{count}} სკრიპტი",
-  "session.activity.background": "ფონური სამუშაო",
   "session.activity.shell.back": "ფონურ სამუშაოზე დაბრუნება",
   "session.activity.shell.stop": "შეჩერება",
   "session.activity.shell.stopping": "ჩერდება…",

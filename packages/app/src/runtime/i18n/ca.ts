@@ -1179,7 +1179,6 @@ export const dict = {
   "session.activity.subagents.other": "{{count}} subagents",
   "session.activity.shells.one": "{{count}} shell",
   "session.activity.shells.other": "{{count}} shells",
-  "session.activity.background": "Feina en segon pla",
   "session.activity.shell.back": "Torna a la feina en segon pla",
   "session.activity.shell.stop": "Atura",
   "session.activity.shell.stopping": "S'està aturant…",

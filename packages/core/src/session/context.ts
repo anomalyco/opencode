@@ -17,6 +17,7 @@ import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
+import { MachineInstructions } from "../machine/instructions.js"
 import { McpInstructions } from "../mcp/instructions.js"
 import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
@@ -90,6 +91,7 @@ const layer = Layer.effect(
     const entries = yield* InstructionEntry.Service
     const flags = yield* Flag.Service
     const location = yield* Location.Service
+    const machineInstructions = yield* MachineInstructions.Service
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
@@ -180,6 +182,7 @@ const layer = Layer.effect(
           skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),
           mcp: mcpInstructions.load(tools),
+          machines: machineInstructions.load(),
           entries: entries.load(sessionID),
         },
         { concurrency: "unbounded" },
@@ -195,6 +198,7 @@ const layer = Layer.effect(
           loaded.mcp,
           loaded.references,
           loaded.skills,
+          loaded.machines,
           loaded.discovery,
           loaded.builtins,
           loaded.entries,
@@ -255,6 +259,7 @@ export const node = makeLocationNode({
     InstructionDiscovery.node,
     InstructionEntry.node,
     Location.node,
+    MachineInstructions.node,
     McpInstructions.node,
     McpTool.node,
     ReferenceInstructions.node,
