@@ -178,6 +178,10 @@ fn time_on_a_run_queue_is_not_charged() {
 #[test]
 fn an_overrun_is_judged_by_cpu_time_not_wall_time() {
     let monitor = Monitor::default();
+    // The run queue is not this test's: with delayed dequeues, the scheduler can add a sleeper's whole sleep, when it
+    // lands on another CPU, to `schedstat`'s run-queue wait (a known upstream `sched_info` over-count), taking the wall
+    // time below the sleep. The CPU clock stays real, which is what the overrun judges.
+    *monitor.queued.borrow_mut() = Rc::new(|| Duration::ZERO);
     let slot = monitor.slot(&Artifact::builtin("p"));
     let ((), blocked) = monitor.call(slot, "run-command", || std::thread::sleep(Duration::from_millis(250)));
     assert!(blocked.took >= Duration::from_millis(250), "{blocked:?}");
@@ -203,24 +207,36 @@ fn the_kernel_tells_the_time_on_a_run_queue() {
     let cpu = unsafe { libc::sched_getcpu() } as usize;
     pin(cpu);
     let stop = Arc::new(AtomicBool::new(false));
+    let running = Arc::new(AtomicBool::new(false));
     let spinner = {
         let stop = stop.clone();
+        let running = running.clone();
         std::thread::spawn(move || {
             pin(cpu);
+            running.store(true, Ordering::Relaxed);
             while !stop.load(Ordering::Relaxed) {}
         })
     };
+    // The window opens with the spinner spinning on the same CPU, so the kernel has two runnable threads to report,
+    // and it is the thread's CPU time, so a stall (a page fault, a wake that lands elsewhere) lengthens the window
+    // instead of shrinking the wait in it. Two runnable threads on one CPU share it: half the window is a wait.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !running.load(Ordering::Relaxed) {
+        assert!(Instant::now() < deadline, "the spinner never ran");
+        std::hint::spin_loop();
+    }
     let monitor = Monitor::default();
     let slot = monitor.slot(&Artifact::builtin("p"));
+    let used = thread_cpu().unwrap();
     let before = queued();
     let started = Instant::now();
-    // Busy for 200 ms of wall time, which the spinner shares.
-    let ((), timed) = monitor.call(slot, "run-command", || while started.elapsed() < Duration::from_millis(200) {});
+    let ((), timed) =
+        monitor.call(slot, "run-command", || while thread_cpu().unwrap() - used < Duration::from_millis(100) {});
     let waited = queued() - before;
     stop.store(true, Ordering::Relaxed);
     spinner.join().unwrap();
-    assert!(waited > Duration::from_millis(20), "{waited:?}");
-    assert!(timed.took < started.elapsed() - waited / 2, "{timed:?} {waited:?}");
+    assert!(waited > Duration::from_millis(20), "{waited:?} of {:?}, {timed:?}", started.elapsed());
+    assert!(timed.took < started.elapsed().saturating_sub(waited / 2), "{timed:?} {waited:?}");
 }
 
 /// Pins the calling thread to `cpu`.
