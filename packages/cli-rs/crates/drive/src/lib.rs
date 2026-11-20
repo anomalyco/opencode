@@ -197,7 +197,9 @@ mod tests {
         });
         app.on_mouse({
             let events = events.clone();
-            move |_cx, mouse| events.borrow_mut().push(format!("{:?} {} {}", mouse.kind, mouse.x, mouse.y))
+            move |_cx, mouse| {
+                events.borrow_mut().push(format!("{:?} {} {} {:?}", mouse.kind, mouse.x, mouse.y, mouse.modifiers))
+            }
         });
         let server = start(&app, SocketAddr::from(([127, 0, 0, 1], 0)), "1.2.3".into()).unwrap();
 
@@ -222,6 +224,34 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":17,"method":"ui.capture"}"#,
             r#"{"jsonrpc":"2.0","id":18,"method":"ui.state"}"#,
             r#"{"jsonrpc":"2.0","id":21,"method":"ui.click","params":{"target":1,"x":0,"y":0}}"#,
+            // Keys and mouse reports as Core's mock input encodes them, after the capture so the frame stays as asserted.
+            r#"{"jsonrpc":"2.0","id":30,"method":"ui.press","params":{"key":"home"}}"#,
+            r#"{"jsonrpc":"2.0","id":31,"method":"ui.press","params":{"key":"f5"}}"#,
+            r#"{"jsonrpc":"2.0","id":32,"method":"ui.press","params":{"key":"delete"}}"#,
+            r#"{"jsonrpc":"2.0","id":33,"method":"ui.press","params":{"key":"tab","modifiers":{"shift":true}}}"#,
+            r#"{"jsonrpc":"2.0","id":34,"method":"ui.press","params":{"key":"é"}}"#,
+            r#"{"jsonrpc":"2.0","id":35,"method":"ui.press","params":{"key":"x","modifiers":{"ctrl":true,"shift":true,"meta":true,"super":true,"hyper":true}}}"#,
+            r#"{"jsonrpc":"2.0","id":36,"method":"ui.press","params":{"key":"pageup"}}"#,
+            r#"{"jsonrpc":"2.0","id":37,"method":"ui.mouse","params":{"action":"down","x":2,"y":2,"button":"right"}}"#,
+            r#"{"jsonrpc":"2.0","id":38,"method":"ui.mouse","params":{"action":"move","x":5,"y":2}}"#,
+            r#"{"jsonrpc":"2.0","id":39,"method":"ui.mouse","params":{"action":"up","x":5,"y":2,"button":"right"}}"#,
+            r#"{"jsonrpc":"2.0","id":40,"method":"ui.mouse","params":{"action":"move","x":3,"y":2,"modifiers":{"ctrl":true}}}"#,
+            r#"{"jsonrpc":"2.0","id":41,"method":"ui.mouse","params":{"action":"down","x":0,"y":2,"modifiers":{"shift":true,"alt":true}}}"#,
+            r#"{"jsonrpc":"2.0","id":42,"method":"ui.mouse","params":{"action":"up","x":0,"y":2}}"#,
+            r#"{"jsonrpc":"2.0","id":43,"method":"ui.mouse","params":{"action":"scroll","x":9,"y":2,"direction":"left","modifiers":{"ctrl":true}}}"#,
+            // What TS refuses.
+            r#"{"jsonrpc":"2.0","id":50,"method":"ui.mouse","params":{"action":"move","x":-1,"y":0}}"#,
+            r#"{"jsonrpc":"2.0","id":51,"method":"ui.mouse","params":{"action":"scroll","x":1,"y":0}}"#,
+            r#"{"jsonrpc":"2.0","id":52,"method":"ui.mouse","params":{"action":"move","x":1.5,"y":0}}"#,
+            r#"{"jsonrpc":"2.0","id":53,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"backend","offeredVersions":[1],"requiredCapabilities":[],"optionalCapabilities":[]}}"#,
+            r#"{"jsonrpc":"2.0","id":54,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[2],"requiredCapabilities":[],"optionalCapabilities":[]}}"#,
+            r#"{"jsonrpc":"2.0","id":55,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[1],"requiredCapabilities":["ui.state","ui.type","ui.click"],"optionalCapabilities":[]}}"#,
+            r#"{"jsonrpc":"2.0","id":56,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[1,1],"requiredCapabilities":[],"optionalCapabilities":[]}}"#,
+            r#"{"jsonrpc":"2.0","id":57,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[],"requiredCapabilities":[],"optionalCapabilities":[]}}"#,
+            r#"{"jsonrpc":"2.0","id":58,"method":"ui.type"}"#,
+            r#"{"jsonrpc":"2.0","id":59,"method":"ui.type","params":{"text":1}}"#,
+            r#"{"jsonrpc":"2.0","id":60,"method":"ui.arrow","params":{"direction":"in"}}"#,
+            r#"{"jsonrpc":"1.0","id":61,"method":"ui.enter"}"#,
             r#"{"jsonrpc":"2.0","method":"ui.press","params":{"key":"!"}}"#,
             r#"{"jsonrpc":"2.0","id":19,"method":"ui.nope"}"#,
         ];
@@ -272,7 +302,18 @@ mod tests {
         assert_eq!(invalid["jsonrpc"], "2.0");
         assert_eq!(invalid["id"], Value::Null);
         assert_eq!(invalid["error"]["code"], -32000);
-        assert_eq!(responses.len(), 21);
+        assert_eq!(
+            [53, 54, 55].map(|id| result(id).unwrap_err()),
+            [
+                "Expected simulation endpoint role backend, received ui",
+                "No mutually supported simulation protocol version",
+                "Simulation endpoint is missing required capabilities: ui.state, ui.click",
+            ]
+        );
+        assert!(result(56).is_err() && result(57).is_err());
+        // What does not decode (50 to 52 and 58 to 61, and `ui.nope`) fails with a null `id`, as in TS.
+        assert_eq!(responses.iter().filter(|response| response["id"].is_null()).count(), 8, "{responses:?}");
+        assert_eq!(responses.len(), 47);
         assert_eq!(
             *events.borrow(),
             [
@@ -284,9 +325,29 @@ mod tests {
                 "Char('c') ctrl",
                 "Left NONE",
                 "Enter NONE",
-                "Down(Left) 1 1",
-                "Drag(Left) 2 1",
-                "Up(Left) 2 1",
+                "Down(Left) 1 1 NONE",
+                "Drag(Left) 2 1 NONE",
+                "Up(Left) 2 1 NONE",
+                "Home NONE",
+                "F(5) NONE",
+                "Delete NONE",
+                "BackTab shift",
+                "Char('é') NONE",
+                "Char('X') shift+alt+ctrl+super+hyper",
+                // A name outside Core's `KeyCodes` is typed as text.
+                "Char('p') NONE",
+                "Char('a') NONE",
+                "Char('g') NONE",
+                "Char('e') NONE",
+                "Char('u') NONE",
+                "Char('p') NONE",
+                "Down(Right) 2 2 NONE",
+                "Drag(Right) 5 2 NONE",
+                "Up(Right) 5 2 NONE",
+                "Moved 3 2 ctrl",
+                "Down(Left) 0 2 shift+alt",
+                "Up(Left) 0 2 NONE",
+                "ScrollLeft 9 2 ctrl",
                 "Char('!') NONE",
             ]
             .map(str::to_owned)
