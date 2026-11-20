@@ -242,6 +242,16 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           description: "List configured MCP servers and their status",
           globalFlags: ServerFlags,
         }),
+        Spec.make("reconnect", {
+          description: "Reconnect MCP servers that are not connected",
+          globalFlags: ServerFlags,
+          params: {
+            name: Argument.String("name").pipe(
+              Argument.withDescription("Name of the MCP server, defaults to every failed server"),
+              Argument.optional,
+            ),
+          },
+        }),
         Spec.make("add", {
           description: "Add an MCP server to your configuration",
           params: {
