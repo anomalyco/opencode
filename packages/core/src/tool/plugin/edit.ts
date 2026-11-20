@@ -329,7 +329,12 @@ export const Plugin = {
                 replacements > 0 && (replacements === 1 || input.replaceAll === true)
                   ? fileDiff(target.resource, source, replaced)
                   : undefined
+
+              // Ask permission before taking the per-path lock, so an unanswered
+              // permission prompt in one session cannot block edits to the same path
+              // from every other session.
               yield* fileWrite.authorize(target, context, preview)
+
               if (replacements === 0) {
                 // The hint shows file contents, so only when reading this file is already allowed.
                 const readable = yield* permission.allows({
@@ -355,7 +360,20 @@ export const Plugin = {
                     : `No changes to apply: the edit leaves ${input.path} unchanged. Line endings follow the file; to change them, write \\r explicitly in oldString or newString.`,
                 })
               }
-              const result = yield* fileWrite.commit(target, replaced)
+
+              // Take the lock only for the commit. Re-read under the lock and fail if
+              // the file changed while we were waiting for permission.
+              const result = yield* fileMutation.withLock([FileAccess.resolvePath(location.directory, input.path)])(
+                Effect.gen(function* () {
+                  const current = yield* FileMutation.readText(target.environment.files, target.absolute)
+                  if (current.text !== source) {
+                    return yield* new ToolFailure({
+                      message: `Unable to edit ${input.path}: the file changed while waiting for permission. Please retry the edit.`,
+                    })
+                  }
+                  return yield* fileWrite.commit(target, replaced)
+                }),
+              )
               const formatted =
                 result.formatted ?? (yield* FileMutation.readText(target.environment.files, target.absolute)).text
               return {
@@ -363,7 +381,6 @@ export const Plugin = {
                 metadata: { files: [fileDiff(result.resource, source, formatted)] },
               }
             }).pipe(
-              fileMutation.withLock([FileAccess.resolvePath(location.directory, input.path)]),
               Effect.mapError(toolFailure(`Unable to edit ${input.path}`)),
             )
           },

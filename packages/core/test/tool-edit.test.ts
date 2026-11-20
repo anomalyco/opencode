@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
@@ -50,6 +50,8 @@ const makeEditFixture = () => {
     readAllowed: boolean
     afterRead: () => Effect.Effect<void>
     formatFile: (target: string) => Effect.Effect<boolean>
+    deferFirstEdit: boolean
+    resolveFirstEdit: (() => void) | undefined
   } = {
     assertions: [],
     writes: [],
@@ -57,24 +59,35 @@ const makeEditFixture = () => {
     readAllowed: true,
     afterRead: () => Effect.void,
     formatFile: () => Effect.succeed(false),
+    deferFirstEdit: false,
+    resolveFirstEdit: undefined,
   }
+
+  let firstEditResolved = false
+  const firstEditPromise = new Promise<void>((resolve) => {
+    fixture.resolveFirstEdit = resolve
+  })
 
   const permission = permissionLayer({
     allows: (input) => Effect.succeed(input.action === "read" && fixture.readAllowed),
     assert: (input) =>
-      Effect.sync(() => fixture.assertions.push(input)).pipe(
-        Effect.andThen(
-          input.action === fixture.denyAction
-            ? Effect.fail(
-                new Permission.BlockedError({
-                  rules: [],
-                  permission: input.action,
-                  resources: input.resources,
-                }),
-              )
-            : Effect.void,
-        ),
-      ),
+      Effect.gen(function* () {
+        fixture.assertions.push(input)
+        if (fixture.deferFirstEdit && input.action === "edit" && !firstEditResolved) {
+          firstEditResolved = true
+          yield* Effect.promise(() => firstEditPromise)
+        }
+        if (input.action === fixture.denyAction) {
+          return yield* Effect.fail(
+            new Permission.BlockedError({
+              rules: [],
+              permission: input.action,
+              resources: input.resources,
+            }),
+          )
+        }
+        return Effect.void
+      }),
   })
 
   const formatter = Layer.mock(Formatter.Service, {
@@ -830,8 +843,16 @@ describe("EditTool", () => {
         ),
         Effect.andThen((results) =>
           Effect.gen(function* () {
-            expect(results.map((result) => result.status)).toEqual(["completed", "completed"])
-            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
+            const statuses = results.map((result) => result.status)
+            expect(statuses).toContain("completed")
+            expect(statuses).toContain("error")
+            const errorResult = results.find((result) => result.status === "error")
+            expect(errorResult!.error!.type).toBe("tool.execution")
+            expect(errorResult!.error!.message).toContain(
+              "file changed while waiting for permission",
+            )
+            const finalContent = yield* Effect.promise(() => fs.readFile(target, "utf8"))
+            expect(finalContent).toMatch(/^(ONE\ntwo\n|one\nTWO\n)$/)
           }),
         ),
       )
@@ -851,10 +872,52 @@ describe("EditTool", () => {
         ),
         Effect.andThen((result) =>
           Effect.gen(function* () {
-            expect(result).toMatchObject({ status: "completed", output: "Edited concurrent.txt (1 replacement)" })
-            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
-            expect(edit.writes).toEqual([target])
+            expect(result.status).toBe("error")
+            expect(result.error!.type).toBe("tool.execution")
+            expect(result.error!.message).toContain(
+              "file changed while waiting for permission",
+            )
+            expect(edit.writes).toEqual([])
           }),
+        ),
+      )
+    }),
+  )
+
+  it.live("fails when file changed while waiting for permission", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "concurrent.txt")
+      edit.deferFirstEdit = true
+      return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            Effect.gen(function* () {
+              // Fork edit A: it waits on permission (deferred), holding no lock.
+              const editAFork = yield* executeTool(
+                registry,
+                call({ path: "concurrent.txt", oldString: "before", newString: "A" }, "call-edit-a"),
+              ).pipe(Effect.forkChild)
+              // Let edit A reach the deferred permission assert.
+              yield* Effect.sleep("10 millis")
+              // Edit B: permission granted immediately, takes the lock, commits.
+              const editBResult = yield* executeTool(
+                registry,
+                call({ path: "concurrent.txt", oldString: "before", newString: "B" }, "call-edit-b"),
+              )
+              expect(editBResult.status).toBe("completed")
+              // Release edit A's permission; it re-reads under the lock and finds
+              // the file changed by edit B.
+              edit.resolveFirstEdit!()
+              const editAResult = yield* Fiber.join(editAFork)
+              expect(editAResult.status).toBe("error")
+              expect(editAResult.error!.type).toBe("tool.execution")
+              expect(editAResult.error!.message).toContain(
+                "file changed while waiting for permission",
+              )
+              expect(edit.writes).toEqual([target])
+            }),
+          ),
         ),
       )
     }),
