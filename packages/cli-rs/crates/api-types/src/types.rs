@@ -10396,12 +10396,19 @@ pub struct AutomationCodeActionInput {
     pub args: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AutomationShellActionInput {
+    pub r#type: String,
+    pub command: String,
+}
+
 /// `Automation.ActionInput`, tagged by `type`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum AutomationActionInput {
     Prompt(AutomationPromptActionInput),
     Code(AutomationCodeActionInput),
+    Shell(AutomationShellActionInput),
     /// A member this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
 }
@@ -10417,6 +10424,7 @@ impl AutomationActionInput {
         match raw.field("type").as_str() {
             Some("prompt") => raw.variant().map(Self::Prompt),
             Some("code") => raw.variant().map(Self::Code),
+            Some("shell") => raw.variant().map(Self::Shell),
             _ => raw.unknown().map(Self::Unknown),
         }
     }
@@ -10428,6 +10436,7 @@ impl AutomationActionInput {
         match self {
             Self::Prompt(value) => value.r#type.as_str(),
             Self::Code(value) => value.r#type.as_str(),
+            Self::Shell(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
@@ -10461,12 +10470,19 @@ pub struct AutomationActionCode {
     pub args: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AutomationActionShell {
+    pub r#type: String,
+    pub command: String,
+}
+
 /// `Automation.Action`, tagged by `type`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum AutomationAction {
     Prompt(AutomationActionPrompt),
     Code(AutomationActionCode),
+    Shell(AutomationActionShell),
     /// A member this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
 }
@@ -10482,6 +10498,7 @@ impl AutomationAction {
         match raw.field("type").as_str() {
             Some("prompt") => raw.variant().map(Self::Prompt),
             Some("code") => raw.variant().map(Self::Code),
+            Some("shell") => raw.variant().map(Self::Shell),
             _ => raw.unknown().map(Self::Unknown),
         }
     }
@@ -10493,6 +10510,7 @@ impl AutomationAction {
         match self {
             Self::Prompt(value) => value.r#type.as_str(),
             Self::Code(value) => value.r#type.as_str(),
+            Self::Shell(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
