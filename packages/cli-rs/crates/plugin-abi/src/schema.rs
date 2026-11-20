@@ -692,6 +692,220 @@ mod tests {
         read
     }
 
+    /// A xorshift generator, so the crate needs no generator of its own; `foreign` once it generated a value of the HTTP
+    /// API's, whose schema and types are the API crate's to agree on.
+    struct Rng(u64, bool);
+
+    impl Rng {
+        fn below(&mut self, n: usize) -> usize {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 % n as u64) as usize
+        }
+
+        fn chance(&mut self, percent: usize) -> bool {
+            self.below(100) < percent
+        }
+    }
+
+    /// A value `schema` takes, by chance: boundaries and odd text more often than not. Past `depth` levels, arrays are
+    /// empty and optional fields left out, so recursion ends.
+    fn instance(schema: &Value, defs: &Value, rng: &mut Rng, depth: usize) -> Value {
+        let deep = depth > 4;
+        if let Some(path) = schema.get("$ref").and_then(Value::as_str) {
+            rng.1 |= !path.starts_with("#/$defs/");
+            return instance(resolve(path, defs), defs, rng, depth + 1);
+        }
+        if let Some(constant) = schema.get("const") {
+            return constant.clone();
+        }
+        if let Some(values) = schema.get("enum").and_then(Value::as_array) {
+            return values[rng.below(values.len())].clone();
+        }
+        if let Some(any) = schema.get("oneOf").or(schema.get("anyOf")).and_then(Value::as_array) {
+            return instance(&any[rng.below(any.len())], defs, rng, depth);
+        }
+        if let Some(all) = schema.get("allOf").and_then(Value::as_array) {
+            let mut merged = serde_json::Map::new();
+            for part in all {
+                match instance(part, defs, rng, depth) {
+                    Value::Object(object) => merged.extend(object),
+                    other => return other,
+                }
+            }
+            return Value::Object(merged);
+        }
+        let kind = match schema.get("type") {
+            Some(Value::String(kind)) => kind.as_str(),
+            Some(Value::Array(kinds)) => kinds[rng.below(kinds.len())].as_str().unwrap(),
+            _ => ["null", "boolean", "integer", "string"][rng.below(4)],
+        };
+        match kind {
+            "null" => Value::Null,
+            "boolean" => json!(rng.chance(50)),
+            "integer" => {
+                let exact = |key: &str| {
+                    schema.get(key).and_then(|value| value.as_i64().map(i128::from).or(value.as_u64().map(i128::from)))
+                };
+                let min = exact("minimum").or(exact("exclusiveMinimum").map(|min| min + 1)).unwrap_or(-(1 << 40));
+                let max = exact("maximum").unwrap_or(1 << 40);
+                let n = match rng.below(5) {
+                    0 => min,
+                    1 => max,
+                    2 => 0.clamp(min, max),
+                    _ => min + (rng.below(1 << 30) as i128 % (max - min + 1)),
+                };
+                u64::try_from(n).map_or_else(|_| json!(i64::try_from(n).unwrap()), |n| json!(n))
+            }
+            "number" => {
+                let min = schema.get("minimum").or(schema.get("exclusiveMinimum")).and_then(Value::as_f64);
+                let n = [0.0, 0.5, 1.0, 1e9, -3.25, 100.0][rng.below(6)];
+                json!(match min {
+                    Some(min) if n <= min => min + 1.0,
+                    _ => n,
+                })
+            }
+            "string" => {
+                if schema.get("pattern").and_then(Value::as_str) == Some(RGBA) {
+                    let hex: String = (0..8).map(|_| char::from(b"0123456789abcdefABCDEF"[rng.below(22)])).collect();
+                    return json!(format!("#{hex}"));
+                }
+                let pool = ["", "x", "text.muted", "é 日本 👨‍👩‍👧", "a\u{0}b\n", "ses_a", "#ff0000ff"];
+                let min = schema.get("minLength").and_then(Value::as_u64).unwrap_or(0) as usize;
+                let text = pool[rng.below(pool.len())];
+                json!(if text.chars().count() < min { "x".repeat(min) } else { text.to_owned() })
+            }
+            "array" => {
+                let mut items: Vec<Value> = schema
+                    .get("prefixItems")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .map(|item| instance(item, defs, rng, depth + 1))
+                    .collect();
+                if let Some(each) = schema.get("items").filter(|each| each.is_object()) {
+                    let min = schema.get("minItems").and_then(Value::as_u64).unwrap_or(0) as usize;
+                    let max = schema.get("maxItems").and_then(Value::as_u64).map_or(3, |max| max as usize);
+                    let count = if deep { min } else { min + rng.below(max.min(3).saturating_sub(min) + 1) };
+                    items.extend((0..count).map(|_| instance(each, defs, rng, depth + 1)));
+                }
+                Value::Array(items)
+            }
+            "object" => {
+                let required: Vec<&str> =
+                    schema["required"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+                let mut object = serde_json::Map::new();
+                for (name, field) in schema.get("properties").and_then(Value::as_object).into_iter().flatten() {
+                    if name == "base64" {
+                        // Text the schema cannot say is base64.
+                        object.insert(name.clone(), json!(["", "AA==", "aGk="][rng.below(3)]));
+                    } else if required.contains(&name.as_str()) || (!deep && rng.chance(50)) {
+                        object.insert(name.clone(), instance(field, defs, rng, depth + 1));
+                    }
+                }
+                if let Some(each) = schema.get("additionalProperties").filter(|each| each.is_object())
+                    && !deep
+                {
+                    for key in ["text.base", "k"].iter().take(rng.below(3)) {
+                        object.insert((*key).to_owned(), instance(each, defs, rng, depth + 1));
+                    }
+                }
+                Value::Object(object)
+            }
+            other => panic!("a schema of type {other}"),
+        }
+    }
+
+    /// `value` with one of its parts broken, by chance: a field dropped, a value of another type, a field added.
+    fn mutate(value: &mut Value, rng: &mut Rng) {
+        let children = match value {
+            Value::Object(object) => object.len(),
+            Value::Array(items) => items.len(),
+            _ => 0,
+        };
+        if children > 0 && rng.chance(70) {
+            let at = rng.below(children);
+            match value {
+                // Base64 the schema cannot tell from other text.
+                Value::Object(object) if object.keys().nth(at).is_some_and(|key| key == "base64") => {}
+                Value::Object(object) => mutate(object.values_mut().nth(at).unwrap(), rng),
+                Value::Array(items) => mutate(&mut items[at], rng),
+                _ => unreachable!(),
+            }
+            return;
+        }
+        match (value, rng.below(4)) {
+            (Value::Object(object), 0) if !object.is_empty() => {
+                let key = object.keys().nth(rng.below(object.len())).unwrap().clone();
+                object.remove(&key);
+            }
+            (Value::Object(object), 1) => drop(object.insert("unknown".into(), json!(1))),
+            // Not an array: serde reads a struct from one, as its fields in order.
+            (value, _) => {
+                *value = [json!(null), json!("x"), json!(-1), json!(1.5), json!({}), json!(true)][rng.below(6)].clone()
+            }
+        }
+    }
+
+    /// Generated values of definition `name`, and each with a part broken: serde reads each the schema takes, and what
+    /// serde writes of one, the schema takes and serde reads back to itself.
+    fn generated<T: DeserializeOwned + Serialize>(name: &str, cases: u64, seed: u64) {
+        let schema = schema();
+        let defs = &schema["$defs"];
+        let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1, false);
+        let mut kinds = std::collections::BTreeSet::new();
+        for case in 0..cases {
+            rng.1 = false;
+            let value = instance(&defs[name], defs, &mut rng, 0);
+            let at = format!("{name}, seed {seed}, case {case}");
+            kinds.extend(value.get("type").and_then(Value::as_str).map(str::to_owned));
+            // A branch of a `oneOf` another branch takes too is the generator's, not the contract's.
+            if rng.1 || !conforms(&value, &defs[name], defs) {
+                continue;
+            }
+            let read: T =
+                serde_json::from_value(value.clone()).unwrap_or_else(|error| panic!("{at}: {value}: {error}"));
+            let written = serde_json::to_value(&read).unwrap();
+            assert!(conforms(&written, &defs[name], defs), "{at}: {value} is written as {written}");
+            let again = serde_json::to_value(serde_json::from_value::<T>(written.clone()).unwrap()).unwrap();
+            assert_eq!(again, written, "{at}: {value}");
+            let mut broken = value.clone();
+            mutate(&mut broken, &mut rng);
+            // What the schema takes the host reads; the host may read more, as serde reads a missing `Option` as `None`.
+            if conforms(&broken, &defs[name], defs) {
+                let read = serde_json::from_value::<T>(broken.clone());
+                assert!(read.is_ok(), "{at}: {broken} from {value}: {read:?}", read = read.err());
+            }
+        }
+        // Every kind of a tagged definition, so the values reach each variant's fields.
+        let tag = |branch: &Value| branch["properties"]["type"]["const"].as_str().map(str::to_owned);
+        let branches = defs[name]["oneOf"].as_array().into_iter().flatten();
+        let missing: Vec<String> = branches
+            .filter_map(|branch| tag(branch).or_else(|| branch["allOf"].as_array()?.iter().find_map(tag)))
+            .filter(|kind| !kinds.contains(kind))
+            .collect();
+        assert!(missing.is_empty(), "{name}: no value of {missing:?} in {cases}");
+    }
+
+    #[test]
+    fn generated_messages_agree_with_serde_and_read_back() {
+        let number = |key: &str, default: u64| std::env::var(key).ok().map_or(default, |text| text.parse().unwrap());
+        let (cases, seed) = (number("MODEL_CASES", 800), number("MODEL_SEED", 1));
+        generated::<Node>("Node", cases, seed);
+        generated::<crate::Request>("Request", cases, seed);
+        generated::<crate::HostRequest>("HostRequest", cases, seed);
+        generated::<crate::Manifest>("Manifest", cases, seed);
+        generated::<crate::ViewReply>("ViewReply", cases, seed);
+        generated::<LayoutReply>("LayoutReply", cases, seed);
+        generated::<SurfaceInput>("SurfaceInput", cases, seed);
+        generated::<Geometry>("Geometry", cases, seed);
+        generated::<crate::Dialog>("Dialog", cases, seed);
+        generated::<crate::Fenced>("Fenced", cases, seed);
+        generated::<crate::Render>("Render", cases, seed);
+        generated::<crate::claim::Reply>("ClaimReply", cases, seed);
+    }
+
     #[test]
     fn the_schema_takes_every_message_of_the_transcripts() {
         let schema = shipped();
@@ -813,329 +1027,32 @@ mod tests {
     }
 
     #[test]
-    fn the_envelopes_take_what_serde_takes() {
-        for (value, taken) in [
-            (json!({ "type": "plugins" }), true),
-            (json!({ "type": "later" }), false),
-            (json!({ "type": "unmount" }), false),
-            (
-                json!({ "type": "input", "to": { "type": "surface", "surface": 0 }, "event": { "type": "paste", "text": "x" } }),
-                true,
-            ),
-            (json!({ "type": "input", "to": { "type": "surface" }, "event": { "type": "paste", "text": "x" } }), false),
-            (
-                json!({ "type": "render-fence", "language": "a", "info": "", "code": "", "streaming": false, "closed": false, "key": 1 }),
-                true,
-            ),
-            (json!({ "type": "render-fence", "language": "a" }), false),
-        ] {
-            assert_eq!(agree::<crate::Request>("Request", value), taken);
-        }
-        for (value, taken) in [
-            (json!({ "type": "toast", "variant": "info", "message": "m" }), true),
-            (json!({ "type": "toast", "variant": "info" }), false),
-            (json!({ "type": "fetch", "method": "GET", "path": "/x" }), true),
-            (json!({ "type": "open-panel", "surface": "s", "fullscreen": true }), true),
-            (json!({ "type": "overlay", "surface": "s", "anchor": { "edge": "top" }, "width": 1, "height": 1 }), true),
-            (json!({ "type": "overlay", "surface": "s", "anchor": "top", "width": 1, "height": 1 }), false),
-            (json!({ "type": "dialog", "dialog": { "type": "alert", "title": "t", "message": "m" } }), true),
-            (json!({ "type": "model" }), true),
-            (json!({ "type": "terminal" }), false),
-        ] {
-            assert_eq!(agree::<crate::HostRequest>("HostRequest", value), taken);
-        }
-        assert!(agree::<crate::Manifest>("Manifest", serde_json::to_value(crate::Manifest::default()).unwrap()));
-        assert!(!agree::<crate::Manifest>("Manifest", json!({ "commands": [] })));
-        assert!(agree::<crate::ViewReply>("ViewReply", json!({ "node": { "type": "box" }, "content": [[1, "x"]] })));
-        assert!(agree::<crate::ViewReply>(
-            "ViewReply",
-            json!({ "node": { "type": "box" }, "content": [[1, { "base64": "AA==" }]] })
-        ));
-        assert!(!agree::<crate::ViewReply>("ViewReply", json!({ "content": [] })));
-        assert!(agree::<crate::Render>("Render", json!({ "type": "show", "node": { "type": "slot", "path": "p" } })));
-        assert!(!agree::<crate::Render>("Render", json!({ "type": "show" })));
-        assert_eq!(serde_json::from_value::<crate::claim::Reply>(json!({})).unwrap().node, None);
-        assert!(agree::<crate::claim::Part>(
-            "ClaimPart",
-            json!({ "type": "fence", "language": "l", "info": "", "code": "", "streaming": false, "closed": true })
-        ));
-    }
-
-    #[test]
-    fn the_schema_takes_what_serde_takes() {
-        let span = Span {
-            text: "x".into(),
-            fg: Some(Color::from("text.muted")),
-            bg: Some(Color::Rgba(Rgba::new(1, 2, 3, 4))),
-            bold: true,
-            italic: true,
-            underline: true,
-            dim: true,
-            strikethrough: true,
-            link: Some("https://opencode.ai".into()),
-        };
-        let layout = Layout {
-            width: Some(Width::Percent(50.0)),
-            grow: true,
-            shrink: Some(false),
-            min_width: Some(Width::Cells(0)),
-            max_width: Some(Width::Percent(40.0)),
-            height: Some(Width::Cells(2)),
-            min_height: Some(Width::Cells(1)),
-            max_height: Some(Width::Cells(9)),
-            margin: Some(Edges { top: -1, right: 1, bottom: 2, left: 3 }),
-            absolute: Some(crate::Absolute { top: Some(-2), right: Some(2), bottom: None, left: None, z: 1 }),
-        };
-        let click = Click { action: Action::command("x").input("y"), on: Press::Down };
-        let border = Border {
-            sides: Sides { top: true, right: false, bottom: true, left: false },
-            style: BorderStyle::Heavy,
-            color: Some(Color::from("#ff0000")),
-            title: Some("t".into()),
-            title_align: TitleAlign::Right,
-            bottom_title: Some("b".into()),
-            bottom_title_align: TitleAlign::Center,
-        };
-        let nodes = [
-            Node::Box {
-                id: Some("b".into()),
-                row: true,
-                gap: 1,
-                padding: (1, 2),
-                justify: Justify::SpaceAround,
-                align: Align::End,
-                bg: Some(Color::from("text.base")),
-                layout,
-                on_click: Some(click.clone()),
-                children: vec![Node::Keep { key: "k".into() }],
-                border: Some(std::boxed::Box::new(border)),
-                padding_sides: Some(Edges { top: 1, ..Edges::default() }),
-                wrap: true,
-                overflow: Overflow::Hidden,
-                sticky: Some(Edge::Bottom),
-                anchor: Some(Anchor::new("file", "reviewed")),
-                split: Some(Split { at: 30, min: 4 }),
-                interact: Interact {
-                    focusable: true,
-                    pointer: true,
-                    hover: Some(Color::from("background.raised")),
-                    hover_events: true,
-                },
-                visible: false,
-            },
-            Node::Text {
-                id: Some("t".into()),
-                spans: vec![span],
-                fg: Some(Color::from("text.base")),
-                wrap: Wrap::None,
-                truncate: true,
-                selectable: false,
-                hover_fg: Some(Color::from("text.muted")),
-                layout,
-                on_click: Some(click),
-                hover_events: true,
-            },
-            Node::Slot { path: "home.footer".into() },
-            Node::Markdown {
-                id: Some("m".into()),
-                source: Source::PartOutput(PartRef { session: "s".into(), part: "p".into() }),
-            },
-            Node::Spinner { id: Some("s".into()), label: "l".into() },
-            Node::Scroll {
-                id: Some("c".into()),
-                height: Some(3),
-                follow: true,
-                layout,
-                children: vec![],
-                notify_top: Some("file".into()),
-                user_scroll: true,
-                scrollbar: true,
-            },
-            Node::Diff {
-                id: Some("d".into()),
-                content: Source::Content(ContentRef(7)),
-                view: DiffView::Split,
-                filetype: Some("rust".into()),
-                hunks: Some("hunk".into()),
-                wrap: Default::default(),
-                padding: 0,
-            },
-            Node::Input {
-                id: Some("i".into()),
-                value: "v".into(),
-                placeholder: "p".into(),
-                lines: Some(3),
-                layout,
-                seen: Some(7),
-            },
-            Node::List {
-                id: Some("l".into()),
-                row: true,
-                items: vec![ListItem::new(Node::Keep { key: "k".into() }, 9)],
-                layout,
-                notify_top: Some("file".into()),
-                user_scroll: true,
-            },
-            Node::Code {
-                id: Some("o".into()),
-                content: Source::Text("fn x() {}".into()),
-                filetype: Some("rust".into()),
-                numbers: true,
-                layout,
-            },
-            Node::Image { id: Some("g".into()), content: Source::Content(ContentRef(2)), fit: Fit::Cover, layout },
-            Node::Markdown { id: None, source: Source::Text("x".into()) },
-            Node::Canvas { id: Some("v".into()), layout, version: 7, animate: true },
-        ];
-        for node in nodes {
-            let encoded = serde_json::to_value(&node).unwrap();
-            assert!(agree::<Node>("Node", encoded.clone()), "{node:?}");
-            assert_eq!(serde_json::from_value::<Node>(encoded).unwrap(), node);
-        }
-        let input = SurfaceInput {
-            width: 1,
-            height: 2,
-            palette: Palette { mode: Mode::Light, colors: [("text.base".into(), Rgba::new(1, 2, 3, 4))].into() },
-            full: true,
-            panel: Some(PanelInput { width: 40, fullscreen: true, focused: true, forced: true }),
-            changed: Changed {
-                all: true,
-                sessions: vec!["ses_a".into()],
-                lists: vec!["ses_a".into()],
-                messages: vec![("ses_a".into(), "msg_1".into())],
-                locations: vec![LocationRef { directory: "/p".into(), workspace: Some("w".into()) }],
-                local: true,
-                size: true,
-                woken: true,
-            },
-            slot: Some(SlotInput {
-                session_id: Some("ses_a".into()),
-                prompt: Some(PromptInput { shell: true, show_details: true }),
-                width: 3,
-                height: 4,
-            }),
-        };
-        assert!(agree::<SurfaceInput>("SurfaceInput", serde_json::to_value(&input).unwrap()));
-        let mount = MountId { surface: "s".into(), key: "k".into(), generation: u64::MAX };
-        assert!(agree::<MountId>("MountId", serde_json::to_value(&mount).unwrap()));
-        for cause in [Cause::First, Cause::Resized, Cause::Version, Cause::Animate] {
-            let frame = Frame { width: 3, height: 2, cause, dt: std::time::Duration::new(1, 999_999_999) };
-            assert!(agree::<Frame>("Frame", serde_json::to_value(frame).unwrap()), "{frame:?}");
-        }
-        let frame = |cause: Value, dt: Value| json!({ "width": 1, "height": 1, "cause": cause, "dt": dt });
-        assert!(!agree::<Frame>("Frame", frame(json!("drawn"), json!({ "secs": 0, "nanos": 0 }))));
-        assert!(!agree::<Frame>("Frame", frame(json!("first"), json!({ "secs": 0 }))));
-        assert!(!agree::<Frame>("Frame", frame(json!("first"), json!({ "secs": -1, "nanos": 0 }))));
-        let anchor = AnchorAt { id: "d#1".into(), owner: "d".into(), index: 1, variant: "v".into(), row: -3 };
-        let verbs = [
-            Scroll::To { node: "n".into(), align: ScrollAlign::Nearest { inset: 2 } },
-            Scroll::To { node: "n".into(), align: ScrollAlign::Keep },
-            Scroll::To { node: "n".into(), align: ScrollAlign::Start },
-            Scroll::Offset { offset: -1 },
-            Scroll::By { rows: i32::MIN },
-            Scroll::Page { percent: i16::MIN },
-            Scroll::Edge { edge: Edge::Bottom },
-            Scroll::Step { group: "g".into(), by: -2, inset: 1 },
-            Scroll::Forget,
-        ];
-        for verb in verbs {
-            assert!(agree::<Scroll>("Scroll", serde_json::to_value(&verb).unwrap()), "{verb:?}");
-        }
-        for target in [Target::node("s", "i"), Target::Transcript] {
-            assert!(agree::<Target>("Target", serde_json::to_value(&target).unwrap()));
-        }
-        let state = ScrollState { offset: 1, viewport: 2, extent: 3 };
-        assert!(agree::<ScrollState>("ScrollState", serde_json::to_value(state).unwrap()));
-        for event in [
-            ScrollEvent::Landed { scroll: "s".into(), anchor: anchor.clone() },
-            ScrollEvent::UserScroll { scroll: "s".into() },
-        ] {
-            assert!(agree::<ScrollEvent>("ScrollEvent", serde_json::to_value(&event).unwrap()));
-        }
-        let notify = [
-            Notify::Node { id: "n".into() },
-            Notify::Scroll { id: "s".into() },
-            Notify::Group { scroll: "s".into(), group: "g".into() },
-            Notify::Transcript,
-        ];
-        for notify in notify {
-            assert!(agree::<Notify>("Notify", serde_json::to_value(&notify).unwrap()));
-        }
-        let transcript = TranscriptView {
-            offset: 1,
-            viewport: 2,
-            extent: 3,
-            revision: u64::MAX,
-            above: 4,
-            rows: vec![TranscriptRow {
-                kind: "tool".into(),
-                message: "m".into(),
-                part: Some("p".into()),
-                row: 0,
-                height: 2,
-            }],
-        };
-        let geometry = Geometry {
-            mount: Some(mount.clone()),
-            rects: vec![("n".into(), Rect { x: -1, y: 2, width: 3, height: 4 })],
-            scrolls: vec![("s".into(), state)],
-            groups: vec![("s".into(), "g".into(), vec![anchor.clone()])],
-            tops: vec![Top { scroll: "s".into(), group: "g".into(), anchor: Some(anchor) }],
-            moved_only: true,
-            reached: vec![("s".into(), 7)],
-            transcript: Some(transcript),
-        };
-        assert!(agree::<Geometry>("Geometry", serde_json::to_value(&geometry).unwrap()));
-        let reply = LayoutReply::default().paint("n", "text.base");
-        assert!(agree::<LayoutReply>(
-            "LayoutReply",
-            serde_json::to_value(LayoutReply { again: true, ..reply }).unwrap()
-        ));
-        // What a plugin may leave out, and what neither takes.
+    fn the_schema_and_serde_agree_at_the_bounds() {
+        let frame = |dt: Value| json!({ "width": 1, "height": 1, "cause": "first", "dt": dt });
+        assert!(agree::<Frame>("Frame", frame(json!({ "secs": u64::MAX, "nanos": 999_999_999 }))));
+        assert!(!agree::<Frame>("Frame", frame(json!({ "secs": 0, "nanos": 0, "later": 1 }))));
         for (verb, taken) in [
             (json!({ "type": "to", "node": "n" }), true),
-            (json!({ "type": "to", "node": "n", "align": { "type": "nearest" } }), true),
-            (json!({ "type": "step", "group": "g", "by": 1 }), true),
-            (json!({ "type": "step", "group": "g" }), false),
-            (json!({ "type": "page", "percent": 40000 }), false),
             (json!({ "type": "forget", "node": "n" }), true),
+            (json!({ "type": "page", "percent": i16::MAX }), true),
+            (json!({ "type": "page", "percent": 40000 }), false),
             (json!({ "type": "edge", "edge": "left" }), false),
         ] {
             assert_eq!(agree::<Scroll>("Scroll", verb), taken);
         }
-        assert!(agree::<LayoutReply>("LayoutReply", json!({})));
+        let anchor =
+            |anchor: Value| json!({ "type": "overlay", "surface": "s", "anchor": anchor, "width": 1, "height": 1 });
+        assert!(agree::<crate::HostRequest>("HostRequest", anchor(json!({ "edge": "top" }))));
+        assert!(!agree::<crate::HostRequest>("HostRequest", anchor(json!("top"))));
         // serde reads a percent past `f32` as infinite, as the schema takes it; the reconcile refuses a size that is not
         // finite (`Refused::Number`).
         assert!(agree::<Node>("Node", json!({ "type": "box", "layout": { "width": { "percent": 1e100 } } })));
+        assert!(!agree::<Node>("Node", json!({ "type": "box", "layout": { "absolute": { "z": 1u64 << 31 } } })));
         let past: Value =
             serde_json::from_str(r#"{ "surface": "s", "key": "k", "generation": 18446744073709551616 }"#).unwrap();
         assert!(!agree::<MountId>("MountId", past));
-        let refused = [
-            json!({ "type": "text" }),
-            json!({ "type": "image", "id": "x" }),
-            json!({ "type": "box", "gap": 70000 }),
-            json!({ "type": "box", "layout": { "width": { "inches": 3 } } }),
-            json!({ "type": "markdown", "source": { "text": "a", "content": 1 } }),
-            json!({ "type": "diff", "content": { "content": -1 } }),
-            json!({ "type": "canvas", "version": -1 }),
-            json!({ "type": "canvas", "animate": 1 }),
-            json!({ "type": "list", "items": [{ "estimate": 3 }] }),
-            json!({ "type": "box", "sticky": "left" }),
-        ];
-        for value in refused {
-            assert!(!agree::<Node>("Node", value));
-        }
-        let taken = [
-            json!({ "type": "box" }),
-            json!({ "type": "text", "spans": [{ "text": "a", "fg": "#AABBCCDD" }], "fg": null }),
-            json!({ "type": "box", "padding_sides": { "left": -2 }, "border": { "title": "t" } }),
-            json!({ "type": "box", "id": "b", "focusable": true, "hover": "text.muted" }),
-        ];
-        for value in taken {
-            assert!(agree::<Node>("Node", value));
-        }
-        assert!(!agree::<SurfaceInput>("SurfaceInput", json!({ "width": 1, "height": 2 })));
         assert!(agree::<Rgba>("Rgba", json!("#AABBCCdd")));
         assert!(!agree::<Rgba>("Rgba", json!("#GG000000")));
+        assert_eq!(serde_json::from_value::<crate::claim::Reply>(json!({})).unwrap().node, None);
     }
 }
