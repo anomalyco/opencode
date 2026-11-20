@@ -1297,6 +1297,7 @@ describe("Anthropic Messages route", () => {
         { type: "message_start", message: { usage: { input_tokens: 5 } } },
         { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
         { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Planning." } },
+        { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_0" } },
         { type: "content_block_start", index: 1, content_block: { type: "thinking", thinking: "", signature: "" } },
         { type: "content_block_delta", index: 1, delta: { type: "signature_delta", signature: "sig_1" } },
         { type: "content_block_stop", index: 1 },
@@ -1323,6 +1324,9 @@ describe("Anthropic Messages route", () => {
         "reasoning-start:reasoning-1",
         "reasoning-end:reasoning-1",
       ])
+      expect(response.events.find((event) => event.type === "reasoning-end" && event.id === "reasoning-0")).toMatchObject({
+        providerMetadata: { anthropic: { signature: "sig_0" } },
+      })
     }),
   )
 
