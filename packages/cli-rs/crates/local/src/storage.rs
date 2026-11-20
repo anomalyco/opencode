@@ -104,7 +104,7 @@ impl Storage {
 }
 
 fn read(file: &Path) -> Option<Value> {
-    let value: Value = serde_json::from_str(&fs::read_to_string(file).ok()?).ok()?;
+    let value: Value = serde_json::from_str(&crate::read_lossy(file).ok()?).ok()?;
     is_object(&value).then_some(value)
 }
 
@@ -156,6 +156,8 @@ mod tests {
         assert_eq!(fs::read_to_string(&file).unwrap(), "{\"open\":true,\"other\":1}");
         fs::write(&file, "5").unwrap();
         assert_eq!(storage.load("view", &initial).unwrap(), initial);
+        fs::write(&file, b"{\"open\":false,\"name\":\"caf\xe9\"}").unwrap();
+        assert_eq!(storage.load("view", &initial).unwrap(), json!({"open": false, "name": "caf\u{fffd}"}));
         assert!(matches!(storage.file("../x"), Err(Error::Segment(_))));
         assert!(matches!(storage.file(".x"), Err(Error::Segment(_))));
         assert!(storage.file("plugin.sidebar.view").is_ok());
