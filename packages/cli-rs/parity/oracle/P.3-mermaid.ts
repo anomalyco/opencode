@@ -34,6 +34,8 @@ for (const file of files) {
     if (detectMermaidDiagram(source)) sources.add(source)
   }
 }
+// What crates/mermaid's parser test once asserted by hand: dotted operators and the `-.` lookahead.
+sources.add("flowchart LR\n  A -.-> B\n  C -.->D.- E\n  F -. note .-> G\n  H -.-> I -. x .- J")
 
 const theme = resolveThemeDocument(parseTheme(allThemes().opencode, "opencode"), "dark")
 const colors = resolveOpenCodeDiagramPalette(theme, "dark")
