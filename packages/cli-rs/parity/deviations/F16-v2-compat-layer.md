@@ -177,8 +177,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   TS never shows and a checkpoint saw or not by the machine's speed. Not mapped: `data.project.permission`, the location's `mcp.resource` list, `renderer` members other than
   `requestRender`, `width`, `height` and `keyInput` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's
   returns the renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS),
-  `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `alignSelf` and
-  `flexBasis`. `minWidth` and `maxWidth` are the layout's `min_width` and `max_width`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
+  `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `alignSelf`,
+  `flexBasis`, and a box's `flexDirection` of `row-reverse` or `column-reverse` (it draws as `row` or `column`),
+  `justifyContent` of `space-evenly` (as `flex-start`) and `alignItems` of `baseline` (as `stretch`). `minWidth` and `maxWidth` are the layout's `min_width` and `max_width`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
   A session panel's input has `close`, `toggleFullscreen` and `focus` (CT-38), which act as requests of the panel's
   mount while it lives (one kept past it does nothing) and follow it across a reload of the registrations;
   `toggleFullscreen` toggles what it asked for last, which the next draw sets to what shows. The contract has no focus

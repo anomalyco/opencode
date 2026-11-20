@@ -886,6 +886,30 @@ test("a border draws as OpenTUI's box draws it", () => {
   ])
 })
 
+test("a box layout the contract has no value for is reported", () => {
+  const fake = host()
+  const ctx = plugin("t.layout", fake)
+  const box = (props: Json) => h("box", props)
+  ctx.ui.slot({
+    append: "home.footer",
+    render: () =>
+      h("box", {
+        children: [
+          box({ flexDirection: "row-reverse" }),
+          box({ flexDirection: "column-reverse", justifyContent: "space-evenly", alignItems: "baseline" }),
+          box({ flexDirection: "row", justifyContent: "space-around", alignItems: "center" }),
+        ],
+      }),
+  })
+  view(fake, 0, "a").draw()
+  expect(fake.warnings()).toEqual([
+    "t.layout: flexDirection row-reverse is not supported by opencode-native yet",
+    "t.layout: flexDirection column-reverse is not supported by opencode-native yet",
+    "t.layout: justifyContent space-evenly is not supported by opencode-native yet",
+    "t.layout: alignItems baseline is not supported by opencode-native yet",
+  ])
+})
+
 test("data.listen hears every event", () => {
   const fake = host()
   const ctx = plugin("t.listen", fake)
