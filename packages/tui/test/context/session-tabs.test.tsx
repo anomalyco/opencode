@@ -369,11 +369,17 @@ test("keeps scroll anchors for open session tabs", async () => {
     expect(setup.tabs.groupExpanded("first", group.groupID)).toBe(true)
     setup.tabs.setGroupExpanded("first", group.groupID, false)
     expect(setup.tabs.groupExpanded("first", group.groupID)).toBe(false)
+    setup.tabs.setGroupsExpanded("first", ["group-1", "group-2"], true)
+    expect(setup.tabs.groupExpanded("first", "group-2")).toBe(true)
+    setup.tabs.setGroupsExpanded("first", ["group-1", "group-2"], false)
+    expect(setup.tabs.groupExpanded("first", "group-1")).toBe(false)
+    expect(setup.tabs.groupExpanded("first", "group-2")).toBe(false)
 
     setup.tabs.close("first")
     await wait(() => setup.tabs.tabs().every((tab) => tab.sessionID !== "first"))
     expect(setup.tabs.scrollAnchor("first")).toBeUndefined()
     expect(setup.tabs.groupExpanded("first", group.groupID)).toBeUndefined()
+    expect(setup.tabs.groupExpanded("first", "group-2")).toBeUndefined()
   } finally {
     await setup.destroy()
   }

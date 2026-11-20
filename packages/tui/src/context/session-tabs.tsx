@@ -424,6 +424,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       setGroupExpanded(sessionID: string, groupID: string, expanded: boolean) {
         setExpandedGroups(sessionID, (current) => ({ ...current, [groupID]: expanded }))
       },
+      setGroupsExpanded(sessionID: string, groupIDs: readonly string[], expanded: boolean) {
+        if (groupIDs.length === 0) return
+        const target = root(sessionID)
+        setExpandedGroups(target, (current) => ({
+          ...current,
+          ...Object.fromEntries(groupIDs.map((groupID) => [groupID, expanded])),
+        }))
+      },
       select(sessionID: string) {
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })

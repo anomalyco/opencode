@@ -5,6 +5,7 @@ import {
   createTimelineAnchors,
   entryRef,
   groupID,
+  groupIDs,
   type AnchorTarget,
 } from "../../../src/routes/session/anchors"
 import { groupEntries } from "../../../src/routes/session/grouping/tree"
@@ -40,6 +41,25 @@ test("group IDs use the first descendant reference, kind and nesting level", () 
   if (!id) throw new Error("Missing group ID")
   expect(containsAnchor(root, { type: "group", groupID: id })).toBe(true)
   expect(containsAnchor(root, { type: "part", ref: b.ref })).toBe(false)
+})
+
+test("group IDs cover nested groups so collapse all reaches every disclosure", () => {
+  const entries: SessionEntry[] = [
+    { type: "part", ref: { messageID: "a", partID: "reasoning:0" } },
+    { type: "part", ref: { messageID: "a", partID: "read" } },
+  ]
+  const [root] = groupEntries(entries, (entry) =>
+    entry.type === "part" && entry.ref.partID === "reasoning:0"
+      ? (["activity", "reasoning"] as const)
+      : (["activity", "exploration"] as const),
+  )
+  if (root.type !== "group") throw new Error("Expected group")
+  const [reasoning, exploration] = root.children
+  if (reasoning.type !== "group" || exploration.type !== "group") throw new Error("Expected subgroups")
+  const ids = [groupID(root, 0), groupID(reasoning, 1), groupID(exploration, 1)].filter(
+    (id): id is string => id !== undefined,
+  )
+  expect(groupIDs(root)).toEqual(ids)
 })
 
 test("mounted headers and parts are independent targets with current geometry", () => {

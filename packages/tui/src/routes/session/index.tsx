@@ -134,7 +134,7 @@ import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDis
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
-import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
+import { containsAnchor, createTimelineAnchors, groupID, groupIDs } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
@@ -309,6 +309,7 @@ export function Session(props: {
   const sessionTabs = useSessionTabs()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
+  const [collapseHovered, setCollapseHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
   createEffect(() => {
     if (!awayFromBottom()) setLatestHovered(false)
@@ -901,6 +902,12 @@ export function Session(props: {
       alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
     })
 
+  const collapseAll = () => {
+    const ids = rows.flatMap((row) => (row.type === "group" ? groupIDs(row) : []))
+    sessionTabs.setGroupsExpanded(route.sessionID, ids, false)
+    dialog.clear()
+  }
+
   function toBottom() {
     clearMessageNavigation()
     ensureAllRowsPending = undefined
@@ -1228,6 +1235,12 @@ export function Session(props: {
           .catch(toast.error)
         dialog.clear()
       },
+    },
+    {
+      title: "Collapse all transcript groups",
+      id: "session.collapse_all",
+      group: "Session",
+      run: collapseAll,
     },
     {
       title: "Jump to last user message",
@@ -1582,7 +1595,21 @@ export function Session(props: {
                 </Show>
               </scrollbox>
             </box>
-            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end" gap={2}>
+              <Show when={rows.some((row) => row.type === "group")}>
+                <box
+                  id="session-collapse-all"
+                  onMouseOver={() => setCollapseHovered(true)}
+                  onMouseOut={() => setCollapseHovered(false)}
+                  onMouseUp={collapseAll}
+                >
+                  <text
+                    fg={collapseHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
+                  >
+                    Collapse all
+                  </text>
+                </box>
+              </Show>
               <Show when={firstJump()}>
                 <text fg={theme.text.feedback.info.base}>Loading session history…</text>
               </Show>

@@ -27,6 +27,13 @@ export function groupID(node: Extract<SessionNode, { type: "group" }>, level: nu
   return ref && JSON.stringify([ref.messageID, ref.partID, node.kind, level])
 }
 
+export function groupIDs(node: SessionNode, level = 0): string[] {
+  if (node.type === "entry") return []
+  const id = groupID(node, level)
+  const nested = node.children.flatMap((child) => groupIDs(child, level + 1))
+  return id ? [id, ...nested] : nested
+}
+
 function firstRef(nodes: readonly SessionNode[]): PartRef | undefined {
   for (const node of nodes) {
     const ref = node.type === "entry" ? entryRef(node.entry) : firstRef(node.children)

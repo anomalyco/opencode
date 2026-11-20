@@ -201,6 +201,7 @@ test("accepts every v2-only named command ID", () => {
   const commands = [
     "server.pair",
     "session.toggle.exploration_grouping",
+    "session.collapse_all",
     "composer.subagent.up",
     "composer.subagent.down",
     "composer.subagent.select",
