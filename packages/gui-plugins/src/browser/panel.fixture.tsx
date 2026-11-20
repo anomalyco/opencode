@@ -27,6 +27,7 @@ import {
 import {
   type Appearance,
   type App,
+  type ComposerDelivery,
   type ComposerNote,
   type Context,
   type Embeds,
@@ -114,6 +115,8 @@ type PaneFixtureState = {
   dropInspect: boolean
   highlights: { sessionKey: string; ref?: Browser.Ref }[]
   comments: ComposerNote[]
+  /** The comment IDs a comment editor's Mod+Enter sent. */
+  sent: string[]
   /** Presentation details last reported by each native tab. */
   pages: Record<string, PageDetails | undefined>
   /** The browser history store. */
@@ -141,6 +144,8 @@ type ElementRect = Pick<DOMRect, "x" | "y" | "width" | "height">
 
 type StoryHost = Pick<PaneHost, "useLanguage"> & {
   scenario: BrowserScenario
+  /** How the composer would send a comment now; undefined while nothing can be sent. */
+  delivery?: ComposerDelivery
   Page: Component<{ url: string; zoom: number; picking: boolean; pick: (rect: ElementRect) => void }>
   Frame: ParentComponent<{
     loading: boolean
@@ -149,6 +154,7 @@ type StoryHost = Pick<PaneHost, "useLanguage"> & {
     reconnect: () => void
     external: string | undefined
     comments: readonly ComposerNote[]
+    sent: readonly string[]
   }>
 }
 
@@ -281,6 +287,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       dropInspect: false,
       highlights: [],
       comments: [],
+      sent: [],
       pages: {},
       history: { visits: scenario === "Recent" ? structuredClone(visits) : [] },
       historyPages: 0,
@@ -459,11 +466,16 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
     }
 
     // The session screen: one object that follows the route, with the composer the pane attaches comments to.
-    // SAFETY: the pane reads only file.search and composer.attach; the model's workspace-link paths are not invoked.
+    // SAFETY: the pane reads only file.search and composer.attach, delivery and send; the model's workspace-link paths
+    // are not invoked.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const screen = {
       file: { search: async () => [] },
-      composer: { attach: (note: ComposerNote) => setStore("comments", (items) => [...items, note]) },
+      composer: {
+        attach: (note: ComposerNote) => setStore("comments", (items) => [...items, note]),
+        delivery: () => ("delivery" in input ? input.delivery : undefined),
+        send: (commentID: string) => setStore("sent", (items) => [...items, commentID]),
+      },
     } as unknown as SessionScreen
 
     const back: string[] = []
@@ -813,6 +825,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
               suspended={model.suspended({ key: store.session })}
               reconnect={() => model.command({ key: store.session }, { type: "reload", tabID: current().id })}
               comments={store.comments}
+              sent={store.sent}
               external={store.external.at(-1)}
             >
               <SessionBrowserPane tab={current} session={session()} screen={screen} model={model} />
@@ -1442,9 +1455,10 @@ export function mountBrowserRegion(input: RegionHost) {
 
     // One screen object while the strip mounts, whichever session it routes.
     // SAFETY: this fixture draws file tab triggers and the browser pane. Its file model implements list,
-    // normalize and focus; the browser has a composer attach callback. File-view operations are never invoked here.
+    // normalize and focus; the browser has composer attach, delivery and send callbacks. File-view operations are never
+    // invoked here.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-    const screen = { file, composer: { attach() {} } } as unknown as SessionScreen
+    const screen = { file, composer: { attach() {}, delivery: () => undefined, send() {} } } as unknown as SessionScreen
 
     const layout = (plugin: string): BuiltinLayout => ({
       narrow: () => false,

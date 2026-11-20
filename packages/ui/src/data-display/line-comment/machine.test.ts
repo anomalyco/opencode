@@ -275,7 +275,7 @@ describe("line comment editor machine", () => {
     const unsupported = transitionLineCommentEditor(createLineCommentEditorState(), {
       type: "modifier.changed",
       active: true,
-      config: { ...settings, variant: "default" },
+      config: { ...settings, alternateSubmit: null },
     })
 
     expect(unsupported.state).toMatchObject({ alternate: false })

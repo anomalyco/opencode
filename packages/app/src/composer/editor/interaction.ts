@@ -71,11 +71,10 @@ export type ComposerEditorView = {
     canSubmit?: Accessor<boolean>
     working?: Accessor<boolean>
     queue?: ComposerQueue
-    quote?: {
-      available: Accessor<boolean>
-      delivery: Accessor<ComposerDelivery | undefined>
-      onSubmit: (key: string, comment: string) => Promise<boolean>
-    }
+    /** The quote comment editor's Mod+Enter send, which takes the composer's Mod+Enter delivery. */
+    quote?: ComposerCommentSend
+    /** A plugin comment editor's send, which takes the follow-up behavior the composer's Enter uses. */
+    comment?: ComposerCommentSend
     onSubmit: (options?: { alternate?: boolean; first?: boolean }) => void
     onStop: () => void
   }
@@ -83,6 +82,13 @@ export type ComposerEditorView = {
     onOpen: () => void
     onClose: () => void
   }
+}
+
+/** Sends one attached part on its own; `delivery` is undefined while the session is idle. */
+export type ComposerCommentSend = {
+  available: Accessor<boolean>
+  delivery: Accessor<ComposerDelivery | undefined>
+  onSubmit: (key: string, comment: string) => Promise<boolean>
 }
 
 const DRAFT_EDITED: ComposerInteractionEvent = Object.freeze({ type: "draft.edited" })
