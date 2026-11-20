@@ -84,7 +84,7 @@ export type BindingEvent =
   | { readonly type: "register.timed-out" }
   /** The window navigated or was destroyed. */
   | { readonly type: "owner.closed" }
-  /** The window closed the binding; its saved tabs are forgotten. */
+  /** The window closed the binding, as when it leaves the session; its saved tabs stay for the next registration. */
   | { readonly type: "client.closed" }
   | { readonly type: "pane.disposed" }
   | { readonly type: "request.started"; readonly requestID: string }
@@ -228,7 +228,9 @@ export function transitionBinding(state: BindingState, event: BindingEvent): Bin
   if (state.status === "closed") return { state, effects: [] }
   const reason = closeReason(state, event)
 
-  if (reason) return close(state, reason, event.type === "client.closed" || reason === "browser.pane.missing")
+  // A closed binding keeps the tabs saved for its server and session: the window registers again after a session
+  // switch or a compaction, and restores them. Only a session that no longer exists forgets them.
+  if (reason) return close(state, reason, reason === "browser.pane.missing")
 
   if (event.type === "control.unrecognized")
     return {
