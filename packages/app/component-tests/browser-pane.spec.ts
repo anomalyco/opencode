@@ -545,32 +545,58 @@ story("paints a still of the page in place of the native view while a resize han
   await expect(still).toHaveCount(0)
 })
 
-story("keeps the native view live while a resize handle is dragged on macOS", async ({ page }) => {
-  const root = page.getByTestId("browser-pane-fixture")
-  const handle = root.getByTestId("pane-resize-handle")
-  const still = root.locator("#browser-panel img")
-  await pinPlatform(page, "MacIntel")
+for (const platform of ["MacIntel", "Win32"]) {
+  story(`keeps the native view live through a press, a drag and the release of a resize handle on ${platform}`, async ({ page }) => {
+    const root = page.getByTestId("browser-pane-fixture")
+    const handle = root.getByTestId("pane-resize-handle")
+    const native = root.getByTestId("native-Alpha")
+    const still = root.locator("#browser-panel img")
+    await pinPlatform(page, platform)
+    const box = await handle.boundingBox()
 
-  // macOS puts a native view's bounds and the DOM around it on the same frame, so the page keeps laying out through the
-  // drag instead of freezing behind a still. Read in the same task as each move, so a blink between frames cannot pass.
-  const visible = await handle.evaluate((element) => {
-    const read = () => document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
-    const box = element.getBoundingClientRect()
-    const at = { bubbles: true, pointerId: 1, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
-    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
-    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 40 }))
-    const dragging = read()
-    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 80 }))
-    const moved = read()
-    document.dispatchEvent(new PointerEvent("pointerup", at))
+    if (!box) throw new Error("Missing pane resize handle")
+    const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    const width = Number(await native.getAttribute("data-width"))
+    const calls = (await native.getAttribute("data-layout-calls")) ?? ""
 
-    return { dragging, moved }
+    // macOS and Windows put a native view's bounds and the DOM around it on the same frame, so the page keeps laying
+    // out through the drag instead of hiding behind a still, which blanks the box until the still paints. Every change
+    // of the view's visibility is recorded, so one hidden and shown again before the next frame cannot pass.
+    const flips = await native.evaluateHandle((element) => {
+      const flips: (string | null)[] = []
+      new MutationObserver((records) => flips.push(...records.map((record) => record.oldValue))).observe(element, {
+        attributeFilter: ["data-visible"],
+        attributeOldValue: true,
+      })
+
+      return flips
+    })
+
+    const frames = () =>
+      page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+
+    // A real press: the handle takes the pointer, and main hears nothing until it moves.
+    await page.mouse.move(at.x, at.y)
+    await page.mouse.down()
+    await expect(handle).toHaveAttribute("data-dragging", "")
+    await frames()
+    await expect(native).toHaveAttribute("data-layout-calls", calls)
+
+    // Main gets the bounds of every move.
+    for (const moved of [10, 20, 30, 40]) {
+      await page.mouse.move(at.x - moved, at.y)
+      await expect(native).toHaveAttribute("data-width", String(width - moved))
+    }
+
+    await expect(still).toHaveCount(0)
+    await page.mouse.up()
+    await expect(handle).not.toHaveAttribute("data-dragging")
+    await frames()
+    await expect(native).toHaveAttribute("data-width", String(width - 40))
+    await expect(still).toHaveCount(0)
+    expect(await flips.jsonValue()).toEqual([])
   })
-
-  expect(visible).toEqual({ dragging: "true", moved: "true" })
-  await expect(handle).not.toHaveAttribute("data-dragging")
-  await expect(still).toHaveCount(0)
-})
+}
 
 story("shows the native view again when the window loses focus mid-drag", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
