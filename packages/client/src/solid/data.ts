@@ -145,7 +145,8 @@ type Store = {
     permission: Record<string, PermissionSavedInfo[]>
   }
   location: Record<string, LocationData>
-  // Running background jobs keyed by job id, for the session trees that synced them. Settled jobs are removed.
+  // Running background jobs keyed by job id, for the session trees that synced them (or every one, once the server-wide
+  // list synced). Settled jobs are removed.
   job: Record<string, JobInfo>
   // Job ids the server listed for each synced tree root (it filters descendants itself), plus ids that events added
   // for owners known to be in the tree. Loaded session info only reaches direct children, so walking parents alone
@@ -282,6 +283,7 @@ function createSync() {
 }
 
 const CHILD_PAGE = 200
+const JOB_RUNNING = "job:*"
 // TODO: `sequence` and SEQUENCE_HANDOFF_MS patch a rare ordering race: a
 // `!shell` or `/command` sent behind a prompt that waits on a gate (the
 // desktop browser's attachment) must not reach the server before it. That is
@@ -391,6 +393,7 @@ export function createData(config: CreateDataInput) {
   // Job events that arrive while a tree's list is in flight, applied over its response: the latest info, or undefined
   // once settled.
   const jobUpdates = new Map<string, Map<string, JobInfo | undefined>>()
+  let jobRunningSynced = false
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -820,6 +823,10 @@ export function createData(config: CreateDataInput) {
           result.job.invalidate(sessionID)
           refresh(() => result.job.sync(sessionID))
         })
+        if (jobRunningSynced) {
+          sync.invalidate(JOB_RUNNING)
+          refresh(() => result.job.syncRunning())
+        }
         return
       }
       case "experimental.job.updated": {
@@ -844,6 +851,7 @@ export function createData(config: CreateDataInput) {
             })
           }),
         )
+        if (jobRunningSynced) loadJobOwner(info.sessionID)
         return
       }
       case "project.updated":
@@ -1223,8 +1231,7 @@ export function createData(config: CreateDataInput) {
             error: event.data.error,
             input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
-            content:
-              omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
+            content: omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1621,6 +1628,55 @@ export function createData(config: CreateDataInput) {
     return (
       withinTree(job.sessionID, ancestorID) || (job.kind === "subagent" && withinTree(job.childSessionID, ancestorID))
     )
+  }
+
+  // Every running job on the server, so any session's root can tell whether its family has background work.
+  function syncRunningJobs() {
+    jobRunningSynced = true
+    return sync.run(JOB_RUNNING, async () => {
+      const updates = new Map<string, JobInfo | undefined>()
+      jobUpdates.set(JOB_RUNNING, updates)
+      const list = await api()
+        .experimental.job.list({ status: "running" })
+        .catch((error: unknown) => {
+          if (jobUpdates.get(JOB_RUNNING) === updates) jobUpdates.delete(JOB_RUNNING)
+          throw error
+        })
+      if (jobUpdates.get(JOB_RUNNING) !== updates) return
+      jobUpdates.delete(JOB_RUNNING)
+      const next = new Map(list.map((job) => [job.id, job]))
+      updates.forEach((info, id) => (info ? next.set(id, info) : next.delete(id)))
+      // The server listed every running job, so anything else settled; trees keep their members that still run.
+      setStore(
+        produce((draft) => {
+          Object.keys(draft.job).forEach((id) => {
+            if (next.has(id)) return
+            delete draft.job[id]
+            Object.values(draft.jobTree).forEach((members) => delete members[id])
+          })
+          next.forEach((job, id) => (draft.job[id] = job))
+        }),
+      )
+      next.forEach((job) => loadJobOwner(job.sessionID))
+    })
+  }
+
+  // A job only names its owner, so load the owner's info (and any missing ancestor) to place it under its root.
+  function loadJobOwner(sessionID: string) {
+    const seen = new Set<string>()
+    let current: string | undefined = sessionID
+    while (current && !seen.has(current) && store.session.info[current]) {
+      seen.add(current)
+      current = store.session.info[current]?.parentID
+    }
+    if (!current || seen.has(current) || store.session.missing[current]) return
+    const id = current
+    void result.session
+      .sync(id)
+      .then(() => {
+        if (store.session.info[id]) loadJobOwner(id)
+      })
+      .catch(() => undefined)
   }
 
   function removeJobTree(rootID: string) {
@@ -2287,6 +2343,10 @@ export function createData(config: CreateDataInput) {
       invalidate(sessionID: string) {
         sync.invalidate(`job:${sessionID}`)
       },
+      running() {
+        return Object.values(store.job)
+      },
+      syncRunning: syncRunningJobs,
     },
     location: {
       info(ref?: LocationRef) {

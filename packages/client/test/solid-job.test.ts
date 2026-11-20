@@ -22,7 +22,7 @@ function setup() {
     fetch: async (input, init) => {
       const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
       if (!url.pathname.includes("/job")) return Response.json({ data: [] })
-      expect(url.searchParams.get("sessionID")).toBe("ses_root")
+      expect([null, "ses_root"]).toContain(url.searchParams.get("sessionID"))
       expect(url.searchParams.get("status")).toBe("running")
       requests++
       const list = Promise.withResolvers<JobInfo[]>()
@@ -113,6 +113,28 @@ test("re-lists on reconnect, pruning jobs that settled while away, and forgets a
     // The reconnect starts its reads together; once its VCS read settles, a job list would have been requested too.
     await data.location.vcs.sync().catch(() => undefined)
     expect(requests()).toBe(2)
+  } finally {
+    dispose()
+  }
+})
+
+test("the server-wide list and a tree's list share the store without wiping each other", async () => {
+  const { data, dispose, ids, respond } = setup()
+  try {
+    const synced = data.job.sync("ses_root")
+    await respond([job("job_a"), job("job_b")])
+    await synced
+    const running = data.job.syncRunning()
+    await respond([job("job_b"), job("job_other", "running", "ses_other")])
+    await running
+    expect(ids()).toEqual(["job_b"])
+    expect(data.job.running().map((item) => item.id)).toEqual(["job_b", "job_other"])
+
+    data.job.invalidate("ses_root")
+    const resynced = data.job.sync("ses_root")
+    await respond([job("job_b")])
+    await resynced
+    expect(data.job.running().map((item) => item.id)).toEqual(["job_b", "job_other"])
   } finally {
     dispose()
   }

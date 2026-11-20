@@ -1,4 +1,4 @@
-import { createEffect, createMemo, type Accessor } from "solid-js"
+import { createMemo, type Accessor } from "solid-js"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests/session-request-tree"
@@ -28,15 +28,6 @@ export function useSessionTabAvatarState(
     const project = projectSettingsKey(ctx.sdk.scope, ctx.data.session.get(sessionId())?.projectID)
 
     return attention(ctx, sessionId(), !!root?.(), settings.permissions.autoApproves(project))
-  })
-
-  // Roots load their family's running jobs once; job events keep them current and a reconnect re-reads them.
-  createEffect(() => {
-    const ctx = serverCtx()
-
-    if (!ctx || !root?.()) return
-
-    void ctx.data.job.sync(sessionId()).catch(() => undefined)
   })
 
   const unread = createMemo(

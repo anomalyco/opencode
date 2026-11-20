@@ -231,6 +231,9 @@ function createServerController(
     },
   })
 
+  // One server-wide list of running jobs lets every sidebar root show its family's background work.
+  void source.job.syncRunning().catch(() => undefined)
+
   const data = createDesktopData({
     data: source,
     remove: (sessionID) => sdk.api.session.remove({ sessionID }),
