@@ -43,6 +43,7 @@ export const authorize = Effect.fnUntraced(function* (
     target,
     local: true,
     once: true,
+    rules: Effect.succeed(Permission.merge(agent.info?.permissions ?? [], owner.permissions ?? [])),
   }).pipe(Effect.mapError((error) => error.message))
   // No save patterns: approval applies only to the command stored in this automation.
   yield* Effect.forEach(

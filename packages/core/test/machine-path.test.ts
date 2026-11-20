@@ -3,6 +3,7 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { AppProcess } from "@opencode/util/process"
+import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
@@ -70,6 +71,7 @@ const toolPlugins = makeLocationNode({
     ),
   ),
   deps: [
+    Agent.node,
     Config.node,
     Environment.node,
     FileAccess.node,

@@ -139,6 +139,7 @@ const shellPluginSupervisor = makeLocationNode({
   name: "test/shell-plugins",
   layer: Layer.effectDiscard(registerToolPlugin(ShellTool.Plugin)),
   deps: [
+    Agent.node,
     Config.node,
     Environment.node,
     FileAccess.node,
@@ -437,6 +438,36 @@ describe("ShellTool scanner permissions", () => {
         expect(result.requests).toEqual([])
         expect(result.exit).toMatchObject({ _tag: "Success", value: { status: "completed", metadata: { exit: 0 } } })
         expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+      }),
+    ))
+
+  test("unanalyzable commands are denied when a shell deny rule could be bypassed", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [
+              { action: "*", resource: "*", effect: "allow" },
+              { action: "shell", resource: "rm *", effect: "deny" },
+            ]
+          }),
+        )
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, "alias p=true; printf hello > marker", marker, [])
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({
+          _tag: "Success",
+          value: {
+            status: "error",
+            error: {
+              message: expect.stringContaining(
+                "Portable shell scanner cannot analyze command: dynamic-execution. A shell deny rule is configured",
+              ),
+            },
+          },
+        })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
       }),
     ))
 
@@ -1364,6 +1395,7 @@ describe("ShellTool", () => {
             }),
           ),
           deps: [
+            Agent.node,
             Config.node,
             Environment.node,
             FileAccess.node,
