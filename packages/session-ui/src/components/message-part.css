@@ -1000,9 +1000,27 @@
   }
 }
 
-/* A script's changes, each its own card, overlap their borders as a direct patch's files do. */
+/* A script's changes, each its own card, join into one list as a direct patch's files do: borders overlap and only the
+   ends are rounded. The New timeline spaces them apart instead. */
 [data-script-change="patch"] + [data-script-change="patch"] {
   margin-top: -1px;
+}
+
+[data-script-changes]:not([data-timeline="next"] *) {
+  [data-script-change="patch"]:has(+ [data-script-change="patch"]) [data-slot="accordion-item"]:last-child {
+    [data-slot="accordion-header"] [data-slot="accordion-trigger"],
+    [data-slot="accordion-content"] {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+  }
+
+  [data-script-change="patch"] + [data-script-change="patch"] [data-slot="accordion-item"]:first-child {
+    [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+  }
 }
 
 [data-component="execute-tool-calls"] {
