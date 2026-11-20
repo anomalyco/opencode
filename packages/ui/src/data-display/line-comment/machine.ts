@@ -226,7 +226,8 @@ function textareaKey(state: Live, key: LineCommentEditorKey, config: LineComment
   }
 
   if (key.key === "Enter" && !key.shift) {
-    if (modifiedKey(key) && config.alternateSubmit) return key.repeat ? handled(state) : submit(state, config, true)
+    if (modifiedKey(key) && alternateKeyReady(config))
+      return key.repeat ? handled(state) : submit(state, config, true)
 
     if (state.status === "mention-open") return insert(state, state.activeIndex)
 
@@ -365,6 +366,13 @@ function navigation(key: LineCommentEditorKey) {
   if (key.key === "p") return -1
 
   return 0
+}
+
+// A full-size editor whose alternate submit is disabled lets Mod+Enter save as Enter does; a compact one swallows it.
+function alternateKeyReady(config: LineCommentEditorConfig) {
+  if (!config.alternateSubmit) return false
+
+  return config.variant === "compact" || !config.alternateSubmit.disabled
 }
 
 function allowsAlternate(config: LineCommentEditorConfig) {
