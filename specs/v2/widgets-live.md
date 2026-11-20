@@ -1,8 +1,8 @@
 # Live widgets
 
-A template can opt into **live mode**: instead of short `init`/`update`/`view`/`draw` steps, the client starts one
-long-running PsychoScript program per open widget. It keeps its state in the VM, waits on events, timers and display
-frames, and renders whenever it wants. This is what minigames, timers, simulations, step-by-step animations and other
+A template can opt into **live mode**: instead of short `init`/`view`/`draw` steps, the client starts one
+long-running PsychoScript program per open widget. It keeps its state in the VM, waits on timers and display frames,
+takes input through handlers on its nodes, and renders whenever it wants. This is what minigames, timers, simulations, step-by-step animations and other
 free-running widgets use. Step mode stays the default; everything in `widgets.md` still applies unless said here.
 
 ## Opting in
@@ -16,7 +16,7 @@ async function main(data) {
 }
 ```
 
-and may omit `init`, `view`, `update` and `draw`.
+and may omit `init`, `view` and `draw`.
 
 ## Host functions
 
@@ -40,26 +40,37 @@ The prelude exposes a `widget` object inside `main` (implemented with `__host`):
 
 | Call | Effect |
 | --- | --- |
-| `widget.render(node)` | replace the widget's view tree (same nodes as step mode, `canvas` and `shader` included) |
-| `widget.draw(canvasID, commands)` | replace one canvas's command list (same commands as step mode; a builder: `ui.draw()`) |
-| `await widget.event()` | next user event (`press`, `change`, `pointer`; same shapes as step mode) |
-| `await widget.frame()` | next display frame `{ t, dt, width, height, scale, pointer, dark }` for the widget (requests exactly one) |
+| `widget.render(node)` | replace the widget's view tree (same nodes, ids and handler props as step mode) |
+| `widget.draw(key, commands)` | replace the command list of the canvas with that `key` in the last rendered view (a builder: `ui.draw()`); throws for an unknown key |
+| `await widget.frame()` | next display frame `{ t, dt, width, height, scale, pointer, dark }` for the widget (requests exactly one; every waiter gets it) |
 | `await widget.sleep(ms)` | timer |
 | `widget.now()` | ms of running time (excludes paused time; use `Date.now()` for wall-clock time) |
 | `await widget.fetch(url, { method, headers, body })` | HTTPS request → `{ ok, status, headers, text(), json() }` (needs the `https` capability) |
-| `await widget.next({ frame?, timeout? })` | whichever comes first: `{ type: "event", event }`, `{ type: "frame", frame }` or `{ type: "timeout" }` |
+| `widget.on(kind, fn)` | `kind`: `key` (`fn(key)`), `focus` (`fn(focused)`), `fullscreen` (`fn(on)`), `capture` (`fn(captured)`), `resumed` (`fn(pausedMs)`); returns an unsubscribe function |
+| `widget.keys` | the `code`s of the keys held now (a `Set`; cleared on blur), to read each frame |
+| `widget.pointer` | the last pointer value from any node, or `null` |
 | `widget.submit(value)` / `widget.dismiss()` | final answer; the client stops the program |
 | `widget.send(value, { wake })` | non-final message to the agent (as in step mode) |
 | `widget.capturePointer()` / `widget.releasePointer()` | ask for pointer capture (granted on the next click) / give it back; see `widgets-input.md` |
 
-`Math.random()` is allowed in live mode.
+`Math.random()` is allowed in live mode. There is no `widget.event()` or `widget.next()`: input arrives through
+handlers, and `widget.frame()`, `widget.sleep()` and `Promise.race` cover waiting.
+
+**Handlers.** The node props are the same as in step mode (`onPress`, `onChange`, `onPointer`; `widgets.md`, Events),
+but a live handler gets only the value (`onPress()`, `onChange(value)`, `onPointer(p)`) and its return value is
+ignored: it changes the program's variables or calls `widget.*`. `render` keeps the view's id → handler table. While
+the view has handlers, hooks are registered or a frame is awaited, the prelude keeps a `__host.receive()` in flight and
+calls the handler or hook for each message between the program's awaits (handlers run while `main` awaits a frame, a
+timer or a fetch). A handler that throws, or an async one that rejects, fails the program like a throw in `main`. When
+`main` returns, the widget stays open while its view has handlers or hooks are registered; the run ends when none are
+left (`return`) or the program submits or dismisses.
 
 ## Shaders
 
 A live program animates a `shader` by calling `widget.render` with the same view and new `values` (up to 16 floats)
 once per frame; clients must apply that as a uniform update without recompiling the shader or rebuilding the view (see
-`widgets.md`, Shader). A `shader` with an `id` sends `pointer` events like a canvas, so a tap on a full-screen shader can
-drive a game (`widget.event()` / `widget.next()`).
+`widgets.md`, Shader). A `shader` with `onPointer` gets `pointer` events like a canvas, so a tap on a full-screen shader can
+drive a game.
 
 ## Client ↔ program messages
 
@@ -67,7 +78,8 @@ Program → client (`post`): `{ type: "render", node }`, `{ type: "draw", id, co
 frame wanted), `{ type: "submit", value }`, `{ type: "dismiss" }`, `{ type: "send", value, wake }`, `{ type: "capture", value: true |
 false }` (`capturePointer` / `releasePointer`; clients without capture ignore it).
 
-Client → program (`receive`): `{ type: "event", event }`, `{ type: "frame", frame }` (only after a frame request, at
+Client → program (`receive`): `{ type: "event", event }` (`{ id, type, value }` for a prelude-assigned id, or `id: ""`
+for keys, focus, full screen and capture; the prelude routes it), `{ type: "frame", frame }` (only after a frame request, at
 the next vsync while the widget is visible), `{ type: "resumed", pausedMs }` (after a pause, see below).
 
 ## Capabilities
@@ -108,7 +120,7 @@ and hands the actual transfer to the app (URLSession / OkHttp), so system TLS an
 - **Pause when not visible.** When a live widget scrolls out of view, its window or app goes to the background, or the
   session is closed, the client pauses the program: no frames, events or timer firings are delivered, `sleep` timers
   freeze with their remaining time, `now()` stops, and in-flight `fetch` results are held until resume. When the widget
-  comes back into view the client resumes it and delivers `{ type: "resumed", pausedMs }` first, so a dashboard can
+  comes back into view the client resumes it and delivers `{ type: "resumed", pausedMs }` first (the prelude calls the `widget.on("resumed")` hooks), so a dashboard can
   refresh and a game can show its pause screen. A paused program costs no CPU.
 - If a widget stays paused for more than 30 s (or the OS asks the app to free memory), the client may suspend the
   program to a snapshot (PsychoScript `suspend`, `toBytes`), drop the VM, and resume from the snapshot when it's visible

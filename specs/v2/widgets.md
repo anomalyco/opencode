@@ -60,39 +60,66 @@ Built-in templates ship in `@opencode/widget` and are always present: `suggestio
 
 ## Template source
 
-PsychoScript (confined JavaScript). It defines top-level functions:
+PsychoScript (confined JavaScript). It defines top-level functions; input arrives through **handlers on nodes**:
 
 ```js
 function init(data) { return { picked: null } }            // optional; default returns {}
-function view(state, data) { return ui.column({}, [...]) } // required; returns a Node
-function update(state, event, data) {                       // optional; default returns state
-  if (event.id === "choose") return submit({ picked: state.picked }, state)
-  return { ...state, picked: event.value }
+function view(state, data) {                                // required; returns a Node
+  return ui.column({}, [
+    data.items.map((item, index) =>
+      ui.card({ key: item, selected: state.picked === index, onPress: (state) => ({ ...state, picked: index }) }, [
+        ui.text(item),
+      ]),
+    ),
+    ui.button("Choose", { onPress: (state) => submit({ picked: state.picked }) }),
+  ])
 }
 ```
 
-`update` returns either a new state, or a step result built with the prelude helpers `submit(value, state?)` /
-`dismiss(state?)` (final: the widget closes) or `send(value, state?, { wake? })` (a message to the agent; the widget
-stays open). State and data are plain JSON. Programs must be deterministic and must not rely on time or
-randomness.
+A handler gets the current state (and the event's value, see Events) and returns the next state, or a step result
+built with the prelude helpers `submit(value)` / `dismiss()` (final: the widget closes) or
+`send(value, { wake?, state? })` (a message to the agent; the widget stays open). Returning `undefined` keeps the
+state. Optional top-level **hooks** take the events that belong to no node: `onKey(state, key)`,
+`onFocus(state, focused)`, `onFullscreen(state, on)` and `onCapture(state, captured)` (`widgets-input.md`,
+`widgets-fullscreen.md`); a template without a hook never sees that event. State and data are plain JSON. Programs
+must be deterministic and must not rely on time or randomness. There is no `update` function: the lint rejects one.
 
 ## Prelude and step ABI
 
 The prelude is canonical JavaScript in `packages/widget/src/prelude.js`. It defines:
 
-- `ui`: pure node builders, one per node type. Required fields are positional, optional ones go in `props`:
-  `column|row|carousel|card(props, children)` (or `(children)`), `text(text, props?)`, `markdown(text)`,
-  `image(src, props?)`, `button(id, label, props?)`, `checkbox(id, label, checked, props?)`, `slider(id, props)`
-  (`props` holds `value`, `min`, `max`), `select(id, options, props?)`, `input(id, value, props?)`, `divider()`.
+- `ui`: pure node builders, one per node type. Required fields are positional, optional ones and handlers go in
+  `props`: `column|row|carousel|card(props, children)` (or `(children)`), `text(text, props?)`, `markdown(text)`,
+  `image(src, props?)`, `button(label, props?)`, `checkbox(label, checked, props?)`, `slider(props)` (`props` holds
+  `value`, `min`, `max`), `select(options, props?)` (options may be strings), `input(value, props?)`, `divider()`.
   `children` may nest arrays and contain `null`/`undefined`/`false`, which are dropped (`cond && ui.text(...)`).
-  Also `canvas(props)`, `shader(wgsl, props)` and `draw()`, the draw command builder (see Canvas).
-- `submit(value, state)` and `dismiss(state)`. An omitted `state` keeps the previous state; `submit(undefined)`
-  submits `null`. Both are final: the widget closes.
-- `send(value, state, { wake = true })`: a non-final message to the agent; the widget stays open and can send again,
-  submit or dismiss later. State handling is like `submit`, and `send(undefined)` sends `null`. `wake: false` delivers
-  it without waking the agent: it sees the message on its next turn (use it for background updates).
-- `__widget_step(input)`: runs one step. `init` returning `undefined` gives `{}`; `update` returning `undefined` keeps
-  the state.
+  Also `canvas(props)`, `shader(wgsl, props)` and `draw()`, the draw command builder (see Canvas). Authors never set
+  `id`; any `node.key` (string or number) names a node among its siblings.
+- `submit(value)` and `dismiss()`: final, the widget closes; the state stays. `submit(undefined)` submits `null`.
+- `send(value, { wake = true, state })`: a non-final message to the agent; the widget stays open and can send again,
+  submit or dismiss later. `state`, when given, becomes the next state. `send(undefined)` sends `null`. `wake: false`
+  delivers it without waking the agent: it sees the message on its next turn (use it for background updates).
+- `__widget_step(input)`: runs one step (below).
+
+**Ids.** Before a view leaves the program, the prelude turns the tree templates build into the tree clients get: it
+flattens `children`, removes handler functions and `key`s, and gives each interactive node an `id` derived from its
+path: the root is `0` (or `:key`), a child appends `/` and its index among its parent's children (`2`, or `2.1` for
+the second item of a nested array at index 2; a `null`/`false` hole keeps its index) or `:key` when it has a `key`
+(URI-encoded; a repeated key gets `~2`, `~3`, ...). So `0/:alice/1` is the second child of the sibling keyed `alice`.
+`button`, `checkbox`, `slider`, `select` and `input` always get an id; `card` and `carousel` get one with a handler;
+`canvas` and `shader` with `onPointer` or a `key`. The same node keeps its id from one view to the next as long as its
+path does, which keys make true for lists that change shape. The prelude keeps an id → handler table for the view.
+
+**Steps.** `init` runs `init(data)` (`undefined` gives `{}`) and `view`. `event` routes `input.event`:
+
+- `key`, `focus`, `fullscreen`, `capture`: to the matching hook with the decoded value, never to a node.
+- `press`, `change`, `pointer`: the prelude runs `view(state, data)` to rebuild the table, then calls the handler of the
+  node with `event.id`, only if the node takes that event type (Events), with the value decoded and checked against
+  the node. Anything else (an unknown id, a node without a handler, the wrong type, a value that doesn't fit) changes
+  nothing.
+
+Then it runs `view` on the next state. `draw` calls `draw(state, data, frame)` with `frame.key` (the canvas's `key`, or
+`null`) instead of `frame.id`.
 
 The server serves the full **program** = `prelude + "\n" + source`. Clients never need their own prelude copy.
 
@@ -134,19 +161,29 @@ error to the agent with the `report` RPC (see Server plugin), since the server n
 ## Events
 
 ```ts
-type WidgetEvent = { id: string; type: "press" | "change" | "pointer"; value?: unknown }
+type WidgetEvent = {
+  id: string   // a prelude-assigned node id, or "" for events that belong to no node
+  type: "press" | "change" | "pointer" | "key" | "focus" | "fullscreen" | "capture"
+  value?: unknown
+}
 ```
 
-| Node | Event |
-| --- | --- |
-| `button`, `card` with `id` | `press` |
-| `checkbox` | `change`, `value: boolean` |
-| `slider` | `change`, `value: number` (send on release, not on every drag tick) |
-| `select` | `change`, `value: string` or `string[]` when `multiple` |
-| `input` | `change`, `value: string` (on commit / blur / debounce >= 300 ms) |
-| `carousel` with `id` | `change`, `value: number` (new page index) |
-| `canvas` with `id` | `pointer`, `value: { kind, x, y, width, height }` (see Canvas) |
-| `shader` with `id` | `pointer`, the same as a canvas: `value: { kind, x, y, width, height }` in the node's logical pixels; `move` only while down, at most once per frame |
+Clients send `{ id, type, value }` for the ids the prelude put on the nodes and never interpret ids; templates attach
+handlers and never see them. The value a client sends, and what the handler gets:
+
+| Node | Event | Handler |
+| --- | --- | --- |
+| `button`, `card` | `press` | `onPress(state)` |
+| `checkbox` | `change`, `value: boolean` | `onChange(state, checked)` |
+| `slider` | `change`, `value: number` (send on release, not on every drag tick) | `onChange(state, value)`, clamped to `min`..`max` |
+| `select` | `change`, `value: string` or `string[]` when `multiple` | `onChange(state, value)`, only known option values |
+| `input` | `change`, `value: string` (on commit / blur / debounce >= 300 ms) | `onChange(state, text)` |
+| `carousel` | `change`, `value: number` (new page index) | `onChange(state, index)` |
+| `canvas`, `shader` | `pointer`, `value: { kind, x, y, width, height }` in the node's logical pixels; `move` only while down, at most once per frame (see Canvas) | `onPointer(state, p)`; under pointer capture `p` is `{ kind, dx, dy, button }` |
+| none (`id: ""`) | `key`, `focus`, `fullscreen`, `capture` | the hooks (Template source) |
+
+In live mode the same props take closures that get only the value (`onPress()`, `onChange(value)`,
+`onPointer(p)`); see `widgets-live.md`.
 
 ## Nodes
 
@@ -186,19 +223,20 @@ relative paths through the server's existing file content endpoint for the sessi
 file name) plus the source instead of pixels where it cannot draw images.
 
 Carousel: one child visible at a time with paging (swipe on touch, arrows on desktop, left/right keys in the TUI) and a
-page indicator. A carousel without `id` pages locally; with `id` it also emits `change`.
+page indicator. A carousel without `id` pages locally; with one (it has an `onChange`) it also emits `change`.
 
 ## Canvas
 
 A `canvas` node is drawn by the template's optional `draw(state, data, frame)` function, which returns draw commands.
-`draw` is pure: it can't change state. Animate with `frame.t`; keep anything that must persist in state via events.
+`draw` is pure: it can't change state. Animate with `frame.t`; keep anything that must persist in state via handlers.
 
 Draw step input / output (same `__widget_step` entry point):
 
 ```ts
 type StepInput = ... | { phase: "draw"; data: unknown; state: unknown; frame: Frame }
 type Frame = {
-  id: string | null   // the canvas node's id (templates with several canvases switch on it)
+  id: string | null   // the canvas node's id; the prelude gives `draw` `key` (the canvas's `key`, or null) instead,
+                      // so templates with several canvases switch on `frame.key`
   t: number           // seconds since the canvas appeared
   dt: number          // seconds since the previous frame
   width: number; height: number; scale: number   // logical size and device pixel ratio
@@ -232,9 +270,9 @@ type Gradient = { linear: [x1, y1, x2, y2]; stops: [offset: number, color: Color
               | { radial: [cx, cy, r]; stops: [offset: number, color: Color][] }
 ```
 
-Pointer input on a canvas with an `id` goes to `update`:
+Pointer input on a canvas with an `id` goes to its `onPointer` handler: clients send
 `{ id, type: "pointer", value: { kind: "down" | "move" | "up", x, y, width, height } }`, with `move` only while down
-and at most once per frame. `width`/`height` are the canvas's logical size, so `update` can hit-test a layout that
+and at most once per frame. `width`/`height` are the canvas's logical size, so the handler can hit-test a layout that
 follows the available width.
 
 The builder methods push one command each and return the builder (`g.save().alpha(0.5)`): `save() restore()
@@ -270,7 +308,7 @@ ES 3.00 translated with naga (`opencode-widget-ffi`). Source is capped at 16 KB.
 `poster` (an image src) or `alt` with the error inline; one that takes over 50 ms per frame three frames in a row stops
 and shows its last frame. The TUI shows `poster`/`alt` for `shader` and `alt` for `canvas`.
 
-A `shader` node with an `id` sends `pointer` events like a canvas (see Events). When a new view changes only a shader's
+A `shader` node with an `id` (it has an `onPointer`) sends `pointer` events like a canvas (see Events). When a new view changes only a shader's
 `values` (same `wgsl`, same place in the tree), clients update its uniforms in place: no recompile, no rebuilt view, no
 restart of `widget.time`. Live programs drive shader games that way, re-rendering with new `values` every frame.
 
@@ -368,7 +406,7 @@ show them as one quiet line (`◈ <description>` in the TUI). `<label>` is the t
 Waiting tool calls and the lock that serializes respond and send live in the server process, shared by every Location
 and plugin reload in it; this assumes one server process per database, like the goal plugin.
 
-`report` is how a client tells the agent that running the widget failed: `phase` is `init`, `view`, `update`, `draw`,
+`report` is how a client tells the agent that running the widget failed: `phase` is `init`, `event` (a handler or hook), `view`, `draw`,
 `main`, `shader`, `fetch` or another string; `line`/`column` (1-based) are in the template's source when known; `client`
 names the client (`tui`, `rune`, `ios`, `android`). Identical reports (same phase and message) for a widget are delivered
 once, and at most one report per widget every 10 seconds; reports for a closed widget are ignored. While a `wait: true`
@@ -418,7 +456,8 @@ input: {
 
 `save` validates the name, checks `example` against the schema, and parses and lints the source without running it
 (psychoscript's parser): at most 128 KB; the entry functions exist (`view` for step templates, `async function main` for
-live ones; `init`, `update`, `draw` are optional); only function and `const` declarations at the top level, and no
+live ones; `init`, `draw` and the hooks are optional); no `update` function and no `widget.event` / `widget.next`
+(the removed event API; the message says what replaces it); only function and `const` declarations at the top level, and no
 `const` initializer that runs code (calls, `new`, assignments), so nothing runs when the program loads; no prelude name
 (`ui`, `widget`, `submit`, `dismiss`, `send`, the `__widget_*` internals, `__input`, `__host`) is redeclared. Problems
 come back as the tool error with `line N, col M`. `capabilities` are rejected on step templates, and each

@@ -11,8 +11,9 @@ this. Clients only; the server knows nothing about it.
 - While focused, key presses go to the widget instead of the app, except app/OS chords that use the platform's command
   modifier (Cmd on macOS, Ctrl elsewhere), which still reach the app. Text input nodes keep working as before.
 - The program receives `{ id: "", type: "key", value: { kind: "down" | "up", key, code, repeat, shift, alt, ctrl, meta } }`
-  (`key`/`code` as in DOM `KeyboardEvent`): through `update` in step mode, through `widget.event()` / `widget.next()`
-  in live mode. Focus changes arrive as `{ id: "", type: "focus", value: true | false }`; on blur the client sends `up`
+  (`key`/`code` as in DOM `KeyboardEvent`): the template's `onKey(state, key)` hook in step mode,
+  `widget.on("key", fn)` (and `widget.keys`) in live mode; a template without one never sees keys. Key events never
+  reach node handlers, even when they carry a node's id. Focus changes arrive as `{ id: "", type: "focus", value: true | false }` (`onFocus` / `widget.on("focus")`); on blur the client sends `up`
   for keys still held.
 
 ## Pointer capture
@@ -23,7 +24,8 @@ this. Clients only; the server knows nothing about it.
   plus `down`/`up` with `button`. `widget.releasePointer()` (or dropping the root prop) gives it back. When capture is
   granted the program gets `{ id: "", type: "capture", value: true }`; when it ends for any reason,
   `{ id: "", type: "capture", value: false }`.
-- Without capture, pointer events are as before (absolute `x`, `y` on canvas/shader nodes with an `id`).
+- Without capture, pointer events are as before (absolute `x`, `y` on canvas/shader nodes with an `id`). Both kinds go
+  to the node's `onPointer`; capture changes go to `onCapture` / `widget.on("capture")`.
 
 ## Esc always releases
 
