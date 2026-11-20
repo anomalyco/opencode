@@ -393,7 +393,9 @@ const layer = Layer.effect(
               if (name === "execute" && codemode) {
                 const run = (ctx: Tool.Context) => executeTool(codemode.tool, name, event.input, ctx)
                 const background = yield* CodeModeJob.Current
-                return yield* background ? background(context, run) : run(context)
+                return yield* background
+                  ? background(context, run, full ? executeOptions(event.input) : undefined)
+                  : run(context)
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
@@ -552,3 +554,13 @@ export const node = makeLocationNode({
   layer,
   deps: [PluginHooks.node, Image.node, Permission.node, Flag.node],
 })
+
+// Only read once the input has the shape the full_codemode schema accepts; the tool still validates it when it runs.
+const executeOptions = (input: unknown): CodeModeJob.Options | undefined => {
+  if (typeof input !== "object" || input === null) return undefined
+  const { timeout, background } = input as Record<string, unknown>
+  return {
+    ...(typeof timeout === "number" && Number.isInteger(timeout) && timeout > 0 ? { timeout } : {}),
+    ...(background === true ? { background } : {}),
+  }
+}
