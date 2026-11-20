@@ -195,6 +195,40 @@ describe("visibleTimelineMessages", () => {
 
     expect(visibleTimelineMessages(failed, [steer]).map((message) => message.id)).toEqual(["msg_3", "msg_idle"])
   })
+
+  // https://github.com/anomalyco/opencode/issues/59133: only the active failure's segment may be reordered.
+  test("keeps an earlier failed idle marker after its own input when a later failure is pending", () => {
+    const failedTwice = [
+      { id: "msg_1", type: "user", text: "first", time: { created: 1 } },
+      {
+        id: "msg_idle_1",
+        type: "idle",
+        outcome: "failed",
+        error: { type: "unknown", message: "boom" },
+        time: { created: 2 },
+      },
+      { id: "msg_3", type: "user", text: "second", time: { created: 3 } },
+      {
+        id: "msg_idle_2",
+        type: "idle",
+        outcome: "failed",
+        error: { type: "unknown", message: "boom" },
+        time: { created: 4 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const pending = [
+      { ...steer, id: "msg_1", time: { created: 1 } },
+      steer,
+    ] satisfies SessionInboxInfo[]
+
+    expect(visibleTimelineMessages(failedTwice, pending).map((message) => message.id)).toEqual([
+      "msg_1",
+      "msg_idle_1",
+      "msg_3",
+      "msg_idle_2",
+    ])
+  })
 })
 
 describe("applyTimelineMessageHandoff", () => {
