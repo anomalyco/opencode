@@ -23,6 +23,19 @@ fn many_labeled_transitions_render_promptly() {
     assert!(started.elapsed() < Duration::from_secs(3), "{:?}", started.elapsed());
 }
 
+/// Repeated edges in a flowchart folded for a narrow terminal check their crossings by cell, not route by route.
+#[test]
+fn many_repeated_flowchart_edges_route_promptly() {
+    let corpus: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../parity/fixtures/P.3/corpus.json")).unwrap();
+    let cases = corpus["cases"].as_array().unwrap().iter().filter_map(|case| case["source"].as_str());
+    let base = cases.into_iter().find(|source| source.contains("/inference/*")).unwrap();
+    let source = format!("{base}\n{}", "    Client -->|/inference/*| DNS --> Infer\n".repeat(15));
+    let started = Instant::now();
+    assert!(matches!(render(&source, 10, &palette()), Rendered::Diagram(_)));
+    assert!(started.elapsed() < Duration::from_secs(3), "{:?}", started.elapsed());
+}
+
 /// A Gantt axis whose steps no longer move its far-out dates, or that spans millions of years, still ends.
 #[test]
 fn far_gantt_axes_end() {
