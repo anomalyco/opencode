@@ -14,7 +14,15 @@ import { turnCommentary } from "./commentary"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineNoticeRequired, type TimelineDetail } from "./detail"
 import { placeFactOf, type PlaceFact } from "./facts"
-import { placeContent, placeNotice, placer, type Place, type PlaceFactOf } from "./place"
+import {
+  placeContent,
+  placeNotice,
+  placer,
+  placeScriptChange,
+  scriptChangeItems,
+  type Place,
+  type PlaceFactOf,
+} from "./place"
 import {
   IDLE_TURN_PHASE,
   isInterruptedError,
@@ -477,6 +485,7 @@ export namespace Timeline {
           detail,
           commentary,
           placeOf,
+          factOf,
         )
       }),
     ]
@@ -536,6 +545,7 @@ export namespace Timeline {
     detail?: TimelineDetail,
     commentary: ReadonlySet<Content> = new Set(),
     placeOf = detail ? placer(detail, "current") : undefined,
+    factOf?: PlaceFactOf,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -557,13 +567,14 @@ export namespace Timeline {
     // rendered separately. Notices end a segment so none of those rows cross it.
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
       const refs = messages.flatMap((message, messageIndex) =>
-        contentEntries(message)
-          .filter(
-            (entry) =>
-              isRenderable(entry.content, showReasoning, detail) &&
-              !(thinking?.messageID === message.id && thinking.partID === entry.id),
-          )
-          .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
+        contentEntries(message).flatMap((entry) => [
+          ...(isRenderable(entry.content, showReasoning, detail) &&
+          !(thinking?.messageID === message.id && thinking.partID === entry.id)
+            ? [{ messageID: message.id, messageIndex, partID: entry.id, content: entry.content, script: false }]
+            : []),
+          // A script's changes follow it, placed by the Edits setting even where the script itself hides.
+          ...scriptChangeItems(message.id, messageIndex, entry.content, detail, factOf),
+        ]),
       )
 
       const interruptedAt = messages.findIndex((message) => isInterruptedError(message.error))
@@ -988,7 +999,7 @@ function renderable(
 }
 
 function groupContent(
-  items: { messageID: string; partID: string; content: Content }[],
+  items: { messageID: string; partID: string; content: Content; script?: boolean }[],
   shellToolDefaultOpen: boolean,
   editToolDefaultOpen: boolean,
   commentary: ReadonlySet<Content>,
@@ -1024,7 +1035,12 @@ function groupContent(
     adjacent = undefined
   }
 
-  const placed = placeOf ? items.map((item) => placeOf(item.content, commentary.has(item.content))) : undefined
+  const placed =
+    placeOf && detail
+      ? items.map((item) =>
+          item.script ? placeScriptChange(detail) : placeOf(item.content, commentary.has(item.content)),
+        )
+      : undefined
 
   items.forEach((item, index) => {
     const group = placed?.[index]?.group
@@ -1230,6 +1246,7 @@ const placeFactKeys = [
   "called",
   "groupedRead",
   "background",
+  "changes",
 ] as const
 
 function samePlaceFact(previous: PlaceFact, next: PlaceFact) {

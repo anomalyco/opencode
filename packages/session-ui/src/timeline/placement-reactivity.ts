@@ -23,6 +23,7 @@ const source = (): SessionMessageInfo[] => [
       storyTool("execute", "execute", "streaming", {}, { raw: '{"code":"1' }),
       storyTool("shell", "shell", "running", { command: "make" }, { metadata: { output: "a" } }),
       storyTool("subagent", "subagent", "running", { description: "look" }, { metadata: { sessionID: "ses_c" } }),
+      storyTool("script", "execute", "running", { code: "await edit()" }, { metadata: { toolCalls: [] } }),
     ],
   },
 ]
@@ -62,6 +63,12 @@ export function projectionRuns(
       edit(2, (tool) => tool.state.status === "streaming" && (tool.state.input += "1"))
       edit(3, (tool) => tool.state.status === "running" && (tool.state.metadata = { output: "a".repeat(step + 2) }))
       edit(4, (tool) => tool.state.status === "running" && (tool.state.metadata = { sessionID: "ses_c", step }))
+      edit(5, (tool) => {
+        if (tool.state.status !== "running") return
+        tool.state.metadata = {
+          toolCalls: Array.from({ length: step + 1 }, () => ({ tool: "edit", status: "completed" })),
+        }
+      })
       rows()
     }
 
@@ -78,8 +85,26 @@ export function projectionRuns(
     )
     rows()
     const moved = count
+    // A script that finishes with the files it changed places them, once.
+    edit(
+      5,
+      (tool) =>
+        (tool.state = {
+          status: "completed",
+          input: { code: "await edit()" },
+          content: [{ type: "text", text: "" }],
+          metadata: {
+            toolCalls: [],
+            files: [
+              { file: "/repo/a.ts", status: "modified", additions: 1, deletions: 0, patch: "@@ -1 +1,2 @@\n a\n+b\n" },
+            ],
+          },
+        }),
+    )
+    rows()
+    const scripted = count
     dispose()
 
-    return { streamed: streamed - before, moved: moved - streamed }
+    return { streamed: streamed - before, moved: moved - streamed, scripted: scripted - moved }
   })
 }

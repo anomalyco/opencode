@@ -970,6 +970,24 @@
   justify-content: center;
 }
 
+[data-component="file-counts"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--v2-text-text-base);
+
+  [data-slot="file-counts-name"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 [data-component="execute-tool-calls"] {
   display: flex;
   flex-direction: column;

@@ -1,14 +1,19 @@
 import type { FileDiffInfo, SessionMessageAssistantTool } from "@opencode/client/promise"
 import { createTwoFilesPatch, diffLines } from "diff"
-import { createMemo } from "solid-js"
+import { createMemo, Show } from "solid-js"
 import { changedFileDiff } from "../../components/apply-patch-file"
 import { currentToolInput, currentToolMetadata } from "../../message/current-tool-state"
-import { samePatchFile, toolInput, toolMetadata } from "../../tools/tool-renderer"
+import type { FileFact } from "../../timeline/facts"
+import { samePatchFile, ScriptChanges, toolInput, toolMetadata } from "../../tools/tool-renderer"
 import { PatchTool } from "./patch"
 
 /** Calls that changed files, one after another, as one list of files. An edit or a write still in progress shows the change it is making. */
 export function FileGroup(props: {
   tools: SessionMessageAssistantTool[]
+  /** Changes a script made, each shown like a file a call changed, on its own card. */
+  files?: readonly FileFact[]
+  /** The script's changes come before the calls'. */
+  scriptFirst?: boolean
   fileOpen?: (path: string) => boolean | undefined
   onFileOpenChange?: (path: string, open: boolean) => void
   onSizeChange?: () => void
@@ -112,17 +117,37 @@ export function FileGroup(props: {
       data-timeline-part-id={props.tools.length === 1 ? props.tools[0]?.id : undefined}
       data-timeline-part-ids={props.tools.length > 1 ? props.tools.map((tool) => tool.id).join(",") : undefined}
     >
-      <PatchTool
-        tool={tool()}
-        input={{}}
-        metadata={metadata()}
-        status={pending() ? "running" : "completed"}
-        fileOpen={props.fileOpen}
-        onFileOpenChange={props.onFileOpenChange}
-        deferContent
-        virtualizeDiff={false}
-        onContentRendered={props.onSizeChange}
-      />
+      <Show when={props.scriptFirst}>
+        <ScriptChanges
+          files={props.files ?? []}
+          render={PatchTool}
+          fileOpen={props.fileOpen}
+          onFileOpenChange={props.onFileOpenChange}
+          onSizeChange={props.onSizeChange}
+        />
+      </Show>
+      <Show when={props.tools.length > 0}>
+        <PatchTool
+          tool={tool()}
+          input={{}}
+          metadata={metadata()}
+          status={pending() ? "running" : "completed"}
+          fileOpen={props.fileOpen}
+          onFileOpenChange={props.onFileOpenChange}
+          deferContent
+          virtualizeDiff={false}
+          onContentRendered={props.onSizeChange}
+        />
+      </Show>
+      <Show when={!props.scriptFirst}>
+        <ScriptChanges
+          files={props.files ?? []}
+          render={PatchTool}
+          fileOpen={props.fileOpen}
+          onFileOpenChange={props.onFileOpenChange}
+          onSizeChange={props.onSizeChange}
+        />
+      </Show>
     </div>
   )
 }

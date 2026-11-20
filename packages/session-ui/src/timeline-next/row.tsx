@@ -6,7 +6,7 @@ import type {
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { SessionTurn } from "@opencode/util/session-turn"
-import { Predicate } from "effect"
+import { Predicate, Option } from "effect"
 import {
   For,
   Match,
@@ -53,6 +53,7 @@ import { TimelineEventItem, TimelineEventRow } from "./event-row"
 import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
 import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
+import { scriptFileFact } from "../timeline/facts"
 import { diffOpens, placeContent } from "../timeline/place"
 import { goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
 import { Separator } from "./separator"
@@ -370,6 +371,27 @@ export function createNextTimelineRowRenderer(input: {
               },
             ]
 
+          const script =
+            message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
+
+          if (script)
+            return [
+              {
+                type: "file",
+                id: ref.partID,
+                file: script,
+                render: () => (
+                  <FileGroup
+                    tools={[]}
+                    files={[script]}
+                    fileOpen={(path) => input.disclosure.value(`patch:${path}`) ?? diffOpens(input.timelineDetail())}
+                    onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
+                    onSizeChange={onSizeChange}
+                  />
+                ),
+              },
+            ]
+
           if (ref.messageID !== ref.partID || !message) return []
           const event = noticeEvent(message)
 
@@ -505,9 +527,31 @@ export function createNextTimelineRowRenderer(input: {
         })
       })
 
+      const files = createMemo(() => {
+        const group = row().group
+
+        if (group.type !== "file") return []
+
+        return group.refs.flatMap((ref) => {
+          const message = input.projection.messageByID().get(ref.messageID)
+
+          return Option.toArray(
+            Option.fromNullishOr(
+              message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined,
+            ),
+          )
+        })
+      })
+
       return (
         <FileGroup
           tools={tools()}
+          files={files()}
+          scriptFirst={(() => {
+            const group = row().group
+
+            return group.type === "file" && group.refs[0]?.partID.includes(":file:") === true
+          })()}
           fileOpen={(path) =>
             input.disclosure.value(`${row().group.key}:file:${path}`) ?? diffOpens(input.timelineDetail())
           }

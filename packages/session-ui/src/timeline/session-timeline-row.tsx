@@ -50,6 +50,7 @@ import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "./detail"
+import { scriptFileFact } from "./facts"
 import { diffOpens, placeContent } from "./place"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
@@ -385,6 +386,29 @@ export function createSessionTimelineRowRenderer(input: {
               },
             ]
 
+          const script =
+            message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
+
+          if (script)
+            return [
+              {
+                type: "file",
+                id: ref.partID,
+                file: script,
+                render: () => (
+                  <SessionFileToolGroup
+                    tools={[]}
+                    files={[script]}
+                    fileOpen={(path) =>
+                      input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
+                    }
+                    onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
+                    onSizeChange={onSizeChange}
+                  />
+                ),
+              },
+            ]
+
           if (ref.messageID !== ref.partID || !message) return []
 
           if (message.type === "shell")
@@ -493,9 +517,29 @@ export function createSessionTimelineRowRenderer(input: {
         return Option.getOrUndefined(decodeMetadataFile(files[0]))?.file
       })
 
+      const files = createMemo(() => {
+        const group = row().group
+
+        if (group.type !== "file") return []
+
+        return group.refs.flatMap((ref) => {
+          const message = input.projection.messageByID().get(ref.messageID)
+          const file =
+            message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
+
+          return file ? [file] : []
+        })
+      })
+
       return (
         <SessionFileToolGroup
           tools={tools()}
+          files={files()}
+          scriptFirst={(() => {
+            const group = row().group
+
+            return group.type === "file" && group.refs[0]?.partID.includes(":file:") === true
+          })()}
           fileOpen={(path) => {
             const open = input.disclosure.value(`${row().group.key}:file:${path}`)
 

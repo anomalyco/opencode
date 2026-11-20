@@ -256,6 +256,7 @@ export function displayDirectory(path: string | undefined) {
 import { resolveFileDiff } from "../components/session-diff"
 import { factsOf, summarize } from "../timeline/facts"
 import { contextGroupLabel, webSearchProviderLabel } from "./context-group-label"
+import type { FileFact } from "../timeline/facts"
 
 export function taskAgentName(raw: string | undefined, list?: readonly { name: string }[]) {
   if (!raw) return undefined
@@ -370,6 +371,7 @@ export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
   | { type: "notice" | "shell" | "text"; id: string; render: () => JSX.Element }
+  | { type: "file"; id: string; file: FileFact; render: () => JSX.Element }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -581,7 +583,7 @@ export function CurrentContextToolGroup(props: {
                 const value = item()
 
                 return !Array.isArray(value) &&
-                  (value.type === "notice" || value.type === "shell" || value.type === "text")
+                  (value.type === "notice" || value.type === "shell" || value.type === "text" || value.type === "file")
                   ? value
                   : undefined
               })
@@ -901,6 +903,10 @@ export function CurrentReadToolGroup(props: {
 
 export function CurrentFileToolGroup(props: {
   tools: SessionMessageAssistantTool[]
+  /** Changes a script made, each shown like a file a call changed, on its own card. */
+  files?: readonly FileFact[]
+  /** The script's changes come before the calls'. */
+  scriptFirst?: boolean
   fileOpen?: (path: string) => boolean | undefined
   onFileOpenChange?: (path: string, open: boolean) => void
   onSizeChange?: () => void
@@ -1006,19 +1012,104 @@ export function CurrentFileToolGroup(props: {
       data-timeline-part-id={props.tools.length === 1 ? props.tools[0]?.id : undefined}
       data-timeline-part-ids={props.tools.length > 1 ? props.tools.map((tool) => tool.id).join(",") : undefined}
     >
-      <Dynamic
-        component={render}
-        tool={tool()}
-        input={{}}
-        metadata={metadata()}
-        status={pending() ? "running" : "completed"}
-        fileOpen={props.fileOpen}
-        onFileOpenChange={props.onFileOpenChange}
-        deferContent
-        virtualizeDiff={false}
-        onContentRendered={props.onSizeChange}
-      />
+      <Show when={props.scriptFirst}>
+        <ScriptChanges
+          files={props.files ?? []}
+          render={render}
+          fileOpen={props.fileOpen}
+          onFileOpenChange={props.onFileOpenChange}
+          onSizeChange={props.onSizeChange}
+        />
+      </Show>
+      <Show when={props.tools.length > 0}>
+        <Dynamic
+          component={render}
+          tool={tool()}
+          input={{}}
+          metadata={metadata()}
+          status={pending() ? "running" : "completed"}
+          fileOpen={props.fileOpen}
+          onFileOpenChange={props.onFileOpenChange}
+          deferContent
+          virtualizeDiff={false}
+          onContentRendered={props.onSizeChange}
+        />
+      </Show>
+      <Show when={!props.scriptFirst}>
+        <ScriptChanges
+          files={props.files ?? []}
+          render={render}
+          fileOpen={props.fileOpen}
+          onFileOpenChange={props.onFileOpenChange}
+          onSizeChange={props.onSizeChange}
+        />
+      </Show>
     </div>
+  )
+}
+
+/**
+ * The changes a script made, in order, one card each: the same file changed twice is two cards. A change past the size
+ * cap, or to a binary file, shows its counts where it has them. Each card opens by the change's own id.
+ */
+export function ScriptChanges(props: {
+  files: readonly FileFact[]
+  render: Component<ToolProps>
+  fileOpen?: (key: string) => boolean | undefined
+  onFileOpenChange?: (key: string, open: boolean) => void
+  onSizeChange?: () => void
+}) {
+  return (
+    <Index each={props.files}>
+      {(file) => {
+        const diff = createMemo(() => {
+          const value = {
+            file: file().path,
+            patch: file().patch,
+            additions: file().additions ?? 0,
+            deletions: file().deletions ?? 0,
+            status: file().change ?? "modified",
+          }
+
+          return changedFileDiff(value) ? value : undefined
+        })
+
+        return (
+          <Show
+            when={diff()}
+            fallback={
+              <div data-component="file-counts" data-type={file().change} data-timeline-part-id={file().id}>
+                <FileIcon node={{ path: file().path, type: "file" }} />
+                <span data-slot="file-counts-name">{file().path}</span>
+                <Show when={file().additions !== undefined || file().deletions !== undefined}>
+                  <DiffChanges
+                    appearance="standard"
+                    changes={{ additions: file().additions ?? 0, deletions: file().deletions ?? 0 }}
+                  />
+                </Show>
+              </div>
+            }
+          >
+            {(value) => (
+              <Dynamic
+                component={props.render}
+                tool="patch"
+                input={{}}
+                metadata={{ files: [value()] }}
+                status="completed"
+                fileOpen={props.fileOpen && (() => props.fileOpen?.(file().id))}
+                onFileOpenChange={
+                  props.onFileOpenChange && ((_: string, open: boolean) => props.onFileOpenChange?.(file().id, open))
+                }
+                deferContent
+                virtualizeDiff={false}
+                onContentRendered={props.onSizeChange}
+              />
+            )}
+          </Show>
+        )
+      }}
+    </Index>
   )
 }
 
