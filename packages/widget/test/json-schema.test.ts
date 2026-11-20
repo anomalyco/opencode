@@ -79,3 +79,11 @@ test("oneOf reports the closest branch and rejects ambiguous matches", () => {
   expect(validateData(ambiguous, 1)).toEqual(["/: must match exactly one schema in oneOf, matches 2"])
   expect(validateData(ambiguous, 1.5)).toEqual([])
 })
+
+test("pattern matches strings and reports an invalid expression", () => {
+  const color: JSONSchema = { type: "string", pattern: "^#[0-9a-f]{6}$" }
+  expect(validateData(color, "#00ff00")).toEqual([])
+  expect(validateData(color, "green")).toEqual(["/: must match ^#[0-9a-f]{6}$"])
+  expect(validateData({ pattern: "^#" }, 1)).toEqual([])
+  expect(validateData({ type: "string", pattern: "(" }, "x")).toEqual(["/: has an invalid pattern ("])
+})

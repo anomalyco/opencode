@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { builtins, prelude, program, step, version } from "../src/index.js"
-import { confirm, form, suggestions } from "../src/source.js"
+import { backdrop, chart, confirm, form, suggestions } from "../src/source.js"
 
 const src = path.resolve(import.meta.dir, "../src")
 
@@ -10,6 +10,8 @@ test("source.ts embeds the canonical .js files", async () => {
   expect(suggestions).toBe(await Bun.file(path.join(src, "templates/suggestions.js")).text())
   expect(form).toBe(await Bun.file(path.join(src, "templates/form.js")).text())
   expect(confirm).toBe(await Bun.file(path.join(src, "templates/confirm.js")).text())
+  expect(chart).toBe(await Bun.file(path.join(src, "templates/chart.js")).text())
+  expect(backdrop).toBe(await Bun.file(path.join(src, "templates/backdrop.js")).text())
 })
 
 test("program is the prelude, a newline, then the source", () => {

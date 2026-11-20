@@ -1,6 +1,6 @@
 import type { JSONSchema } from "./json-schema.js"
 import { version } from "./program.js"
-import { confirm, form, suggestions } from "./source.js"
+import { backdrop, chart, confirm, form, suggestions } from "./source.js"
 
 export interface Template {
   /** /^[a-z][a-z0-9-]{0,47}$/, unique per server */
@@ -20,6 +20,11 @@ export const NAME = /^[a-z][a-z0-9-]{0,47}$/
 
 const string = (description: string): JSONSchema => ({ type: "string", description })
 const label = string("Shown next to the field")
+const hex = (description: string): JSONSchema => ({
+  type: "string",
+  pattern: "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+  description: `${description}, "#rgb" or "#rrggbb"`,
+})
 
 const field = (type: string, properties: Record<string, JSONSchema>, required: ReadonlyArray<string>): JSONSchema => ({
   type: "object",
@@ -145,4 +150,56 @@ export const builtins: ReadonlyArray<Template> = [
     required: ["title", "message"],
     additionalProperties: false,
   }),
+  make(
+    "chart",
+    "An animated bar or line chart of one or more series; pressing shows values. Submits nothing, or { series, index, value } on a tap when choose is true.",
+    chart,
+    {
+      type: "object",
+      properties: {
+        title: string("Heading of the chart"),
+        kind: { enum: ["bar", "line"], description: "bar: grouped bars per label; line: one line per series" },
+        series: {
+          type: "array",
+          minItems: 1,
+          maxItems: 6,
+          items: {
+            type: "object",
+            properties: {
+              label: string("Name of the series; submitted as `series`"),
+              values: { type: "array", minItems: 1, maxItems: 60, items: { type: "number" } },
+              color: hex("Color of the series (default: a palette starting with the theme accent)"),
+            },
+            required: ["label", "values"],
+            additionalProperties: false,
+          },
+        },
+        labels: {
+          type: "array",
+          items: { type: "string" },
+          description: "Label of each value index (x axis), e.g. months; default 1, 2, 3...",
+        },
+        unit: string('Unit appended to values, such as "%", "ms" or "k users"'),
+        choose: { type: "boolean", description: "Tapping a bar or point submits it (default false)" },
+      },
+      required: ["title", "kind", "series"],
+      additionalProperties: false,
+    },
+  ),
+  make(
+    "backdrop",
+    "A title and text on an animated GPU shader banner (plasma, aurora or waves) with a speed slider. Submits nothing.",
+    backdrop,
+    {
+      type: "object",
+      properties: {
+        title: string("Heading shown under the banner"),
+        preset: { enum: ["plasma", "aurora", "waves"], description: "The shader" },
+        text: string("Markdown shown under the title"),
+        accent: hex("Accent color of the shader (default per preset)"),
+      },
+      required: ["title", "preset"],
+      additionalProperties: false,
+    },
+  ),
 ]

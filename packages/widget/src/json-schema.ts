@@ -15,6 +15,8 @@ export interface JSONSchema {
   readonly maxItems?: number
   readonly minLength?: number
   readonly maxLength?: number
+  /** An ECMAScript regular expression (with the `u` flag) a string must match somewhere. */
+  readonly pattern?: string
   readonly minimum?: number
   readonly maximum?: number
   readonly enum?: ReadonlyArray<unknown>
@@ -37,6 +39,10 @@ function check(schema: JSONSchema, value: unknown, path: string): string[] {
     return [`${at}: must be one of ${schema.enum.map((item) => JSON.stringify(item)).join(", ")}`]
   const types = schema.type === undefined ? undefined : [schema.type].flat()
   if (types && !types.some((type) => is(type, value))) return [`${at}: must be ${types.join(" or ")}`]
+  if (typeof value === "string" && schema.pattern !== undefined) {
+    const problem = pattern(schema.pattern, value)
+    if (problem) return [`${at}: ${problem}`]
+  }
   return [
     ...alternatives(schema, value, path),
     ...range(at, size(schema, value)),
@@ -102,6 +108,15 @@ function properties(schema: JSONSchema, value: Record<string, unknown>, path: st
       return check(extra, item, `${path}/${key}`)
     }),
   ]
+}
+
+// Schemas come from models, so a pattern that is not a valid regular expression is reported rather than thrown.
+function pattern(source: string, value: string) {
+  try {
+    return new RegExp(source, "u").test(value) ? undefined : `must match ${source}`
+  } catch {
+    return `has an invalid pattern ${source}`
+  }
 }
 
 function is(type: JSONSchemaType, value: unknown) {

@@ -6,7 +6,14 @@ import path from "node:path"
 import { format, resolveConfig } from "prettier"
 
 const src = path.resolve(import.meta.dir, "../src")
-const names = ["prelude", "templates/suggestions", "templates/form", "templates/confirm"]
+const names = [
+  "prelude",
+  "templates/suggestions",
+  "templates/form",
+  "templates/confirm",
+  "templates/chart",
+  "templates/backdrop",
+]
 const sources = await Promise.all(names.map((name) => Bun.file(path.join(src, `${name}.js`)).text()))
 
 const file = path.join(src, "source.ts")

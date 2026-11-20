@@ -1,5 +1,16 @@
 import { expect, test } from "bun:test"
-import { builtins, NAME, type Node, program, validateData, WidgetSession } from "../src/index.js"
+import {
+  builtins,
+  type Command,
+  type Frame,
+  NAME,
+  type Node,
+  type Pointer,
+  type Shader,
+  program,
+  validateData,
+  WidgetSession,
+} from "../src/index.js"
 
 const template = (name: string) => {
   const found = builtins.find((item) => item.name === name)
@@ -19,8 +30,8 @@ const find = (view: Node, predicate: (node: Node) => boolean) => nodes(view).fil
 const press = (id: string) => ({ id, type: "press" as const })
 const change = (id: string, value: unknown) => ({ id, type: "change" as const, value })
 
-test("built-ins are suggestions, form and confirm with valid names", () => {
-  expect(builtins.map((item) => item.name)).toEqual(["suggestions", "form", "confirm"])
+test("built-ins have valid names", () => {
+  expect(builtins.map((item) => item.name)).toEqual(["suggestions", "form", "confirm", "chart", "backdrop"])
   expect(builtins.every((item) => item.builtin && NAME.test(item.name) && item.description.length > 0)).toBe(true)
 })
 
@@ -186,4 +197,161 @@ test("confirm: confirm and cancel", async () => {
   ])
   expect((await session.dispatch(press("cancel"))).submit).toEqual({ confirmed: false })
   expect((await session.dispatch(press("confirm"))).submit).toEqual({ confirmed: true })
+})
+
+const frame = (t: number, pointer: Frame["pointer"] = null): Frame => ({
+  id: "chart",
+  t,
+  dt: 1 / 60,
+  width: 400,
+  height: 240,
+  scale: 2,
+  pointer,
+  dark: true,
+})
+const pointer = (kind: Pointer["kind"], x: number, y: number) => ({
+  id: "chart",
+  type: "pointer" as const,
+  value: { kind, x, y, width: 400, height: 240 },
+})
+const texts = (commands: ReadonlyArray<Command>) =>
+  commands.flatMap((command) => (command[0] === "text" ? [command[3]] : []))
+const shapes = (commands: ReadonlyArray<Command>, kind: Command[0]) => commands.filter((command) => command[0] === kind)
+const caption = (view: Node) =>
+  find(view, (node) => node.type === "text").map((node) => node.type === "text" && node.text)[1]
+
+const revenue = {
+  title: "Revenue",
+  kind: "bar",
+  unit: "k",
+  labels: ["Jan", "Feb", "Mar", "Apr"],
+  series: [
+    { label: "2025", values: [12, 18, 9, 24] },
+    { label: "2026", values: [15, 21, 14, 29], color: "#f59e0b" },
+  ],
+}
+
+test("chart: bars grow in, then the canvas stops animating", async () => {
+  const session = await start("chart", revenue)
+  expect(find(session.view, (node) => node.type === "canvas")).toEqual([
+    {
+      type: "canvas",
+      id: "chart",
+      height: 240,
+      fps: 60,
+      duration: 0.65,
+      alt: "Bar chart. 2025: Jan 12k, Feb 18k, Mar 9k, Apr 24k; 2026: Jan 15k, Feb 21k, Mar 14k, Apr 29k",
+    },
+  ])
+  const height = (commands: ReadonlyArray<Command>) =>
+    shapes(commands, "rrect").reduce((sum, command) => sum + (command[0] === "rrect" ? command[4] : 0), 0)
+  expect(shapes((await session.draw(frame(0))).commands, "rrect")).toHaveLength(0)
+  // The groups start one after another: at 0.05 s only January's two bars have begun.
+  const early = (await session.draw(frame(0.05))).commands
+  const middle = (await session.draw(frame(0.3))).commands
+  const end = (await session.draw(frame(0.65))).commands
+  expect(shapes(early, "rrect")).toHaveLength(2)
+  expect(height(middle)).toBeGreaterThan(height(early))
+  expect(height(end)).toBeGreaterThan(height(middle))
+  expect(shapes(end, "rrect")).toHaveLength(8)
+  expect((await session.draw(frame(5))).commands).toEqual(end)
+  // Axes, gridlines, the x labels and a legend for two series.
+  expect(texts(end)).toEqual(["0", "10", "20", "30", "Jan", "Feb", "Mar", "Apr", "2025", "2026"])
+  expect(shapes(end, "line")).toHaveLength(4)
+})
+
+test("chart: pressing a bar shows its value, animating only while down", async () => {
+  const session = await start("chart", revenue)
+  expect(caption(session.view)).toBe("Press a bar to read its value")
+  // The plot starts at x 26 with 90.5 px per label: April's bars span 312.75..340.75 (2025) and 344.75..372.75 (2026).
+  const down = await session.dispatch(pointer("down", 360, 120))
+  expect(down.state).toEqual({ active: { series: 1, index: 3 }, down: true })
+  expect(find(session.view, (node) => node.type === "canvas" && node.duration === undefined)).toHaveLength(1)
+  expect(caption(session.view)).toBe("Apr · 2026: 29k")
+  const pressed = (await session.draw(frame(2))).commands
+  expect(texts(pressed).slice(-2)).toEqual(["Apr", "29k"])
+  expect(shapes(pressed, "alpha")).toHaveLength(7)
+  await session.dispatch(pointer("move", 325, 120))
+  expect(session.state).toEqual({ active: { series: 0, index: 3 }, down: true })
+  const up = await session.dispatch(pointer("up", 325, 120))
+  expect(up.submit).toBeUndefined()
+  expect(session.state).toEqual({ active: { series: 0, index: 3 }, down: false })
+  expect(find(session.view, (node) => node.type === "canvas" && node.duration === 0.65)).toHaveLength(1)
+  // A tap outside the plot clears the selection.
+  await session.dispatch(pointer("down", 200, 5))
+  await session.dispatch(pointer("up", 200, 5))
+  expect(session.state).toEqual({ active: null, down: false })
+})
+
+test("chart: hovering without pressing highlights from the frame pointer", async () => {
+  const session = await start("chart", revenue)
+  const hovered = (await session.draw(frame(1, { x: 325, y: 120, down: false }))).commands
+  expect(texts(hovered).slice(-2)).toEqual(["Apr", "24k"])
+  expect(session.state).toEqual({ active: null, down: false })
+})
+
+test("chart: with choose, tapping a point submits it", async () => {
+  const session = await start("chart", {
+    title: "Latency",
+    kind: "line",
+    unit: "ms",
+    choose: true,
+    series: [
+      { label: "p50", values: [120, 135, 128, 160] },
+      { label: "p99", values: [420, 380, 510, 470] },
+    ],
+  })
+  expect(caption(session.view)).toBe("Tap a point to choose it")
+  const lines = (await session.draw(frame(1))).commands
+  expect(shapes(lines, "path").filter((command) => command[0] === "path" && command[2].width === 2.5)).toHaveLength(2)
+  expect(shapes(lines, "circle").length).toBeGreaterThanOrEqual(8)
+  await session.dispatch(pointer("down", 380, 70))
+  const output = await session.dispatch(pointer("up", 380, 70))
+  expect(output.submit).toEqual({ series: "p99", index: 3, value: 470 })
+})
+
+test("chart: the line draws in progressively", async () => {
+  const session = await start("chart", { title: "One", kind: "line", series: [{ label: "a", values: [1, 3, 2, 5] }] })
+  const segments = async (t: number) =>
+    (await session.draw(frame(t))).commands.flatMap((command) =>
+      command[0] === "path" && command[2].width === 2.5 ? [command[1].length] : [],
+    )
+  expect(await segments(0)).toEqual([1])
+  expect((await segments(0.1))[0]).toBeLessThan(4)
+  expect(await segments(1)).toEqual([4])
+})
+
+test("chart data schema checks the kind and colors", () => {
+  const data = template("chart").data
+  expect(validateData(data, { title: "x", kind: "pie", series: [{ label: "a", values: [1] }] })).toEqual([
+    '/kind: must be one of "bar", "line"',
+  ])
+  expect(validateData(data, { title: "x", kind: "bar", series: [{ label: "a", values: [1], color: "red" }] })).toEqual([
+    "/series/0/color: must match ^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+  ])
+})
+
+test("backdrop: a shader per preset driven by the speed slider", async () => {
+  const session = await start("backdrop", {
+    title: "Launch",
+    preset: "aurora",
+    text: "We **shipped**.",
+    accent: "#f0a",
+  })
+  const shader = () => nodes(session.view).find((node): node is Shader => node.type === "shader")
+  expect(shader()).toMatchObject({ id: "backdrop", height: 200, fps: 60, values: [1, 1, 0, 2 / 3] })
+  expect(shader()?.wgsl).toContain("fn shade(frag: vec2f) -> vec4f")
+  expect(nodes(session.view).map((node) => node.type)).toEqual(["column", "shader", "text", "markdown", "slider"])
+  await session.dispatch(change("speed", 0.25))
+  expect(shader()).toMatchObject({ fps: 60, values: [0.3, 1, 0, 2 / 3] })
+  const paused = await session.dispatch(change("speed", 0))
+  expect(paused.submit).toBeUndefined()
+  expect(shader()).toMatchObject({ fps: 0, values: [0, 1, 0, 2 / 3] })
+  const presets = await Promise.all(
+    (["plasma", "aurora", "waves"] as const).map(async (preset) => {
+      const view = (await start("backdrop", { title: "x", preset })).view
+      return find(view, (node) => node.type === "shader").map((node) => node.type === "shader" && node.wgsl)[0]
+    }),
+  )
+  expect(new Set(presets).size).toBe(3)
 })
