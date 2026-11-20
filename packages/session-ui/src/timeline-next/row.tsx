@@ -31,7 +31,7 @@ import { useData } from "../context"
 import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
 import { SessionReadToolGroup, SessionUserMessage } from "../message/current-message"
-import { FileChangeRuns, fileRuns, ScriptChanges, taskAgentName } from "../tools/tool-renderer"
+import { FileChangeRuns, fileRuns, runDisclosureKey, ScriptChanges, taskAgentName } from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "../timeline/detail"
@@ -572,9 +572,12 @@ export function createNextTimelineRowRenderer(input: {
               <FileGroup
                 tools={run()}
                 fileOpen={(path) =>
-                  input.disclosure.value(`${row().group.key}:file:${path}`) ?? diffOpens(input.timelineDetail())
+                  input.disclosure.value(`${runDisclosureKey(row().group.key, run(), tools()[0])}:file:${path}`) ??
+                  diffOpens(input.timelineDetail())
                 }
-                onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+                onFileOpenChange={(path, open) =>
+                  input.disclosure.set(`${runDisclosureKey(row().group.key, run(), tools()[0])}:file:${path}`, open)
+                }
                 onSizeChange={onSizeChange}
               />
             )}

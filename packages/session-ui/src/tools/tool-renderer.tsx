@@ -1093,85 +1093,89 @@ export function ScriptChanges(props: {
 }) {
   const i18n = useI18n()
 
+  // One wrapper, as a direct patch's files share one, so the turn's gap falls around the list and not between changes.
   return (
-    <Index each={props.files}>
-      {(file) => {
-        const diff = createMemo(() => {
-          const value = {
-            file: file().path,
-            patch: file().patch,
-            additions: file().additions ?? 0,
-            deletions: file().deletions ?? 0,
-            status: file().change ?? "modified",
-          }
-
-          return changedFileDiff(value) ? value : undefined
-        })
-
-        return (
-          <Show
-            when={diff()}
-            fallback={
-              <div
-                data-component="file-counts"
-                data-type={file().change}
-                data-timeline-part-id={scriptChangePartID(file())}
-              >
-                <FileIcon node={{ path: file().path, type: "file" }} />
-                <span data-slot="file-counts-name">
-                  <Show when={file().path.includes("/")}>
-                    <span data-slot="file-counts-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
-                  </Show>
-                  <span data-slot="file-counts-filename">{getFilename(file().path)}</span>
-                </span>
-                <Switch>
-                  <Match when={file().change === "added"}>
-                    <span data-component="diff-changes" data-appearance="standard">
-                      <span data-slot="diff-changes-additions">{i18n.t("ui.patch.action.created")}</span>
-                    </span>
-                  </Match>
-                  <Match when={file().change === "deleted"}>
-                    <span data-component="diff-changes" data-appearance="standard">
-                      <span data-slot="diff-changes-deletions">{i18n.t("ui.patch.action.deleted")}</span>
-                    </span>
-                  </Match>
-                  <Match when={(file().additions ?? 0) + (file().deletions ?? 0) > 0}>
-                    <DiffChanges
-                      appearance="standard"
-                      markEmpty
-                      changes={{ additions: file().additions ?? 0, deletions: file().deletions ?? 0 }}
-                    />
-                  </Match>
-                </Switch>
-              </div>
+    <div data-component="tool-part-wrapper" data-script-changes="">
+      <Index each={props.files}>
+        {(file) => {
+          const diff = createMemo(() => {
+            const value = {
+              file: file().path,
+              patch: file().patch,
+              additions: file().additions ?? 0,
+              deletions: file().deletions ?? 0,
+              status: file().change ?? "modified",
             }
-          >
-            {(value) => (
-              <div data-timeline-part-id={scriptChangePartID(file())}>
-                <Dynamic
-                  component={props.render}
-                  tool="patch"
-                  input={{}}
-                  metadata={{ files: [value()] }}
-                  status="completed"
-                  fileOpen={props.fileOpen && (() => props.fileOpen?.(file().id))}
-                  onFileOpenChange={
-                    props.onFileOpenChange && ((_: string, open: boolean) => props.onFileOpenChange?.(file().id, open))
-                  }
-                  deferContent
-                  virtualizeDiff={false}
-                  onContentRendered={props.onSizeChange}
-                />
-              </div>
-            )}
-          </Show>
-        )
-      }}
-    </Index>
+
+            return changedFileDiff(value) ? value : undefined
+          })
+
+          return (
+            <Show
+              when={diff()}
+              fallback={
+                <div
+                  data-component="file-counts"
+                  data-type={file().change}
+                  data-timeline-part-id={scriptChangePartID(file())}
+                >
+                  <FileIcon node={{ path: file().path, type: "file" }} />
+                  <span data-slot="file-counts-name">
+                    <Show when={file().path.includes("/")}>
+                      <span data-slot="file-counts-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
+                    </Show>
+                    <span data-slot="file-counts-filename">{getFilename(file().path)}</span>
+                  </span>
+                  <Switch>
+                    <Match when={file().change === "added"}>
+                      <span data-component="diff-changes" data-appearance="standard">
+                        <span data-slot="diff-changes-additions">{i18n.t("ui.patch.action.created")}</span>
+                      </span>
+                    </Match>
+                    <Match when={file().change === "deleted"}>
+                      <span data-component="diff-changes" data-appearance="standard">
+                        <span data-slot="diff-changes-deletions">{i18n.t("ui.patch.action.deleted")}</span>
+                      </span>
+                    </Match>
+                    <Match when={(file().additions ?? 0) + (file().deletions ?? 0) > 0}>
+                      <DiffChanges
+                        appearance="standard"
+                        markEmpty
+                        changes={{ additions: file().additions ?? 0, deletions: file().deletions ?? 0 }}
+                      />
+                    </Match>
+                  </Switch>
+                </div>
+              }
+            >
+              {(value) => (
+                <div data-script-change="patch" data-timeline-part-id={scriptChangePartID(file())}>
+                  <Dynamic
+                    component={props.render}
+                    tool="patch"
+                    input={{}}
+                    metadata={{ files: [value()] }}
+                    status="completed"
+                    fileOpen={props.fileOpen && (() => props.fileOpen?.(file().id))}
+                    onFileOpenChange={
+                      props.onFileOpenChange &&
+                      ((_: string, open: boolean) => props.onFileOpenChange?.(file().id, open))
+                    }
+                    deferContent
+                    virtualizeDiff={false}
+                    onContentRendered={props.onSizeChange}
+                  />
+                </div>
+              )}
+            </Show>
+          )
+        }}
+      </Index>
+    </div>
   )
 }
 
-export { fileRuns, type FileRun } from "./file-runs"
+export { fileRuns, runDisclosureKey, type FileRun } from "./file-runs"
 
 export function scrollParent(element: HTMLElement): HTMLElement | undefined {
   const parent = element.parentElement

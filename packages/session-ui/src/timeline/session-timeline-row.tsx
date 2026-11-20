@@ -48,6 +48,7 @@ import {
 import {
   FileChangeRuns,
   fileRuns,
+  runDisclosureKey,
   ScriptChanges,
   taskAgentName,
   ToolRegistry,
@@ -577,17 +578,24 @@ export function createSessionTimelineRowRenderer(input: {
               <SessionFileToolGroup
                 tools={run()}
                 fileOpen={(path) => {
-                  const open = input.disclosure.value(`${row().group.key}:file:${path}`)
+                  const open = input.disclosure.value(
+                    `${runDisclosureKey(row().group.key, run(), tools()[0])}:file:${path}`,
+                  )
 
                   if (open !== undefined) return open
 
                   if (input.timelineDetail) return diffOpens(input.timelineDetail())
 
-                  if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
+                  if (run()[0]?.name !== "edit" || path !== firstPath()) return false
 
-                  return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
+                  return (
+                    input.disclosure.value(runDisclosureKey(row().group.key, run(), tools()[0])) ??
+                    input.editToolDefaultOpen()
+                  )
                 }}
-                onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+                onFileOpenChange={(path, open) =>
+                  input.disclosure.set(`${runDisclosureKey(row().group.key, run(), tools()[0])}:file:${path}`, open)
+                }
                 onSizeChange={onSizeChange}
               />
             )}

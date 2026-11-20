@@ -22,3 +22,14 @@ export function fileRuns(items: readonly (SessionMessageAssistantTool | FileFact
     return runs
   }, [])
 }
+
+/**
+ * The disclosure key a run of direct calls opens its files under. The group's first run keeps the group's key, so a group
+ * without a script keeps its files' state; a later run is scoped by its first call, so two runs that change the same file
+ * open on their own.
+ */
+export function runDisclosureKey(groupKey: string, run: readonly { id: string }[], first: { id: string } | undefined) {
+  const head = run[0]
+
+  return head && head.id !== first?.id ? `${groupKey}:${head.id}` : groupKey
+}

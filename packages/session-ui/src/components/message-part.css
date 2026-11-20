@@ -977,7 +977,6 @@
   min-width: 0;
   padding: 6px 0;
   font-size: 13px;
-  line-height: var(--line-height-compact);
   color: var(--v2-text-text-base);
 
   [data-slot="file-counts-name"] {
@@ -999,6 +998,11 @@
   [data-component="diff-changes"] [data-empty] {
     display: none;
   }
+}
+
+/* A script's changes, each its own card, overlap their borders as a direct patch's files do. */
+[data-script-change="patch"] + [data-script-change="patch"] {
+  margin-top: -1px;
 }
 
 [data-component="execute-tool-calls"] {

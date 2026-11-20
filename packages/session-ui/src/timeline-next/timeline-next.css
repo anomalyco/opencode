@@ -44,6 +44,11 @@
   gap: 8px;
 }
 
+/* A script's changes, each its own card, keep the spacing of a direct patch's files. */
+[data-timeline="next"] [data-script-change="patch"] + [data-script-change="patch"] {
+  margin-top: var(--timeline-gap-s);
+}
+
 /* Each changed file is its own accordion, rather than one stacked group, as far from the next
    as any two rows. */
 [data-timeline="next"] [data-component="accordion"][data-scope="apply-patch"] {
