@@ -3,9 +3,29 @@
 use std::borrow::Cow;
 use std::fmt;
 
-use serde::de::{DeserializeOwned, Error, MapAccess, Visitor};
-use serde::{Deserialize, Deserializer};
+use serde::de::{DeserializeOwned, Error, MapAccess, Unexpected, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+
+/// What an empty struct schema accepts: any JSON value but `null`, kept as it arrived. It defaults to `{}`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct NotNull(pub Value);
+
+impl Default for NotNull {
+    fn default() -> Self {
+        Self(Value::Object(serde_json::Map::new()))
+    }
+}
+
+impl<'de> Deserialize<'de> for NotNull {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        match Value::deserialize(deserializer)? {
+            Value::Null => Err(D::Error::invalid_type(Unexpected::Unit, &"any value but null")),
+            value => Ok(Self(value)),
+        }
+    }
+}
 
 /// The JSON text with each lone UTF-16 surrogate escape (`\ud83d` without its pair) written as `\ufffd`, or `None` when
 /// it has none. `JSON.parse` keeps a lone surrogate, which `JSON.stringify` writes for a string cut inside a pair;
@@ -359,6 +379,19 @@ mod tests {
             let fixed = well_formed(text.as_bytes());
             assert_eq!(fixed.as_deref().map(|text| std::str::from_utf8(text).unwrap()), expected, "{text}");
         }
+    }
+
+    #[test]
+    fn an_empty_struct_schema_keeps_any_value_but_null() {
+        use crate::types::SkillUpdated;
+        let event = |data: &str| format!(r#"{{"id":"evt","created":1,"type":"skill.updated","data":{data}}}"#);
+        for data in ["{}", r#"{"a":[1]}"#, "[1]", r#""x""#, "0", "false"] {
+            let decoded: SkillUpdated = serde_json::from_str(&event(data)).unwrap();
+            assert_eq!(serde_json::to_string(&decoded).unwrap(), event(data));
+        }
+        assert!(serde_json::from_str::<SkillUpdated>(&event("null")).is_err());
+        assert!(serde_json::from_str::<SkillUpdated>(r#"{"id":"evt","created":1,"type":"skill.updated"}"#).is_err());
+        assert_eq!(serde_json::to_string(&SkillUpdated::default().data).unwrap(), "{}");
     }
 
     #[test]
