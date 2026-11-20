@@ -596,6 +596,76 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("keeps adjacent non-overlapping whitespace-only fallback matches", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "blank-lines.txt")
+      return Effect.promise(() => fs.writeFile(target, "\n\n\n")).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(
+              registry,
+              call({ path: "blank-lines.txt", oldString: "\n ", newString: "x", replaceAll: true }),
+            ),
+          ),
+        ),
+        Effect.tap((result) =>
+          Effect.sync(() =>
+            expect(result).toMatchObject({ status: "completed", output: "Edited blank-lines.txt (2 replacements)" }),
+          ),
+        ),
+        Effect.andThen(Effect.promise(() => fs.readFile(target, "utf8"))),
+        Effect.tap((content) => Effect.sync(() => expect(content).toBe("xx\n"))),
+      )
+    }),
+  )
+
+  it.live("matches long repeated whitespace-tolerant regions without quadratic rescans", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "repeated.txt")
+      return Effect.promise(() => fs.writeFile(target, "a  \r\n".repeat(6_000))).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(
+              registry,
+              call({
+                path: "repeated.txt",
+                oldString: "a\n".repeat(500),
+                newString: "patched\n",
+                replaceAll: true,
+              }),
+            ),
+          ),
+        ),
+        Effect.tap((result) =>
+          Effect.sync(() =>
+            expect(result).toMatchObject({ status: "completed", output: "Edited repeated.txt (12 replacements)" }),
+          ),
+        ),
+        Effect.andThen(Effect.promise(() => fs.readFile(target, "utf8"))),
+        Effect.tap((content) => Effect.sync(() => expect(content).toBe("patched\r\n".repeat(12)))),
+      )
+    }),
+  )
+
+  it.live("recovers partial multiline prefixes before a later trailing-whitespace match", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "prefix.txt")
+      return Effect.promise(() => fs.writeFile(target, "a  \nb  \nx  \na  \nb  \na")).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(registry, call({ path: "prefix.txt", oldString: "a\nb\na", newString: "FOUND" })),
+          ),
+        ),
+        Effect.tap((result) => Effect.sync(() => expect(result.status).toBe("completed"))),
+        Effect.andThen(Effect.promise(() => fs.readFile(target, "utf8"))),
+        Effect.tap((content) => Effect.sync(() => expect(content).toBe("a  \nb  \nx  \nFOUND"))),
+      )
+    }),
+  )
+
   it.live("uses non-overlapping trailing-whitespace matches and preserves CRLF", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
