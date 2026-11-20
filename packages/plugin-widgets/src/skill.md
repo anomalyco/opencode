@@ -164,16 +164,90 @@ ui.shader(wgsl, { id, height, width, values, fps, alt, poster })   a WGSL fragme
 
 Children may contain `null` or `false` (for `cond && node`) and nested arrays.
 
-## Live templates and capabilities
+## Live templates
 
-Save a template with `mode: "live"` for games, timers, animations and live dashboards: it defines
-`async function main(data)` instead of `init`/`view`/`update`, and runs until it calls `widget.submit` or
-`widget.dismiss` (see the spec's `widgets-live.md`). The server only checks that it compiles.
+A **live** template runs one program for as long as the widget is open: it keeps state in variables, waits for taps,
+timers and display frames, and renders whenever it wants. Use it when something happens **without the user acting**:
+games, timers and countdowns, step-by-step animations and simulations, dashboards that refresh themselves. Stay with
+step mode for pickers, forms, confirmations and charts: it's cheaper, works in the terminal (which can't run live
+widgets), and the server can run it to check it; a live widget's `main` only runs on the user's device,
+so the server only checks that it compiles. The built-in `minigame` (`{ "title": "Tap the dots", "seconds": 20 }`,
+submits `{ score, seconds }`) is one.
 
-A live template that calls `widget.fetch` declares the hosts it needs, as narrowly as it can:
-`capabilities: { https: { hosts: ["api.github.com"] } }` (exact hosts, `*.example.com`, or `["*"]` only if it truly
-needs any host). Step templates can't declare capabilities. Fetching from the widget is for live dashboards that must
-refresh while open; for anything else, fetch the data yourself and pass it in `data`.
+Save it with `mode: "live"` and define `async function main(data)` instead of `init`/`view`/`update`/`draw`. It runs
+until it returns, calls `widget.submit(...)` / `widget.dismiss()`, or the widget closes:
+
+```
+widget.render(node)                      replace the view (any ui.* node)
+widget.draw(canvasID, g)                 replace a canvas's drawing (g = ui.draw())
+await widget.event()                     next user event { id, type, value }
+await widget.frame()                     next display frame { t, dt, width, height, scale, pointer, dark }
+await widget.next({ frame, timeout })    first of { type: "event", event } | { type: "frame", frame }
+                                           | { type: "timeout" } | { type: "resumed", pausedMs }
+await widget.sleep(ms) / widget.now()    timers; now() is ms running, not counting pauses
+await widget.fetch(url, { method, headers, body })   HTTPS → { ok, status, headers, text(), json() }
+widget.submit(value) / widget.dismiss()  final answer; the program stops
+widget.send(value, { wake })             a message to you while the widget stays open
+```
+
+- Ask for a frame (`widget.next({ frame: true })`) only while something moves, handle events between frames and draw
+  on the frame. Call `widget.render` only when layout or text changes; put per-frame changes in a canvas.
+- Never run 50 ms without an `await`; keep each `draw` under 2,000 commands.
+- The program pauses when the widget is out of view; `widget.next` then gives `{ type: "resumed", pausedMs }` first.
+- `Math.random()` is fine. Always set the canvas `alt`.
+
+```js
+// Catch the ball: it bounces around; tap it to score. Submits { score }.
+async function main(data) {
+  widget.render(
+    ui.column({ gap: 1 }, [
+      ui.text(data.title, { style: "title" }),
+      ui.canvas({ id: "court", height: 240, alt: "Catch the ball game" }),
+    ]),
+  )
+  const ball = { x: 60, y: 60, vx: 180, vy: 140, r: 22 }
+  const end = widget.now() + (data.seconds ?? 15) * 1000
+  let score = 0
+  while (widget.now() < end) {
+    const next = await widget.next({ frame: true, timeout: end - widget.now() })
+    if (next.type === "event" && next.event.type === "pointer" && next.event.value.kind === "down") {
+      if (Math.hypot(next.event.value.x - ball.x, next.event.value.y - ball.y) <= ball.r + 8) {
+        score++
+        ball.vx *= 1.1
+      }
+    }
+    if (next.type !== "frame") continue
+    const f = next.frame
+    ball.x += ball.vx * f.dt
+    ball.y += ball.vy * f.dt
+    if (ball.x < ball.r || ball.x > f.width - ball.r) ball.vx = -ball.vx
+    if (ball.y < ball.r || ball.y > f.height - ball.r) ball.vy = -ball.vy
+    ball.x = Math.max(ball.r, Math.min(f.width - ball.r, ball.x))
+    ball.y = Math.max(ball.r, Math.min(f.height - ball.r, ball.y))
+    const g = ui.draw()
+    g.text(12, 24, "Score " + score, { size: 16, weight: 600 })
+    g.text(f.width - 12, 24, Math.ceil((end - widget.now()) / 1000) + "s", { align: "right", color: "muted" })
+    g.circle(ball.x, ball.y, ball.r, "accent")
+    widget.draw("court", g)
+  }
+  widget.render(
+    ui.column({ gap: 1 }, [
+      ui.text("You caught it " + score + " times", { style: "title" }),
+      ui.button("done", "Submit", { variant: "primary" }),
+    ]),
+  )
+  while ((await widget.event()).id !== "done") {}
+  widget.submit({ score })
+}
+```
+
+### Capabilities
+
+A live template that calls `widget.fetch` declares the hosts it needs in `capabilities`, as few as it can:
+`{ "https": { "hosts": ["api.github.com"] } }` (exact hosts, `*.example.com`, or `["*"]` only if it truly needs any
+host). Clients show the hosts on the widget. Requests are HTTPS only, at most 4 in flight and 10 a second, 15 s and
+2 MB each; failures reject with `{ kind, message }`. Step templates can't declare capabilities. Fetch from the widget
+only for live dashboards that must refresh while open; otherwise fetch the data yourself and pass it in `data`.
 
 ## Canvas and shader
 

@@ -2,9 +2,7 @@ export * as WidgetTemplates from "./templates.js"
 
 import type { StorageDomain } from "@opencode/plugin/effect/storage"
 import { Widget } from "@opencode/schema/widget"
-import { builtins, program, StepError, step, validateData, version } from "@opencode/widget"
-import { createHash } from "node:crypto"
-import { parseProgram } from "psychoscript"
+import { builtins, compile, program, StepError, step, validateData, version } from "@opencode/widget"
 import { Effect, Option, Schema } from "effect"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Widget.TemplateNotFoundError", {
@@ -62,29 +60,6 @@ const decodeOption = (value: unknown) =>
   )
 const builtin = new Map(builtins.map((template) => [template.name, decode(template)]))
 
-/**
- * A template's content address. Step templates use `@opencode/widget`'s `version`; a live template's also covers its
- * mode, so the same source and schema in the other mode is another version.
- */
-export const versionOf = (
-  source: string,
-  data: Widget.DataSchema,
-  mode: Widget.Mode,
-  capabilities?: Widget.Capabilities,
-) =>
-  mode === "step"
-    ? version(source, data)
-    : createHash("sha256")
-        .update(
-          program(source) +
-            "\n" +
-            JSON.stringify(data) +
-            "\nlive" +
-            (capabilities === undefined ? "" : "\n" + JSON.stringify(capabilities)),
-        )
-        .digest("hex")
-        .slice(0, 16)
-
 // An exact host name, or `*.` and a host name for any subdomain of it.
 const HOST = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
 
@@ -104,9 +79,6 @@ export function capabilitiesProblem(mode: Widget.Mode, capabilities: Widget.Capa
 // A version lives under its content address and never changes; `latest:<name>` names the newest saved one.
 const versionKey = (name: string, version: string) => `template:${name}:${version}`
 const latestKey = (name: string) => `latest:${name}`
-
-// Lines the prelude adds before a template's source in its program.
-const preludeLines = program("").split("\n").length - 1
 
 export const toProgram = (template: Widget.Template): Widget.Program => ({
   ...template,
@@ -164,10 +136,9 @@ export const make = (storage: StorageDomain) => {
       return yield* new InvalidDataError({ name: template.name, reason: errors.slice(0, 5).join("; ") })
     // A live program runs until it finishes, so the server only checks that it compiles (widgets-live.md).
     if (template.mode === "live") {
-      const parsed = parseProgram(program(template.source) + "\nreturn await __widget_live(__input())")
-      if (parsed.ok) return
-      const at = parsed.error.location ? ` at line ${parsed.error.location.line - preludeLines}` : ""
-      return yield* new InvalidDataError({ name: template.name, reason: `${parsed.error.message}${at}` })
+      const error = compile(template.source, "live")
+      if (error) return yield* new InvalidDataError({ name: template.name, reason: error.message })
+      return
     }
     yield* Effect.tryPromise({
       try: () => step(program(template.source), { phase: "init", data }),
@@ -187,7 +158,7 @@ export const make = (storage: StorageDomain) => {
     if (problem) return yield* invalid(problem)
     const template = decode({
       name: input.name,
-      version: versionOf(input.source, input.data, mode, input.capabilities),
+      version: version(input.source, input.data, mode, input.capabilities),
       mode,
       ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
       description: input.description.trim(),

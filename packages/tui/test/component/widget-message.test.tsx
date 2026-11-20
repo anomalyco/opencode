@@ -1,3 +1,4 @@
+import { builtins } from "@opencode/widget"
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
@@ -23,10 +24,15 @@ import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 async function render(
   name: WidgetFixtureName,
-  options: { width?: number; status?: WidgetInfo["status"]; program?: WidgetBackend["program"] } = {},
+  options: {
+    width?: number
+    status?: WidgetInfo["status"]
+    program?: WidgetBackend["program"]
+    widget?: Partial<WidgetInfo>
+  } = {},
 ) {
   const responses: WidgetResponse[] = []
-  const [message, setMessage] = createSignal(widgetFixtureMessage(name, options.status))
+  const [message, setMessage] = createSignal({ ...widgetFixtureMessage(name, options.status), ...options.widget })
   const backend: WidgetBackend = {
     program: options.program ?? ((template) => cached(template, () => Promise.reject(new Error("not a built-in")))),
     async respond(input) {
@@ -88,6 +94,14 @@ test("a live widget points to desktop and mobile instead of running", async () =
   using setup = await render("confirm", { program: async () => ({ program: "", mode: "live" }) })
   const current = await frame(setup, (current) => current.includes("Open this widget on desktop or mobile."))
   expect(current).not.toContain("Confirm")
+})
+
+test("the built-in live minigame shows the desktop and mobile fallback", async () => {
+  const minigame = builtins.find((template) => template.name === "minigame")!
+  using setup = await render("confirm", {
+    widget: { template: { name: minigame.name, version: minigame.version }, data: { title: "Tap the dots" } },
+  })
+  await frame(setup, (current) => current.includes("Open this widget on desktop or mobile."))
 })
 
 test("form renders every field kind", async () => {
