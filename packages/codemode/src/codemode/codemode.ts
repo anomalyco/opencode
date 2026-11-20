@@ -13,9 +13,9 @@ import {
   SnapshotError,
   type SnapshotHeader,
   toBytes,
-} from "psychoscript"
+} from "psychoscript/effect"
 
-export const SuspendError = Language.SuspendError
+export const SuspendError: typeof Language.SuspendError = Language.SuspendError
 export type SuspendError = Language.SuspendError
 export { fromBytes, scanTools, SnapshotError, toBytes }
 export type { Snapshot, SnapshotHeader }
