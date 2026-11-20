@@ -93,6 +93,8 @@ function fixture(
   })
 
   const history = { value: { visits: [] }, set: () => undefined }
+  // The tabs the last run saved for the strip, which the model writes with every inventory: none here.
+  const tabs = { value: { sessions: [] }, set: () => undefined }
 
   const fake = {
     id: "browser",
@@ -102,7 +104,7 @@ function fixture(
     screen: { current: () => undefined },
     links: { open: () => undefined },
     layout: { narrow: () => false, stored: () => [], state: () => "closed", open() {}, close() {}, side: { opened: () => false } },
-    stores: { history },
+    stores: { history, tabs },
   }
 
   // SAFETY: the model reads only these context fields, and these fields of a session and its server.
