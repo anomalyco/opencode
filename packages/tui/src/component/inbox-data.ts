@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@opencode/client"
+import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
 import { displayLabel } from "@opencode/util/session-title-fallback"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -14,7 +14,7 @@ export type InboxRow = {
   detail: "Review permission" | "Answer question" | "Working" | "Failed" | ""
 }
 export type InboxSection = { title: string; rows: InboxRow[] }
-type Group = "Needs attention" | "Working" | "Unread" | "Recent"
+type Group = "Needs attention" | "Pinned" | "Working" | "Unread" | "Recent"
 type Request = { id: string; sessionID: string; kind: "Approval" | "Question" }
 
 function start(session: SessionInfo) {
@@ -31,6 +31,7 @@ export function useInbox() {
   const [snapshot, setSnapshot] = createSignal<Request[]>([])
   const cold = createMemo(() => Map.groupBy(snapshot(), (request) => request.sessionID))
   const [asked, setAsked] = createStore<Record<string, number | undefined>>({})
+  const pins = usePins()
   onCleanup(client.event.on("permission.asked", (event) => setAsked(event.data.id, event.created)))
   onCleanup(client.event.on("permission.replied", (event) => setAsked(event.data.requestID, undefined)))
   onCleanup(client.event.on("form.created", (event) => setAsked(event.data.form.id, event.created)))
@@ -135,6 +136,7 @@ export function useInbox() {
   const sections = createMemo((): InboxSection[] => {
     const rows: Record<Group, { row: InboxRow; since: number }[]> = {
       "Needs attention": [],
+      Pinned: [],
       Working: [],
       Unread: [],
       Recent: [],
@@ -155,7 +157,15 @@ export function useInbox() {
       const unread =
         info.time.idle !== undefined && (info.time.viewed === undefined || info.time.idle > info.time.viewed)
       const request = approval ?? question
-      const group = request ? "Needs attention" : busy ? "Working" : unread ? "Unread" : "Recent"
+      const group = request
+        ? "Needs attention"
+        : pins.has(info.id)
+          ? "Pinned"
+          : busy
+            ? "Working"
+            : unread
+              ? "Unread"
+              : "Recent"
       const since = request
         ? (asked[request.id] ?? start(info) ?? info.time.updated)
         : busy
@@ -189,5 +199,93 @@ export function useInbox() {
     return Object.entries(rows).map(([title, items]) => ({ title, rows: items.map((item) => item.row) }))
   })
 
-  return { sections, loading: () => !indexed() && !sections().some((section) => section.rows.length > 0) }
+  return { sections, pins, loading: () => !indexed() && !sections().some((section) => section.rows.length > 0) }
+}
+
+const SpaceEvents = [
+  "experimental.kv.snapshot",
+  "experimental.kv.delta",
+  "experimental.kv.updated",
+  "experimental.kv.deleted",
+] as const
+type SpaceEvent = Extract<OpenCodeEvent, { type: (typeof SpaceEvents)[number] }>
+
+async function* frames(body: ReadableStream<Uint8Array>): AsyncGenerator<SpaceEvent> {
+  const decoder = new TextDecoder()
+  let buffer = ""
+  for await (const chunk of body) {
+    buffer += decoder.decode(chunk, { stream: true })
+    let end = buffer.indexOf("\n\n")
+    while (end >= 0) {
+      const data = buffer
+        .slice(0, end)
+        .split("\n")
+        .filter((line) => line.startsWith("data: "))
+        .map((line) => line.slice(6))
+        .join("\n")
+      buffer = buffer.slice(end + 2)
+      end = buffer.indexOf("\n\n")
+      if (!data) continue
+      const event = JSON.parse(data) as OpenCodeEvent
+      if ((SpaceEvents as readonly string[]).includes(event.type)) yield event as SpaceEvent
+    }
+  }
+}
+
+// Pinned sessions live in the server's experimental `pins` space, so every client on the server sees the same pins.
+// A dedicated stream carries only space events: a snapshot, or the changes since the last applied revision on reconnect.
+function usePins() {
+  const client = useClient()
+  const log = useLog({ component: "inbox-pins" })
+  const [pinned, setPinned] = createStore<Record<string, true | undefined>>({})
+  let revision: number | undefined
+  createEffect(() => {
+    if (client.connection.status() !== "connected") return
+    const controller = new AbortController()
+    onCleanup(() => controller.abort())
+    const url = client.url
+    if (!url) return
+    void (async () => {
+      // The shared event client multiplexes one stream, so space subscriptions open their own.
+      const query = new URLSearchParams([
+        ...SpaceEvents.map((type) => ["types", type]),
+        ["experimental.kv", revision === undefined ? "pins" : `pins:${revision}`],
+      ])
+      const response = await fetch(new URL(`/api/event?${query}`, url), {
+        headers: client.headers,
+        signal: controller.signal,
+      })
+      if (!response.ok || !response.body) throw new Error(`Pins stream failed: ${response.status}`)
+      const stream = frames(response.body)
+      for await (const event of stream) {
+        if (event.type === "experimental.kv.snapshot") {
+          setPinned(Object.fromEntries(event.data.entries.map((entry) => [entry.key, true as const])))
+          revision = event.data.revision
+        } else if (event.type === "experimental.kv.delta") {
+          batch(() => {
+            event.data.entries.forEach((entry) => setPinned(entry.key, true))
+            event.data.deleted.forEach((key) => setPinned(key, undefined))
+          })
+          revision = event.data.revision
+        } else if (event.type === "experimental.kv.updated") {
+          setPinned(event.data.key, true)
+          revision = event.data.revision
+        } else if (event.type === "experimental.kv.deleted") {
+          setPinned(event.data.key, undefined)
+          revision = event.data.revision
+        }
+      }
+    })().catch((error) => {
+      if (!controller.signal.aborted) log.warn("Pins stream failed", { error })
+    })
+  })
+  return {
+    has: (sessionID: string) => pinned[sessionID] === true,
+    toggle(sessionID: string) {
+      const input = { space: "pins", key: sessionID }
+      return pinned[sessionID]
+        ? client.api.experimental.kv.delete(input)
+        : client.api.experimental.kv.set({ ...input, value: true })
+    },
+  }
 }

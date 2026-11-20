@@ -98,6 +98,7 @@ export const Definitions = {
   "inbox.section.collapse": keybind("left", "Collapse Inbox section"),
   "inbox.section.expand": keybind("right", "Expand Inbox section"),
   "inbox.session.archive": keybind("alt+a", "Archive or restore Inbox session"),
+  "inbox.session.pin": keybind("alt+p", "Pin or unpin Inbox session"),
   "inbox.view.archived": keybind("tab", "Toggle archived Inbox sessions"),
   "pane.focus.left": keybind("<leader>left", "Focus session pane"),
   "pane.focus.right": keybind("<leader>right", "Focus right pane"),
