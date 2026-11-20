@@ -61,6 +61,41 @@ describe("Session.list", () => {
     }),
   )
 
+  it.effect("finds a session by its ID", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const created = yield* session.create({ location: project, title: "match one" })
+      yield* session.create({ location: project, title: "match two" })
+
+      const byID = yield* session.list({ directory: project.directory, search: created.id })
+      expect(byID.data.map((item) => item.id)).toEqual([created.id])
+    }),
+  )
+
+  it.effect("matches a session ID prefix", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const created = yield* session.create({ location: project, title: "match one" })
+      yield* session.create({ location: project, title: "match two" })
+
+      // The leading characters of an ID are a timestamp shared by sessions created close together, so a prefix
+      // selects a group of sessions rather than one.
+      const byPrefix = yield* session.list({ directory: project.directory, search: created.id.slice(0, 12) })
+      expect(byPrefix.data.map((item) => item.id)).toContain(created.id)
+    }),
+  )
+
+  it.effect("keeps a short title search from matching session IDs", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      yield* session.create({ location: project, title: "match one" })
+      yield* session.create({ location: project, title: "different" })
+
+      const result = yield* session.list({ directory: project.directory, search: "match" })
+      expect(result.data.map((item) => item.title)).toEqual(["match one"])
+    }),
+  )
+
   it.effect("rejects an invalid cursor", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
