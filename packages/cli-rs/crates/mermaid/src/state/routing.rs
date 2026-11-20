@@ -747,8 +747,9 @@ fn side_parallel(b: &mut Builder, rail_x: i32, approach: Option<Approach>) {
     b.departure(&from, from.left + from.width - 1, from.center_y, ROUNDED.left_t);
     b.horizontal(start_x, rail_x - 1, start_y, 1);
     b.ch(rail_x, start_y, if step == 1 { "╮" } else { "╯" });
+    // The rows strictly between; none when the transition leaves on the row it arrives.
     let mut y = start_y + step;
-    while y != end_y {
+    while (end_y - y) * step > 0 {
         b.ch(rail_x, y, "│");
         y += step;
     }

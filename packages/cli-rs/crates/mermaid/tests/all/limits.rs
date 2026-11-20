@@ -31,3 +31,11 @@ fn far_gantt_axes_end() {
         assert!(matches!(render(&source, 80, &palette()), Rendered::Diagram(_)), "{source}");
     }
 }
+
+/// A transition routed beside the states that leaves on the row it arrives on still ends.
+#[test]
+fn a_side_route_on_one_row_ends() {
+    let source = "stateDiagram-v2\n  state Session {\n    state Open {\n      [*] --> Clean\n      Clean --> Dirty: edit\n      \
+                  Dirty --> Clean: save\n    }\n  }\n  Session --> [*]\n  Clean😀 --> Dirty: edit\n  Clean --> Dirty: edit";
+    assert!(matches!(render(source, 80, &palette()), Rendered::Diagram(_)));
+}
