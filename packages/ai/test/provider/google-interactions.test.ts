@@ -1,8 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Stream } from "effect"
-import { ai, isRetryable } from "../../src/effect.js"
+import { ai, isRetryable, Media, Message } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/testing.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
@@ -15,6 +16,60 @@ const generate = (...events: ReadonlyArray<unknown>) =>
   LLMClient.generate(ai.request({ model, prompt: "Hi" })).pipe(Effect.provide(fixedResponse(sseEvents(...events))))
 
 describe("Google Interactions", () => {
+  it.effect("sends Gemini safety settings in the Interactions request", () =>
+    Effect.gen(function* () {
+      const bodies: unknown[] = []
+      const layer = dynamicResponse((input) =>
+        Effect.sync(() => {
+          bodies.push(JSON.parse(input.text))
+          return input.respond(
+            sseEvents({ event_type: "interaction.completed", interaction: { status: "completed" } }),
+            {
+              headers: { "content-type": "text/event-stream" },
+            },
+          )
+        }),
+      )
+      const configured = Google.configure({
+        apiKey: "test",
+        baseURL: "https://generativelanguage.test/v1beta",
+        providerOptions: {
+          safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_LOW_AND_ABOVE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+          ],
+        },
+      }).interactions("gemini-3.8-flash")
+      yield* LLMClient.generate(ai.request({ model: configured, prompt: "Hi" })).pipe(Effect.provide(layer))
+
+      expect(bodies).toHaveLength(1)
+      expect(bodies[0]).toHaveProperty("safety_settings", [
+        { type: "harassment", threshold: "block_low_and_above" },
+        { type: "hate_speech", threshold: "block_only_high" },
+      ])
+      expect(bodies[0]).not.toHaveProperty("safetySettings")
+    }),
+  )
+
+  it.effect("lowers DOCX as a document and rejects an undocumented Office MIME type", () =>
+    Effect.gen(function* () {
+      const docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      const docm = "application/vnd.ms-word.document.macroenabled.12"
+      const request = (mime: string) => ai.request({ model, prompt: Message.media(Media.base64("UEsDBA==", mime)) })
+
+      const compiled = yield* compileRequest(request(docx))
+      expect(compiled.body.input).toEqual([
+        { type: "user_input", content: [{ type: "document", mime_type: docx, data: "UEsDBA==" }] },
+      ])
+
+      const error = yield* compileRequest(request(docm)).pipe(Effect.flip)
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidRequest",
+        message: `Google Interactions does not support ${docm} document input`,
+      })
+    }),
+  )
+
   it.effect("classifies premature EOF before interaction.completed as an incomplete stream", () =>
     Effect.gen(function* () {
       const error = yield* generate(
