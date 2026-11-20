@@ -1,3 +1,5 @@
+/// <reference path="../../markdown.d.ts" />
+
 export * as WidgetTools from "./widget.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
@@ -7,22 +9,27 @@ import { optional } from "@opencode/schema/schema"
 import { Flag } from "../../flag.js"
 import { Permission } from "../../permission.js"
 import { Widget } from "../../widget.js"
+import { Skill } from "../../skill.js"
+import { AbsolutePath } from "../../schema.js"
+import skillContent from "../../plugin/skill/widgets.md" with { type: "text" }
 
 export const name = "widget"
 export const templateName = "widget_template"
 
 export const description = `Show the user an interactive widget inline in the conversation: option cards with image carousels, a form with text inputs, sliders, checkboxes and selects, or a confirmation. The user's answer arrives as your next message.
 
-Built-in templates (see their data schemas with widget_template action "list"):
+Use it when the user should pick between things they should see, fill several structured inputs at once, or approve something consequential. Load the "widgets" skill for when and how to use it, data examples and writing templates.
+
+Built-in templates (data schemas via widget_template action "list"):
 - suggestions: 2 or 3 options, each with 1 to 3 images and an optional note; submits { choice, index, note? }.
 - form: text, number (slider), boolean (checkbox) and select fields with a submit button; submits { [key]: value }.
 - confirm: a yes/no question with markdown details; submits { confirmed }.
 
 Usage notes:
-- \`data\` must match the template's JSON Schema; mismatches come back as the tool error.
-- Image paths may be https URLs, data: URIs or paths relative to the session directory.
-- After the widget is shown, end your turn unless there is unrelated work to do. Do not ask the same thing again in text.
-- For a layout no template fits, write one with widget_template.`
+- \`data\` is a JSON object (not a string) matching the template's JSON Schema; fix mismatches from the tool error and call again.
+- Image paths may be https URLs, data: URIs or paths relative to the session directory. Never invent image URLs.
+- Show the widget early instead of researching for many steps first.
+- After the widget is shown, end your turn unless there is unrelated work to do. Do not ask the same thing again in text.`
 
 export const templateDescription = `List, read and save widget templates for the widget tool.
 
@@ -30,30 +37,10 @@ export const templateDescription = `List, read and save widget templates for the
 - action "get": one template including its source; read "suggestions" or "form" before writing your own and copy their patterns.
 - action "save": store a template (name, description, data, source, example). Saving an existing name creates a new version that becomes the latest; built-in names cannot be overwritten. \`example\` is data that is checked against \`data\` and rendered once before the template is stored.
 
-A template's source is confined JavaScript (no imports, timers, randomness or I/O) defining top-level functions:
-  function init(data) { return { picked: null } }            // optional, the initial state
-  function view(state, data) { return ui.column({}, [...]) } // required, returns the view tree
-  function update(state, event, data) {                       // optional, returns the next state
-    if (event.id === "choose") return submit({ picked: state.picked }, state)
-    return { ...state, picked: event.value }
-  }
-State and data are plain JSON. update may return submit(value, state) to send \`value\` to you, or dismiss(state).
+A template's source is confined JavaScript defining init(data), view(state, data) and update(state, event, data) with the prelude's ui.* node builders, submit(value, state) and dismiss(state). Load the "widgets" skill for the full builder reference before writing one.`
 
-Node builders (props are optional objects; tone is default|muted|accent|success|warning|error; gap is 0..3):
-  ui.column(props, children)  { gap, align: start|center|end|stretch }
-  ui.row(props, children)     { gap, align: start|center|end, wrap }
-  ui.text(text, props)        { style: title|body|caption|code, tone }
-  ui.markdown(text)
-  ui.image(src, props)        { alt, aspect }  (aspect = width / height)
-  ui.carousel(props, children){ id, index }    one child at a time; with id it sends change with the page index
-  ui.card(props, children)    { id, selected } with id it sends press
-  ui.button(id, label, props) { variant: primary|secondary|danger, disabled } sends press
-  ui.checkbox(id, label, checked, props) sends change with a boolean
-  ui.slider(id, { label, value, min, max, step }) sends change with a number
-  ui.select(id, [{ value, label, description }], { label, value, multiple }) sends change with a string or string[]
-  ui.input(id, value, { label, placeholder, multiline }) sends change with a string
-  ui.divider()
-Children may contain null or false (for \`cond && node\`) and nested arrays. Events are { id, type: "press" | "change", value? }.`
+export const skillDescription =
+  "Use when showing the user an interactive widget (option cards with images, forms with sliders, checkboxes and selects, confirmations) with the widget tool, or writing a widget template: when a widget beats text, how to fill each built-in template, and the template language."
 
 export const Input = Schema.Struct({
   template: Schema.String.annotate({ description: 'Template name, such as "suggestions", "form" or "confirm"' }),
@@ -87,6 +74,18 @@ export const Plugin = {
     const widgets = yield* Widget.Service
     const permission = yield* Permission.Service
     if (!(yield* Flag.enabled("widgets"))) return
+
+    yield* ctx.skill.transform((editor) => {
+      editor.add(
+        Skill.Info.make({
+          id: Skill.ID.make("widgets"),
+          name: Skill.Name.make("Widgets"),
+          description: skillDescription,
+          path: AbsolutePath.make("skill://widgets/SKILL.md"),
+          content: skillContent,
+        }),
+      )
+    })
 
     yield* ctx.tool
       .transform((editor) => {

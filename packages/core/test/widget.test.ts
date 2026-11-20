@@ -1,5 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import { Skill } from "@opencode/core/skill"
 import { builtins, program, version } from "@opencode/widget"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
@@ -30,9 +32,25 @@ import { promptLocationNode } from "./fixture/prompt-location"
 const assertions: Permission.AssertInput[] = []
 const permission = permissionLayer({ assert: (input) => Effect.sync(() => assertions.push(input)) })
 
+const skills: Skill.Info[] = []
+const skill: Context["skill"] = {
+  list: () => Effect.die("unused skill.list"),
+  reload: () => Effect.die("unused skill.reload"),
+  transform: (callback) =>
+    Effect.sync(() =>
+      callback({
+        add: (info) => skills.push(info),
+        list: () => [],
+        get: () => undefined,
+        update: () => {},
+        remove: () => {},
+      }),
+    ).pipe(Effect.as({ dispose: Effect.void })),
+}
+
 const widgetToolNode = makeLocationNode({
   name: "test/widget-tool-plugin",
-  layer: Layer.effectDiscard(registerToolPlugin(WidgetTools.Plugin)),
+  layer: Layer.effectDiscard(registerToolPlugin(WidgetTools.Plugin, { skill })),
   deps: [Tool.node, Permission.node, Widget.node, Flag.node],
 })
 
@@ -144,6 +162,13 @@ describe("Widget templates", () => {
 })
 
 describe("widget tool", () => {
+  it.effect("registers the widgets skill with the tools", () =>
+    Effect.sync(() => {
+      expect(skills[0]).toMatchObject({ id: "widgets", name: "Widgets", path: "skill://widgets/SKILL.md" })
+      expect(skills[0]?.content).toContain("## When to show a widget")
+    }),
+  )
+
   it.effect("posts an open widget message linked to the tool call", () =>
     Effect.gen(function* () {
       assertions.length = 0
