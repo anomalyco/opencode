@@ -393,8 +393,12 @@ export const flattenToolRequest = (request: LLMRequest) => {
   }
 }
 
-const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(part: Part): Part =>
-  part.namespace === undefined ? part : { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
+const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(part: Part): Part => {
+  // Models sometimes call names no tool declares, such as a Code Mode path like `a.b.c`. Several providers (OpenAI
+  // Chat Completions, Bedrock Converse) reject those characters when the call is replayed, so replace them.
+  const name = (part.namespace === undefined ? part.name : `${part.namespace}_${part.name}`).replace(/[^a-zA-Z0-9_-]/g, "_") || "_"
+  return name === part.name && part.namespace === undefined ? part : { ...part, name, namespace: undefined }
+}
 
 const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
   next.every((part, index) => part === previous[index])

@@ -360,7 +360,7 @@ const layer = Layer.effect(
                   }
                   catalogs.set(key, entry)
                 }
-                return { tool, catalog: entry.value, definition: entry.definition }
+                return { tool, tools: inventory.tools, catalog: entry.value, definition: entry.definition }
               })()
           return {
             ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog }),
@@ -394,6 +394,26 @@ const layer = Layer.effect(
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
+              // Weaker models sometimes call a Code Mode tool at the top level, by its path or flattened name. When
+              // this request offered execute, run it as a program would and say how to call it next time.
+              const offered = codemode && (!input.definitions || input.definitions.has("execute"))
+              const id = name.replace(/^tools\./, "").replace(/[^a-zA-Z0-9_-]/g, "_")
+              const fallback = offered ? codemode.tools.get(id) : undefined
+              if (fallback) {
+                const path = CodeModeTool.qualifiedName(fallback)
+                const note = `Note: ${path} is a Code Mode tool, so it is only callable inside execute. This call ran anyway; next time call it there, as \`await tools.${path}(input)\`.`
+                const result = yield* executeTool(fallback, id, event.input, context).pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new Tool.Error({
+                        message: `${note}\n\n${error.message}`,
+                        error: error.error,
+                        ...(error.metadata === undefined ? {} : { metadata: error.metadata }),
+                      }),
+                  ),
+                )
+                return { ...result, content: [{ type: "text" as const, text: note }, ...result.content] }
+              }
               return yield* new Tool.Error({
                 message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
               })

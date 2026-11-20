@@ -63,6 +63,26 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("replaces characters providers reject in replayed tool call names", () =>
+    Effect.gen(function* () {
+      const call = ToolCallPart.make({ id: "call_1", name: "opencode.session.search", input: {} })
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([call]),
+            Message.tool({ id: call.id, name: call.name, result: "unknown tool", resultType: "error" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages[0]).toMatchObject({
+        role: "assistant",
+        tool_calls: [{ id: "call_1", function: { name: "opencode_session_search" } }],
+      })
+    }),
+  )
+
   it.effect("omits stream usage options when compatibility disables them", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

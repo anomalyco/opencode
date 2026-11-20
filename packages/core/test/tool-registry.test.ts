@@ -625,6 +625,27 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("runs a Code Mode tool called at the top level and says to call it inside execute", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make() }, { namespace: "acme.tools" })
+      const snapshot = yield* service.snapshot()
+      for (const name of ["acme.tools.echo", "tools.acme.tools.echo", "acme_tools_echo"]) {
+        const result = yield* snapshot.execute(call(name))
+        expect(result.output).toEqual({ text: name })
+        expect(result.content[0]).toEqual({
+          type: "text",
+          text: expect.stringContaining("call it there, as `await tools.acme.tools.echo(input)`"),
+        })
+      }
+      // A tool this request doesn't offer stays unknown.
+      const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
+      expect((yield* denied.execute(call("acme.tools.echo")).pipe(Effect.flip)).message).toContain(
+        'No tool named "acme.tools.echo"',
+      )
+    }),
+  )
+
   it.effect("logs invalid tool definitions without dropping healthy tools", () => {
     const output: unknown[] = []
     const logger = Logger.map(Logger.formatStructured, (entry) => {
