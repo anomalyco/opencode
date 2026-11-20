@@ -13837,6 +13837,209 @@
         "x-websocket": true
       }
     },
+    "/api/experimental/machine": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.machine.list",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Machine.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List known machines and whether each is paired and online. Behind the machines flag. Experimental: may change without compatibility guarantees.",
+        "summary": "List machines"
+      },
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.machine.add",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Machine.Invite"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MachineNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Add a machine by name if it does not exist, then create a single-use join string carrying the given reach addresses. Behind the machines flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Add or invite a machine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Machine.AddPayload"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/machine/{name}": {
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.machine.remove",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Forget a machine by name, closing any live link and revoking its key. Behind the machines flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Remove a machine"
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -21246,6 +21449,103 @@
           }
         },
         "required": ["_tag", "location", "message"],
+        "additionalProperties": false
+      },
+      "Machine.AddPayload": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "reach": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Machine.Reach"
+            }
+          },
+          "replace": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["name", "reach"],
+        "additionalProperties": false
+      },
+      "Machine.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "paired": {
+            "type": "boolean"
+          },
+          "os": {
+            "type": "string"
+          },
+          "arch": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "online", "paired"],
+        "additionalProperties": false
+      },
+      "Machine.Invite": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "join": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["name", "join", "expires"],
+        "additionalProperties": false
+      },
+      "Machine.Reach": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["url"]
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "url"],
+        "additionalProperties": false
+      },
+      "MachineNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["MachineNotFoundError"]
+          },
+          "machine": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "machine", "message"],
         "additionalProperties": false
       },
       "Mcp.LocalConfigEncoded": {

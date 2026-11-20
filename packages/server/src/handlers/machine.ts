@@ -1,17 +1,21 @@
 import { NodeHttpServerRequest } from "@effect/platform-node"
 import { type WebSocket, WebSocketServer } from "@effect/platform-node-shared/NodeWS"
+import { Environment } from "@opencode/core/environment/index"
 import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Frames } from "@opencode/core/machine/frames"
 import { Identity } from "@opencode/core/machine/identity"
+import { Join } from "@opencode/core/machine/join"
 import { Link } from "@opencode/core/machine/link"
 import { Machines } from "@opencode/core/machine/machines"
 import { AbsolutePath } from "@opencode/core/schema"
-import { isWebSocketUpgrade } from "@opencode/protocol/groups/machine"
+import { ConflictError, ForbiddenError, InvalidRequestError, MachineNotFoundError } from "@opencode/protocol/errors"
+import { isWebSocketUpgrade, type MachineAddPayload } from "@opencode/protocol/groups/machine"
 import { Global } from "@opencode/util/global"
 import { Context, Effect, Latch, Option, Scope, Semaphore } from "effect"
 import { HttpMiddleware, type HttpServerRequest, HttpServerResponse } from "effect/http"
+import { HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { IncomingMessage } from "node:http"
 
@@ -256,4 +260,47 @@ export const makeMachineLink = Effect.gen(function* () {
       Effect.provide(services),
     )
   })
+})
+
+/** `machine.*` HTTP routes in the `server.experimental` group. Every route needs the `machines` flag. */
+export const makeMachine = Effect.gen(function* () {
+  const enabled = yield* machinesEnabled
+  const machines = yield* Machines.Service
+  const requireEnabled = Effect.gen(function* () {
+    if (yield* enabled) return
+    return yield* new ForbiddenError({ message: "Machines are disabled; enable experimental.machines" })
+  })
+
+  return {
+    list: Effect.fn("MachineHandler.list")(function* () {
+      yield* requireEnabled
+      return { data: yield* machines.list() }
+    }),
+    add: Effect.fn("MachineHandler.add")(function* (payload: MachineAddPayload) {
+      yield* requireEnabled
+      const id = yield* machines.add(payload.name).pipe(
+        Effect.catchTag("Machines.AlreadyExists", (error) => Effect.succeed(error.machine)),
+        Effect.catchTag("Machines.InvalidName", (error) =>
+          Effect.fail(new InvalidRequestError({ message: error.message, kind: "invalid_name", field: "name" })),
+        ),
+      )
+      const join = yield* machines.invite(id, { reach: payload.reach, replace: payload.replace }).pipe(
+        Effect.catchTags({
+          "Machines.AlreadyPaired": (error) =>
+            Effect.fail(new ConflictError({ message: error.message, resource: error.machine })),
+          "Machines.NotFound": (error) =>
+            Effect.fail(new MachineNotFoundError({ machine: error.machine, message: error.message })),
+          "Identity.InvalidKey": (error) => Effect.die(error),
+        }),
+      )
+      const decoded = Option.getOrUndefined(Join.decode(join))
+      if (!decoded) return yield* Effect.die(new Error("Server produced an unreadable join string"))
+      return { data: { name: id, join, expires: decoded.expires } }
+    }),
+    remove: Effect.fn("MachineHandler.remove")(function* (name: string) {
+      yield* requireEnabled
+      yield* machines.remove(Environment.ID.make(name))
+      return HttpApiSchema.NoContent.make()
+    }),
+  }
 })

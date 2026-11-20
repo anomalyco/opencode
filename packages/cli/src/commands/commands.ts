@@ -2,6 +2,7 @@ import { Argument, Flag, GlobalFlag } from "effect/cli"
 import { Schema } from "effect"
 import { CliFlag } from "../framework/flag"
 import { Spec } from "../framework/spec"
+import { parseServerURL } from "../services/service-urls"
 import { Updater } from "../services/updater"
 
 export const PrintLogs = GlobalFlag.Setting("print-logs")({
@@ -33,6 +34,16 @@ const ServerParams = {
   standalone: Standalone.flag,
   server: Server.flag,
 }
+
+const serverURLFlag = (description: string) =>
+  Flag.String("url").pipe(
+    Flag.withDescription(description),
+    Flag.mapTryCatch(
+      parseServerURL,
+      () => "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment",
+    ),
+    Flag.optional,
+  )
 
 const PermissionParams = {
   auto: Flag.Boolean("auto").pipe(
@@ -545,22 +556,35 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       description: "Reload configuration",
       globalFlags: ServerFlags,
     }),
+    Spec.make("machine", {
+      description: "Manage remote machines",
+      commands: [
+        Spec.make("add", {
+          description: "Add a machine and print a one-time join string",
+          params: {
+            name: Argument.String("name").pipe(Argument.withDescription("Name of the machine")),
+            url: serverURLFlag("Use an external HTTP(S) server URL in the join string"),
+            replace: Flag.Boolean("replace").pipe(
+              Flag.withDescription("Replace the key of an already-paired machine"),
+              Flag.withDefault(false),
+            ),
+          },
+        }),
+        Spec.make("list", {
+          description: "List machines",
+        }),
+        Spec.make("remove", {
+          description: "Remove a machine",
+          params: {
+            name: Argument.String("name").pipe(Argument.withDescription("Name of the machine")),
+          },
+        }),
+      ],
+    }),
     Spec.make("pair", {
       description: "Print one-time links to connect a browser or app",
       params: {
-        url: Flag.String("url").pipe(
-          Flag.withDescription("Use an external HTTP(S) server URL in pairing links"),
-          Flag.mapTryCatch(
-            (value) => {
-              const url = new URL(value)
-              if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash)
-                throw new Error("Invalid pairing URL")
-              return url.href.replace(/\/+$/, "")
-            },
-            () => "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment",
-          ),
-          Flag.optional,
-        ),
+        url: serverURLFlag("Use an external HTTP(S) server URL in pairing links"),
         remote: Flag.Boolean("remote").pipe(
           Flag.withDescription(
             "Pair through the OpenTunnel remote address, enabling remote access if needed (exposes the server to the internet)",
