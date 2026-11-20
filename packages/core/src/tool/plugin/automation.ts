@@ -84,7 +84,7 @@ export const Plugin = {
         editor.namespace({
           name: "automation",
           description:
-            "Schedule recurring or one-off jobs (cron jobs, timers, reminders). Each one runs a prompt or Code Mode action at a time, every interval, on a cron or when a connected MCP server pushes an event. Useful for reminders, following up on something later, recurring checks and reports, and reacting to outside events.",
+            "Schedule recurring or one-off jobs (cron jobs, timers, reminders). Each one runs a prompt or Code Mode action at a time, every interval, on a cron or when a connected MCP server pushes an event. Use these when the user asks you to schedule, remind, repeat or check back on something, instead of waiting, sleeping or polling.",
         })
         editor.add({
           name: "create",
