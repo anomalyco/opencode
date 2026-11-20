@@ -851,7 +851,6 @@ dependencies = [
  "regex",
  "serde_json",
  "unicode-segmentation",
- "unicode-width",
 ]
 
 [[package]]

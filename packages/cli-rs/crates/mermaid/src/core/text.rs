@@ -2,7 +2,6 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 
 use super::entities::ENTITIES;
 
@@ -16,14 +15,55 @@ pub fn width(value: &str) -> i32 {
     value.graphemes(true).map(grapheme_width).sum()
 }
 
-/// A grapheme's width as `string-width` counts it: two for wide characters and emoji (by its first code point),
-/// none for zero-width ones, else one.
+/// A grapheme's width as `string-width` 7 counts it: none when it starts with a control, zero-width, combining or
+/// variation character, or is one default-ignorable character; two when it starts with a wide character or holds an
+/// emoji, a flag or a keycap; else one.
 pub fn grapheme_width(grapheme: &str) -> i32 {
-    let Some(first) = grapheme.chars().next() else { return 0 };
-    if super::wide::is_wide(first) {
-        return 2;
+    let mut chars = grapheme.chars();
+    let Some(first) = chars.next() else { return 0 };
+    let rest = chars.as_str();
+    if ignored(first) || (rest.is_empty() && default_ignorable(first)) {
+        return 0;
     }
-    i32::from(grapheme.width() > 0)
+    // Hangul fillers are wide unless alone, when they are default-ignorable.
+    let wide = super::wide::is_wide(first) || matches!(first, '\u{115f}' | '\u{3164}');
+    let keycap =
+        "#*0123456789".contains(first) && (rest.starts_with('\u{20e3}') || rest.starts_with("\u{fe0f}\u{20e3}"));
+    if wide || keycap || rest.chars().any(emoji) || flag(grapheme) { 2 } else { 1 }
+}
+
+/// An emoji after the first character: `is_wide` without the East Asian wide letters and ideographs.
+fn emoji(c: char) -> bool {
+    let code = u32::from(c);
+    super::wide::is_wide(c) && (code < 0x1100 || (0x2000..0x2e80).contains(&code) || (0x1f000..0x20000).contains(&code))
+        || matches!(code, 0x3030 | 0x303d | 0x3297 | 0x3299)
+}
+
+/// The regional indicator pairs `emoji-regex` matches, by their letters.
+const FLAGS: &str = "ACADAEAFAGAIALAMAOAQARASATAUAWAXAZBABBBDBEBFBGBHBIBJBLBMBNBOBQBRBSBTBVBWBYBZCACCCDCFCGCHCICKCLCMCNCOCPCQCRCUCVCWCXCYCZDEDGDJDKDMDODZEAECEEEGEHERESETEUFIFJFKFMFOFRGAGBGDGEGFGGGHGIGLGMGNGPGQGRGSGTGUGWGYHKHMHNHRHTHUICIDIEILIMINIOIQIRISITJEJMJOJPKEKGKHKIKMKNKPKRKWKYKZLALBLCLILKLRLSLTLULVLYMAMCMDMEMFMGMHMKMLMMMNMOMPMQMRMSMTMUMVMWMXMYMZNANCNENFNGNINLNONPNRNUNZOMPAPEPFPGPHPKPLPMPNPRPSPTPWPYQARERORSRURWSASBSCSDSESGSHSISJSKSLSMSNSOSRSSSTSVSXSYSZTATCTDTFTGTHTJTKTLTMTNTOTRTTTVTWTZUAUGUMUNUSUYUZVAVCVEVGVIVNVUWFWSXKYEYTZAZMZW";
+
+fn flag(grapheme: &str) -> bool {
+    let letter =
+        |c: char| char::from_u32(u32::from(c).wrapping_sub(0x1f1e6) + u32::from(b'A')).filter(char::is_ascii_uppercase);
+    let letters: Vec<Option<char>> = grapheme.chars().map(letter).collect();
+    letters.windows(2).any(|pair| match pair {
+        [Some(a), Some(b)] => FLAGS.as_bytes().chunks(2).any(|code| code == [*a as u8, *b as u8]),
+        _ => false,
+    })
+}
+
+fn ignored(c: char) -> bool {
+    matches!(u32::from(c),
+        0..=0x1f | 0x7f..=0x9f | 0x200b..=0x200f | 0xfeff | 0x300..=0x36f | 0x1ab0..=0x1aff | 0x1dc0..=0x1dff
+        | 0x20d0..=0x20ff | 0xfe20..=0xfe2f | 0xfe00..=0xfe0f)
+}
+
+/// Unicode's `Default_Ignorable_Code_Point`.
+fn default_ignorable(c: char) -> bool {
+    matches!(u32::from(c),
+        0xad | 0x34f | 0x61c | 0x115f..=0x1160 | 0x17b4..=0x17b5 | 0x180b..=0x180f | 0x200b..=0x200f
+        | 0x202a..=0x202e | 0x2060..=0x206f | 0x3164 | 0xfe00..=0xfe0f | 0xfeff | 0xffa0 | 0xfff0..=0xfff8
+        | 0x1bca0..=0x1bca3 | 0x1d173..=0x1d17a | 0xe0000..=0xe0fff)
 }
 
 pub fn graphemes(value: &str) -> impl Iterator<Item = &str> {
@@ -235,7 +275,42 @@ fn code_point(code: u32) -> char {
 #[cfg(test)]
 mod tests {
     use super::super::entities::{CASES, ENTITIES};
-    use super::decode;
+    use super::{decode, grapheme_width};
+
+    /// Widths `string-width` 7 gives each grapheme.
+    #[test]
+    fn measures_graphemes_as_string_width() {
+        for (grapheme, width) in [
+            ("\u{0}", 0),
+            ("\u{7}", 0),
+            ("\u{85}", 0),
+            ("\u{483}", 1),
+            ("\u{600}", 1),
+            ("\u{ad}", 0),
+            ("\u{3164}", 0),
+            ("\u{3164}\u{301}", 2),
+            ("\u{d7b0}", 1),
+            ("\u{e0067}", 0),
+            ("\u{e0067}\u{301}", 1),
+            ("\u{e31}", 1),
+            ("\u{fe0f}\u{1f3fb}", 0),
+            ("\u{1f1e9}", 1),
+            ("\u{1f1e9}\u{1f1f0}", 2),
+            ("\u{1f1f0}\u{1f1e9}", 1),
+            ("#\u{20e3}", 2),
+            ("#\u{fe0f}\u{20e3}", 2),
+            ("1\u{fe0f}", 1),
+            ("\u{a9}", 2),
+            ("a\u{1f3fb}", 2),
+            ("\u{600}\u{4e2d}", 1),
+            ("\u{600}\u{1f600}", 2),
+            ("\u{1f3f4}\u{e0067}\u{e0062}\u{e007f}", 2),
+            ("\u{4e2d}", 2),
+            ("e\u{301}", 1),
+        ] {
+            assert_eq!(grapheme_width(grapheme), width, "{:?}", grapheme.escape_unicode().to_string());
+        }
+    }
 
     #[test]
     fn decodes_every_entity_of_the_table() {
