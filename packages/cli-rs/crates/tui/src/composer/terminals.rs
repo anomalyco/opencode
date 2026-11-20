@@ -111,7 +111,14 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
                 }));
             })
         };
-        inner.body.add(&row(tui, theme, state, Label { text: label, status: None, truncate: true }, hover, click));
+        inner.body.add(&row(
+            tui,
+            theme,
+            state,
+            Label { text: label, status: None, truncate: true, gap: 0 },
+            hover,
+            click,
+        ));
     }
     Vec::new()
 }

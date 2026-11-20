@@ -18,8 +18,16 @@ pub(super) struct Entry {
     agent: String,
     title: String,
     running: bool,
+    /// Running jobs in its tree. A subagent stays active while any of them runs.
+    jobs: Vec<String>,
     current: bool,
     prefix: String,
+}
+
+impl Entry {
+    fn active(&self) -> bool {
+        self.running || !self.jobs.is_empty()
+    }
 }
 
 #[derive(Default)]
@@ -72,13 +80,17 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
         .data
         .read(|state| {
             let sessions = state.sessions();
+            let jobs = state.jobs(&state.root(&inner.session));
             family(&sessions, &inner.session)
                 .into_iter()
-                .map(|(session, prefix)| entry(session, prefix, &inner.session, state.status(&session.id)))
+                .map(|(session, prefix)| Entry {
+                    jobs: state.owned_jobs(&jobs, &session.id).iter().map(|job| job.id().to_owned()).collect(),
+                    ..entry(session, prefix, &inner.session, state.status(&session.id))
+                })
                 .collect::<Vec<_>>()
         })
         .into_iter()
-        .filter(|entry| entry.running == filter)
+        .filter(|entry| entry.active() == filter)
         .collect();
     let mut state = inner.subagents.borrow_mut();
     state.entries = entries;
@@ -138,16 +150,23 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             })
             .bind(Bind::Key("ctrl+a".to_owned())),
         inner.command("composer.subagent.interrupt", "Interrupt subagent", |inner, tui| {
-            let session = {
+            let entry = {
                 let state = inner.subagents.borrow();
-                state.entries.get(state.selected).filter(|entry| entry.running).map(|entry| entry.session.clone())
+                state.entries.get(state.selected).cloned()
             };
-            let Some(session) = session else { return };
-            let client = tui.data.client().clone();
+            let Some(entry) = entry else { return };
+            let data = tui.data.clone();
             tui.app.runtime().spawn(async move {
-                let input = SessionInterruptInput { session_id: session, resume: None };
-                if let Err(error) = client.session_interrupt(&input).await {
-                    log::warn!("failed to interrupt the subagent: {error}");
+                if entry.running {
+                    let input = SessionInterruptInput { session_id: entry.session, resume: None };
+                    if let Err(error) = data.client().session_interrupt(&input).await {
+                        log::warn!("failed to interrupt the subagent: {error}");
+                    }
+                }
+                for job in entry.jobs {
+                    if let Err(error) = data.job_cancel(&job).await {
+                        log::warn!("failed to cancel the subagent's job: {error}");
+                    }
                 }
             });
         }),
@@ -198,13 +217,14 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
                 text: format!("{}{}: {}", entry.prefix, entry.agent, entry.title),
                 status: entry.running.then(|| "Running".to_owned()),
                 truncate: false,
+                gap: 0,
             },
             hover,
             click,
         ));
     }
     let mut hints = Vec::new();
-    if entries.get(selected).is_some_and(|entry| entry.running) {
+    if entries.get(selected).is_some_and(Entry::active) {
         hints.push(("interrupt".to_owned(), tui.keymap.shortcut("composer.subagent.interrupt").unwrap_or_default()));
     }
     hints.push((
@@ -235,6 +255,7 @@ fn entry(session: &SessionInfo, prefix: String, current: &SessionID, status: Ses
         agent,
         title,
         running: status == SessionStatus::Running,
+        jobs: Vec::new(),
         prefix,
     }
 }

@@ -55,6 +55,7 @@ struct Footer {
 struct Model {
     prompt: PromptInput,
     width: u16,
+    scripts: usize,
     subagents: usize,
     shells: usize,
     goal: Option<Rc<Goal>>,
@@ -94,10 +95,11 @@ impl Footer {
             }
         }
         let last = self.last.as_ref();
-        let live = last.is_some_and(|last| last.running + last.shells > 0);
+        let live = last.is_some_and(|last| last.scripts + last.running + last.shells > 0);
         let model = Model {
             prompt: input.prompt.unwrap_or(PromptInput { shell: false, show_details: true }),
             width: self.width,
+            scripts: last.map_or(0, |last| last.scripts),
             subagents: last.map_or(0, |last| last.running),
             shells: last.map_or(0, |last| last.shells),
             goal: input.session_id.as_deref().and_then(|session| goals.goal(session)),
@@ -133,7 +135,10 @@ fn view(model: &Model, session: &str) -> Node {
     let plural =
         |count: usize, what: &str| (count > 0).then(|| format!("{count} {what}{}", if count == 1 { "" } else { "s" }));
     let live: Vec<String> =
-        [plural(model.subagents, "subagent"), plural(model.shells, "shell")].into_iter().flatten().collect();
+        [plural(model.scripts, "script"), plural(model.subagents, "subagent"), plural(model.shells, "shell")]
+            .into_iter()
+            .flatten()
+            .collect();
     let (usage, shortcuts) = match model.status.is_empty() {
         true => (false, model.width >= 44),
         false => layout(
@@ -159,7 +164,7 @@ fn view(model: &Model, session: &str) -> Node {
             let mut spans: Vec<Span> =
                 model.keys.child.iter().map(|key| Span::new(format!("{key} ")).fg("text.base")).collect();
             spans.push(Span::new(live.join(" · ")));
-            let tab = if model.subagents > 0 { "subagents" } else { "shell" };
+            let tab = crate::composer::busy_tab(model.scripts, model.subagents, model.shells);
             status.push(
                 text(spans)
                     .fg("text.muted")

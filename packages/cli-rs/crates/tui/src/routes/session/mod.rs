@@ -92,6 +92,17 @@ impl Session {
         let sidebar = sidebar::mount(tui, &frame.root(), &id);
         let synced = (tui.data.session_sync(&id, true), tui.data.message_sync(&id));
         missing(tui, &id, synced.0.clone());
+        // Once the session is read, the running jobs of its tree, for the composer and the prompt footer.
+        let read = id.clone();
+        tui.app.spawn(
+            synced.0.clone(),
+            bind!(tui, |tui, _, session: Result<(), opencode_store::Error>| {
+                if session.is_ok() {
+                    let root = tui.data.read(|state| state.root(&read));
+                    drop(tui.data.job_sync(&root));
+                }
+            }),
+        );
         load(tui, synced.1.clone());
         prewarm(tui, &id, synced.1.clone());
         // `restoreScrollPosition` waits for the first sync (`synced`, `rowsSynced`).

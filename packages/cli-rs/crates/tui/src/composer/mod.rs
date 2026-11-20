@@ -1,6 +1,7 @@
-//! Session composer tabs for subagents, shells, and terminals. The open composer owns the input until a permission
+//! Session composer tabs for subagents, shells, scripts, and terminals. The open composer owns the input until a permission
 //! prompt takes it.
 
+mod scripts;
 mod shell;
 mod subagents;
 mod terminals;
@@ -26,6 +27,7 @@ impl Default for Memory {
 enum Tab {
     Subagents,
     Shell,
+    Scripts,
     Terminals,
 }
 
@@ -34,6 +36,7 @@ impl Tab {
         match self {
             Tab::Subagents => "Subagents",
             Tab::Shell => "Shell",
+            Tab::Scripts => "Scripts",
             Tab::Terminals => "Terminals",
         }
     }
@@ -63,8 +66,11 @@ struct Inner {
     tabs: RefCell<Vec<Tab>>,
     default: Cell<Option<Tab>>,
     active: Cell<Tab>,
+    /// The user picked a tab, so a requested tab that shows late no longer takes over.
+    chosen: Cell<bool>,
     subagents: RefCell<subagents::State>,
     shell: RefCell<shell::State>,
+    scripts: RefCell<scripts::State>,
     terminals: RefCell<terminals::State>,
     on_toggle: OnToggle,
     mode: RefCell<Option<Disposer>>,
@@ -106,8 +112,10 @@ impl Composer {
             default: Cell::new(None),
             // `register` makes the first tab active.
             active: Cell::new(Tab::Subagents),
+            chosen: Cell::new(false),
             subagents: RefCell::default(),
             shell: RefCell::default(),
+            scripts: RefCell::default(),
             terminals: RefCell::default(),
             on_toggle,
             mode: RefCell::default(),
@@ -200,6 +208,7 @@ impl Inner {
             .priority(1),
             tab(Tab::Subagents, subagents::commands(self)),
             tab(Tab::Shell, shell::commands(self)),
+            tab(Tab::Scripts, scripts::commands(self)),
             tab(Tab::Terminals, terminals::commands(self)),
             KeymapLayer::global(vec![child_first]),
             KeymapLayer::default().bindings(["session.child.first"]),
@@ -236,6 +245,7 @@ impl Inner {
         if let Some(tab) = tab.and_then(|tab| match tab {
             "subagents" => Some(Tab::Subagents),
             "shell" => Some(Tab::Shell),
+            "scripts" => Some(Tab::Scripts),
             _ => None,
         }) {
             self.show(tui, Some(tab));
@@ -248,15 +258,14 @@ impl Inner {
         tui.dialogs.clear();
     }
 
-    /// The tab the picker opens on when nothing asks for one (TS `busyTab`): the first that has something running,
-    /// else Subagents. TS puts Scripts first; this client has no Scripts tab.
+    /// The tab the picker opens on when nothing asks for one (TS `busyTab`).
     fn busy_tab(&self, tui: &Tui) -> Tab {
-        let session = &self.session;
-        tui.data.read(|state| {
-            let subagents =
-                state.family(session).iter().any(|id| id != session && state.status(id) == SessionStatus::Running);
-            if !subagents && !state.session_shells(session).is_empty() { Tab::Shell } else { Tab::Subagents }
-        })
+        let (scripts, subagents, shells) = tui.data.read(|state| busy(state, &self.session));
+        match busy_tab(scripts, subagents, shells) {
+            "scripts" => Tab::Scripts,
+            "shell" => Tab::Shell,
+            _ => Tab::Subagents,
+        }
     }
 
     fn show(self: &Rc<Self>, tui: &Tui, tab: Option<Tab>) {
@@ -284,6 +293,7 @@ impl Inner {
         let index = tabs.iter().position(|tab| *tab == self.active.get()).unwrap_or(0) as isize;
         let next = (index + direction).rem_euclid(tabs.len() as isize) as usize;
         self.active.set(tabs[next]);
+        self.chosen.set(true);
         self.refresh(tui);
     }
 
@@ -291,16 +301,25 @@ impl Inner {
         self.open.get() && self.active.get() == tab
     }
 
+    /// The tabs in a fixed order, and which one is active (TS `createComposerTabs`): opening, or a new requested tab,
+    /// picks the requested tab or the first; a requested tab that shows late takes over until the user picks one; and
+    /// tabs that come and go, like Scripts, leave the active tab alone unless they remove it.
     fn refresh(self: &Rc<Self>, tui: &Tui) {
         let open = !self.permissions.get() && (self.requested.get() || (self.child.get() && !self.forms.get()));
         let mut tabs = vec![Tab::Subagents, Tab::Shell];
+        if scripts::shown(self, tui) {
+            tabs.push(Tab::Scripts);
+        }
         if tui.terminals.available() {
             tabs.push(Tab::Terminals);
         }
         let default = self.tab.get().or_else(|| self.child.get().then_some(Tab::Subagents));
-        let reset = open && (!self.open.get() || *self.tabs.borrow() != tabs || self.default.get() != default);
-        if reset {
-            self.active.set(default.filter(|tab| tabs.contains(tab)).unwrap_or(tabs[0]));
+        let reopened = open != self.open.get() || default != self.default.get();
+        if reopened {
+            self.chosen.set(false);
+        }
+        if open && let Some(tab) = pick(&tabs, self.active.get(), default, reopened, self.chosen.get()) {
+            self.active.set(tab);
         }
         *self.tabs.borrow_mut() = tabs;
         self.default.set(default);
@@ -310,6 +329,7 @@ impl Inner {
         }
         subagents::update(self, tui);
         shell::update(self, tui);
+        scripts::update(self, tui);
         terminals::update(self, tui);
         self.root.visible(open);
         if open {
@@ -358,6 +378,7 @@ impl Inner {
                     let Some(inner) = weak.upgrade() else { return };
                     let Some(tui) = inner.tui.upgrade() else { return };
                     inner.active.set(tab);
+                    inner.chosen.set(true);
                     inner.redraw_later(&tui);
                 });
                 labels.add(&label);
@@ -387,6 +408,7 @@ impl Inner {
         let hints = match self.active.get() {
             Tab::Subagents => subagents::draw(self, tui, &theme),
             Tab::Shell => shell::draw(self, tui, &theme),
+            Tab::Scripts => scripts::draw(self, tui, &theme),
             Tab::Terminals => terminals::draw(self, tui, &theme),
         };
 
@@ -419,6 +441,8 @@ struct Label {
     text: String,
     status: Option<String>,
     truncate: bool,
+    /// Columns between the text and the status.
+    gap: u32,
 }
 
 fn row(
@@ -441,6 +465,7 @@ fn row(
     }
     let view = View::new(app)
         .row()
+        .gap(label.gap)
         .padding_edge(Edge::Left, 1)
         .padding_edge(Edge::Right, 1)
         .bg(background)
@@ -460,6 +485,40 @@ fn row(
     view
 }
 
+/// The tab to make active in an open picker, or `None` to keep it: on opening or a new requested tab, the requested
+/// tab or the first; a requested tab that shows late, until the user picked one; the first when the active one went.
+fn pick(tabs: &[Tab], active: Tab, requested: Option<Tab>, reopened: bool, chosen: bool) -> Option<Tab> {
+    let first = *tabs.first()?;
+    let late = !chosen && requested.is_some_and(|tab| tab != active && tabs.contains(&tab));
+    (reopened || late || !tabs.contains(&active)).then(|| requested.filter(|tab| tabs.contains(tab)).unwrap_or(first))
+}
+
+/// What a session has running (TS `busyCounts`): its own scripts, the subagents in its family that run or own
+/// running jobs, and its shells.
+pub(crate) fn busy(state: &opencode_store::State, session: &SessionID) -> (usize, usize, usize) {
+    let jobs = state.jobs(session);
+    let scripts = jobs.iter().filter(|job| crate::plugins::host::is_script(job, session)).count();
+    let subagents = state
+        .family(session)
+        .iter()
+        .filter(|id| {
+            *id != session && (state.status(id) == SessionStatus::Running || !state.owned_jobs(&jobs, id).is_empty())
+        })
+        .count();
+    (scripts, subagents, state.session_shells(session).len())
+}
+
+/// The tab the picker opens on when nothing asks for one (TS `busyTab`): the first that has something running, else
+/// Subagents.
+pub(crate) fn busy_tab(scripts: usize, subagents: usize, shells: usize) -> &'static str {
+    match (scripts, subagents, shells) {
+        (1.., _, _) => "scripts",
+        (_, 1.., _) => "subagents",
+        (_, _, 1..) => "shell",
+        _ => "subagents",
+    }
+}
+
 fn window<T>(rows: &[T], offset: usize) -> std::ops::Range<usize> {
     let start = offset.min(rows.len().saturating_sub(ROWS));
     start..(start + ROWS).min(rows.len())
@@ -476,4 +535,70 @@ fn empty(tui: &Tui, theme: &Theme, text: String) -> Text {
 
 fn split_border() -> [char; 11] {
     [' ', ' ', ' ', ' ', ' ', '┃', ' ', ' ', ' ', ' ', ' ']
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use Tab::*;
+
+    /// The picker's tab state through a sequence of refreshes, as `createComposerTabs` keeps it.
+    struct Picker {
+        active: Tab,
+        chosen: bool,
+        requested: Option<Tab>,
+    }
+
+    impl Picker {
+        fn open(tabs: &[Tab], requested: Option<Tab>) -> Self {
+            let mut picker = Self { active: Subagents, chosen: false, requested };
+            picker.active = pick(tabs, picker.active, requested, true, false).unwrap();
+            picker
+        }
+
+        fn refresh(&mut self, tabs: &[Tab]) -> Tab {
+            if let Some(tab) = pick(tabs, self.active, self.requested, false, self.chosen) {
+                self.active = tab;
+            }
+            self.active
+        }
+
+        fn choose(&mut self, tab: Tab) {
+            (self.active, self.chosen) = (tab, true);
+        }
+    }
+
+    #[test]
+    fn the_active_tab_stays_while_scripts_comes_and_goes() {
+        let mut picker = Picker::open(&[Subagents, Shell, Terminals], None);
+        assert_eq!(picker.active, Subagents);
+        picker.choose(Shell);
+        assert_eq!(picker.refresh(&[Subagents, Shell, Scripts, Terminals]), Shell);
+        assert_eq!(picker.refresh(&[Subagents, Shell, Terminals]), Shell);
+        picker.choose(Scripts);
+        assert_eq!(picker.refresh(&[Subagents, Shell, Terminals]), Subagents);
+    }
+
+    #[test]
+    fn the_picker_opens_on_the_requested_tab() {
+        assert_eq!(Picker::open(&[Subagents, Scripts], Some(Scripts)).active, Scripts);
+    }
+
+    #[test]
+    fn a_requested_tab_that_shows_late_takes_over_until_the_user_picks_one() {
+        let mut picker = Picker::open(&[Subagents], Some(Shell));
+        assert_eq!(picker.active, Subagents);
+        assert_eq!(picker.refresh(&[Subagents, Shell]), Shell);
+        assert_eq!(picker.refresh(&[Subagents, Shell, Scripts]), Shell);
+        picker.choose(Subagents);
+        assert_eq!(picker.refresh(&[Subagents, Shell, Scripts, Terminals]), Subagents);
+    }
+
+    #[test]
+    fn the_picker_opens_on_the_first_busy_tab_else_subagents() {
+        assert_eq!(busy_tab(1, 1, 1), "scripts");
+        assert_eq!(busy_tab(0, 2, 1), "subagents");
+        assert_eq!(busy_tab(0, 0, 1), "shell");
+        assert_eq!(busy_tab(0, 0, 0), "subagents");
+    }
 }
