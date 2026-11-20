@@ -69,7 +69,7 @@ export const make = <const Globals extends Readonly<Record<string, unknown>>>(
 
 const asyncGlobals = new WeakSet<Function>()
 
-export { StreamingResponse } from "psychoscript"
+export { StreamingResponse } from "psychoscript/effect"
 const AsyncFunction = (async () => {}).constructor
 
 /** Marks a global that returns a Promise or an Effect, so a denied call rejects its promise instead of throwing. */
