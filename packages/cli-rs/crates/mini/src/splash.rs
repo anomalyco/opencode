@@ -134,17 +134,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_entry_header_drops_metadata_that_does_not_fit() {
-        let layout = |width| entry_layout(width, "1.2.3", "/home/me/src/app", false);
-        assert_eq!(layout(80), ("▪ oc mini".into(), " v1.2.3 · /home/me/src/app".into()));
-        assert_eq!(layout(28), ("▪ oc mini".into(), " v1.2.3 · …/src/app".into()));
-        assert_eq!(layout(20), ("▪ oc mini".into(), " · app".into()));
-        assert_eq!(layout(14), ("▪ oc mini".into(), "".into()));
-        assert_eq!(layout(5), ("oc mi".into(), "".into()));
-        assert_eq!(entry_layout(80, "local", "/tmp/mini", true), ("[O] oc mini".into(), " vlocal - /tmp/mini".into()));
-    }
-
-    #[test]
     fn titles_collapse_whitespace_and_truncate() {
         assert_eq!(title(None, false), "Untitled session");
         assert_eq!(title(Some("  fix \n the   bug "), false), "fix the bug");

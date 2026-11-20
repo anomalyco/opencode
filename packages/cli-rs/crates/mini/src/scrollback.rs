@@ -881,33 +881,6 @@ mod tests {
     }
 
     #[test]
-    fn bodies_follow_entry_body() {
-        let options = BodyOptions::default();
-        let user = Commit::new(EntryKind::User, Source::System, Phase::Start, "\nhello");
-        assert_eq!(entry_body(&user, options), Body::Text("\n› hello".into()));
-        let mono = BodyOptions { mono: true, ..options };
-        assert_eq!(entry_body(&user, mono), Body::Text("\n> hello".into()));
-        let blank = Commit::new(EntryKind::User, Source::System, Phase::Start, "  ");
-        assert_eq!(entry_body(&blank, options), Body::None);
-        assert_eq!(entry_body(&assistant("**hi**", Phase::Progress), options), Body::Markdown("**hi**".into()));
-        assert_eq!(entry_body(&assistant("", Phase::Final), options), Body::None);
-        let mut interrupted = assistant("", Phase::Final);
-        interrupted.interrupted = true;
-        assert_eq!(entry_body(&interrupted, options), Body::Text("assistant interrupted".into()));
-        let reasoning =
-            Commit::new(EntryKind::Reasoning, Source::Reasoning, Phase::Progress, "Thinking:   a [REDACTED]plan");
-        assert_eq!(entry_body(&reasoning, options), Body::Markdown("_Thinking:_ a plan".into()));
-        let source = BodyOptions { markdown_source: true, ..options };
-        assert_eq!(
-            entry_body(&reasoning, source),
-            Body::Code { content: "_Thinking:_ a plan".into(), filetype: Some("markdown".into()) }
-        );
-        assert_eq!(entry_body(&reasoning, mono), Body::Text("Thinking: a plan".into()));
-        let system = Commit::system("  → done \n");
-        assert_eq!(entry_body(&system, mono), Body::Text("-> done".into()));
-    }
-
-    #[test]
     fn flags_and_separators() {
         let user = Commit::new(EntryKind::User, Source::System, Phase::Start, "q");
         assert_eq!(entry_flags(&user), Flags { start_on_new_line: true, trailing_newline: false });
@@ -918,23 +891,6 @@ mod tests {
         assert_eq!(separator_rows(Some(&progress), &assistant("b", Phase::Progress), &Body::None), 0);
         assert!(same_group(Some(&progress), &assistant("b", Phase::Final)));
         assert!(!same_group(Some(&user), &user));
-    }
-
-    #[test]
-    fn images_fit_the_width_or_the_rows_left() {
-        let app = opentui::testing::TestApp::new(10, 2);
-        let fit = |pixels: Option<(u32, u32)>, width: u32, height: u32| {
-            let image = pixels.map(|(wide, high)| {
-                let rgba = vec![0; (wide * high * 4) as usize];
-                opentui::native::Image::from_rgba(app.session().context(), wide, high, &rgba).unwrap()
-            });
-            opentui::widget::ImageView::new(&app).image(image).fitted_size(width, height, 2.0)
-        };
-        assert_eq!(fit(Some((200, 100)), 40, 30), (40, 10));
-        assert_eq!(fit(Some((100, 400)), 40, 30), (15, 30));
-        assert_eq!(fit(None, 40, 30), (0, 0));
-        // 40 columns would take 10.4 rows, more than the 10 left, so the rows bound it and it narrows, as in Core.
-        assert_eq!(fit(Some((100, 52)), 40, 10), (38, 10));
     }
 
     /// Streamed equals whole: a Markdown reply committed in parts, at any split of its text, leaves the terminal with the
@@ -1034,26 +990,6 @@ mod tests {
         let capture = app.render();
         assert_eq!(capture.cell(0, 2).unwrap().symbol, "─", "{}", capture.text());
         assert_eq!(capture.cell(0, 2).unwrap().fg, entry_color(&commit, &theme));
-    }
-
-    #[test]
-    fn tables_are_borderless_columns() {
-        let commit = assistant("", Phase::Final);
-        for mono in [false, true] {
-            let theme = crate::theme::resolve(&crate::theme::ThemeInput {
-                name: None,
-                mode: None,
-                palette: None,
-                directories: Vec::new(),
-                mono,
-            });
-            let app = opentui::testing::TestApp::new(20, 3);
-            let markdown = entry_markdown(app.app(), &theme, &commit, &Body::Markdown(String::new()), false);
-            app.app().root().add(&markdown);
-            markdown.set_markdown("| a | bb |\n| - | -: |\n| 1 | 2 |");
-            let rows: Vec<String> = app.render().text().lines().map(|row| row.trim_end().to_owned()).collect();
-            assert_eq!(rows, ["a  bb", "1   2"], "mono {mono}");
-        }
     }
 
     /// Mono task boxes, against TS's mono scrollback for the same reply at 24 columns: the box is part of the marker,

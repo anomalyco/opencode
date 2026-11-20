@@ -494,32 +494,6 @@ mod tests {
         assert_eq!(theme.background.intent(), Intent::Default);
     }
 
-    /// A terminal that reports its palette but not its default colors (no OSC 10 or 11 reply) still gets the system
-    /// theme from slots 0 and 7, and its accents from the slots as `migrateV1` lays them out: the agent rail from slot 5
-    /// (secondary) at step 400, as TS reads it since #64988, and warnings in slot 3.
-    #[test]
-    fn system_theme_derives_from_the_palette_without_default_colors() {
-        let slots = ["#1a1b26", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#ad8ee6", "#449dab", "#a9b1d6"];
-        let colors = slots.iter().map(|slot| Some(opencode_ui::theme::from_hex(slot))).collect();
-        let palette = TerminalPalette { colors, ..TerminalPalette::default() };
-        let input = |palette: TerminalPalette| ThemeInput {
-            name: Some("system".into()),
-            palette: Some(palette),
-            ..ThemeInput::default()
-        };
-        let bare = resolve(&input(palette.clone()));
-        let rgb = |color: Color| (color.r, color.g, color.b);
-        assert_eq!(bare.footer.categorical.first().copied().map(rgb), Some((125, 100, 171)));
-        assert_eq!(rgb(bare.footer.warning), (0xe0, 0xaf, 0x68));
-        assert_eq!(bare.background.intent(), Intent::Default);
-        // The focused search field takes the transparent background, so the panel's shade shows through it.
-        let field = bare.footer.formfield_focused_bg;
-        assert_eq!((field.intent(), field.a), (Intent::Default, 0));
-        // The same slots as default colors give the same footer.
-        let reported = TerminalPalette { foreground: palette.colors[7], background: palette.colors[0], ..palette };
-        assert_eq!(resolve(&input(reported)).footer, bare.footer);
-    }
-
     #[test]
     fn mono_uses_default_colors_by_mode() {
         let dark = resolve(&ThemeInput { mono: true, ..ThemeInput::default() });

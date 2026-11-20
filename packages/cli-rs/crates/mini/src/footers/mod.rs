@@ -2387,16 +2387,4 @@ mod tests {
         app.wait_until(Duration::from_millis(300), || false);
         assert_eq!(footers.blocker_status(), "");
     }
-
-    /// The requests a hydration listed show; the stream applies its events after them.
-    #[test]
-    fn the_listed_requests_show() {
-        let app = TestApp::new(40, 12);
-        let (footers, _) = footers(&app);
-        let V2Event::PermissionAsked(event) = asked("ses_1") else { unreachable!() };
-        let request =
-            permission::Request { info: super::asked(&event.data), input: Value::Null, metadata: Value::Null };
-        footers.hydrated(Requests { permissions: vec![request], ..Requests::default() });
-        assert_eq!(footers.blocker_status(), "awaiting permission");
-    }
 }

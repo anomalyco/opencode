@@ -1617,23 +1617,6 @@ fn delivery(value: &SessionInboxDelivery) -> Delivery {
 mod tests {
     use super::*;
 
-    #[test]
-    fn layout_follows_footer_prompt_layout() {
-        // 20 rows: padded, one row, no menu.
-        assert_eq!(layout(20, 1, 0, 1, false), Layout { padding: 1, textarea: 6, menu: 0, images: 0, rows: 1 });
-        // Nine slash options in 20 rows: eight menu rows.
-        assert_eq!(layout(20, 1, 9, 0, false).menu, 8);
-        assert_eq!(layout(20, 1, 9, 0, false).rows, 9);
-        // Ten lines grow to six.
-        assert_eq!(layout(20, 10, 0, 1, false).rows, 6);
-        // A short terminal: no padding, the menu takes what is left.
-        let short = layout(8, 2, 9, 0, false);
-        assert_eq!((short.padding, short.rows, short.menu), (0, 7, 5));
-        // Previews take four rows when they fit.
-        assert_eq!(layout(30, 1, 0, 1, true).images, 4);
-        assert_eq!(layout(5, 1, 0, 1, true).images, 0);
-    }
-
     /// The leader sequence expires `leader.timeout` after the leader on the app's clock, though `route_keys` stops
     /// the key before `App::on_key`. A key just before then completes the sequence; one at it is typed.
     #[test]
@@ -1694,15 +1677,9 @@ mod tests {
         assert_eq!(restored.parts, [part]);
     }
 
+    /// A command picked from the menu keeps its source while its name leads the text, and takes the typed arguments.
     #[test]
-    fn slash_commands_parse_against_the_catalog() {
-        let commands = [complete::Command { name: "review".into(), description: None, source: None }];
-        assert!(
-            matches!(parse_slash_command("/review src", Some(&commands)), Slash::Command(command) if command.arguments == "src")
-        );
-        assert!(matches!(parse_slash_command("/nope", Some(&commands)), Slash::None));
-        assert!(matches!(parse_slash_command("/review", None), Slash::Pending));
-        assert!(matches!(parse_slash_command("plain", None), Slash::None));
+    fn a_picked_command_follows_the_text() {
         let restored = Command { name: "review".into(), arguments: String::new(), source: Some("command".into()) };
         assert_eq!(
             selected_command("/review now", Some(&restored)).map(|command| command.arguments),

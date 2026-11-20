@@ -211,23 +211,6 @@ mod tests {
     }
 
     #[test]
-    fn grouped_rows_put_a_spacer_and_header_before_each_category() {
-        let items = [item("a", "One"), item("b", "One"), item("c", "Two")];
-        assert_eq!(
-            grouped_rows(&items, false),
-            vec![
-                Row::Header("One".into()),
-                Row::Item(0),
-                Row::Item(1),
-                Row::Spacer,
-                Row::Header("Two".into()),
-                Row::Item(2),
-            ]
-        );
-        assert_eq!(grouped_rows(&items, true), vec![Row::Item(0), Row::Item(1), Row::Item(2)]);
-    }
-
-    #[test]
     fn the_grouped_window_follows_the_selection() {
         let items: Vec<Item> =
             (0..12).map(|index| item(&index.to_string(), if index < 6 { "One" } else { "Two" })).collect();

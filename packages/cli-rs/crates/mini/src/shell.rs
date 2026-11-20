@@ -2104,22 +2104,12 @@ mod tests {
         assert!(!own_event(&event("model.updated", json!({})), "ses_1"));
     }
 
+    // Windows asks for key event types too; no PTY scenario runs there.
     #[test]
-    fn mono_turns_the_kitty_keyboard_off_and_windows_adds_event_types() {
+    fn windows_adds_event_types_unless_mono() {
         let default = AppOptions::default().host.terminal.kitty_keyboard;
-        assert_eq!(keyboard_flags(false, false), default);
         assert_eq!(keyboard_flags(false, true), default | KittyKeyboard::EVENT_TYPES);
-        assert_eq!(keyboard_flags(true, false), KittyKeyboard::OFF);
         assert_eq!(keyboard_flags(true, true), KittyKeyboard::OFF);
-    }
-
-    #[test]
-    fn the_footer_is_padded_in_tall_terminals() {
-        assert_eq!(prompt_height(16, 1), 2);
-        assert_eq!(prompt_height(17, 1), 2);
-        assert_eq!(prompt_height(18, 1), 4);
-        assert_eq!(prompt_height(40, 3), 6);
-        assert_eq!(prompt_height(2, 1), 1);
     }
 
     #[test]

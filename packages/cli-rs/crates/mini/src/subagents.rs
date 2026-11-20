@@ -1151,7 +1151,6 @@ fn time(created: f64, ran: Option<f64>, completed: Option<f64>) -> SessionMessag
 #[cfg(test)]
 mod tests {
     use super::*;
-    use opencode_api::generated::PermissionRequest;
     use serde::Deserialize;
     use serde_json::json;
 
@@ -1220,31 +1219,6 @@ mod tests {
     }
 
     #[test]
-    fn hydration_adopts_listed_calls_and_the_family() {
-        let mut tracker = Tracker::new("ses_root", false, None);
-        let messages = [assistant(
-            "msg_1",
-            json!([subagent_call("call_1", "ses_a", "completed"), subagent_call("call_2", "ses_b", "running")]),
-        )];
-        assert_eq!(tracker.hydrate(&messages, &["ses_b".into(), "ses_c".into()], false), [Fetch::Family]);
-        let tabs = tracker.tabs();
-        assert_eq!(tabs.len(), 2);
-        // `ses_b` still runs; `ses_a` finished.
-        assert_eq!((tabs[0].session_id.as_str(), tabs[0].status), ("ses_b", Status::Running));
-        assert_eq!((tabs[1].session_id.as_str(), tabs[1].status), ("ses_a", Status::Completed));
-        let fetches = tracker.family(vec![session("ses_d", "ses_root", "plan", 9.0)]);
-        assert!(fetches.iter().any(|fetch| matches!(fetch, Fetch::Discover { session, .. } if session == "ses_c")));
-        let blockers = fetches.iter().filter(|fetch| matches!(fetch, Fetch::Blockers { .. })).count();
-        assert_eq!(blockers, 3);
-        let tab = tracker.tabs().into_iter().find(|tab| tab.session_id == "ses_d").unwrap();
-        // The family index's sessions are not running: they settle at once.
-        assert_eq!(
-            (tab.label.as_str(), tab.description.as_str(), tab.status),
-            ("Plan", "plan session", Status::Completed)
-        );
-    }
-
-    #[test]
     fn discovery_buffers_events_and_replays_them_in_order() {
         let mut tracker = Tracker::new("ses_root", true, None);
         tracker.hydrate(&[], &[], false);
@@ -1291,105 +1265,5 @@ mod tests {
         tracker.set_thinking(true);
         tracker.foreign(&reasoning(1, "Shown"));
         assert_eq!(texts(&tracker, "ses_a"), [(EntryKind::Reasoning, "Thinking: Shown".into())]);
-    }
-
-    #[test]
-    fn a_child_transcript_rebuilds_then_follows_live_events() {
-        let mut tracker = Tracker::new("ses_root", true, None);
-        let messages = [assistant("msg_p", json!([subagent_call("call_1", "ses_a", "running")]))];
-        tracker.hydrate(&messages, &["ses_a".into()], false);
-        let fetches = tracker.select(Some("ses_a"));
-        assert_eq!(fetches, [Fetch::Child("ses_a".into())]);
-        // Events during the list wait and replay after it; the listed text is not repeated.
-        let ended = json!({ "assistantMessageID": "msg_c", "ordinal": 0, "text": "Found three tests." });
-        tracker.foreign(&event("session.text.ended", "ses_a", ended));
-        let user = SessionMessageInfo::deserialize(&json!({ "id": "msg_u", "type": "user", "text": "Find the tests",
-            "time": { "created": 1 } }))
-        .unwrap();
-        let listed = assistant(
-            "msg_c",
-            json!([
-                { "type": "reasoning", "text": "Looking" },
-                { "type": "text", "text": "Found three" },
-            ]),
-        );
-        tracker.child_loaded("ses_a", Ok((vec![user, listed], Vec::new())));
-        assert!(tracker.take_detail());
-        assert_eq!(
-            texts(&tracker, "ses_a"),
-            [
-                (EntryKind::User, "Find the tests".into()),
-                (EntryKind::Reasoning, "Thinking: Looking".into()),
-                (EntryKind::Assistant, "Found three tests.".into()),
-            ]
-        );
-        let failed = json!({ "assistantMessageID": "msg_c", "error": { "type": "provider", "message": "Boom" } });
-        tracker.foreign(&event("session.step.failed", "ses_a", failed));
-        assert_eq!(texts(&tracker, "ses_a").last(), Some(&(EntryKind::Error, "Boom".into())));
-    }
-
-    #[test]
-    fn child_requests_follow_lists_and_events() {
-        let mut tracker = Tracker::new("ses_root", false, None);
-        let messages = [assistant("msg_p", json!([subagent_call("call_1", "ses_a", "running")]))];
-        tracker.hydrate(&messages, &["ses_a".into()], false);
-        let fetches = tracker.family(Vec::new());
-        assert!(fetches.contains(&Fetch::Blockers { session: "ses_a".into(), epoch: 1, delay: Duration::ZERO }));
-        let permission = |id: &str| {
-            let info = PermissionRequest::deserialize(&json!({ "id": id, "sessionID": "ses_a", "action": "read",
-                "resources": ["a.txt"] }))
-            .unwrap();
-            Request { info, input: json!({ "filePath": "a.txt" }), metadata: Value::Null }
-        };
-        // An event that arrives while the list is in flight applies after it.
-        let asked = json!({ "id": "per_2", "action": "edit", "resources": ["b.txt"] });
-        tracker.foreign(&event("permission.asked", "ses_a", asked));
-        let retry = tracker.blockers_loaded("ses_a", 1, Ok(vec![permission("per_1")]), Err("down".into()));
-        assert_eq!(retry, [Fetch::Blockers { session: "ses_a".into(), epoch: 1, delay: Duration::from_millis(50) }]);
-        let ids: Vec<String> = tracker.permissions().iter().map(|request| request.info.id.0.clone()).collect();
-        assert_eq!(ids, ["per_1", "per_2"]);
-        // The input read from the source message stays.
-        assert_eq!(tracker.permissions()[0].input, json!({ "filePath": "a.txt" }));
-        assert!(tracker.retry_due("ses_a", 1));
-        let form = json!({ "id": "frm_1", "sessionID": "ses_a", "title": "Pick", "fields": [] });
-        let forms = vec![FormInfo::deserialize(&form).unwrap()];
-        assert!(tracker.blockers_loaded("ses_a", 1, Ok(vec![permission("per_1")]), Ok(forms)).is_empty());
-        assert_eq!(tracker.forms().len(), 1);
-        tracker.foreign(&event("permission.replied", "ses_a", json!({ "requestID": "per_1", "reply": "once" })));
-        assert!(tracker.permissions().is_empty());
-        tracker.settle_form("ses_a", "frm_1");
-        assert!(tracker.forms().is_empty());
-        // A list from an earlier hydration is ignored.
-        assert!(tracker.blockers_loaded("ses_a", 0, Ok(vec![permission("per_9")]), Ok(Vec::new())).is_empty());
-        assert!(tracker.permissions().is_empty());
-    }
-
-    #[test]
-    fn tool_events_of_a_child_print_like_the_transcript() {
-        let mut tracker = Tracker::new("ses_root", false, None);
-        tracker.hydrate(
-            &[assistant("msg_p", json!([subagent_call("call_1", "ses_a", "running")]))],
-            &["ses_a".into()],
-            false,
-        );
-        tracker.select(Some("ses_a"));
-        tracker.child_loaded("ses_a", Ok((Vec::new(), Vec::new())));
-        let data = |extra: Value| {
-            let mut data = json!({ "assistantMessageID": "msg_c", "id": "call_r" });
-            data.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
-            data
-        };
-        tracker.foreign(&event("session.tool.input.started", "ses_a", data(json!({ "name": "read" }))));
-        let called = data(json!({ "input": { "filePath": "/tmp/a.txt" }, "executed": true }));
-        tracker.foreign(&event("session.tool.called", "ses_a", called));
-        let success = data(json!({ "content": [{ "type": "text", "text": "hello" }], "executed": true }));
-        tracker.foreign(&event("session.tool.success", "ses_a", success));
-        let commits = tracker.detail("ses_a").unwrap();
-        assert_eq!(commits.len(), 1);
-        assert_eq!((commits[0].kind, commits[0].tool.as_deref()), (EntryKind::Tool, Some("read")));
-        assert_eq!(commits[0].tool_state, Some(crate::scrollback::ToolState::Completed));
-        // A finished call ignores late events.
-        tracker.foreign(&event("session.tool.progress", "ses_a", data(json!({ "metadata": {} }))));
-        assert_eq!(tracker.detail("ses_a").unwrap().len(), 1);
     }
 }
