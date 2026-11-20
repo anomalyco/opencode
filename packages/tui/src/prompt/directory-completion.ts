@@ -60,7 +60,7 @@ export function directoryAutocompleteSearch(query: string, directory: string, ho
 }
 
 function directorySearch(query: string, root: string, prefix: string) {
-  const separator = query.lastIndexOf("/")
+  const separator = Math.max(query.lastIndexOf("/"), path.sep === "\\" ? query.lastIndexOf("\\") : -1)
   if (separator === -1) return { directory: root, prefix, query }
   const parent = query.slice(0, separator + 1)
   return {
