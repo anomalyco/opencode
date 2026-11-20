@@ -181,6 +181,9 @@ export const PaneEvent = Schema.Union([
     type: Schema.Literal("state"),
     state: Schema.NullOr(Browser.State),
     error: Schema.optionalKey(Schema.String),
+    // With the inventory that first lists a tab a page or link opened: the tab it stands after, as in Chrome. The
+    // window's strip holds other panels' tabs too, so it adds the tab there instead of at its end.
+    placed: Schema.optionalKey(Schema.Struct({ tabID: Browser.TabID, after: Browser.TabID })),
   }),
   // A tab's page exists; the renderer lays it out through this host embed.
   Schema.Struct({ type: Schema.Literal("embed"), tabID: Browser.TabID, embed: text(256) }),

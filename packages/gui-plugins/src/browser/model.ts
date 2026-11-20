@@ -385,7 +385,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (event.error !== undefined) noteFailure(event.error, undefined)
 
-      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error })
+      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error, placed: event.placed })
     }
 
     if (event.type === "embed")
@@ -476,7 +476,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       }
 
       effect.open.forEach((tabID) => {
-        if (layout.state(key(tabID), ref) === "closed") layout.open(key(tabID), ref, { tab: "append" })
+        if (layout.state(key(tabID), ref) !== "closed") return
+        // A tab a page or link opened stands after the tab it came from; the strip holds other panels' tabs too.
+        const after = effect.placed?.tabID === tabID ? key(effect.placed.after) : undefined
+        builtinContext(ctx).layout.open(key(tabID), ref, { tab: "append", after })
       })
     })
   }

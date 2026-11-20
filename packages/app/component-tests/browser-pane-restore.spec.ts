@@ -24,6 +24,7 @@ const modules = {
   settings: source("../src/settings/model.tsx"),
   platform: source("../src/runtime/platform/platform.tsx"),
   solid: source("./plugin-host.fixture.tsx"),
+  sessionTabs: source("../src/shell/state/session-tabs.ts"),
 }
 
 story.beforeEach(async ({ mount, page }) => {
@@ -45,6 +46,7 @@ story.beforeEach(async ({ mount, page }) => {
       solid,
       closed,
       pluginCommands,
+      sessionTabs,
     ] = await Promise.all([
       import(modules.fixture),
       import(modules.host),
@@ -60,6 +62,7 @@ story.beforeEach(async ({ mount, page }) => {
       import(modules.solid),
       import(modules.closed),
       import(modules.pluginCommands),
+      import(modules.sessionTabs),
       // Load the pane before mounting: Vite must not reload the page to optimize its dependencies mid-fixture.
       import(modules.browserPanel),
     ])
@@ -211,6 +214,7 @@ story.beforeEach(async ({ mount, page }) => {
         return null
       },
       Contribution: renderer.Contribution,
+      appendTab: sessionTabs.appendSessionTab,
     })
   }, modules)
 })
@@ -724,7 +728,7 @@ type MainTab = {
 
 // The fixture reads each one through the pane Ipc's own event schema, so a shape main cannot send fails there.
 type MainEvent =
-  | { type: "state"; state: { tabs: MainTab[]; focusedTabID: string } | null; error?: string }
+  | { type: "state"; state: { tabs: MainTab[]; focusedTabID: string } | null; error?: string; placed?: { tabID: string; after: string } }
   | { type: "page"; tabID: string; zoom: number; viewport: { mode: "auto" }; icon?: string }
   | { type: "embed"; tabID: string; embed: string }
 
@@ -849,6 +853,67 @@ story("holds every restored tab's box, label and icon from the reopen until its 
   await stable()
   // What held all along is the saved icon of each page, not the globe.
   expect(first.map((tab) => tab.icon)).toEqual([expect.any(String), previewIcon, docsIcon])
+})
+
+// A tab a link opened was added at the end of the strip, after every other tab, however far from the tab it came from.
+story("a tab a link opens stands beside the tab it came from, moves no tab again as it loads, and keeps its place after a restart", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const tabs = root.getByRole("tab")
+  const selected = root.getByTestId("selected")
+  const guide = "tab_77777777-7777-7777-7777-777777777777"
+  const linked = "tab_88888888-8888-8888-8888-888888888888"
+  const first = reported({ id: preview, url: "http://localhost:4173/", title: "Preview" })
+  const middle = reported({ id: docs, url: "https://example.com/docs", title: "Docs" })
+  const last = reported({ id: guide, url: "https://example.com/guide", title: "Guide" })
+  // Main's inventory with the new tab after Docs, and Docs still in front.
+  const listed = (tab: MainTab): MainEvent => ({ type: "state", state: { tabs: [first, middle, tab, last], focusedTabID: docs } })
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+  await send(root, inventory(first, middle, last))
+  await root.getByRole("tab", { name: "Docs", exact: true }).click()
+  await expect(selected).toHaveText(`browser:${docs}`)
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const before = await drawn(tabs)
+  expect(before.map((tab) => tab.text)).toEqual(["beta.ts", "Preview", "Docs", "Guide"])
+  const gap = before[3].x - before[2].x - before[2].width
+
+  // The person middle-clicks a link in Docs, the middle one of the three: main lists the new, still blank tab after
+  // Docs and says where it stands (`tab.opened` in pane-machine.ts).
+  const blank = reported({ id: linked, url: "about:blank", title: "" })
+  await send(root, { ...listed(blank), placed: { tabID: linked, after: docs } })
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs", "New tab", "Guide"])
+  await expect(selected).toHaveText(`browser:${docs}`)
+  const opened = await drawn(tabs)
+  // It took Guide's place, and Guide moved right by its width; nothing to its left moved.
+  expect(opened.slice(0, 3)).toEqual(before.slice(0, 3))
+  expect(opened[3].x).toBe(before[3].x)
+  expect(opened[4]).toEqual({ ...before[3], x: opened[3].x + opened[3].width + gap })
+
+  // Its page loads and names itself. The label is the tab's own; the tabs before it stay, and none changes place.
+  const loading = { ...blank, url: "https://example.com/linked", loading: true, generation: 1 }
+  await send(root, listed(loading))
+  await send(root, listed({ ...loading, title: "Linked" }))
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs", "Linked", "Guide"])
+  const named = await drawn(tabs)
+  expect(named.slice(0, 3)).toEqual(before.slice(0, 3))
+  // Its icon arrives and it stops loading: no box moves again.
+  await send(root, details(linked, docsIcon))
+  await send(root, listed({ ...loading, title: "Linked", loading: false }))
+  await expect(root.getByRole("tab", { name: "Linked", exact: true }).locator("img")).toHaveAttribute("src", docsIcon)
+  expect(await drawn(tabs)).toEqual([...named.slice(0, 3), { ...named[3], icon: docsIcon }, named[4]])
+  await expect(selected).toHaveText(`browser:${docs}`)
+
+  // The app quits and opens again: the strip draws the same order at once, and main's restored tabs move nothing.
+  const kept = await drawn(tabs)
+  await root.getByRole("button", { name: "Quit and reopen", exact: true }).dispatchEvent("click")
+  await expect(root.getByText("Registrations: 3", { exact: true })).toBeVisible()
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs", "Linked", "Guide"])
+  expect(await drawn(tabs)).toEqual(kept)
+  const restored = [first, middle, { ...loading, loading: false }, last].map((tab) => ({ ...tab, title: "", generation: 1 }))
+  await send(root, { type: "state", state: { tabs: restored, focusedTabID: docs } })
+  await expect(root.getByRole("status", { name: "Loading", exact: true })).toHaveCount(0)
+  expect(await drawn(tabs)).toEqual(kept)
+  await expect(selected).toHaveText(`browser:${docs}`)
 })
 
 // A page's icon arrives after its tab is drawn: Chromium lists it once the document's head has parsed, and main loads

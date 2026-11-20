@@ -637,6 +637,20 @@ describe("browser pane machine", () => {
 
   // A tab drawn from the saved state can be closed or selected before the desktop reports it. With no inventory there
   // was no command to send, so the first inventory put a closed tab back in the strip.
+  test("a tab a link opened is added to the strip after the tab the desktop names, and only when the inventory adds it", () => {
+    const start = ready()
+    const placed = { tabID: tabB, after: tabA }
+    const opened = transition(start, { ...paneState(start, inventory(tab(tabA), tab(tabB), tab(tabC))), placed })
+    expect(opened.effects.filter((effect) => effect.type === "sync-strip")).toEqual([
+      { type: "sync-strip", sessionKey: key, keep: [tabA, tabB, tabC], open: [tabB, tabC], placed },
+    ])
+    // A tab the strip has already is not placed again: it stays where the person sees it.
+    const again = transition(opened.state, { ...paneState(opened.state, inventory(tab(tabA), tab(tabB))), placed })
+    expect(again.effects.filter((effect) => effect.type === "sync-strip")).toEqual([
+      { type: "sync-strip", sessionKey: key, keep: [tabA, tabB], open: [] },
+    ])
+  })
+
   test("a saved tab closed or selected before the first inventory is closed or focused on the desktop once it arrives", () => {
     const start = replay(attach()).state
     const registering = attempt(start)

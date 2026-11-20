@@ -39,6 +39,9 @@ export type Phase =
   | { readonly status: "suspended"; readonly reason: "idle" | "ipc" | "unlisted" }
   | { readonly status: "blocked"; readonly reason: "replaced" | "missing" | "unsupported" }
 
+/** A tab a page or link opened, and the tab it stands after in the strip, as the desktop reports it once. */
+export type Placed = { readonly tabID: Browser.TabID; readonly after: Browser.TabID }
+
 /** How the session's side-panel strip follows the desktop's tab inventory. */
 export type Strip = {
   /** The session's location is known, so the strip can be written. */
@@ -248,6 +251,8 @@ export type Event =
       readonly attempt: number
       readonly state: Browser.State | null
       readonly error: string | undefined
+      /** The tab this inventory lists for the first time because a page or link opened it, and the tab it stands after. */
+      readonly placed?: Placed
     }
   | {
       readonly type: "pane.embed"
@@ -313,13 +318,15 @@ export type MachineEffect =
     }
   /**
    * Applies an inventory to the strip: closes stored tabs `keep` lacks (only a native inventory prunes, so the desktop
-   * decides which tabs exist), then appends `open`, the tabs new since the last mirrored inventory.
+   * decides which tabs exist), then appends `open`, the tabs new since the last mirrored inventory. The one `placed`
+   * names is added after the tab it was opened from instead.
    */
   | {
       readonly type: "sync-strip"
       readonly sessionKey: string
       readonly keep: readonly Browser.TabID[] | undefined
       readonly open: readonly Browser.TabID[]
+      readonly placed?: Placed
     }
   | { readonly type: "focus-strip-tab"; readonly sessionKey: string; readonly tabID: Browser.TabID }
   /** Records the session's loaded pages in the browser history, and its tabs for the strip of the next launch. */
@@ -1168,6 +1175,7 @@ function paneState(
     { ...strip, mirrored: [...strip.mirrored, ...dismissed], dismissed: [], selected: undefined },
     event.state,
     true,
+    event.placed,
   )
 
   // An inventory that repeats the error it reported last is the same failure, not a new one to read again.
@@ -1262,7 +1270,7 @@ function backoff(state: Open, key: string, attachment: Attachment, phase: Bound)
 // Mirrors an inventory into the strip. Only tabs new since the last mirrored inventory are added, so a tab the user
 // just closed is not reopened before the desktop confirms. Only a native inventory prunes; suspended and restoring
 // states keep the tabs they will restore. While the strip cannot be written, the prune waits for the location.
-function mirror(key: string, strip: Strip, browser: Browser.State | null, native: boolean) {
+function mirror(key: string, strip: Strip, browser: Browser.State | null, native: boolean, placed?: Placed) {
   if (!browser) return { strip: { ...noStrip(), located: strip.located }, effects: [] }
   const ids = browser.tabs.map((tab) => tab.id)
 
@@ -1276,7 +1284,7 @@ function mirror(key: string, strip: Strip, browser: Browser.State | null, native
       effects: [],
     }
 
-  return { strip: { ...strip, mirrored: ids }, effects: sync(key, ids, strip.mirrored, native) }
+  return { strip: { ...strip, mirrored: ids }, effects: sync(key, ids, strip.mirrored, native, placed) }
 }
 
 function sync(
@@ -1284,12 +1292,15 @@ function sync(
   ids: readonly Browser.TabID[],
   mirrored: readonly Browser.TabID[],
   prune: boolean,
+  placed?: Placed,
 ): MachineEffect[] {
   const open = ids.filter((id) => !mirrored.includes(id))
 
   if (!prune && open.length === 0) return []
+  const effect = { type: "sync-strip" as const, sessionKey: key, keep: prune ? ids : undefined, open }
 
-  return [{ type: "sync-strip", sessionKey: key, keep: prune ? ids : undefined, open }]
+  // Only a tab this inventory adds is placed: one the strip has already stays where the person sees it.
+  return [placed && open.includes(placed.tabID) ? { ...effect, placed } : effect]
 }
 
 // The new tab a user's tabs.open added: blank, it takes the address focus; anything else ends the request. A ready tab

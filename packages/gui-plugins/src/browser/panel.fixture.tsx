@@ -1292,6 +1292,8 @@ type RegionHost = {
   }>
   /** The real host wrapper that renders a plugin in its context. */
   Contribution: Component<{ plugin: string; children: () => JSX.Element }>
+  /** The host's own placement of a tab it adds without selecting it: after `after` when the strip has it, else last. */
+  appendTab(strip: { all: string[] }, tab: string, after?: string): { all: string[] }
 }
 
 type RegionFixtureState = {
@@ -1449,7 +1451,7 @@ export function mountBrowserRegion(input: RegionHost) {
       fitsSide: () => true,
       ready: () => true,
       open(key, session, options) {
-        if (!strip(session.key).all.includes(key)) setAll(session.key, [...strip(session.key).all, key])
+        setAll(session.key, input.appendTab({ all: [...strip(session.key).all] }, key, options?.after).all)
 
         if (options?.tab !== "append") setStore("strips", session.key, "active", key)
 
