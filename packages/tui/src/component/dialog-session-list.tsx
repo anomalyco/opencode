@@ -75,7 +75,14 @@ export function DialogSessionList() {
           parentID: null,
           archived: false,
         })
-        return { query, allProjects, sessions: response.data, error: undefined }
+        const exact =
+          /^ses_[0-9A-Za-z]{26}$/.test(query) && !response.data.some((session) => session.id === query)
+            ? await client.api.session
+                .get({ sessionID: query })
+                .then((session) => (session.id === query ? session : undefined))
+                .catch(() => undefined)
+            : undefined
+        return { query, allProjects, sessions: exact ? [exact, ...response.data] : response.data, error: undefined }
       } catch (error) {
         // A transient transport failure must degrade search, not crash the TUI
         // through the root ErrorBoundary when the errored resource is read.
@@ -86,7 +93,8 @@ export function DialogSessionList() {
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const localSessions = createMemo(() => {
-    const query = filter().trim().toLowerCase()
+    const raw = filter().trim()
+    const query = raw.toLowerCase()
     const current = data.location.info(pickerLocation())
     const sessions = data.session
       .list()
@@ -96,9 +104,12 @@ export function DialogSessionList() {
           (allProjects() ||
             (session.projectID === current?.project.id && session.location.directory === current.directory)),
       )
-    if (!query) return sessions
+    if (!raw) return sessions
     return sessions.filter(
-      (session) => !session.parentID && withTimestampedFallback(session).toLowerCase().includes(query),
+      (session) =>
+        !session.parentID &&
+        (withTimestampedFallback(session).toLowerCase().includes(query) ||
+          (raw.startsWith("ses_") && session.id.startsWith(raw))),
     )
   })
   const sessions = createMemo(() => {
@@ -143,11 +154,9 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    const sessionMap = new Map(
-      sessions()
-        .filter((session) => !session.parentID)
-        .map((session) => [session.id, session]),
-    )
+    const exactID = filter().trim()
+    const visible = sessions().filter((session) => !session.parentID || session.id === exactID)
+    const sessionMap = new Map(visible.map((session) => [session.id, session]))
     const pinned = sessionTabs.enabled() ? [] : local.session.pinned().filter((sessionID) => sessionMap.has(sessionID))
     const pinnedSet = new Set(pinned)
     const slotByID = new Map(local.session.slots().map((sessionID, index) => [sessionID, index + 1]))
@@ -184,8 +193,8 @@ export function DialogSessionList() {
       }
     }
 
-    const remaining = sessions()
-      .filter((session) => !session.parentID && !pinnedSet.has(session.id))
+    const remaining = visible
+      .filter((session) => !pinnedSet.has(session.id))
       .map((session) => {
         const date = new Date(session.time.updated).toDateString()
         return option(session, date === today ? "Today" : date)
