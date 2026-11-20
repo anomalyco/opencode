@@ -54,6 +54,20 @@ export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
   }),
 }) {}
 
+export class TlsConfig extends Schema.Class<TlsConfig>("Mcp.TlsConfig")({
+  ca_file: Schema.String.pipe(optional).annotate({
+    description:
+      "Path to a PEM-encoded CA certificate file to trust for this server. Relative paths resolve from the workspace; ~ expands to the home directory.",
+  }),
+  ca_pem: Schema.String.pipe(optional).annotate({
+    description: "Inline PEM-encoded CA certificate content to trust for this server.",
+  }),
+  fingerprint: Schema.String.pipe(optional).annotate({
+    description:
+      "SHA256 fingerprint of the server certificate to pin. Format: 'SHA256:XX:XX:...', 'XX:XX:...', or bare hex.",
+  }),
+}) {}
+
 export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")({
   type: Schema.Literal("remote"),
   url: Schema.String,
@@ -65,6 +79,10 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  tls: TlsConfig.pipe(optional).annotate({
+    description:
+      "TLS trust for this server: a custom CA and/or a pinned certificate fingerprint. Applies to this server only.",
+  }),
   pool: Schema.Boolean.pipe(optional).annotate({
     description:
       'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to false.',
