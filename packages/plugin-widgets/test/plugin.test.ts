@@ -59,7 +59,7 @@ describe("widget tool", () => {
 
         expect(result).toEqual(
           Exit.succeed({
-            content: WidgetTools.shownText("Deploy"),
+            content: WidgetTools.shownText("Deploy", at.id),
             metadata: { template: { name: "confirm", version: confirm.version } },
           }),
         )
@@ -142,6 +142,132 @@ describe("widget templates", () => {
         expect(
           yield* fake.call("program", { name: "picker", version: "0000000000000000" }).pipe(Effect.flip),
         ).toMatchObject({ type: "not_found" })
+      }),
+    ))
+})
+
+describe("template edits", () => {
+  const save = (fake: Effect.Success<typeof make>) =>
+    execute(fake, "widget_template", {
+      action: "save",
+      name: "picker",
+      description: "Pick one",
+      data: pickerSchema,
+      source: pickerSource,
+      example: { items: ["a"] },
+    })
+  const edit = (fake: Effect.Success<typeof make>, input: Record<string, unknown>) =>
+    execute(fake, "widget_template", { action: "edit", name: "picker", ...input })
+  const reason = (exit: Exit.Exit<unknown, unknown>) => (failure(exit) as Tool.Error | undefined)?.message
+
+  test("applies exact replacements to the latest source and saves a new revision with short metadata", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        expect(yield* save(fake)).toMatchObject(
+          Exit.succeed({ metadata: { action: "save", name: "picker", revision: 1, lines: 3 } }),
+        )
+        const edited = yield* edit(fake, {
+          edits: [
+            { oldText: "ui.column({}", newText: "ui.row({ wrap: true }" },
+            { oldText: "picked: item", newText: "picked: item, at: '$&'" },
+          ],
+          description: "Pick one, in a row",
+        })
+        const source = pickerSource
+          .replace("ui.column({}", "ui.row({ wrap: true }")
+          .replace("picked: item", () => "picked: item, at: '$&'")
+        expect(edited).toEqual(
+          Exit.succeed({
+            content: expect.stringContaining(
+              `Edited widget template "picker" version ${version(source, pickerSchema)}`,
+            ),
+            metadata: { action: "edit", name: "picker", version: version(source, pickerSchema), revision: 2, lines: 3 },
+          }),
+        )
+        expect(yield* fake.call("program", { name: "picker" })).toMatchObject({
+          source,
+          description: "Pick one, in a row",
+        })
+        // `get` and `list` carry short metadata too.
+        expect(yield* execute(fake, "widget_template", { action: "get", name: "picker" })).toMatchObject(
+          Exit.succeed({ metadata: { action: "get", name: "picker", revision: 2, lines: 3 } }),
+        )
+        expect(yield* execute(fake, "widget_template", { action: "list" })).toMatchObject(
+          Exit.succeed({ metadata: { action: "list", count: builtins.length + 1 } }),
+        )
+        // Saving the first content again promotes it without a new revision.
+        expect(yield* save(fake)).toMatchObject(Exit.succeed({ metadata: { revision: 1 } }))
+      }),
+    ))
+
+  test("explains edits that don't match once, and lints the result", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        yield* save(fake)
+        expect(reason(yield* edit(fake, { edits: [{ oldText: "ui.grid", newText: "x" }] }))).toContain(
+          "edit 1: oldText was not found in the source",
+        )
+        expect(reason(yield* edit(fake, { edits: [{ oldText: "item", newText: "entry" }] }))).toContain(
+          "edit 1: oldText matches 4 times; include more surrounding text",
+        )
+        expect(
+          reason(
+            yield* edit(fake, {
+              edits: [
+                { oldText: "ui.column", newText: "ui.row" },
+                { oldText: "ui.column", newText: "ui.row" },
+              ],
+            }),
+          ),
+        ).toContain('edit 2: oldText was not found in the source of "picker" after the earlier edits')
+        expect(reason(yield* edit(fake, { edits: [] }))).toContain("`edits` is empty")
+        expect(reason(yield* edit(fake, { edits: [{ oldText: "view", newText: "show" }] }))).toContain(
+          "a step template must define `function view(state, data)`",
+        )
+        expect(
+          reason(yield* edit(fake, { edits: [{ oldText: "{}", newText: "{ gap: 1 }" }], data: pickerSchema })),
+        ).toContain("`example` is required when `data` changes")
+        expect(reason(yield* edit(fake, { name: "nope", edits: [{ oldText: "a", newText: "b" }] }))).toContain(
+          "Widget template not found: nope",
+        )
+        expect(reason(yield* execute(fake, "widget_template", { action: "edit", name: "picker" }))).toContain(
+          '`edits` is required for action "edit"',
+        )
+        // Nothing failed was stored.
+        expect(yield* fake.call("program", { name: "picker" })).toMatchObject({ source: pickerSource })
+      }),
+    ))
+
+  test("edits a built-in only as a copy under a new name", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        expect(
+          reason(yield* edit(fake, { name: "confirm", edits: [{ oldText: "Confirm", newText: "Yes" }] })),
+        ).toContain(
+          'built-in templates can\'t be edited; copy it under a new name: { action: "edit", name: "my-confirm", from: "confirm"',
+        )
+        expect(
+          reason(
+            yield* edit(fake, {
+              name: "confirm",
+              from: "confirm",
+              edits: [{ oldText: '"Confirm"', newText: '"Yes"' }],
+            }),
+          ),
+        ).toContain("built-in templates cannot be overwritten")
+        const copied = yield* edit(fake, {
+          name: "yes-no",
+          from: "confirm",
+          edits: [{ oldText: '"Confirm"', newText: '"Yes"' }],
+        })
+        expect(copied).toMatchObject(Exit.succeed({ metadata: { action: "edit", name: "yes-no", revision: 1 } }))
+        expect(yield* fake.call("program", { name: "yes-no" })).toMatchObject({
+          source: confirm.source.replace('"Confirm"', '"Yes"'),
+          description: confirm.description,
+          data: confirm.data,
+          builtin: false,
+        })
+        expect(yield* fake.call("program", { name: "confirm" })).toMatchObject({ source: confirm.source })
       }),
     ))
 })
@@ -558,6 +684,82 @@ describe("waiting widget tool", () => {
         )
         yield* fake.call("respond", { ...stopped.call, response: { dismiss: true } })
         expect(fake.synthetic.at(-1)).toMatchObject({ text: 'User dismissed widget "Deploy"', resume: true })
+      }),
+    ))
+})
+
+describe("replacing a widget", () => {
+  test("supersedes the old open widget, which can't be answered, and publishes the change", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const first = context()
+        yield* execute(fake, "widget", { template: "confirm", data: confirmData, title: "Deploy" }, first)
+        const second = context()
+        const result = yield* execute(
+          fake,
+          "widget",
+          {
+            template: "confirm",
+            data: { ...confirmData, message: "Deploys main and docs." },
+            title: "Deploy",
+            replaces: first.id,
+          },
+          second,
+        )
+        expect(result).toMatchObject(Exit.succeed({ content: WidgetTools.shownText("Deploy", second.id) }))
+        const [old, current] = yield* states(fake)
+        expect(old).toMatchObject({
+          callID: first.id,
+          status: "superseded",
+          supersededBy: { messageID, callID: second.id },
+          time: { responded: expect.any(Number) },
+        })
+        expect(current).toMatchObject({ callID: second.id, status: "open" })
+        expect(fake.events.map((event) => (event.data as { state: Widget.State }).state)).toMatchObject([
+          { callID: first.id, status: "open" },
+          { callID: first.id, status: "superseded" },
+          { callID: second.id, status: "open" },
+        ])
+        const call = { sessionID, messageID, callID: first.id }
+        expect(yield* fake.call("respond", { ...call, response: { value: true } }).pipe(Effect.flip)).toMatchObject({
+          type: "closed",
+          data: { status: "superseded" },
+        })
+        expect(yield* fake.call("send", { ...call, value: 1 }).pipe(Effect.flip)).toMatchObject({ type: "closed" })
+        expect(fake.synthetic).toEqual([])
+      }),
+    ))
+
+  test("refuses an unknown call ID without posting", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const result = yield* execute(fake, "widget", { template: "confirm", data: confirmData, replaces: "call_nope" })
+        expect((failure(result) as Tool.Error).message).toContain('No widget with call ID "call_nope" in this session')
+        expect(yield* states(fake)).toEqual([])
+      }),
+    ))
+
+  test("ends a replaced widget's waiting call as superseded", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const first = context()
+        const fiber = yield* execute(
+          fake,
+          "widget",
+          { template: "confirm", data: confirmData, title: "Deploy", wait: true },
+          first,
+        ).pipe(Effect.forkChild({ startImmediately: true }))
+        while ((yield* states(fake)).length === 0) yield* Effect.yieldNow
+        yield* execute(fake, "widget", {
+          template: "confirm",
+          data: confirmData,
+          title: "Deploy v2",
+          replaces: first.id,
+        })
+        expect(failure(yield* Fiber.join(fiber))).toEqual(
+          new Tool.Error({ message: 'Widget "Deploy" was superseded by a newer widget.' }),
+        )
+        expect((yield* states(fake)).map((state) => state.status)).toEqual(["superseded", "open"])
       }),
     ))
 })

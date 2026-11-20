@@ -31,6 +31,8 @@ Not for one free-text question, a passing yes/no or an explanation (use `questio
 - Without `wait`: end your turn; don't repeat the options in text. The answer arrives as
   `User responded to widget "<title>": <JSON>` / `User dismissed widget "<title>"`; open widgets may also send
   `Widget "<title>" sent: <JSON>`.
+- Iterating on a widget you showed (a fix, new data, the next step)? Post the new one with `replaces: "<call ID>"`
+  from the old result; the old one closes as superseded.
 - `wait: true`: the call blocks and returns the answer (a dismissal is a tool error), like `question`: for short
   decisions you need this turn, never for live or long-open widgets.
 
@@ -59,7 +61,8 @@ messages · `table` ≤ 50 sortable rows with sparklines. For one or two plain s
 
 `widget_template` `save`: `name`, `description`, `data` (JSON Schema, `type: "object"`), `source`, an `example`
 matching the schema, `mode: "live"` for live ones. Saving again makes a new version; templates persist, so keep them
-general and put specifics in `data`. The server only parses and lints the source (entry functions, only function and
+general and put specifics in `data`. To change a template, prefer `edit` (`edits: [{ oldText, newText }]`, each
+matching once; `from` copies a built-in under a new name) over resending the source. The server only parses and lints the source (entry functions, only function and
 `const` declarations at the top level, no prelude names redeclared, ≤ 128 KB). Clients report runtime errors as
 `Widget "<title>" failed on <client>: <phase>: <message> (line N, col M)` (the tool error with `wait: true`): fix the
 source, save it and show the widget again.

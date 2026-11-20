@@ -56,6 +56,17 @@ export interface SaveInput {
   readonly example: Schema.Json
 }
 
+/** An `edit`: exact-text replacements on the latest source of `name`, or of `from` copied to the new `name`. */
+export interface EditInput {
+  readonly name: string
+  readonly from?: string
+  readonly edits: ReadonlyArray<{ readonly oldText: string; readonly newText: string }>
+  readonly description?: string
+  readonly data?: Widget.DataSchema
+  /** Required when `data` changes; otherwise the stored schema was already checked. */
+  readonly example?: Schema.Json
+}
+
 const decode = Schema.decodeUnknownSync(Widget.Template)
 // Versions stored before templates had a mode are step templates.
 const decodeOption = (value: unknown) =>
@@ -85,6 +96,8 @@ export function capabilitiesProblem(mode: Widget.Mode, capabilities: Widget.Capa
 // A version lives under its content address and never changes; `latest:<name>` names the newest saved one.
 const versionKey = (name: string, version: string) => `template:${name}:${version}`
 const latestKey = (name: string) => `latest:${name}`
+// The 1-based number of a saved version among its template's versions, in the order they were first saved.
+const revisionKey = (name: string, version: string) => `revision:${name}:${version}`
 
 export const toProgram = (template: Widget.Template): Widget.Program => ({
   ...template,
@@ -143,7 +156,18 @@ export const make = (storage: StorageDomain) => {
       return yield* new InvalidDataError({ name: template.name, reason: errors.slice(0, 5).join("; ") })
   })
 
-  const save = Effect.fn("WidgetTemplates.save")(function* (input: SaveInput) {
+  /** A saved version's revision number (1 for the first version of a name), or undefined for built-ins. */
+  const revision = Effect.fn("WidgetTemplates.revision")(function* (name: string, version: string) {
+    const stored = yield* storage.get(revisionKey(name, version))
+    return typeof stored === "number" ? stored : undefined
+  })
+
+  const save = (input: SaveInput) => store(input)
+
+  // `save` and `edit`: validates, lints, checks the example when there is one, and stores the version.
+  const store = Effect.fn("WidgetTemplates.save")(function* (
+    input: Omit<SaveInput, "example"> & { example?: Schema.Json },
+  ) {
     const invalid = (reason: string) => new InvalidTemplateError({ name: input.name, reason })
     if (!Schema.is(Widget.Name)(input.name))
       return yield* invalid("names are lowercase letters, digits and dashes, starting with a letter, at most 48")
@@ -165,15 +189,69 @@ export const make = (storage: StorageDomain) => {
     })
     const issues = WidgetLint.lint(input.source, mode)
     if (issues.length > 0) return yield* invalid(WidgetLint.format(issues))
-    yield* check(template, input.example).pipe(Effect.mapError((error) => invalid(`example: ${error.reason}`)))
+    if (input.example !== undefined)
+      yield* check(template, input.example).pipe(Effect.mapError((error) => invalid(`example: ${error.reason}`)))
     // The version first, so `latest` never names a version that is not stored. Saving existing content promotes it
     // again with the new description.
     yield* storage.set(versionKey(template.name, template.version), Schema.encodeSync(Widget.Template)(template))
+    if ((yield* revision(template.name, template.version)) === undefined)
+      yield* storage.set(revisionKey(template.name, template.version), yield* count(template.name))
     yield* storage.set(latestKey(template.name), template.version)
     return template
   })
 
-  return { latest, get, list, remember, check, save }
+  // How many versions of `name` are stored.
+  const count = Effect.fnUntraced(function* (name: string) {
+    let total = 0
+    let after: string | undefined
+    do {
+      const page = yield* storage.scan({ prefix: `template:${name}:`, after, limit: 100 })
+      total += page.entries.length
+      after = page.next
+    } while (after !== undefined)
+    return total
+  })
+
+  const edit = Effect.fn("WidgetTemplates.edit")(function* (input: EditInput) {
+    const invalid = (reason: string) => new InvalidTemplateError({ name: input.name, reason })
+    if (input.from === undefined && builtin.has(input.name))
+      return yield* invalid(
+        `built-in templates can't be edited; copy it under a new name: { action: "edit", name: "my-${input.name}", from: "${input.name}", edits }`,
+      )
+    const origin = input.from ?? input.name
+    const base = yield* latest(origin)
+    if (input.edits.length === 0) return yield* invalid("`edits` is empty")
+    let source = base.source
+    for (const [index, change] of input.edits.entries()) {
+      const at = `edit ${index + 1}`
+      if (change.oldText === "") return yield* invalid(`${at}: oldText is empty`)
+      if (change.oldText === change.newText) return yield* invalid(`${at}: oldText and newText are the same`)
+      const matches = source.split(change.oldText).length - 1
+      if (matches === 0)
+        return yield* invalid(
+          `${at}: oldText was not found in the source of "${origin}"${index > 0 ? " after the earlier edits" : ""}; it must match exactly, whitespace included (get the template to see it)`,
+        )
+      if (matches > 1)
+        return yield* invalid(
+          `${at}: oldText matches ${matches} times; include more surrounding text so it matches once`,
+        )
+      // A function replacement, so `$` in newText is taken literally.
+      source = source.replace(change.oldText, () => change.newText)
+    }
+    if (input.data !== undefined && input.example === undefined)
+      return yield* invalid("`example` is required when `data` changes")
+    return yield* store({
+      name: input.name,
+      description: input.description ?? base.description,
+      data: input.data ?? base.data,
+      source,
+      mode: base.mode,
+      ...(base.capabilities === undefined ? {} : { capabilities: base.capabilities }),
+      ...(input.example === undefined ? {} : { example: input.example }),
+    })
+  })
+
+  return { latest, get, list, remember, check, save, edit, revision }
 }
 
 export type Interface = ReturnType<typeof make>

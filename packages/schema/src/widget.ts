@@ -67,7 +67,10 @@ export const Program = Schema.Struct({
   program: Schema.String,
 }).annotate({ identifier: "Widget.Program" })
 
-export const Status = Schema.Literals(["open", "submitted", "dismissed"]).annotate({ identifier: "Widget.Status" })
+/** `superseded`: a newer widget replaced it (`replaces`); it can't be answered, and clients show "Updated below". */
+export const Status = Schema.Literals(["open", "submitted", "dismissed", "superseded"]).annotate({
+  identifier: "Widget.Status",
+})
 export type Status = typeof Status.Type
 
 export interface Submit extends Schema.Schema.Type<typeof Submit> {}
@@ -98,6 +101,8 @@ export const State = Schema.Struct({
   wait: Schema.Boolean,
   /** The template's capabilities, so clients can show what the widget is granted. */
   capabilities: optional(Capabilities),
+  /** The widget that replaced this one, when `status` is `superseded`. */
+  supersededBy: optional(Schema.Struct({ messageID: Schema.String, callID: Schema.String })),
   /** Epoch milliseconds. */
   time: Schema.Struct({ created: Schema.Number, responded: optional(Schema.Number) }),
 }).annotate({ identifier: "Widget.State" })
@@ -117,7 +122,7 @@ export const RuntimeError = Schema.Struct({
 const Call = { sessionID: Schema.String, messageID: Schema.String, callID: Schema.String }
 const standard = Schema.toStandardSchemaV1
 const NotFound = standard(Schema.Struct({}))
-const Closed = standard(Schema.Struct({ status: Schema.Literals(["submitted", "dismissed"]) }))
+const Closed = standard(Schema.Struct({ status: Schema.Literals(["submitted", "dismissed", "superseded"]) }))
 
 /**
  * The widgets plugin's RPC. Clients list a Session's widgets with `states`, keep them current from `changed`, fetch a

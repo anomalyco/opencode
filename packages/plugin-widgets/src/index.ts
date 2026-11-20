@@ -20,8 +20,8 @@ export const id = "opencode.widget"
 /** At most one error report per widget is delivered within this many milliseconds. */
 export const REPORT_WINDOW_MS = 10_000
 
-/** A client's runtime error, as it fails a waiting tool call. */
-class ReportedError {
+/** Why a waiting tool call ends without an answer: a client's runtime error, or a newer widget replaced it. */
+class WaitFailure {
   constructor(readonly text: string) {}
 }
 
@@ -33,7 +33,7 @@ type Call = { readonly sessionID: string; readonly messageID: string; readonly c
 
 // Process-wide rather than per activation, so a plugin reload or another Location's instance still finds a waiting
 // call. Keys are a widget's storage key.
-const waiters = new Map<string, Deferred.Deferred<Widget.Response, ReportedError>>()
+const waiters = new Map<string, Deferred.Deferred<Widget.Response, WaitFailure>>()
 // Error reports already delivered per widget (`phase\0message`), and when the last one went out.
 const reports = new Map<string, { readonly seen: Set<string>; last: number }>()
 const recentSends = new Map<string, number[]>()
@@ -129,7 +129,7 @@ export default Plugin.define({
 
       type Outcome =
         | { readonly type: "not_found" }
-        | { readonly type: "closed"; readonly status: "submitted" | "dismissed" }
+        | { readonly type: "closed"; readonly status: Exclude<Widget.Status, "open"> }
         | { readonly type: "ok"; readonly state: Widget.State }
 
       const respond = Effect.fn("WidgetPlugin.respond")(function* (call: Call, response: Widget.Response) {
@@ -178,6 +178,24 @@ export default Plugin.define({
         }).pipe(Semaphore.withPermit(lock))
       })
 
+      // Closes `old` because `by` replaces it: it can't be answered any more, and a call waiting on it ends.
+      const supersede = Effect.fn("WidgetPlugin.supersede")(function* (old: Widget.State, by: Call) {
+        return yield* Effect.gen(function* () {
+          const state = yield* read(old)
+          if (!state || state.status !== "open") return
+          yield* write({
+            ...state,
+            status: "superseded",
+            supersededBy: { messageID: by.messageID, callID: by.callID },
+            time: { ...state.time, responded: yield* Clock.currentTimeMillis },
+          })
+          const waiter = waiters.get(stateKey(old))
+          if (!waiter) return
+          waiters.delete(stateKey(old))
+          yield* Deferred.fail(waiter, new WaitFailure(`Widget "${label(state)}" was superseded by a newer widget.`))
+        }).pipe(Semaphore.withPermit(lock))
+      })
+
       // A client's runtime error reaches the model once: a waiting call fails with it, otherwise a waking message.
       const report = Effect.fn("WidgetPlugin.report")(function* (
         call: Call,
@@ -200,7 +218,7 @@ export default Plugin.define({
           const waiter = waiters.get(key)
           if (waiter) {
             waiters.delete(key)
-            yield* Deferred.fail(waiter, new ReportedError(text))
+            yield* Deferred.fail(waiter, new WaitFailure(text))
             return state
           }
           yield* deliver(state, "error", text, `${label(state)} failed on ${client}`, true)
@@ -308,6 +326,14 @@ export default Plugin.define({
                 ),
               )
               yield* templates.check(template, input.data).pipe(Effect.mapError(toolError))
+              const replaced =
+                input.replaces === undefined
+                  ? undefined
+                  : (yield* list(context.sessionID)).find((state) => state.callID === input.replaces)
+              if (input.replaces !== undefined && !replaced)
+                return yield* new Tool.Error({
+                  message: `No widget with call ID "${input.replaces}" in this session to replace. Omit replaces to show a new widget.`,
+                })
               yield* templates.remember(template)
               const ref = { name: template.name, version: template.version }
               const state: Widget.State = {
@@ -321,9 +347,10 @@ export default Plugin.define({
                 ...(template.capabilities === undefined ? {} : { capabilities: template.capabilities }),
                 time: { created: yield* Clock.currentTimeMillis },
               }
+              if (replaced) yield* supersede(replaced, state)
               if (!state.wait) {
                 yield* write(state).pipe(Semaphore.withPermit(lock))
-                return { content: WidgetTools.shownText(label(state)), metadata: { template: ref } }
+                return { content: WidgetTools.shownText(label(state), state.callID), metadata: { template: ref } }
               }
               const response = yield* wait(state, context.cancel)
               if (!("value" in response))
@@ -346,30 +373,58 @@ export default Plugin.define({
                 metadata: { action: input.action },
                 source: { type: "tool", messageID: context.messageID, id: context.id },
               })
-              if (input.action === "list") return { content: JSON.stringify(yield* templates.list(), null, 2) }
+              if (input.action === "list") {
+                const all = yield* templates.list()
+                return { content: JSON.stringify(all, null, 2), metadata: { action: "list", count: all.length } }
+              }
               const required = <A>(field: string, value: A | undefined) =>
                 value === undefined
                   ? Effect.fail(new Tool.Error({ message: `\`${field}\` is required for action "${input.action}"` }))
                   : Effect.succeed(value)
               const named = yield* required("name", input.name)
+              // Short metadata, so clients show these calls as one quiet line instead of the source.
+              const summary = Effect.fnUntraced(function* (template: Widget.Template) {
+                const revision = yield* templates.revision(template.name, template.version)
+                return {
+                  action: input.action,
+                  name: template.name,
+                  version: template.version,
+                  ...(revision === undefined ? {} : { revision }),
+                  lines: template.source.split("\n").length,
+                }
+              })
               if (input.action === "get") {
                 const template = yield* templates.latest(named).pipe(Effect.mapError(toolError))
-                return { content: JSON.stringify(template, null, 2) }
+                return { content: JSON.stringify(template, null, 2), metadata: yield* summary(template) }
               }
-              const saved = yield* templates
-                .save({
-                  name: named,
-                  description: yield* required("description", input.description),
-                  data: yield* required("data", input.data),
-                  source: yield* required("source", input.source),
-                  ...(input.mode === undefined ? {} : { mode: input.mode }),
-                  ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
-                  example: yield* required("example", input.example),
-                })
-                .pipe(Effect.mapError(toolError))
+              const saved =
+                input.action === "edit"
+                  ? yield* templates
+                      .edit({
+                        name: named,
+                        ...(input.from === undefined ? {} : { from: input.from }),
+                        edits: yield* required("edits", input.edits),
+                        ...(input.description === undefined ? {} : { description: input.description }),
+                        ...(input.data === undefined ? {} : { data: input.data }),
+                        ...(input.example === undefined ? {} : { example: input.example }),
+                      })
+                      .pipe(Effect.mapError(toolError))
+                  : yield* templates
+                      .save({
+                        name: named,
+                        description: yield* required("description", input.description),
+                        data: yield* required("data", input.data),
+                        source: yield* required("source", input.source),
+                        ...(input.mode === undefined ? {} : { mode: input.mode }),
+                        ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
+                        example: yield* required("example", input.example),
+                      })
+                      .pipe(Effect.mapError(toolError))
+              const metadata = yield* summary(saved)
+              const verb = input.action === "edit" ? "Edited" : "Saved"
               return {
-                content: `Saved widget template "${saved.name}" version ${saved.version}. Show it with the widget tool.`,
-                metadata: { name: saved.name, version: saved.version },
+                content: `${verb} widget template "${saved.name}" version ${saved.version} (revision ${metadata.revision}, ${metadata.lines} lines). Show it with the widget tool.`,
+                metadata,
               }
             }),
         })
@@ -379,7 +434,7 @@ export default Plugin.define({
       // that arrives at once finds it; it is removed under the lock, so an answer reaches either this call or the model.
       const wait = Effect.fnUntraced(function* (state: Widget.State, cancel: Effect.Effect<void> | undefined) {
         const key = stateKey(state)
-        const answered = yield* Deferred.make<Widget.Response, ReportedError>()
+        const answered = yield* Deferred.make<Widget.Response, WaitFailure>()
         waiters.set(key, answered)
         return yield* Effect.gen(function* () {
           yield* write(state).pipe(Semaphore.withPermit(lock))

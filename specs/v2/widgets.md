@@ -340,15 +340,18 @@ type State = {
   callID: string
   template: { name: string; version: string }
   title?: string
-  status: "open" | "submitted" | "dismissed"
+  status: "open" | "submitted" | "dismissed" | "superseded"
   response?: unknown                    // the submitted value
+  supersededBy?: { messageID: string; callID: string }   // the widget that replaced it (status "superseded")
   wait: boolean                         // the tool call waits for the answer (see Tools)
   capabilities?: { https?: { hosts: string[] } }   // the template's, for the client's grant chip
   time: { created: number; responded?: number }   // epoch ms
 }
 ```
 
-A widget goes `open → submitted` or `open → dismissed`, once. States of a deleted Session are removed.
+A widget goes `open → submitted`, `open → dismissed` or `open → superseded` (a newer widget `replaces` it), once;
+`time.responded` records when. A superseded widget can't be answered or send (`closed`, `data: { status:
+"superseded" }`), and reports for it are ignored. States of a deleted Session are removed.
 
 ### RPC: `opencode.widget`
 
@@ -422,15 +425,21 @@ Respond and send for one process are serialized, so a widget is answered once.
 `widget` — show a widget.
 
 ```ts
-input: { template: string; data: object; title?: string; wait?: boolean }
+input: { template: string; data: object; title?: string; replaces?: string; wait?: boolean }
 ```
 
 The plugin resolves the latest version, validates `data` against the template's JSON Schema (errors go back to the
 model as the tool error), stores the widget's state and publishes `changed`. **The server never runs template code**:
 not `init`, `view` or `main`. Errors in running a widget come from the clients that show it, through `report`.
 
-- `wait` omitted or `false`: returns at once with `Widget "<title>" is shown to the user. Their response arrives as the
-  next message; end your turn now unless there is unrelated work to do.` The answer arrives as a synthetic message.
+- `replaces`: the call ID of an earlier widget in the same Session (an unknown one is a tool error and nothing is
+  posted). If it is still open it becomes `superseded` with `supersededBy` set, and `changed` is published for it
+  before the new widget's state; a `wait: true` call waiting on it ends with the tool error
+  `Widget "<label>" was superseded by a newer widget.` The model uses it when iterating on the same widget (a fix, new
+  data, the next step), so the transcript keeps one live widget.
+- `wait` omitted or `false`: returns at once with `Widget "<title>" is shown to the user (call ID <callID>, for
+  replaces). Their response arrives as the next message; end your turn now unless there is unrelated work to do.` The
+  answer arrives as a synthetic message.
 - `wait: true`: blocks until the final answer from any client, like the `question` tool. A submission returns
   `User responded to widget "<label>": <JSON value>` as the tool result (metadata adds `response`); a dismissal returns a
   tool error `User dismissed widget "<label>"`, which the model sees and continues with; no synthetic message is
@@ -443,14 +452,16 @@ providers); fields an action needs are checked at run time.
 
 ```ts
 input: {
-  action: "list" | "get" | "save"  // list: names, descriptions, data schemas; get: the latest version with source
-  name?: string                    // get, save
-  description?: string             // save
-  data?: JSONSchema                // save; top-level `type` must be "object"
+  action: "list" | "get" | "save" | "edit"  // list: names, descriptions, data schemas; get: the latest version with source
+  name?: string                    // get, save, edit
+  description?: string             // save; edit (optional, keeps the old one)
+  data?: JSONSchema                // save; edit (optional); top-level `type` must be "object"
+  from?: string                    // edit: copy this template's latest version to `name` first (e.g. a built-in)
+  edits?: { oldText: string; newText: string }[]   // edit
   source?: string                  // save
   mode?: "step" | "live"           // save; default "step"
   capabilities?: { https?: { hosts: string[] } }   // save; live templates only (widgets-live.md, Capabilities)
-  example?: object                 // save
+  example?: object                 // save; edit when `data` changes
 }
 ```
 
@@ -464,6 +475,20 @@ come back as the tool error with `line N, col M`. `capabilities` are rejected on
 `https.hosts` entry must be a lowercase host name (single labels and IPv4 literals included, for clients' dev-mode
 local network), `*.` plus one, optionally with a `:port`, or `*` (1 to 32 entries). Built-in names cannot be overwritten. Saving content that already exists (same version) makes
 that version the latest again and updates its description.
+
+`edit` applies `edits` in order to the latest source of `name` (or of `from`, saved under the new `name`): each
+`oldText` must occur exactly once in the source as edited so far, and `newText` replaces it literally. Errors name the
+edit (`edit 2: oldText matches 3 times; include more surrounding text so it matches once`, `... was not found ...`,
+empty `edits`, `oldText` equal to `newText`). The result is linted and saved like `save`, keeping the template's mode and
+capabilities, as a new version. A built-in can only be edited as a copy (`from: "<built-in>"` with a new `name`). An
+`example` is required when `data` changes; otherwise the stored schema stands and no example is checked.
+
+Each saved version gets a **revision**: 1 for the first content saved under a name, counting distinct versions in the
+order they were first stored (saving old content again keeps its revision). Results carry short metadata, so clients
+never need the source to show the call: `list` → `{ action, count }`; `get`, `save`, `edit` →
+`{ action, name, version, revision?, lines }` (`revision` is absent for built-ins). Clients render `widget_template`
+calls as one quiet line, never the source: `Saved template <name> v<revision>`, `Edited template <name> v<revision>`,
+`Read template <name>`, `Listed <count> widget templates`.
 
 Permission actions are `widget` (resource: the template name) and `widget_template` (resource: the template name, or
 `*` for list). The plugin's agent transform allows both for the Build agent, `widget` for Plan, and denies `widget` for
@@ -534,6 +559,8 @@ nothing.
 ## Client behaviour
 
 - Render each `widget` tool call inline in the timeline at its position, from its tool input plus its state.
+- `superseded`: render one quiet line, "Updated below", instead of the widget (the replacement follows it in the
+  timeline; `supersededBy` names it).
 - `open`: interactive. `submitted` / `dismissed`: render the final view read-only with a status line ("Submitted",
   "Dismissed"); for a submitted widget, rerun `init` and show the response summary (clients do not persist the local
   state).
