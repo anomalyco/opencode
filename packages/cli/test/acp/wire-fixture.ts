@@ -25,6 +25,7 @@ import { Form } from "@opencode/schema/form"
 import type { Location } from "@opencode/schema/location"
 import type { Model } from "@opencode/schema/model"
 import type { Plugin } from "@opencode/schema/plugin"
+import type { Provider } from "@opencode/schema/provider"
 import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { TokenUsage } from "@opencode/schema/token-usage"
@@ -43,6 +44,7 @@ type LocationRef = typeof Location.PublicRef.Encoded
 type ModelInfo = typeof Model.Info.Encoded
 type ModelRef = typeof Model.Ref.Encoded
 type PluginInfo = typeof Plugin.Info.Encoded
+type ProviderInfo = typeof Provider.Info.Encoded
 type SessionInfo = typeof Session.Info.Encoded
 type SessionMessageInfo = typeof SessionMessage.Info.Encoded
 type TokenUsageInfo = typeof TokenUsage.Info.Encoded
@@ -165,6 +167,7 @@ type Catalog = {
   agents: AgentInfo[]
   commands: CommandInfo[]
   plugins: PluginInfo[]
+  providers: ProviderInfo[]
 }
 
 export type InitializeOptions = {
@@ -201,6 +204,13 @@ export const secondModel = {
   enabled: true,
   limit: { context: 200_000, output: 20_000 },
 } satisfies ModelInfo
+
+const testProvider = {
+  id: "test",
+  name: "Test Provider",
+  activation: "auto",
+  package: "",
+} satisfies ProviderInfo
 
 const buildAgent = {
   id: "build",
@@ -610,6 +620,7 @@ function startServer(options: WireOptions, changed: () => void) {
     models: [testModel, secondModel],
     agents: [buildAgent, planAgent],
     commands: [reviewCommand],
+    providers: [testProvider],
     plugins: [
       {
         id: "opencode.models.dev",
@@ -755,6 +766,7 @@ function startServer(options: WireOptions, changed: () => void) {
       },
       "/api/model": { GET: catalogRoute(() => catalog.models) },
       "/api/model/default": { GET: catalogRoute(() => catalog.models[0] ?? null) },
+      "/api/provider": { GET: catalogRoute(() => catalog.providers) },
       "/api/agent": { GET: catalogRoute(() => catalog.agents) },
       "/api/command": { GET: catalogRoute(() => catalog.commands) },
       "/api/plugin": { GET: catalogRoute(() => catalog.plugins) },
@@ -776,7 +788,9 @@ function startServer(options: WireOptions, changed: () => void) {
         ),
       },
       "/api/session/active": {
-        GET: route(() => Response.json({ data: Object.fromEntries([...fake.active].map((id) => [id, { type: "running" }])) })),
+        GET: route(() =>
+          Response.json({ data: Object.fromEntries([...fake.active].map((id) => [id, { type: "running" }])) }),
+        ),
       },
       "/api/session/:sessionID": {
         GET: route((req) => {
