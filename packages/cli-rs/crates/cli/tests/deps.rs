@@ -87,7 +87,7 @@ const LAYERS: [&[Crate]; 6] = [
     &[
         // Their tests draw through the plugin host above them: an upward dev edge, which ships nothing.
         ("latex", &["plugin-abi"], &["parity", "plugin", "ui"]),
-        ("mermaid", &["plugin-abi"], &["parity", "plugin", "ui"]),
+        ("mermaid", &["plugin-abi"], &["parity", "plugin", "ui", "util"]),
         ("service", &["api", "local", "util"], &[]),
         ("ui", &["api-types", "util"], &["parity"]),
     ],
