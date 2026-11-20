@@ -143,6 +143,48 @@ function MenuItem(props: ParentProps<MenuItemProps>) {
   )
 }
 
+export interface MenuItemRowProps extends ComponentProps<typeof DropdownMenu.Group> {
+  /** The row's name, set where an item's label is. It names the group for assistive technology. */
+  label: JSX.Element
+}
+
+// A row that is not an action itself: its name where an item's label is, and small items of its own where an item's
+// shortcut or chevron is. It is laid out as an item, so its name and the edge of its last item cannot drift from the
+// rows around it. Up and Down walk its items in order, as they walk every item; Left and Right move between them.
+function MenuItemRow(props: ParentProps<MenuItemRowProps>) {
+  const ctx = useMenuContext()
+  const [s, r] = splitProps(props, ["class", "classList", "children", "label"])
+
+  const onKeyDown: JSX.EventHandler<HTMLSpanElement, KeyboardEvent> = (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+
+    const items = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-component="menu-v2-item"]:not([data-disabled])')]
+    const forward = (event.key === "ArrowRight") !== event.currentTarget.matches(":dir(rtl)")
+    const next = items[items.findIndex((item) => item === document.activeElement) + (forward ? 1 : -1)]
+
+    // Past either end the key keeps its meaning for the menu, such as closing a submenu.
+    if (!next) return
+    event.preventDefault()
+    event.stopPropagation()
+    next.focus()
+  }
+
+  return (
+    <DropdownMenu.Group
+      {...r}
+      data-component="menu-v2-item"
+      data-row=""
+      data-appearance={ctx.appearance()}
+      classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
+    >
+      <DropdownMenu.GroupLabel data-slot="menu-v2-item-content">{s.label}</DropdownMenu.GroupLabel>
+      <span data-slot="menu-v2-item-actions" onKeyDown={onKeyDown}>
+        {s.children}
+      </span>
+    </DropdownMenu.Group>
+  )
+}
+
 export interface MenuCheckboxItemProps extends ComponentProps<typeof DropdownMenu.CheckboxItem> {
   shortcut?: JSX.Element | string
   badge?: JSX.Element | string
@@ -544,6 +586,7 @@ export const Menu = Object.assign(MenuRoot, {
   Portal: DropdownMenu.Portal,
   Content: MenuContent,
   Item: MenuItem,
+  ItemRow: MenuItemRow,
   CheckboxItem: MenuCheckboxItem,
   RadioGroup: DropdownMenu.RadioGroup,
   RadioItem: MenuRadioItem,

@@ -12,11 +12,12 @@ import {
   untrack,
 } from "solid-js"
 import { Button } from "@opencode/ui/button"
-import { Command, createKeyed, LinkHandler, MenuItem, Style, type Plugin } from "@opencode/plugin/gui"
-import { BuiltinCommand, BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
-import { Browser } from "@opencode/plugin/gui/browser"
+import { Command, createKeyed, LinkHandler, MenuItem, SettingsPage, Style, type Plugin } from "@opencode/plugin/gui"
+import { BuiltinAppLink, builtinContext, BuiltinCommand, BuiltinPanel, BuiltinPromptGate, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
+import { Browser, type ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
 import type definition from "./index"
 import type { Model } from "./model"
+import { uuid } from "@opencode/util/uuid"
 import {
   BROWSER_MODEL_LOAD_TIMEOUT_MS,
   createBrowserModelState,
@@ -28,6 +29,9 @@ import {
   type BrowserModelEvent,
 } from "./model-machine"
 import { PageIcon } from "./page-icon"
+import { artifactLink, artifactWebURL } from "./artifact-link"
+import { attachable } from "./prompt-gate"
+import { remotePath, workspacePrefix } from "./remote-address"
 import { viewportToolbarAvailable } from "./viewport-toolbar-machine"
 import barStyles from "./bar.css?inline"
 import commentStyles from "./comment.css?inline"
@@ -57,15 +61,64 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }
   })
 
+  // Artifacts have a relative API link, not a workspace path. An external provider's ordinary web URL falls through.
+  ctx.add(LinkHandler, {
+    priority: 6,
+    match: (link) => link.origin === undefined && !!link.session && !!artifactLink(link.href, link.session.server.url),
+    open(link) {
+      const session = link.session
+      const url = session && artifactLink(link.href, session.server.url)
+
+      if (session && url) {
+        if (ctx.app.platform !== "desktop") {
+          const external = artifactWebURL(url, session.server.url)
+
+          if (external) return ctx.system.openExternal(external)
+        }
+
+        const pane = model()
+
+        if (pane?.available(session)) return pane.openURL(session, url)
+      }
+
+      ctx.toast.show({ variant: "error", title: ctx.t("artifact.unavailable") })
+    },
+  })
+
   // The native pane is a desktop feature.
   if (ctx.app.platform !== "desktop") return
+  ctx.add(BuiltinAppLink, {
+    review(href) {
+      const session = sessions.current()
+      const result = session && model()?.reviewLink(session, href)
+
+      if (!result) return ctx.toast.show({ title: ctx.t("link.unavailable") })
+      void result.catch(() => {
+        if (!ctx.signal.aborted) ctx.toast.show({ title: ctx.t("link.failed") })
+      })
+    },
+  })
+  ctx.add(LinkHandler, {
+    priority: 6,
+    match: (link) => link.origin === undefined && link.href.startsWith("workspace://"),
+    open(link) {
+      const session = link.session
+      const pane = model()
+
+      if (session?.id && !session.server.builtin && remotePath(link.href, workspacePrefix(session.id)) && pane?.available(session))
+        return pane.openURL(session, link.href)
+      ctx.toast.show({ variant: "error", title: ctx.t("refused.workspace") })
+    },
+  })
   // Tab trigger styles render with the strip, before the pane chunk loads.
   ctx.add(Style, tabStyles)
   ctx.add(Style, commentStyles)
   ctx.add(Style, barStyles)
-  // Everything here serves a mounted session, so the attachment model and the pane's protocol
-  // schemas load when the first session opens instead of at startup.
+  // Everything here serves a session, so the attachment model and the pane's protocol schemas load once the app
+  // idles after startup, or when the first session opens if that is sooner.
   const owner = getOwner()
+  // Each load in flight by attempt, for a caller that needs the model before its chunk arrived.
+  const loads = new Map<number, Promise<void>>()
 
   const dispatchModel = (event: BrowserModelEvent<Model>) => {
     const next = transitionBrowserModel(untrack(modelState), event)
@@ -79,34 +132,97 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     const deadline = Promise.withResolvers<never>()
     const timer = setTimeout(() => deadline.reject(new Error(ctx.t("model.timedOut"))), BROWSER_MODEL_LOAD_TIMEOUT_MS)
 
-    void Promise.race([import("./model"), deadline.promise])
-      .finally(() => clearTimeout(timer))
-      .then(
-        (module) => {
-          if (ctx.signal.aborted || !isLoadingBrowserModel(untrack(modelState), attempt)) return
-          const created = runWithOwner(owner, () => module.createModel(ctx))!
+    loads.set(
+      attempt,
+      Promise.race([import("./model"), deadline.promise])
+        .finally(() => clearTimeout(timer))
+        .then(
+          (module) => {
+            if (ctx.signal.aborted || !isLoadingBrowserModel(untrack(modelState), attempt)) return
+            const created = runWithOwner(owner, () => module.createModel(ctx))!
 
-          dispatchModel({ type: "load.succeeded", attempt, model: created })
-        },
-        (cause: unknown) =>
-          dispatchModel({
-            type: "load.failed",
-            attempt,
-            error: cause instanceof Error ? cause.message : String(cause),
-          }),
-      )
+            dispatchModel({ type: "load.succeeded", attempt, model: created })
+          },
+          (cause: unknown) =>
+            dispatchModel({
+              type: "load.failed",
+              attempt,
+              error: cause instanceof Error ? cause.message : String(cause),
+            }),
+        )
+        .finally(() => loads.delete(attempt)),
+    )
   }
 
   onCleanup(() => dispatchModel({ type: "disposed" }))
 
   const opened = createMemo((seen: boolean) => seen || !!sessions.current(), false)
   createKeyed(opened, () => dispatchModel({ type: "load.requested" }))
+  // A draft has no session until its first prompt is sent, and that prompt must not wait for a chunk to compile.
+  onCleanup(onIdle(() => dispatchModel({ type: "load.requested" })))
+  // The agent's first step lists the browser tools only when this desktop attached to the session before the prompt
+  // reached the server. A draft's session is created by the send itself, so the send waits here for the attachment.
+  ctx.add(BuiltinPromptGate, {
+    ready(input) {
+      // A prompt that cannot gain from an attachment waits for nothing, not even for the model's chunk.
+      if (!attachable(input.session, navigator.onLine)) return
+      dispatchModel({ type: "load.requested" })
+      const loading = untrack(modelState)
+      const loaded = loading.status === "loading" ? loads.get(loading.attempt) : undefined
 
-  ctx.provide(Browser, {
-    attached: (session) => model()?.attached(session) ?? false,
-    canOpen: (session, path) => model()?.canOpen(session, path) ?? false,
-    open: (session, url) => model()?.openURL(session, url),
-    openFile: (session, path) => model()?.openFile(session, path),
+      if (!loaded) return untrack(model)?.ready(input.session, input.signal)
+
+      return loaded.then(() => {
+        if (!input.signal.aborted && !ctx.signal.aborted) return untrack(model)?.ready(input.session, input.signal)
+      })
+    },
+  })
+
+  builtinContext(ctx).provideFor(Browser, (_consumer, signal) => {
+    const owner = uuid()
+    const targets = new Map<ExperimentalBrowserTab, string>()
+
+    const experimental: Browser["experimental"] = {
+      async open(session, url) {
+        signal.throwIfAborted()
+        ctx.signal.throwIfAborted()
+        // A plugin may ask as its session first mounts, while the model's chunk still loads.
+        dispatchModel({ type: "load.requested" })
+        const loading = untrack(modelState)
+
+        if (loading.status === "loading") await loads.get(loading.attempt)
+        signal.throwIfAborted()
+        ctx.signal.throwIfAborted()
+        const pane = untrack(model)
+
+        if (!pane) throw new Error("browser.pane.unavailable")
+
+        const id = await pane.createTab(session.key, owner, url)
+        signal.throwIfAborted()
+        ctx.signal.throwIfAborted()
+        targets.set(id, session.key)
+
+        return id
+      },
+      async close(id) {
+        const session = targets.get(id)
+
+        if (!session || signal.aborted || ctx.signal.aborted) return false
+        const closed = await model()?.closeOwned(session, owner, id) ?? false
+
+        if (closed) targets.delete(id)
+
+        return closed
+      },
+    }
+
+    return {
+      attached: (session) => model()?.attached(session) ?? false,
+      canOpen: (session, path) => model()?.canOpen(session, path) ?? false,
+      open: (session, url) => model()?.openURL(session, url),
+      experimental,
+      openFile: (session, path) => model()?.openFile(session, path),
+    }
   })
 
   ctx.add(Command, (): Command | undefined => {
@@ -121,7 +237,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       bind: "f5",
       editable: true,
       enabled: pane.visible() && !!pane.address(),
-      run: pane.reload,
+      run: () => pane.reload(),
     }
   })
 
@@ -141,9 +257,60 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       hidden: true,
       editable: true,
       enabled: pane.visible(),
-      run: pane.reload,
+      run: () => pane.reload(),
     }
   })
+
+  ctx.add(Command, (): Command | undefined => {
+    const pane = model()?.pane()
+
+    if (!pane) return
+
+    return {
+      id: "hardReload",
+      title: ctx.t("menu.hardReload"),
+      // The names developers know it by, which the palette matches.
+      keywords: "hard reload ignore cache refresh",
+      group: ctx.t("command.category.view"),
+      bind: mac ? "mod+alt+r" : "ctrl+f5",
+      scope: "#browser-panel",
+      editable: true,
+      enabled: pane.visible() && !!pane.address(),
+      run: () => pane.reload(true),
+    }
+  })
+
+  ctx.add(Command, (): Command | undefined => {
+    const pane = model()?.pane()
+
+    if (!pane) return undefined
+
+    return {
+      id: "find",
+      title: ctx.t("find.open"),
+      group: ctx.t("command.category.view"),
+      bind: "mod+f",
+      scope: "#browser-panel",
+      editable: true,
+      enabled: pane.visible() && pane.inspectable(),
+      run: pane.find,
+    }
+  })
+
+  for (const direction of ["next", "previous"] as const) {
+    const shift = direction === "previous" ? "shift+" : ""
+    ctx.add(Command, (): Command | undefined => {
+      const pane = model()?.pane()
+
+      if (!pane) return
+
+      return {
+        id: `find.${direction}`, title: ctx.t(`find.${direction}`), group: ctx.t("command.category.view"),
+        bind: mac ? `mod+${shift}g` : `mod+${shift}g,${shift}f3`, scope: "#browser-panel", editable: true,
+        enabled: pane.visible() && pane.inspectable(), run: () => pane.findMatch(direction),
+      }
+    })
+  }
 
   // The system browser's address shortcut, in the pane and, forwarded like mod+t and mod+w, from a page with focus.
   // Ctrl+L focuses the composer outside the pane on Windows and Linux.
@@ -270,6 +437,60 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     },
   })
 
+  // A web link the user clicked in a session opens beside it, in the profile where they are signed in. While the pane
+  // cannot open it, or the user turned this off, the link goes on to the system browser.
+  ctx.add(LinkHandler, {
+    priority: 5,
+    match: (link) =>
+      link.origin === undefined &&
+      /^https?:\/\//i.test(link.href) &&
+      ctx.stores.preferences.value.links &&
+      !!link.session &&
+      !!model()?.available(link.session),
+    open(link) {
+      if (link.session) model()?.openURL(link.session, link.href)
+    },
+  })
+
+  const SettingsView = lazy(() => import("./settings"))
+
+  ctx.add(SettingsPage, {
+    id: "browser",
+    icon: "globe",
+    get title() {
+      return ctx.t("settings.title")
+    },
+    get entries() {
+      return [
+        { id: "settings-browser-links", title: ctx.t("settings.links.title"), keywords: "links open system browser" },
+        { id: "settings-browser-agent-pages", title: ctx.t("settings.agentPages.title"), keywords: "agent preview automatic browser pane" },
+        {
+          id: "settings-browser-remote",
+          title: ctx.t("settings.remote.title"),
+          keywords: "remote server sign in cookies share",
+        },
+        { id: "settings-browser-cookies", title: ctx.t("settings.cookies.title"), keywords: "cookies sign out" },
+        {
+          id: "settings-browser-import",
+          title: ctx.t("settings.import.title"),
+          keywords: "import cookies chrome edge firefox safari helium arc brave sign in",
+        },
+        { id: "settings-browser-extensions", title: ctx.t("settings.extensions.title"), keywords: "extensions" },
+        {
+          id: "settings-browser-sites",
+          title: ctx.t("settings.sites.title"),
+          keywords: "site permissions camera microphone location notifications clipboard",
+        },
+      ]
+    },
+    // A search that lands on a row inside Advanced opens it; the page reads the entry being revealed.
+    render: (input) => (
+      <Suspense>
+        <SettingsView target={input.target} />
+      </Suspense>
+    ),
+  })
+
   // Stable tab objects with live labels, so title and URL changes never remount a trigger.
   const tabs = new Map<string, Map<string, BuiltinPanelTab>>()
 
@@ -291,6 +512,9 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
         <div class="flex items-center gap-1.5">
           <PageIcon icon={icon()} />
           <span class="max-w-40 truncate">{text()}</span>
+          <Show when={model()?.asking({ key: session }, id) ? "prompt.tab" : model()?.unseen({ key: session }, id) && "tab.activity"}>
+            {(status) => <span role="img" aria-label={ctx.t(status())} class="size-1.5 shrink-0 rounded-full" classList={{ "bg-v2-state-fg-warning": status() === "prompt.tab", "bg-v2-state-fg-info": status() === "tab.activity" }} />}
+          </Show>
         </div>
       ),
       // Listed only to hold the restored selection until the desktop's first inventory names the tab, or the model
@@ -345,7 +569,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           {(error) => (
             <div role="alert" class="size-full flex flex-col items-center justify-center gap-3 px-4 text-center">
               <div class="flex flex-col gap-1">
-                <div class="text-13-regular text-text-strong">{ctx.t("common.requestFailed")}</div>
+                <div class="text-13-regular text-text-strong">{ctx.t("model.failed")}</div>
                 <div class="text-12-regular text-text-weak break-words">{error()}</div>
               </div>
               <Button size="small" variant="outline" onClick={() => dispatchModel({ type: "retry.requested" })}>

@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { FileRpcs } from "../../shared/ipc-rpc"
-import { DesktopFiles, openExternalURL, openLocalFileURL } from "../files"
+import { DesktopFiles, openExternalURL } from "../files"
 import { IpcPortHandoff } from "../ipc-transport"
 import { sender } from "./context"
 
@@ -27,7 +27,6 @@ export const fileHandlers = FileRpcs.toLayer(
       FilesSaveFile: ({ options, content }) => files.saveFile(options, content).pipe(Effect.orDie),
       FilesOpenExternal: ({ url }) => openExternalURL(url).pipe(Effect.asVoid),
       FilesOpenBrowser: ({ url }) => (/^https?:/i.test(url) ? openExternalURL(url) : Effect.succeed(false)),
-      FilesOpenLocalFile: ({ url }) => openLocalFileURL(url),
       FilesOpenPath: ({ path, application }) =>
         files.openPath(path, application).pipe(
           Effect.map((result) => result ?? null),

@@ -97,6 +97,14 @@ for (const view of ["desktop", "mobile"] as const) {
 
     if (view === "desktop") await openReviewLauncher(panel)
     await expect(panel.getByText("Track, review, and undo changes in this project")).toBeVisible()
+
+    if (view === "desktop") {
+      const toggle = panel.getByRole("button", {name:"Toggle file tree"})
+
+      if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click()
+      await expect(panel.getByText("No changed files. Use Open file to browse the workspace.")).toBeVisible()
+    }
+
     await expect(panel.getByRole("button", { name: "Git changes" })).toHaveCount(0)
     const init = panel.getByRole("button", { name: "Create Git repository" })
     await init.click()
@@ -495,6 +503,12 @@ test("context closes the side region only when its button opened it", async ({ p
   await panel.getByRole("button", { name: /^Review/ }).click()
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
   await context.click()
+  // Under a New tab view Context is not what the region shows, so its button shows it rather than closing it unseen.
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await contextButton.click()
+  await expect(newTab).toHaveCount(0)
+  await expect(context).toHaveAttribute("aria-selected", "true")
   await contextButton.click()
   await expect(context).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")

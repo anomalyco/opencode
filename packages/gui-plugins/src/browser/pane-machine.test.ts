@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { createDocumentState, documentTab, transitionDocument } from "./page-machine"
+import { invalidReply, wireOutcome, wireState } from "./wire"
 import { SessionNotFoundError } from "@opencode/protocol/errors"
 import {
   attachmentFailure,
@@ -9,6 +11,8 @@ import {
   isCurrentPage,
   resolveControlFrame,
   selectBinding,
+  selectInventory,
+  selectOwnedBinding,
   transitionBinding,
   transitionPane,
   type BindingEvent,
@@ -71,6 +75,91 @@ function frame(data: {
 function attached(restore?: Browser.State) {
   return play(createPaneState(), registered(restore), on({ type: "server.attached", fileRoots: [] })).state
 }
+
+test("only the registering window owns the binding used to review a conversation link", () => {
+  const state = attached()
+  expect(selectOwnedBinding(state, 1, "b1")).toBeDefined()
+  expect(selectOwnedBinding(state, 2, "b1")).toBeUndefined()
+  expect(selectOwnedBinding(state, 1, "missing")).toBeUndefined()
+})
+
+test("the saved-tab record after stopping a deferred restore is the original address", () => {
+  const prior = tab(tabA, dashboard, "Dashboard", 2)
+  const start = attached({ tabs: [prior], focusedTabID: tabA })
+  const attempt = entry(start).nextAttempt
+  const held = transitionDocument(createDocumentState(prior), { type: "navigation.started", url: dashboard, isMainFrame: true, isSameDocument: false }).state
+  const stopped = transitionDocument(held, { type: "navigation.held-stopped", address: dashboard }).state
+  const value = documentTab(stopped, { id: tabA, canGoBack: false, canGoForward: false })
+  const opened = play(start, on({ type: "tab.opened", tabID: tabA, attempt, tab: prior }))
+  const next = play(opened.state, on({ type: "tab.published", tabID: tabA, attempt, tab: value }))
+  expect(next.effects).toContainEqual({ type: "save-restore", binding: "b1", storageKey: "server\nb1", snapshot: { tabs: [{ id: tabA, url: dashboard }], focusedTabID: tabA } })
+})
+
+test("a refused restore keeps its saved address, reports the reason once and consumes no page attempt", () => {
+  const url = "file:///old/project/index.html"
+  const start = attached({ tabs: [tab(tabA, url)], focusedTabID: tabA })
+  const event = on({ type: "restore.refused", tabID: tabA, reason: "browser.restore.outside" })
+  const result = transitionPane(start, event)
+  expect(entry(result.state).tabs.get(tabA)).toMatchObject({ status: "unloaded", tab: {url, loadError:"browser.restore.outside"} })
+  expect(entry(result.state).nextAttempt).toBe(entry(start).nextAttempt)
+  expect(transitionPane(result.state, event)).toEqual({state:result.state, effects:[]})
+})
+
+test("agent activity neither selects the person's tab nor gives another window a binding", () => {
+  const start = attached({ tabs: [tab(tabA, dashboard, "A"), tab(tabB, dashboard, "B")], focusedTabID: tabA })
+  const next = transitionPane(start, on({ type: "tab.active", tabID: tabB }))
+  const own = selectOwnedBinding(next.state, 1, "b1")
+
+  if (!own) throw new Error("missing fixture binding")
+  expect(selectOwnedBinding(next.state, 2, "b1")).toBeUndefined()
+  expect(selectInventory(own).focusedTabID).toBe(tabA)
+  expect(selectInventory(own, "agent").focusedTabID).toBe(tabB)
+  expect(next.effects.some(effect => effect.type === "emit" && effect.event.type === "focus")).toBe(false)
+})
+
+test("reconnect tears down the previous native pages before restoring the same window and session", () => {
+  const opened = play(attached(), on({type:"tab.opened", tabID: tabA, attempt:1, tab:tab(tabA,"workspace://session/index.html")}))
+  const replacement = registered(undefined, "b2")
+
+  if (replacement.type !== "registered") throw new Error("expected registration")
+  const next = transitionPane(opened.state, {...replacement, storageKey:"server\nb1"})
+  expect(selectBinding(next.state,"b1")).toBeUndefined()
+  expect(next.effects.map(effect => effect.type)).toEqual(["emit", "release-pages", "teardown", "start-timer"])
+})
+
+test("a restored preview retries the failed attempt when the server returns", () => {
+  const state = attached({tabs:[{ ...tab(tabA,"workspace://ses_x/report.html"), loadError:"ERR_FAILED" }], focusedTabID:tabA})
+  const restored = entry(state).tabs.get(tabA)?.tab
+  expect(restored?.url).toBe("workspace://ses_x/report.html")
+  expect(restored?.loadError).toBeUndefined()
+  expect(Object.hasOwn(restored ?? {}, "loadError")).toBe(false)
+})
+
+test("tab inventories and command replies cross the same JSON boundary, including after restore", () => {
+  for (const url of ["about:blank", "file:///project/index.html", "workspace://session/index.html", "artifact://art_report/"]) {
+    const failed = { ...tab(tabA, url), loadError: "ERR_FAILED" }
+    const restored = entry(attached({tabs:[failed], focusedTabID:tabA})).tabs.get(tabA)!.tab
+
+    for (const t of [failed, restored]) {
+      const state = { tabs: [t], focusedTabID: tabA }
+      expect(wireState(state)).toEqual(state)
+      expect(wireOutcome({type:"success",result:{value:state,files:[]}}).type).toBe("success")
+    }
+  }
+
+  const invalid = {}
+  Object.defineProperty(invalid, "missing", { value: undefined, enumerable: true })
+  expect(wireOutcome({ type: "success", result: { value: invalid, files: [] } })).toEqual(invalidReply)
+})
+
+test("an offline registration returns the saved inventory for retry without forgetting it", () => {
+  const tab = { id: tabA, url: "workspace://ses_x/report.html" }
+  const start = registered()
+
+  if (start.type !== "registered") throw new Error("expected registration")
+  const result = play(createPaneState(), { ...start, saved: { tabs: [tab], focusedTabID: tabA } }, on({ type: "attachment.ended", outcome: "closed" }))
+  expect(closeEvents(result.effects)).toMatchObject([{ state: { tabs: [tab] }, error: "browser.pane.registration.closed" }])
+})
 
 function entry(state: PaneState, binding = "b1") {
   const value = selectBinding(state, binding)
@@ -178,11 +267,11 @@ describe("binding close reason", () => {
     expect(attachmentFailure(new Error("socket hang up"))).toBe("closed")
   })
 
-  test("a missing session and the window's close forget the saved tabs; other closes keep them", () => {
+  test("only explicit deletion forgets the saved tabs, not a missing session or suspended window", () => {
     const removes = (event: BindingEvent) =>
       play(attached(), on(event)).effects.some((effect) => effect.type === "remove-restore")
 
-    expect(removes({ type: "attachment.ended", outcome: "missing" })).toBe(true)
+    expect(removes({ type: "attachment.ended", outcome: "missing" })).toBe(false)
     expect(removes({ type: "client.closed" })).toBe(true)
     expect(removes({ type: "owner.closed" })).toBe(false)
     expect(removes({ type: "attachment.ended", outcome: "closed" })).toBe(false)
@@ -246,6 +335,7 @@ describe("tabs", () => {
     expect(crashed.effects).toContainEqual({ type: "release-pages", binding: "b1", attempts: [1] })
     expect(crashed.effects).toContainEqual({
       type: "save-restore",
+      binding: "b1",
       storageKey: "server\nb1",
       snapshot: { tabs: [{ id: tabA, url: dashboard }], focusedTabID: tabA },
     })

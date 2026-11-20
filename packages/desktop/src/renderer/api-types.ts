@@ -39,7 +39,7 @@ export type ElectronAPI = {
   getWindowID(): string
   getWindowBootstrap(): WindowBootstrap
   themeReady(): Promise<void>
-  onMenuCommand(cb: (id: string) => void): () => void
+  onMenuCommand(cb: (id: string, accelerator: boolean) => void): () => void
   onDeepLink(cb: (delivery: { attempt: number; urls: string[] }) => void): () => void
   openDirectoryPicker(opts?: DirectoryPickerOptions): Promise<string | string[] | null>
   openFilePicker(opts?: FilePickerOptions): Promise<PickedFiles | null>
@@ -49,7 +49,6 @@ export type ElectronAPI = {
   saveFile(opts: SaveFilePickerOptions, content: string): Promise<boolean>
   openExternal(url: string): void
   openBrowser(url: string): Promise<boolean>
-  openLocalFile(url: string): void
   openPath(path: string, app?: string): Promise<string | undefined>
   revealPath(path: string): Promise<boolean>
   readClipboardImage(): Promise<ClipboardImage | null>

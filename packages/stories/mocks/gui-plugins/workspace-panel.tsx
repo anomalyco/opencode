@@ -66,6 +66,7 @@ export default function WorkspacePanel(props: {
   const scroll = new Map<string, ReturnType<Layout["scroll"]["get"]>>()
 
   const layout: BuiltinLayout = {
+    fitsSide: () => true,
     narrow: () => false,
     ready: () => true,
     open: (key) => setTab(key.slice(key.indexOf(":") + 1)),
