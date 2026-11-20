@@ -625,6 +625,16 @@
   }
 }
 
+/* An open group's sticky header ends the gap above its first row and paints over that row's ring; a focused row rises
+   above it. */
+[data-timeline="next"]
+  [data-component="collapsed-tool-group"]
+  [data-slot="collapsible-content"]
+  :is([data-slot="collapsible-trigger"], [data-slot="timeline-event-item"]):focus-visible {
+  position: relative;
+  z-index: 22;
+}
+
 /* A command set in its monospace face sits on the line's top rather than its baseline, so the row stays one line tall
    with it as without it, and opening the row never moves its label. */
 [data-timeline="next"] [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
