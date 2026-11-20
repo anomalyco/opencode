@@ -69,7 +69,7 @@ function NewSessionExtensionListDialog(props: Copy & { list: NewSessionExtension
               <div class="mcp-trailing" onClick={(event) => event.stopPropagation()}>
                 <Switch
                   checked={props.list.enabled(item())}
-                  disabled={props.list.pending()}
+                  disabled={props.list.pending(item().id)}
                   onChange={(enabled) => props.list.toggle(item().id, enabled)}
                 >
                   <span class="sr-only">{item().name}</span>

@@ -9,7 +9,7 @@ export type NewSessionMcps = ReturnType<typeof createNewSessionMcps>
 export function createNewSessionMcps(input: {
   servers: () => { id: string; name: string; status?: string }[]
   states: () => Readonly<Record<string, boolean>>
-  pending: () => boolean
+  pending: (id: string) => boolean
   change: (name: string, enabled: boolean) => void
 }) {
   return createNewSessionExtensionList({
@@ -37,7 +37,7 @@ export function createDraftNewSessionMcps(input: { mcp: DraftMcpControls }) {
         status: server.status.status,
       })),
     states: () => input.mcp.controls.states,
-    pending: () => input.mcp.controls.pending,
+    pending: input.mcp.controls.pending,
     change: input.mcp.controls.change,
   })
 }

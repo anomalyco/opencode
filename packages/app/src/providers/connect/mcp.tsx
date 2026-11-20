@@ -19,7 +19,8 @@ import { DialogMcpSignIn } from "./mcp-sign-in"
 export type McpControls = {
   readonly preview: boolean
   readonly states: Readonly<Record<string, boolean>>
-  readonly pending: boolean
+  /** True while the server takes no new toggle: its own toggle runs, or the draft is being submitted. */
+  pending: (name: string) => boolean
   change: (name: string, enabled: boolean) => void
 }
 

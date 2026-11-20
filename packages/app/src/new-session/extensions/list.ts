@@ -6,7 +6,7 @@ export function createNewSessionExtensionList(input: {
   entries: () => NewSessionExtension[]
   enabled: (entry: NewSessionExtension) => boolean
   toggle: (id: string, enabled: boolean) => void
-  pending?: () => boolean
+  pending?: (id: string) => boolean
 }) {
   return {
     items: () => input.entries().toSorted((a, b) => a.name.localeCompare(b.name)),
