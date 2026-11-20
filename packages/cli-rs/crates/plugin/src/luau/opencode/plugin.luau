@@ -305,6 +305,7 @@ export type Family = {
     members: { Member },
     cost: number,
     shells: number?,
+    scripts: number?,
 }
 
 --- A Markdown code fence.
@@ -824,6 +825,7 @@ export type Member = {
     status: SessionStatus,
     updated: number,
     parent: string?,
+    jobs: number?,
 }
 
 --- What a library's `describe` answers: its nonempty ID, which the host reads before any `create`.

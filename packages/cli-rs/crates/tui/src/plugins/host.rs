@@ -600,7 +600,7 @@ pub fn changed(tui: &Tui, changes: &Changes, sync: impl FnOnce(Option<&abi::Chan
     // Refilled with each change batch, so a batch like the one before costs no allocation.
     let mut changed = tui.reads.batch.take();
     changed.all = changes.all;
-    let sessions = changes.session.iter().chain(&changes.status).chain(changes.selected.keys());
+    let sessions = changes.session.iter().chain(&changes.status).chain(changes.selected.keys()).chain(&changes.jobs);
     refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
     refill(&mut changed.lists, &changes.messages, |into, id| assign(into, &id.0));
     let messages = changes.message.iter().flat_map(|(session, ids)| ids.iter().map(move |id| (session, id)));
@@ -849,20 +849,25 @@ impl abi::Read for Reader<'_> {
     }
 
     fn family(&self, id: &str) -> abi::Family {
-        self.session(id, |state, id| abi::Family {
-            members: state
-                .family(id)
-                .iter()
-                .filter_map(|member| state.session(member))
-                .map(|info| abi::Member {
-                    id: info.id.0.clone(),
-                    parent: info.parent_id.as_ref().map(|parent| parent.0.clone()),
-                    status: status(state.status(&info.id)),
-                    updated: info.time.updated,
-                })
-                .collect(),
-            cost: state.cost(id),
-            shells: state.session_shells(id).len(),
+        self.session(id, |state, id| {
+            let jobs = state.jobs(id);
+            abi::Family {
+                members: state
+                    .family(id)
+                    .iter()
+                    .filter_map(|member| state.session(member))
+                    .map(|info| abi::Member {
+                        id: info.id.0.clone(),
+                        parent: info.parent_id.as_ref().map(|parent| parent.0.clone()),
+                        status: status(state.status(&info.id)),
+                        updated: info.time.updated,
+                        jobs: state.owned_jobs(&jobs, &info.id).len(),
+                    })
+                    .collect(),
+                cost: state.cost(id),
+                shells: state.session_shells(id).len(),
+                scripts: jobs.iter().filter(|job| is_script(job, id)).count(),
+            }
         })
     }
 
@@ -1777,6 +1782,11 @@ pub fn markdown_with(tui: &Tui, renderers: &CodeBlockRenderers) -> opentui::widg
         != Some(opencode_local::cli_config::Markdown::Source);
     let syntax = opencode_ui::code::syntax_theme(&page);
     opencode_ui::markdown::view(&tui.app, &page, &syntax, renderers, conceal, false)
+}
+
+/// A Code Mode script the session itself runs (the prompt footer's and the Scripts tab's count).
+pub(crate) fn is_script(job: &opencode_api::generated::JobInfo, session: &SessionID) -> bool {
+    matches!(job, opencode_api::generated::JobInfo::Codemode(_)) && job.session_id() == session.0
 }
 
 #[cfg(test)]
