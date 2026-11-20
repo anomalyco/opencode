@@ -77,7 +77,13 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       () => (
         <TestTuiContexts
           paths={{ state: temporary.path }}
-          clipboard={{ read: async () => undefined, write: async (text) => void copied.push(text) }}
+          clipboard={{
+            read: async () => undefined,
+            write: async (text) => {
+              copied.push(text)
+              return "copied" as const
+            },
+          }}
         >
           <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
             <StorageProvider>

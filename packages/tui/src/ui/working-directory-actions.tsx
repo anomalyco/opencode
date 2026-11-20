@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js"
 import { openPath } from "@opencode/util/open"
 import { useRenderer } from "@opentui/solid"
-import { useClipboard } from "../context/clipboard"
+import { clipboardWriteToast, useClipboard } from "../context/clipboard"
 import { useDialog } from "./dialog"
 import { DialogSelect } from "./dialog-select"
 import { useToast } from "./toast"
@@ -27,9 +27,9 @@ export function useWorkingDirectoryActions(input: { directory: () => string | un
             value: "location.copy",
             description: directory,
             onSelect: (dialog) => {
-              void clipboard.write(directory).then(() => {
+              void clipboard.write(directory).then((result) => {
                 dialog.clear()
-                toast.show({ message: "Path copied to clipboard", variant: "info" })
+                toast.show(clipboardWriteToast(result, "Path copied to clipboard"))
               }, toast.error)
             },
           },
