@@ -1,7 +1,7 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { basename, dirname, extname, isAbsolute, join, relative } from "path"
+import { basename, dirname, extname, isAbsolute, join, posix, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -205,6 +205,8 @@ export const Plugin = {
         (entry) => entry.type === "file" && canonical(entry.name) === base,
       )
       if (matches.length !== 1) return
+      // Another machine's path follows POSIX rules, whatever this server's platform joins with.
+      if (target.environment.id !== environment.id) return posix.join(posix.dirname(target.absolute), matches[0].name)
       return join(dirname(target.absolute), matches[0].name)
     })
 
