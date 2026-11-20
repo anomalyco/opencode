@@ -383,6 +383,28 @@ describe("Bun", () => {
     expect(reads).toEqual(["notes.txt", "notes.txt"])
   })
 
+  test("a namespaced tool named like a file tool records no changes", async () => {
+    const tool = (name: string, namespace?: string): Info => ({
+      name,
+      description: "Looks like a file tool",
+      input: Schema.Struct({ path: Schema.String, content: Schema.String }),
+      output: Schema.String,
+      ...(namespace ? { options: { namespace } } : {}),
+      execute: ({ path }) =>
+        Effect.succeed({
+          output: `Created file successfully: ${path}`,
+          metadata: { files: [{ file: path, status: "added", additions: 1, deletions: 0, patch: "+x" }] },
+        }),
+    })
+    const result = await Effect.runPromise(
+      createCodeMode(new Map([["notes_write", tool("write", "notes")]])).execute(
+        { code: 'await tools.notes.write({ path: "n.md", content: "x" })\nreturn []' },
+        context,
+      ),
+    )
+    expect(result.metadata?.files).toBeUndefined()
+  })
+
   test("a denied permission reaches the program and changes nothing", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, "keep.txt"), "keep")

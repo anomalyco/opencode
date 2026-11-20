@@ -6,7 +6,7 @@ import type {
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { SessionTurn } from "@opencode/util/session-turn"
-import { Predicate, Option } from "effect"
+import { Predicate } from "effect"
 import {
   For,
   Match,
@@ -31,7 +31,7 @@ import { useData } from "../context"
 import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
 import { SessionReadToolGroup, SessionUserMessage } from "../message/current-message"
-import { taskAgentName } from "../tools/tool-renderer"
+import { FileChangeRuns, fileRuns, ScriptChanges, taskAgentName } from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "../timeline/detail"
@@ -53,7 +53,7 @@ import { TimelineEventItem, TimelineEventRow } from "./event-row"
 import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
 import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
-import { scriptFileFact } from "../timeline/facts"
+import { scriptFileFact, type FileFact } from "../timeline/facts"
 import { diffOpens, placeContent } from "../timeline/place"
 import { goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
 import { Separator } from "./separator"
@@ -381,9 +381,9 @@ export function createNextTimelineRowRenderer(input: {
                 id: ref.partID,
                 file: script,
                 render: () => (
-                  <FileGroup
-                    tools={[]}
+                  <ScriptChanges
                     files={[script]}
+                    render={PatchTool}
                     fileOpen={(path) => input.disclosure.value(`patch:${path}`) ?? diffOpens(input.timelineDetail())}
                     onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
                     onSizeChange={onSizeChange}
@@ -527,37 +527,64 @@ export function createNextTimelineRowRenderer(input: {
         })
       })
 
-      const files = createMemo(() => {
+      // Direct changes and a script's changes in the order they happened.
+      const runs = createMemo(() => {
         const group = row().group
 
         if (group.type !== "file") return []
+        const contents = indexGroupContents(group.refs)
 
-        return group.refs.flatMap((ref) => {
-          const message = input.projection.messageByID().get(ref.messageID)
+        return fileRuns(
+          group.refs.flatMap<Extract<SessionMessageAssistant["content"][number], { type: "tool" }> | FileFact>(
+            (ref) => {
+              const content = contents.get(ref.messageID)?.get(ref.partID)
 
-          return Option.toArray(
-            Option.fromNullishOr(
-              message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined,
-            ),
-          )
-        })
+              if (content?.type === "tool") return [content]
+              const message = input.projection.messageByID().get(ref.messageID)
+
+              const file =
+                message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
+
+              return file ? [file] : []
+            },
+          ),
+        )
       })
 
       return (
-        <FileGroup
-          tools={tools()}
-          files={files()}
-          scriptFirst={(() => {
-            const group = row().group
-
-            return group.type === "file" && group.refs[0]?.partID.includes(":file:") === true
-          })()}
-          fileOpen={(path) =>
-            input.disclosure.value(`${row().group.key}:file:${path}`) ?? diffOpens(input.timelineDetail())
+        <Show
+          when={runs().some((run) => run.type === "script")}
+          fallback={
+            <FileGroup
+              tools={tools()}
+              fileOpen={(path) =>
+                input.disclosure.value(`${row().group.key}:file:${path}`) ?? diffOpens(input.timelineDetail())
+              }
+              onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+              onSizeChange={onSizeChange}
+            />
           }
-          onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
-          onSizeChange={onSizeChange}
-        />
+        >
+          <FileChangeRuns
+            runs={runs()}
+            render={PatchTool}
+            tools={(run) => (
+              <FileGroup
+                tools={run()}
+                fileOpen={(path) =>
+                  input.disclosure.value(`${row().group.key}:file:${path}`) ?? diffOpens(input.timelineDetail())
+                }
+                onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+                onSizeChange={onSizeChange}
+              />
+            )}
+            fileOpen={(path) =>
+              input.disclosure.value(`${row().group.key}:file:${path}`) ?? diffOpens(input.timelineDetail())
+            }
+            onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+            onSizeChange={onSizeChange}
+          />
+        </Show>
       )
     }
 

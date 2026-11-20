@@ -172,8 +172,6 @@ const decodeScript = Schema.decodeUnknownOption(
   Schema.Struct({ background: Schema.optional(Schema.Unknown), jobID: Schema.optional(Schema.Unknown) }),
 )
 
-const decodePath = Schema.decodeUnknownOption(Schema.Struct({ file: Schema.String }))
-
 const decodeFiles = Schema.decodeUnknownOption(Schema.Array(Schema.Unknown))
 
 const decodeText = Schema.decodeUnknownOption(Schema.NonEmptyString)
@@ -224,7 +222,8 @@ function placeFact(tool: Tool, id: string, read: Reads): PlaceFact {
 
 // A script reports the files it changed once it finishes in the foreground; one moved to the background has none.
 // Its metadata is read only then, so a running script's progress reports never reach placement.
-function scriptChanges(tool: Tool, read: Reads): readonly unknown[] {
+// Entries that don't decode are dropped here, so every reader numbers the changes alike.
+function scriptChanges(tool: Tool, read: Reads) {
   if (tool.state.status !== "completed") return []
   const metadata = read.metadata()
   const script = Option.getOrUndefined(decodeScript(metadata))
@@ -232,11 +231,13 @@ function scriptChanges(tool: Tool, read: Reads): readonly unknown[] {
   if (script?.background === true || script?.jobID !== undefined) return []
 
   return Option.getOrElse(decodeFiles(metadata.files), () => [])
+    .flatMap((file) => Option.toArray(decodeFile(file)))
+    .filter((file) => file.file !== "")
 }
 
-/** The paths of the changes a finished script made, in order, read without their diffs. */
+/** The paths of the changes a finished script made, in order. */
 export function scriptChangePaths(tool: Tool) {
-  return scriptChanges(tool, reads(tool)).map((file) => Option.getOrUndefined(decodePath(file))?.file ?? "")
+  return scriptChanges(tool, reads(tool)).map((file) => file.file)
 }
 
 /** How a call that launches background work ended, or undefined for any other call or while it is still written. */
@@ -273,12 +274,7 @@ function toolFacts(tool: Tool, id: string): Fact[] {
     return [
       call,
       // One fact per change, in order: a script can change the same file more than once.
-      ...scriptChanges(tool, read).flatMap((value, index) =>
-        Option.toArray(decodeFile(value)).map((file) => ({
-          ...fileFact(file, id, state.status, "script"),
-          id: `${id}:file:${index}:${file.file}`,
-        })),
-      ),
+      ...scriptChanges(tool, read).map((file, index) => scriptFileFactOf(file, index, id)),
     ]
 
   if (fact.mode !== "edit") return [call]
@@ -458,25 +454,22 @@ export function scriptFilePartID(scriptID: string, index: number, path: string) 
   return `${scriptID}:file:${index}:${path}`
 }
 
-/** The change a script made that a part id names, read from the script's part in the message. */
-export function scriptFileFact(content: readonly Content[], messageID: string, partID: string) {
-  const at = partID.indexOf(":file:")
+function scriptFileFactOf(file: Parameters<typeof fileFact>[0], index: number, by: string): FileFact {
+  return { ...fileFact(file, by, "completed", "script"), id: `${by}:file:${index}:${file.file}` }
+}
 
-  if (at < 0) return undefined
-  const scriptID = partID.slice(0, at)
+const scriptFilePart = /^(.*?):file:(\d+):/
+
+/** The change a script made that a part id names, read from that one entry of the script's part in the message. */
+export function scriptFileFact(content: readonly Content[], messageID: string, partID: string) {
+  const match = scriptFilePart.exec(partID)
+
+  if (!match) return undefined
+  const [, scriptID, index] = match
   const tool = content.find((item) => item.type === "tool" && item.id === scriptID)
 
   if (tool?.type !== "tool") return undefined
-  const id = `${messageID}:${partID}`
+  const file = scriptChanges(tool, reads(tool))[Number(index)]
 
-  return factsOf([{ ...tool, messageID }]).find(
-    (fact): fact is FileFact => fact.kind === "file" && fact.via === "script" && fact.id === id,
-  )
-}
-
-/** The changes a script part made, as facts. */
-export function scriptFiles(tool: Tool, messageID: string) {
-  return factsOf([{ ...tool, messageID }]).filter(
-    (fact): fact is FileFact => fact.kind === "file" && fact.via === "script",
-  )
+  return file ? scriptFileFactOf(file, Number(index), `${messageID}:${scriptID}`) : undefined
 }

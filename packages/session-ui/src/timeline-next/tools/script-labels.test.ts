@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { storyTool } from "../../storybook/current-session-scenarios"
-import { scriptFiles } from "../../timeline/facts"
+import { factsOf, type FileFact } from "../../timeline/facts"
 import { contextGroupLabel } from "../../tools/context-group-label"
 import { activityLabel, activityText, usedLabel } from "./activity-label"
 import type { ActivityGroupPart } from "./context-group"
@@ -28,7 +28,11 @@ const script = storyTool(
   },
 )
 
-const files = scriptFiles(script, "msg_1").map((file) => ({
+const scriptFiles = factsOf([{ ...script, messageID: "msg_1" }]).filter(
+  (fact): fact is FileFact => fact.kind === "file" && fact.via === "script",
+)
+
+const files = scriptFiles.map((file) => ({
   type: "file" as const,
   id: file.id,
   file,
@@ -54,6 +58,35 @@ describe("script labels", () => {
   test("a group of a hidden script's files reads as a direct patch's", () => {
     expect(contextGroupLabel(files, i18n).text).toBe("Used 1 Patch")
     expect(next(files)).toBe("Edited 3 files")
+  })
+
+  test("a hidden script's changes count as a patch beside the other calls in their group", () => {
+    const read = storyTool("read_1", "read", "completed", { path: "/repo/z.ts" })
+    const patch = storyTool("patch_2", "patch", "completed", {}, { metadata: { files: [{ file: "/repo/d.ts" }] } })
+
+    expect(contextGroupLabel([read, ...files], i18n).text).toBe("Used 2 Read, Patch")
+    expect(contextGroupLabel([...files, patch], i18n).text).toBe("Used 2 Patch")
+    expect(next([read, ...files])).toBe("Edited 3 files · 1 read")
+    expect(next([...files, patch])).toBe("Edited 4 files")
+  })
+
+  test("a script moved to the background, or run as a job, has no changes to show", () => {
+    const changed = (metadata: { background?: boolean; jobID?: string }) =>
+      factsOf([
+        storyTool(
+          "exec_2",
+          "execute",
+          "completed",
+          { code: "x" },
+          {
+            metadata: { toolCalls: [], files: [{ file: "/repo/a.ts", status: "added" }], ...metadata },
+          },
+        ),
+      ]).filter((fact) => fact.kind === "file")
+
+    expect(changed({})).toHaveLength(1)
+    expect(changed({ background: true })).toEqual([])
+    expect(changed({ jobID: "job_1" })).toEqual([])
   })
 
   test("the New timeline counts a script's files only where they are placed", () => {

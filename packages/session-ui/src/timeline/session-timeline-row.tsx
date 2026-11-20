@@ -45,12 +45,19 @@ import {
   SessionCompactionMessage,
   SessionCompactionQueued,
 } from "../message/message-content"
-import { taskAgentName, ToolRegistry, type ContextGroupPart } from "../tools/tool-renderer"
+import {
+  FileChangeRuns,
+  fileRuns,
+  ScriptChanges,
+  taskAgentName,
+  ToolRegistry,
+  type ContextGroupPart,
+} from "../tools/tool-renderer"
 import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "./detail"
-import { scriptFileFact } from "./facts"
+import { scriptFileFact, type FileFact } from "./facts"
 import { diffOpens, placeContent } from "./place"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
@@ -396,9 +403,9 @@ export function createSessionTimelineRowRenderer(input: {
                 id: ref.partID,
                 file: script,
                 render: () => (
-                  <SessionFileToolGroup
-                    tools={[]}
+                  <ScriptChanges
                     files={[script]}
+                    render={ToolRegistry.render("patch") ?? GenericTool}
                     fileOpen={(path) =>
                       input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
                     }
@@ -517,44 +524,88 @@ export function createSessionTimelineRowRenderer(input: {
         return Option.getOrUndefined(decodeMetadataFile(files[0]))?.file
       })
 
-      const files = createMemo(() => {
+      // Direct changes and a script's changes in the order they happened.
+      const runs = createMemo(() => {
         const group = row().group
 
         if (group.type !== "file") return []
+        const contents = indexGroupContents(group.refs)
 
-        return group.refs.flatMap((ref) => {
-          const message = input.projection.messageByID().get(ref.messageID)
+        return fileRuns(
+          group.refs.flatMap<Extract<SessionMessageAssistant["content"][number], { type: "tool" }> | FileFact>(
+            (ref) => {
+              const content = contents.get(ref.messageID)?.get(ref.partID)
 
-          const file =
-            message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
+              if (content?.type === "tool") return [content]
+              const message = input.projection.messageByID().get(ref.messageID)
 
-          return file ? [file] : []
-        })
+              const file =
+                message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
+
+              return file ? [file] : []
+            },
+          ),
+        )
       })
 
       return (
-        <SessionFileToolGroup
-          tools={tools()}
-          files={files()}
-          scriptFirst={(() => {
-            const group = row().group
+        <Show
+          when={runs().some((run) => run.type === "script")}
+          fallback={
+            <SessionFileToolGroup
+              tools={tools()}
+              fileOpen={(path) => {
+                const open = input.disclosure.value(`${row().group.key}:file:${path}`)
 
-            return group.type === "file" && group.refs[0]?.partID.includes(":file:") === true
-          })()}
-          fileOpen={(path) => {
-            const open = input.disclosure.value(`${row().group.key}:file:${path}`)
+                if (open !== undefined) return open
 
-            if (open !== undefined) return open
+                if (input.timelineDetail) return diffOpens(input.timelineDetail())
 
-            if (input.timelineDetail) return diffOpens(input.timelineDetail())
+                if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
 
-            if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
+                return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
+              }}
+              onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+              onSizeChange={onSizeChange}
+            />
+          }
+        >
+          <FileChangeRuns
+            runs={runs()}
+            render={ToolRegistry.render("patch") ?? GenericTool}
+            tools={(run) => (
+              <SessionFileToolGroup
+                tools={run()}
+                fileOpen={(path) => {
+                  const open = input.disclosure.value(`${row().group.key}:file:${path}`)
 
-            return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
-          }}
-          onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
-          onSizeChange={onSizeChange}
-        />
+                  if (open !== undefined) return open
+
+                  if (input.timelineDetail) return diffOpens(input.timelineDetail())
+
+                  if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
+
+                  return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
+                }}
+                onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+                onSizeChange={onSizeChange}
+              />
+            )}
+            fileOpen={(path) => {
+              const open = input.disclosure.value(`${row().group.key}:file:${path}`)
+
+              if (open !== undefined) return open
+
+              if (input.timelineDetail) return diffOpens(input.timelineDetail())
+
+              if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
+
+              return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
+            }}
+            onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+            onSizeChange={onSizeChange}
+          />
+        </Show>
       )
     }
 

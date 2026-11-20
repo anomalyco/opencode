@@ -173,7 +173,8 @@ export const create = (
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
-                  const executed = yield* CodeModeDiffs.around(diffs, tool.name, input, call)
+                  // The name the program called, so a namespaced tool that happens to be named edit or write records nothing.
+                  const executed = yield* CodeModeDiffs.around(diffs, name, input, call)
                   const content = resultContent(executed)
                   const outputFileParts = outputFiles(content)
                   if (outputFileParts.length > 0)

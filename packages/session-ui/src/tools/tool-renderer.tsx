@@ -1,5 +1,6 @@
 // Current Session tool presentation grouped by visual family.
 import {
+  type Accessor,
   Component,
   batch,
   createComputed,
@@ -254,9 +255,9 @@ export function displayDirectory(path: string | undefined) {
 }
 
 import { resolveFileDiff } from "../components/session-diff"
-import { factsOf, summarize } from "../timeline/facts"
+import { factsOf, summarize, type FileFact } from "../timeline/facts"
 import { contextGroupLabel, webSearchProviderLabel } from "./context-group-label"
-import type { FileFact } from "../timeline/facts"
+import type { FileRun } from "./file-runs"
 
 export function taskAgentName(raw: string | undefined, list?: readonly { name: string }[]) {
   if (!raw) return undefined
@@ -903,10 +904,6 @@ export function CurrentReadToolGroup(props: {
 
 export function CurrentFileToolGroup(props: {
   tools: SessionMessageAssistantTool[]
-  /** Changes a script made, each shown like a file a call changed, on its own card. */
-  files?: readonly FileFact[]
-  /** The script's changes come before the calls'. */
-  scriptFirst?: boolean
   fileOpen?: (path: string) => boolean | undefined
   onFileOpenChange?: (path: string, open: boolean) => void
   onSizeChange?: () => void
@@ -1012,45 +1009,80 @@ export function CurrentFileToolGroup(props: {
       data-timeline-part-id={props.tools.length === 1 ? props.tools[0]?.id : undefined}
       data-timeline-part-ids={props.tools.length > 1 ? props.tools.map((tool) => tool.id).join(",") : undefined}
     >
-      <Show when={props.scriptFirst}>
-        <ScriptChanges
-          files={props.files ?? []}
-          render={render}
-          fileOpen={props.fileOpen}
-          onFileOpenChange={props.onFileOpenChange}
-          onSizeChange={props.onSizeChange}
-        />
-      </Show>
-      <Show when={props.tools.length > 0}>
-        <Dynamic
-          component={render}
-          tool={tool()}
-          input={{}}
-          metadata={metadata()}
-          status={pending() ? "running" : "completed"}
-          fileOpen={props.fileOpen}
-          onFileOpenChange={props.onFileOpenChange}
-          deferContent
-          virtualizeDiff={false}
-          onContentRendered={props.onSizeChange}
-        />
-      </Show>
-      <Show when={!props.scriptFirst}>
-        <ScriptChanges
-          files={props.files ?? []}
-          render={render}
-          fileOpen={props.fileOpen}
-          onFileOpenChange={props.onFileOpenChange}
-          onSizeChange={props.onSizeChange}
-        />
-      </Show>
+      <Dynamic
+        component={render}
+        tool={tool()}
+        input={{}}
+        metadata={metadata()}
+        status={pending() ? "running" : "completed"}
+        fileOpen={props.fileOpen}
+        onFileOpenChange={props.onFileOpenChange}
+        deferContent
+        virtualizeDiff={false}
+        onContentRendered={props.onSizeChange}
+      />
     </div>
   )
 }
 
+/** A file group holding a script's changes: each run in order, direct calls drawn as their own group. */
+export function FileChangeRuns(props: {
+  runs: readonly FileRun[]
+  tools: (tools: Accessor<SessionMessageAssistantTool[]>) => JSX.Element
+  render: Component<ToolProps>
+  fileOpen?: (key: string) => boolean | undefined
+  onFileOpenChange?: (key: string, open: boolean) => void
+  onSizeChange?: () => void
+}) {
+  return (
+    <Index each={props.runs}>
+      {(run) => {
+        const tools = createMemo(() => {
+          const value = run()
+
+          return value.type === "tools" ? value.tools : undefined
+        })
+
+        const files = createMemo(() => {
+          const value = run()
+
+          return value.type === "script" ? value.files : undefined
+        })
+
+        return (
+          <Show
+            when={tools()}
+            fallback={
+              <Show when={files()}>
+                {(list) => (
+                  <ScriptChanges
+                    files={list()}
+                    render={props.render}
+                    fileOpen={props.fileOpen}
+                    onFileOpenChange={props.onFileOpenChange}
+                    onSizeChange={props.onSizeChange}
+                  />
+                )}
+              </Show>
+            }
+          >
+            {(list) => props.tools(list)}
+          </Show>
+        )
+      }}
+    </Index>
+  )
+}
+
+// A change's part id: the fact id less its message.
+function scriptChangePartID(file: FileFact) {
+  return file.id.slice(file.id.indexOf(":") + 1)
+}
+
 /**
- * The changes a script made, in order, one card each: the same file changed twice is two cards. A change past the size
- * cap, or to a binary file, shows its counts where it has them. Each card opens by the change's own id.
+ * The changes a script made, in order, one card each: the same file changed twice is two cards. A change without a
+ * diff, past the size cap, to a binary file, a copy or a delete, shows what it did as a patch's file header does. Each
+ * card opens by the change's own id.
  */
 export function ScriptChanges(props: {
   files: readonly FileFact[]
@@ -1059,6 +1091,8 @@ export function ScriptChanges(props: {
   onFileOpenChange?: (key: string, open: boolean) => void
   onSizeChange?: () => void
 }) {
+  const i18n = useI18n()
+
   return (
     <Index each={props.files}>
       {(file) => {
@@ -1078,33 +1112,57 @@ export function ScriptChanges(props: {
           <Show
             when={diff()}
             fallback={
-              <div data-component="file-counts" data-type={file().change} data-timeline-part-id={file().id}>
+              <div
+                data-component="file-counts"
+                data-type={file().change}
+                data-timeline-part-id={scriptChangePartID(file())}
+              >
                 <FileIcon node={{ path: file().path, type: "file" }} />
-                <span data-slot="file-counts-name">{file().path}</span>
-                <Show when={file().additions !== undefined || file().deletions !== undefined}>
-                  <DiffChanges
-                    appearance="standard"
-                    changes={{ additions: file().additions ?? 0, deletions: file().deletions ?? 0 }}
-                  />
-                </Show>
+                <span data-slot="file-counts-name">
+                  <Show when={file().path.includes("/")}>
+                    <span data-slot="file-counts-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
+                  </Show>
+                  <span data-slot="file-counts-filename">{getFilename(file().path)}</span>
+                </span>
+                <Switch>
+                  <Match when={file().change === "added"}>
+                    <span data-component="diff-changes" data-appearance="standard">
+                      <span data-slot="diff-changes-additions">{i18n.t("ui.patch.action.created")}</span>
+                    </span>
+                  </Match>
+                  <Match when={file().change === "deleted"}>
+                    <span data-component="diff-changes" data-appearance="standard">
+                      <span data-slot="diff-changes-deletions">{i18n.t("ui.patch.action.deleted")}</span>
+                    </span>
+                  </Match>
+                  <Match when={(file().additions ?? 0) + (file().deletions ?? 0) > 0}>
+                    <DiffChanges
+                      appearance="standard"
+                      markEmpty
+                      changes={{ additions: file().additions ?? 0, deletions: file().deletions ?? 0 }}
+                    />
+                  </Match>
+                </Switch>
               </div>
             }
           >
             {(value) => (
-              <Dynamic
-                component={props.render}
-                tool="patch"
-                input={{}}
-                metadata={{ files: [value()] }}
-                status="completed"
-                fileOpen={props.fileOpen && (() => props.fileOpen?.(file().id))}
-                onFileOpenChange={
-                  props.onFileOpenChange && ((_: string, open: boolean) => props.onFileOpenChange?.(file().id, open))
-                }
-                deferContent
-                virtualizeDiff={false}
-                onContentRendered={props.onSizeChange}
-              />
+              <div data-timeline-part-id={scriptChangePartID(file())}>
+                <Dynamic
+                  component={props.render}
+                  tool="patch"
+                  input={{}}
+                  metadata={{ files: [value()] }}
+                  status="completed"
+                  fileOpen={props.fileOpen && (() => props.fileOpen?.(file().id))}
+                  onFileOpenChange={
+                    props.onFileOpenChange && ((_: string, open: boolean) => props.onFileOpenChange?.(file().id, open))
+                  }
+                  deferContent
+                  virtualizeDiff={false}
+                  onContentRendered={props.onSizeChange}
+                />
+              </div>
             )}
           </Show>
         )
@@ -1112,6 +1170,8 @@ export function ScriptChanges(props: {
     </Index>
   )
 }
+
+export { fileRuns, type FileRun } from "./file-runs"
 
 export function scrollParent(element: HTMLElement): HTMLElement | undefined {
   const parent = element.parentElement

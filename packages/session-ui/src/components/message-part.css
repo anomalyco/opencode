@@ -977,6 +977,7 @@
   min-width: 0;
   padding: 6px 0;
   font-size: 13px;
+  line-height: var(--line-height-compact);
   color: var(--v2-text-text-base);
 
   [data-slot="file-counts-name"] {
@@ -985,6 +986,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  [data-slot="file-counts-directory"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-component="diff-changes"] {
+    flex-shrink: 0;
+  }
+
+  [data-component="diff-changes"] [data-empty] {
+    display: none;
   }
 }
 

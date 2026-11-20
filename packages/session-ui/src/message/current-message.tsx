@@ -1,6 +1,5 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
 import { Match, Switch, type ComponentProps } from "solid-js"
-import type { FileFact } from "../timeline/facts"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
 import {
@@ -141,8 +140,6 @@ export function SessionReadToolGroup(props: ComponentProps<typeof CurrentReadToo
 
 export function SessionFileToolGroup(props: {
   tools: SessionMessageAssistantTool[]
-  files?: readonly FileFact[]
-  scriptFirst?: boolean
   fileOpen: (path: string) => boolean | undefined
   onFileOpenChange: (path: string, open: boolean) => void
   onSizeChange?: () => void
@@ -150,8 +147,6 @@ export function SessionFileToolGroup(props: {
   return (
     <CurrentFileToolGroup
       tools={props.tools}
-      files={props.files}
-      scriptFirst={props.scriptFirst}
       fileOpen={props.fileOpen}
       onFileOpenChange={props.onFileOpenChange}
       onSizeChange={props.onSizeChange}

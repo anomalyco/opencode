@@ -2,7 +2,7 @@ export * as CodeModeDiffs from "./diffs.js"
 
 import { Context, Effect, Option, Schema } from "effect"
 import type { Result } from "@opencode/schema/tool"
-import { FileAccess } from "../file-access.js"
+import type { FileAccess } from "../file-access.js"
 import { fileDiff } from "../tool/plugin/file-diff.js"
 
 /** The most patch text an execute call keeps on its part; changes past it keep only their counts. */
@@ -50,19 +50,24 @@ export const record = (change: File) =>
     if (Option.isSome(found)) found.value.record(change)
   })
 
-/** A change written in full: the diff the write path already built for its permission request, or what is known. */
+/**
+ * A change written in full: the diff the write path already built for its permission request, or what is known. An
+ * overwrite that changed nothing is no change.
+ */
 export const written = (target: FileAccess.Target, status: Status, preview: ReturnType<typeof fileDiff> | undefined) =>
-  record(
-    preview
-      ? {
-          file: target.resource,
-          status,
-          additions: preview.additions,
-          deletions: preview.deletions,
-          patch: preview.patch,
-        }
-      : { file: target.resource, status },
-  )
+  status === "modified" && preview && preview.additions === 0 && preview.deletions === 0
+    ? Effect.void
+    : record(
+        preview
+          ? {
+              file: target.resource,
+              status,
+              additions: preview.additions,
+              deletions: preview.deletions,
+              patch: preview.patch,
+            }
+          : { file: target.resource, status },
+      )
 
 /** Text added to the end of a file: its lines are what it adds, counted without reading the file. */
 export const appended = (target: FileAccess.Target, status: Status, text: string | undefined) =>

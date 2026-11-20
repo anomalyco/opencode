@@ -3773,19 +3773,21 @@ function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; par
             part={props.part}
           >
             <Show
-              when={file.type !== "delete" && file.patch}
+              when={file.type !== "delete" && file.patch.includes("@@")}
               fallback={
-                <Show when={file.deletions !== undefined || file.additions !== undefined}>
-                  <text>
-                    <Show when={(file.additions ?? 0) > 0}>
-                      <span style={{ fg: theme.diff.text.added }}>+{file.additions} </span>
-                    </Show>
-                    <Show when={file.type === "delete" || (file.deletions ?? 0) > 0}>
-                      <span style={{ fg: theme.diff.text.removed }}>
-                        -{file.deletions ?? 0} line{file.deletions !== 1 ? "s" : ""}
-                      </span>
-                    </Show>
-                  </text>
+                <Show when={changeCounts(file)}>
+                  {(counts) => (
+                    <text>
+                      <Show when={counts().additions}>
+                        {(text) => <span style={{ fg: theme.diff.text.added }}>{text()}</span>}
+                      </Show>
+                      <Show when={counts().additions && counts().deletions}> </Show>
+                      <Show when={counts().deletions}>
+                        {(text) => <span style={{ fg: theme.diff.text.removed }}>{text()}</span>}
+                      </Show>
+                      {counts().unit}
+                    </text>
+                  )}
                 </Show>
               }
             >
@@ -3817,6 +3819,21 @@ function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; par
       </For>
     </box>
   )
+}
+
+/**
+ * The line counts a change shows without its diff: "+2 lines", "-40 lines", "+5 -1 lines". Nothing where they are
+ * unknown or zero, so a change without counts shows only its path.
+ */
+export function changeCounts(file: { additions?: number; deletions?: number }) {
+  const additions = file.additions ?? 0
+  const deletions = file.deletions ?? 0
+  if (additions === 0 && deletions === 0) return undefined
+  return {
+    additions: additions > 0 ? `+${additions}` : "",
+    deletions: deletions > 0 ? `-${deletions}` : "",
+    unit: additions + deletions === 1 ? " line" : " lines",
+  }
 }
 
 // A script's changes, like a patch's files, but a change may have no patch and, where nothing could be derived

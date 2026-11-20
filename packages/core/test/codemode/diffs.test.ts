@@ -60,6 +60,17 @@ describe("CodeModeDiffs", () => {
     ])
   })
 
+  test("an overwrite that changed nothing is no change", async () => {
+    const diffs = CodeModeDiffs.make()
+    const target = { resource: "same.txt" } as Parameters<typeof CodeModeDiffs.written>[0]
+    await Effect.runPromise(
+      CodeModeDiffs.written(target, "modified", fileDiff("same.txt", "a\n", "a\n")).pipe(
+        Effect.provideService(CodeModeDiffs.Service, diffs),
+      ),
+    )
+    expect(diffs.files()).toEqual([])
+  })
+
   test("the patch budget and the change cap apply as changes arrive", () => {
     const diffs = CodeModeDiffs.make()
     const big = "x".repeat(CodeModeDiffs.MAX_PATCH_BYTES)
