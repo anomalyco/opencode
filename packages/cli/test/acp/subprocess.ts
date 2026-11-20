@@ -87,6 +87,8 @@ export async function createAcpFixture(
           OPENCODE_CONFIG_CONTENT: undefined,
           OPENCODE_DISABLE_AUTOUPDATE: "true",
           OPENCODE_MODELS_PATH: models,
+          // The scripted model calls read and shell directly, which full_codemode moves inside execute.
+          OPENCODE_FLAGS: "-full_codemode",
         }),
       })
       processes.add(acp)
