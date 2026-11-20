@@ -163,8 +163,8 @@ export function createSessionRequestModel() {
     return !!id && !data.session.get(id)?.parentID
   }
 
-  // Running jobs in the session's tree: listed when the session opens, the connection returns or the event stream
-  // reconnects, then kept by job.updated events.
+  // Running jobs in the session's tree: listed once when the session opens or the connection returns, then kept by
+  // job.updated events.
   const [jobs, setJobs] = createSignal<ReadonlyMap<string, JobInfo>>(new Map())
   const runningJobs = createMemo(() => [...jobs().values()])
   const jobList = createJobList<JobInfo>(setJobs)
@@ -177,16 +177,7 @@ export function createSessionRequestModel() {
 
   const stopJobs = serverSDK.event.on("experimental.job.updated", (event) => jobList.update(event.data.info))
 
-  const stopJobsResync = serverSDK.event.on("server.connected", () => {
-    const sessionID = untrack(() => params.id)
-
-    if (sessionID) void loadJobs(sessionID)
-  })
-
-  onCleanup(() => {
-    stopJobs()
-    stopJobsResync()
-  })
+  onCleanup(stopJobs)
 
   createEffect(() => {
     const sessionID = params.id
