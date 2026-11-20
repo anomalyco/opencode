@@ -19,6 +19,8 @@ await_holding_lock = "deny"
 await_holding_refcell_ref = "deny"
 dbg_macro = "deny"
 todo = "warn"
+# Every `unsafe` block states the invariant that makes it sound in a `// SAFETY:` comment.
+undocumented_unsafe_blocks = "deny"
 
 [workspace.dependencies]
 opencode-acp = { path = "crates/acp" }

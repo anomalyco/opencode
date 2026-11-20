@@ -256,6 +256,7 @@ impl Library {
         // SAFETY: the entry has type `EntryFn` in every plugin of ABI 2. The entry of ABI 1 is only looked up, never
         // called.
         let entry = unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY) }.map_err(|_| {
+            // SAFETY: looking a symbol up runs no plugin code, and the entry of ABI 1 is never called.
             match unsafe { library.symbol::<abi::EntryFn>(ENTRY_V1) } {
                 Ok(_) => unsupported("1.x"),
                 Err(_) => format!("not an opencode-native plugin: no `{}` symbol", abi::ENTRY),
@@ -307,6 +308,7 @@ impl Library {
         // SAFETY: the host calls them as `PluginApi::create` and `PluginApi::describe` document.
         let create: CreateFn =
             Rc::new(move |host, options, instance, out| unsafe { create(host, options, instance, out) });
+        // SAFETY: the host passes `describe` an `out` valid for writes, as `PluginApi::describe` documents.
         let describe: Rc<dyn Fn(*mut Owned) -> i32> = Rc::new(move |out| unsafe { describe(out) });
         let requires_minor = core.requires_minor;
         conformance::tap(Event::Open { major, minor, requires_minor, served: HOST_MINOR });

@@ -69,12 +69,14 @@ mod sys {
 
     pub unsafe fn open(path: &OsStr) -> Result<NonNull<c_void>, String> {
         let path = CString::new(path.as_encoded_bytes()).map_err(|error| error.to_string())?;
+        // SAFETY: `path` is a NUL-terminated string that lives across the call; the caller of `open` accepts the initializers.
         let handle = unsafe { libc::dlopen(path.as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL) };
         NonNull::new(handle).ok_or_else(|| last_error("dlopen failed"))
     }
 
     pub unsafe fn symbol(handle: NonNull<c_void>, name: &CStr) -> Result<NonNull<c_void>, String> {
         // `dlerror` clears a stale error first.
+        // SAFETY: `handle` is an open `dlopen` handle (the caller's promise) and `name` is NUL-terminated.
         let address = unsafe {
             libc::dlerror();
             libc::dlsym(handle.as_ptr(), name.as_ptr())
@@ -83,6 +85,7 @@ mod sys {
     }
 
     pub unsafe fn close(handle: NonNull<c_void>) {
+        // SAFETY: `handle` came from `dlopen`, and the caller closes it once, after its last symbol is used.
         unsafe { libc::dlclose(handle.as_ptr()) };
     }
 
@@ -104,14 +107,17 @@ mod sys {
     use std::ptr::NonNull;
 
     pub unsafe fn open(path: &OsStr) -> Result<NonNull<c_void>, String> {
+        // SAFETY: the caller of `open` accepts the library's initializers, `load_library`'s only condition.
         unsafe { win::load_library(path) }.map_err(|error| error.to_string())
     }
 
     pub unsafe fn symbol(handle: NonNull<c_void>, name: &CStr) -> Result<NonNull<c_void>, String> {
+        // SAFETY: `handle` came from `load_library` and is still open (the caller's promise).
         unsafe { win::library_symbol(handle, name) }.map_err(|error| error.to_string())
     }
 
     pub unsafe fn close(handle: NonNull<c_void>) {
+        // SAFETY: `handle` came from `load_library`, and the caller frees it once, after its last symbol is used.
         unsafe { win::free_library(handle) };
     }
 }
@@ -153,15 +159,20 @@ mod tests {
         // SAFETY: libc is already loaded; `strlen` has this signature.
         let library = unsafe { Library::open(LIBC) }.unwrap();
         let strlen: unsafe extern "C" fn(*const std::ffi::c_char) -> usize =
+            // SAFETY: every C runtime's `strlen` has this signature.
             unsafe { library.symbol("strlen") }.unwrap();
+        // SAFETY: `c"abc"` is a NUL-terminated string.
         assert_eq!(unsafe { strlen(c"abc".as_ptr()) }, 3);
     }
 
     #[test]
     fn reports_the_loader_message() {
+        // SAFETY: opening a path that does not exist runs no code.
         let error = unsafe { Library::open(MISSING) }.err().unwrap();
         assert!(error.contains("libnothing"), "{error}");
+        // SAFETY: libc is already loaded and its initializers have run.
         let library = unsafe { Library::open(LIBC) }.unwrap();
+        // SAFETY: the symbol is missing, so no pointer of the wrong type is made.
         let error = unsafe { library.symbol::<*mut u8>("no_such_symbol_here") }.err().unwrap();
         assert!(error.contains("no_such_symbol_here"), "{error}");
     }

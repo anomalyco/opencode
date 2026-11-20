@@ -86,14 +86,17 @@ fn count(measure: usize, bytes: isize) {
 #[allow(unsafe_code)]
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: `with_header` is non-zero sized, and `tag` gets the system's allocation of that layout or null.
         unsafe { tag(System.alloc(with_header(layout)), layout) }
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: `with_header` is non-zero sized, and `tag` gets the system's allocation of that layout or null.
         unsafe { tag(System.alloc_zeroed(with_header(layout)), layout) }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // SAFETY: `ptr` came from `alloc`, so the header before it holds the measure and `System` allocated its base.
         unsafe {
             count(counts_in(ptr), -(layout.size() as isize));
             System.dealloc(ptr.sub(header(layout)), with_header(layout));
@@ -101,6 +104,7 @@ unsafe impl GlobalAlloc for Counting {
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        // SAFETY: `ptr` came from `alloc`, so the header before it holds the measure and `System` allocated its base.
         unsafe {
             let measure = counts_in(ptr);
             let base = System.realloc(ptr.sub(header(layout)), with_header(layout), new_size + header(layout));
@@ -124,6 +128,7 @@ unsafe fn tag(base: *mut u8, layout: Layout) -> *mut u8 {
     }
     let measure = counted_in();
     count(measure, layout.size() as isize);
+    // SAFETY: `base` is a live allocation of `with_header(layout)` bytes, so the header's last word is in bounds.
     unsafe {
         let ptr = base.add(header(layout));
         ptr.cast::<usize>().sub(1).write_unaligned(measure);
@@ -133,6 +138,7 @@ unsafe fn tag(base: *mut u8, layout: Layout) -> *mut u8 {
 
 #[allow(unsafe_code)]
 unsafe fn counts_in(ptr: *mut u8) -> usize {
+    // SAFETY: `ptr` came from `tag`, which wrote the measure in the word before it.
     unsafe { ptr.cast::<usize>().sub(1).read_unaligned() }
 }
 

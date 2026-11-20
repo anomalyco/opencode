@@ -210,6 +210,7 @@ impl Bytes {
     /// # Safety
     /// As for [`Bytes::checked`].
     pub unsafe fn as_slice<'a>(self) -> &'a [u8] {
+        // SAFETY: the caller promises what `checked` needs: a non-null `ptr` points to `len` bytes that outlive `'a`.
         unsafe { self.checked() }.unwrap_or_default()
     }
 }
@@ -239,6 +240,7 @@ impl Owned {
         if self.ptr.is_null() {
             return Vec::new();
         }
+        // SAFETY: the caller promises an unchanged descriptor from `from_vec` in this library, so this allocator owns it.
         unsafe { Vec::from_raw_parts(self.ptr, self.len, self.cap) }
     }
 
@@ -259,6 +261,7 @@ impl Owned {
     /// # Safety
     /// A non-null `ptr` must point to `len` readable bytes.
     pub unsafe fn to_vec(&self) -> Vec<u8> {
+        // SAFETY: the caller promises a non-null `ptr` points to `len` readable bytes, all `bytes` reads.
         unsafe { self.bytes() }.map(<[u8]>::to_vec).unwrap_or_default()
     }
 
@@ -3852,6 +3855,7 @@ struct Ctx(*mut c_void);
 
 // SAFETY: the host's `wake` may be called from any thread with its `ctx` until `destroy` returns ([`HostApi::wake`]).
 unsafe impl Send for Ctx {}
+// SAFETY: `Ctx` is a `Copy` pointer with no state of its own, so sharing it is sending copies, which `Send` covers.
 unsafe impl Sync for Ctx {}
 
 impl Ctx {
@@ -4697,9 +4701,11 @@ macro_rules! export_plugin {
                 instance: *mut *mut ::std::ffi::c_void,
                 out: *mut $crate::Owned,
             ) -> i32 {
+                // SAFETY: the host passes the pointers `PluginApi::create` documents, which `runtime::create` requires.
                 unsafe { $crate::runtime::create($id, $setup, host, options, instance, out) }
             }
             unsafe extern "C" fn describe(out: *mut $crate::Owned) -> i32 {
+                // SAFETY: the host passes an `out` valid for writes, as `PluginApi::describe` documents.
                 unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), &[$($feature),*], out) }
             }
             static API: $crate::PluginApi = $crate::runtime::table($major, $minor, $requires, create, describe);
@@ -4949,6 +4955,7 @@ mod tests {
     }
 
     unsafe extern "C" fn call(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
+        // SAFETY: the host handle passes an `out` valid for writes, as `HostApi::call` documents.
         unsafe { *out = Owned::EMPTY };
         ERROR
     }
@@ -4972,6 +4979,7 @@ mod tests {
     unsafe extern "C" fn answer(ctx: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
         // SAFETY: the test passes a live counter.
         unsafe { &*ctx.cast::<std::sync::atomic::AtomicUsize>() }.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        // SAFETY: the host handle passes an `out` valid for writes, as `HostApi::call` documents.
         unsafe { *out = Owned::EMPTY };
         OK
     }
@@ -5035,6 +5043,7 @@ mod tests {
     unsafe extern "C" fn answer_as(ctx: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
         // SAFETY: the test passes a live row.
         let (status, owned) = unsafe { &*ctx.cast::<(i32, Owned)>() };
+        // SAFETY: the host handle passes an `out` valid for writes, as `HostApi::call` documents.
         unsafe { *out = Owned { ptr: owned.ptr, len: owned.len, cap: owned.cap } };
         *status
     }
@@ -5226,9 +5235,12 @@ mod tests {
         for (borrowed, needle) in refused {
             // SAFETY: refused before anything is read, as the test checks.
             assert!(unsafe { borrowed.checked() }.is_err_and(|error| error.contains(needle)));
+            // SAFETY: refused before anything is read, so `as_slice` reads nothing.
             assert!(unsafe { borrowed.as_slice() }.is_empty());
         }
+        // SAFETY: `Bytes::new` borrows `bytes`, which outlives the slice.
         assert_eq!(unsafe { Bytes::new(bytes).checked() }, Ok(&bytes[..]));
+        // SAFETY: a null descriptor of no length reads nothing.
         assert_eq!(unsafe { Bytes { ptr: std::ptr::null(), len: 0 }.checked() }, Ok(&[][..]));
         let mut owned = Owned::from_vec(b"abcdef".to_vec());
         owned.len = usize::MAX;
@@ -5741,11 +5753,13 @@ mod tests {
             false => (ERROR, b"unsupported host request".to_vec()),
         };
         log.lock().unwrap().push(text);
+        // SAFETY: the host handle passes an `out` valid for writes, as `HostApi::call` documents.
         unsafe { *out = Owned::from_vec(reply) };
         status
     }
 
     unsafe extern "C" fn free_buffer(owned: Owned) {
+        // SAFETY: `owned` is a reply `toasts_only` made with `Owned::from_vec`, handed back unchanged.
         drop(unsafe { owned.into_vec() });
     }
 
