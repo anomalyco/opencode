@@ -351,7 +351,7 @@ impl Data {
                     return Err(evict_missing(&data, error));
                 }
             };
-            data.write(|state| {
+            let reread = data.write(|state| {
                 let updates = state
                     .pending_updates
                     .get(&session)
@@ -360,7 +360,7 @@ impl Data {
                     .unwrap_or_default();
                 release_updates(state, &session, token);
                 if state.deleted_since(&session, started) {
-                    return;
+                    return false;
                 }
                 let mut current: IndexMap<String, SessionInboxInfo> =
                     response.into_iter().map(|item| (item.id().to_owned(), item)).collect();
@@ -402,12 +402,39 @@ impl Data {
                     state.pending(&session).iter().filter(|item| state.outbox.contains(item.id())).cloned().collect();
                 let mut merged = pending;
                 merged.extend(inflight);
+                // An item the read no longer lists was cancelled or delivered by an event this client missed (a
+                // reconnect loses events): its row goes, and a synced transcript reads again for a delivered one.
+                let listed: HashSet<&str> = merged.iter().map(SessionInboxInfo::id).collect();
+                let dropped: Vec<String> = state
+                    .pending(&session)
+                    .iter()
+                    .filter(|item| !listed.contains(item.id()))
+                    .map(|item| item.id().to_owned())
+                    .collect();
+                let mut retracted = false;
+                if let Some(transcript) = state.messages.get_mut(&session) {
+                    for id in &dropped {
+                        retracted |= transcript.remove(id).is_some();
+                    }
+                }
+                let key = format!("session.message:{}", session.0);
+                let reread = retracted && state.syncs.has(&key);
+                if retracted {
+                    state.log.messages(&session);
+                }
+                if reread {
+                    state.syncs.invalidate(&key);
+                }
                 state.pending.insert(session.clone(), merged.clone());
                 state.log.pending(&session);
                 for item in &merged {
                     state.materialize(item);
                 }
+                reread
             });
+            if reread {
+                data.refresh(|data| data.message_sync(&session));
+            }
             Ok(())
         })
     }
