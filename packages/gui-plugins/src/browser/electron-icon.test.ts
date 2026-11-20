@@ -7,7 +7,7 @@ type Reported = {
   /** The page's icons as Chromium listed them. */
   readonly listed: readonly string[]
   /** The icon the pane makes of that list, as the strip draws it. */
-  readonly icon: { readonly type: string; readonly length?: number } | null
+  readonly icon: { readonly type: string; readonly length?: number; readonly text?: string } | null
 }
 
 const png = (color: string) => ({ type: "image/png", width: 32, height: 32, length: expect.any(Number), color })
