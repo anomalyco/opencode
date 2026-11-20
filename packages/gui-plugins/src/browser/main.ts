@@ -179,6 +179,7 @@ const setup: Plugin.MainSetup = (ctx) => {
                   system: createSystemMedia(ctx.app.packaged ? undefined : (line) => ctx.log.write("info", line)),
                   toolbar: viewportToolbarAvailable(ctx.app.channel),
                   verifier,
+                  log: ctx.log,
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })
