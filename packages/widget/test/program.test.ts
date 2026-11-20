@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { builtins, prelude, program, step, version } from "../src/index.js"
-import { backdrop, chart, confirm, form, suggestions } from "../src/source.js"
+import { backdrop, chart, confirm, form, minigame, suggestions } from "../src/source.js"
 
 const src = path.resolve(import.meta.dir, "../src")
 
@@ -12,6 +12,7 @@ test("source.ts embeds the canonical .js files", async () => {
   expect(confirm).toBe(await Bun.file(path.join(src, "templates/confirm.js")).text())
   expect(chart).toBe(await Bun.file(path.join(src, "templates/chart.js")).text())
   expect(backdrop).toBe(await Bun.file(path.join(src, "templates/backdrop.js")).text())
+  expect(minigame).toBe(await Bun.file(path.join(src, "templates/minigame.js")).text())
 })
 
 test("program is the prelude, a newline, then the source", () => {
@@ -28,7 +29,7 @@ test("version addresses the program and data schema", () => {
   expect(version("source", data)).toMatch(/^[0-9a-f]{16}$/)
   expect(version("source", { type: "array" })).not.toBe(expected)
   expect(builtins.map((template) => template.version)).toEqual(
-    builtins.map((template) => version(template.source, template.data)),
+    builtins.map((template) => version(template.source, template.data, template.mode)),
   )
 })
 

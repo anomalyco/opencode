@@ -1,11 +1,14 @@
 import type { JSONSchema } from "./json-schema.js"
 import { version } from "./program.js"
-import { backdrop, chart, confirm, form, suggestions } from "./source.js"
+import { backdrop, chart, confirm, form, minigame, suggestions } from "./source.js"
+
+/** `step` (default): short init/update/view/draw steps. `live`: one long-running `main(data)` (widgets-live.md). */
+export type Mode = "step" | "live"
 
 export interface Template {
   /** /^[a-z][a-z0-9-]{0,47}$/, unique per server */
   readonly name: string
-  /** `version(source, data)`: a content address; a version is immutable. */
+  /** `version(source, data, mode)`: a content address; a version is immutable. */
   readonly version: string
   /** One line, shown to the model when listing templates. */
   readonly description: string
@@ -14,6 +17,7 @@ export interface Template {
   /** The template source, without the prelude; clients run `program(source)`. */
   readonly source: string
   readonly builtin: boolean
+  readonly mode: Mode
 }
 
 export const NAME = /^[a-z][a-z0-9-]{0,47}$/
@@ -40,13 +44,14 @@ const option: JSONSchema = {
   additionalProperties: false,
 }
 
-const make = (name: string, description: string, source: string, data: JSONSchema): Template => ({
+const make = (name: string, description: string, source: string, data: JSONSchema, mode: Mode = "step"): Template => ({
   name,
-  version: version(source, data),
+  version: version(source, data, mode),
   description,
   data,
   source,
   builtin: true,
+  mode,
 })
 
 export const builtins: ReadonlyArray<Template> = [
@@ -201,5 +206,20 @@ export const builtins: ReadonlyArray<Template> = [
       required: ["title", "preset"],
       additionalProperties: false,
     },
+  ),
+  make(
+    "minigame",
+    'A live "tap the dots" game: dots appear and shrink, tapping scores (smaller is worth more) until time runs out. Submits { score, seconds }.',
+    minigame,
+    {
+      type: "object",
+      properties: {
+        title: string("Heading of the game"),
+        seconds: { type: "integer", minimum: 5, maximum: 120, description: "Length of a round (default 20)" },
+      },
+      required: ["title"],
+      additionalProperties: false,
+    },
+    "live",
   ),
 ]

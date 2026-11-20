@@ -36,6 +36,17 @@ export {
   WGSL_BYTES,
   type WidgetEvent,
 } from "./node.js"
+export {
+  type Clock,
+  type LiveEnd,
+  type LiveFrame,
+  type LiveInput,
+  type LiveMessage,
+  type LiveOptions,
+  LiveWidget,
+  ManualClock,
+  realClock,
+} from "./live.js"
 export { prelude, program, version } from "./program.js"
 export { draw, StepError, type StepOptions, TIMEOUT_MS, WidgetSession, step } from "./session.js"
-export { builtins, NAME, type Template } from "./template.js"
+export { builtins, type Mode, NAME, type Template } from "./template.js"

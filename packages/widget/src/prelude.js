@@ -135,3 +135,90 @@ function __widget_step(input) {
   if (next.kind === "send") return { state, view: view(state, data), send: next.value }
   return { state, view: view(state, data), submit: next.value ?? null }
 }
+
+// Live mode (specs/v2/widgets-live.md): `main(data)` runs once, for as long as the widget is open, on the host's
+// `__host.post`, `__host.receive`, `__host.sleep` and `__host.now`. Messages from the client are buffered here, so
+// waiting for one kind (a frame) keeps the others (events) for later.
+const widget = (() => {
+  const events = []
+  const live = { frame: null, requested: false, receiving: null, alarm: null, visible: true, done: false }
+  const post = (message) => {
+    if (!live.done) __host.post(message)
+  }
+  const accept = (message) => {
+    live.receiving = null
+    if (message.type === "event") events.push(message.event)
+    if (message.type === "frame") {
+      live.requested = false
+      live.frame = message.frame
+    }
+    if (message.type === "visibility") live.visible = message.visible !== false
+  }
+  // At most one receive is in flight: one left over from a timed-out wait is reused by the next wait.
+  const pull = () => live.receiving ?? (live.receiving = __host.receive().then(accept))
+  // At most one timer per deadline is in flight, so a loop that waits with the same deadline doesn't pile up sleeps.
+  const alarm = (deadline) => {
+    if (live.alarm && live.alarm.at <= deadline) return live.alarm.promise
+    const entry = { at: deadline, promise: null }
+    entry.promise = __host.sleep(deadline - __host.now()).then(() => {
+      if (live.alarm === entry) live.alarm = null
+    })
+    live.alarm = entry
+    return entry.promise
+  }
+  const request = () => {
+    if (live.requested || live.frame) return
+    live.requested = true
+    post({ type: "frame" })
+  }
+  const take = () => {
+    const frame = live.frame
+    live.frame = null
+    return frame
+  }
+  return {
+    get visible() {
+      return live.visible
+    },
+    render: (node) => post({ type: "render", node }),
+    draw: (id, commands) =>
+      post({ type: "draw", id, commands: commands instanceof __WidgetDraw ? commands.commands : commands }),
+    event: async () => {
+      while (events.length === 0) await pull()
+      return events.shift()
+    },
+    frame: async () => {
+      request()
+      while (!live.frame) await pull()
+      return take()
+    },
+    sleep: (ms) => __host.sleep(ms),
+    now: () => __host.now(),
+    next: async (options) => {
+      const frame = options?.frame === true
+      const deadline = typeof options?.timeout === "number" ? __host.now() + Math.max(0, options.timeout) : undefined
+      if (frame) request()
+      while (true) {
+        if (events.length > 0) return { type: "event", event: events.shift() }
+        if (frame && live.frame) return { type: "frame", frame: take() }
+        if (deadline === undefined) await pull()
+        else if (__host.now() >= deadline) return { type: "timeout" }
+        else await Promise.race([pull(), alarm(deadline)])
+      }
+    },
+    submit: (value) => {
+      post({ type: "submit", value: value ?? null })
+      live.done = true
+    },
+    dismiss: () => {
+      post({ type: "dismiss" })
+      live.done = true
+    },
+    send: (value, options) => post({ type: "send", value: value ?? null, wake: options?.wake !== false }),
+  }
+})()
+
+async function __widget_live(input) {
+  await main(input.data)
+  return null
+}

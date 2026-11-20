@@ -123,7 +123,7 @@ const known = new Set<string>(types)
 
 // Drops nodes of unknown types from `children` so older clients render what they know (spec: "unknown node types
 // render as nothing plus a dev warning"). Anything else, including an unknown root, is left for the schema to reject.
-function prune(node: unknown, warnings: string[]): unknown {
+export function prune(node: unknown, warnings: string[]): unknown {
   if (!isRecord(node) || !Array.isArray(node.children)) return node
   return {
     ...node,

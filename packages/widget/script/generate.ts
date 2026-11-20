@@ -13,6 +13,7 @@ const names = [
   "templates/confirm",
   "templates/chart",
   "templates/backdrop",
+  "templates/minigame",
 ]
 const sources = await Promise.all(names.map((name) => Bun.file(path.join(src, `${name}.js`)).text()))
 
