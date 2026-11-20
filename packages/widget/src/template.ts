@@ -1,3 +1,4 @@
+import { diagrams } from "./diagram.js"
 import type { JSONSchema } from "./json-schema.js"
 import { version } from "./program.js"
 import { backdrop, chart, confirm, form, suggestions } from "./source.js"
@@ -202,4 +203,5 @@ export const builtins: ReadonlyArray<Template> = [
       additionalProperties: false,
     },
   ),
+  ...diagrams,
 ]
