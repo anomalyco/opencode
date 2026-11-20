@@ -106,9 +106,9 @@ story("each switch is named by its row's title, and each row says what it does i
 
   // The switch's accessible name is the row's title, so a screen reader hears what the row shows.
   for (const [id, title, description] of [
-    ["settings-browser-links", "Open links in OpenCode", "Hold Shift and click a link to use your default browser."],
-    ["settings-browser-remote", "Share sign-ins with remote servers", "Only turn on for servers you trust, since they can access your signed\u2011in sites."],
-    ["settings-browser-agent-pages", "Open browser automatically", "Show the tab when the agent opens a page or file for you."],
+    ["settings-browser-links", "Open links in OpenCode", "Hold Shift and click a link to use your default browser"],
+    ["settings-browser-remote", "Share sign-ins with remote servers", "Only turn on for servers you trust, since they can access your signed\u2011in sites"],
+    ["settings-browser-agent-pages", "Open browser automatically", "Show the tab when the agent opens a page or file for you"],
   ] as const) {
     await expect(row(id).locator('[data-slot="settings-row-title"]')).toHaveText(title)
     await expect(row(id).locator('[data-slot="settings-row-description"]')).toHaveText(description)
@@ -116,7 +116,7 @@ story("each switch is named by its row's title, and each row says what it does i
   }
 
   await expect(row("settings-browser-extensions").locator('[data-slot="settings-row-description"]')).toHaveText(
-    "Install from the Chrome Web Store, Edge Add-ons, or your other browsers.",
+    "Install from the Chrome Web Store, Edge Add-ons, or your other browsers",
   )
   const sites = view.root.getByRole("region", { name: "Site permissions", exact: true })
   await expect(sites.locator('[data-slot="settings-row-title"]')).toHaveText("No saved permissions")
@@ -128,7 +128,7 @@ story("the red button asks first: Cancel, Escape, Enter on Cancel and a click ou
   const cancel = view.confirm.getByRole("button", { name: "Cancel", exact: true })
   const confirm = view.confirm.getByRole("button", { name: "Clear data", exact: true })
 
-  await expect(view.data.getByText("0 cookies. Sign-ins are shared across sessions.", { exact: true })).toBeVisible()
+  await expect(view.data.getByText("0 cookies. Sign-ins are shared across sessions", { exact: true })).toBeVisible()
   await view.clear.click()
   // One title, one line, two buttons: no close button, as the app's other confirmations.
   await expect(view.confirm.getByText("This signs you out of all sites and deletes history in OpenCode, leaving your other browsers untouched.", { exact: true })).toBeVisible()
@@ -156,7 +156,7 @@ story("the red button asks first: Cancel, Escape, Enter on Cancel and a click ou
   }
 
   // Nothing ran: the row still shows the count, the window's last pages are there, and the button is ready again.
-  await expect(view.data.getByText("0 cookies. Sign-ins are shared across sessions.", { exact: true })).toBeVisible()
+  await expect(view.data.getByText("0 cookies. Sign-ins are shared across sessions", { exact: true })).toBeVisible()
   await expect(view.visits).toHaveText("1")
   await expect(view.clear).toBeEnabled()
 
@@ -203,7 +203,7 @@ for (const [name, file, line] of [
     const view = await open(page, { target: "settings-browser-cookies", file })
 
     await expect(view.root.getByText("Import cookie file", { exact: true })).toBeVisible()
-    await expect(view.root.getByText("Supports cookies.txt or JSON from browser extensions or Playwright.", { exact: true })).toBeVisible()
+    await expect(view.root.getByText("Supports cookies.txt or JSON from browser extensions or Playwright", { exact: true })).toBeVisible()
     await view.root.getByRole("button", { name: "Choose file", exact: true }).click()
     await expect(view.root.getByText(line, { exact: true })).toBeVisible()
   })
