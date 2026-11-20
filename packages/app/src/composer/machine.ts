@@ -20,7 +20,7 @@ export type ComposerSubmission = {
   first?: boolean
 }
 
-type QuoteItem = Extract<ComposerSubmission["context"][number], { type: "quote" }>
+type CommentItem = ComposerSubmission["context"][number]
 
 /** What a submission sends. A prompt is in flight before the composer clears; shell and commands start after. */
 export type SubmissionKind =
@@ -46,7 +46,7 @@ export type CapturedDraft = {
  */
 export type PromptSend = { settled: (restore: (cancelled: boolean) => boolean) => Promise<boolean> }
 
-/** Settles the caller of `submit` or `submitQuote`; `sent` is false when nothing was sent. */
+/** Settles the caller of `submit` or `submitComment`; `sent` is false when nothing was sent. */
 export type SubmitDone = (sent: boolean) => void
 
 /** A held prompt that already shows in its Session's timeline; `cleared` is the composer it left, once cleared. */
@@ -65,8 +65,8 @@ export type ComposerSubmitState =
   // Session shows in its timeline at once and leaves the composer (`shown`); any other send waits in the composer,
   // where an edit cancels it.
   | { type: "held"; attempt: number; snapshot: SubmitSnapshot; shown: ShownHold | undefined; done: SubmitDone }
-  // A client command or a quote runs; neither takes the draft, but the composer submits nothing else meanwhile. A quote
-  // is a prompt, so it waits on the gate as one does.
+  // A client command or one attached comment runs; neither takes the draft, but the composer submits nothing else
+  // meanwhile. A comment is a prompt, so it waits on the gate as one does.
   | { type: "running"; attempt: number; gate: SendGate; done: SubmitDone }
   // Image attachments resolve and, for a new Session, the Session starts. Nothing is sent yet. `cleared` is the
   // composer a shown hold already cleared.
@@ -117,9 +117,9 @@ export type SubmitSnapshot = {
   session: ComposerSession | undefined
 }
 
-export type QuoteSnapshot = {
+export type CommentSnapshot = {
   key: string
-  quote: QuoteItem | undefined
+  item: CommentItem | undefined
   comment: string
   selection: ComposerSelection | undefined
   delivery: ComposerDelivery
@@ -129,7 +129,7 @@ export type QuoteSnapshot = {
 
 export type ComposerSubmitEvent =
   | { type: "submit"; snapshot: SubmitSnapshot; done: SubmitDone }
-  | { type: "quote"; snapshot: QuoteSnapshot; done: SubmitDone }
+  | { type: "comment"; snapshot: CommentSnapshot; done: SubmitDone }
   | { type: "stop" }
   | { type: "unmounted" }
   | { type: "hold.changed"; attempt: number }
@@ -173,10 +173,10 @@ export type ComposerSubmitEffect =
   | { type: "hold.cancel"; session: ComposerSession; snapshot: SubmitSnapshot; cleared: Prompt | undefined }
   | { type: "command.run"; attempt: number; prompt: Prompt; run: () => void | Promise<void> }
   | {
-      type: "quote.send"
+      type: "comment.send"
       attempt: number
       key: string
-      quote: QuoteItem
+      item: CommentItem
       comment: string
       session: ComposerSession
       value: ComposerSubmission
@@ -226,7 +226,7 @@ export function transitionComposerSubmit(
 ): ComposerSubmitTransition {
   if (event.type === "submit") return submit(state, event.snapshot, event.done)
 
-  if (event.type === "quote") return quote(state, event.snapshot, event.done)
+  if (event.type === "comment") return comment(state, event.snapshot, event.done)
 
   if (event.type === "stop") return stop(state)
 
@@ -385,7 +385,7 @@ function stop(state: ComposerSubmitState): ComposerSubmitTransition {
   if (state.type === "sending" || (state.type === "handing-off" && state.gate === "pending"))
     return settle(state, false, [{ type: "send.cancel", attempt: state.attempt }])
 
-  // The quote's own send settles the run once it fails as cancelled.
+  // The comment's own send settles the run once it fails as cancelled.
   if (state.type === "running" && state.gate === "pending")
     return { state, effects: [{ type: "send.cancel", attempt: state.attempt }] }
 
@@ -487,8 +487,8 @@ function cancelHold(state: Extract<ComposerSubmitState, { type: "held" }>, effec
   ])
 }
 
-function quote(state: ComposerSubmitState, snapshot: QuoteSnapshot, done: SubmitDone): ComposerSubmitTransition {
-  if (state.type !== "idle" || !snapshot.quote) return { state, effects: [{ type: "done", done, sent: false }] }
+function comment(state: ComposerSubmitState, snapshot: CommentSnapshot, done: SubmitDone): ComposerSubmitTransition {
+  if (state.type !== "idle" || !snapshot.item) return { state, effects: [{ type: "done", done, sent: false }] }
 
   if (!snapshot.selection)
     return { state, effects: [{ type: "notify.missing-selection" }, { type: "done", done, sent: false }] }
@@ -498,23 +498,17 @@ function quote(state: ComposerSubmitState, snapshot: QuoteSnapshot, done: Submit
     state: { type: "running", attempt, gate: "pending", done },
     effects: [
       {
-        type: "quote.send",
+        type: "comment.send",
         attempt,
         key: snapshot.key,
-        quote: snapshot.quote,
+        item: snapshot.item,
         comment: snapshot.comment,
         session: snapshot.session,
         value: {
           id: snapshot.id,
           mode: "normal",
           prompt: [],
-          context: [
-            {
-              ...snapshot.quote,
-              comment: snapshot.comment,
-              source: snapshot.quote.source ? { ...snapshot.quote.source } : undefined,
-            },
-          ],
+          context: [{ ...snapshot.item, comment: snapshot.comment }],
           text: "",
           images: [],
           selection: snapshot.selection,

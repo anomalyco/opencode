@@ -206,6 +206,7 @@ export function viewLineCommentEditor(state: LineCommentEditorState, config: Lin
     trackModifiers: state.status !== "disposed" && allowsAlternate(config),
     compactVariant: alternateActive || submitting ? "submit" : config.value.trim() ? "neutral" : "ghost-muted",
     compactDisabled: submitting || (alternateActive && !!config.alternateSubmit?.disabled),
+    defaultDisabled: submitting || !submittable || (alternateActive && !!config.alternateSubmit?.disabled),
     mentionItems,
     activeMentionPath:
       state.status === "mention-open" || state.status === "mention-loading"
@@ -225,7 +226,8 @@ function textareaKey(state: Live, key: LineCommentEditorKey, config: LineComment
   }
 
   if (key.key === "Enter" && !key.shift) {
-    if (modifiedKey(key) && config.alternateSubmit) return key.repeat ? handled(state) : submit(state, config, true)
+    if (modifiedKey(key) && alternateKeyReady(config))
+      return key.repeat ? handled(state) : submit(state, config, true)
 
     if (state.status === "mention-open") return insert(state, state.activeIndex)
 
@@ -366,8 +368,15 @@ function navigation(key: LineCommentEditorKey) {
   return 0
 }
 
+// A full-size editor whose alternate submit is disabled lets Mod+Enter save as Enter does; a compact one swallows it.
+function alternateKeyReady(config: LineCommentEditorConfig) {
+  if (!config.alternateSubmit) return false
+
+  return config.variant === "compact" || !config.alternateSubmit.disabled
+}
+
 function allowsAlternate(config: LineCommentEditorConfig) {
-  return config.variant === "compact" && config.alternateSubmit !== null
+  return config.alternateSubmit !== null
 }
 
 function canSubmit(config: LineCommentEditorConfig) {

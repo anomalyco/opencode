@@ -34,6 +34,7 @@ import {
   createKeyed,
   usePlugin,
   usePanel,
+  type ComposerNote,
   type PanelTab,
   type MountedSession,
   type SessionScreen,
@@ -103,6 +104,10 @@ const RECENT = 5
 
 /** How long a notice about a command that did not work stays before it goes by itself. */
 const FAILURE_NOTICE_MS = 8_000
+
+const sendLabels = { send: "comment.send", steer: "comment.steer", queue: "comment.queue" } as const
+
+const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
 
 /** An element a component reads after render, such as a button a native view anchors to. */
 type ElementRef = { element?: HTMLElement }
@@ -489,6 +494,12 @@ export default function SessionBrowserPane(props: {
     inspectable: inspectable(),
   })
 
+  const attach = (send: boolean, note: ComposerNote) => {
+    props.screen.composer.attach(note)
+
+    if (send) props.screen.composer.send(note.commentID)
+  }
+
   const dispatchOverlay = (event: OverlayEvent) => {
     const next = transitionOverlay(untrack(overlay), event)
     setOverlay(next.state)
@@ -500,7 +511,8 @@ export default function SessionBrowserPane(props: {
 
       // The owning screen's composer serves the session the pane shows.
       if (effect.type === "attach-comment")
-        return props.screen.composer.attach(
+        return attach(
+          effect.send,
           commentNote({
             origin: plugin.id,
             tabID: effect.tabID,
@@ -518,7 +530,8 @@ export default function SessionBrowserPane(props: {
           }),
         )
 
-      props.screen.composer.attach(
+      attach(
+        effect.send,
         pageNote({
           origin: plugin.id,
           tabID: effect.tabID,
@@ -605,6 +618,19 @@ export default function SessionBrowserPane(props: {
     )
 
   const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
+
+  const sendOverlay = createMemo(() => {
+    const delivery = props.screen.composer.delivery()
+
+    return {
+      label: plugin.t(sendLabels[delivery ?? "send"]),
+      keys: [mac ? "⌘" : plugin.t("common.key.ctrl"), "⏎"],
+      disabled: delivery === undefined,
+      onSubmit: (value: string) =>
+        dispatchOverlay({ type: "overlay.submitted", value, context: context(), send: true }),
+    }
+  })
+
   const openNote = () => dispatchOverlay({ type: "note.opened", context: context() })
 
   const zoomed = () => !!address() && (page()?.zoom ?? 1) !== 1
@@ -1571,6 +1597,7 @@ export default function SessionBrowserPane(props: {
                         onInput={(value) => dispatchOverlay({ type: "draft.changed", value })}
                         onCancel={closeOverlay}
                         onSubmit={submitOverlay}
+                        alternateSubmit={sendOverlay()}
                         mention={{
                           items: (query) => props.screen.file.search(query, { kind: "any" }),
                         }}
@@ -1639,6 +1666,7 @@ export default function SessionBrowserPane(props: {
                     onInput={(value) => dispatchOverlay({ type: "draft.changed", value })}
                     onCancel={closeOverlay}
                     onSubmit={submitOverlay}
+                    alternateSubmit={sendOverlay()}
                     placeholder={plugin.t("page.placeholder")}
                     mention={{
                       items: (query) => props.screen.file.search(query, { kind: "any" }),

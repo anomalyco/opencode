@@ -275,7 +275,7 @@ describe("line comment editor machine", () => {
     const unsupported = transitionLineCommentEditor(createLineCommentEditorState(), {
       type: "modifier.changed",
       active: true,
-      config: { ...settings, variant: "default" },
+      config: { ...settings, alternateSubmit: null },
     })
 
     expect(unsupported.state).toMatchObject({ alternate: false })
@@ -322,6 +322,20 @@ describe("line comment editor machine", () => {
     expect(transitionLineCommentEditor(open.state, key("Enter", settings, { ctrl: true })).effects).toEqual([
       { type: "submit", mode: "alternate", value: "@src" },
     ])
+  })
+
+  test("Mod+Enter in a full-size editor saves while its alternate submit is disabled", () => {
+    const settings = config({ value: "Ship it", variant: "default", alternateSubmit: { disabled: true } })
+
+    expect(
+      transitionLineCommentEditor(createLineCommentEditorState(), key("Enter", settings, { ctrl: true })).effects,
+    ).toEqual([{ type: "submit", mode: "primary", value: "Ship it" }])
+    expect(
+      transitionLineCommentEditor(
+        createLineCommentEditorState(),
+        key("Enter", { ...settings, variant: "compact" }, { ctrl: true }),
+      ).effects,
+    ).toEqual([])
   })
 
   test("Escape closes a visible list once, and the same token stays closed", () => {
