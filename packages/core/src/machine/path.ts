@@ -14,7 +14,7 @@ export class NotAbsolute extends Schema.TaggedError<NotAbsolute>()("Machine.NotA
   machine: Environment.ID,
 }) {
   override get message() {
-    return `A ${this.machine} path must be absolute, as in ${this.machine}:/work/file.`
+    return `A ${this.machine} path must be absolute or start with ~/, as in ${this.machine}:/work/file.`
   }
 }
 

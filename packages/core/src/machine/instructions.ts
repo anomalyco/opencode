@@ -9,7 +9,7 @@ import { Machines } from "./machines.js"
 const render = (names: ReadonlyArray<string>) =>
   [
     `Other machines are available: ${names.join(", ")}.`,
-    `Name one in a path, as in ${names[0]}:/work/file, for the read, write, edit and patch tools, and as the shell tool's workdir to run a command there. A machine path must be absolute. grep and glob cannot search another machine yet. A machine may be offline; the tool says so when it is.`,
+    `Name one in a path, as in ${names[0]}:/work/file, for the read, write, edit and patch tools, and as the shell tool's workdir to run a command there. A machine path is absolute or starts with ~/ for that machine's home. grep and glob cannot search another machine; run a search command there with the shell tool instead. A machine may be offline; the tool says so when it is.`,
   ].join("\n")
 
 const update = Instructions.listUpdate<string>({

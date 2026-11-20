@@ -65,7 +65,7 @@ describe("MachineInstructions", () => {
       expect(initialized.text).toBe(
         [
           "Other machines are available: box, pro.",
-          "Name one in a path, as in box:/work/file, for the read, write, edit and patch tools, and as the shell tool's workdir to run a command there. A machine path must be absolute. grep and glob cannot search another machine yet. A machine may be offline; the tool says so when it is.",
+          "Name one in a path, as in box:/work/file, for the read, write, edit and patch tools, and as the shell tool's workdir to run a command there. A machine path is absolute or starts with ~/ for that machine's home. grep and glob cannot search another machine; run a search command there with the shell tool instead. A machine may be offline; the tool says so when it is.",
         ].join("\n"),
       )
     }).pipe(Effect.provide(layer("machines", () => [machine("pro"), machine("box")]))),
@@ -105,7 +105,7 @@ describe("MachineInstructions", () => {
       expect(initialized.text).toBe(
         [
           "Other machines are available: gpu, pro.",
-          "Name one in a path, as in gpu:/work/file, for the read, write, edit and patch tools, and as the shell tool's workdir to run a command there. A machine path must be absolute. grep and glob cannot search another machine yet. A machine may be offline; the tool says so when it is.",
+          "Name one in a path, as in gpu:/work/file, for the read, write, edit and patch tools, and as the shell tool's workdir to run a command there. A machine path is absolute or starts with ~/ for that machine's home. grep and glob cannot search another machine; run a search command there with the shell tool instead. A machine may be offline; the tool says so when it is.",
         ].join("\n"),
       )
       const unchanged = { values: initialized.values, text: "", changed: false }

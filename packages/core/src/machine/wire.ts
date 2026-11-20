@@ -30,6 +30,8 @@ export const Hello = Schema.Struct({
   name: Schema.String,
   os: Schema.String,
   arch: Schema.String,
+  /** The worker's home directory, an absolute POSIX path: where `~` in a path on this machine starts. */
+  home: Schema.String.check(Schema.isPattern(/^\//)),
   /** Made once per worker process start: a new value means every process the worker held is gone. */
   instance: Instance,
   processes: Schema.Array(

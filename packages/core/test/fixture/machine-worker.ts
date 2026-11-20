@@ -203,6 +203,7 @@ export const makeWorker = (host: {
         name: host.environment.id,
         os: "linux",
         arch: "x64",
+        home: "/home/worker",
         instance,
         processes: [...table.values()].map((process) => ({
           id: process.run.id,
