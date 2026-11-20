@@ -938,15 +938,11 @@ export const dict = {
     "Tidak dapat menyemak kebenaran. Semak sambungan pelayan anda dan cuba lagi.",
   "provider.connect.console.startFailed":
     "Tidak dapat memulakan log masuk. Semak sambungan pelayan anda dan cuba lagi.",
-  "provider.connect.models.title": "Disambungkan ke {{provider}}",
-  "provider.connect.models.description": "Pilih model untuk bermula. Anda boleh menukar model pada bila-bila masa.",
-  "provider.connect.models.available": "Model tersedia",
   "provider.connect.chatgptWelcome.title": "ChatGPT disambungkan",
   "provider.connect.chatgptWelcome.description":
     "Permintaan yang layak dalam OpenCode boleh menggunakan pelan ChatGPT anda.",
   "provider.connect.chatgptWelcome.usage": "Urus penggunaan dalam tetapan ChatGPT",
   "provider.connect.chatgptWelcome.confirm": "Faham",
-  "provider.connect.models.list": "Model yang tersedia daripada {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Had penggunaan ChatGPT dicapai",
   "provider.connect.chatgptUsageLimit.description": "Semak penggunaan dan had anda dalam tetapan ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Urus penggunaan",

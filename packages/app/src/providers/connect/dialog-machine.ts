@@ -4,6 +4,7 @@ import {
   transitionProviderConnect,
   type ProviderConnectEffect,
   type ProviderConnectEvent,
+  type ProviderConnectMethod,
   type ProviderConnectScreen,
   type ProviderConnectState,
   type ProviderConnectTransition,
@@ -27,15 +28,18 @@ export type AccountStepAction =
   | { readonly type: "activating"; readonly attempt: number; readonly accountID: string }
   | { readonly type: "removing"; readonly attempt: number; readonly accountID: string; readonly final: boolean }
 
-/** Saving a Claude Agent connection only records the choice; the server then checks `claude` itself. */
+/**
+ * Saving a Claude Agent connection only records the choice; the server then checks `claude` itself. `first` is whether
+ * the check replaces no account, so a working login continues to its models.
+ */
 export type ClaudeStepPhase =
   | { readonly status: "idle" }
   /** The connect request is in flight. `replacing` lists the accounts the new connection replaces once saved. */
   | { readonly status: "starting"; readonly check: number; readonly replacing: readonly string[] }
-  | { readonly status: "checking"; readonly check: number }
+  | { readonly status: "checking"; readonly check: number; readonly first: boolean }
   /** Models appeared; the integration is read again before they count as a working login. */
-  | { readonly status: "confirming"; readonly check: number }
-  | { readonly status: "timed-out"; readonly check: number }
+  | { readonly status: "confirming"; readonly check: number; readonly first: boolean }
+  | { readonly status: "timed-out"; readonly check: number; readonly first: boolean }
 
 export type ProviderDialogStep =
   | { readonly kind: "accounts"; readonly action: AccountStepAction; readonly connect: ProviderConnectState }
@@ -45,24 +49,17 @@ export type ProviderDialogStep =
       /** The result of copying the Console sign-in link, for the authorization it was copied from. */
       readonly copy?: { readonly attemptID: string; readonly copied: boolean }
       readonly connect: ProviderConnectState
+      /**
+       * Whether the provider had no account when the sign-in was sent, so it continues to the models. Read then, not
+       * when it completes: the saved credential reaches the account list first.
+       */
+      readonly first?: boolean
     }
   | {
       readonly kind: "claude"
       readonly returnTo: ProviderReturnTarget
       readonly phase: ClaudeStepPhase
       readonly connect: ProviderConnectState
-    }
-  | {
-      readonly kind: "no-models"
-      readonly returnTo: ProviderReturnTarget
-      /** The workspace providers had not loaded when the wait ran out. */
-      readonly catalogPending: boolean
-      readonly connect: ProviderConnectState
-    }
-  | {
-      readonly kind: "models"
-      readonly selectedModel: string
-      readonly collapsed: Readonly<Record<string, boolean>>
     }
 
 /** What the server lists for the selected integration. The server lists the active account first. */
@@ -79,8 +76,6 @@ type DialogMeta = {
   /** Last attempt ID handed to an account action or a Claude check. */
   readonly attempt: number
   readonly standalone: boolean
-  /** The user picked a model to start with. */
-  readonly completed: boolean
   readonly chatgptWelcome: boolean
 }
 
@@ -96,14 +91,6 @@ export type ProviderDialogState =
     })
   | (DialogMeta & { readonly status: "disposed" })
 
-export type ProviderCatalogSnapshot = {
-  /** The Console workspace providers had not loaded when the wait ran out. */
-  readonly pending: boolean
-  readonly firstModel: string | undefined
-}
-
-export type ModelChoice = { readonly providerID: string; readonly modelID: string }
-
 export type ProviderDialogEvent =
   | {
       readonly type: "provider.selected"
@@ -114,13 +101,12 @@ export type ProviderDialogEvent =
   | { readonly type: "provider.cleared" }
   /** User input for the sign-in of the current step. */
   | { readonly type: "connect.input"; readonly event: ProviderConnectEvent }
-  /** An async sign-in result. `catalog` comes with `refresh.succeeded`. */
+  /** An async sign-in result. */
   | {
       readonly type: "connect.result"
       readonly session: number
       readonly provider: string
       readonly event: ProviderConnectEvent
-      readonly catalog?: ProviderCatalogSnapshot
     }
   | { readonly type: "accounts.synced"; readonly accounts: ProviderAccounts }
   | { readonly type: "account.add" }
@@ -140,12 +126,8 @@ export type ProviderDialogEvent =
       readonly session: number
       readonly check: number
       readonly hasProblem: boolean
-      readonly firstModel: string | undefined
     }
   | { readonly type: "link.copied"; readonly session: number; readonly attemptID: string; readonly copied: boolean }
-  | { readonly type: "model.selected"; readonly modelKey: string }
-  | { readonly type: "group.collapsed"; readonly providerID: string; readonly collapsed: boolean }
-  | { readonly type: "model.confirmed"; readonly selection: ModelChoice }
   /** A breadcrumb in the header: the provider list, or the provider's accounts or sign-in methods. */
   | { readonly type: "navigate"; readonly target: ProviderBackTarget }
   | { readonly type: "disposed" }
@@ -183,11 +165,15 @@ export type ProviderDialogEffect =
     }
   | { readonly type: "claude.timer.stop" }
   | { readonly type: "claude.confirm"; readonly session: number; readonly check: number }
-  | { readonly type: "settle.cancel" }
-  | { readonly type: "models.reveal"; readonly provider: string }
   | { readonly type: "connected.notify"; readonly provider: string }
   | { readonly type: "toast.connected"; readonly provider: string }
-  | { readonly type: "model.apply"; readonly selection: ModelChoice }
+  /**
+   * A first connection hands off to the model picker, filtered to the provider, which loads the catalogs while it is
+   * open. `settle` waits for the Console workspace's providers; `welcome` shows the ChatGPT plan welcome after a pick.
+   */
+  | { readonly type: "models.open"; readonly provider: string; readonly settle: boolean; readonly welcome: boolean }
+  /** Any other connection loads the catalogs in the background, with the same Console wait. */
+  | { readonly type: "catalog.refresh"; readonly provider: string; readonly settle: boolean }
   | { readonly type: "dialog.close" }
 
 export type ProviderDialogTransition = {
@@ -205,7 +191,6 @@ export function createProviderDialogState(input: { standalone: boolean }): Provi
     session: 0,
     attempt: 0,
     standalone: input.standalone,
-    completed: false,
     chatgptWelcome: false,
   }
 }
@@ -278,27 +263,6 @@ export function transitionProviderDialog(
 
   if (step.kind === "claude") return claude(state, step, event)
 
-  if (step.kind === "models") {
-    if (event.type === "model.selected")
-      return unchanged({ ...state, step: { ...step, selectedModel: event.modelKey } })
-
-    if (event.type === "group.collapsed") {
-      if (!!step.collapsed[event.providerID] === event.collapsed) return unchanged(state)
-
-      return unchanged({
-        ...state,
-        step: { ...step, collapsed: { ...step.collapsed, [event.providerID]: event.collapsed } },
-      })
-    }
-
-    if (event.type !== "model.confirmed") return unchanged(state)
-
-    return {
-      state: { ...state, completed: true, closed: true },
-      effects: [{ type: "dialog.close" }, { type: "model.apply", selection: event.selection }],
-    }
-  }
-
   if (step.kind !== "connect" || event.type !== "link.copied" || event.session !== state.session)
     return unchanged(state)
 
@@ -314,14 +278,9 @@ export function providerBackTarget(state: ProviderDialogState): ProviderBackTarg
   if (state.status !== "provider") return
 
   const step = state.step
-
-  if (step.kind === "models") return
-
   const picker = state.standalone ? undefined : "picker"
 
   if (step.kind === "accounts") return picker
-
-  if (step.kind === "no-models") return "methods"
 
   if (step.kind === "claude") return step.returnTo === "accounts" && state.accounts.count > 0 ? "accounts" : picker
 
@@ -340,8 +299,8 @@ export function providerBackTarget(state: ProviderDialogState): ProviderBackTarg
   return picker
 }
 
-/** Which dialog shell the step uses: the searchable list, the model choice, or a provider step. */
-export type ProviderDialogFrame = "picker" | "models" | "accounts" | "provider"
+/** Which dialog shell the step uses: the searchable list, the accounts list, or a provider step. */
+export type ProviderDialogFrame = "picker" | "accounts" | "provider"
 
 /** The header path of a provider step: the provider list, then the provider. A crumb with a `target` links back. */
 export type ProviderDialogCrumb =
@@ -350,7 +309,6 @@ export type ProviderDialogCrumb =
 
 export type ProviderDialogBody =
   | { readonly kind: "picker" }
-  | { readonly kind: "models"; readonly selectedModel: string; readonly collapsed: Readonly<Record<string, boolean>> }
   | {
       readonly kind: "accounts"
       readonly action: AccountStepAction
@@ -359,7 +317,6 @@ export type ProviderDialogBody =
       readonly canAdd: boolean
     }
   | { readonly kind: "claude"; readonly checking: boolean; readonly canCheck: boolean; readonly timedOut: boolean }
-  | { readonly kind: "no-models"; readonly catalogPending: boolean; readonly refreshing: boolean }
   | { readonly kind: "console-sign-in"; readonly copy: "idle" | "copied" | "failed" }
   | { readonly kind: ProviderConnectScreen }
 
@@ -370,11 +327,7 @@ export function selectProviderDialogView(state: ProviderDialogState) {
   const target = providerBackTarget(state)
   const body = selectBody(state, connect)
 
-  const frame: ProviderDialogFrame = !step
-    ? "picker"
-    : step.kind === "models" || step.kind === "accounts"
-      ? step.kind
-      : "provider"
+  const frame: ProviderDialogFrame = !step ? "picker" : step.kind === "accounts" ? "accounts" : "provider"
 
   return {
     provider: provider?.provider,
@@ -384,7 +337,6 @@ export function selectProviderDialogView(state: ProviderDialogState) {
     crumbs: crumbs(state, target),
     // Closing on a stray backdrop click would abandon a sign-in the user is finishing in the browser.
     preventBackdropDismiss: !!provider && !provider.closed && !!connect?.authorizing,
-    completed: state.completed,
     chatgptWelcome: state.chatgptWelcome,
   }
 }
@@ -392,7 +344,7 @@ export function selectProviderDialogView(state: ProviderDialogState) {
 export type ProviderDialogView = ReturnType<typeof selectProviderDialogView>
 
 function crumbs(state: ProviderDialogState, target: ProviderBackTarget | undefined): readonly ProviderDialogCrumb[] {
-  if (state.status !== "provider" || state.step.kind === "models") return []
+  if (state.status !== "provider") return []
 
   return [
     { kind: "root", target: state.standalone ? undefined : "picker" },
@@ -407,8 +359,6 @@ function selectBody(
   if (state.status !== "provider") return { kind: "picker" }
 
   const step = state.step
-
-  if (step.kind === "models") return { kind: "models", selectedModel: step.selectedModel, collapsed: step.collapsed }
 
   if (step.kind === "accounts") {
     const busy = step.action.type === "activating" || step.action.type === "removing"
@@ -440,9 +390,6 @@ function selectBody(
       timedOut: phase === "timed-out",
     }
   }
-
-  if (step.kind === "no-models")
-    return { kind: "no-models", catalogPending: step.catalogPending, refreshing: connect.status === "refreshing" }
 
   if (state.provider === CONSOLE_INTEGRATION && connect.screen === "browser") {
     const copy = step.copy?.attemptID === connect.authorization?.attemptID ? step.copy : undefined
@@ -484,11 +431,7 @@ function back(state: ProviderState): ProviderDialogTransition {
 
   const result = transitionProviderConnect(step.connect, { type: "back" })
 
-  const effects = [
-    ...stopClaude(step),
-    ...settleCancel(step.connect, result.state),
-    ...wrap(state.session, state.provider, result),
-  ]
+  const effects = [...stopClaude(step), ...wrap(state.session, state.provider, result)]
 
   if (target === "accounts")
     return {
@@ -671,7 +614,7 @@ function claude(
     // A check that outlives the timeout can still finish, so a late result replaces the timeout message.
     if (phase.status === "confirming" || !event.hasModels) return unchanged(state)
 
-    return set({ status: "confirming", check: phase.check }, [
+    return set({ status: "confirming", check: phase.check, first: phase.first }, [
       { type: "claude.timer.stop" },
       { type: "claude.confirm", session: state.session, check: phase.check },
     ])
@@ -681,7 +624,7 @@ function claude(
     if (phase.status !== "checking" || event.session !== state.session || event.check !== phase.check)
       return unchanged(state)
 
-    return set({ status: "timed-out", check: phase.check })
+    return set({ status: "timed-out", check: phase.check, first: phase.first })
   }
 
   if (event.type !== "claude.confirmed") return unchanged(state)
@@ -690,103 +633,116 @@ function claude(
     return unchanged(state)
 
   if (event.hasProblem) return set({ status: "idle" })
-  const finished = finish(state, event.firstModel)
 
-  return {
-    state: finished.state,
-    effects: [{ type: "models.reveal", provider: state.provider }, ...finished.effects],
-  }
+  return finish(state, { first: phase.first, settle: false })
 }
 
-// Applies a sign-in transition to the current step. A sign-in that completes moves the dialog on.
+// Applies a sign-in transition to the current step. Once a sign-in saves its credential the dialog moves on at once;
+// the catalogs load afterwards, so nothing waits on them. Claude Agent still waits for the server's check of `claude`.
 function connectTransition(
   state: ProviderState,
   step: ConnectStep,
   result: ProviderConnectTransition,
-  catalog?: ProviderCatalogSnapshot,
 ): ProviderDialogTransition {
+  const effects = wrap(state.session, state.provider, result)
+  const refresh = step.kind === "claude" ? undefined : result.effects.find((effect) => effect.type === "refresh")
+  const sent = step.kind === "connect" && !signingIn(step.connect) && signingIn(result.state)
+  const firstConnection = step.kind === "connect" && !sent ? step.first : state.accounts.count === 0
+
+  if (refresh?.type === "refresh")
+    return saved(
+      { ...state, step: { ...step, connect: result.state } },
+      { method: refresh.method, first: firstConnection ?? state.accounts.count === 0 },
+      effects.filter((effect) => effect.type !== "connect.effect" || effect.effect.type !== "refresh"),
+    )
+
   const complete = result.effects.find((effect) => effect.type === "complete")
-  const effects = [...settleCancel(step.connect, result.state), ...wrap(state.session, state.provider, result)]
 
   if (result.state === step.connect && complete === undefined) return unchanged(state, effects)
 
-  const next: ProviderState = { ...state, step: { ...step, connect: result.state } }
-
-  if (complete?.type !== "complete") return { state: next, effects }
-
-  const method = complete.method
-
-  const notified: ProviderState = {
-    ...next,
-    chatgptWelcome:
-      state.chatgptWelcome ||
-      (state.provider === "openai" && method.type === "oauth" && method.id === "chatgpt-token-sharing"),
+  const next: ProviderState = {
+    ...state,
+    step:
+      step.kind === "connect"
+        ? { ...step, connect: result.state, first: firstConnection }
+        : { ...step, connect: result.state },
   }
 
-  const notify: ProviderDialogEffect[] = [...effects, { type: "connected.notify", provider: state.provider }]
-  const returnTo = step.kind === "accounts" ? "picker" : step.returnTo
+  if (complete?.type !== "complete" || step.kind !== "claude") return { state: next, effects }
 
-  if (step.kind === "claude") {
-    // Each connect saves a new account, so drop the ones this check replaces.
-    const replacing = step.phase.status === "starting" ? step.phase.replacing : []
-    const check = step.phase.status === "starting" ? step.phase.check : state.attempt + 1
+  // Each connect saves a new account, so drop the ones this check replaces.
+  const replacing = step.phase.status === "starting" ? step.phase.replacing : []
+  const check = step.phase.status === "starting" ? step.phase.check : state.attempt + 1
+  const first = step.phase.status === "starting" ? replacing.length === 0 : state.accounts.count === 0
+  const replace: ProviderDialogEffect[] = replacing.length ? [{ type: "claude.replace", credentialIDs: replacing }] : []
 
-    const replace: ProviderDialogEffect[] = replacing.length
-      ? [{ type: "claude.replace", credentialIDs: replacing }]
-      : []
-
-    return {
-      state: {
-        ...notified,
-        attempt: Math.max(state.attempt, check),
-        step: { ...step, connect: result.state, phase: { status: "checking", check } },
-      },
-      effects: [
-        ...notify,
-        ...replace,
-        { type: "claude.timer.start", session: state.session, check, timeoutMs: CLAUDE_CHECK_TIMEOUT_MS },
-      ],
-    }
+  return {
+    state: {
+      ...next,
+      attempt: Math.max(state.attempt, check),
+      step: { ...step, connect: result.state, phase: { status: "checking", check, first } },
+    },
+    effects: [
+      ...effects,
+      { type: "connected.notify", provider: state.provider },
+      ...replace,
+      { type: "claude.timer.start", session: state.session, check, timeoutMs: CLAUDE_CHECK_TIMEOUT_MS },
+    ],
   }
-
-  // The picker only lists the newest model per family by default, which hides most of what a new connection
-  // just unlocked. Show everything the connected integration offers.
-  const reveal: ProviderDialogEffect[] = [...notify, { type: "models.reveal", provider: state.provider }]
-
-  if (catalog?.pending)
-    return {
-      state: { ...notified, step: { kind: "no-models", returnTo, catalogPending: true, connect: result.state } },
-      effects: reveal,
-    }
-
-  const finished = finish(notified, catalog?.firstModel, result.state, returnTo)
-
-  return { state: finished.state, effects: [...reveal, ...finished.effects] }
 }
 
-// Like the TUI, every connection continues to that provider's models. A Console connection without models stays
-// open so the workspace can be fixed.
-function finish(
+// The server may save a credential from these phases on: once a key or code is sent, or a sign-in has begun.
+function signingIn(connect: ProviderConnectState) {
+  return (
+    connect.status !== "loading" &&
+    connect.status !== "choosing" &&
+    connect.status !== "form" &&
+    connect.status !== "entering"
+  )
+}
+
+function saved(
   state: ProviderState,
-  firstModel: string | undefined,
-  connect?: ProviderConnectState,
-  returnTo: ProviderReturnTarget = "picker",
+  input: { method: ProviderConnectMethod; first: boolean },
+  effects: readonly ProviderDialogEffect[],
 ): ProviderDialogTransition {
+  const chatgptWelcome =
+    state.chatgptWelcome ||
+    (state.provider === "openai" && input.method.type === "oauth" && input.method.id === "chatgpt-token-sharing")
+
+  // A Console browser sign-in grants the workspace, whose providers the server loads a moment later.
+  const settle = state.provider === CONSOLE_INTEGRATION && input.method.type !== "key"
+  const finished = finish({ ...state, chatgptWelcome }, { first: input.first, settle })
+
+  return {
+    state: finished.state,
+    effects: [...effects, { type: "connected.notify", provider: state.provider }, ...finished.effects],
+  }
+}
+
+// A first connection continues to the model picker for that provider, like the TUI. Adding an account or signing in
+// again only closes the dialog.
+function finish(state: ProviderState, input: { first: boolean; settle: boolean }): ProviderDialogTransition {
   const announce: ProviderDialogEffect[] = [{ type: "toast.connected", provider: state.provider }]
 
-  if (firstModel)
+  if (input.first)
     return {
-      state: { ...state, step: { kind: "models", selectedModel: firstModel, collapsed: {} } },
-      effects: announce,
+      // The picker replaces this dialog and shows the ChatGPT welcome itself, after a model is picked.
+      state: { ...state, closed: true, chatgptWelcome: false },
+      effects: [
+        ...announce,
+        { type: "models.open", provider: state.provider, settle: input.settle, welcome: state.chatgptWelcome },
+      ],
     }
 
-  if (state.provider === CONSOLE_INTEGRATION && connect)
-    return {
-      state: { ...state, step: { kind: "no-models", returnTo, catalogPending: false, connect } },
-      effects: announce,
-    }
-
-  return { state: { ...state, closed: true }, effects: [...announce, { type: "dialog.close" }] }
+  return {
+    state: { ...state, closed: true },
+    effects: [
+      ...announce,
+      { type: "catalog.refresh", provider: state.provider, settle: input.settle },
+      { type: "dialog.close" },
+    ],
+  }
 }
 
 function connected(
@@ -808,7 +764,7 @@ function connected(
       ? { ...event.event, manual: step.kind === "accounts" || step.kind === "claude" }
       : event.event
 
-  return connectTransition(state, step, transitionProviderConnect(step.connect, input), event.catalog)
+  return connectTransition(state, step, transitionProviderConnect(step.connect, input))
 }
 
 function toPicker(state: ProviderState): ProviderDialogTransition {
@@ -820,31 +776,18 @@ function toPicker(state: ProviderState): ProviderDialogTransition {
   }
 }
 
-// Stops what the provider's step left running: its sign-in, the Console wait and the Claude check timer.
+// Stops what the provider's step left running: its sign-in and the Claude check timer.
 function leave(state: ProviderState): ProviderDialogEffect[] {
   const step = state.step
 
   if (!("connect" in step)) return []
   const result = transitionProviderConnect(step.connect, { type: "disposed" })
 
-  return [
-    ...stopClaude(step),
-    ...settleCancel(step.connect, result.state),
-    ...wrap(state.session, state.provider, result),
-  ]
+  return [...stopClaude(step), ...wrap(state.session, state.provider, result)]
 }
 
 function stopClaude(step: ProviderDialogStep): ProviderDialogEffect[] {
   return step.kind === "claude" && step.phase.status !== "idle" ? [{ type: "claude.timer.stop" }] : []
-}
-
-// The Console wait belongs to one refresh; a sign-in that leaves it before it finished stops the polling.
-function settleCancel(prev: ProviderConnectState, next: ProviderConnectState): ProviderDialogEffect[] {
-  if (prev.status !== "refreshing" || next.status === "connected") return []
-
-  if (next.status === "refreshing" && next.attempt === prev.attempt) return []
-
-  return [{ type: "settle.cancel" }]
 }
 
 function wrap(session: number, provider: string, result: ProviderConnectTransition): ProviderDialogEffect[] {
@@ -862,7 +805,6 @@ function meta(state: ProviderDialogState): DialogMeta {
     session: state.session,
     attempt: state.attempt,
     standalone: state.standalone,
-    completed: state.completed,
     chatgptWelcome: state.chatgptWelcome,
   }
 }

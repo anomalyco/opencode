@@ -1,7 +1,6 @@
 import { useDialog } from "@opencode/ui/context/dialog"
+import { uuid } from "@opencode/util/uuid"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
-import { consoleCatalogLoaded, consoleProviderGroup } from "@/providers/catalog/console"
-import { createConsoleCatalogSettler } from "@/providers/catalog/console-settle"
 import { useIntegrations } from "@/providers/catalog/integrations"
 import { useProviders } from "@/providers/catalog/providers"
 import type { ModelSelection } from "@/providers/models/selection"
@@ -11,7 +10,6 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { formatServerError } from "@/runtime/server/errors"
 import { ServerConnection } from "@/runtime/server/registry"
-import { useGlobal } from "@/runtime/server/runtime"
 import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
 import { showToast } from "@/shell/notifications/toast"
@@ -28,6 +26,8 @@ import {
   type ProviderDialogEvent,
 } from "./dialog-machine"
 import { connectMethods, type ProviderConnectEffect, type ProviderConnectEvent } from "./machine"
+import { useConnectionRefresh } from "./connection-refresh"
+import { requestDraftModels, showConnectedModels } from "./connected-models"
 
 export function createProviderDialogController(options: {
   /** The Location a sign-in belongs to, fixed when the dialog opens. */
@@ -37,13 +37,14 @@ export function createProviderDialogController(options: {
   selected: () => string | undefined
   onSelect: (provider: string | undefined) => void
   selection?: ModelSelection
+  /** Runs when the model picker a first connection opens for `selection` closes. */
+  onDone?: () => void
   onConnected?: (provider: string) => void
 }) {
   const language = useLanguage()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
   const data = useData()
-  const global = useGlobal()
   const tabs = useTabs()
   const dialog = useDialog()
   const directory = () => options.directory
@@ -51,6 +52,7 @@ export function createProviderDialogController(options: {
   const providers = useProviders(directory)
   const integrations = useIntegrations(directory)
   const accountActions = useProviderAccountActions(directory)
+  const refreshConnection = useConnectionRefresh(options.directory)
   // Not createResource: the dialog is owned by whichever page opened it, so reading a pending
   // resource here would suspend that page's <Suspense> and blank the screen behind the dialog.
   const [machine, setMachine] = createSignal(createProviderDialogState({ standalone: options.standalone }))
@@ -103,36 +105,6 @@ export function createProviderDialogController(options: {
     return (data.location.model.list(location) ?? []).filter(
       (model) => ids.has(model.providerID) && model.enabled && model.status !== "deprecated",
     )
-  })
-
-  const connectionGroups = createMemo(() => {
-    const models = connectionModels()
-
-    return connectionProviders()
-      .map((item) => ({ provider: item, models: models.filter((model) => model.providerID === item.id) }))
-      .filter((group) => group.models.length > 0)
-  })
-
-  const managedProviders = createMemo(() =>
-    provider() === CONSOLE_INTEGRATION ? consoleProviderGroup(connectionProviders()) : undefined,
-  )
-
-  const firstModel = () => {
-    const model = connectionGroups()[0]?.models[0]
-
-    return model ? modelKey(model) : undefined
-  }
-
-  const settler = createConsoleCatalogSettler({
-    isLoaded: () => consoleCatalogLoaded(connectionProviders()),
-    sync: () => {
-      data.location.provider.invalidate(location)
-      data.location.model.invalidate(location)
-
-      return Promise.all([data.location.provider.sync(location), data.location.model.sync(location)]).then(
-        () => undefined,
-      )
-    },
   })
 
   // Effects run in order and one that throws cannot stop the events queued after it.
@@ -228,19 +200,11 @@ export function createProviderDialogController(options: {
             session: effect.session,
             check: effect.check,
             hasProblem: accountsOf(CLAUDE_AGENT_INTEGRATION).problem,
-            firstModel: firstModel(),
           }),
         )
 
       return
     }
-
-    if (effect.type === "settle.cancel") return settler.cancel()
-
-    if (effect.type === "models.reveal")
-      return global.models.show(
-        connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })),
-      )
 
     if (effect.type === "connected.notify") return options.onConnected?.(effect.provider)
 
@@ -261,15 +225,30 @@ export function createProviderDialogController(options: {
 
     if (effect.type === "dialog.close") return dialog.close()
 
-    if (options.selection) return options.selection.set(effect.selection)
-    void tabs.newDraft(
-      {
-        server: ServerConnection.key(serverSDK.server),
-        directory: options.directory ?? data.location.default().directory,
-      },
-      undefined,
-      effect.selection,
-    )
+    if (effect.type === "catalog.refresh")
+      return void refreshConnection({ integrationID: effect.provider, settle: effect.settle })
+
+    const pick = {
+      integration: effect.provider,
+      directory: options.directory,
+      settle: effect.settle,
+      welcome: effect.welcome,
+    }
+
+    // The picker replaces this dialog, and the model chosen there applies to the composer that opened it.
+    if (options.selection) return showConnectedModels(dialog, pick, options.selection, options.onDone)
+
+    // Opened outside a composer, so a new session gets the picker once its composer is ready.
+    const draft = {
+      type: "draft" as const,
+      draftID: uuid(),
+      server: ServerConnection.key(serverSDK.server),
+      directory: options.directory ?? data.location.default().directory,
+    }
+
+    requestDraftModels(tabs, draft, pick)
+    dialog.close()
+    void tabs.newDraft(draft)
   }
 
   const runConnect = (input: Extract<ProviderDialogEffect, { type: "connect.effect" }>) => {
@@ -277,8 +256,8 @@ export function createProviderDialogController(options: {
     const integrationID = input.provider
     const isConsole = integrationID === CONSOLE_INTEGRATION
 
-    const result = (event: ProviderConnectEvent, catalog?: { pending: boolean; firstModel: string | undefined }) =>
-      dispatch({ type: "connect.result", session: input.session, provider: integrationID, event, catalog })
+    const result = (event: ProviderConnectEvent) =>
+      dispatch({ type: "connect.result", session: input.session, provider: integrationID, event })
 
     if (effect.type === "load") {
       void serverSDK.api.integration
@@ -412,7 +391,7 @@ export function createProviderDialogController(options: {
 
     if (effect.type === "sync") return void sync()
 
-    void refresh(effect, integrationID, result)
+    void refresh(effect, result)
   }
 
   const start = (
@@ -540,36 +519,14 @@ export function createProviderDialogController(options: {
       .catch(() => false)
   }
 
-  // The server loads the Console workspace's providers after the grant lands, so the first refresh
-  // can still show only the free catalog. Wait briefly for the workspace providers before moving on.
+  // Only a Claude Agent check still waits for the catalogs: its models show that `claude` works. Every other sign-in
+  // hands off before the refresh, so the catalogs load without holding the dialog.
   const refresh = async (
     effect: Extract<ProviderConnectEffect, { type: "refresh" }>,
-    integrationID: string,
-    result: (event: ProviderConnectEvent, catalog?: { pending: boolean; firstModel: string | undefined }) => void,
+    result: (event: ProviderConnectEvent) => void,
   ) => {
-    const refreshed = await sync()
-
-    if (integrationID !== CONSOLE_INTEGRATION)
-      return result(
-        { type: "refresh.succeeded", attempt: effect.attempt },
-        { pending: false, firstModel: firstModel() },
-      )
-
-    if (!refreshed)
-      return result({
-        type: "refresh.failed",
-        attempt: effect.attempt,
-        error: language.t("provider.connect.console.refreshFailed"),
-      })
-
-    const outcome = effect.method.type === "key" ? "loaded" : await settler.settle()
-
-    // Back or closing the dialog already moved on and stopped the wait.
-    if (outcome === "cancelled") return
-    result(
-      { type: "refresh.succeeded", attempt: effect.attempt },
-      { pending: outcome === "timed-out", firstModel: firstModel() },
-    )
+    await sync()
+    result({ type: "refresh.succeeded", attempt: effect.attempt })
   }
 
   const claudePhase = createMemo(() => {
@@ -609,7 +566,7 @@ export function createProviderDialogController(options: {
 
   createEffect(
     on(
-      [claudePhase, () => !!claudeProblem(), () => connectionGroups().length > 0],
+      [claudePhase, () => !!claudeProblem(), () => connectionModels().length > 0],
       ([phase, hasProblem, hasModels]) => {
         if (phase) dispatch({ type: "claude.status.changed", hasProblem, hasModels })
       },
@@ -622,9 +579,6 @@ export function createProviderDialogController(options: {
     view,
     dispatch,
     providerName,
-    connectionModels,
-    connectionGroups,
-    managedProviders,
     claudeProblem,
     // Sorted by name so rows stay put when the server moves the active account first.
     accounts: () => {
@@ -668,5 +622,3 @@ export function createProviderDialogController(options: {
     },
   }
 }
-
-export const modelKey = (model: { providerID: string; id: string }) => `${model.providerID}:${model.id}`

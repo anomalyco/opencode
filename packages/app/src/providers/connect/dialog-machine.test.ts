@@ -5,7 +5,6 @@ import {
   selectProviderDialogView,
   transitionProviderDialog,
   type ProviderAccounts,
-  type ProviderCatalogSnapshot,
   type ProviderDialogEffect,
   type ProviderDialogEvent,
   type ProviderDialogState,
@@ -70,7 +69,7 @@ function provider(state: ProviderDialogState) {
 }
 
 // Builds a sign-in result the way the driver does: tagged with the session and provider of the effect that asked.
-function result(state: ProviderDialogState, event: ProviderConnectEvent, catalog?: ProviderCatalogSnapshot) {
+function result(state: ProviderDialogState, event: ProviderConnectEvent) {
   const current = provider(state)
 
   return {
@@ -78,7 +77,6 @@ function result(state: ProviderDialogState, event: ProviderConnectEvent, catalog
     session: current.session,
     provider: current.provider,
     event,
-    catalog,
   } satisfies ProviderDialogEvent
 }
 
@@ -112,8 +110,8 @@ function waitingOAuth(name: string, methods = [oauth]) {
   )
 }
 
-// Signs in to the Console with OAuth until the catalogs refresh; returns the refresh attempt.
-function refreshingConsole() {
+// Signs in to the Console with OAuth until the browser sign-in completes.
+function signedInConsole() {
   const opened = replay([selected("opencode", false)])
   const choosing = replay([loaded(opened.state, [oauth, key])], opened.state)
   const started = replay([{ type: "connect.input", event: { type: "method.selected", index: 0 } }], choosing.state)
@@ -126,26 +124,31 @@ function refreshingConsole() {
 
   const poll = connectEffect(waiting.effects, "poll")
 
-  const refreshing = replay(
+  return replay(
     [result(waiting.state, { type: "polled", attempt: poll.attempt, outcome: { status: "complete" } })],
     waiting.state,
   )
-
-  return { ...refreshing, attempt: connectEffect(refreshing.effects, "refresh").attempt }
 }
 
-function consoleWithoutModels(pending: boolean) {
-  const refreshing = refreshingConsole()
+// Enters an API key for `name` and has the server accept it.
+function savedKey(name: string, list = none) {
+  const picked = replay([selected(name, true, list)])
+  const listed = replay([loaded(picked.state, [key])], picked.state)
+  const entering = list.count > 0 ? replay([{ type: "account.add" }], listed.state) : listed
+
+  const submitting = replay(
+    [{ type: "connect.input", event: { type: "entry.submitted", value: "sk-1" } }],
+    entering.state,
+  )
 
   return replay(
     [
-      result(
-        refreshing.state,
-        { type: "refresh.succeeded", attempt: refreshing.attempt },
-        { pending, firstModel: undefined },
-      ),
+      result(submitting.state, {
+        type: "submit.succeeded",
+        attempt: connectEffect(submitting.effects, "submit").attempt,
+      }),
     ],
-    refreshing.state,
+    submitting.state,
   )
 }
 
@@ -157,22 +160,13 @@ function claudeSetup(list = accounts(1)) {
 }
 
 // Runs a Claude Agent check until the server's check of `claude` is the only thing left.
-function claudeChecking(from: Run) {
-  const started = replay([{ type: "claude.check", replacing: ["cred_1"] }], from.state)
+function claudeChecking(from: Run, replacing = ["cred_1"]) {
+  const started = replay([{ type: "claude.check", replacing }], from.state)
   const start = connectEffect(started.effects, "start")
   const saved = replay([result(started.state, { type: "external.saved", attempt: start.attempt })], started.state)
   const refresh = connectEffect(saved.effects, "refresh")
 
-  return replay(
-    [
-      result(
-        saved.state,
-        { type: "refresh.succeeded", attempt: refresh.attempt },
-        { pending: false, firstModel: undefined },
-      ),
-    ],
-    saved.state,
-  )
+  return replay([result(saved.state, { type: "refresh.succeeded", attempt: refresh.attempt })], saved.state)
 }
 
 function claudeCheck(state: ProviderDialogState) {
@@ -193,57 +187,6 @@ test("Back from a pending OAuth sign-in to the provider list allows backdrop dis
   expect(selectProviderDialogView(back.state).preventBackdropDismiss).toBe(false)
   expect(connectEffect(back.effects, "cancel")).toEqual({ type: "cancel", target: "oauth", attemptID: "att_1" })
   expect(back.effects).toContainEqual({ type: "controller.sync", provider: undefined })
-})
-
-test("Back from a Console connection without models returns to the sign-in methods", () => {
-  const empty = consoleWithoutModels(false)
-  expect(selectProviderDialogView(empty.state).body).toEqual({
-    kind: "no-models",
-    catalogPending: false,
-    refreshing: false,
-  })
-  expect(types(empty.effects)).toEqual(["connected.notify", "models.reveal", "toast.connected"])
-
-  const methods = replay([goBack(empty.state)], empty.state)
-  expect(selectProviderDialogView(methods.state).body).toEqual({ kind: "methods" })
-  expect(selectProviderDialogView(methods.state).crumbs).toEqual([
-    { kind: "root", target: "picker" },
-    { kind: "provider", target: undefined },
-  ])
-
-  expect(replay([goBack(methods.state)], methods.state).state.status).toBe("picker")
-})
-
-test("Back from a failed Console refresh returns to the sign-in methods", () => {
-  const empty = consoleWithoutModels(true)
-  const refreshing = replay([{ type: "connect.input", event: { type: "refresh" } }], empty.state)
-  expect(selectProviderDialogView(refreshing.state).body).toEqual({
-    kind: "no-models",
-    catalogPending: true,
-    refreshing: true,
-  })
-  const attempt = connectEffect(refreshing.effects, "refresh").attempt
-
-  const failed = replay(
-    [result(refreshing.state, { type: "refresh.failed", attempt, error: "Could not refresh" })],
-    refreshing.state,
-  )
-
-  expect(selectProviderDialogView(failed.state).body).toEqual({ kind: "failed" })
-  expect(selectProviderDialogView(failed.state).crumbs).toEqual([
-    { kind: "root", target: "picker" },
-    { kind: "provider", target: "methods" },
-  ])
-
-  expect(selectProviderDialogView(replay([goBack(failed.state)], failed.state).state).body).toEqual({ kind: "methods" })
-})
-
-test("Back during the Console workspace wait stops the wait", () => {
-  const refreshing = refreshingConsole()
-  const back = replay([goBack(refreshing.state)], refreshing.state)
-
-  expect(back.effects).toContainEqual({ type: "settle.cancel" })
-  expect(selectProviderDialogView(back.state).body).toEqual({ kind: "methods" })
 })
 
 test("Back from a Claude Agent check started from Add account returns to the accounts", () => {
@@ -287,10 +230,7 @@ test("leaving a Claude Agent check ignores its late confirmation", () => {
   expect(back.state.status).toBe("picker")
   expect(back.effects).toContainEqual({ type: "claude.timer.stop" })
 
-  const late = replay(
-    [{ type: "claude.confirmed", session, check, hasProblem: false, firstModel: "claude-agent:sonnet" }],
-    back.state,
-  )
+  const late = replay([{ type: "claude.confirmed", session, check, hasProblem: false }], back.state)
 
   expect(late.state).toBe(back.state)
   expect(late.effects).toEqual([])
@@ -308,16 +248,13 @@ test("a new Claude Agent check ignores the confirmation of the one it replaced",
   const again = replay([{ type: "claude.check", replacing: [] }], idle.state)
   expect(claudeCheck(again.state)).not.toBe(first)
 
-  const late = replay(
-    [{ type: "claude.confirmed", session, check: first, hasProblem: false, firstModel: "claude-agent:sonnet" }],
-    again.state,
-  )
+  const late = replay([{ type: "claude.confirmed", session, check: first, hasProblem: false }], again.state)
 
   expect(late.state).toBe(again.state)
 })
 
-test("a Claude Agent check that outlives its timeout still finishes", () => {
-  const checking = claudeChecking(claudeSetup(none))
+test("a first Claude Agent check that outlives its timeout still continues to its models", () => {
+  const checking = claudeChecking(claudeSetup(none), [])
   const check = claudeCheck(checking.state)
   const session = provider(checking.state).session
   const timedOut = replay([{ type: "claude.timed-out", session, check }], checking.state)
@@ -330,17 +267,36 @@ test("a Claude Agent check that outlives its timeout still finishes", () => {
   const done = replay(
     [
       { type: "claude.status.changed", hasProblem: false, hasModels: true },
-      { type: "claude.confirmed", session, check, hasProblem: false, firstModel: "claude-agent:sonnet" },
+      { type: "claude.confirmed", session, check, hasProblem: false },
     ],
     timedOut.state,
   )
 
-  expect(selectProviderDialogView(done.state).body).toEqual({
-    kind: "models",
-    selectedModel: "claude-agent:sonnet",
-    collapsed: {},
-  })
-  expect(types(done.effects)).toEqual(["models.reveal", "toast.connected"])
+  expect(done.effects).toEqual([
+    { type: "toast.connected", provider: "claude-agent" },
+    { type: "models.open", provider: "claude-agent", settle: false, welcome: false },
+  ])
+})
+
+test("a Claude Agent check that replaces its login closes without opening the models", () => {
+  const confirming = replay(
+    [{ type: "claude.status.changed", hasProblem: false, hasModels: true }],
+    claudeChecking(claudeSetup()).state,
+  )
+
+  const done = replay(
+    [
+      {
+        type: "claude.confirmed",
+        session: provider(confirming.state).session,
+        check: claudeCheck(confirming.state),
+        hasProblem: false,
+      },
+    ],
+    confirming.state,
+  )
+
+  expect(types(done.effects)).toEqual(["toast.connected", "catalog.refresh", "dialog.close"])
 })
 
 test("a second Remove click sends one request, and a late final removal after Back does not close the dialog", () => {
@@ -486,89 +442,58 @@ test("a credential saved after the dialog moved to another provider only reloads
   ])
 })
 
-test("Refresh on a Console connection whose models were still loading continues to the models", () => {
-  const empty = consoleWithoutModels(true)
-  expect(types(empty.effects)).toEqual(["connected.notify", "models.reveal"])
+test("an accepted API key hands off to that provider's models without waiting for the catalogs", () => {
+  const done = savedKey("openrouter")
 
-  const refreshing = replay([{ type: "connect.input", event: { type: "refresh" } }], empty.state)
-  const attempt = connectEffect(refreshing.effects, "refresh").attempt
-
-  const models = replay(
-    [
-      result(
-        refreshing.state,
-        { type: "refresh.succeeded", attempt },
-        { pending: false, firstModel: "console-google:gemini" },
-      ),
-    ],
-    refreshing.state,
-  )
-
-  const view = selectProviderDialogView(models.state)
-  expect(view.frame).toBe("models")
-  expect(view.preventBackdropDismiss).toBe(false)
-  expect(types(models.effects)).toEqual(["connected.notify", "models.reveal", "toast.connected"])
-})
-
-test("a connection without models closes the dialog", () => {
-  const picked = replay([selected("openrouter", true)])
-
-  const submitting = replay(
-    [loaded(picked.state, [key]), { type: "connect.input", event: { type: "entry.submitted", value: "sk-1" } }],
-    picked.state,
-  )
-
-  const refreshing = replay(
-    [
-      result(submitting.state, {
-        type: "submit.succeeded",
-        attempt: connectEffect(submitting.effects, "submit").attempt,
-      }),
-    ],
-    submitting.state,
-  )
-
-  const done = replay(
-    [
-      result(
-        refreshing.state,
-        { type: "refresh.succeeded", attempt: connectEffect(refreshing.effects, "refresh").attempt },
-        { pending: false, firstModel: undefined },
-      ),
-    ],
-    refreshing.state,
-  )
-
-  expect(types(done.effects)).toEqual(["connected.notify", "models.reveal", "toast.connected", "dialog.close"])
+  // The catalogs load in the picker, so no refresh holds the dialog open.
+  expect(done.effects).toEqual([
+    { type: "connected.notify", provider: "openrouter" },
+    { type: "toast.connected", provider: "openrouter" },
+    { type: "models.open", provider: "openrouter", settle: false, welcome: false },
+  ])
   // The key form stays while the dialog animates out, and takes no more input.
   expect(selectProviderDialogView(done.state).body).toEqual({ kind: "key" })
   expect(replay([goBack(done.state)], done.state).state).toBe(done.state)
 })
 
-test("confirming a model closes once and keeps the outcome through disposal", () => {
-  const empty = consoleWithoutModels(true)
-  const refreshing = replay([{ type: "connect.input", event: { type: "refresh" } }], empty.state)
+test("a first browser sign-in opens the models even when its saved account is listed before it completes", () => {
+  const waiting = waitingOAuth("github-copilot")
+  const poll = connectEffect(waiting.effects, "poll")
 
-  const models = replay(
+  // The saved credential reaches the account list before the next status poll reports the sign-in complete.
+  const done = replay(
     [
-      result(
-        refreshing.state,
-        { type: "refresh.succeeded", attempt: connectEffect(refreshing.effects, "refresh").attempt },
-        { pending: false, firstModel: "opencode:big" },
-      ),
-      { type: "model.selected", modelKey: "opencode:small" },
+      { type: "accounts.synced", accounts: accounts(1) },
+      result(waiting.state, { type: "polled", attempt: poll.attempt, outcome: { status: "complete" } }),
     ],
-    refreshing.state,
+    waiting.state,
   )
 
-  const selection = { providerID: "opencode", modelID: "small" }
+  expect(done.effects).toContainEqual({
+    type: "models.open",
+    provider: "github-copilot",
+    settle: false,
+    welcome: false,
+  })
+})
 
-  const confirmed = replay([{ type: "model.confirmed", selection }], models.state)
-  expect(confirmed.effects).toEqual([{ type: "dialog.close" }, { type: "model.apply", selection }])
-  expect(replay([{ type: "model.confirmed", selection }], confirmed.state).effects).toEqual([])
+test("an account added to a connected provider closes without opening the models", () => {
+  const done = savedKey("openai", accounts(1))
 
-  const disposed = replay([{ type: "disposed" }], confirmed.state)
-  expect(disposed.state).toMatchObject({ status: "disposed", completed: true })
+  expect(done.effects).toEqual([
+    { type: "connected.notify", provider: "openai" },
+    { type: "toast.connected", provider: "openai" },
+    { type: "catalog.refresh", provider: "openai", settle: false },
+    { type: "dialog.close" },
+  ])
+})
+
+test("a Console browser sign-in hands off to the picker, which waits for the workspace models", () => {
+  const done = signedInConsole()
+
+  expect(types(done.effects)).toEqual(["connected.notify", "toast.connected", "models.open"])
+  expect(done.effects).toContainEqual({ type: "models.open", provider: "opencode", settle: true, welcome: false })
+  expect(selectProviderDialogView(done.state).preventBackdropDismiss).toBe(false)
 })
 
 test("closing the dialog during a sign-in cancels it", () => {
@@ -580,28 +505,19 @@ test("closing the dialog during a sign-in cancels it", () => {
   expect(replay([selected("openai", true)], disposed.state).state).toBe(disposed.state)
 })
 
-test("a ChatGPT token sharing sign-in shows the welcome on close", () => {
+test("a ChatGPT token sharing sign-in shows the welcome after the first model is picked", () => {
   const sharing: ProviderConnectMethod = { id: "chatgpt-token-sharing", type: "oauth", label: "ChatGPT" }
   const waiting = waitingOAuth("openai", [sharing])
   const poll = connectEffect(waiting.effects, "poll")
 
-  const refreshing = replay(
+  const done = replay(
     [result(waiting.state, { type: "polled", attempt: poll.attempt, outcome: { status: "complete" } })],
     waiting.state,
   )
 
-  const done = replay(
-    [
-      result(
-        refreshing.state,
-        { type: "refresh.succeeded", attempt: connectEffect(refreshing.effects, "refresh").attempt },
-        { pending: false, firstModel: "openai:gpt" },
-      ),
-    ],
-    refreshing.state,
-  )
-
-  expect(selectProviderDialogView(done.state).chatgptWelcome).toBe(true)
+  // The picker that replaces the dialog shows the welcome, so the dialog's own close does not.
+  expect(done.effects).toContainEqual({ type: "models.open", provider: "openai", settle: false, welcome: true })
+  expect(selectProviderDialogView(done.state).chatgptWelcome).toBe(false)
 })
 
 test("a lone method waits on the accounts list and starts once Add account is chosen", () => {

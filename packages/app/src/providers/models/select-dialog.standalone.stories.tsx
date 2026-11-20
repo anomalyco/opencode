@@ -101,7 +101,7 @@ const models: StoryModel[] = [
 
 const keyOf = (model: StoryModel) => `${model.provider.id}:${model.id}`
 
-function SelectorStory(props: { favorite?: boolean; provider?: string; empty?: boolean }) {
+function SelectorStory(props: { favorite?: boolean; integration?: string; empty?: boolean }) {
   const dialog = useDialog()
 
   const [store, setStore] = createStore<{ current: string; favorite: string[]; variant?: string }>({
@@ -144,7 +144,7 @@ function SelectorStory(props: { favorite?: boolean; provider?: string; empty?: b
     },
   } satisfies ModelSelection
 
-  const open = () => void dialog.show(() => <DialogSelectModel model={selection} provider={props.provider} />)
+  const open = () => void dialog.show(() => <DialogSelectModel model={selection} integration={props.integration} />)
 
   onMount(open)
 
@@ -181,7 +181,7 @@ export const Favorites = {
 export const ProviderOnly = {
   render: () => (
     <DialogStoryRuntime>
-      <SelectorStory provider="opencode" />
+      <SelectorStory integration="opencode" />
     </DialogStoryRuntime>
   ),
 }

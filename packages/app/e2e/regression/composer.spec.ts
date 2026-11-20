@@ -293,14 +293,16 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
   await expect(view.editor).toHaveCount(0)
   await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
 
-  // Subscribe -> Go API key -> Continue switches the model in the current session without opening a new draft tab.
+  // Subscribe -> Go API key -> the model picker, filtered to Go, switches the model in the current session without
+  // opening a new draft tab.
   await upsell.getByRole("button", { name: "Subscribe", exact: true }).click()
   const connect = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
   await connect.getByPlaceholder("API key").fill("sk-go-test")
   await connect.getByRole("button", { name: "Continue", exact: true }).click()
-  const connected = page.getByRole("dialog", { name: "Connected to OpenCode Go" })
-  await expect(connected.getByRole("radio", { name: "GLM-5 Go", exact: true })).toHaveAttribute("aria-checked", "true")
-  await connected.getByRole("button", { name: "Continue", exact: true }).click()
+  const picker = page.getByRole("dialog", { name: "Select model", exact: true })
+  await expect(picker.locator("[data-option-key]")).toHaveText([/^GLM-5 Go/])
+  await expect(connect).toHaveCount(0)
+  await picker.locator('[data-option-key="opencode-go:glm-5-go"]').click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expectPath(page, sessionHref(sessionID))
   await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(1)

@@ -1,4 +1,6 @@
+import { useDialog } from "@opencode/ui/context/dialog"
 import { createPromptProjectController } from "@/new-session/project/selector"
+import { showConnectedModels, takeDraftModels } from "@/providers/connect/connected-models"
 import { useNewSessionLocationDialog } from "@/new-session/location/dialog"
 import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { useLayout } from "@/shell/state/layout"
@@ -17,6 +19,7 @@ export default function NewSessionPage(props: { draftId: string }) {
   const [search, setSearch] = useSearchParams<{ draftId?: string; prompt?: string }>()
   const tabs = useTabs()
   const layout = useLayout()
+  const dialog = useDialog()
 
   const draftTab = createMemo(() =>
     tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId),
@@ -75,8 +78,13 @@ export default function NewSessionPage(props: { draftId: string }) {
       if (!ready) return
 
       // Search projects opened this draft; the picker returns focus to the composer when it closes.
-      if (layout.draft.projectSearch.take(props.draftId)) location()
-      else model.restoreFocus(undefined, false)
+      if (layout.draft.projectSearch.take(props.draftId)) return location()
+      const pick = takeDraftModels(tabs, tabs.draft(props.draftId))
+
+      // A provider connected outside a composer opened this draft to choose one of its models.
+      if (pick)
+        return void showConnectedModels(dialog, pick, composer.model, () => model.restoreFocus(undefined, false))
+      model.restoreFocus(undefined, false)
     }),
   )
   createEffect(() => {
