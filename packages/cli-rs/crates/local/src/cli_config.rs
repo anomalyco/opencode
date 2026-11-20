@@ -558,7 +558,7 @@ impl CliConfig {
             if edits.is_empty() {
                 return Ok(Info::decode(&current).unwrap_or_default());
             }
-            let text = fs::read_to_string(&self.file)
+            let text = crate::read_text(&self.file)
                 .unwrap_or_else(|_| jsonc::stringify_pretty(&serde_json::json!({ "$schema": SCHEMA_URL })));
             let updated = edits.iter().try_fold(text, |text, (path, value)| {
                 jsonc::modify(&text, path, value.as_ref()).map_err(|error| Error::Update(error.to_string()))
@@ -585,7 +585,7 @@ impl CliConfig {
 
     fn load(&self, migration: Option<Value>) -> Info {
         let base = migration.or_else(|| {
-            let text = fs::read_to_string(&self.file).ok()?;
+            let text = crate::read_text(&self.file).ok()?;
             decode_text(&text).map(|info| info.to_value())
         });
         merge(&[base, self.content.clone()])

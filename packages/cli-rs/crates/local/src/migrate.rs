@@ -1,7 +1,6 @@
 //! Migrates legacy keybinds and copy settings in place, preserving comments. If `cli.json` is absent, combine
 //! `tui.json` and `kv.json` into a new file.
 
-use std::fs;
 use std::io;
 use std::path::Path;
 
@@ -23,7 +22,7 @@ pub struct Migration {
 /// `ConfigMigration.run`. `Ok(None)` when there is nothing to migrate.
 pub fn run(file: &Path, config: &Path, state: &Path) -> io::Result<Option<Migration>> {
     if file.exists() {
-        let text = fs::read_to_string(file)?;
+        let text = crate::read_text(file)?;
         let Some(updated) = rewrite(&text) else { return Ok(None) };
         let Some(info) = cli_config::decode_text(&updated) else { return Ok(None) };
         return Ok(Some(persist(file, &updated, info.to_value())));
@@ -54,7 +53,7 @@ fn persist(file: &Path, text: &str, info: Value) -> Migration {
 
 // `readJson`: a JSONC object, or `None`.
 fn read_json(file: &Path) -> Option<Map<String, Value>> {
-    jsonc::parse(&fs::read_to_string(file).ok()?)?.as_object().cloned()
+    jsonc::parse(&crate::read_text(file).ok()?)?.as_object().cloned()
 }
 
 /// The in-place rewrite of an existing `cli.json`, or `None` when nothing changes.

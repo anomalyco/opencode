@@ -68,7 +68,7 @@ impl Registration {
 /// Reads a registration file. A missing or corrupt file is `None`: clients treat both as "no
 /// service", and a registering server evicts itself.
 pub fn read(file: &Path) -> Option<Registration> {
-    Registration::parse(&fs::read_to_string(file).ok()?)
+    Registration::parse(&crate::read_text(file).ok()?)
 }
 
 /// The registration file for a channel and the legacy files migrated into it.
@@ -94,7 +94,7 @@ impl Files {
     /// unless the file exists. The TypeScript CLI does this before every service operation.
     pub fn migrate(&self, channel: &str, installed_version: &str) {
         for legacy in &self.legacy {
-            let Ok(text) = fs::read_to_string(legacy) else { continue };
+            let Ok(text) = crate::read_text(legacy) else { continue };
             let Some(info) = Registration::parse(&text) else { continue };
             if !channel::version_belongs_to_channel(info.version.as_deref(), channel, installed_version) {
                 continue;
