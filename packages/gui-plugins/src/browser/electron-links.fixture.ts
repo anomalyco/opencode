@@ -129,6 +129,7 @@ void electron.app.whenReady().then(async () => {
     // An address with a password, which the pane opens nowhere.
     if (request.url === "/to-refused")
       return void response.writeHead(302, { location: `http://someone:secret@${request.headers.host}/target?refused` }).end()
+
     if (request.url === "/after-press") {
       response.writeHead(200, { "content-type": "text/html" })
 
