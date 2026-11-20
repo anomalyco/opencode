@@ -246,6 +246,7 @@ export default function Layout(props: ParentProps) {
           <aside
             id="vertical-tabs-sidebar"
             data-slot="vertical-tabs-sidebar"
+            data-focus-scope
             data-state={preferences.appearance.sidebarOpen() ? "open" : "closed"}
             data-peek={peek.shown() ? "" : undefined}
             style={{

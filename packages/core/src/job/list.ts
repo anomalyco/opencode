@@ -88,6 +88,18 @@ function toItem(input: {
   }
 }
 
+/** The listed shape of one live job. */
+export function item(info: Info, recovery: Recovery): Job.Info {
+  return toItem({
+    id: info.id,
+    status: info.status,
+    title: info.title,
+    started: info.started_at,
+    completed: info.completed_at,
+    recovery,
+  })
+}
+
 export function read<Entry extends Live>(
   db: Database.Interface["db"],
   jobs: SynchronizedRef.SynchronizedRef<Map<string, Entry>>,

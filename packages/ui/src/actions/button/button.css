@@ -33,9 +33,9 @@
     outline: none;
   }
 
-  [data-component="button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled):not([data-variant="loading"]) {
+  [data-component="button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 2.5px;
+    outline-offset: 2px;
   }
 
   [data-component="button-v2"][data-size="normal"] {

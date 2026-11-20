@@ -77,6 +77,7 @@ import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
 import { useStorage } from "../../context/storage"
 import { Composer } from "./composer"
+import { busyCounts, busyTab } from "./composer/tabs"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
@@ -229,6 +230,7 @@ export function Session(props: {
       item.delivery === "queue" ? [{ id: item.id, text: item.payload.text, payload: item.payload }] : [],
     ),
   )
+  const openingTab = () => busyTab(busyCounts({ data, sessionID: route.sessionID, location: location() }))
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
@@ -362,6 +364,7 @@ export function Session(props: {
         return
       }
       editor.reconnect(info.location.directory)
+      void data.job.sync(data.session.root(sessionID)).catch(() => undefined)
       setSynced(true)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -1406,9 +1409,9 @@ export function Session(props: {
       id: "session.child.first",
       group: "Session",
       run: (tab?: string) => {
-        if (tab === "shell" || tab === "subagents") setComposer({ open: true, tab })
+        if (tab === "shell" || tab === "subagents" || tab === "scripts") setComposer({ open: true, tab })
         else if (composer.open || session()?.parentID) setComposer("open", false)
-        else setComposer({ open: true, tab: "subagents" })
+        else setComposer({ open: true, tab: openingTab() })
         dialog.clear()
       },
     },
@@ -1547,6 +1550,8 @@ export function Session(props: {
                 }}
                 stickyScroll={!navigationMessage() && !navigationSlack()}
                 stickyStart="bottom"
+                // Rows never grow or shrink, so a change to one row lays out only that row.
+                contentOptions={{ layoutMode: "list" }}
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
@@ -2235,9 +2240,8 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
           <markdown
             ref={useSessionLinks()}
             syntaxStyle={syntax()}
-            renderNode={plugins.markdown()}
-            streaming={true}
-            internalBlockMode="top-level"
+            renderBlock={plugins.markdown()}
+            streaming={status() === "running"}
             content={content()}
             tableOptions={{ style: "grid", cellPaddingX: 1 }}
             conceal={ctx.markdownMode() === "rendered"}
@@ -3260,7 +3264,7 @@ function Read(props: ToolProps) {
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.text.muted}>
+            <text fg={theme.text.muted}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>
           </box>
@@ -3455,7 +3459,7 @@ function Execute(props: ToolProps) {
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
-              <text paddingLeft={3} fg={theme.text.feedback.error.base}>
+              <text fg={theme.text.feedback.error.base}>
                 {index() === 0 ? "↳ " : "  "}
                 {line}
               </text>

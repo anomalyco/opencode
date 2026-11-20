@@ -543,7 +543,7 @@ export function ScrollView(props: ScrollViewProps) {
         onTouchCancel={events.onTouchCancel}
         onPointerDown={events.onPointerDown}
         onClick={events.onClick}
-        tabIndex={0}
+        tabIndex={selectShowVerticalThumb(thumbState()) || selectShowHorizontalThumb(thumbState()) ? 0 : -1}
         role="region"
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
         onKeyDown={(e) => {

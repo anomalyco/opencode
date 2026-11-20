@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "ab8fea18-0d95-48a1-b631-c112235dc492",
-  "prevIds": ["0709c7fb-3e7c-4bec-a6c5-0dd42ae64919"],
+  "id": "74cace2e-430e-4672-bf3b-eba14ae0c399",
+  "prevIds": ["ab8fea18-0d95-48a1-b631-c112235dc492"],
   "ddl": [
     {
       "name": "account_state",
@@ -38,6 +38,10 @@
     },
     {
       "name": "kv",
+      "entityType": "tables"
+    },
+    {
+      "name": "machine",
       "entityType": "tables"
     },
     {
@@ -845,6 +849,26 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "kv"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "machine"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "machine"
     },
     {
       "type": "text",
@@ -2266,6 +2290,13 @@
       "nameExplicit": false,
       "name": "kv_pk",
       "table": "kv",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "machine_pk",
+      "table": "machine",
       "entityType": "pks"
     },
     {

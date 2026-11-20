@@ -142,14 +142,16 @@ export function useUsageExceededDialogs(input?: {
 
       if (error.type === "provider.free-limit") return whenGoUpsellReady(showFreeLimitDialog, evt)
 
-      if (error.type !== "provider.chatgpt-limit") return
+      if (error.type !== "provider.chatgpt-limit" && error.type !== "provider.chatgpt-workspace-limit") return
 
       if (chatgptUsageLimit.lastSeenAt && Date.now() - chatgptUsageLimit.lastSeenAt < CHATGPT_USAGE_LIMIT_WINDOW) return
 
       void import("@/providers/connect/chatgpt-usage-limit").then((usage) => {
         if (dialog.active) return
         setChatGPTUsageLimit("lastSeenAt", Date.now())
-        dialog.show(() => <usage.DialogChatGPTUsageLimit />)
+        dialog.show(() => (
+          <usage.DialogChatGPTUsageLimit workspace={error.type === "provider.chatgpt-workspace-limit"} />
+        ))
       })
     }),
   )

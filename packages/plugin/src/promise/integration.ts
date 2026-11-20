@@ -71,6 +71,8 @@ export type IntegrationOAuthMethodRegistration = {
   readonly method: IntegrationOAuthMethod
   readonly authorize: (answer: Form.Answer) => Promise<IntegrationOAuthAuthorization>
   readonly refresh?: (credential: Credential.OAuth) => Promise<Credential.OAuth>
+  /** Signs the credential out remotely before it is removed. A rejection is logged and the credential is still removed. */
+  readonly revoke?: (credential: Credential.OAuth) => Promise<void>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 

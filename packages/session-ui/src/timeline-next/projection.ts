@@ -9,6 +9,7 @@ import type {
 } from "@opencode/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
 import { createComputed, createMemo, createSignal, mapArray, untrack, type Accessor } from "solid-js"
+import { turnCommentary } from "../timeline/commentary"
 import { timelineNoticeRequired, type TimelineDetail } from "../timeline/detail"
 import { TimelineRow, type PartGroup, type PartRef } from "../timeline/timeline-row"
 import {
@@ -43,7 +44,7 @@ type FailedIdle = SessionMessageIdle & {
 }
 
 type Entry =
-  | { type: "assistant"; message: SessionMessageAssistant }
+  | { type: "assistant"; message: SessionMessageAssistant; run: number }
   | { type: "notice"; message: Notice }
   | { type: "idle"; message: FailedIdle }
   | { type: "diff"; message: SessionMessageIdle; from: string; files: string[] }
@@ -252,7 +253,7 @@ export function contentEntries(message: SessionMessageAssistant) {
 }
 
 function constructRows(input: Input) {
-  const { turns, leading } = constructTurns(input)
+  const { turns, leading, openRun } = constructTurns(input)
 
   const activeMessageID =
     turns.findLast(
@@ -273,7 +274,14 @@ function constructRows(input: Input) {
 
   const commentary = new Set(
     input.detail.commentary.placement !== "separate"
-      ? turns.flatMap((turn) => turnCommentary(turn.entries, viewTurnPhase(phaseOf(turn)).settled, input.shows))
+      ? turns.flatMap((turn) =>
+          turnCommentary(
+            turn.entries.filter((entry) => entry.type === "assistant"),
+            openRun,
+            viewTurnPhase(phaseOf(turn)).settled,
+            input.shows,
+          ),
+        )
       : [],
   )
 
@@ -347,6 +355,7 @@ function constructTurns(input: Input) {
   const leading: Notice[] = []
   const turnByUserID = new Map<string, Turn>()
   let current: Turn | undefined
+  let openRun = 0
   let execution: { opener: string; turn: Turn; files: Set<string> } | undefined
 
   const appendIdle = (message: SessionMessageIdle) => {
@@ -414,6 +423,7 @@ function constructTurns(input: Input) {
 
     if (message.type === "idle") {
       appendIdle(message)
+      openRun++
 
       // The summary follows the turn's last prompt, after any failure the marker reports.
       // Sorted like the diff route's git order, so the list keeps its order when the diffs arrive.
@@ -433,17 +443,17 @@ function constructTurns(input: Input) {
     message.snapshot?.files?.forEach((file) => execution?.files.add(file))
 
     if (current && !current.shell) {
-      current.entries.push({ type: "assistant", message })
+      current.entries.push({ type: "assistant", message, run: openRun })
 
       return
     }
 
-    const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message }] }
+    const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message, run: openRun }] }
     turns.push(turn)
     current = turn
   })
 
-  return { turns, leading }
+  return { turns, leading, openRun }
 }
 
 function turnRows(
@@ -618,26 +628,6 @@ function stepEvent(
 
 function isFailedIdle(message: SessionMessageInfo): message is FailedIdle {
   return message.type === "idle" && message.outcome === "failed" && !!message.error
-}
-
-// Text that a tool call follows in the same turn is commentary; text after the last tool call is the answer.
-// OpenAI Responses models label each message with a phase, which wins over position. A settled turn
-// without an answer keeps its last text, so an interrupted turn still ends with something to read.
-function turnCommentary(entries: Entry[], settled: boolean, visible: (content: Content) => boolean) {
-  const contents = entries.flatMap((entry) => (entry.type === "assistant" ? entry.message.content : []))
-  const lastTool = contents.findLastIndex((content) => content.type === "tool")
-
-  const commentary = contents.filter(
-    (content, index) =>
-      content.type === "text" &&
-      (content.native?.phase === "commentary" || (content.native?.phase !== "final_answer" && index < lastTool)),
-  )
-
-  const texts = contents.filter((content) => content.type === "text" && visible(content))
-
-  if (!settled || texts.some((content) => !commentary.includes(content))) return commentary
-
-  return commentary.filter((content) => content !== texts.at(-1))
 }
 
 /**

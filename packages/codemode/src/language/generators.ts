@@ -11,13 +11,13 @@ import {
   type PromiseObj,
   type Value,
 } from "./runtime/objects.js"
-import { readProperty, requireIteratorMethod, requireIteratorObject } from "./runtime/operations.js"
+import { requireIteratorMethod, requireIteratorObject } from "./runtime/operations.js"
 import { capability } from "./runtime/promises.js"
 import { abrupt, type Completion, type GeneratorRequest, Interruption, normal, Resume } from "./runtime/signals.js"
 import type { Reaction, Resolving } from "./scheduler.js"
 import { internalCode, VmIntrinsic } from "./internal-prelude.js"
 import { CodeFlags, Op } from "./opcodes.js"
-import { CustomIter, type Frame, Mode, type Vm } from "./vm.js"
+import { CustomIter, type Frame, Mode, REDO, REDO_ENTERED, type Vm } from "./vm.js"
 
 /**
  * CreateAsyncFromSyncIterator's object: an async iterator over a synchronous one, for `for await` and an async
@@ -275,6 +275,12 @@ export const execResume = (frame: Frame, bx: number, pc: number, sp: number): nu
   return pc + 1
 }
 
+const synchronous = (frame: Frame): boolean =>
+  frame.mode === Mode.CALLER ||
+  frame.mode === Mode.REDO ||
+  frame.mode === Mode.CONSTRUCT ||
+  (frame.mode === Mode.GENERATOR && !(frame.target as GeneratorObj).asynchronous)
+
 export const execAwait = (vm: Vm, frame: Frame, a: number, pc: number, sp: number): void => {
   const v = frame.regs[--sp] as Value
   frame.pc = pc
@@ -283,9 +289,9 @@ export const execAwait = (vm: Vm, frame: Frame, a: number, pc: number, sp: numbe
   const site = a === 1 ? undefined : frame.code.siteAt(pc)
   frame.pc = pc + 1
   let bIdx = vm.frames.length - 1
-  while (bIdx > 0 && vm.frames[bIdx]!.mode === Mode.CALLER) {
-    bIdx--
-  }
+  // Only `$vmHostWait` awaits under synchronous code (a host call waiting on its arguments): a getter an iterator op
+  // runs (`Mode.REDO`) and a synchronous generator's body run inside their caller's job, so the await parks it all.
+  while (bIdx > 0 && synchronous(vm.frames[bIdx]!)) bIdx--
   const cut = vm.frames.splice(bIdx)
   for (const f of cut) {
     if (f.counted) vm.depth--
@@ -301,7 +307,7 @@ export const execAwait = (vm: Vm, frame: Frame, a: number, pc: number, sp: numbe
   vm.scheduler.park(cut, promise, site, result)
 }
 
-export const execYstar = (frame: Frame, itSlot: number, bx: number, pc: number, sp: number): number => {
+export const execYstar = (vm: Vm, frame: Frame, itSlot: number, bx: number, pc: number, sp: number): number => {
   const kind = frame.regs[sp - 1] as number
   const recv = frame.regs[sp - 2] as Value
   const rec = frame.regs[itSlot] as CustomIter
@@ -314,7 +320,8 @@ export const execYstar = (frame: Frame, itSlot: number, bx: number, pc: number, 
     return bx
   }
   const methodName = REQUEST_KINDS[kind]!
-  const method = readProperty(rec.iterator, methodName, site)
+  const method = vm.redoRead(frame, rec.iterator, methodName, rec.iterator, pc, sp, [])
+  if (method === REDO) return REDO_ENTERED
   if (method === undefined || method === null) {
     frame.sp = sp - 1
     return pc + 1
@@ -327,13 +334,16 @@ export const execYstar = (frame: Frame, itSlot: number, bx: number, pc: number, 
   return bx
 }
 
-export const execYstarResult = (frame: Frame, kindSlot: number, bx: number, pc: number, sp: number): number => {
+export const execYstarResult = (vm: Vm, frame: Frame, kindSlot: number, bx: number, pc: number, sp: number): number => {
   const res = frame.regs[sp - 1] as Value
   const kind = frame.regs[kindSlot] as number
   const site = frame.code.siteAt(pc) ?? frame.origin
   const obj = requireIteratorObject(res, `Iterator ${REQUEST_KINDS[kind]}() result`, site)
-  const done = Boolean(readProperty(obj, "done", site))
-  const value = readProperty(obj, "value", site)
+  const reads: Array<Value> = []
+  const done = vm.redoRead(frame, obj, "done", obj, pc, sp, reads)
+  if (done === REDO) return REDO_ENTERED
+  const value = vm.redoRead(frame, obj, "value", obj, pc, sp, reads)
+  if (value === REDO) return REDO_ENTERED
   frame.regs[sp - 1] = value
   return done ? bx : pc + 1
 }
@@ -444,13 +454,14 @@ export const registerGeneratorIntrinsics = (map: Map<string, unknown>, vm: Vm): 
   // The `$vmAsyncFromSync` frame running now settles this.
   const made = () => vm.frames[vm.frames.length - 1]!.target as Resolving
 
-  add("$WrapAsyncFromSync", ([syncVal]) => {
+  add("$AfsRequireObj", ([syncVal]) => requireIteratorObject(syncVal, "Iterator method result", vm.currentSite()))
+
+  add("$WrapAsyncFromSync", ([obj, nextVal]) => {
     const site = vm.currentSite()
-    const obj = requireIteratorObject(syncVal, "Iterator method result", site)
-    const next = requireIteratorMethod(readProperty(obj, "next", site), "Iterator next", site)
+    const next = requireIteratorMethod(nextVal, "Iterator next", site)
     return new AsyncFromSyncIterator(
       builtins.AsyncFromSyncIterator,
-      { iterator: obj, next, asynchronous: false },
+      { iterator: obj as Obj, next, asynchronous: false },
       site!,
     )
   })
@@ -459,9 +470,9 @@ export const registerGeneratorIntrinsics = (map: Map<string, unknown>, vm: Vm): 
 
   add("$AfsGetNext", ([adapter]) => ((adapter as AsyncFromSyncIterator).sync as CustomIterator).next)
 
-  add("$AfsGetMethod", ([adapter, iterator, kind]) => {
+  // An iterator method the prelude read: undefined when absent, else it must be a function.
+  add("$AfsMethod", ([adapter, method, kind]) => {
     const site = (adapter as AsyncFromSyncIterator).site
-    const method = readProperty(iterator as Obj, kind as string, site)
     if (method === undefined || method === null) return undefined
     return requireIteratorMethod(method, `Iterator ${kind as string}`, site)
   })

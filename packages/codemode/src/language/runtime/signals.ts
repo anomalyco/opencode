@@ -53,6 +53,14 @@ export class Convert {
   ) {}
 }
 
+/**
+ * A built-in met program getters it cannot call (see `withReads`): the VM reads `reads` (receiver, key, receiver, key,
+ * …) in program code, then runs the built-in again from the start, and its reads of them get those values.
+ */
+export class Prefetch {
+  constructor(readonly reads: ReadonlyArray<Value>) {}
+}
+
 export type Hint = "number" | "string" | "default"
 export type Hints = Hint | ReadonlyArray<Hint>
 

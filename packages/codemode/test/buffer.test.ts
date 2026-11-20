@@ -35,6 +35,16 @@ describe("Buffer", () => {
     ).toEqual(["axcd", "xc", true, -1, true, 2, "010101", "abab"])
   })
 
+  test("makes a Buffer from a Buffer through the inherited Uint8Array methods, like Bun", async () => {
+    expect(
+      await value(`const b = Buffer.from("abc")
+        const made = [b.map((x) => x + 1), b.filter((x) => x > 97), Uint8Array.prototype.slice.call(b, 1),
+          Uint8Array.prototype.subarray.call(b, 2)]
+        return [...made.map((x) => [Buffer.isBuffer(x), x.toString()]), Buffer.isBuffer(new Uint8Array(1).map((x) => x)),
+          String(new Uint8Array([1, 2]).slice(1))]`),
+    ).toEqual([[true, "bcd"], [true, "bc"], [true, "bc"], [true, "c"], false, "2"])
+  })
+
   test("reads and writes numbers", async () => {
     expect(
       await value(`const b = Buffer.alloc(4)

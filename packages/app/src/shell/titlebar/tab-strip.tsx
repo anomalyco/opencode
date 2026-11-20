@@ -973,6 +973,7 @@ export function TitlebarTabStrip(props: {
   const renderList = () => (
     <div
       data-titlebar-tab-list
+      data-focus-scope
       data-orientation={vertical() ? "vertical" : "horizontal"}
       data-dragging={customDrag()?.isDraggingStrip() ? "true" : undefined}
       class="relative flex w-full min-w-0"

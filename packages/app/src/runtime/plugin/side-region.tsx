@@ -102,6 +102,7 @@ export function SideRegion(props: {
       <aside
         ref={setRoot}
         id="review-panel"
+        data-focus-scope
         tabIndex={-1}
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!tabsOpen()}

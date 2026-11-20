@@ -28,6 +28,8 @@ function ToastRegion(props: ToastRegionProps) {
     // A modal dialog hides what's outside it from assistive tech. The region is in the Portal's own div, so that div,
     // rather than the toaster, is what the dialog would hide.
     container.setAttribute("data-kb-top-layer", "")
+    // Dismissing a toast moves focus to the next one, or back to where it was before the last.
+    container.setAttribute("data-focus-scope", "")
 
     const sync = () => {
       container.querySelectorAll<HTMLElement>(".toast-v2-region .toast-v2").forEach((element) => {

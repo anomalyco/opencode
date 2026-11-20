@@ -72,6 +72,34 @@ for (const v of set) sum += v
 for (let i = 0; i < 5000; i++) { map.delete("k" + i); set.delete(i) }
 return sum + map.size + set.size`,
   ],
+  [
+    "property-heavy (plain data)",
+    `const rows = Array.from({ length: 20000 }, (_, i) => ({ id: i, name: "n" + i, score: i % 97, tags: ["a", "b"] }))
+let sum = 0
+for (const r of rows) {
+  const c = { ...r, extra: 1 }
+  const { id, ...rest } = r
+  Object.assign(c, rest)
+  sum += c.score + Object.keys(c).length + Object.entries(r).length + Object.values(r).length + rest.score
+}
+return sum + JSON.stringify(rows.slice(0, 3000)).length`,
+  ],
+  [
+    "accessors",
+    `const o = { _v: 1, get v() { return this._v }, set v(x) { this._v = x } }
+const p = Object.create(o)
+let sum = 0
+for (let i = 0; i < 100000; i++) { p.v = i; sum += p.v + o.v }
+return sum + JSON.stringify(Array.from({ length: 2000 }, () => o)).length`,
+  ],
+  [
+    "classes",
+    `class Shape { kind = "shape"; constructor(size) { this.size = size } area() { return this.size } }
+class Square extends Shape { sides = 4; constructor(size) { super(size) } area() { return super.area() * this.size } }
+let sum = 0
+for (let i = 0; i < 20000; i++) { const s = new Square(i % 10); sum += s.area() + s.sides + s.kind.length }
+return sum`,
+  ],
 ]
 
 const argument = (flag: string) => {

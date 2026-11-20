@@ -4,9 +4,14 @@ import { checkStringLength } from "./limits.js"
 import { locate } from "./errors.js"
 import { type Builtins, primitivePrototype } from "./intrinsics.js"
 import {
+  access,
   Arr,
   Builtin,
   Callable,
+  GetterCall,
+  isProgramAccessor,
+  lookup,
+  type Slot,
   type Cursor,
   Fn,
   get,
@@ -24,7 +29,7 @@ import {
   coerceToString,
   type Value,
 } from "./objects.js"
-import { isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
+import { circularValue, describeValue, hasCircularReference, isOpaque, typeofValue } from "./references.js"
 import type { Interpreter } from "./interpreter.js"
 import { enumerableSource } from "../stdlib/object.js"
 
@@ -91,19 +96,26 @@ export const notConstructible = (callee: Value, node: NewExpression) => {
   const name = calleeDescription(node.callee) ?? "The called value"
   const message =
     callee instanceof Fn
-      ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
+      ? `${name} is not a constructor: only classes can be constructed with new. Use a class, or call it as a function that returns an object.`
       : callee instanceof Builtin
         ? `new ${name}(...) is not supported; call ${name}(...) without new instead.`
         : `${name} is not a constructor.`
   return typeError(message, node)
 }
 
-// OrdinaryHasInstance: walk the left operand's chain looking for the constructor's `prototype`.
-export const instanceofValue = (lhs: Value, rhs: Value, node: AstNode): boolean => {
+// OrdinaryHasInstance: walk the left operand's chain looking for the constructor's `prototype`, unless that is a
+// program getter, which the VM runs first (`$vmInstanceof`).
+export const instanceofValue = (lhs: Value, rhs: Value, node: AstNode): boolean | GetterCall => {
   if (!(rhs instanceof Callable)) {
     throw typeError("The right-hand side of 'instanceof' is not callable.", node)
   }
-  const prototype = get(rhs, "prototype")
+  const prototype = accessProperty(rhs, "prototype", node)
+  if (prototype instanceof GetterCall) return prototype
+  return hasInstance(lhs, prototype, node)
+}
+
+/** The rest of OrdinaryHasInstance, once `prototype` is read. */
+export const hasInstance = (lhs: Value, prototype: Value, node: AstNode | undefined): boolean => {
   if (!(prototype instanceof Obj)) {
     throw typeError("The right-hand side of 'instanceof' has no 'prototype' object.", node)
   }
@@ -205,9 +217,16 @@ type MemberReference = {
   receiver: Value
 }
 
-// A thenable the program's implicit async body adopts before copy-out.
-export const isThenable = (value: Value): boolean =>
-  value instanceof PromiseObj || (value instanceof Obj && typeofValue(get(value, "then")) === "function")
+// A thenable the program's implicit async body adopts before copy-out. A program `then` getter counts: the adoption
+// reads it, in program code.
+export const isThenable = (value: Value): boolean => {
+  if (value instanceof PromiseObj) return true
+  if (!(value instanceof Obj)) return false
+  const slot = lookup(value, "then")
+  if (slot === undefined) return false
+  if (isProgramAccessor(slot)) return true
+  return typeofValue(get(value, "then")) === "function"
+}
 
 /** A built-in iterator over `value` that needs no program code to start: an iterator object, a string, a collection. */
 export const builtinCursor = (builtins: Builtins, value: Value): Cursor | undefined => {
@@ -273,7 +292,7 @@ export const resolveProperty = (
   if (typeof objectValue === "string") {
     if (key === "length") return { value: objectValue.length }
     const index = typeof key === "symbol" ? undefined : parseArrayIndex(key)
-    if (index !== undefined) return { value: objectValue[index] }
+    if (index !== undefined && index < objectValue.length) return { value: objectValue[index] }
   }
   const proto = primitivePrototype(builtins, objectValue)
   if (proto !== undefined) return { target: proto, key, receiver: objectValue }
@@ -284,23 +303,28 @@ export const resolveProperty = (
   throw typeError("Cannot access a property on a non-object value.", objectNode)
 }
 
-// One destructured property, read the way a member expression would read it (primitives use their prototype).
-export const destructuredProperty = (builtins: Builtins, source: Value, key: PropertyKey, node: AstNode): Value => {
-  const reference = resolveProperty(builtins, source, key, node, node)
-  if (reference instanceof HostNamespace) return reference
-  if ("value" in reference) return reference.value
-  return readProperty(reference.target, reference.key, node, reference.receiver)
-}
-
-export const readReference = (reference: MemberReference, node: MemberExpression): Value => {
-  // Reject unknown promise properties so a missing await cannot hide.
+/** Rejects reading a property a promise doesn't have, so a missing await cannot hide. */
+export const requirePromiseProperty = (reference: MemberReference, node: AstNode): void => {
   if (reference.target instanceof PromiseObj && !has(reference.target, reference.key)) {
     throw invalidData(
       "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`.",
-      node.object,
+      (node as Partial<MemberExpression>).object ?? node,
     )
   }
-  return readProperty(reference.target, reference.key, node, reference.receiver)
+}
+
+/** [[Get]] for the VM's ops, located at `node`: the value, or a program getter for the op to enter. */
+export const accessProperty = (
+  target: Obj,
+  key: PropertyKey,
+  node: AstNode | undefined,
+  receiver: Value = target,
+): Value | GetterCall => {
+  try {
+    return access(target, key, receiver)
+  } catch (error) {
+    throw locate(error, node)
+  }
 }
 
 // Accessors throw without a location; the member or pattern that read them supplies it.
@@ -334,19 +358,39 @@ export const writableReference = (
   return reference
 }
 
-export const assignToReference = (target: Obj, key: PropertyKey, next: Value, node: AstNode): void => {
-  const written = (() => {
-    try {
-      rejectCircularInsertion(
-        target,
-        next,
-        target instanceof Arr ? "Array assignment result" : "Object assignment result",
-      )
-      return set(target, key, next)
-    } catch (error) {
-      throw locate(error, node)
+/** Assigns `target[key] = next`: the program setter to call with `target` and `[next]`, if the write reaches one. */
+export const assignToReference = (
+  target: Obj,
+  key: PropertyKey,
+  next: Value,
+  node: AstNode | undefined,
+): Callable | undefined => {
+  let written: boolean | Callable
+  try {
+    // An accessor decides what a write stores (or refuses it), so only a data write can make a cycle. The cycle check
+    // goes first: the lookup is only needed in the rare case it fails.
+    if (next instanceof Obj && hasCircularReference(target, next) && !isAccessor(lookup(target, key))) {
+      throw circularValue(target instanceof Arr ? "Array assignment result" : "Object assignment result")
     }
-  })()
-  if (written) return
-  throw typeError(`Cannot assign to read only property '${String(key)}'.`, node)
+    written = set(target, key, next)
+  } catch (error) {
+    throw locate(error, node)
+  }
+  if (written === true) return undefined
+  if (written === false) throw failedAssignment(target, key, node)
+  return written
+}
+
+const isAccessor = (slot: Slot | undefined): boolean => slot !== undefined && !("value" in slot)
+
+/** Why `[[Set]]` refused: an accessor with only a getter, or a read-only property. */
+export const failedAssignment = (receiver: Value, key: PropertyKey, node: AstNode | undefined) => {
+  const slot = receiver instanceof Obj ? lookup(receiver, key) : undefined
+  if (slot !== undefined && !("value" in slot)) {
+    return typeError(
+      `Cannot set property '${String(key)}' of ${describeValue(receiver)} which has only a getter.`,
+      node,
+    )
+  }
+  return typeError(`Cannot assign to read only property '${String(key)}'.`, node)
 }

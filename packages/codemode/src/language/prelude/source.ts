@@ -5,7 +5,7 @@ function arrayFromIterable(items, mapper, thisArg) {
   const result = []
   let index = 0
   for (const item of items) {
-    result[index] = mapper === undefined ? item : $Call(mapper, thisArg, item, index)
+    $ArraySet(result, index, mapper === undefined ? item : $Call(mapper, thisArg, item, index))
     index++
   }
   return result
@@ -16,7 +16,7 @@ function arrayFromLike(source, length, mapper, thisArg) {
   const result = new Array(length)
   let index = 0
   while (index < length) {
-    result[index] = $Call(mapper, thisArg, source[index], index)
+    $ArraySet(result, index, $Call(mapper, thisArg, source[index], index))
     index++
   }
   return result
@@ -30,7 +30,7 @@ function Array$prototype$map(callback, thisArg = undefined) {
 }
 function Uint8Array$prototype$map(callback, thisArg = undefined) {
   const bytes = $Receiver(this, "Uint8Array", "Uint8Array.prototype.map")
-  return $Bytes(mapItems(bytes, callback, thisArg, "Uint8Array.map"), Uint8Array.prototype, 0)
+  return $DerivedBytes(mapItems(bytes, callback, thisArg, "Uint8Array.map"), bytes)
 }
 function mapItems(array, callback, thisArg, label) {
   $Callback(callback, label)
@@ -38,7 +38,7 @@ function mapItems(array, callback, thisArg, label) {
   const result = new Array(length)
   let index = 0
   while (index < length) {
-    if (index in array) result[index] = $Call(callback, thisArg, array[index], index, array)
+    if (index in array) $ArraySet(result, index, $Call(callback, thisArg, array[index], index, array))
     index++
   }
   return result
@@ -49,7 +49,7 @@ function Array$prototype$filter(callback, thisArg = undefined) {
 }
 function Uint8Array$prototype$filter(callback, thisArg = undefined) {
   const bytes = $Receiver(this, "Uint8Array", "Uint8Array.prototype.filter")
-  return $Bytes(filterItems(bytes, callback, thisArg, "Uint8Array.filter"), Uint8Array.prototype, 0)
+  return $DerivedBytes(filterItems(bytes, callback, thisArg, "Uint8Array.filter"), bytes)
 }
 function filterItems(array, callback, thisArg, label) {
   $Callback(callback, label)
@@ -227,10 +227,10 @@ function sortWith(target, into, holes, comparator, work, undefs, merges) {
       order = +$Call(comparator, undefined, work[left], work[right])
       // A NaN result counts as equal, which keeps the order stable.
       if (order <= 0 || order !== order) {
-        merged[count] = work[left]
+        $ArraySet(merged, count, work[left])
         left++
       } else {
-        merged[count] = work[right]
+        $ArraySet(merged, count, work[right])
         right++
       }
       count++
@@ -387,7 +387,7 @@ function Math$sumPrecise(items) {
   const numbers = []
   for (const item of items) {
     if (typeof item !== "number") $Throw("TypeError", "Math.sumPrecise expects an iterable of numbers.")
-    numbers[numbers.length] = item
+    $ArraySet(numbers, numbers.length, item)
   }
   return $SumPrecise(numbers)
 }
@@ -395,7 +395,7 @@ function Math$sumPrecise(items) {
 // new AggregateError: the error is made (message and cause) before its errors are read.
 function aggregateError(error, errors) {
   const list = []
-  for (const item of errors) list[list.length] = item
+  for (const item of errors) $ArraySet(list, list.length, item)
   return $Define(error, "errors", list, false)
 }
 
@@ -404,7 +404,7 @@ function aggregateError(error, errors) {
 function collectBytes(source, name, mapper, thisArg, into, offset) {
   if (!$IsIterable(source)) $Throw("TypeError", name + " expects a Uint8Array, an array, or an iterable of numbers, received " + $Describe(source) + ".")
   const values = []
-  for (const item of source) values[values.length] = item
+  for (const item of source) $ArraySet(values, values.length, item)
   let index = 0
   if (mapper !== undefined) {
     while (index < values.length) {
@@ -413,6 +413,47 @@ function collectBytes(source, name, mapper, thisArg, into, offset) {
     }
   }
   return $Bytes(values, into, offset)
+}
+
+// An arguments object's [Symbol.iterator], as Array.prototype.values reads it: the length and each index, live.
+function* argumentsValues() {
+  let index = 0
+  while (index < this.length) {
+    yield this[index]
+    index++
+  }
+}
+
+// Object.entries and Object.values over an object with program getters: each key's enumerability is checked as it is
+// visited, so a getter that deletes or hides a later key is seen.
+function objectEntries(source, values) {
+  const keys = $OwnKeys(source, true, undefined)
+  const result = []
+  let index = 0
+  while (index < keys.length) {
+    const key = keys[index]
+    if ($IsEnumerableOwn(source, key)) $ArraySet(result, result.length, values ? source[key] : [key, source[key]])
+    index++
+  }
+  return result
+}
+
+// Object.assign when a source has program getters or the target's chain has program setters: Get from each source,
+// then Set on the target, key by key.
+function objectAssign(target, sources) {
+  let at = 0
+  while (at < sources.length) {
+    const source = sources[at]
+    const keys = $OwnKeys(source, false, undefined)
+    let index = 0
+    while (index < keys.length) {
+      const key = keys[index]
+      if ($IsEnumerableOwn(source, key)) target[key] = source[key]
+      index++
+    }
+    at++
+  }
+  return target
 }
 
 // Headers and URLSearchParams from iterable [name, value] pairs, read in full as strings before any is checked; from a
@@ -424,8 +465,8 @@ function readPairs(init, label, kind, proto) {
   for (const pair of init) {
     if (!$IsIterable(pair)) $Throw("TypeError", label + " expects iterable [name, value] pairs.")
     strings = []
-    for (const item of pair) strings[strings.length] = String(item)
-    pairs[pairs.length] = strings
+    for (const item of pair) $ArraySet(strings, strings.length, String(item))
+    $ArraySet(pairs, pairs.length, strings)
   }
   return $Pairs(kind, proto, pairs, label)
 }
@@ -573,7 +614,7 @@ function closeIterator(iterator) {
 
 function Iterator$prototype$toArray() {
   const result = []
-  for (const item of $Direct(this, false)) result[result.length] = item
+  for (const item of $Direct(this, false)) $ArraySet(result, result.length, item)
   return result
 }
 

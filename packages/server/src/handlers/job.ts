@@ -22,5 +22,8 @@ export const makeJob = Effect.gen(function* () {
         data: yield* SessionBackground.list(jobs, lookup, query),
       }
     }),
+    cancel: Effect.fn("JobHandler.cancel")(function* (id: string) {
+      yield* jobs.cancel(id)
+    }),
   }
 })

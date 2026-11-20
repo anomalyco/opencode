@@ -279,6 +279,7 @@ const promiseLikeMethods = <R>(ctx: Interpreter<R>) => {
     const source = receiver(Obj, thisValue, name)
     const copy = new Obj(ctx.builtins.Object)
     for (const [key, slot] of source.props) copy.props.set(key, { ...slot })
+    copy.hasProgramAccessors = source.hasProgramAccessors
     return ctx.vm.scheduler.promiseResolve(copy)
   }
   methods(

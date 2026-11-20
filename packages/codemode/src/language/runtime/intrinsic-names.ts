@@ -1,6 +1,6 @@
 import type { Builtins } from "./intrinsics.js"
 import { AsyncIteratorSymbol, IteratorSymbol } from "./model.js"
-import { Arr, Fn, Native, Obj, type Value } from "./objects.js"
+import { accessorFunction, Arr, Fn, Native, Obj, type Value } from "./objects.js"
 
 /**
  * Deterministic names for one runtime's intrinsic objects, so saved state can refer to a built-in by name instead of
@@ -139,10 +139,11 @@ let ids: Map<string, number> | undefined
 const staticIds = () => (ids ??= new Map(table!.names.map((name, at) => [name, table!.order[at]!])))
 
 const walk = (made: ReadonlyArray<Obj>, roots: Roots): Table => {
+  type Path = string | readonly [parent: number, key: string | symbol, half?: "get" | "set"]
   const order: Array<number> = []
-  const paths: Array<string | readonly [parent: number, key: string | symbol]> = []
+  const paths: Array<Path> = []
   const position = made.map(() => -1)
-  const visit = (value: Value, path: string | readonly [number, string | symbol]) => {
+  const visit = (value: Value, path: Path) => {
     if (!(value instanceof Obj)) return
     const id = value.intrinsic - 1
     if (id < 0 || made[id] !== value) {
@@ -153,13 +154,21 @@ const walk = (made: ReadonlyArray<Obj>, roots: Roots): Table => {
     order.push(id)
     paths.push(path)
   }
-  const describe = (path: string | readonly [number, string | symbol]): string =>
-    typeof path === "string" ? path : member(describe(paths[path[0]]!), path[1])
+  const name = (base: string, path: Exclude<Path, string>) =>
+    `${member(base, path[1])}${path[2] === undefined ? "" : path[2] === "get" ? "[[Get]]" : "[[Set]]"}`
+  const describe = (path: Path): string => (typeof path === "string" ? path : name(describe(paths[path[0]]!), path))
   let next = 0
   const drain = () => {
     for (; next < order.length; next++) {
       const item = made[order[next]!]!
-      for (const [key, slot] of item.props) if ("value" in slot) visit(slot.value, [next, key])
+      for (const [key, slot] of item.props) {
+        if ("value" in slot) visit(slot.value, [next, key])
+        else {
+          // A built-in accessor's halves are named by their companions: `Map.prototype.size[[Get]]`.
+          visit(accessorFunction(slot.get), [next, key, "get"])
+          visit(accessorFunction(slot.set), [next, key, "set"])
+        }
+      }
       if (item.proto !== null) visit(item.proto, [next, prototypeKey])
     }
   }
@@ -170,7 +179,7 @@ const walk = (made: ReadonlyArray<Obj>, roots: Roots): Table => {
     drain()
   }
   const names: Array<string> = []
-  for (const path of paths) names.push(typeof path === "string" ? path : member(names[path[0]]!, path[1]))
+  for (const path of paths) names.push(typeof path === "string" ? path : name(names[path[0]]!, path))
   return { count: made.length, order, names, position }
 }
 
