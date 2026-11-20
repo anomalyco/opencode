@@ -17429,6 +17429,9 @@
               "full_codemode": {
                 "type": "boolean"
               },
+              "machines": {
+                "type": "boolean"
+              },
               "schedules": {
                 "type": "boolean"
               },

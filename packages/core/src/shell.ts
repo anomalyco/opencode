@@ -98,6 +98,8 @@ type Spawned = {
   newlines: number
   // Byte offsets where the last two lines start, so a truncation notice can size a cut-off line.
   lineStarts: [number, number]
+  // Why its exit could not be read, such as a machine's worker restarting: the driver's own sentence.
+  killed?: string
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
@@ -847,7 +849,7 @@ const layer = () =>
             command.kind === "daemon" && command.outputError
               ? `\n\n[output file ${info.file} stopped early: ${command.outputError}]`
               : ""
-          const killed = command.kind === "daemon" && command.killed ? { killed: command.killed } : {}
+          const killed = command.killed ? { killed: command.killed } : {}
           if (partial && lines.length === 1) {
             const lineStarts = command.kind === "spawned" ? command.lineStarts : yield* lineStartsOf(info.file, size)
             const lineStart = endsWithNewline ? lineStarts[0] : lineStarts[1]
@@ -895,11 +897,16 @@ const layer = () =>
         const baseEnv = local
           ? ((Schema.is(SessionSchema.ID)(sessionID) ? yield* environments.get(sessionID) : undefined) ?? process.env)
           : undefined
+        // A command anywhere else has none of this server's shell paths, and the driver runs only argv, cwd and env.
+        // `sh -c` is the contract every POSIX worker can meet; the command is parsed as `sh` for the same reason.
+        // Only a command outside this Location's environment takes it: a workspace session keeps its own shell.
+        const program =
+          target.id === environment.id ? (input.shell ?? (yield* shell.resolve({ priority: "config" }))) : "sh"
         const invocation: ShellCreateBefore = {
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout ?? 0,
-          shell: input.shell ?? (yield* shell.resolve({ priority: "config" })),
+          shell: program,
           env: {
             ...baseEnv,
             TERM: "xterm-256color",
@@ -1061,13 +1068,15 @@ const layer = () =>
                 Effect.gen(function* () {
                   const exited = yield* handle.exitCode.pipe(
                     Effect.map((code) => ({ exit: code, signal: undefined })),
-                    Effect.catch((error) =>
-                      Effect.succeed({
-                        exit: undefined,
-                        signal:
-                          error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
-                      }),
-                    ),
+                    Effect.catch((error) => {
+                      const cause = error.cause
+                      const signal = cause instanceof CrossSpawnSpawner.KilledBySignal ? cause.signal : undefined
+                      // A signal reads as one. A command on another machine that cannot read its exit reports the
+                      // driver's own sentence instead of nothing; a local one is unchanged.
+                      if (signal === undefined && target.id !== environment.id)
+                        command.killed = cause instanceof Error ? cause.message : String(cause)
+                      return Effect.succeed({ exit: undefined, signal })
+                    }),
                   )
                   yield* end({ status: "exited", ...exited })
                   // A stop keeps its status but still records how the killed process exited.

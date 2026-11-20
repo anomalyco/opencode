@@ -159,7 +159,14 @@ const ARITY: Record<string, number> = {
 }
 const PREFIX_LENGTH = Math.max(...Object.values(ARITY))
 
-export function scan(command: string, shell: string, cwd: string): Effect.Effect<Result, Error> {
+export function scan(
+  command: string,
+  shell: string,
+  cwd: string,
+  options: { readonly home?: string | null } = {},
+): Effect.Effect<Result, Error> {
+  // A machine's home is unknown, so `~` there is left as written for locating to refuse.
+  const home = options.home === null ? undefined : (options.home ?? os.homedir())
   return Effect.suspend(() => {
     const powershell = ShellSelect.ps(shell)
     const shellName = ShellSelect.name(shell)
@@ -218,7 +225,7 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
           })
       const directoryCommand = unwrapDirectoryCommand(powershell ? words : item.rawWords, parts, powershell)
       if (directoryCommand) {
-        const resolved = directoryArgs(directoryCommand, powershell, cwd, shell)
+        const resolved = directoryArgs(directoryCommand, powershell, cwd, shell, home)
         output.directories.push(...resolved.directories)
         if (directoryCommand === parts && resolved.complete) continue
       }
@@ -451,7 +458,7 @@ function hasPowerShellDotWildcard(raw: string) {
   return false
 }
 
-function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell: string) {
+function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell: string, home: string | undefined) {
   const head = command[0]?.text.toLowerCase() ?? ""
   if (head === "popd" || head === "pop-location") return { directories: [], complete: false }
 
@@ -468,7 +475,9 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
     })
     if (operands.length === 0) return { directories: [], complete: false }
     const resolved = operands.map((part) =>
-      part.text === "-" ? undefined : directoryArgument(part.text, false, cwd, shell, part.unquotedTilde),
+      part.text === "-"
+        ? undefined
+        : directoryArgument(part.text, false, cwd, shell, part.unquotedTilde ?? false, home),
     )
     const directories = resolved.filter((item): item is string => item !== undefined)
     return { directories, complete: directories.length === operands.length }
@@ -490,7 +499,7 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
       const value =
         !literalFlag && (hasPowerShellDotWildcard(part.raw) || part.text === "-" || part.text === "+")
           ? undefined
-          : directoryArgument(part.text, true, cwd, shell)
+          : directoryArgument(part.text, true, cwd, shell, false, home)
       if (value) directories.push(value)
       if (!value) complete = false
       pathFlag = false
@@ -510,15 +519,22 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
     const value =
       hasPowerShellDotWildcard(part.raw) || (!endOfParameters && (part.raw === "-" || part.raw === "+"))
         ? undefined
-        : directoryArgument(part.text, true, cwd, shell)
+        : directoryArgument(part.text, true, cwd, shell, false, home)
     if (value) directories.push(value)
     if (!value) complete = false
   }
   return { directories, complete: sawOperand && complete }
 }
 
-function directoryArgument(value: string, powershell: boolean, cwd: string, shell: string, unquotedTilde = false) {
-  if (!powershell) return expandKnownDirectory(value, false, cwd, unquotedTilde)
+function directoryArgument(
+  value: string,
+  powershell: boolean,
+  cwd: string,
+  shell: string,
+  unquotedTilde: boolean,
+  home: string | undefined,
+) {
+  if (!powershell) return expandKnownDirectory(value, false, cwd, unquotedTilde, home)
   const quote = value[0]
   const text = (quote === '"' || quote === "'") && value.at(-1) === quote ? value.slice(1, -1) : value
 
@@ -536,16 +552,27 @@ function directoryArgument(value: string, powershell: boolean, cwd: string, shel
       }),
     true,
     cwd,
+    false,
+    home,
   )
 }
 
-function expandKnownDirectory(value: string, powershell: boolean, cwd: string, unquotedTilde = false) {
+function expandKnownDirectory(
+  value: string,
+  powershell: boolean,
+  cwd: string,
+  unquotedTilde: boolean,
+  home: string | undefined,
+) {
   // Unknown shell expressions cannot be resolved safely during permission analysis.
   if (value.includes("$") || value.includes("`") || (powershell && value.startsWith("("))) return
   const resolved = value.replaceAll("\0", "$")
-  if (resolved === "~") return os.homedir()
-  if (resolved.startsWith("~/") || (process.platform === "win32" && resolved.startsWith("~\\"))) {
-    return path.join(os.homedir(), resolved.slice(2))
+  if (resolved.startsWith("~")) {
+    // A machine has no known home: leave `~` as written so locating refuses the directory.
+    if (home === undefined) return resolved
+    if (resolved === "~") return home
+    if (resolved.startsWith("~/") || (process.platform === "win32" && resolved.startsWith("~\\")))
+      return path.join(home, resolved.slice(2))
   }
   if (unquotedTilde && process.platform !== "win32") {
     if (resolved === "~+") return cwd
