@@ -78,10 +78,23 @@ const layer = Layer.effect(
   Service,
   Effect.sync(() => {
     const locks = KeyedMutex.makeUnsafe<string>()
-    const withLock: Interface["withLock"] = (targets) => (effect) =>
-      [...new Set(targets.map(FSUtil.resolve))]
-        .sort()
-        .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
+    const withLock: Interface["withLock"] = (targets) => <A, E, R>(effect: Effect.Effect<A, E, R>) => {
+      const sorted = [...new Set(targets.map(FSUtil.resolve))].sort()
+      let result: Effect.Effect<A, E, R> = effect
+      // Process from right to left so locks are acquired in sorted order
+      // (smallest key outermost) and released in reverse, preventing deadlocks.
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        // Bound the lock wait so a stuck holder (e.g. a permission check that
+        // never resolves) cannot block subsequent edits to the same path
+        // indefinitely (#64869). The holder itself is interrupted on timeout,
+        // releasing the lock via `ensuring` in `KeyedMutex.withLock`.
+        result = Effect.timeout(
+          transactionLocks.withLock(sorted[i])(result),
+          "2 minutes",
+        ) as Effect.Effect<A, E, R>
+      }
+      return result
+    }
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>

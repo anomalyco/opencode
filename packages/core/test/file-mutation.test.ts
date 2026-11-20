@@ -222,6 +222,35 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("releases the lock when the holder is interrupted, so a subsequent acquisition does not hang (#64869)", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        const files = yield* FileMutation.Service
+        const target = path.join(directory, "shared.txt")
+
+        // Fiber A acquires the lock and holds it until interrupted.
+        const holderStarted = yield* Deferred.make<void>()
+        const holder = yield* files
+          .withLock([target])(Deferred.succeed(holderStarted, undefined).pipe(Effect.andThen(Effect.never)))
+          .pipe(Effect.forkChild)
+        yield* Deferred.await(holderStarted)
+
+        // Interrupt the holder while it holds the lock.
+        yield* Fiber.interrupt(holder)
+
+        // A subsequent acquisition on the same path must not hang.
+        const acquired = yield* Deferred.make<void>()
+        const waiter = yield* files
+          .withLock([target])(Deferred.succeed(acquired, undefined))
+          .pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        expect(yield* Deferred.isDone(acquired)).toBe(true)
+
+        yield* Fiber.join(waiter)
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("allows distinct absolute targets to proceed independently", () =>
     withTempDir(({ path: directory }) =>
       Effect.gen(function* () {

@@ -70,4 +70,32 @@ describe("KeyedMutex", () => {
       expect(yield* mutex.size).toBe(0)
     }),
   )
+
+  it.effect("releases the lock when the holder is interrupted, so a subsequent acquisition does not hang", () =>
+    Effect.gen(function* () {
+      const mutex = yield* KeyedMutex.make<string>()
+      const firstStarted = yield* Deferred.make<void>()
+
+      // Fiber A acquires the lock and holds it until interrupted.
+      const first = yield* mutex
+        .withLock("shared")(Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Effect.never)))
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(firstStarted)
+      yield* Effect.yieldNow
+
+      // Interrupt the holder while it holds the permit.
+      yield* Fiber.interrupt(first)
+
+      // A subsequent acquisition on the same key must not hang.
+      const secondDone = yield* Deferred.make<void>()
+      const second = yield* mutex
+        .withLock("shared")(Deferred.succeed(secondDone, undefined))
+        .pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+      expect(yield* Deferred.isDone(secondDone)).toBe(true)
+
+      yield* Fiber.join(second)
+      expect(yield* mutex.size).toBe(0)
+    }),
+  )
 })
