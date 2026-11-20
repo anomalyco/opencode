@@ -331,6 +331,8 @@ export type SessionStatus =
 
 export type SpaceName = string
 
+export type SpaceEpoch = string
+
 export type SpaceRevision = number
 
 export type SpaceKey = string
@@ -2343,7 +2345,7 @@ export type ExperimentalKvSnapshot = {
   metadata?: { [x: string]: any }
   type: "experimental.kv.snapshot"
   location?: LocationRef
-  data: { space: SpaceName; revision: SpaceRevision; entries: Array<SpaceEntry> }
+  data: { space: SpaceName; epoch: SpaceEpoch; revision: SpaceRevision; entries: Array<SpaceEntry> }
 }
 
 export type ExperimentalKvDelta = {
@@ -2352,7 +2354,13 @@ export type ExperimentalKvDelta = {
   metadata?: { [x: string]: any }
   type: "experimental.kv.delta"
   location?: LocationRef
-  data: { space: SpaceName; revision: SpaceRevision; entries: Array<SpaceEntry>; deleted: Array<SpaceKey> }
+  data: {
+    space: SpaceName
+    epoch: SpaceEpoch
+    revision: SpaceRevision
+    entries: Array<SpaceEntry>
+    deleted: Array<SpaceKey>
+  }
 }
 
 export type AutomationTrigger =

@@ -45,12 +45,14 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
   }),
 )
 
-// `space:revision`; a revision that is not a plain non-negative integer is unusable, so the space gets a snapshot.
+// `space:epoch.revision`; a cursor that does not parse is unusable, so the space gets a snapshot.
 function parse(item: string): SpaceStore.Request {
   const index = item.indexOf(":")
   if (index < 0) return { space: item }
   const space = item.slice(0, index)
-  const revision = item.slice(index + 1)
-  if (!/^\d+$/u.test(revision) || !Number.isSafeInteger(Number(revision))) return { space }
-  return { space, since: Number(revision) }
+  const cursor = item.slice(index + 1)
+  const dot = cursor.lastIndexOf(".")
+  const revision = cursor.slice(dot + 1)
+  if (dot < 1 || !/^\d+$/u.test(revision) || !Number.isSafeInteger(Number(revision))) return { space }
+  return { space, epoch: cursor.slice(0, dot), since: Number(revision) }
 }

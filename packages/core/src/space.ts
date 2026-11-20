@@ -54,12 +54,13 @@ export const head = (db: Db, space: SpaceSchema.Name) =>
       Effect.map((row) => row?.revision ?? 0),
     )
 
-/** Every row, tombstones included, written after `since`, in revision order: one range of the revision index. */
-export const changes = (db: Db, space: SpaceSchema.Name, since: SpaceSchema.Revision) =>
+/** Rows, tombstones included, written after `since`, in revision order: one range of the revision index. */
+export const changes = (db: Db, space: SpaceSchema.Name, since: SpaceSchema.Revision, limit?: number) =>
   db
     .select({ key: SpaceTable.key, value: SpaceTable.value, revision: SpaceTable.revision })
     .from(SpaceTable)
     .where(and(eq(SpaceTable.space, space), gt(SpaceTable.revision, since)))
     .orderBy(asc(SpaceTable.revision))
+    .limit(limit ?? -1)
     .all()
     .pipe(Effect.orDie)

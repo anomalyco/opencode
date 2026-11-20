@@ -56,6 +56,8 @@ it.live("syncs requested spaces to another client, catching up from revisions ac
       fs: { filewatcher: false },
     })
 
+    // Issued by the database, so it survives the restart below.
+    let epoch = ""
     yield* Effect.scoped(
       Effect.gen(function* () {
         const handler = yield* boot
@@ -67,13 +69,20 @@ it.live("syncs requested spaces to another client, catching up from revisions ac
           const reader = await subscribe(handler, "types=session.created&experimental.kv=app&experimental.kv=empty")
           const plain = await subscribe(handler, "")
           expect(await reader.next()).toEqual({ type: "server.connected", data: {} })
-          expect(await reader.next()).toEqual({
+          const first = await reader.next()
+          epoch = (first.data as { epoch: string }).epoch
+          expect(first).toEqual({
             type: "experimental.kv.snapshot",
-            data: { space: "app", revision: 1, entries: [{ key: "draft/1", value: { text: "hi", n: [1, null] } }] },
+            data: {
+              space: "app",
+              epoch,
+              revision: 1,
+              entries: [{ key: "draft/1", value: { text: "hi", n: [1, null] } }],
+            },
           })
           expect(await reader.next()).toEqual({
             type: "experimental.kv.snapshot",
-            data: { space: "empty", revision: 0, entries: [] },
+            data: { space: "empty", epoch, revision: 0, entries: [] },
           })
           expect(await plain.next()).toEqual({ type: "server.connected", data: {} })
 
@@ -103,27 +112,33 @@ it.live("syncs requested spaces to another client, catching up from revisions ac
           await writer.experimental.kv.delete({ space: "app", key: "draft/3" })
           await writer.experimental.kv.delete({ space: "app", key: "draft/1" })
 
-          // One stream mixes a delta, an unusable cursor, an empty delta and a cursor this server never issued.
+          // One stream mixes a delta, an unusable cursor, an empty delta, a revision this server never issued and
+          // another database's epoch.
           const reconnected = await subscribe(
             handler,
-            "experimental.kv=app:3&experimental.kv=other:x&experimental.kv=empty:0&experimental.kv=ahead:99",
+            `experimental.kv=app:${epoch}.3&experimental.kv=other:x&experimental.kv=empty:${epoch}.0` +
+              `&experimental.kv=ahead:${epoch}.99&experimental.kv=elsewhere:another-epoch.0`,
           )
           await reconnected.next()
           expect(await reconnected.next()).toEqual({
             type: "experimental.kv.delta",
-            data: { space: "app", revision: 7, entries: [{ key: "draft/2", value: 4 }], deleted: ["draft/3"] },
+            data: { space: "app", epoch, revision: 7, entries: [{ key: "draft/2", value: 4 }], deleted: ["draft/3"] },
           })
           expect(await reconnected.next()).toEqual({
             type: "experimental.kv.snapshot",
-            data: { space: "other", revision: 2, entries: [{ key: "draft/1", value: "unseen" }] },
+            data: { space: "other", epoch, revision: 2, entries: [{ key: "draft/1", value: "unseen" }] },
           })
           expect(await reconnected.next()).toEqual({
             type: "experimental.kv.delta",
-            data: { space: "empty", revision: 0, entries: [], deleted: [] },
+            data: { space: "empty", epoch, revision: 0, entries: [], deleted: [] },
           })
           expect(await reconnected.next()).toEqual({
             type: "experimental.kv.snapshot",
-            data: { space: "ahead", revision: 0, entries: [] },
+            data: { space: "ahead", epoch, revision: 0, entries: [] },
+          })
+          expect(await reconnected.next()).toEqual({
+            type: "experimental.kv.snapshot",
+            data: { space: "elsewhere", epoch, revision: 0, entries: [] },
           })
           await writer.experimental.kv.set({ space: "app", key: "draft/4", value: true })
           expect(await reconnected.next()).toEqual({
@@ -153,15 +168,15 @@ it.live("syncs requested spaces to another client, catching up from revisions ac
 
     const handler = yield* boot
     yield* Effect.promise(async () => {
-      const reader = await subscribe(handler, "experimental.kv=app:7&experimental.kv=other:2")
+      const reader = await subscribe(handler, `experimental.kv=app:${epoch}.7&experimental.kv=other:${epoch}.2`)
       await reader.next()
       expect(await reader.next()).toEqual({
         type: "experimental.kv.delta",
-        data: { space: "app", revision: 8, entries: [{ key: "draft/4", value: true }], deleted: [] },
+        data: { space: "app", epoch, revision: 8, entries: [{ key: "draft/4", value: true }], deleted: [] },
       })
       expect(await reader.next()).toEqual({
         type: "experimental.kv.delta",
-        data: { space: "other", revision: 2, entries: [], deleted: [] },
+        data: { space: "other", epoch, revision: 2, entries: [], deleted: [] },
       })
       await client(handler, { authorization }).experimental.kv.delete({ space: "app", key: "draft/4" })
       expect(await reader.next()).toEqual({

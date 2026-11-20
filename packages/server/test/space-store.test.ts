@@ -54,6 +54,13 @@ const take = (live: Stream.Stream<string, EventFeed.Error>, count: number) =>
 
 const now = { startImmediately: true } as const
 
+const collect = (store: SpaceStore.Interface, requests: ReadonlyArray<SpaceStore.Request>) =>
+  Stream.fromIterable(requests).pipe(
+    Stream.flatMap((request) => store.read(request)),
+    Stream.runCollect,
+    Effect.map((items) => Array.from(items)),
+  )
+
 it.live("delivers concurrent writes to one space in revision order", () =>
   Effect.gen(function* () {
     const { boot } = yield* setup
@@ -71,13 +78,16 @@ it.live("delivers concurrent writes to one space in revision order", () =>
     )
 
     const [snapshot, ...changes] = yield* take(live, writes.length + 1)
-    expect(snapshot).toEqual({ type: "experimental.kv.snapshot", data: { space: "app", revision: 0, entries: [] } })
+    expect(snapshot).toEqual({
+      type: "experimental.kv.snapshot",
+      data: { space: "app", epoch: store.epoch, revision: 0, entries: [] },
+    })
     expect(changes.map((change) => change.data)).toEqual(
       writes.map((_, index) => expect.objectContaining({ space: "app", revision: index + 1 })),
     )
     // The last change of each key is the value read back.
     const last = new Map(changes.map((change) => [change.data.key, change.data.value]))
-    const [state] = yield* store.read([{ space: "app" }])
+    const [state] = yield* collect(store, [{ space: "app" }])
     expect(new Map(state.data.entries.map((entry) => [entry.key, entry.value]))).toEqual(last)
   }),
 )
@@ -94,7 +104,7 @@ it.live("a write held before delivery blocks neither subscribers, readers nor ot
     yield* Deferred.await(pending.reached)
     // "new" (revision 3) is committed but not yet delivered, and the space's lock is held.
     const fresh = yield* feed.subscribe(undefined, [{ space: "app" }])
-    const resumed = yield* feed.subscribe(undefined, [{ space: "app", since: 2 }])
+    const resumed = yield* feed.subscribe(undefined, [{ space: "app", epoch: store.epoch, since: 2 }])
     yield* store.set("other", "x", 1)
     const next = yield* store.set("app", "k", "newer").pipe(Effect.forkChild(now))
     yield* Deferred.succeed(pending.release, undefined)
@@ -112,6 +122,7 @@ it.live("a write held before delivery blocks neither subscribers, readers nor ot
         type: "experimental.kv.snapshot",
         data: {
           space: "app",
+          epoch: store.epoch,
           revision: 3,
           entries: [
             { key: "gone", value: 1 },
@@ -124,7 +135,7 @@ it.live("a write held before delivery blocks neither subscribers, readers nor ot
     expect(yield* take(resumed, 3)).toEqual([
       {
         type: "experimental.kv.delta",
-        data: { space: "app", revision: 3, entries: [{ key: "k", value: "new" }], deleted: [] },
+        data: { space: "app", epoch: store.epoch, revision: 3, entries: [{ key: "k", value: "new" }], deleted: [] },
       },
       ...after,
     ])
@@ -136,10 +147,9 @@ it.live("writes on either side of a subscription's read reach it exactly once", 
     const { boot } = yield* setup
     const { store, feed } = yield* boot((store) => ({
       ...store,
-      read: (requests) =>
-        store.set("app", "k", "before read").pipe(
-          Effect.andThen(store.read(requests)),
-          Effect.tap(() => store.set("app", "k", "after read")),
+      read: (request) =>
+        Stream.unwrap(store.set("app", "k", "before read").pipe(Effect.as(store.read(request)))).pipe(
+          Stream.concat(Stream.fromEffect(store.set("app", "k", "after read")).pipe(Stream.drain)),
         ),
     }))
     const live = yield* feed.subscribe(undefined, [{ space: "app" }])
@@ -148,7 +158,7 @@ it.live("writes on either side of a subscription's read reach it exactly once", 
     expect(yield* take(live, 3)).toEqual([
       {
         type: "experimental.kv.snapshot",
-        data: { space: "app", revision: 1, entries: [{ key: "k", value: "before read" }] },
+        data: { space: "app", epoch: store.epoch, revision: 1, entries: [{ key: "k", value: "before read" }] },
       },
       { type: "experimental.kv.updated", data: { space: "app", key: "k", value: "after read", revision: 2 } },
       { type: "experimental.kv.updated", data: { space: "app", key: "k", value: "later", revision: 3 } },
@@ -175,20 +185,23 @@ it.live("catches each space up from its revision: final values and deletions, el
     yield* store.remove("app", "back")
     yield* store.set("app", "back", "b")
 
+    const epoch = store.epoch
     expect(
-      yield* store.read([
-        { space: "app", since: 3 },
-        { space: "other", since: 1 },
+      yield* collect(store, [
+        { space: "app", epoch, since: 3 },
+        { space: "other", epoch, since: 1 },
         { space: "fresh" },
-        { space: "ahead", since: 9 },
-        { space: "zero", since: 0 },
-        { space: "app", since: 9 },
+        { space: "ahead", epoch, since: 9 },
+        { space: "zero", epoch, since: 0 },
+        { space: "app", epoch, since: 9 },
+        { space: "app", epoch: "another-database", since: 9 },
       ]),
     ).toEqual([
       {
         type: "experimental.kv.delta",
         data: {
           space: "app",
+          epoch,
           revision: 9,
           entries: [
             { key: "churn", value: 3 },
@@ -197,11 +210,24 @@ it.live("catches each space up from its revision: final values and deletions, el
           deleted: ["doomed"],
         },
       },
-      { type: "experimental.kv.delta", data: { space: "other", revision: 1, entries: [], deleted: [] } },
-      { type: "experimental.kv.snapshot", data: { space: "fresh", revision: 0, entries: [] } },
-      { type: "experimental.kv.snapshot", data: { space: "ahead", revision: 0, entries: [] } },
-      { type: "experimental.kv.delta", data: { space: "zero", revision: 0, entries: [], deleted: [] } },
-      { type: "experimental.kv.delta", data: { space: "app", revision: 9, entries: [], deleted: [] } },
+      { type: "experimental.kv.delta", data: { space: "other", epoch, revision: 1, entries: [], deleted: [] } },
+      { type: "experimental.kv.snapshot", data: { space: "fresh", epoch, revision: 0, entries: [] } },
+      { type: "experimental.kv.snapshot", data: { space: "ahead", epoch, revision: 0, entries: [] } },
+      { type: "experimental.kv.delta", data: { space: "zero", epoch, revision: 0, entries: [], deleted: [] } },
+      { type: "experimental.kv.delta", data: { space: "app", epoch, revision: 9, entries: [], deleted: [] } },
+      {
+        type: "experimental.kv.snapshot",
+        data: {
+          space: "app",
+          epoch,
+          revision: 9,
+          entries: [
+            { key: "kept", value: "v1" },
+            { key: "churn", value: 3 },
+            { key: "back", value: "b" },
+          ],
+        },
+      },
     ])
   }),
 )
@@ -216,13 +242,20 @@ it.live("a restarted store resumes revisions and catch-up from storage alone", (
 
     // A new process over the same database. Its first write must not reuse a revision, even the tombstone's.
     const after = yield* boot()
+    expect(after.store.epoch).toBe(before.store.epoch)
     yield* after.store.set("app", "j", "c")
-    const live = yield* after.feed.subscribe(undefined, [{ space: "app", since: 1 }])
+    const live = yield* after.feed.subscribe(undefined, [{ space: "app", epoch: after.store.epoch, since: 1 }])
     yield* after.store.set("app", "k", "d")
     expect(yield* take(live, 2)).toEqual([
       {
         type: "experimental.kv.delta",
-        data: { space: "app", revision: 4, entries: [{ key: "j", value: "c" }], deleted: ["k"] },
+        data: {
+          space: "app",
+          epoch: after.store.epoch,
+          revision: 4,
+          entries: [{ key: "j", value: "c" }],
+          deleted: ["k"],
+        },
       },
       { type: "experimental.kv.updated", data: { space: "app", key: "k", value: "d", revision: 5 } },
     ])
@@ -243,16 +276,49 @@ it.live("sends kv events only to subscribers of their space and leaves other eve
     yield* bus.publish(Agent.Event.Updated, {})
 
     expect(yield* take(app, 3)).toEqual([
-      { type: "experimental.kv.snapshot", data: { space: "app", revision: 0, entries: [] } },
+      { type: "experimental.kv.snapshot", data: { space: "app", epoch: store.epoch, revision: 0, entries: [] } },
       { type: "experimental.kv.updated", data: { space: "app", key: "k", value: { n: 1 }, revision: 1 } },
       { type: "agent.updated", data: {} },
     ])
     expect(yield* take(other, 2)).toEqual([
-      { type: "experimental.kv.snapshot", data: { space: "other", revision: 0, entries: [] } },
+      { type: "experimental.kv.snapshot", data: { space: "other", epoch: store.epoch, revision: 0, entries: [] } },
       { type: "agent.updated", data: {} },
     ])
     expect(yield* take(plain, 1)).toEqual([{ type: "agent.updated", data: {} }])
     // Changes never pass through the bus, which is where plugins listen.
     expect(seen).toEqual([Agent.Event.Updated.type])
+  }),
+)
+
+it.live("sends a large space in batches, each covering every change up to its revision", () =>
+  Effect.gen(function* () {
+    const { boot } = yield* setup
+    const { store, feed } = yield* boot()
+    const count = SpaceStore.BatchSize * 2 + 1
+    yield* Effect.forEach(
+      Array.from({ length: count }, (_, index) => index),
+      (index) => store.set("big", `k${index}`, index),
+      {
+        discard: true,
+      },
+    )
+    yield* store.remove("big", "k0")
+
+    const live = yield* feed.subscribe(undefined, [{ space: "big" }])
+    yield* store.set("big", "after", true)
+    const [first, second, third, change] = yield* take(live, 4)
+    expect(
+      [first, second, third].map((batch) => [batch?.type, batch?.data.revision, batch?.data.entries.length]),
+    ).toEqual([
+      ["experimental.kv.snapshot", SpaceStore.BatchSize + 1, SpaceStore.BatchSize],
+      ["experimental.kv.delta", SpaceStore.BatchSize * 2 + 1, SpaceStore.BatchSize],
+      ["experimental.kv.delta", count + 1, 0],
+    ])
+    // k0 became a tombstone after the first batch's revisions, so the last batch reports the deletion.
+    expect(third?.data.deleted).toEqual(["k0"])
+    expect(change).toEqual({
+      type: "experimental.kv.updated",
+      data: { space: "big", key: "after", value: true, revision: count + 2 },
+    })
   }),
 )

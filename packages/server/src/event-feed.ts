@@ -129,10 +129,14 @@ export const make = Effect.fn("EventFeed.make")(function* (
           Stream.filter((frame) => !frame.change || frame.change.revision > (revisions.get(frame.change.space) ?? 0)),
           Stream.map((frame) => frame.text),
         )
-        if (!options?.spaces || !requests?.length) return live
+        const spaces = options?.spaces
+        if (!spaces || !requests?.length) return live
         // Read only after registering: a change committed meanwhile is then in the initial state, the queue or both,
         // and never missed. Writers do not wait for this.
-        const initial = yield* options.spaces.read(requests)
+        const initial = yield* Stream.fromIterable(requests).pipe(
+          Stream.flatMap((request) => spaces.read(request)),
+          Stream.runCollect,
+        )
         for (const item of initial) revisions.set(item.data.space, item.data.revision)
         const created = yield* Clock.currentTimeMillis
         return Stream.fromIterable(initial).pipe(

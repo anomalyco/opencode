@@ -55,7 +55,7 @@ const query = <const Definitions extends ReadonlyArray<Definition>>(definitions:
     }),
     "experimental.kv": Schema.optional(Schema.ArrayEnsure(Space.Subscription)).annotate({
       description:
-        "Experimental: spaces to sync, each as `space` or `space:revision`. After server.connected, sends per space an experimental.kv.delta with the keys changed since that revision when it is one this server issued, otherwise an experimental.kv.snapshot; then every later experimental.kv.updated and experimental.kv.deleted in those spaces, with nothing missed or repeated. experimental.kv.* events reach only subscribers that request their space, whatever `types` says.",
+        "Experimental: spaces to sync, each as `space` or `space:epoch.revision` from that space's last applied event. After server.connected, sends per space experimental.kv.delta batches with the keys changed since that revision when this database issued it, otherwise an experimental.kv.snapshot batch followed by deltas; then every later experimental.kv.updated and experimental.kv.deleted in those spaces, with nothing missed or repeated. experimental.kv.* events reach only subscribers that request their space, whatever `types` says.",
     }),
   }).annotate({ identifier: "EventSubscribeQuery" })
 

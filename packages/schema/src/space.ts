@@ -32,20 +32,29 @@ export const Entry = Schema.Struct({ key: Key, value: Value }).annotate({ identi
 export const Revision = NonNegativeInt.annotate({ identifier: "Space.Revision" })
 export type Revision = typeof Revision.Type
 
-/** A space to subscribe to, optionally followed by `:` and the last revision the client applied. */
+/** A space to subscribe to, optionally followed by `:`, the epoch, `.` and the last revision the client applied. */
 export const Subscription = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9._-]{1,128}(:.*)?$/u)).annotate({
   identifier: "Space.Subscription",
 })
 
-/** Every entry of a space, sent when a stream opens without a usable revision for it. Never published on the bus. */
+/** Identifies the database that issued a space's revisions; a revision is only usable with the same epoch. */
+export const Epoch = Schema.String.annotate({ identifier: "Space.Epoch" })
+
+/**
+ * The first batch of a space's entries, sent when a stream opens without a usable revision for it: the client drops
+ * what it held for the space. Later batches arrive as deltas. Never published on the bus.
+ */
 const Snapshot = ephemeral({
   type: "experimental.kv.snapshot",
-  schema: { space: Name, revision: Revision, entries: Schema.Array(Entry) },
+  schema: { space: Name, epoch: Epoch, revision: Revision, entries: Schema.Array(Entry) },
 })
-/** Final values of the keys changed after the requested revision, and the keys deleted since. Never published on the bus. */
+/**
+ * Final values of the keys changed after the previous revision, and the keys deleted since, in batches. Each batch
+ * covers every change up to its revision. Never published on the bus.
+ */
 const Delta = ephemeral({
   type: "experimental.kv.delta",
-  schema: { space: Name, revision: Revision, entries: Schema.Array(Entry), deleted: Schema.Array(Key) },
+  schema: { space: Name, epoch: Epoch, revision: Revision, entries: Schema.Array(Entry), deleted: Schema.Array(Key) },
 })
 const Updated = ephemeral({
   type: "experimental.kv.updated",
