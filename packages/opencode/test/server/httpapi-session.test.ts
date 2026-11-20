@@ -428,6 +428,65 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "preserves session routing when prompt_async omits agent, model, and variant",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* createSession({ title: "prompt routing" })
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const path = pathFor(SessionPaths.promptAsync, { sessionID: session.id })
+
+        const first = yield* request(path, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            agent: "plan",
+            model: { providerID: "test", modelID: "test-model" },
+            variant: "medium",
+            parts: [{ type: "text", text: "first" }],
+            noReply: true,
+          }),
+        })
+        expect(first.status).toBe(204)
+        yield* pollWithTimeout(
+          requestJson<SessionV1.WithParts[]>(pathFor(SessionPaths.messages, { sessionID: session.id }), {
+            headers,
+          }).pipe(
+            Effect.map((messages) => {
+              const prompts = messages.filter((message) => message.info.role === "user")
+              return prompts.length === 1 ? prompts : undefined
+            }),
+          ),
+          "timed out waiting for the first prompt_async message",
+        )
+
+        const second = yield* request(path, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ parts: [{ type: "text", text: "second" }], noReply: true }),
+        })
+        expect(second.status).toBe(204)
+
+        const users = yield* pollWithTimeout(
+          requestJson<SessionV1.WithParts[]>(pathFor(SessionPaths.messages, { sessionID: session.id }), {
+            headers,
+          }).pipe(
+            Effect.map((messages) => {
+              const prompts = messages.filter((message) => message.info.role === "user")
+              return prompts.length === 2 ? prompts : undefined
+            }),
+          ),
+          "timed out waiting for both prompt_async messages",
+        )
+        expect(users.at(-1)?.info).toMatchObject({
+          agent: "plan",
+          model: { providerID: "test", modelID: "test-model", variant: "medium" },
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns v2 public request errors for cursor and workspace query failures",
     () =>
       Effect.gen(function* () {

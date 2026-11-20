@@ -633,7 +633,13 @@ const layer = Layer.effect(
     })
 
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
-      const agentName = input.agent
+      const current = yield* db
+        .select({ agent: SessionTable.agent, model: SessionTable.model })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, input.sessionID))
+        .get()
+        .pipe(Effect.orDie)
+      const agentName = input.agent ?? current?.agent
       const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!ag) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
@@ -651,7 +657,13 @@ const layer = Layer.effect(
               .getModel(model.providerID, model.modelID)
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
-      const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+      const sessionVariant =
+        current?.model?.providerID === model.providerID &&
+        current.model.id === model.modelID &&
+        current.model.variant !== "default"
+          ? current.model.variant
+          : undefined
+      const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : sessionVariant)
 
       const info: SessionV1.User = {
         id: input.messageID ?? MessageID.ascending(),
@@ -669,9 +681,8 @@ const layer = Layer.effect(
         format: input.format,
       }
 
-      const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       if (
-        current.agent !== info.agent ||
+        current?.agent !== info.agent ||
         current.model?.providerID !== info.model.providerID ||
         current.model?.id !== info.model.modelID ||
         (current.model?.variant === "default" ? undefined : current.model?.variant) !== info.model.variant
