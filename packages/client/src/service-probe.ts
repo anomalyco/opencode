@@ -55,18 +55,16 @@ export function parseRegistration(text: string): Info | undefined {
   const value = parseJson(text)
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
   if (!("url" in value) || typeof value.url !== "string" || !isServiceUrl(value.url)) return undefined
+  // A non-positive PID would make stop() signal a process group or every process the user owns.
   if (!("pid" in value) || typeof value.pid !== "number" || !Number.isInteger(value.pid) || value.pid <= 0)
     return undefined
-  if ("id" in value && typeof value.id !== "string") return undefined
-  if ("version" in value && typeof value.version !== "string") return undefined
-  if ("password" in value && typeof value.password !== "string") return undefined
-  return {
-    ...("id" in value && typeof value.id === "string" ? { id: value.id } : {}),
-    ...("version" in value && typeof value.version === "string" ? { version: value.version } : {}),
-    url: value.url,
-    pid: value.pid,
-    ...("password" in value && typeof value.password === "string" ? { password: value.password } : {}),
-  }
+  const id = "id" in value ? value.id : undefined
+  const version = "version" in value ? value.version : undefined
+  const password = "password" in value ? value.password : undefined
+  if (id !== undefined && typeof id !== "string") return undefined
+  if (version !== undefined && typeof version !== "string") return undefined
+  if (password !== undefined && typeof password !== "string") return undefined
+  return { id, version, url: value.url, pid: value.pid, password }
 }
 
 /** Ask a registered owner for its health and classify the answer. */
@@ -130,10 +128,10 @@ function decodeInfo(input: unknown) {
   return { version: input.version, pid: input.pid }
 }
 
+// Only HTTP(S): fetch() would read a file:// registration URL from disk.
 function probeUrl(value: string) {
-  if (!URL.canParse("/api/info", value)) return undefined
-  const url = new URL("/api/info", value)
-  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
+  const url = URL.parse("/api/info", value)
+  if (url?.protocol !== "http:" && url?.protocol !== "https:") return undefined
   return url
 }
 
