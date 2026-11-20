@@ -57,7 +57,11 @@ Children may contain null or false (for \`cond && node\`) and nested arrays. Eve
 
 export const Input = Schema.Struct({
   template: Schema.String.annotate({ description: 'Template name, such as "suggestions", "form" or "confirm"' }),
-  data: Schema.Json.annotate({ description: "Data for the template, matching its JSON Schema" }),
+  // An object schema, not `Schema.Json`: models often send `data` as a JSON string, and the input repair only
+  // parses it back when the schema says object.
+  data: Schema.Record(Schema.String, Schema.Json).annotate({
+    description: "Data for the template (a JSON object, not a string), matching its JSON Schema",
+  }),
   title: Schema.String.pipe(optional).annotate({ description: "Short title of the widget, used in the transcript" }),
 })
 
@@ -69,7 +73,9 @@ export const TemplateInput = Schema.Struct({
     description: 'JSON Schema (type "object") of the data the template takes, for save',
   }),
   source: Schema.String.pipe(optional).annotate({ description: "The template source, for save" }),
-  example: Schema.Json.pipe(optional).annotate({ description: "Example data to test the template with, for save" }),
+  example: Schema.Record(Schema.String, Schema.Json)
+    .pipe(optional)
+    .annotate({ description: "Example data (a JSON object) to test the template with, for save" }),
 })
 
 export const shownText = (title: string) =>

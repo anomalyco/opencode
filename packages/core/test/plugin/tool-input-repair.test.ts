@@ -7,6 +7,8 @@ import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { Tool } from "@opencode/schema/tool"
 import { Effect, type JsonSchema } from "effect"
 import { it } from "../lib/effect"
+import { definition } from "@opencode/core/tool/runtime"
+import { WidgetTools } from "@opencode/core/tool/plugin/widget"
 import { host } from "./host"
 
 function run(input: unknown, inputSchema: JsonSchema.JsonSchema) {
@@ -452,6 +454,19 @@ describe("tool input repair plugin", () => {
       expect(event.input).toBe(input)
       expect((yield* run(input, { properties: { numeric: { type: "integer" } } })).input).toBe(input)
       expect((yield* run(input, { allOf: [object({ numeric: { type: "integer" } })] })).input).toBe(input)
+    }),
+  )
+  it.effect("parses the widget tool's stringified data back into an object", () =>
+    Effect.gen(function* () {
+      const schema = definition({
+        name: "widget",
+        description: "",
+        input: WidgetTools.Input,
+        execute: () => Effect.succeed({ content: "unused" }),
+      }).inputSchema
+      const data = { title: "Pick one", options: [{ label: "A", images: ["https://example.com/a.jpg"] }] }
+      const event = yield* run({ template: "suggestions", data: JSON.stringify(data) }, schema)
+      expect(event.input).toEqual({ template: "suggestions", data })
     }),
   )
 })
