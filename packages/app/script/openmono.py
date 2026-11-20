@@ -12,10 +12,10 @@
 # - the Regular build's icons file, once, for all styles: the icons are the same in every style.
 #
 # The split follows the websites' rules (services/site/script/openmono.py): the same Latin and Cyrillic blocks, the
-# stress marks in the Cyrillic file too, and the same subsetting options, which keep only the layout features for
-# accents. Three things differ, because the app also draws a terminal: no character is left out (the sites drop ⇧),
-# the Italic has a Cyrillic file too, and the ranges around the Powerline characters are exact, because the icons
-# file has the code points between them.
+# shortcut keys in the Latin file, the stress marks in the Cyrillic file too, and the same subsetting options, which
+# keep only the layout features for accents. Both scripts make the same files, byte for byte. Only the unicode-range
+# values in the stylesheets differ: the websites' run across code points the font lacks, to keep their stylesheet
+# short, and the app's do so in fewer blocks, because its icons file has code points between text characters.
 #
 # Every input is read and checked and every file is built in a temporary folder first, so a build that is incomplete
 # or does not match the @font-face rules in src/index.css leaves the checkout as it was. The same input files give
@@ -35,6 +35,9 @@ app = Path(__file__).resolve().parent.parent
 out = app / "src/assets/fonts"
 styles = ["Regular", "Bold", "Italic"]
 latin = [(0x0000, 0x017F), (0x2000, 0x206F), (0x20AC, 0x20AC), (0x2122, 0x2122), (0x2190, 0x21FF), (0x2212, 0x2212), (0x2500, 0x25FF)]
+# The keys that shortcuts name (⌃ ⌘ ⌥ ⌫ ⎋ ⏎), which are in the Latin file too, as on the websites: a hint such as
+# ⌘K set in the code font would otherwise load the "rest" file for one character.
+keys = {0x2303, 0x2318, 0x2325, 0x232B, 0x238B, 0x23CE}
 cyrillic = [(0x0400, 0x052F), (0x1C80, 0x1C8F), (0x2DE0, 0x2DFF), (0xA640, 0xA69F)]
 # The stress marks, which the Cyrillic file has too: a stressed letter such as у́ has no code point of its own, and a
 # browser sets a letter and its mark from one file or falls back for both. (A Latin letter with one of them has a
@@ -117,8 +120,8 @@ with tempfile.TemporaryDirectory() as folder:
             stop(f"{path} is not the one-cell build: {ranges(wide)} are not 600 units wide")
         codes = set(font.getBestCmap())
         groups = {
-            "latin": {code for code in codes if within(code, latin)},
-            "rest": {code for code in codes if not within(code, latin + cyrillic)},
+            "latin": {code for code in codes if within(code, latin) or code in keys},
+            "rest": {code for code in codes if not within(code, latin + cyrillic) and code not in keys},
             "cyrillic": {code for code in codes if within(code, cyrillic) or code in stress},
         }
         for group, chars in groups.items():
@@ -171,7 +174,11 @@ with tempfile.TemporaryDirectory() as folder:
             taken = {other: rule["range"] & members[other] - members[group] for other in named if other != group}
             if outside:
                 wrong.append(f"{file} ({style}): {ranges(outside)} are not in the unicode-range of its rule. Its range is\n  unicode-range: {ranges(members[group])};")
-            wrong.extend(f"{file} ({style}): its rule's unicode-range takes {ranges(codes)} from the {other} file" for other, codes in taken.items() if codes)
+            wrong.extend(
+                f"{file} ({style}): its rule's unicode-range takes {ranges(codes)} from the {other} file. Its range is\n  unicode-range: {ranges(members[group])};"
+                for other, codes in taken.items()
+                if codes
+            )
     if wrong:
         stop("The @font-face rules in src/index.css do not match the characters of this build:", wrong)
 
