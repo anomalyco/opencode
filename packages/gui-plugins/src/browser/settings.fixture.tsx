@@ -1,9 +1,9 @@
 import { DialogProvider, useDialog } from "@opencode/ui/context/dialog"
-import type { JSX } from "solid-js"
+import type { Component, JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { render } from "solid-js/web"
 import { liveAccessor, PluginContext } from "@opencode/plugin/gui/host"
-import type { Context, SetupContext, Ui } from "@opencode/plugin/gui"
+import type { ConfirmOptions, Context, SetupContext, Ui } from "@opencode/plugin/gui"
 import browserEn from "./i18n/en"
 import type definition from "./index"
 import type { ExtensionAccess, ExtensionCompatibility, ImportResult, InstallResult, ProfileSource } from "./profile/ipc"
@@ -22,6 +22,12 @@ const badge = (bg: string, fg: string, glyph: string) =>
   `data:image/svg+xml,${encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" rx="4" fill="${bg}"/>${glyph.replaceAll("FG", fg)}</svg>`,
   )}`
+
+/** What the fixture takes from the app, which this package cannot import. */
+type SettingsHost = {
+  readonly Confirm: Component<{ options: ConfirmOptions; done: (confirmed: boolean) => void }>
+  readonly LanguageProvider: Component<{ locale: string; children: JSX.Element }>
+}
 
 const sampleSources: readonly ProfileSource[] = [
   { id: "helium", name: "Helium", engine: "chromium", profiles: [{ id: "Default", name: "Default" }] },
@@ -78,13 +84,17 @@ const sampleExtensionEntries: readonly (readonly [string, readonly SampleExtensi
 // which stays set for the whole visit, as the host leaves it. With `extensions`, Chromium browsers and their extensions
 // are populated so the real Add an extension dialog can be driven end to end. `historyKept` is a sign-out that left
 // main's history behind: its file could not be removed. `file` is what importing the cookie file the person picks
-// brings: how many cookies came and how many could not be imported, or that the file could not be read.
+// brings: how many cookies came and how many could not be imported, or that the file could not be read. `clearFails`
+// is main rejecting the clear. `host` is the app's own confirmation dialog, which `Dialogs.confirm` shows, with the
+// language it reads its default labels from.
 export function mountBrowserSettings(input: {
   ui: Ui
+  host: SettingsHost
   target?: string
   extensions?: boolean
   installed?: boolean
   historyKept?: boolean
+  clearFails?: boolean
   file?: { imported: number; failed: number } | "unreadable"
 }) {
   const host = document.createElement("main")
@@ -104,6 +114,9 @@ export function mountBrowserSettings(input: {
     links: true,
     welcomed: true,
   })
+
+  // How often main was asked to clear the browsing data.
+  const [calls, setCalls] = createStore({ clear: 0 })
 
   // The window's list of the last pages, which a sign-out empties.
   const [history, setHistory] = createStore<{ visits: readonly { url: string; title: string }[] }>({
@@ -134,7 +147,13 @@ export function mountBrowserSettings(input: {
     on: () => () => undefined,
     sources: async () => (input.extensions ? [...sampleSources] : []),
     summary: async () => ({ cookies: 0, persistent: true }),
-    clear: async () => ({ history: !input.historyKept }),
+    clear: async () => {
+      setCalls("clear", (count) => count + 1)
+
+      if (input.clearFails) throw new Error("the profile could not be cleared")
+
+      return { history: !input.historyKept }
+    },
     importFile: async (): Promise<ImportResult> => {
       if (input.file === "unreadable") return { type: "failed", reason: "read" }
 
@@ -227,6 +246,24 @@ export function mountBrowserSettings(input: {
 
           return handle
         },
+        // As the host does: the content's answer, or no once the dialog ends without one; the first wins.
+        confirm: (options: ConfirmOptions) =>
+          new Promise<boolean>((resolve) =>
+            dialog.show(
+              () => (
+                <input.host.LanguageProvider locale="en">
+                  <input.host.Confirm
+                    options={options}
+                    done={(confirmed) => {
+                      resolve(confirmed)
+                      dialog.close()
+                    }}
+                  />
+                </input.host.LanguageProvider>
+              ),
+              () => resolve(false),
+            ),
+          ),
       },
       stores: {
         preferences: {
@@ -248,6 +285,7 @@ export function mountBrowserSettings(input: {
         <BrowserSettings target={input.target} />
         <output data-testid="browser-settings-stored">{JSON.stringify(preferences)}</output>
         <output data-testid="browser-settings-visits">{history.visits.length}</output>
+        <output data-testid="browser-settings-clears">{calls.clear}</output>
       </PluginContext.Provider>
     )
   }

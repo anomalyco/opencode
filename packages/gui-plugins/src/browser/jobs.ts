@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, untrack } from "solid-js"
+import { createSignal, getOwner, onCleanup, runWithOwner, untrack } from "solid-js"
 import { createKeyed, createLatest, usePlugin, type IpcClient } from "@opencode/plugin/gui"
 import type { Choice } from "./choices"
 import type definition from "./index"
@@ -69,6 +69,18 @@ export function createProfileJobs(
     return current.status === "active" ? `${current.generation}:${version()}` : undefined
   }
 
+  // A question belongs to the surface that asked, so it goes with it.
+  const owner = getOwner()
+
+  // What the person is asked before the one job that deletes: clearing the browsing data.
+  const question = () => ({
+    title: ctx.t("settings.clear.confirm.title"),
+    description: ctx.t("settings.clear.confirm.description"),
+    confirm: ctx.t("settings.clear.confirm.action"),
+    cancel: ctx.t("common.cancel"),
+    danger: true,
+  })
+
   const dispatch = (event: JobsEvent) => {
     const next = transitionJobs(untrack(state), event)
     setState(next.state)
@@ -76,6 +88,19 @@ export function createProfileJobs(
   }
 
   const run = (effect: JobsEffect) => {
+    if (effect.type === "confirm") {
+      const attempt = effect.attempt
+
+      // The app's own confirmation: it starts on Cancel, and Escape or a click outside answers no. It closes with
+      // the surface that asked, which is a no too, as is a question that could not be asked.
+      const asked = runWithOwner(owner, () => ctx.dialogs.confirm(question())) ?? Promise.resolve(false)
+
+      return void asked.then(
+        (confirmed) => dispatch({ type: "answered", attempt, confirmed }),
+        () => dispatch({ type: "answered", attempt, confirmed: false }),
+      )
+    }
+
     if (effect.type === "notify") {
       setVersion((value) => value + 1)
       input.finished?.(effect.finished)
