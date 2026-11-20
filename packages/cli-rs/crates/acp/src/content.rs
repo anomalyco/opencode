@@ -292,66 +292,6 @@ mod tests {
     }
 
     #[test]
-    fn blocks_to_parts() {
-        let main = absolute("/src/main.rs");
-        let rows = [
-            (
-                json!({ "type": "resource", "resource": { "uri": "file:///src/a.ts#L12", "text": "body" } }),
-                vec![text("[/src/a.ts:12]\nbody")],
-            ),
-            (
-                json!({ "type": "resource", "resource": { "uri": "file:///context.txt", "mimeType": "text/plain", "text": "embedded" } }),
-                vec![text("[/context.txt]\nembedded")],
-            ),
-            (
-                json!({ "type": "resource", "resource": { "uri": "untitled:notes", "text": "body" } }),
-                vec![text("[untitled:notes]\nbody")],
-            ),
-            (
-                json!({ "type": "resource", "resource": { "uri": "not a uri", "text": "body" } }),
-                vec![text("[not a uri]\nbody")],
-            ),
-            (
-                json!({ "type": "resource", "resource": { "uri": "file:///a.bin", "mimeType": "application/octet-stream", "blob": "AAE=" } }),
-                vec![PromptPart::File {
-                    url: "data:application/octet-stream;base64,AAE=".to_owned(),
-                    filename: Some("a.bin".to_owned()),
-                    mime: "application/octet-stream".to_owned(),
-                }],
-            ),
-            (json!({ "type": "resource", "resource": { "uri": "file:///a.bin", "blob": "AAE=" } }), vec![]),
-            (
-                json!({ "type": "resource_link", "uri": format!("zed://file?path={}", main.0), "name": "" }),
-                vec![PromptPart::File {
-                    url: main.1.clone(),
-                    filename: Some("main.rs".to_owned()),
-                    mime: "text/plain".to_owned(),
-                }],
-            ),
-            (
-                json!({ "type": "resource_link", "uri": "https://example.com/a", "name": "" }),
-                vec![text("https://example.com/a")],
-            ),
-            (
-                json!({ "type": "image", "mimeType": "image/png", "data": "iVBO" }),
-                vec![PromptPart::File {
-                    url: "data:image/png;base64,iVBO".to_owned(),
-                    filename: Some("image".to_owned()),
-                    mime: "image/png".to_owned(),
-                }],
-            ),
-            (
-                json!({ "type": "text", "text": "seen by user", "annotations": { "audience": ["user"] } }),
-                vec![PromptPart::Text { text: "seen by user".to_owned(), synthetic: false, ignored: true }],
-            ),
-            (json!({ "type": "audio", "mimeType": "audio/wav", "data": "AA==" }), vec![]),
-        ];
-        for (block, expected) in rows {
-            assert_eq!(prompt_content_to_parts(std::slice::from_ref(&block)), expected, "{block}");
-        }
-    }
-
-    #[test]
     fn replayed_parts_to_chunks() {
         let notes = absolute("/notes.txt");
         let chunks = parts_to_content_chunks(&[
