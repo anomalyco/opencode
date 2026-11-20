@@ -1,6 +1,5 @@
 //! Changes to `<state>/session.json` reread the file under its lock so concurrent pins and unrelated fields survive.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
@@ -40,7 +39,7 @@ pub fn set(state: &Path, id: &str, pinned: bool) -> Result<Vec<String>, lock::Er
 }
 
 fn read(file: &Path) -> Map<String, Value> {
-    fs::read_to_string(file)
+    crate::read_lossy(file)
         .ok()
         .and_then(|text| serde_json::from_str::<Value>(&text).ok())
         .and_then(|value| match value {
@@ -61,6 +60,7 @@ fn pinned(document: &Map<String, Value>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn changes_keep_pins_and_fields_written_since() {

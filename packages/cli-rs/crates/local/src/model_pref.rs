@@ -1,6 +1,5 @@
 //! Recent models, favorites and variants in `<state>/model.json`. Locked updates preserve unrelated fields.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
@@ -181,7 +180,7 @@ impl ModelPreferences {
     }
 
     fn read(&self) -> Map<String, Value> {
-        let value = fs::read_to_string(&self.file).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
+        let value = crate::read_lossy(&self.file).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
         decode(value.as_ref())
     }
 

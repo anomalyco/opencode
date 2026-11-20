@@ -119,7 +119,7 @@ impl History {
         if let Err(error) = healed {
             log::warn!("prompt-history.jsonl: {error}");
         }
-        Self { entries: parse_history(&fs::read_to_string(&file).unwrap_or_default()) }
+        Self { entries: parse_history(&crate::read_lossy(&file).unwrap_or_default()) }
     }
 
     pub fn entries(&self) -> &[Value] {
@@ -258,7 +258,7 @@ impl Stash {
         if let Err(error) = healed {
             log::warn!("prompt-stash.jsonl: {error}");
         }
-        Self { state: state.to_path_buf(), entries: parse_stash(&fs::read_to_string(&file).unwrap_or_default()) }
+        Self { state: state.to_path_buf(), entries: parse_stash(&crate::read_lossy(&file).unwrap_or_default()) }
     }
 
     pub fn list(&self) -> &[Value] {
@@ -372,7 +372,7 @@ impl Frecency {
         if let Err(error) = healed {
             log::warn!("frecency.jsonl: {error}");
         }
-        let data = parse_frecency(&fs::read_to_string(&file).unwrap_or_default())
+        let data = parse_frecency(&crate::read_lossy(&file).unwrap_or_default())
             .iter()
             .filter_map(|entry| Some((entry.get("path")?.as_str()?.to_string(), visit(entry)?)))
             .collect();
@@ -472,6 +472,9 @@ mod tests {
             history.append(prompt(&index.to_string()));
         }
         assert_eq!(history.entries().len(), MAX_HISTORY_ENTRIES);
+        // A byte that is not UTF-8 reads as U+FFFD, as Node reads it, rather than emptying the history.
+        fs::write(&file, b"{\"text\":\"caf\xe9\",\"pasted\":[]}\n").unwrap();
+        assert_eq!(History::load(state.path()).entries(), [json!({"text": "caf\u{fffd}", "pasted": []})]);
     }
 
     #[test]
