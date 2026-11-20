@@ -1,6 +1,5 @@
 //! Launches the external editor and realigns mentions to the edited text.
 
-use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
@@ -173,42 +172,43 @@ fn occurrences(content: &str, text: &str, offset: impl Fn(usize) -> u32) -> Vec<
 }
 
 /// Pairs mentions with occurrences in order: the most pairs, then the least total distance from the old offsets
-/// (`assignMentions`).
+/// (`assignMentions`). TS recurses with a memo; this fills the same table bottom-up, as a deep recursion would
+/// overflow the stack on a text with many occurrences.
 fn assign(mut items: Vec<(usize, &Mention)>, candidates: &[Candidate]) -> Vec<(usize, Candidate)> {
     items.sort_by(|left, right| left.1.start.cmp(&right.1.start).then(left.0.cmp(&right.0)));
-    let mut memo = HashMap::new();
-    solve(&items, candidates, 0, 0, &mut memo).2
-}
-
-type Solution = (usize, u64, Vec<(usize, Candidate)>);
-
-fn solve(
-    items: &[(usize, &Mention)],
-    candidates: &[Candidate],
-    item: usize,
-    candidate: usize,
-    memo: &mut HashMap<(usize, usize), Solution>,
-) -> Solution {
-    if item >= items.len() || candidate >= candidates.len() {
-        return (0, 0, Vec::new());
+    // `best[item][candidate]`: the pairs and distance of the items and candidates from these on.
+    let width = candidates.len() + 1;
+    let mut best = vec![(0usize, 0u64); (items.len() + 1) * width];
+    let at = |item: usize, candidate: usize| item * width + candidate;
+    let matched = |best: &[(usize, u64)], item: usize, candidate: usize| {
+        let (pairs, distance) = best[at(item + 1, candidate + 1)];
+        (pairs + 1, distance + u64::from(candidates[candidate].offset.abs_diff(items[item].1.start)))
+    };
+    // TS's order: the matched pair, then skipping the item, then skipping the candidate, each only when strictly better.
+    let better =
+        |next: (usize, u64), best: (usize, u64)| if next.0 != best.0 { next.0 > best.0 } else { next.1 < best.1 };
+    for item in (0..items.len()).rev() {
+        for candidate in (0..candidates.len()).rev() {
+            best[at(item, candidate)] = [best[at(item + 1, candidate)], best[at(item, candidate + 1)]]
+                .into_iter()
+                .fold(matched(&best, item, candidate), |best, next| if better(next, best) { next } else { best });
+        }
     }
-    if let Some(cached) = memo.get(&(item, candidate)) {
-        return cached.clone();
+    // A later choice was taken only when strictly better, so the first choice with the best value is the one taken.
+    let mut pairs = Vec::new();
+    let (mut item, mut candidate) = (0, 0);
+    while item < items.len() && candidate < candidates.len() {
+        let here = best[at(item, candidate)];
+        if here == matched(&best, item, candidate) {
+            pairs.push((items[item].0, candidates[candidate]));
+            (item, candidate) = (item + 1, candidate + 1);
+        } else if here == best[at(item + 1, candidate)] {
+            item += 1;
+        } else {
+            candidate += 1;
+        }
     }
-    let tail = solve(items, candidates, item + 1, candidate + 1, memo);
-    let (index, current) = items[item];
-    let range = candidates[candidate];
-    let mut pairs = vec![(index, range)];
-    pairs.extend(tail.2);
-    let matched = (tail.0 + 1, tail.1 + u64::from(range.offset.abs_diff(current.start)), pairs);
-    let options =
-        [solve(items, candidates, item + 1, candidate, memo), solve(items, candidates, item, candidate + 1, memo)];
-    let best = options.into_iter().fold(matched, |best, next| {
-        let better = if next.0 != best.0 { next.0 > best.0 } else { next.1 < best.1 };
-        if better { next } else { best }
-    });
-    memo.insert((item, candidate), best.clone());
-    best
+    pairs
 }
 
 #[cfg(test)]
@@ -222,6 +222,13 @@ mod tests {
         assert_eq!(normalize("a\nb\n"), "a\nb\n");
         assert_eq!(normalize("a\r\nb\r\n"), "a\r\nb\r\n");
         assert_eq!(normalize("plain"), "plain");
+    }
+
+    #[test]
+    fn a_text_with_many_occurrences_aligns_without_recursing() {
+        let mention = Mention { start: 299_997, end: 299_999, text: "@x".to_owned() };
+        let aligned = realign_mentions(&"@x ".repeat(100_000), &[Some(mention.clone())], |index| index as u32);
+        assert_eq!(aligned, [Some(mention)]);
     }
 
     #[test]
