@@ -89,7 +89,9 @@ function watch(emit: (message: SDKMessage) => void) {
         emit(message)
         return
       }
-      const visible = message.type === "stream_event" || (message.type === "assistant" && !message.error)
+      const visible =
+        message.type === "stream_event" ||
+        (message.type === "assistant" && !message.error && !ClaudeAgentError.isSynthetic(message))
       if (!visible) {
         held.push(message)
         return

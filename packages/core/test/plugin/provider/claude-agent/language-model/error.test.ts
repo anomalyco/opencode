@@ -91,4 +91,107 @@ describe("terminal errors", () => {
     } as const
     expect(ConvertClaudeStream.make([])(empty).at(-1)?.type).toBe("finish")
   })
+
+  test("a non-error synthetic placeholder is ignored and fails the turn when no real reply arrived", () => {
+    const { error: _error, ...base } = assistant()
+    const synthetic: SDKAssistantMessage = {
+      ...base,
+      message: {
+        ...base.message,
+        model: "<synthetic>",
+        stop_reason: "stop_sequence",
+        usage: {
+          ...base.message.usage,
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+        content: [{ type: "text", text: "No response requested.", citations: null }],
+      },
+    }
+    const convert = ConvertClaudeStream.make([])
+    expect(convert(synthetic)).toEqual([])
+    const result = {
+      ...Recorder.result("text"),
+      subtype: "success",
+      is_error: false,
+      api_error_status: null,
+      stop_reason: "stop_sequence",
+      result: "No response requested.",
+      usage: {
+        ...Recorder.result("text").usage,
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+    } as const
+    const parts = convert(result)
+    expect(parts).toEqual([{ type: "error", error: expect.any(Error) }])
+    if (parts[0]?.type === "error") expect(String(parts[0].error)).toContain("Claude Code returned no response.")
+    expect(parts.some((part) => part.type === "finish" || part.type === "text-delta")).toBe(false)
+
+    // Billing/API synthetic errors still surface their actual error message.
+    const billing = ConvertClaudeStream.make([])
+    expect(billing({ ...assistant(), error: "billing_error" } as const)).toEqual([])
+    const billingParts = billing({
+      ...Recorder.result("api-error"),
+      subtype: "success",
+      is_error: true,
+      api_error_status: 400,
+      result: "Credit balance is too low",
+    } as const)
+    expect(billingParts).toEqual([{ type: "error", error: expect.any(Error) }])
+    if (billingParts[0]?.type === "error") expect(String(billingParts[0].error)).toContain("Credit balance is too low")
+  })
+
+  test("a trailing synthetic placeholder after real text does not emit text or zero out usage", () => {
+    const { error: _error, ...base } = assistant()
+    const synthetic: SDKAssistantMessage = {
+      ...base,
+      uuid: crypto.randomUUID(),
+      message: {
+        ...base.message,
+        id: "synthetic-placeholder",
+        model: "<synthetic>",
+        stop_reason: "stop_sequence",
+        usage: {
+          ...base.message.usage,
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+        content: [{ type: "text", text: "No response requested.", citations: null }],
+      },
+    }
+    const convert = ConvertClaudeStream.make([])
+    const parts: LanguageModelV3StreamPart[] = []
+    for (const line of Recorder.load("text")) {
+      if (line.from !== "claude" || line.message.type === "control_response") continue
+      if (line.message.type === "result") {
+        expect(convert(synthetic)).toEqual([])
+        parts.push(...convert(line.message as SDKMessage))
+        break
+      }
+      parts.push(...convert(line.message as SDKMessage))
+    }
+    const text = parts
+      .filter((part) => part.type === "text-delta")
+      .map((part) => part.delta)
+      .join("")
+    expect(text).toBe("COPPER-OTTER")
+    expect(parts.some((part) => part.type === "error")).toBe(false)
+    const finish = parts.find((part) => part.type === "finish")
+    if (!finish) throw new Error("Expected a finish part")
+    const recorded = Recorder.result("text").usage
+    expect(finish.usage.inputTokens).toEqual({
+      total: recorded.input_tokens + recorded.cache_read_input_tokens + recorded.cache_creation_input_tokens,
+      noCache: recorded.input_tokens,
+      cacheRead: recorded.cache_read_input_tokens,
+      cacheWrite: recorded.cache_creation_input_tokens,
+    })
+    expect(finish.usage.outputTokens.total).toBe(recorded.output_tokens)
+  })
 })
