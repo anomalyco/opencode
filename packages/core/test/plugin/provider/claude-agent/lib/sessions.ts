@@ -22,6 +22,14 @@ export function storage() {
       Effect.sync(() => {
         data.set(key, value)
       }),
+    remove: (key: string) =>
+      Effect.sync(() => {
+        data.delete(key)
+      }),
+    scan: (options: { readonly prefix: string }) =>
+      Effect.sync(() => ({
+        entries: [...data.keys()].filter((key) => key.startsWith(options.prefix)).map((key) => ({ key })),
+      })),
   }
 }
 

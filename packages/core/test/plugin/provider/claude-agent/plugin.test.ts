@@ -308,6 +308,47 @@ describe("ClaudeAgentPlugin models", () => {
   )
 })
 
+describe("ClaudeAgentPlugin deleted sessions", () => {
+  it.live("deleting a session stops its process and removes what was saved for it", () =>
+    Effect.gen(function* () {
+      const store = yield* storage
+      const claude = FakeClaude.make(
+        [FakeClaude.expectStartup(), FakeClaude.expectTurn(), FakeClaude.expectInterrupt()],
+        { probes: true },
+      )
+      yield* addPlugin(FakeIO.make({ claude }))
+      const location = yield* Location.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ location: { directory: location.directory } })
+      const aisdk = yield* AISDK.Service
+      const sdk = yield* aisdk.runSDK({
+        model: Model.Info.make({
+          ...Model.Info.default(ClaudeProvider.ID, haiku.id),
+          modelID: haiku.id,
+          package: Provider.aisdk(ClaudeProvider.PACKAGE),
+        }),
+        package: ClaudeProvider.PACKAGE,
+        options: {},
+      })
+      const model: LanguageModelV3 = sdk.sdk.languageModel("haiku")
+      const result = yield* Effect.promise(() =>
+        model.doStream({
+          prompt: TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker."),
+          headers: { [RequestKind.SESSION_HEADER]: session.id, [RequestKind.HEADER]: "primary" },
+        }),
+      )
+      yield* Effect.promise(() => TestSessions.collect(result.stream))
+      yield* store.set(`sessions/${session.id}:/claude-work`, { claudeSessionID: "other-folder" })
+      yield* store.set(`accounts/${session.id}`, "/claude-work")
+
+      yield* sessions.remove(session.id)
+      yield* Effect.promise(() => claude.runs[0]!.closed)
+      yield* eventually(store.scan({ prefix: "" }), (saved) => saved.entries.every((entry) => entry.key === "models"))
+      claude.check()
+    }),
+  )
+})
+
 describe("ClaudeAgentPlugin connection", () => {
   it.live("connecting without claude installed asks the user to install it", () =>
     Effect.gen(function* () {

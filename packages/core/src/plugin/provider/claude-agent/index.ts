@@ -1,5 +1,6 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, Option, Stream } from "effect"
+import { ClaudeAccounts } from "./claude/accounts.js"
 import { ClaudeIO } from "./claude/io.js"
 import { ClaudeSessions } from "./claude/sessions.js"
 import { ClaudeStatus } from "./claude/status.js"
@@ -35,10 +36,21 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
       const sessions = yield* registry.attach({ io, status, storage: ctx.storage, directory: ctx.location.directory })
       yield* ctx.event
         .subscribe({
-          types: ["session.execution.succeeded", "session.execution.failed", "session.execution.interrupted"],
+          types: [
+            "session.execution.succeeded",
+            "session.execution.failed",
+            "session.execution.interrupted",
+            "session.deleted",
+          ],
         })
         .pipe(
-          Stream.runForEach((event) => sessions.idle(event.data.sessionID)),
+          Stream.runForEach((event) => {
+            if (event.type !== "session.deleted") return sessions.idle(event.data.sessionID)
+            return Effect.andThen(
+              sessions.remove(event.data.sessionID),
+              ctx.storage.remove(ClaudeAccounts.key(event.data.sessionID)),
+            )
+          }),
           Effect.forkScoped({ startImmediately: true }),
         )
       yield* ClaudeProvider.register(ctx, status, io)

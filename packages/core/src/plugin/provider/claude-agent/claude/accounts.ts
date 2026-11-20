@@ -15,6 +15,7 @@ export interface Interface {
 }
 
 const LAST = "last-account"
+export const key = (sessionID: string) => `accounts/${sessionID}`
 
 export function make(input: { readonly sessions: ClaudeSessions.Interface; readonly storage: Storage }) {
   const read = Effect.fn("ClaudeAccounts.read")(function* (key: string) {
@@ -30,10 +31,10 @@ export function make(input: { readonly sessions: ClaudeSessions.Interface; reado
     if (configDirs.length < 2 || connection?.ANTHROPIC_API_KEY || connection?.ANTHROPIC_AUTH_TOKEN) {
       return yield* input.sessions.run(request)
     }
-    const own = request.sessionID ? yield* read(`accounts/${request.sessionID}`) : undefined
+    const own = request.sessionID ? yield* read(key(request.sessionID)) : undefined
     const last = yield* read(LAST)
     // Side calls and new forks start on their parent chat's account, which has its transcript and prompt cache.
-    const parent = !own && request.sourceID ? yield* read(`accounts/${request.sourceID}`) : undefined
+    const parent = !own && request.sourceID ? yield* read(key(request.sourceID)) : undefined
     const from = own ?? parent ?? last
     const start = from ? Math.max(0, configDirs.indexOf(from)) : 0
     const dirs = [...configDirs.slice(start), ...configDirs.slice(0, start)]
@@ -48,7 +49,7 @@ export function make(input: { readonly sessions: ClaudeSessions.Interface; reado
       const error = attempt.error()
       if (!error) {
         // A side call never moves its chat, because the side call's model may have hit a limit of its own.
-        if (request.sessionID && dir !== own) yield* input.storage.set(`accounts/${request.sessionID}`, dir)
+        if (request.sessionID && dir !== own) yield* input.storage.set(key(request.sessionID), dir)
         if (dir !== last) yield* input.storage.set(LAST, dir)
         attempt.flush()
         return
