@@ -629,8 +629,12 @@ fn apply_variant(value: &str, variant: Option<Variant>) -> String {
         .collect()
 }
 
-/// Terminal width in cells, including wide and zero-width graphemes.
+/// Terminal width in cells, including wide and zero-width graphemes. A control character takes none, as
+/// `string-width` counts it, so a line break or tab in `\text{}` cannot split a row.
 pub fn cell_width(value: &str) -> i32 {
+    if value.starts_with(char::is_control) {
+        return 0;
+    }
     unicode_width::UnicodeWidthStr::width(value) as i32
 }
 

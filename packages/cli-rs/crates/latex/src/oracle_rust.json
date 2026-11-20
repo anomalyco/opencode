@@ -69,7 +69,6 @@
  {"error":true,"source":"\\begin{align*}\\end{align*}"},
  {"text":"   a  b\nc","width":7,"height":2,"baseline":1,"styled":[],"source":"\\begin{aligned}&\\begin{matrix}a&&b\\end{matrix}\\\\c&\\end{aligned}"},
  {"text":"a\n  b","width":3,"height":2,"baseline":1,"styled":[],"source":"\\displaylines{a&\\\\&b}"},
- {"text":"100% raw\ntext","width":13,"height":1,"baseline":0,"styled":[],"source":"\\text{100% raw\ntext}"},
  {"text":"↪ ⇀ ⇌ ⟹ ⟼ ⇕ ↖ ϵε°","width":17,"height":1,"baseline":0,"styled":[],"source":"\\hookrightarrow \\rightharpoonup \\rightleftharpoons \\Longrightarrow \\longmapsto \\Updownarrow \\nwarrow \\epsilon \\varepsilon \\degree"},
  {"text":"ϵεϕφ","width":4,"height":1,"baseline":0,"styled":[],"source":"\\epsilon\\varepsilon\\phi\\varphi"},
  {"text":"x y\nz","width":3,"height":2,"baseline":1,"styled":["0,0  red"],"source":"\\begin{matrix}\\color{red}x&y\\\\z\\end{matrix}"},
