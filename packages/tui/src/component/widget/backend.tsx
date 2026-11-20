@@ -1,26 +1,16 @@
-import type { SessionMessageInfo } from "@opencode/client"
+import {
+  isWidgetAlreadyRespondedError,
+  type JsonValue,
+  type SessionMessageInfo,
+  type SessionMessageWidget,
+} from "@opencode/client"
 import { builtins, program } from "@opencode/widget"
 import { createContext, useContext, type ParentProps } from "solid-js"
 import { useClient } from "../../context/client"
 
-/**
- * Local mirror of `Session.Message.Widget` until the regenerated client exposes it as `SessionMessageWidget`.
- * This file is the one place to swap for the real client.
- */
-export type WidgetMessageInfo = {
-  id: string
-  type: "widget"
-  time: { created: number; responded?: number }
-  metadata?: Record<string, unknown>
-  title?: string
-  template: { name: string; version: string }
-  data: unknown
-  tool?: { messageID: string; callID: string }
-  status: "open" | "submitted" | "dismissed"
-  response?: unknown
-}
+export type WidgetMessageInfo = SessionMessageWidget
 
-export type WidgetResponse = { value: unknown } | { dismiss: true }
+export type WidgetResponse = { value: JsonValue } | { dismiss: true }
 
 export type WidgetBackend = {
   /** The runnable program (prelude + source) of an immutable template version. */
@@ -28,10 +18,8 @@ export type WidgetBackend = {
   respond: (input: { sessionID: string; messageID: string; response: WidgetResponse }) => Promise<void>
 }
 
-export function widgetMessage(message: SessionMessageInfo | undefined): WidgetMessageInfo | undefined {
-  const value: { type: string } | undefined = message
-  if (value?.type !== "widget") return
-  return value as WidgetMessageInfo
+export function widgetMessage(message: SessionMessageInfo | undefined) {
+  return message?.type === "widget" ? message : undefined
 }
 
 /** A respond call the server rejected because the widget already has a response. */
@@ -50,30 +38,14 @@ export function useWidgetBackend(): WidgetBackend {
   const client = useClient()
   return {
     program: (template) =>
-      cached(template, async () => {
-        const response = await request(`/api/widget/template/${template.name}/${template.version}`, { method: "GET" })
-        const body: { program?: unknown } = await response.json()
-        if (typeof body.program !== "string") throw new Error("Template response has no program")
-        return body.program
-      }),
-    async respond(input) {
-      const response = await request(`/api/session/${input.sessionID}/widget/${input.messageID}/respond`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(input.response),
-      })
-      if (response.status === 409) throw new WidgetConflict("This widget already has a response")
-    },
-  }
-
-  async function request(path: string, init: RequestInit) {
-    if (!client.url) throw new Error("Widget endpoints need a server URL")
-    const response = await fetch(new URL(path, client.url), {
-      ...init,
-      headers: { ...client.headers, ...(init.headers as Record<string, string> | undefined) },
-    })
-    if (!response.ok && response.status !== 409) throw new Error(`Widget request failed: ${response.status}`)
-    return response
+      cached(template, () => client.api.experimental.widget.template.get(template).then((result) => result.program)),
+    respond: (input) =>
+      client.api.experimental.session.widget
+        .respond({ sessionID: input.sessionID, messageID: input.messageID, payload: input.response })
+        .catch((error) => {
+          if (isWidgetAlreadyRespondedError(error)) throw new WidgetConflict("This widget already has a response")
+          throw error
+        }),
   }
 }
 

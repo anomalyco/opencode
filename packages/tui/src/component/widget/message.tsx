@@ -1,3 +1,4 @@
+import type { JsonValue } from "@opencode/client"
 import { StepError, WidgetSession, type Node, type WidgetEvent } from "@opencode/widget"
 import { TextAttributes } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
@@ -100,7 +101,8 @@ export function WidgetMessage(props: { message: WidgetMessageInfo; sessionID: st
         output.warnings?.forEach((warning) => log.warn(warning, { template: props.message.template.name }))
         setStore({ view: output.view, error: undefined })
         if (output.dismiss) return respond({ dismiss: true })
-        if ("submit" in output) return respond({ value: output.submit })
+        // Programs run on a JSON-only interpreter, so a submitted value is always JSON.
+        if ("submit" in output) return respond({ value: output.submit as JsonValue })
       })
       .catch((error) => {
         if (session() === current) setStore("error", stepMessage(error))

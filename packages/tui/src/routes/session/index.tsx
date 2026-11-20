@@ -1669,6 +1669,7 @@ export function Session(props: {
                   <Prompt
                     visible={true}
                     inactive={widgetFocus.engaged() !== undefined}
+                    onActivate={widgetFocus.release}
                     ref={bind}
                     muted={props.promptMuted}
                     onSubmit={() => {

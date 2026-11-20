@@ -1,7 +1,11 @@
+import type { JsonValue } from "@opencode/client"
 import { builtins } from "@opencode/widget"
 import type { WidgetMessageInfo } from "../../../component/widget/backend"
 
-export const widgetFixtures = {
+export const widgetFixtures: Record<
+  "suggestions" | "form" | "confirm",
+  { title: string; data: JsonValue; response: JsonValue }
+> = {
   suggestions: {
     title: "Pick a cabin for the offsite",
     data: {
@@ -80,7 +84,7 @@ export const widgetFixtures = {
     },
     response: { confirmed: true },
   },
-} as const
+}
 
 export type WidgetFixtureName = keyof typeof widgetFixtures
 
