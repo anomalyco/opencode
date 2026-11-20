@@ -51,9 +51,12 @@ pub enum Message {
     },
 }
 
-/// Decodes a text message; `None` for malformed JSON, a missing or mistyped field, or an unknown type.
+/// Decodes a text message; `None` for malformed JSON, a missing or mistyped field, or an unknown type. A lone
+/// surrogate escape reads as U+FFFD (deviation A01-lone-surrogate-escapes).
 pub fn decode(text: &str) -> Option<Message> {
-    let value: Value = serde_json::from_str(text).ok()?;
+    let value: Value = serde_json::from_str(text)
+        .ok()
+        .or_else(|| serde_json::from_slice(&opencode_api_types::de::well_formed(text.as_bytes())?).ok())?;
     let field = |name: &str| value.get(name);
     let optional = |name: &str| match field(name) {
         None => Some(None),
@@ -253,6 +256,8 @@ mod tests {
         extra["userTitle"] = json!("build");
         extra["sessionID"] = json!("dummy");
         assert_eq!(decoded(attached(extra)), expected);
+        // A title cut inside a surrogate pair.
+        assert_eq!(decode(&attached(info()).to_string().replace(r#""zsh""#, r#""\ud83d""#)), expected);
         assert_eq!(decoded(attached(json!({ "id": "pty_1" }))), None);
     }
 
