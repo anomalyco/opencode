@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, parseRegistration, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { fallback, headers }
@@ -114,11 +114,7 @@ export async function stop(options: StopOptions = {}) {
 async function read(file?: string) {
   const text = await readFile(file ?? fallback(), "utf8").catch(() => undefined)
   if (text === undefined) return undefined
-  try {
-    return JSON.parse(text) as Info
-  } catch {
-    return undefined
-  }
+  return parseRegistration(text)
 }
 
 async function registered(file?: string, timeout?: number) {

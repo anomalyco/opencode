@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { writeFile } from "node:fs/promises"
 import { Service, type EnsureReason } from "../src/promise/service"
 import {
   catchesSigterm,
@@ -38,6 +39,81 @@ test("discovers a compatible registered service", async () => {
     expect.objectContaining({ url: expect.stringMatching(/^http:\/\//) }),
   )
   expect(await Service.discover({ file: registration, version: (version) => version.startsWith("3.") })).toBeUndefined()
+})
+
+const malformedRegistrations = [
+  "null",
+  "{}",
+  "[]",
+  '"not a url"',
+  '{"url":"not a url","pid":1}',
+  '{"url":"file:///etc/passwd","pid":1}',
+  '{"url":"http://127.0.0.1:4096","pid":0}',
+  '{"url":"http://127.0.0.1:4096","pid":-1}',
+  '{"url":"http://127.0.0.1:4096","pid":1.5}',
+  '{"url":"http://127.0.0.1:4096","pid":"1"}',
+  '{"url":"http://127.0.0.1:4096","pid":1,"version":123}',
+  '{"url":"http://127.0.0.1:4096","pid":1,"id":null}',
+  '{"url":"http://127.0.0.1:4096","pid":1,"password":false}',
+  "{ invalid json",
+]
+
+test("discover and stop ignore malformed registration files", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+
+  for (const content of malformedRegistrations) {
+    await writeFile(registration, content)
+    expect(await Service.discover({ file: registration })).toBeUndefined()
+    await Service.stop({ file: registration, pty: "handoff" })
+    expect(await Bun.file(registration).text()).toBe(content)
+  }
+})
+
+test("ensure recovers from malformed registration files even with a handoff sidecar", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  await writeFile(registration, "null")
+  await writeFile(
+    registration + ".pty-handoff",
+    JSON.stringify({
+      source: { id: "old", pid: 999_999, url: "http://127.0.0.1:4096" },
+      handoff: null,
+      expiresAt: Date.now() + 30_000,
+    }),
+  )
+
+  const starts: EnsureReason[] = []
+  const endpoint = await ensure({
+    file: registration,
+    version: "test",
+    command: fixture.command("delayed", "10"),
+    onStart: (reason) => starts.push(reason),
+  })
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  expect(endpoint.url).toBe(replacement.url)
+  expect(starts).toEqual(["missing"])
+})
+
+test("ensure recovers when the registration URL is invalid", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  await writeFile(registration, '{"url":"not a url","pid":1}')
+
+  const starts: EnsureReason[] = []
+  const endpoint = await ensure({
+    file: registration,
+    version: "test",
+    command: fixture.command("delayed", "10"),
+    onStart: (reason) => starts.push(reason),
+  })
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  expect(endpoint.url).toBe(replacement.url)
+  expect(starts).toEqual(["missing"])
 })
 
 test("ensures a missing service with native promises", async () => {

@@ -3,7 +3,7 @@ export * as PtyHandoff from "./pty-handoff.js"
 import type { PersistentPty } from "@opencode/schema/persistent-pty"
 import { readFile, rename, rm, writeFile } from "node:fs/promises"
 import type { Info } from "./service.js"
-import { headers } from "./service-probe.js"
+import { headers, parseRegistration } from "./service-probe.js"
 
 type Sidecar = {
   readonly source: Pick<Info, "id" | "pid" | "url">
@@ -68,8 +68,8 @@ async function publish(file: string, info: Info, handoff: PersistentPty.Handoff 
 
 export async function environment(file: string, env?: Readonly<Record<string, string>>) {
   const record = await read(file)
-  const current: Info | undefined = await readFile(file, "utf8")
-    .then((text) => JSON.parse(text))
+  const current = await readFile(file, "utf8")
+    .then(parseRegistration)
     .catch(() => undefined)
   const handoff =
     record !== undefined && record.expiresAt > Date.now() && (current === undefined || same(record.source, current))

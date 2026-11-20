@@ -45,14 +45,40 @@ export function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
+/** Whether a string is a valid HTTP(S) service base URL. */
+export function isServiceUrl(value: string) {
+  return probeUrl(value) !== undefined
+}
+
+/** Parse and validate a local service registration JSON string. */
+export function parseRegistration(text: string): Info | undefined {
+  const value = parseJson(text)
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
+  if (!("url" in value) || typeof value.url !== "string" || !isServiceUrl(value.url)) return undefined
+  if (!("pid" in value) || typeof value.pid !== "number" || !Number.isInteger(value.pid) || value.pid <= 0)
+    return undefined
+  if ("id" in value && typeof value.id !== "string") return undefined
+  if ("version" in value && typeof value.version !== "string") return undefined
+  if ("password" in value && typeof value.password !== "string") return undefined
+  return {
+    ...("id" in value && typeof value.id === "string" ? { id: value.id } : {}),
+    ...("version" in value && typeof value.version === "string" ? { version: value.version } : {}),
+    url: value.url,
+    pid: value.pid,
+    ...("password" in value && typeof value.password === "string" ? { password: value.password } : {}),
+  }
+}
+
 /** Ask a registered owner for its health and classify the answer. */
 export async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
+  const url = probeUrl(info.url)
+  if (url === undefined) return { service: undefined, timedOut: false }
   const endpoint = {
     url: info.url,
     auth: info.password === undefined ? undefined : { type: "basic", username: "opencode", password: info.password },
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
-  const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
+  const result = await fetch(url, { headers: headers(endpoint), signal })
     .then(async (response) => ({
       response,
       body: response.status === 404 ? undefined : ((await response.json()) as unknown),
@@ -102,4 +128,19 @@ function decodeInfo(input: unknown) {
   if (!("version" in input) || typeof input.version !== "string") return
   if (!("pid" in input) || typeof input.pid !== "number" || !Number.isInteger(input.pid) || input.pid < 0) return
   return { version: input.version, pid: input.pid }
+}
+
+function probeUrl(value: string) {
+  if (!URL.canParse("/api/info", value)) return undefined
+  const url = new URL("/api/info", value)
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
+  return url
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }

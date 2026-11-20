@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, isServiceUrl, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -142,7 +142,7 @@ export const stop = Effect.fn("service.stop")(function* (options: StopOptions = 
 export const Info = Schema.Struct({
   id: Schema.optional(Schema.String),
   version: Schema.optional(Schema.String),
-  url: Schema.String,
+  url: Schema.String.check(Schema.makeFilter(isServiceUrl, { expected: "an HTTP(S) URL" })),
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
   password: Schema.optional(Schema.String),
 })

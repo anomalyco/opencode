@@ -481,6 +481,62 @@ test("replaces an incompatible owner that appears during startup", async () => {
   await old.exited
 })
 
+const malformedRegistrations = [
+  "null",
+  "{}",
+  "[]",
+  '"not a url"',
+  '{"url":"not a url","pid":1}',
+  '{"url":"file:///etc/passwd","pid":1}',
+  '{"url":"http://127.0.0.1:4096","pid":0}',
+  '{"url":"http://127.0.0.1:4096","pid":-1}',
+  "{ invalid json",
+]
+
+test("discover, incumbent, and stop ignore malformed registrations and invalid URLs", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+
+  for (const content of malformedRegistrations) {
+    await writeFile(registration, content)
+    expect(await run(Service.discover({ file: registration }))).toBeUndefined()
+    await run(Service.stop({ file: registration, pty: "handoff" }))
+    expect(await Bun.file(registration).text()).toBe(content)
+  }
+
+  await writeFile(registration, '{"url":"http://127.0.0.1:4096","pid":999999}')
+  expect(await run(Service.incumbent({ file: registration, url: "not a url" }))).toBeUndefined()
+})
+
+test("ensure recovers from a malformed registration with a handoff sidecar", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  await writeFile(registration, '{"url":"not a url","pid":1}')
+  await writeFile(
+    registration + ".pty-handoff",
+    JSON.stringify({
+      source: { id: "old", pid: 999_999, url: "http://127.0.0.1:4096" },
+      handoff: null,
+      expiresAt: Date.now() + 30_000,
+    }),
+  )
+
+  const starts: EnsureReason[] = []
+  const endpoint = await run(
+    ensure({
+      file: registration,
+      version: "test",
+      command: fixture.command("delayed", "10"),
+      onStart: (reason) => starts.push(reason),
+    }),
+  )
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  expect(endpoint.url).toBe(replacement.url)
+  expect(starts).toEqual(["missing"])
+})
+
 function run<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
   return Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))
 }
