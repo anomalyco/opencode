@@ -5,6 +5,7 @@ import { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import { sameDirectory } from "@opencode/util/path"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
@@ -150,16 +151,26 @@ export const Plugin = {
                 const root = yield* fs.resolve(location.directory)
                 // The Location and its ancestors are already supplied by initial instructions,
                 // even when an upward walk from elsewhere in the project cannot reach root.
+                // Walk up from the path the model gave (inside the project), not from the
+                // resolved symlink target (which may live in another tree). Starting from the
+                // target would walk up past the project root and inject AGENTS.md files from
+                // outside the session directory.
                 const discovered = yield* fs.up({
                   targets: InstructionDiscovery.filenames(discovery),
-                  start: result.content.type === "directory" ? resolved : dirname(resolved),
+                  start: result.content.type === "directory" ? result.target.absolute : dirname(result.target.absolute),
                   stop: root,
                   type: "file",
                 })
-                const candidates = (yield* Effect.forEach(
+                const resolvedPaths = (yield* Effect.forEach(
                   InstructionDiscovery.preferAgents(discovered),
                   fs.resolve,
-                )).filter((file) => !FSUtil.contains(dirname(file), root) && file !== resolved)
+                ))
+                const candidates = resolvedPaths.filter(
+                  (file) =>
+                    FSUtil.contains(root, dirname(file)) &&
+                    !sameDirectory(dirname(file), root) &&
+                    file !== resolved,
+                )
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
               }).pipe(

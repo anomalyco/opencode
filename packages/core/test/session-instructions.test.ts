@@ -337,6 +337,32 @@ describe("SessionInstructions", () => {
     }),
   )
 
+  it.live("a symlink into another tree injects no AGENTS.md from above the link target", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const dir = location.directory
+      const store = yield* Effect.promise(() => fs.mkdtemp(path.join(path.dirname(dir), "store-")))
+      yield* mkdir(path.resolve(store, "proj", "skills", "s"))
+      yield* writeAgents(path.resolve(store, "AGENTS.md"), "store-instructions")
+      yield* writeAgents(path.resolve(store, "proj", "AGENTS.md"), "root-instructions")
+      yield* Effect.promise(() => fs.writeFile(path.resolve(store, "proj", "skills", "s", "SKILL.md"), "skill"))
+      yield* Effect.promise(() =>
+        fs.symlink(path.resolve(store, "proj", "AGENTS.md"), path.resolve(dir, "AGENTS.md")),
+      )
+      yield* mkdir(path.resolve(dir, ".agents"))
+      yield* Effect.promise(() =>
+        fs.symlink(path.resolve(store, "proj", "skills"), path.resolve(dir, ".agents", "skills")),
+      )
+
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
+      yield* executeTool(registry, readCall(sessionID, "call-skill", ".agents/skills/s/SKILL.md"))
+
+      expect((yield* synthetics(sessionID)).map((message) => message.text)).toEqual([])
+    }),
+  )
+
   it.live("loads instructions directly without a read", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
