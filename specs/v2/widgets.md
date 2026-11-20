@@ -41,6 +41,9 @@ type Template = {
   description: string   // one line, shown to the model when listing templates
   data: JSONSchema      // JSON Schema (draft 2020-12 subset) for the data the template takes
   source: string        // the template's PsychoScript source (see "Template source")
+  mode: "step" | "live" // how clients run it; "live" templates are in widgets-live.md (stored versions without a
+                        // mode are "step"). A live version hashes program + "\n" + JSON(data) + "\nlive", so the
+                        // mode is part of the content address
   builtin: boolean
 }
 ```
@@ -312,7 +315,7 @@ A widget goes `open → submitted` or `open → dismissed`, once. States of a de
 | `send` | `{ sessionID, messageID, callID, value, wake? }` | the `State` (unchanged) | `not_found`, `closed`, `rate_limited` |
 
 ```ts
-type Summary = { name: string; version: string; description: string; data: JSONSchema; builtin: boolean }
+type Summary = { name: string; version: string; description: string; data: JSONSchema; mode: "step" | "live"; builtin: boolean }
 type Program = Summary & { source: string; program: string }   // program = prelude + "\n" + source
 ```
 
@@ -378,12 +381,14 @@ input: {
   description?: string             // save
   data?: JSONSchema                // save; top-level `type` must be "object"
   source?: string                  // save
+  mode?: "step" | "live"           // save; default "step"
   example?: object                 // save
 }
 ```
 
 `save` validates the name, checks `example` against the schema, and runs `init` (which renders the first `view`) with
-`example` before storing. Built-in names cannot be overwritten. Saving content that already exists (same version) makes
+`example` before storing; a live template is only compiled. The `widget` tool likewise validates data and only
+compiles a live template's program, never running `main`. Built-in names cannot be overwritten. Saving content that already exists (same version) makes
 that version the latest again and updates its description.
 
 Permission actions are `widget` (resource: the template name) and `widget_template` (resource: the template name, or

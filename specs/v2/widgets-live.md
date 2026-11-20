@@ -76,7 +76,7 @@ the next vsync while the widget is visible), `{ type: "visibility", visible }`.
 ## Server
 
 The `widget` tool validates `data` and compiles the program (syntax only) for live templates; it does not run `main`.
-`widget_template` `save` takes `mode`. The skill teaches when to use live mode (games, timers, animations,
+`widget_template` `save` takes `mode`; the mode is part of a template's version (see `widgets.md`, Template). The skill teaches when to use live mode (games, timers, animations,
 simulations) and shows a small game.
 
 ## Built-in example
