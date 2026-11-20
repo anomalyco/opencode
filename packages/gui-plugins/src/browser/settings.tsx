@@ -148,7 +148,7 @@ export default function BrowserSettings(props: { target?: string }) {
           description={ctx.t("settings.extensions.add.description")}
         >
           <ui.Button size="small" icon="plus" disabled={!jobs.available()} onClick={addExtension}>
-            {ctx.t("settings.extensions.add.action")}
+            {ctx.t("settings.extensions.add")}
           </ui.Button>
         </ui.SettingsRow>
       </ui.SettingsSection>
@@ -705,7 +705,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
               >
                 {pending().result.type === "unsupported"
                   ? ctx.t("settings.extensions.anyway")
-                  : ctx.t("settings.extensions.add.action")}
+                  : ctx.t("settings.extensions.add")}
               </ui.Button>
             </>
           )}

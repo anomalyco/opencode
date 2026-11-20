@@ -45,6 +45,7 @@ import {
   type PickerEffect,
   type PickerEvent,
 } from "./picker-machine"
+import { createPageLog, processMemory, setupFailure, type PageEnd, type PageLogWrite } from "./page-log"
 import { createProfiling } from "./profiling"
 import type { SharedTrace } from "./profiling-machine"
 import {
@@ -260,7 +261,10 @@ export function createBrowserPage(
     focused?: () => void
     /** The page left the screen: another tab or a preview took its place, or the pane closed. */
     hidden?: () => void
-    fail: () => void
+    /** The page stopped, for the reason given (page-log.ts); the window shows it as `page_crashed`. */
+    fail: (end: PageEnd) => void
+    /** Writes to the desktop log when the page ends, stalls or fails to load; without it nothing is logged. */
+    log?: PageLogWrite
     /**
      * Adopts a page the document opened; a background one leaves the current tab selected. `refused` shows this tab
      * why an address could not open, for a link the new tab was opened for and hands back (`opened`).
@@ -616,7 +620,7 @@ export function createBrowserPage(
       await cdp.send("Runtime.runIfWaitingForDebugger", {}, sessionID)
     } catch {
       // A detached target needs no resumption. A live one must not run unguarded or remain invisibly paused.
-      if (!closed() && (extensionTargets.has(sessionID) || Array.from(sessions.values()).includes(sessionID))) options.fail()
+      if (!closed() && (extensionTargets.has(sessionID) || Array.from(sessions.values()).includes(sessionID))) end({ cause: "frame-unprepared" })
     }
   }
 
@@ -639,6 +643,34 @@ export function createBrowserPage(
       canGoBack: contents.navigationHistory.canGoBack(),
       canGoForward: contents.navigationHistory.canGoForward(),
     }, display)
+
+  // The desktop log's account of this page ending or stalling: its origin, never its address or title.
+  const journal = createPageLog({
+    tab: options.id,
+    write: options.log ?? (() => undefined),
+    page: () => {
+      const tab = documentTab(documentState, { id: options.id, canGoBack: false, canGoForward: false })
+
+      return { address: tab.url, agentDriven: agentDriven(activity), loading: tab.loading }
+    },
+    memory: () => (contents.isDestroyed() ? undefined : processMemory(electron.app.getAppMetrics(), contents.getOSProcessId())),
+  })
+
+  // Every signal that stops the page comes through here: the log hears each one, the pane the first.
+  const end = (cause: PageEnd) => {
+    // A page the pane closed did not end. One that ended may still hear its process's own account.
+    if (closed() && !journal.ended()) return
+    const account = journal.end(cause)
+
+    // The debugger also leaves a process that is gone, and may say so before Electron says why. Nothing runs in the
+    // page then, so the pane waits with the log, for the same bounded moment, and hears the process's own account.
+    if (cause.cause === "debugger-detached" && !contents.isDestroyed() && contents.isCrashed())
+      return void account.then((recorded) => {
+        if (!closed()) options.fail(recorded)
+      })
+
+    if (!closed()) options.fail(cause)
+  }
 
   // Every state report goes through here, so a page that was disposed publishes nothing.
   // While a user's close asks the page's beforeunload on a blank load, the tab reports nothing: the blank page is not
@@ -804,7 +836,7 @@ export function createBrowserPage(
 
     const enforcing = passkeys.enforce()
 
-    if (native) void enforcing.catch(() => options.fail())
+    if (native) void enforcing.catch(() => end({ cause: "passkeys-unrestricted" }))
 
     return enforcing
   }
@@ -829,11 +861,16 @@ export function createBrowserPage(
   contents.on("did-stop-loading", () => {
     dispatch({ type: "loading.stopped", title: pageTitle() })
     detail()
+
+    // A page that ends before the pane's next sample still has its memory as it was once loaded.
+    if (!closed()) journal.sample(processMemory(electron.app.getAppMetrics(), contents.getOSProcessId()))
   })
   contents.on("did-start-navigation", (event) => {
     // A load no frame started (the address bar, a link from the conversation, history) may redirect before it commits.
     // Input in the page it leaves is not input in the page that redirects.
     if (event.isMainFrame && !event.isSameDocument && !event.initiator) documentInput = false
+
+    if (event.isMainFrame && !event.isSameDocument) journal.navigationStarted()
     navigation.nativeStart(event)
     dispatch({
       type: "navigation.started",
@@ -860,9 +897,11 @@ export function createBrowserPage(
 
     rendering.committed()
   })
-  contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
-    dispatch({ type: "navigation.failed", code, description: options.previewFailure?.(url) ?? (options.artifacts?.display(url) ? "browser.artifact.missing" : description), url, preview: preview(url), isMainFrame }),
-  )
+  contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
+    // ERR_ABORTED is a load that was stopped, replaced or became a download, not one that failed.
+    if (isMainFrame && code !== -3 && !closed()) journal.loadFailed(code, description, displayURL(url))
+    dispatch({ type: "navigation.failed", code, description: options.previewFailure?.(url) ?? (options.artifacts?.display(url) ? "browser.artifact.missing" : description), url, preview: preview(url), isMainFrame })
+  })
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (!isMainFrame) return
     documentInput = false
@@ -885,11 +924,17 @@ export function createBrowserPage(
   contents.on("focus", () => {
     if (!closed()) options.focused?.()
   })
-  contents.on("render-process-gone", () => {
-    if (!closed()) options.fail()
+  contents.on("render-process-gone", (_event, details) => end({ cause: "renderer-gone", reason: details.reason, exitCode: details.exitCode }))
+  contents.debugger.on("detach", (_event, reason) => end({ cause: "debugger-detached", reason }))
+  // The debugger's own report of a crash carries no reason; it is logged only when the process's report did not come first.
+  cdp.on("Inspector.targetCrashed", (_event, sessionID) => {
+    if (!sessionID && !closed()) void journal.end({ cause: "target-crashed" })
   })
-  contents.debugger.on("detach", () => {
-    if (!closed()) options.fail()
+  contents.on("unresponsive", () => {
+    if (!closed()) journal.unresponsive()
+  })
+  contents.on("responsive", () => {
+    if (!closed()) journal.responsive()
   })
   contents.on("content-bounds-updated", (event) => event.preventDefault())
 
@@ -1353,6 +1398,9 @@ export function createBrowserPage(
     attachFrames(),
   ])).then(() => undefined).finally(() => opening?.[Symbol.dispose]())
 
+  // A page that never became ready stopped too, and says what failed.
+  void ready.catch((cause: unknown) => end(setupFailure(cause)))
+
   constructing.move()
 
   return {
@@ -1373,6 +1421,10 @@ export function createBrowserPage(
     /** Refuses passkeys in the browser process from now on, for a tab the agent drives or a tab that can script one. */
     restrictPasskeys,
     ready,
+    /** Keeps the page's process memory from `app.getAppMetrics()`, which lists a process only while it runs. */
+    sampleMemory: (metrics: readonly Electron.ProcessMetric[]) => {
+      if (!closed() && !contents.isDestroyed()) journal.sample(processMemory(metrics, contents.getOSProcessId()))
+    },
     focusHost,
     setViewport,
     /** The host embed the renderer lays this page out with. */
@@ -1439,6 +1491,7 @@ export function createBrowserPage(
      */
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
       using active = new DisposableStack()
+      active.defer(journal.operation(command.action.type, origin))
 
       const hidden = !view.getVisible() && win.isVisible() && !win.isMinimized() && !(process.platform === "darwin" && electron.app.isHidden())
       const shouldPaint = () => needsWakeFrame(command.action.type, documentState.status === "loaded" && !documentState.busy && !documentState.pending, !!selectOpenDialog(dialogGate))

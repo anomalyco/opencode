@@ -76,6 +76,29 @@ story("no setting decides what an import brings: the import section has its brow
   await expect(view.stored).not.toContainText("importHistory")
 })
 
+story("each switch is named by its row's title, and each row says what it does in one sentence", async ({ page }) => {
+  const view = await open(page, { target: "settings-browser-remote", extensions: true })
+  const row = (id: string) => view.root.locator(`[data-action="${id}"]`)
+
+  // The switch's accessible name is the row's title, so a screen reader hears what the row shows.
+  for (const [id, title, description] of [
+    ["settings-browser-links", "Open links in OpenCode", "Hold Shift and click a link to use your default browser."],
+    ["settings-browser-remote", "Share sign-ins with remote servers", "Only turn on for servers you trust, since they can access your signed\u2011in sites."],
+    ["settings-browser-agent-pages", "Open browser automatically", "Show the tab when the agent opens a page or file for you."],
+  ] as const) {
+    await expect(row(id).locator('[data-slot="settings-row-title"]')).toHaveText(title)
+    await expect(row(id).locator('[data-slot="settings-row-description"]')).toHaveText(description)
+    await expect(row(id).getByRole("switch", { name: title, exact: true })).toHaveCount(1)
+  }
+
+  await expect(row("settings-browser-extensions").locator('[data-slot="settings-row-description"]')).toHaveText(
+    "Install from the Chrome Web Store, Edge Add-ons, or your other browsers.",
+  )
+  const sites = view.root.getByRole("region", { name: "Site permissions", exact: true })
+  await expect(sites.locator('[data-slot="settings-row-title"]')).toHaveText("No saved permissions")
+  await expect(sites.locator("p")).toHaveText("Agent and remote server tabs ask again. Clearing browsing data keeps saved permissions.")
+})
+
 story("clearing browsing data that left the history behind says so in its row, and still forgets the window's last pages", async ({ page }) => {
   const view = await open(page, { target: "settings-browser-cookies", historyKept: true })
   const data = view.root.getByRole("region", { name: "Browser data", exact: true })
@@ -110,7 +133,10 @@ for (const [name, file, line] of [
 story("Add an extension aligns controls without top clipping and switches cleanly into a confirmation step", async ({ page }) => {
   const view = await open(page, { extensions: true })
 
-  await view.root.getByRole("button", { name: "Add extension" }).click()
+  // The row is "Add an extension", so its button is "Add", with its plus.
+  const add = view.root.locator('[data-action="settings-browser-extensions"]').getByRole("button", { name: "Add", exact: true })
+  await expect(add.locator("svg")).toHaveCount(1)
+  await add.click()
   const dialog = page.getByRole("dialog", { name: "Add an extension" })
   await expect(dialog).toBeVisible()
   await expect(dialog.getByText("LastPass: Free Password Manager")).toBeVisible()
@@ -180,7 +206,7 @@ story("Add an extension aligns controls without top clipping and switches cleanl
 
   // Approving installs the extension and returns to the picker with status and updated row state.
   await dialog.getByRole("button", { name: "Add", exact: true }).nth(1).click()
-  await confirm.getByRole("button", { name: "Add extension" }).click()
+  await confirm.getByRole("button", { name: "Add", exact: true }).click()
   await expect(page.getByRole("dialog", { name: "Add an extension" })).toBeVisible()
   await expect(dialog.getByRole("status")).toContainText("Added LastPass: Free Password Manager.")
   await expect(dialog.getByRole("button", { name: "Added" })).toBeDisabled()
