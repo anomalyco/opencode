@@ -481,7 +481,9 @@ impl Inner {
     pub(super) fn set_slack(&self, height: f64) {
         self.slack_height.set(height);
         self.slack.height(height.max(0.0) as u16);
-        self.transcript.scroll().sticky(self.navigation.borrow().is_none() && height <= 0.0);
+        let navigating = self.navigation.borrow().is_some() || height > 0.0;
+        self.transcript.navigating(navigating);
+        self.transcript.scroll().sticky(!navigating);
     }
 
     /// `updateAwayFromBottom`: shows "Jump to latest" while the reader is away from the bottom.
