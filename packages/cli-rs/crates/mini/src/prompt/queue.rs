@@ -150,64 +150,6 @@ mod tests {
         RunPrompt::text(text)
     }
 
-    impl Queue {
-        /// The running turn, if it is a shell command.
-        fn shell_running(&self) -> bool {
-            matches!(&self.active, Some(Some(prompt)) if prompt.shell)
-        }
-    }
-
-    #[test]
-    fn prompts_while_a_turn_runs_go_to_the_inbox() {
-        let mut queue = Queue::default();
-        assert_eq!(queue.submit(text("  ")), Submitted::Ignored);
-        assert_eq!(queue.submit(text("/exit")), Submitted::Exit);
-        assert_eq!(queue.submit(text("one")), Submitted::Queued { first: true });
-        let Some(Work::Run(run)) = queue.pump() else { panic!("a turn") };
-        assert!(run.message_id.is_some());
-        assert_eq!(queue.pump(), None);
-        // Enter steers; `prompt.queue` queues; a prompt without a delivery queues.
-        let steer = RunPrompt { delivery: Some(Delivery::Steer), ..text("two") };
-        assert_eq!(queue.submit(steer), Submitted::Admit);
-        assert_eq!(queue.submit(text("three")), Submitted::Admit);
-        // Send follow-ups one at a time after admitting the turn's own prompt.
-        assert_eq!(queue.next_admission(), None);
-        queue.first_admitted();
-        let Some((sent, Delivery::Steer)) = queue.next_admission() else { panic!("two steers") };
-        assert_eq!(sent.text, "two");
-        assert!(sent.message_id.is_some());
-        assert_eq!(queue.next_admission(), None);
-        assert!(!queue.admissions_idle());
-        queue.admission_done();
-        let Some((sent, Delivery::Queue)) = queue.next_admission() else { panic!("three queues") };
-        assert_eq!(sent.text, "three");
-        queue.admission_done();
-        assert!(queue.admissions_idle());
-        assert!(queue.take_admissions());
-        assert!(!queue.take_admissions());
-        assert!(!queue.done());
-    }
-
-    #[test]
-    fn shells_and_local_operations_wait_their_turn() {
-        let mut queue = Queue::default();
-        let shell = RunPrompt { shell: true, ..text("ls") };
-        assert_eq!(queue.submit(shell.clone()), Submitted::Queued { first: true });
-        assert_eq!(queue.pump(), Some(Work::Run(shell)));
-        assert!(queue.shell_running());
-        // A prompt behind a shell waits here.
-        assert_eq!(queue.submit(text("after")), Submitted::Queued { first: true });
-        assert!(queue.done());
-        assert!(matches!(queue.pump(), Some(Work::Run(_))));
-        assert_eq!(queue.submit(text("/compact")), Submitted::Queued { first: false });
-        // While `/compact` waits, an ordinary prompt waits behind it too.
-        assert_eq!(queue.submit(text("later")), Submitted::Queued { first: true });
-        assert!(queue.done());
-        assert_eq!(queue.pump(), Some(Work::Compact));
-        assert!(queue.done());
-        assert!(matches!(queue.pump(), Some(Work::Run(_))));
-    }
-
     /// The queue model: random submits of prompts, commands, shells, `/new` and `/compact`, and the answers to
     /// the work they start, in any order. The harness drives [`Queue`] as `Mini::enqueue`, `pump`, `send`,
     /// `admit_next`, `settle` and `finish` do. The session changes only while no turn is active, so `Mini::settle`

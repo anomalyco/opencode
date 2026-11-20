@@ -41,23 +41,10 @@ pub fn merge_input(piped: Option<&str>, prompt: Option<&str>) -> Option<String> 
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod tests {
     use super::*;
 
-    #[test]
-    fn merge_input_matches_mini_ts() {
-        assert_eq!(merge_input(Some("from stdin"), None).as_deref(), Some("from stdin"));
-        assert_eq!(merge_input(Some("from stdin"), Some("from flag")).as_deref(), Some("from stdin\nfrom flag"));
-        assert_eq!(merge_input(None, None), None);
-        assert_eq!(merge_input(Some(""), Some("")), None);
-        assert_eq!(merge_input(Some("piped"), None).as_deref(), Some("piped"));
-        assert_eq!(merge_input(None, Some("prompt")).as_deref(), Some("prompt"));
-        assert_eq!(merge_input(Some(""), Some("prompt")).as_deref(), Some("prompt"));
-        assert_eq!(merge_input(Some("piped\n"), Some("prompt")).as_deref(), Some("piped\n\nprompt"));
-    }
-
-    #[cfg(windows)]
     #[test]
     fn the_console_becomes_stdin() {
         // Without a console (a detached runner) `CONIN$` cannot open, and mini fails as TS does.

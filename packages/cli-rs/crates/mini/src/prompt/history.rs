@@ -88,24 +88,4 @@ mod tests {
             assert_eq!(appended.items, expected, "append {n}");
         }
     }
-
-    #[test]
-    fn steps_follow_the_cursor_and_restore_the_draft() {
-        let history = History::new(&[RunPrompt::text("first"), RunPrompt::text("second")]);
-        // Up away from the start does nothing.
-        assert_eq!(history.step(true, "draft", 3, 5).apply, None);
-        let up = history.step(true, "draft", 0, 5);
-        assert_eq!(up.apply, Some(("second".into(), Some(0))));
-        let up = up.state.step(true, "second", 0, 6);
-        assert_eq!(up.apply, Some(("first".into(), Some(0))));
-        assert_eq!(up.state.step(true, "first", 0, 5).apply, None);
-        // Down away from the end does nothing.
-        assert_eq!(up.state.step(false, "first", 4, 5).apply, None);
-        let down = up.state.step(false, "first", 5, 5);
-        assert_eq!(down.apply, Some(("second".into(), None)));
-        let down = down.state.step(false, "second", 6, 6);
-        assert_eq!(down.apply, Some(("draft".into(), None)));
-        assert_eq!(down.state.index, None);
-        assert_eq!(down.state.step(false, "draft", 5, 5).apply, None);
-    }
 }

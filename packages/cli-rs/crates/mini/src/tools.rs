@@ -850,105 +850,6 @@ mod tests {
         entry_body(commit, &commit.text, BodyOptions { shell_output: true, ..BodyOptions::default() })
     }
 
-    fn text(body: Option<Body>) -> String {
-        match body {
-            Some(Body::Text(text)) => text,
-            other => panic!("not text: {other:?}"),
-        }
-    }
-
-    #[test]
-    fn a_shell_call_draws_its_command_output_and_exit() {
-        let running = part("bash", json!({ "status": "running", "input": { "command": "ls" }, "metadata": {} }));
-        let start = commit(&running, "msg_a", Phase::Start, None, Some("/work"), 0);
-        assert_eq!(start.part_id.as_deref(), Some("prt_call_1"));
-        assert_eq!(text(body(&start)), "$ ls");
-        let output = commit(&running, "msg_a", Phase::Progress, Some("$ ls\na\nb\n"), Some("/work"), 0);
-        assert_eq!(text(body(&output)), "\na\nb");
-        let hidden = entry_body(&output, &output.text, BodyOptions::default());
-        assert_eq!(hidden, None);
-        let done = part(
-            "shell",
-            json!({ "status": "completed", "input": { "command": "ls" }, "metadata": { "exit": 0 },
-                "content": [{ "type": "text", "text": "a\nb\n" }] }),
-        );
-        assert_eq!(final_phase(&done), Phase::Progress);
-        let failed = part(
-            "shell",
-            json!({ "status": "error", "input": { "command": "ls" }, "metadata": {},
-                "error": { "type": "tool", "message": "boom" } }),
-        );
-        assert_eq!(text(body(&commit(&failed, "msg_a", Phase::Final, None, None, 0))), "✖ shell failed: boom");
-        let mut finished = commit(&done, "msg_a", Phase::Final, None, None, 0);
-        finished.tool_state = Some(ToolState::Completed);
-        assert_eq!(body(&finished), None, "shell has no final line");
-        assert_eq!(scroll(Phase::Final, &tool_frame(&finished, "")), "shell completed (exit 0) · 2.5s");
-
-        // A command moved to the background (#63024) prints the server's note and has no exit.
-        let note = "Command moved to the background (shell ID: sh_1).\nPID: 42\nOutput is streaming to: /out";
-        let backgrounded = part(
-            "shell",
-            json!({ "status": "completed", "input": { "command": "ls" },
-                "metadata": { "status": "running", "shellID": "sh_1", "pid": 42, "truncated": false },
-                "content": [{ "type": "text", "text": note }] }),
-        );
-        let output = commit(&backgrounded, "msg_a", Phase::Progress, Some(note), None, 0);
-        assert_eq!(text(body(&output)), format!("\n{note}"));
-        let mut finished = commit(&backgrounded, "msg_a", Phase::Final, None, None, 0);
-        finished.tool_state = Some(ToolState::Completed);
-        assert_eq!(scroll(Phase::Final, &tool_frame(&finished, "")), "shell completed · 2.5s");
-    }
-
-    #[test]
-    fn start_lines_follow_the_tool_rules() {
-        let start = |name: &str, input: Value| {
-            let tool = part(name, json!({ "status": "running", "input": input, "metadata": {} }));
-            body(&commit(&tool, "msg_a", Phase::Start, None, Some("/work"), 0))
-        };
-        assert_eq!(text(start("read", json!({ "path": "/work/src/a.ts", "offset": 3 }))), "→ Read src/a.ts [offset=3]");
-        assert_eq!(text(start("glob", json!({ "pattern": "*.rs", "path": "/work/src" }))), "✱ Glob \"*.rs\" in src");
-        assert_eq!(text(start("grep", json!({ "pattern": "fn" }))), "✱ Grep \"fn\"");
-        assert_eq!(text(start("webfetch", json!({ "url": "https://x.dev" }))), "% WebFetch https://x.dev");
-        assert_eq!(
-            text(start("lsp", json!({ "operation": "hover", "path": "a.rs", "line": 1, "character": 2 }))),
-            "→ LSP hover a.rs:1:2"
-        );
-        assert_eq!(text(start("mystery", json!({ "flag": true }))), "⚙ mystery [flag=true]");
-        assert_eq!(start("edit", json!({ "path": "a.rs" })), None);
-        assert_eq!(start("task", json!({ "description": "look" })), None);
-    }
-
-    #[test]
-    fn completed_edits_and_writes_are_snapshots() {
-        let edit = part(
-            "edit",
-            json!({ "status": "completed", "input": { "filePath": "/work/a.rs" }, "content": [],
-                "metadata": { "files": [{ "relativePath": "a.rs", "type": "update", "patch": "@@ -1 +1 @@\n-a\n+b\n" }] } }),
-        );
-        let final_ = commit(&edit, "msg_a", Phase::Final, None, Some("/work"), 0);
-        assert!(structured_final(&final_));
-        assert_eq!(
-            body(&final_),
-            Some(Body::Structured(Snapshot::Diff {
-                items: vec![DiffItem {
-                    title: "# Edited a.rs".into(),
-                    diff: "@@ -1 +1 @@\n-a\n+b\n".into(),
-                    file: "a.rs".into(),
-                    deletions: None,
-                }]
-            }))
-        );
-        let write = part(
-            "write",
-            json!({ "status": "completed", "input": { "filePath": "/work/b.ts", "content": "x" }, "content": [] }),
-        );
-        let wrote = commit(&write, "msg_a", Phase::Final, None, Some("/work"), 0);
-        let expected = Snapshot::Code { title: "# Wrote b.ts".into(), content: "x".into(), file: "/work/b.ts".into() };
-        assert_eq!(body(&wrote), Some(Body::Structured(expected.clone())));
-        assert_eq!(mono_body(Body::Structured(expected)), Body::Text("# Wrote b.ts\nx".into()));
-        assert_eq!(filetype("a.tsx"), Some("typescript"));
-    }
-
     #[test]
     fn subagents_patches_and_questions_end_with_their_summaries() {
         let task = part(
@@ -985,15 +886,5 @@ mod tests {
         );
         let frame = tool_frame(&commit(&question, "m", Phase::Final, None, None, 0), "");
         assert_eq!(question_final(&frame), "? Why?\n  Because\n? Question 2\n  (no answer)");
-    }
-
-    #[test]
-    fn a_direct_shell_draws_its_command_and_output() {
-        let mut start = Commit::new(EntryKind::Tool, Source::Tool, Phase::Start, "running shell");
-        start.shell = Some("ls".into());
-        assert_eq!(text(body(&start)), "$ ls");
-        let mut output = Commit { phase: Phase::Progress, text: "\u{1b}[1ma\u{1b}[0m\n".into(), ..start.clone() };
-        output.tool_state = Some(ToolState::Completed);
-        assert_eq!(text(body(&output)), "\na");
     }
 }

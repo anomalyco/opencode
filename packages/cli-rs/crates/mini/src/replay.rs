@@ -1708,26 +1708,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// The two-press interrupt sends `resume` as a query value, as `session.interrupt` declares, and takes the
-    /// server's 200 as success.
-    #[tokio::test]
-    async fn interrupt_resumes_through_the_query() {
-        use opencode_api::memory::{Memory, Route};
-        let memory = Memory::new(vec![Route::json(
-            "POST",
-            "/api/session/ses_1/interrupt",
-            200,
-            &json!({ "interrupted": true }),
-        )]);
-        let client = Client::with_transport("http://test", Arc::new(memory.clone())).unwrap();
-        assert_eq!(interrupt(&client, "ses_1", Some(true)).await, Ok(()));
-        let sent = memory.requests();
-        assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].path, "/api/session/ses_1/interrupt");
-        assert_eq!(sent[0].query, [("resume".to_owned(), vec!["true".to_owned()])].into());
-        assert_eq!(sent[0].body, None);
-    }
-
     /// A transport that is always down and counts the times it is asked to find the server again.
     #[derive(Default)]
     struct Down(std::sync::atomic::AtomicUsize);
@@ -1858,26 +1838,6 @@ mod tests {
     }
 
     #[test]
-    fn hydration_renders_history_only_with_replay() {
-        let mut quiet = Transcript::new("ses_1", true, true, false, None);
-        assert!(quiet.hydrate(&history(), false).commits.is_empty());
-        let mut shown = Transcript::new("ses_1", true, true, true, None);
-        assert_eq!(
-            texts(&shown.hydrate(&history(), false)),
-            [
-                (EntryKind::User, "first".into()),
-                (EntryKind::Reasoning, "Thinking: hmm".into()),
-                (EntryKind::Assistant, "answer".into()),
-                (EntryKind::Error, "Boom".into()),
-            ]
-        );
-        // A later list prints nothing twice.
-        assert!(shown.hydrate(&history(), false).commits.is_empty());
-        let mut hidden = Transcript::new("ses_1", false, true, true, None);
-        assert_eq!(hidden.hydrate(&history(), false).commits.len(), 3);
-    }
-
-    #[test]
     fn live_deltas_after_a_list_print_only_what_is_new() {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);
         transcript.hydrate(
@@ -1918,61 +1878,6 @@ mod tests {
         assert!(output.commits.is_empty());
         assert_eq!(output.footer.len(), 1);
         assert!(transcript.event(&event("session.execution.succeeded", json!({}))).commits.is_empty());
-    }
-
-    #[test]
-    fn an_admitted_prompt_prints_when_delivered() {
-        let mut transcript = Transcript::new("ses_1", true, true, true, None);
-        transcript.hydrate(&[], false);
-        assert!(transcript.admitted("msg_p", "hi", &[], &[]).commits.is_empty());
-        let output = transcript.event(&event("session.inbox.delivered", json!({ "inboxID": "msg_p" })));
-        assert_eq!(texts(&output), [(EntryKind::User, "hi".into())]);
-        assert_eq!(output.patch.unwrap().status.as_deref(), Some("waiting for assistant"));
-        // The listed user message does not print it again.
-        let listed = message(json!({ "id": "msg_p", "type": "user", "text": "hi" }));
-        assert!(transcript.message(&listed, true).commits.is_empty());
-    }
-
-    /// A turn that fails before its first step, or is interrupted by anything but this client's gesture, shows
-    /// the terminal event's error once it settles; a step that showed its own error is not repeated.
-    #[test]
-    fn a_turn_shows_the_terminal_error_no_step_showed() {
-        let failed = || {
-            event(
-                "session.execution.failed",
-                json!({ "error": { "type": "unknown", "message": "API key is missing" } }),
-            )
-        };
-        let interrupted = |reason: &str| event("session.execution.interrupted", json!({ "reason": reason }));
-        let delivered = event("session.inbox.delivered", json!({ "inboxID": "msg_p" }));
-        let mut transcript = Transcript::new("ses_1", true, true, true, None);
-        transcript.hydrate(&[], false);
-        let error = |commit: Option<Commit>| commit.map(|commit| (commit.kind, commit.text, commit.message_id));
-        transcript.begin_wait("msg_p");
-        transcript.admitted("msg_p", "hi", &[], &[]);
-        transcript.event(&delivered);
-        transcript.event(&failed());
-        let listed = message(json!({ "id": "msg_p", "type": "user", "text": "hi" }));
-        transcript.message(&listed, true);
-        assert_eq!(
-            error(transcript.end_wait()),
-            Some((EntryKind::Error, "API key is missing".into(), Some("msg_p".into())))
-        );
-        transcript.begin_wait("msg_q");
-        transcript.event(&interrupted("shutdown"));
-        assert_eq!(error(transcript.end_wait()).map(|error| error.1), Some("Session interrupted: shutdown".into()));
-        transcript.begin_wait("msg_r");
-        transcript.interrupt_wait();
-        transcript.event(&interrupted("user"));
-        assert_eq!(error(transcript.end_wait()), None);
-        transcript.begin_wait("msg_s");
-        let step = event(
-            "session.step.failed",
-            json!({ "assistantMessageID": "msg_a", "error": { "type": "unknown", "message": "Boom" } }),
-        );
-        assert_eq!(texts(&transcript.event(&step)), [(EntryKind::Error, "Boom".into())]);
-        transcript.event(&failed());
-        assert_eq!(error(transcript.end_wait()), None);
     }
 
     #[test]

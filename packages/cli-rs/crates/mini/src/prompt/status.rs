@@ -206,47 +206,7 @@ pub fn money(value: f64) -> String {
 mod tests {
     use super::*;
 
-    fn line(input: &Input) -> String {
-        text(&policy(input), input.mono)
-    }
-
-    fn action(key: &str, label: &str, expanded: Option<&str>) -> Action {
-        Action { key: key.into(), label: label.into(), expanded: expanded.map(str::to_owned) }
-    }
-
-    fn running(width: usize, queued: bool) -> Input {
-        Input {
-            width,
-            status: Some(("esc stop".into(), Some("esc interrupt".into()))),
-            work: if queued { vec![(Id::Queued, action("ctrl+x q", "2 pending", None))] } else { Vec::new() },
-            model: Some(("model".into(), None)),
-            agent: Some("build".into()),
-            provider: Some("demo".into()),
-            menu: Some(action("ctrl+p", "menu", None)),
-            spinner: Some("▪".into()),
-            ..Input::default()
-        }
-    }
-
-    #[test]
-    fn stages_fill_the_width_in_order() {
-        assert_eq!(line(&running(60, false)), "▪ esc interrupt · build · model · demo · ctrl+p menu");
-        assert_eq!(line(&running(60, true)), "▪ esc stop · ctrl+x q 2 pending · build · model · demo");
-        // Narrower: the model shortens to eight cells first, and nothing after a stage that does not fit.
-        let narrow = Input { model: Some(("claude-sonnet-4-5".into(), Some("high".into()))), ..running(40, false) };
-        assert_eq!(line(&narrow), "▪ esc stop · build · claude-s… [high]");
-        // Required groups that do not fit stay whole.
-        assert_eq!(line(&running(4, false)), "▪ esc stop");
-        let shell = Input {
-            width: 60,
-            mono: true,
-            status: Some(("Shell".into(), None)),
-            escape: Some(action("esc", "normal", None)),
-            ..Input::default()
-        };
-        assert_eq!(line(&shell), "Shell - esc normal");
-    }
-
+    // No mini scenario's session has spent tokens or money to show.
     #[test]
     fn usage_and_cost_follow_locale() {
         assert_eq!(context_usage(950, None), "950");

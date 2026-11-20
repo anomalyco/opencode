@@ -656,32 +656,6 @@ mod tests {
     }
 
     #[test]
-    fn a_choice_moves_to_the_next_field_and_the_review_submits() {
-        let form = form(serde_json::json!([
-            { "type": "boolean", "key": "confirm", "title": "Confirm" },
-            { "type": "string", "key": "target", "title": "Target", "options": [
-                { "value": "staging", "label": "Staging" },
-                { "value": "prod", "label": "Production" },
-            ] },
-        ]));
-        let mut state = State::new(&form);
-        assert!(!state.editing);
-        state.step(&form, true);
-        assert_eq!(state.selected, 1);
-        state.step(&form, true);
-        assert_eq!(state.selected, 0);
-        state.pick(&form);
-        assert_eq!(state.field, 1);
-        assert_eq!(state.answer(&form.fields[0]), Some(&FormValue::Bool(true)));
-        state.select(1);
-        state.pick(&form);
-        assert!(confirm(&form, &state));
-        let answer = answer(&form, &state).unwrap();
-        assert_eq!(answer.get("target"), Some(&FormValue::String("prod".into())));
-        assert_eq!(action(&form, &state, 80), "submit");
-    }
-
-    #[test]
     fn typed_answers_are_validated() {
         let form = form(serde_json::json!([
             { "type": "integer", "key": "count", "title": "Count", "minimum": 1, "required": true },

@@ -297,46 +297,6 @@ mod tests {
     }
 
     #[test]
-    fn wire_shapes_follow_the_transport() {
-        let at = |start, end, text: &str| Some(Mention { start, end, text: text.into() });
-        let prompt = RunPrompt {
-            text: "ask @general about @src/a.ts".into(),
-            parts: vec![
-                Part::Agent { name: "general".into(), mention: at(4, 12, "@general") },
-                Part::File(File {
-                    url: "file:///w/src/a.ts".into(),
-                    mime: Some("text/plain".into()),
-                    filename: Some("src/a.ts".into()),
-                    description: None,
-                    mention: at(19, 28, "@src/a.ts"),
-                }),
-                Part::Skill { id: "tidy".into(), mention: None },
-            ],
-            ..RunPrompt::default()
-        };
-        assert_eq!(
-            prompt.files(),
-            [
-                json!({ "uri": "file:///w/src/a.ts", "name": "src/a.ts", "mention": { "start": 19, "end": 28, "text": "@src/a.ts" } })
-            ]
-        );
-        assert_eq!(
-            prompt.agents(),
-            [json!({ "name": "general", "mention": { "start": 4, "end": 12, "text": "@general" } })]
-        );
-        assert_eq!(prompt.skills(), [json!({ "id": "tidy" })]);
-        let back = RunPrompt::from_message(&json!({
-            "text": prompt.text,
-            "files": [{ "uri": "file:///w/src/a.ts", "mime": "text/plain", "name": "src/a.ts", "source": { "type": "uri", "uri": "file:///w/src/a.ts" }, "mention": { "start": 19, "end": 28, "text": "@src/a.ts" } }],
-            "agents": prompt.agents(),
-            "skills": prompt.skills(),
-        }));
-        assert_eq!(back.files(), prompt.files());
-        assert_eq!(back.agents(), prompt.agents());
-        assert!(back.has_file());
-    }
-
-    #[test]
     fn append_shifts_the_following_mentions() {
         let general = |start, end| Part::Agent {
             name: "general".into(),

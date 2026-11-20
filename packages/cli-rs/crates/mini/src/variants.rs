@@ -132,40 +132,12 @@ pub fn save_variant(preferences: &ModelPreferences, model: &ModelSelection, vari
 mod tests {
     use super::*;
 
-    /// `formatModelLabel`: `model · provider`, then the variant.
-    fn format_model_label(model: &ModelSelection, variant: Option<&str>, providers: &[Provider]) -> String {
-        let (name, provider) = model_info(providers, model);
-        let variant = variant.map(|variant| format!(" · {variant}")).unwrap_or_default();
-        format!("{name} · {provider}{variant}")
-    }
-
-    fn catalog() -> Vec<Provider> {
-        let model = Model {
-            name: "Claude".into(),
-            variants: vec!["high".into(), "max".into()],
-            context: 200_000,
-            ..Model::default()
-        };
-        vec![Provider { id: "anthropic".into(), name: "Anthropic".into(), models: [("claude".into(), model)].into() }]
-    }
-
+    /// `resolveVariant`: the asked variant as is, else the first of the session's and the default's that the model has.
     #[test]
-    fn labels_use_the_catalog_names_else_the_ids() {
-        let known = ModelSelection { provider_id: "anthropic".into(), model_id: "claude".into() };
-        assert_eq!(format_model_label(&known, Some("high"), &catalog()), "Claude · Anthropic · high");
-        let unknown = ModelSelection { provider_id: "demo".into(), model_id: "model".into() };
-        assert_eq!(format_model_label(&unknown, None, &catalog()), "model · demo");
-        assert_eq!(variants_for(&catalog(), &known), ["high", "max"]);
-        assert_eq!(context_limit(&catalog(), &known), Some(200_000));
-    }
-
-    #[test]
-    fn variants_resolve_and_cycle_like_variant_shared() {
+    fn variants_resolve_as_variant_shared_does() {
         let variants = vec!["high".to_owned(), "max".to_owned()];
         assert_eq!(resolve_variant(Some("low"), Some("high"), None, &variants).as_deref(), Some("low"));
         assert_eq!(resolve_variant(None, Some("gone"), Some("max"), &variants).as_deref(), Some("max"));
         assert_eq!(resolve_variant(None, None, Some("gone"), &variants), None);
-        assert_eq!(cycle_variant(None, &variants).as_deref(), Some("high"));
-        assert_eq!(cycle_variant(Some("max"), &variants), None);
     }
 }
