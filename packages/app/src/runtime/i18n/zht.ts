@@ -429,6 +429,8 @@ export const dict = {
 
   "settings.general.row.pinchZoom.title": "雙指縮放",
   "settings.general.row.pinchZoom.description": "允許使用觸控板雙指開合和 Ctrl-捲動手勢縮放",
+  "settings.general.row.sharedSidePanel.title": "跨工作階段保持側邊面板開啟",
+  "settings.general.row.sharedSidePanel.description": "在任一工作階段中開啟或關閉面板，都會套用至所有工作階段",
 
   "sound.option.none": "無",
   "sound.option.alert01": "警報 01",
@@ -877,6 +879,7 @@ export const dict = {
   "voice.failure.dropped": "通話已中斷。",
   "voice.failure.connection": "無法接通通話。",
   "desktop.microphoneUsage": "OpenCode 會在語音通話時使用你的麥克風。",
+  "desktop.cameraUsage": "OpenCode 允許你授權的瀏覽器面板網站使用相機。",
   "desktop.documentsFolderUsage": "OpenCode 會使用「文件」檔案夾中的檔案，以處理你在其中開啟的專案和執行的命令。",
   "desktop.desktopFolderUsage": "OpenCode 會使用「桌面」上的檔案，以處理你在其中開啟的專案和執行的命令。",
   "desktop.downloadsFolderUsage": "OpenCode 會使用「下載項目」檔案夾中的檔案，以處理你在其中開啟的專案和執行的命令。",
@@ -978,6 +981,13 @@ export const dict = {
   "provider.connect.chatgptUsageLimit.description": "請在 ChatGPT 設定中查看使用量和上限。",
   "provider.connect.chatgptUsageLimit.manage": "管理使用量",
   "provider.connect.chatgptUsageLimit.close": "關閉",
+  "provider.connect.chatgptUsageLimit.workspaceDescription":
+    "你已達到在其他應用程式中使用 ChatGPT 方案的工作區使用上限。複製下方訊息，請工作區管理員提高使用上限。",
+  "provider.connect.chatgptUsageLimit.copyRequest": "複製給管理員的申請",
+  "provider.connect.chatgptUsageLimit.requestCopied": "已複製申請。請傳送給工作區管理員。",
+  "provider.connect.chatgptUsageLimit.requestCopyFailed": "無法複製。請將以下內容傳送給工作區管理員：",
+  "provider.connect.chatgptUsageLimit.request":
+    "我在 OpenCode 中使用 ChatGPT 方案的使用量已達上限。可以提高我們工作區的使用上限，讓我繼續使用嗎？\n\n請前往 admin.openai.com → Workspace → Usage limits。謝謝！",
   "provider.connect.console.refreshFailed": "你的帳戶已連線，但無法載入模型。請再試一次以重新整理。",
   "provider.connect.console.connected": "OpenCode 已連線",
   "provider.connect.console.noModels":
@@ -1557,7 +1567,7 @@ export const dict = {
   "settings.providers.disconnect.title": "中斷與 {{provider}} 的連線？",
   "settings.providers.disconnect.description": "將移除已儲存的憑證，其模型也將無法再使用。",
   "settings.providers.disconnect.consoleDescription.one":
-    "將移除你的登入資訊，{{workspace}} 中的 {{count}} 個供應商將無法再使用。",
+    "將移除你的登入資訊，{{workspace}} 中的 {{count}} 個提供者將無法再使用。",
   "settings.providers.disconnect.consoleDescription.other":
-    "將移除你的登入資訊，{{workspace}} 中的 {{count}} 個供應商將無法再使用。",
+    "將移除你的登入資訊，{{workspace}} 中的 {{count}} 個提供者將無法再使用。",
 } satisfies Partial<Record<Keys, string>>

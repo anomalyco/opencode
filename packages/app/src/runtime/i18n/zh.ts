@@ -435,6 +435,8 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "在输入框中切换智能体。隐藏时默认使用 Build 智能体。",
   "settings.general.row.pinchZoom.title": "双指缩放",
   "settings.general.row.pinchZoom.description": "允许使用触控板双指捏合和 Ctrl+滚轮手势缩放",
+  "settings.general.row.sharedSidePanel.title": "跨会话保持侧边面板打开",
+  "settings.general.row.sharedSidePanel.description": "在任一会话中打开或关闭面板，都会应用于所有会话",
 
   "sound.option.none": "无",
   "sound.option.alert01": "警报 01",
@@ -881,6 +883,7 @@ export const dict = {
   "voice.failure.dropped": "通话已断开。",
   "voice.failure.connection": "无法接通通话。",
   "desktop.microphoneUsage": "OpenCode 使用你的麦克风进行语音通话。",
+  "desktop.cameraUsage": "OpenCode 允许你授权的浏览器面板网站使用摄像头。",
   "desktop.documentsFolderUsage": "OpenCode 会使用“文稿”文件夹中的文件，用于你在其中打开的项目和运行的命令。",
   "desktop.desktopFolderUsage": "OpenCode 会使用桌面上的文件，用于你在其中打开的项目和运行的命令。",
   "desktop.downloadsFolderUsage": "OpenCode 会使用“下载”文件夹中的文件，用于你在其中打开的项目和运行的命令。",
@@ -982,6 +985,13 @@ export const dict = {
   "provider.connect.chatgptUsageLimit.description": "请在 ChatGPT 设置中查看你的用量和限制。",
   "provider.connect.chatgptUsageLimit.manage": "管理用量",
   "provider.connect.chatgptUsageLimit.close": "关闭",
+  "provider.connect.chatgptUsageLimit.workspaceDescription":
+    "你已达到在其他应用中使用 ChatGPT 套餐的工作区用量上限。复制下方消息，请工作区管理员提高用量上限。",
+  "provider.connect.chatgptUsageLimit.copyRequest": "复制给管理员的申请",
+  "provider.connect.chatgptUsageLimit.requestCopied": "申请已复制。请发送给工作区管理员。",
+  "provider.connect.chatgptUsageLimit.requestCopyFailed": "无法复制。请将以下内容发送给工作区管理员：",
+  "provider.connect.chatgptUsageLimit.request":
+    "我在 OpenCode 中使用 ChatGPT 套餐的用量已达到上限。能否提高我们工作区的用量上限，以便我继续使用？\n\n请前往 admin.openai.com → Workspace → Usage limits。谢谢！",
   "provider.connect.console.refreshFailed": "你的账户已连接，但无法加载模型。请重试以刷新。",
   "provider.connect.console.connected": "OpenCode 已连接",
   "provider.connect.console.noModels":
