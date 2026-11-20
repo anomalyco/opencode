@@ -33,6 +33,8 @@ pub(super) struct Inner {
     /// Do not overwrite the saved position until restoration finishes.
     restored: Cell<bool>,
     layers: RefCell<Vec<Disposer>>,
+    /// The terminal resize handler, which ends message navigation.
+    resize: Cell<Option<HandlerId>>,
     /// The settings listener, until the controls drop.
     settings: RefCell<Option<Disposer>>,
 }
@@ -62,6 +64,7 @@ impl Controls {
             scrollbar: Cell::new(false),
             restored: Cell::new(false),
             layers: RefCell::default(),
+            resize: Cell::new(None),
             settings: RefCell::default(),
         });
         inner.install(tui);
@@ -108,6 +111,9 @@ impl Drop for Inner {
         if let Some(tui) = self.tui.upgrade() {
             self.save_anchor(&tui, self.is_away());
             dispose(&tui, std::mem::take(&mut *self.layers.borrow_mut()));
+            if let Some(id) = self.resize.take() {
+                tui.app.remove_handler(id);
+            }
         }
     }
 }
@@ -148,6 +154,11 @@ impl Inner {
             cx.set_timeout(Duration::ZERO, bind!(weak, |inner, _| inner.update_away()));
         });
         self.transcript.scroll().content_view().on_resize(bind!(self.this, |inner, _, _| inner.update_away()));
+        // A resize ends message navigation and drops its slack; the hint follows once the new size is laid out.
+        self.resize.set(Some(tui.app.on_resize(bind!(self.this, |inner, cx, _, _| {
+            inner.clear_navigation();
+            after_layout(cx.app(), bind!(inner.this, |inner| inner.update_away()));
+        }))));
         let weak = self.this.clone();
         self.transcript.publish(
             tui,
