@@ -251,6 +251,7 @@ fn format_time(value: f64, format: &str) -> String {
 }
 
 const LABEL_GAP: i32 = 2;
+const MAX_TICKS: usize = 10_000;
 const MIN_CHART_WIDTH: i32 = 24;
 const MAX_CHART_WIDTH: i32 = 64;
 
@@ -349,7 +350,9 @@ fn draw_axis(grid: &mut Grid, x: i32, y: i32, chart_width: i32, minimum: f64, sp
     let step = STEPS.iter().copied().find(|&step| step >= span / 4.0).unwrap_or(STEPS[14]);
     let mut ticks = Vec::new();
     let mut value = (minimum / step).ceil() * step;
-    while value <= minimum + span {
+    // A span of more than MAX_TICKS years, or one so far out that a step no longer moves the value, would add ticks
+    // without end.
+    while value <= minimum + span && ticks.len() < MAX_TICKS {
         ticks.push(value);
         value += step;
     }
