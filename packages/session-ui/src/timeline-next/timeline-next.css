@@ -625,6 +625,16 @@
   }
 }
 
+/* An open group's sticky header ends the gap above its first row and would paint over that row's ring. Its last 4px,
+   the width of a ring outside its row, stay unpainted, so the ring shows there and a row scrolling under the header
+   still passes beneath it. */
+[data-timeline="next"]
+  [data-component="collapsed-tool-group"]
+  > [data-component="collapsible"].tool-collapsible
+  > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+  clip-path: inset(-8px -8px min(4px, var(--tool-content-gap)) -8px);
+}
+
 /* A command set in its monospace face sits on the line's top rather than its baseline, so the row stays one line tall
    with it as without it, and opening the row never moves its label. */
 [data-timeline="next"] [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
