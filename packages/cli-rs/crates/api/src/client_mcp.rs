@@ -253,11 +253,7 @@ pub async fn respond(options: &Options, method: &str, params: &Value) -> Map<Str
             let name = params.get("name");
             let Some(tool) = options.tools.iter().find(|tool| name.and_then(Value::as_str) == Some(tool.name.as_str()))
             else {
-                let name = match name {
-                    Some(Value::String(name)) => name.clone(),
-                    None => "undefined".to_owned(),
-                    Some(other) => other.to_string(),
-                };
+                let name = name.map_or_else(|| "undefined".to_owned(), crate::query::js_string);
                 return error(-32602, format!("Unknown tool: {name}"));
             };
             let arguments = params.get("arguments").and_then(Value::as_object).cloned().unwrap_or_default();
@@ -524,6 +520,23 @@ mod tests {
             directory: None,
             headers: Vec::new(),
             tools: Vec::new(),
+        }
+    }
+
+    // Expected: the name of a missing tool reads as JavaScript's `String(name)` writes it.
+    #[tokio::test]
+    async fn an_unknown_tool_is_named_as_javascript_writes_it() {
+        let cases = [
+            (json!({ "name": { "a": 1 } }), "[object Object]"),
+            (json!({ "name": [1, [2, null], "x"] }), "1,2,,x"),
+            (json!({ "name": 1e21 }), "1e+21"),
+            (json!({ "name": null }), "null"),
+            (json!({}), "undefined"),
+            (json!(5), "undefined"),
+        ];
+        for (params, name) in cases {
+            let reply = respond(&quiet(), "tools/call", &params).await;
+            assert_eq!(reply["error"]["message"], format!("Unknown tool: {name}"), "{params}");
         }
     }
 
