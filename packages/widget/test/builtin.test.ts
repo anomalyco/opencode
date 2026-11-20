@@ -31,7 +31,31 @@ const press = (id: string) => ({ id, type: "press" as const })
 const change = (id: string, value: unknown) => ({ id, type: "change" as const, value })
 
 test("built-ins have valid names", () => {
-  expect(builtins.map((item) => item.name)).toEqual(["suggestions", "form", "confirm", "chart", "backdrop", "minigame"])
+  expect(builtins.map((item) => item.name)).toEqual([
+    "suggestions",
+    "form",
+    "confirm",
+    "chart",
+    "backdrop",
+    "minigame",
+    "pie",
+    "scatter",
+    "histogram",
+    "area",
+    "heatmap",
+    "treemap",
+    "sankey",
+    "graph",
+    "tree",
+    "timeline",
+    "funnel",
+    "radar",
+    "gauge",
+    "boxplot",
+    "flowchart",
+    "sequence",
+    "table",
+  ])
   expect(builtins.every((item) => item.builtin && NAME.test(item.name) && item.description.length > 0)).toBe(true)
 })
 

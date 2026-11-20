@@ -14,6 +14,25 @@ const names = [
   "templates/chart",
   "templates/backdrop",
   "templates/minigame",
+  ...[
+    "pie",
+    "scatter",
+    "histogram",
+    "area",
+    "heatmap",
+    "treemap",
+    "sankey",
+    "graph",
+    "tree",
+    "timeline",
+    "funnel",
+    "radar",
+    "gauge",
+    "boxplot",
+    "flowchart",
+    "sequence",
+    "table",
+  ].map((name) => `templates/${name}`),
 ]
 const sources = await Promise.all(names.map((name) => Bun.file(path.join(src, `${name}.js`)).text()))
 
