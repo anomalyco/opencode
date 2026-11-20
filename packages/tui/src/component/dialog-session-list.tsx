@@ -21,7 +21,7 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
 import { useConfig, useNewDesigns } from "../config"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
-import { SessionID } from "@opencode/util/session-id"
+import { looksLikeSessionID, isSessionID } from "@opencode/schema/session-id"
 import { projectName } from "../util/project"
 import { useLocation } from "../context/location"
 
@@ -102,14 +102,15 @@ export function DialogSessionList() {
       (session) =>
         !session.parentID &&
         (withTimestampedFallback(session).toLowerCase().includes(query) ||
-          (SessionID.looksLikeSessionID(query) && session.id.toLowerCase().startsWith(query))),
+          (looksLikeSessionID(query) && session.id.toLowerCase().startsWith(query))),
     )
   })
-  // A session ID identifies one session, so it resolves directly instead of through the project-scoped list.
+  // A session ID identifies one session, so it resolves directly instead of through the project-scoped list. The
+  // lookup waits for a full ID: a prefix is already answered by the list, and a partial ID would only 404.
   const [matched] = createResource(
     () => {
-      const value = filter().trim()
-      return SessionID.looksLikeSessionID(value) ? value : undefined
+      const value = search().trim()
+      return isSessionID(value) ? value : undefined
     },
     (sessionID) =>
       client.api.session
