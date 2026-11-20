@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, onCleanup, Show, Switch, type Accessor } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { TextareaRenderable } from "@opentui/core"
+import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { useTheme, useThemes } from "../../context/theme"
 import type { PermissionReply, PermissionRequest } from "@opencode/client"
 import { SplitBorder } from "../../ui/border"
@@ -19,12 +19,19 @@ import { useToast } from "../../ui/toast"
 
 type PermissionStage = "permission" | "reject"
 
-function EditBody(props: { file?: string; diff?: string; patch?: string }) {
+function EditBody(props: {
+  file?: string
+  diff?: string
+  patch?: string
+  onScroller?: (box: ScrollBoxRenderable | undefined) => void
+}) {
   const theme = useTheme()
   const themes = useThemes()
   const syntax = themes.currentSyntax
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
+
+  onCleanup(() => props.onScroller?.(undefined))
 
   const filepath = createMemo(() => props.file ?? "")
   const diff = createMemo(() => props.diff ?? "")
@@ -43,6 +50,7 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
     <box flexDirection="column" gap={1}>
       <Show when={diff()}>
         <scrollbox
+          ref={(el: ScrollBoxRenderable) => props.onScroller?.(el)}
           height="100%"
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
@@ -85,6 +93,7 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
         >
           {(patch) => (
             <scrollbox
+              ref={(el: ScrollBoxRenderable) => props.onScroller?.(el)}
               height="100%"
               scrollAcceleration={scrollAcceleration()}
               verticalScrollbarOptions={{
@@ -116,6 +125,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
   })
+  const [scroller, setScroller] = createSignal<ScrollBoxRenderable | undefined>()
   const pathFormatter = usePathFormatter()
   const session = createMemo(() => data.session.get(props.request.sessionID))
 
@@ -167,7 +177,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           )
           const presentationBody = () =>
             props.request.action === "edit" ? (
-              <EditBody file={current.file} diff={current.diff} patch={current.patch} />
+              <EditBody file={current.file} diff={current.diff} patch={current.patch} onScroller={setScroller} />
             ) : props.request.action === "external_directory" ? (
               <Show when={current.lines.length > 0}>
                 <box paddingLeft={1} gap={1}>
@@ -240,6 +250,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               }
               escapeKey="reject"
               fullscreen
+              scroller={scroller}
               onSelect={(option) => {
                 if (option === "always") {
                   reply("always")
@@ -416,6 +427,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   options: T
   escapeKey?: keyof T
   fullscreen?: boolean
+  scroller?: Accessor<ScrollBoxRenderable | undefined>
   onSelect: (option: keyof T) => void
 }) {
   const theme = useTheme()
@@ -462,6 +474,24 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
             },
           ]
         : []),
+      ...(props.fullscreen && props.scroller && store.expanded
+        ? [
+            {
+              id: "permission.prompt.scroll.up",
+              title: "Scroll diff up",
+              group: group(),
+              bind: false as const,
+              run: () => props.scroller?.()?.scrollBy(-1, "viewport"),
+            },
+            {
+              id: "permission.prompt.scroll.down",
+              title: "Scroll diff down",
+              group: group(),
+              bind: false as const,
+              run: () => props.scroller?.()?.scrollBy(1, "viewport"),
+            },
+          ]
+        : []),
       ...(keys.length > 1
         ? [
             {
@@ -492,7 +522,13 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
       },
       ...(props.escapeKey ? [{ bind: "escape", title: "Reject permission", group: group(), run: dismiss }] : []),
     ],
-    bindings: [...(props.escapeKey ? ["app.exit"] : []), ...(props.fullscreen ? ["permission.prompt.fullscreen"] : [])],
+    bindings: [
+      ...(props.escapeKey ? ["app.exit"] : []),
+      ...(props.fullscreen ? ["permission.prompt.fullscreen"] : []),
+      ...(props.fullscreen && props.scroller && store.expanded
+        ? ["permission.prompt.scroll.up", "permission.prompt.scroll.down"]
+        : []),
+    ],
   }))
 
   const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
