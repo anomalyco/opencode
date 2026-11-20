@@ -11,6 +11,8 @@ const counter = program(`
     if (event.id === "done") return submit({ total: state.count })
     if (event.id === "close") return dismiss({ count: -1 })
     if (event.id === "empty") return submit()
+    if (event.id === "ping") return send({ count: state.count }, { count: state.count + 1 })
+    if (event.id === "quiet") return send(undefined, undefined, { wake: false })
     if (event.id === "boom") throw new Error("boom")
     if (event.id === "spin") while (true) {}
   }
@@ -50,6 +52,20 @@ test("submit and dismiss end the widget, keeping the state unless given", async 
   const closed = await step(counter, { phase: "event", data, state: { count: 3 }, event: press("close") })
   expect(closed.dismiss).toBe(true)
   expect(closed.state).toEqual({ count: -1 })
+})
+
+test("send messages the agent and keeps the widget open, waking it unless wake is false", async () => {
+  const ping = await step(counter, { phase: "event", data, state: { count: 3 }, event: press("ping") })
+  expect(ping.send).toEqual({ value: { count: 3 }, wake: true })
+  expect(ping.state).toEqual({ count: 4 })
+  expect(ping.view.type === "column" && ping.view.children[0]).toEqual({ type: "text", text: "Count: 4" })
+  expect("submit" in ping || "dismiss" in ping).toBe(false)
+  const quiet = await step(counter, { phase: "event", data, state: { count: 3 }, event: press("quiet") })
+  expect(quiet.send).toEqual({ value: null, wake: false })
+  expect(quiet.state).toEqual({ count: 3 })
+  const session = await WidgetSession.start(counter, data)
+  expect((await session.dispatch(press("ping"))).send).toEqual({ value: { count: 1 }, wake: true })
+  expect((await session.dispatch(press("inc"))).state).toEqual({ count: 3 })
 })
 
 test("update returning nothing keeps the state; init and update are optional", async () => {

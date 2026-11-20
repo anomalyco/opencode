@@ -61,7 +61,8 @@ function update(state, event, data) {                       // optional; default
 ```
 
 `update` returns either a new state, or a step result built with the prelude helpers `submit(value, state?)` /
-`dismiss(state?)`. State and data are plain JSON. Programs must be deterministic and must not rely on time or
+`dismiss(state?)` (final: the widget closes) or `send(value, state?, { wake? })` (a message to the agent; the widget
+stays open). State and data are plain JSON. Programs must be deterministic and must not rely on time or
 randomness.
 
 ## Prelude and step ABI
@@ -73,8 +74,12 @@ The prelude is canonical JavaScript in `packages/widget/src/prelude.js`. It defi
   `image(src, props?)`, `button(id, label, props?)`, `checkbox(id, label, checked, props?)`, `slider(id, props)`
   (`props` holds `value`, `min`, `max`), `select(id, options, props?)`, `input(id, value, props?)`, `divider()`.
   `children` may nest arrays and contain `null`/`undefined`/`false`, which are dropped (`cond && ui.text(...)`).
+  `canvas(props)`, `shader(wgsl, props)`, and `draw()`, the draw command builder (see Canvas).
 - `submit(value, state)` and `dismiss(state)`. An omitted `state` keeps the previous state; `submit(undefined)`
-  submits `null`.
+  submits `null`. Both are final: the widget closes.
+- `send(value, state, { wake = true })`: a non-final message to the agent; the widget stays open and can send again,
+  submit or dismiss later. State handling is like `submit`, and `send(undefined)` sends `null`. `wake: false` delivers
+  it without waking the agent: it sees the message on its next turn (use it for background updates).
 - `__widget_step(input)`: runs one step. `init` returning `undefined` gives `{}`; `update` returning `undefined` keeps
   the state.
 
@@ -107,6 +112,7 @@ type StepOutput = {
   view: Node
   submit?: unknown   // present: the user submitted this value
   dismiss?: true     // present: the user dismissed the widget
+  send?: { value: unknown; wake: boolean }   // present: a message to the agent; the widget stays open
 }
 ```
 
@@ -127,7 +133,7 @@ type WidgetEvent = { id: string; type: "press" | "change" | "pointer"; value?: u
 | `select` | `change`, `value: string` or `string[]` when `multiple` |
 | `input` | `change`, `value: string` (on commit / blur / debounce >= 300 ms) |
 | `carousel` with `id` | `change`, `value: number` (new page index) |
-| `canvas` with `id` | `pointer`, `value: { kind, x, y }` (see Canvas) |
+| `canvas` with `id` | `pointer`, `value: { kind, x, y, width, height }` (see Canvas) |
 
 ## Nodes
 
@@ -153,7 +159,7 @@ type Node =
       value?: string | string[]; multiple?: boolean }
   | { type: "input"; id: string; label?: string; value: string; placeholder?: string; multiline?: boolean }
   | { type: "divider" }
-  | { type: "canvas"; id?: string; height: number; width?: number; fps?: number; alt?: string }
+  | { type: "canvas"; id?: string; height: number; width?: number; fps?: number; duration?: number; alt?: string }
   | { type: "shader"; id?: string; height: number; width?: number; wgsl: string; values?: number[]; fps?: number;
       alt?: string; poster?: string }
 ```
@@ -190,7 +196,9 @@ type DrawOutput = { commands: Command[] }
 ```
 
 Clients call it once when the canvas appears or state changes, then every frame while `fps > 0` (default 0, max 60;
-clients may lower it, e.g. off screen, in low-power mode, or in the TUI). Budget: 8 ms per draw step and 2,000 commands
+clients may lower it, e.g. off screen, in low-power mode, or in the TUI). With `duration` (seconds), a canvas animates
+only until it has drawn a frame with `t >= duration` and then draws again only on state changes (for intro
+animations: `{ fps: 60, duration: 0.6 }`); `t` keeps counting from when the canvas appeared, across view updates. Budget: 8 ms per draw step and 2,000 commands
 per frame; a canvas that exceeds it three frames in a row stops animating and keeps its last frame.
 
 Commands are compact arrays, built with the prelude's `ui.draw()` builder (`const g = ui.draw(); g.rect(...);
@@ -211,8 +219,16 @@ type Gradient = { linear: [x1, y1, x2, y2]; stops: [offset: number, color: Color
 ```
 
 Pointer input on a canvas with an `id` goes to `update`:
-`{ id, type: "pointer", value: { kind: "down" | "move" | "up", x, y } }`, with `move` only while down and at most once
-per frame.
+`{ id, type: "pointer", value: { kind: "down" | "move" | "up", x, y, width, height } }`, with `move` only while down
+and at most once per frame. `width`/`height` are the canvas's logical size, so `update` can hit-test a layout that
+follows the available width.
+
+The builder methods push one command each and return the builder (`g.save().alpha(0.5)`): `save() restore()
+translate(x, y) rotate(r) scale(sx, sy = sx) alpha(a) rect(x, y, w, h, paint) rrect(x, y, w, h, r, paint)
+circle(cx, cy, r, paint) line(x1, y1, x2, y2, paint) path(segments, paint) text(x, y, string, style = {})
+image(src, x, y, w, h)`, and `g.commands` is the list. A `paint` may be a `Color` string, short for `{ fill: color }`
+(`{ stroke: color }` for `line`); an omitted paint is the `"text"` color. `draw` may return the builder itself. The
+TypeScript runtime rejects a draw output that breaks these shapes or exceeds 2,000 commands.
 
 ## Shader
 

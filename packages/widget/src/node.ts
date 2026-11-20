@@ -101,6 +101,8 @@ export interface Canvas {
   readonly width?: number
   /** Frames per second while animating: 0 (default) draws only when it appears or the state changes; max 60. */
   readonly fps?: number
+  /** Seconds after the canvas appears to animate at `fps`, ending with a frame at `t >= duration`; default forever. */
+  readonly duration?: number
   readonly alt?: string
 }
 /** A WGSL fragment shader defining `fn shade(frag: vec2f) -> vec4f` (see the spec's Shader section). */
@@ -142,6 +144,9 @@ export interface Pointer {
   readonly kind: "down" | "move" | "up"
   readonly x: number
   readonly y: number
+  /** The canvas's logical size, so `update` can hit-test a layout that follows the width. */
+  readonly width: number
+  readonly height: number
 }
 
 export type WidgetEvent =
@@ -228,6 +233,11 @@ export interface StepOutput {
   readonly submit?: unknown
   /** Present: the user dismissed the widget. */
   readonly dismiss?: true
+  /**
+   * Present: a message to the agent from `send(value, state, { wake })`; the widget stays open. `wake: false` delivers
+   * it without waking the agent, so it sees it on its next turn.
+   */
+  readonly send?: { readonly value: unknown; readonly wake: boolean }
   /** Added by the runtime, not the program: nodes of unknown types that were dropped from the view. */
   readonly warnings?: ReadonlyArray<string>
 }
@@ -328,6 +338,7 @@ export const Node: Schema.Codec<Node> = Schema.Union([
     height: Schema.Finite.check(Schema.isGreaterThan(0)),
     width: optional(Schema.Finite.check(Schema.isGreaterThan(0))),
     fps: optional(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 60 }))),
+    duration: optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
     alt: optional(Schema.String),
   }),
   Schema.Struct({
@@ -368,6 +379,7 @@ export const StepOutput = Schema.Struct({
   view: Node,
   submit: optional(Schema.Unknown),
   dismiss: optional(Schema.Literal(true)),
+  send: optional(Schema.Struct({ value: Schema.Unknown, wake: Schema.Boolean })),
 })
 
 const n = Schema.Finite

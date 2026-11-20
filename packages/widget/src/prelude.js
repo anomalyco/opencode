@@ -113,6 +113,11 @@ function dismiss(state) {
   return new __WidgetResult("dismiss", undefined, state)
 }
 
+// Sends a message to the agent without closing the widget; `wake: false` lets the agent see it only on its next turn.
+function send(value, state, options) {
+  return new __WidgetResult("send", { value: value ?? null, wake: options?.wake !== false }, state)
+}
+
 function __widget_step(input) {
   const data = input.data
   if (input.phase === "draw") {
@@ -127,5 +132,6 @@ function __widget_step(input) {
   if (!(next instanceof __WidgetResult)) return { state: next, view: view(next, data) }
   const state = next.state ?? input.state
   if (next.kind === "dismiss") return { state, view: view(state, data), dismiss: true }
+  if (next.kind === "send") return { state, view: view(state, data), send: next.value }
   return { state, view: view(state, data), submit: next.value ?? null }
 }
