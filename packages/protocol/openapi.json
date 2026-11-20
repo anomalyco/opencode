@@ -17435,6 +17435,9 @@
               "machines": {
                 "type": "boolean"
               },
+              "home_memory": {
+                "type": "boolean"
+              },
               "schedules": {
                 "type": "boolean"
               },
