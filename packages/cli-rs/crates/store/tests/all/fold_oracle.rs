@@ -346,6 +346,12 @@ fn sequence(templates: &[Value], rng: &mut SplitMix64, len: u64, loaded: bool) -
     // Events for a deleted session are left out until it is created again: Rust drops them, TS recreates the
     // session's lists (deviations O89-list-snapshots and O89-transcript-refresh).
     let mut deleted = HashSet::new();
+    // Rust reads a synced transcript again for the delivery of an item it never saw admitted (deviation
+    // O89-inbox-reconnect), so only admitted items, the loaded one first, are delivered.
+    let mut admitted: HashSet<(String, String)> = HashSet::new();
+    if loaded {
+        admitted.insert(("ses_a".into(), "msg_0006".into()));
+    }
     let mut calls = vec!["call_1".to_owned(), "call_2".to_owned(), "call_3".to_owned()];
     (0..len)
         .map(|serial| {
@@ -424,6 +430,21 @@ fn sequence(templates: &[Value], rng: &mut SplitMix64, len: u64, loaded: bool) -
             }
             let session =
                 data["sessionID"].as_str().or(data["form"]["sessionID"].as_str()).unwrap_or_default().to_owned();
+            let item = (session.clone(), data["inboxID"].as_str().unwrap_or_default().to_owned());
+            match event["type"].as_str() {
+                Some("session.inbox.enqueued") => {
+                    admitted.insert(item);
+                }
+                Some("session.inbox.cancelled") => {
+                    admitted.remove(&item);
+                }
+                Some("session.revert.committed") => {
+                    let to = data["to"].as_str().unwrap_or_default();
+                    admitted.retain(|(owner, id)| *owner != session || id.as_str() < to);
+                }
+                Some("session.inbox.delivered") if !admitted.contains(&item) => return false,
+                _ => {}
+            }
             match event["type"].as_str() {
                 Some("session.deleted") => {
                     deleted.insert(session);

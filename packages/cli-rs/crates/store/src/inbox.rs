@@ -8,6 +8,7 @@ use futures_util::future::BoxFuture;
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
+use crate::connection::Follow;
 use crate::messages::{MessageExt, from_event};
 use crate::state::{Compacting, Data, Error, SessionStatus, State, Task, evict_missing};
 
@@ -224,12 +225,15 @@ impl State {
         }
     }
 
-    pub(crate) fn on_inbox_delivered(&mut self, event: &SessionInboxDelivered) {
+    pub(crate) fn on_inbox_delivered(&mut self, event: &SessionInboxDelivered) -> Vec<Follow> {
         let data = &event.data;
         let session = &data.session_id;
         let inbox = data.inbox_id.as_str();
         let admitted = self.has_input(session, inbox);
+        let known = self.pending(session).iter().any(|item| item.id() == inbox)
+            || self.transcript(session).is_some_and(|transcript| transcript.contains(inbox));
         self.remove_pending(session, inbox);
+        self.observe(session, inbox);
         if admitted
             && let Some(transcript) = self.messages.get_mut(session)
             && let Some(item) = transcript.get_mut(inbox)
@@ -239,7 +243,14 @@ impl State {
             self.created(session, inbox);
             self.log.messages(session);
         }
-        self.observe(session, inbox);
+        // An item this client never saw admitted (its enqueue was lost in a reconnect) has no row to show: a synced
+        // transcript reads its head again.
+        let key = format!("session.message:{}", session.0);
+        if known || !self.syncs.has(&key) {
+            return Vec::new();
+        }
+        self.syncs.invalidate(&key);
+        vec![Follow::Messages(session.clone())]
     }
 
     pub(crate) fn on_inbox_delivery_changed(&mut self, data: &SessionInboxDeliveryChangedData) {
