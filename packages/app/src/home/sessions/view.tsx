@@ -924,8 +924,11 @@ function HomeSessionRow(
             // closing the menu restores focus to the row instead.
             onCloseAutoFocus={(event) => event.preventDefault()}
           >
-            <Menu.Item onSelect={() => props.onOpenSession(props.record.session, { background: true })}>
+            <Menu.Item onSelect={() => props.onOpenSession(props.record.session)}>
               {props.language.t("common.open")}
+            </Menu.Item>
+            <Menu.Item onSelect={() => props.onOpenSession(props.record.session, { background: true })}>
+              {props.language.t("home.sessions.openInBackground")}
             </Menu.Item>
             <Menu.Separator />
             <Menu.Item
