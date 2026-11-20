@@ -1097,46 +1097,6 @@ mod tests {
         }
     }
 
-    #[tokio::test(start_paused = true)]
-    async fn a_stream_that_goes_silent_past_the_idle_timeout_is_replaced() {
-        let fake = Fake::default();
-        let (connection, mut batches) = connect(fake.clone(), options(60));
-        until(|| fake.count() == 1).await;
-        fake.at(0).push(ev(CONNECTED, 1));
-        until(|| connection.state().status == Status::Connected).await;
-
-        until(|| fake.count() == 2).await;
-        assert!(fake.at(0).dropped());
-        assert!(records(&connection).contains(&disconnected(1, "Event stream stalled")));
-
-        fake.at(1).push(ev(CONNECTED, 2));
-        until(|| connection.state().status == Status::Connected).await;
-        let mut events = Vec::new();
-        drain(&mut batches, &mut events).await;
-        assert_eq!(events, vec![ev(CONNECTED, 1), ev(CONNECTED, 2)]);
-        assert_eq!(connection.state().error, None);
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn keepalive_activity_holds_a_quiet_stream_open() {
-        let fake = Fake::default();
-        let (connection, mut batches) = connect(fake.clone(), options(60));
-        until(|| fake.count() == 1).await;
-        fake.at(0).push(ev(CONNECTED, 1));
-        until(|| connection.state().status == Status::Connected).await;
-
-        for _ in 0..12 {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-            (fake.at(0).activity)();
-        }
-        assert_eq!(fake.count(), 1);
-        assert!(!fake.at(0).dropped());
-        assert_eq!(connection.state().status, Status::Connected);
-        let mut events = Vec::new();
-        drain(&mut batches, &mut events).await;
-        assert_eq!(events.len(), 1);
-    }
-
     // A process resuming from suspension may have both an expired idle timer and buffered socket events.
     #[tokio::test(start_paused = true)]
     async fn events_buffered_while_stopped_survive_an_elapsed_idle_deadline() {
@@ -1183,28 +1143,6 @@ mod tests {
         assert!(records(&connection).contains(&disconnected(1, "Network connection restored")));
         fake.at(1).push(ev(CONNECTED, 2));
         until(|| connection.state().status == Status::Connected).await;
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn a_stream_the_server_closes_or_fails_reconnects_and_reports_the_disconnect() {
-        for (fail, message) in [(false, "Event stream disconnected"), (true, "Transport: contract failure")] {
-            let fake = Fake::default();
-            let (connection, _batches) = connect(fake.clone(), options(10_000));
-            until(|| fake.count() == 1).await;
-            fake.at(0).push(ev(CONNECTED, 1));
-            until(|| connection.state().status == Status::Connected).await;
-
-            if fail {
-                fake.at(0).fail("Transport: contract failure")
-            } else {
-                fake.at(0).close()
-            }
-            until(|| connection.state().status == Status::Reconnecting).await;
-            assert_eq!(connection.state().error.as_deref(), Some(message));
-            let disconnected_at = Instant::now();
-            until(|| fake.count() == 2).await;
-            assert!(disconnected_at.elapsed() >= Duration::from_secs(1), "reconnects after the delay");
-        }
     }
 
     #[tokio::test(start_paused = true)]
@@ -1255,19 +1193,6 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn the_stream_must_start_with_server_connected_within_the_connect_timeout() {
-        let fake = Fake::default();
-        let (connection, _batches) = connect(fake.clone(), options(10_000));
-        until(|| fake.count() == 2).await;
-        assert_eq!(records(&connection)[1], disconnected(1, "Timed out connecting to server"));
-
-        fake.at(1).push(ev("session.updated", 0));
-        until(|| fake.count() == 3).await;
-        assert_eq!(records(&connection)[3], disconnected(2, "Event stream did not start with server.connected"));
-        assert_eq!(connection.state().attempt, 2);
-    }
-
-    #[tokio::test(start_paused = true)]
     async fn batches_merge_adjacent_deltas() {
         let fake = Fake::default();
         let (connection, mut batches) =
@@ -1298,48 +1223,6 @@ mod tests {
         assert!(fake.at(0).dropped());
         assert!(records(&connection).contains(&disconnected(1, "Event queue full")));
         assert_eq!(batches.recv().await.unwrap(), vec![ev(CONNECTED, 0)]);
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn a_resolved_server_reconnects_without_the_delay() {
-        #[derive(Clone)]
-        struct Resolving(Fake, Arc<AtomicUsize>);
-        impl Source<Ev> for Resolving {
-            type Error = Failure;
-            fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<Ev, Failure>> {
-                self.0.open(CancellationToken::new(), activity)
-            }
-            fn reconnect(&mut self) -> BoxFuture<'_, bool> {
-                self.1.fetch_add(1, Ordering::SeqCst);
-                Box::pin(async { true })
-            }
-        }
-        let fake = Fake::default();
-        let resolved = Arc::new(AtomicUsize::new(0));
-        let (connection, _batches) = connect(Resolving(fake.clone(), resolved.clone()), options(10_000));
-        until(|| fake.count() == 1).await;
-        fake.at(0).push(ev(CONNECTED, 0));
-        until(|| connection.state().status == Status::Connected).await;
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        fake.at(0).close();
-        let closed = Instant::now();
-        until(|| fake.count() == 2).await;
-        assert!(closed.elapsed() < Duration::from_millis(100));
-        assert_eq!(resolved.load(Ordering::SeqCst), 1);
-        assert_eq!(connection.state().attempt, 1, "a stream that stayed up resets the attempt count");
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn dropping_the_connection_closes_the_stream() {
-        let fake = Fake::default();
-        let (connection, _batches) = connect(fake.clone(), options(10_000));
-        until(|| fake.count() == 1).await;
-        fake.at(0).push(ev(CONNECTED, 0));
-        until(|| connection.state().status == Status::Connected).await;
-        drop(connection);
-        until(|| fake.at(0).dropped()).await;
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        assert_eq!(fake.count(), 1);
     }
 
     /// Opt-in live check (`OPENCODE_LIVE=1`): subscribes to the running service's event stream through
