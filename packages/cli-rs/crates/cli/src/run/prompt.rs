@@ -12,7 +12,7 @@ use futures_util::stream::LocalBoxStream;
 use opencode_api::client::{Call, Client};
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::*;
-use opencode_api::js::truthy;
+use opencode_api::js::{is_whitespace, truthy};
 use opencode_api::transport::SseResponse;
 use opencode_ui::terminal_text;
 use opencode_ui::tool_info::{tool_inline_info, tool_output_text};
@@ -765,7 +765,7 @@ impl Renderer {
             return;
         }
         let value = terminal_text(value);
-        let trimmed = value.trim();
+        let trimmed = value.trim_matches(is_whitespace);
         if trimmed.is_empty() {
             return;
         }
@@ -806,7 +806,8 @@ impl Renderer {
         if completed {
             return self.render_tool(item);
         }
-        if truthy(&state["content"]) && !output_text(name, state.get("content")).trim().is_empty() {
+        if truthy(&state["content"]) && !output_text(name, state.get("content")).trim_matches(is_whitespace).is_empty()
+        {
             let mut shown = item.clone();
             shown["state"] = json_object! { "status": "completed", "input"?: state.get("input"), "metadata"?: state.get("metadata"), "content"?: state.get("content") };
             self.render_tool(&shown);
@@ -1021,7 +1022,7 @@ impl Renderer {
         if info.block {
             ui::empty();
             ui::println(&[&format!("{}{}", ui::TEXT_NORMAL, info.icon), &format!("{}{}", ui::TEXT_NORMAL, info.title)]);
-            if let Some(body) = info.body.filter(|body| !body.trim().is_empty()) {
+            if let Some(body) = info.body.filter(|body| !body.trim_matches(is_whitespace).is_empty()) {
                 ui::println(&[&body]);
             }
             ui::empty();
