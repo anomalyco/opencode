@@ -1,5 +1,7 @@
 //! Parse errors are opaque: the agent only needs to know whether the patch is valid.
 
+use opencode_api::js::is_whitespace;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hunk {
     Add { path: String, contents: String },
@@ -66,11 +68,11 @@ pub fn parse(patch_text: &str) -> Option<Vec<Hunk>> {
         }
         if let Some(path) = header.strip_prefix("*** Update File: ") {
             let mut next = index + 1;
-            while lines.get(next).map(|line| line.trim_end()) == Some("*** End of File") {
+            while lines.get(next).map(|line| js_trim_end(line)) == Some("*** End of File") {
                 next += 1;
             }
             let mut move_path = None;
-            if let Some(line) = lines.get(next).map(|line| line.trim_end())
+            if let Some(line) = lines.get(next).map(|line| js_trim_end(line))
                 && (line == "*** Move to:" || line.starts_with("*** Move to: "))
             {
                 let target = js_trim(line.get("*** Move to: ".len()..).unwrap_or_default());
@@ -114,7 +116,7 @@ fn parse_update(lines: &[&str], start: usize, end: usize) -> Option<(Vec<Chunk>,
     let empty = |chunk: &Chunk| chunk.old_lines.is_empty() && chunk.new_lines.is_empty();
     while index < end {
         let line = lines[index];
-        let update_line = line.trim_end();
+        let update_line = js_trim_end(line);
         if after_end_of_file {
             if update_line.is_empty() {
                 index += 1;
@@ -221,7 +223,7 @@ fn seek(lines: &[String], pattern: &[String], start: usize, eof: bool) -> Option
     let last = lines.len() - pattern.len();
     let compares: [fn(&str, &str) -> bool; 4] = [
         |left, right| left == right,
-        |left, right| left.trim_end() == right.trim_end(),
+        |left, right| js_trim_end(left) == js_trim_end(right),
         |left, right| js_trim(left) == js_trim(right),
         |left, right| normalize(js_trim(left)) == normalize(js_trim(right)),
     ];
@@ -252,7 +254,12 @@ fn normalize(value: &str) -> String {
 
 /// `String.prototype.trim`, which also strips the BOM but not U+0085.
 fn js_trim(value: &str) -> &str {
-    value.trim_matches(|char: char| (char.is_whitespace() && char != '\u{85}') || char == '\u{feff}')
+    value.trim_matches(is_whitespace)
+}
+
+/// `String.prototype.trimEnd`.
+fn js_trim_end(value: &str) -> &str {
+    value.trim_end_matches(is_whitespace)
 }
 
 /// `stripHeredoc`: the body of `cat <<EOF ... EOF` (or `<<'EOF'`, `<<"EOF"`), else the input.
@@ -263,9 +270,9 @@ fn strip_heredoc(input: &str) -> &str {
 fn heredoc_body(input: &str) -> Option<&str> {
     let mut rest = input;
     if let Some(after) = rest.strip_prefix("cat")
-        && after.starts_with(char::is_whitespace)
+        && after.starts_with(is_whitespace)
     {
-        rest = after.trim_start();
+        rest = after.trim_start_matches(is_whitespace);
     }
     rest = rest.strip_prefix("<<")?;
     let quote = rest.chars().next().filter(|char| *char == '\'' || *char == '"');
@@ -291,7 +298,7 @@ fn heredoc_rest<'a>(input: &'a str, rest: &'a str, word: &str) -> Option<&'a str
         return None;
     }
     let header_end = input.len() - rest.len();
-    let space = rest.len() - rest.trim_start().len();
+    let space = rest.len() - rest.trim_start_matches(is_whitespace).len();
     let start = rest[..space]
         .char_indices()
         .filter(|(_, char)| *char == '\n')
@@ -335,6 +342,18 @@ mod tests {
         assert_eq!(parse(text), Some(vec![Hunk::Delete { path: "x".into() }]));
         assert_eq!(strip_heredoc("<<EOF\nbody\nEOF"), "body");
         assert_eq!(strip_heredoc("<<EOF\nbody\nEND"), "<<EOF\nbody\nEND");
+        // JavaScript's `\s` takes a BOM, not U+0085.
+        assert_eq!(strip_heredoc("cat\u{85}<<EOF\nbody\nEOF"), "cat\u{85}<<EOF\nbody\nEOF");
+        assert_eq!(strip_heredoc("cat\u{feff}<<EOF\nbody\nEOF"), "body");
+    }
+
+    #[test]
+    fn line_ends_trim_as_javascript_trim_end() {
+        let eof = "*** Begin Patch\n*** Update File: a\n@@\n-x\n+y\n*** End of File\u{feff}\n*** End Patch";
+        assert!(matches!(parse(eof).as_deref(), Some([Hunk::Update { chunks, .. }]) if chunks[0].end_of_file));
+        let chunks = vec![Chunk { old_lines: vec!["x".into()], new_lines: vec!["y".into()], ..Chunk::default() }];
+        assert!(derive("a", &chunks, "x\u{85}\n").is_err());
+        assert_eq!(derive("a", &chunks, "x\u{feff}\n"), Ok("y\n".into()));
     }
 
     #[test]
