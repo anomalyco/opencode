@@ -58,15 +58,41 @@ pub fn number_to_string(value: f64) -> String {
     if value.is_infinite() {
         return if value > 0.0 { "Infinity" } else { "-Infinity" }.to_owned();
     }
-    if (1e-6..1e21).contains(&value.abs()) {
-        return format!("{value}");
-    }
-    // Rust writes `1e21` and `1e-7`; JavaScript writes `1e+21` and `1e-7`.
+    let sign = if value < 0.0 { "-" } else { "" };
+    let (digits, n) = shortest(value.abs());
+    let k = digits.len() as i32;
+    let body = match n {
+        _ if k <= n && n <= 21 => format!("{digits}{}", "0".repeat((n - k) as usize)),
+        1..=21 => format!("{}.{}", &digits[..n as usize], &digits[n as usize..]),
+        -5..=0 => format!("0.{}{digits}", "0".repeat(n.unsigned_abs() as usize)),
+        _ => {
+            let (first, rest) = digits.split_at(1);
+            let point = if rest.is_empty() { "" } else { "." };
+            format!("{first}{point}{rest}e{}{}", if n > 0 { "+" } else { "-" }, (n - 1).abs())
+        }
+    };
+    format!("{sign}{body}")
+}
+
+/// The shortest digits that read back as `value`, and `n` with `value = 0.digits × 10^n`. Of two such digit strings
+/// equally near `value`, ECMAScript takes the even one, where Rust's formatting takes the larger.
+fn shortest(value: f64) -> (String, i32) {
     let text = format!("{value:e}");
-    match text.split_once('e') {
-        Some((mantissa, exponent)) if !exponent.starts_with('-') => format!("{mantissa}e+{exponent}"),
-        _ => text,
+    let (mantissa, exponent) = text.split_once('e').expect("an exponent");
+    let mut digits = mantissa.replace('.', "");
+    let n = exponent.parse::<i32>().expect("an exponent") + 1;
+    let last = digits.as_bytes()[digits.len() - 1];
+    // A tie needs a value one digit longer than its shortest digits, which only a value of about 16 digits has.
+    if digits.len() >= 15 && last % 2 == 1 {
+        let lower = format!("{}{}", &digits[..digits.len() - 1], char::from(last - 1));
+        let exact = format!("{value:.800e}");
+        let exact = exact.split_once('e').expect("an exponent").0.replace('.', "");
+        let even = format!("{}.{}e{}", &lower[..1], &lower[1..], n - 1);
+        if exact.trim_end_matches('0') == format!("{lower}5") && even.parse() == Ok(value) {
+            digits = lower;
+        }
     }
+    (digits, n)
 }
 
 /// `Boolean(value)` for a JSON value. A JSON number is never `NaN`.
@@ -298,6 +324,11 @@ mod tests {
             (f64::NAN, "NaN"),
             (f64::INFINITY, "Infinity"),
             (f64::NEG_INFINITY, "-Infinity"),
+            (123e-20, "1.23e-18"),
+            (-0.000_001_5, "-0.0000015"),
+            // Exact ties between two shortest digit strings go to the even one; the sums are exact.
+            (794_828_407_152_630.0 + 0.25, "794828407152630.2"),
+            (862_745_139_194.0 + 0.156_25, "862745139194.1562"),
         ];
         for (value, text) in cases {
             assert_eq!(number_to_string(value), text, "{value}");
