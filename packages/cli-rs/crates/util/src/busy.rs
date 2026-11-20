@@ -1,6 +1,7 @@
 //! Paths Windows reports busy while another process has them open or is deleting them, tried again for a bounded time.
 
-use std::io;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write};
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
@@ -26,7 +27,33 @@ pub fn retry<T>(tries: u32, f: impl FnMut() -> io::Result<T>) -> io::Result<T> {
 
 /// `fs::rename`, tried again while Windows reports `from` or `to` busy: replacing a file another TUI is reading.
 pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
-    retry(RENAME_TRIES, || std::fs::rename(from, to))
+    retry(RENAME_TRIES, || fs::rename(from, to))
+}
+
+/// Replaces `file` with `bytes` so a crash or power loss leaves the old file or the new one, never an empty one: writes
+/// them to `temp`, opened with `options`, syncs it, and renames it over `file` with [`rename_synced`]. When a step
+/// after the open fails, `temp` is removed; a `temp` that could not be opened, perhaps another writer's, stays.
+pub fn replace(file: &Path, temp: &Path, options: &OpenOptions, bytes: &[u8]) -> io::Result<()> {
+    let mut handle = options.open(temp)?;
+    let written = handle.write_all(bytes).and_then(|()| handle.sync_all());
+    drop(handle);
+    let result = written.and_then(|()| rename_synced(temp, file));
+    if result.is_err() {
+        let _ = fs::remove_file(temp);
+    }
+    result
+}
+
+/// [`rename`], then on Unix a sync of `to`'s directory, so the rename itself survives a crash. A directory sync that
+/// fails is ignored: `from`'s bytes must be synced already, so a lost rename leaves the old file whole. Windows has no
+/// directory sync through `File::open`, and NTFS journals the rename, so it renames only.
+pub fn rename_synced(from: &Path, to: &Path) -> io::Result<()> {
+    rename(from, to)?;
+    #[cfg(unix)]
+    if let Ok(dir) = fs::File::open(to.parent().filter(|dir| !dir.as_os_str().is_empty()).unwrap_or(Path::new("."))) {
+        let _ = dir.sync_all();
+    }
+    Ok(())
 }
 
 // The loop behind [`retry`], with the busy test passed in so it runs on every platform under test.
@@ -86,6 +113,50 @@ mod tests {
         });
         assert_eq!(result.unwrap_err().raw_os_error(), Some(FAKE));
         assert_eq!(calls, RENAME_TRIES + 1);
+    }
+
+    fn truncating() -> OpenOptions {
+        let mut options = OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        options
+    }
+
+    // A crash between the write and the rename leaves a temporary file behind; the next write over it still lands.
+    #[test]
+    fn a_replace_lands_over_a_stale_temporary_file() {
+        let dir = crate::temp::tempdir().unwrap();
+        let (file, temp) = (dir.path().join("cli.json"), dir.path().join("cli.json.tmp"));
+        fs::write(&file, "old").unwrap();
+        fs::write(&temp, "a longer half-written leftover").unwrap();
+        replace(&file, &temp, &truncating(), b"new").unwrap();
+        assert_eq!(fs::read_to_string(&file).unwrap(), "new");
+        assert!(!temp.exists());
+    }
+
+    // A temporary file that exists already when it must be new is someone else's: the write fails and leaves both.
+    #[test]
+    fn a_replace_that_cannot_open_its_temporary_file_keeps_both() {
+        let dir = crate::temp::tempdir().unwrap();
+        let (file, temp) = (dir.path().join("sidecar"), dir.path().join("sidecar.tmp"));
+        fs::write(&file, "old").unwrap();
+        fs::write(&temp, "theirs").unwrap();
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        assert_eq!(replace(&file, &temp, &options, b"new").unwrap_err().kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read_to_string(&file).unwrap(), "old");
+        assert_eq!(fs::read_to_string(&temp).unwrap(), "theirs");
+    }
+
+    // A rename that fails removes the temporary file and keeps the old one.
+    #[test]
+    fn a_replace_whose_rename_fails_keeps_the_old_file() {
+        let dir = crate::temp::tempdir().unwrap();
+        let (file, temp) = (dir.path().join("taken"), dir.path().join("taken.tmp"));
+        fs::create_dir(&file).unwrap();
+        fs::write(file.join("inside"), "").unwrap();
+        assert!(replace(&file, &temp, &truncating(), b"new").is_err());
+        assert!(file.is_dir());
+        assert!(!temp.exists());
     }
 
     #[test]

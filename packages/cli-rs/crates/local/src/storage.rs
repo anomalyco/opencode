@@ -120,8 +120,8 @@ fn segment(value: &str) -> Result<&str, Error> {
     if valid { Ok(value) } else { Err(Error::Segment(value.to_string())) }
 }
 
-/// `writeJsonAtomic`: compact `JSON.stringify` to `<file>.<pid>.<uuid>.tmp`, then a rename, tried again while Windows
-/// reports the file busy (another TUI reloading it). The temporary file is removed when either step fails.
+/// `writeJsonAtomic`: compact `JSON.stringify` to `<file>.<pid>.<uuid>.tmp`, synced, then a rename, tried again while
+/// Windows reports the file busy (another TUI reloading it). The temporary file is removed when either step fails.
 pub fn write_json_atomic(file: &Path, value: &Value) -> io::Result<()> {
     write_text_atomic(file, &jsonc::stringify(value))
 }
@@ -132,9 +132,9 @@ pub fn write_text_atomic(file: &Path, text: &str) -> io::Result<()> {
         fs::create_dir_all(dir)?;
     }
     let temp = PathBuf::from(format!("{}.{}.{}.tmp", file.display(), std::process::id(), crate::id::v4()));
-    fs::write(&temp, text).and_then(|()| busy::rename(&temp, file)).inspect_err(|_| {
-        let _ = fs::remove_file(&temp);
-    })
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    busy::replace(file, &temp, &options, text.as_bytes())
 }
 
 #[cfg(test)]

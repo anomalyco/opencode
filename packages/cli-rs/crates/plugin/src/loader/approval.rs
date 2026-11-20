@@ -560,24 +560,12 @@ fn update(file: &Path, change: impl FnOnce(&mut Vec<Value>) -> Result<(), String
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let next = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let temp = file.with_file_name(format!(".{FILE}.{}.{next}.tmp", std::process::id()));
-    let written = create_private(&temp).and_then(|mut handle| {
-        std::io::Write::write_all(&mut handle, &text)?;
-        handle.sync_all()?;
-        opencode_util::busy::rename(&temp, file)
-    });
-    written.map_err(|error| {
-        let _ = std::fs::remove_file(&temp);
-        format!("{}: {error}", file.display())
-    })
-}
-
-/// A new file at `path`, which must not exist, readable and writable by this user alone.
-fn create_private(path: &Path) -> std::io::Result<File> {
+    // A new file, which must not exist, readable and writable by this user alone.
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    options.open(path)
+    opencode_util::busy::replace(file, &temp, &options, &text).map_err(|error| format!("{}: {error}", file.display()))
 }
 
 /// The lock of `file`, a file beside it, held until the result drops. Another client holds it only while it writes,
