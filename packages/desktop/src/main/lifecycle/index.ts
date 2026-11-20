@@ -6,7 +6,7 @@ import { Context, Effect, Layer } from "effect"
 import { DeepLinks } from "../deep-links"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
-import { safeWebContentsURL } from "../windows/state"
+import { safeWebContentsOrigin } from "../windows/state"
 import { getLastFocusedWindow, mainWindows } from "../windows"
 import type { Scope } from "@opencode/plugin/gui/host"
 import { marks } from "./marks"
@@ -135,8 +135,13 @@ const runtime = Layer.effect(
       webContents: Electron.WebContents,
       details: Electron.RenderProcessGoneDetails,
     ) => {
+      // Every page's process reports here, a plugin's views included (the in-app browser's pages), and logs go into
+      // bug reports: the origin only. A window's own line has its address (recovery.ts).
       runFork(
-        scoped("window", Effect.logError("app render process gone", { url: safeWebContentsURL(webContents), details })),
+        scoped(
+          "window",
+          Effect.logError("app render process gone", { origin: safeWebContentsOrigin(webContents), details }),
+        ),
       )
     }
 

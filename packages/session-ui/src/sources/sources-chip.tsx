@@ -43,7 +43,7 @@ export function SourcesChip(props: { sources: TurnSources; icons: SiteIconMode; 
   return (
     <button ref={button} type="button" data-component="sources-chip" onClick={() => props.onOpen()}>
       <span data-slot="sources-chip-icons">
-        <Show when={props.sources.sources.length > 0} fallback={<Icon name="globe" size="small" />}>
+        <Show when={props.sources.sources.length > 0} fallback={<Icon name="globe" />}>
           <For each={sites()}>{(source) => <SiteIcon site={source.site} host={source.host} mode={props.icons} />}</For>
         </Show>
       </span>

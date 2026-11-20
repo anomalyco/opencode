@@ -23,8 +23,8 @@
   }
 
   .settings-models-console-groups {
+    --console-rail-strip: 8px;
     margin-inline-start: 4px;
-    padding-inline-start: 8px;
   }
 
   .provider-model-group-trigger,
@@ -35,13 +35,6 @@
   .provider-model-group-models > [data-component="settings-list"] {
     padding-inline: 0;
   }
-}
-
-[data-component="dialog-v2"]:has(.model-dialog) [data-slot="dialog-container"] {
-  width: min(calc(100vw - 24px), 480px);
-  min-height: 0;
-  border-radius: 12px;
-  background: var(--v2-background-bg-base);
 }
 
 .model-dialog {
@@ -60,7 +53,7 @@
     &::after {
       height: 1px;
       margin-inline: -6px;
-      background: var(--v2-border-border-muted);
+      background: var(--v2-border-border-base);
       content: "";
       transform: scaleY(0.5);
     }
@@ -85,14 +78,14 @@
     }
   }
 
-  /* Like a model row: 6px inset, a 16px icon slot and a 6px gap, so the query starts where the model names do. */
+  /* Like a model row: 8px inset, a 16px icon slot and a 6px gap, so the query starts where the model names do. */
   [data-component="search-list"] [data-slot="search-list-search"] [data-slot="text-input-v2-value"] {
     gap: 6px;
   }
 
   [data-component="search-list"] [data-slot="search-list-search"] [data-slot="text-input-v2-leading-icon"] {
-    width: 22px;
-    padding-inline-start: 6px;
+    width: 24px;
+    padding-inline-start: 8px;
   }
 
   /* The stuck header's gradient replaces it; the list measures sections for it, and here they have no box. */
@@ -106,7 +99,7 @@
   }
 
   [data-component="search-list"] [data-slot="search-list-results"] {
-    gap: 4px;
+    gap: 2px;
     padding: 0 6px 6px;
   }
 
@@ -125,7 +118,7 @@
   [data-component="search-list"] [data-slot="search-list-header"] {
     height: auto;
     padding-block: 16px 2px;
-    padding-inline: 34px 6px;
+    padding-inline: 36px 6px;
     background: var(--v2-background-bg-base);
     color: var(--v2-text-text-faint);
     font-size: 12px;
@@ -177,13 +170,15 @@
   [data-component="search-list"] [data-slot="search-list-row"] {
     justify-content: flex-start;
     gap: 6px;
-    height: 28px;
-    padding-inline: 6px 3px;
+    height: 32px;
+    padding-inline: 8px 3px;
     border-radius: 6px;
     font-size: 13px;
     font-weight: 440;
     line-height: var(--line-height-base);
     letter-spacing: -0.04px;
+    /* A catalog can list thousands of models; rows out of view skip layout and paint until they scroll in. */
+    content-visibility: auto;
   }
 
   [data-slot="model-dialog-check"] {

@@ -306,9 +306,9 @@ export const content = {
       body: "Ajanlar gerçek tarayıcınızı kullansın.",
       title: "OpenCode | Browse, kodlama ajanları için gerçek tarayıcınız",
       description:
-        "Browse, OpenCode'un ve diğer MCP istemcilerinin gerçek tarayıcınızı kullanmasını sağlar. Ajanlar arka plan sekmelerini Playwright ile yönetir, girişleri ve 2FA'yı size bırakır.",
+        "Browse, OpenCode'un ve diğer MCP istemcilerinin gerçek tarayıcınızı kullanmasını sağlar. Ajanlar okur, tıklar, yazar, ekran görüntüsü alır, sekme kaydeder ve girişleri ve 2FA'yı size bırakır.",
       intro:
-        "Ajanlarınızın gerçek tarayıcınızı, yani sekmelerinizi, oturum açmış hesaplarınızı ve eklentilerinizi kullanmasını sağlayan bir MCP sunucusu ve bir Chromium eklentisi. Sekmeleri Playwright ile açıp yönetir, ekran görüntüsü alır ve ekranı kaydederler. Bunu yolunuza çıkmayan, gruplanmış arka plan sekmelerinde yaparlar. Sıra size geldiğinde, örneğin bir giriş, 2FA istemi ya da ödeme için, sekmeyi size verirler ve siz Continue'ya tıklayınca devam ederler.",
+        "Ajanlarınızın gerçek tarayıcınızı, yani sekmelerinizi, oturum açmış hesaplarınızı ve eklentilerinizi kullanmasını sağlayan bir MCP sunucusu ve bir Chromium eklentisi. Sekmeleri arka planda, yolunuzdan uzakta gruplanmış olarak açarlar; sayfaları okur, tıklar, yazar, ekran görüntüsü alır ve sekme kaydederler. Sıra size geldiğinde, örneğin bir giriş, 2FA istemi ya da ödeme için, sekmeyi size verirler ve siz Continue'ya tıklayınca devam ederler.",
       features: {
         "your-real-browser": {
           title: "Gerçek tarayıcınız",
@@ -328,7 +328,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Kaydet ve yakala",
-          body: "Ekran görüntüleri, ekran kayıtları ve HAR olarak ağ trafiği.",
+          body: "Ekran görüntüleri, sekme kayıtları ve ağ trafiği.",
         },
         "any-mcp-client": {
           title: "Her MCP istemcisi",
@@ -338,9 +338,9 @@ export const content = {
           title: "Tüm oturum açmalarınız",
           body: "Ajanlar zaten oturum açtığınız siteleri kullanır. Anahtar yok, kurulum yok.",
         },
-        allowlists: {
-          title: "İzin listeleri",
-          body: "Bir oturumun sekmelerini belirttiğiniz sitelerle sınırlayın.",
+        "allowed-sites": {
+          title: "İzin verilen siteler",
+          body: "Bir ajanın sekmesini belirttiğiniz sitelerde tutun.",
         },
       },
       install:
@@ -508,7 +508,7 @@ export const content = {
     },
     colors: {
       title: "Renkler",
-      body: "Logo ve yazı logosu tek bir mürekkebi üç opaklıkta kullanır, koyu arka planlar için daha açık bir mürekkep vardır. Aşağıdaki değerler, standart dosyalardaki gibi bu mürekkebin beyaz ya da #0B0B0B üzerindeki hâlidir. Kopyalamak için bir değere tıklayın.",
+      body: "Logo ve yazı logosu tek bir mürekkebi üç opaklıkta kullanır, koyu arka planlar için daha açık bir mürekkep vardır. Aşağıdaki değerler standart dosyalardaki renklerdir. Bunları yalnızca logo ve yazı logosu için kullanın; diğer metinlerde veya arka planlarda kullanmayın. Kopyalamak için bir değere tıklayın.",
       palettes: {
         light: {
           name: "Açık",

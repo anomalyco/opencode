@@ -1,7 +1,8 @@
-// @ts-nocheck
-import { createSignal } from "solid-js"
+import { createEffect, createSignal, splitProps } from "solid-js"
 import { Field } from "@opencode/ui/field"
-import { TextInput } from "./text-input"
+import { Icon } from "@opencode/ui/icon"
+import { Keybind } from "@opencode/ui/keybind"
+import { TextInput, type TextInputProps } from "./text-input"
 
 const docs = `### Overview
 Compact single-line text field with neutral elevation, optional trailing copy action, and theme tokens.
@@ -26,10 +27,51 @@ Compact single-line text field with neutral elevation, optional trailing copy ac
 Compose with \`Field\` for label, helper prefix/suffix, and tooltip — see the **Field** story.
 `
 
+type Controls = TextInputProps & {
+  defaultValue?: string
+  showLeadingIcon?: boolean
+  showTrailing?: boolean
+  onValue?: (value: string) => void
+}
+
+function Sample(props: Controls) {
+  const [local, input] = splitProps(props, ["defaultValue", "showLeadingIcon", "showTrailing", "onValue"])
+
+  const [value, setValue] = createSignal("")
+
+  createEffect(() => setValue(local.defaultValue ?? ""))
+  createEffect(() => local.onValue?.(value()))
+
+  let field!: HTMLInputElement
+
+  return (
+    <TextInput
+      {...input}
+      ref={field}
+      copyLabel={props.copyLabel || undefined}
+      value={value()}
+      onInput={(event) => setValue(event.currentTarget.value)}
+      leadingIcon={local.showLeadingIcon && <Icon name="magnifying-glass" />}
+      trailing={local.showTrailing && <Keybind keys={["↵"]} variant="neutral" />}
+      onClearClick={() => setValue("")}
+      onCopyClick={() => {
+        const copySelection = () => {
+          field.select()
+          document.execCommand("copy")
+        }
+
+        if (!navigator.clipboard) return copySelection()
+        void navigator.clipboard.writeText(value()).catch(copySelection)
+      }}
+    />
+  )
+}
+
 export default {
   title: "UI/TextInput",
   id: "ui-text-input",
   component: TextInput,
+  render: Sample,
   tags: ["autodocs"],
   parameters: {
     frameHeight: "300px",
@@ -42,13 +84,22 @@ export default {
   },
   args: {
     placeholder: "Placeholder",
+    defaultValue: "",
     showCopyButton: false,
+    copyLabel: "",
+    showClearButton: false,
+    showLeadingIcon: false,
+    showTrailing: false,
+    numeric: false,
+    readOnly: false,
     disabled: false,
     invalid: false,
     appearance: "base",
     surface: "base",
-  },
+    type: "text",
+  } satisfies Controls,
   argTypes: {
+    type: { options: ["text", "search", "email", "password", "url", "tel", "number"] },
     surface: {
       control: "select",
       options: ["base", "layer-1", "invisible"],
@@ -75,9 +126,10 @@ export default {
 export const Playground = {}
 
 export const Surfaces = {
-  render: () => (
+  args: { placeholder: "Base (default)" },
+  render: (args: Controls) => (
     <div style={{ display: "grid", gap: "20px", width: "280px" }}>
-      <TextInput placeholder="Base (default)" />
+      <Sample {...args} />
       <TextInput surface="layer-1" placeholder="Layer 1" />
       <TextInput surface="invisible" placeholder="Invisible" />
       <TextInput surface="invisible" placeholder="Invisible, invalid" invalid />
@@ -96,12 +148,13 @@ export const WithCopyButton = {
 }
 
 export const Controlled = {
-  render: () => {
+  args: { defaultValue: "Controlled value", placeholder: "Type here…" },
+  render: (args: Controls) => {
     const [value, setValue] = createSignal("Controlled value")
 
     return (
       <div style={{ display: "grid", gap: "12px" }}>
-        <TextInput value={value()} onInput={(e) => setValue(e.currentTarget.value)} placeholder="Type here…" />
+        <Sample {...args} onValue={setValue} />
         <div
           style={{
             "font-family": "var(--v2-font-family-sans)",
@@ -117,33 +170,35 @@ export const Controlled = {
 }
 
 export const Appearances = {
-  render: () => (
+  args: { appearance: "small", placeholder: "Small (24px)" },
+  render: (args: Controls) => (
     <div style={{ display: "grid", gap: "20px", width: "280px" }}>
-      <TextInput appearance="small" placeholder="Small (24px)" />
-      <TextInput appearance="base" placeholder="Base (28px)" defaultValue="Base" />
-      <TextInput appearance="large" placeholder="Large (32px)" defaultValue="Large" />
-      <TextInput appearance="large" placeholder="Large with copy" defaultValue="copy-me" showCopyButton />
-      <TextInput appearance="small" placeholder="Small with clear" showClearButton />
-      <TextInput appearance="base" placeholder="Base with clear" showClearButton />
-      <TextInput appearance="large" placeholder="Large with clear" showClearButton />
+      <Sample {...args} />
+      <TextInput appearance="base" placeholder="Base (28px)" value="Base" />
+      <TextInput appearance="large" placeholder="Large (32px)" value="Large" />
+      <Sample appearance="large" placeholder="Large with copy" defaultValue="copy-me" showCopyButton />
+      <Sample appearance="small" placeholder="Small with clear" showClearButton />
+      <Sample appearance="base" placeholder="Base with clear" showClearButton />
+      <Sample appearance="large" placeholder="Large with clear" showClearButton />
     </div>
   ),
 }
 
 export const WithField = {
   parameters: { frameHeight: "500px" },
-  render: () => (
+  args: { placeholder: "Text", showCopyButton: true },
+  render: (args: Controls) => (
     <div style={{ display: "grid", gap: "24px", width: "280px" }}>
-      <Field>
+      <Field invalid={args.invalid}>
         <Field.Label tooltip="Additional context">Label</Field.Label>
         <Field.Prefix>Prefix</Field.Prefix>
-        <TextInput placeholder="Text" showCopyButton />
+        <Sample {...args} />
         <Field.Suffix>Suffix</Field.Suffix>
       </Field>
       <Field invalid>
         <Field.Label>Label</Field.Label>
         <Field.Prefix>Prefix</Field.Prefix>
-        <TextInput placeholder="Text" defaultValue="Invalid" showCopyButton />
+        <Sample placeholder="Text" defaultValue="Invalid" showCopyButton />
         <Field.Suffix>Suffix</Field.Suffix>
       </Field>
     </div>
@@ -151,14 +206,15 @@ export const WithField = {
 }
 
 export const States = {
-  render: () => (
+  args: { placeholder: "Default" },
+  render: (args: Controls) => (
     <div style={{ display: "grid", gap: "20px", width: "280px" }}>
-      <TextInput placeholder="Default" />
-      <TextInput placeholder="With value" defaultValue="Hello world" />
-      <TextInput placeholder="With copy" defaultValue="copy-me" showCopyButton />
-      <TextInput placeholder="Invalid" defaultValue="Invalid value" invalid showCopyButton />
+      <Sample {...args} />
+      <TextInput placeholder="With value" value="Hello world" />
+      <Sample placeholder="With copy" defaultValue="copy-me" showCopyButton />
+      <Sample placeholder="Invalid" defaultValue="Invalid value" invalid showCopyButton />
       <TextInput placeholder="Disabled" disabled />
-      <TextInput placeholder="Disabled with value" defaultValue="Read only" disabled showCopyButton />
+      <TextInput placeholder="Disabled with value" value="Read only" disabled showCopyButton />
     </div>
   ),
 }

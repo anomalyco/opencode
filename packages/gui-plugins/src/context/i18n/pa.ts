@@ -5,7 +5,6 @@ export default {
   "usage.usage": "ورتن",
   "usage.cost": "لاگت",
   "usage.view": "سیاق و سباق دا استعمال ویکھو",
-  "systemPrompt.title": "سسٹم پرامپٹ",
   "rawMessages.title": "خام سنیہے",
   "export.session": "سیشن برآمد کرو",
   "stats.session": "سیشن",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "سیشن نوں ⁨{{filename}}⁩ وچ محفوظ کر دتا گیا",
   "export.failed.title": "سیشن برآمد کرن چ ناکامی ہوئی",
   "export.failed.description": "سیشن برآمد کردے ویلے اک غلطی ہو گئی",
+  "usage.toggle": "سیشن تناظر ٹوگل کرو",
 }

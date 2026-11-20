@@ -76,6 +76,7 @@ export const LocationSwitched = Schema.Struct({
 export interface User extends Schema.Schema.Type<typeof User> {}
 export const User = Schema.Struct({
   ...Base,
+  /** Read by the session search index's SQL (`packages/core/src/session/search-index.ts`); a rename needs its `Version` bumped. */
   text: Prompt.fields.text,
   files: Prompt.fields.files,
   agents: Prompt.fields.agents,
@@ -185,6 +186,7 @@ export const AssistantTool = Schema.Struct({
 export interface AssistantText extends Schema.Schema.Type<typeof AssistantText> {}
 export const AssistantText = Schema.Struct({
   type: Schema.tag("text"),
+  /** Read by the session search index's SQL (`packages/core/src/session/search-index.ts`); a rename needs its `Version` bumped. */
   text: Schema.String,
   native: Native.pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Text" })
@@ -223,6 +225,7 @@ export const Assistant = Schema.Struct({
   type: Schema.tag("assistant"),
   agent: Agent.ID,
   model: Model.Ref,
+  /** Read by the session search index's SQL (`packages/core/src/session/search-index.ts`); a rename needs its `Version` bumped. */
   content: AssistantContent.pipe(Schema.Array),
   snapshot: Schema.Struct({
     start: Snapshot.ID.pipe(optional),
@@ -243,6 +246,7 @@ export const Assistant = Schema.Struct({
     firstToken: DateTimeUtcFromMillis.pipe(optional),
     /** When the provider response body ended, before tool settlement. */
     streamed: DateTimeUtcFromMillis.pipe(optional),
+    /** The session search index waits for this before indexing the message (`search-index.ts`). */
     completed: DateTimeUtcFromMillis.pipe(optional),
   }),
 }).annotate({ identifier: "Session.Message.Assistant" })
@@ -271,6 +275,7 @@ export const CompactionCompleted = Schema.Struct({
   model: Model.Ref.pipe(optional),
   /** A provider compaction stores its replacement window in `native.messages`, replayed instead of `summary`. */
   native: Native.pipe(optional),
+  /** Read by the session search index's SQL (`packages/core/src/session/search-index.ts`); a rename needs its `Version` bumped. */
   summary: Schema.String,
   ...CompactionUsage,
 }).annotate({ identifier: "Session.Message.Compaction.Completed" })

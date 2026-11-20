@@ -39,6 +39,7 @@ const idleCommand = process.platform === "win32" ? "Start-Sleep -Seconds 60" : "
 
 const model = SessionRunnerModel.node.replace(
   Layer.succeed(SessionRunnerModel.Service, {
+    select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
     resolve: () =>
       Effect.succeed(
         SessionRunnerModel.resolved(LanguageModel.make({ id: "restart", provider: "test", route: OpenAIChat.route }), {

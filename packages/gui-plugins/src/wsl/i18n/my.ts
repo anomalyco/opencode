@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms ပြီးနောက် အချိန်ကုန်သွားသည်",
   "error.failedPort": "ဆိပ်ကမ်းကို ရယူရန် မအောင်မြင်ပါ။",
   "menu.remove": "ဖယ်ရှားမည်",
+  "error.busy": "{{distro}} သည် အခြားလုပ်ငန်းတစ်ခုဖြင့် အလုပ်များနေသည်။ ၎င်းပြီးဆုံးသောအခါ ထပ်ကြိုးစားပါ။",
 }

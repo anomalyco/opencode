@@ -11,9 +11,9 @@
 /* Under the section body, across the content columns: the terminal takes two cards and the points
    the rest. Stacked sections (phones) put the points under the terminal. */
 [data-page="home"][data-site] [data-component="oss-fork"] {
-  --terminal-bg: hsl(0, 0%, 8%);
-  --terminal-text: hsl(0, 0%, 86%);
-  --terminal-dim: hsl(0, 0%, 56%);
+  --terminal-bg: var(--fixed-dark-raised);
+  --terminal-text: #dbdbdb;
+  --terminal-dim: var(--fixed-dark-weak);
 
   grid-column: 2 / -1;
   display: grid;
@@ -48,7 +48,7 @@
     height: 2.25rem;
     padding-block: 0;
     padding-inline: 1rem 0.5rem;
-    border-bottom: 1px solid hsl(0, 0%, 16%);
+    border-bottom: 1px solid var(--fixed-dark-line);
     font-family: var(--font-mono);
     font-size: var(--fs-micro);
     color: var(--terminal-dim);
@@ -69,13 +69,13 @@
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {
-        background: hsl(0, 0%, 14%);
+        background: var(--fixed-dark-hover);
         color: var(--terminal-text);
       }
     }
 
     &:active {
-      background: hsl(0, 0%, 14%);
+      background: var(--fixed-dark-hover);
       color: var(--terminal-text);
     }
 
@@ -113,7 +113,7 @@
   }
 
   [data-kind="comment"] {
-    color: hsl(0, 0%, 44%);
+    color: var(--terminal-dim);
   }
 
   [data-kind="command"] + [data-kind="command"],

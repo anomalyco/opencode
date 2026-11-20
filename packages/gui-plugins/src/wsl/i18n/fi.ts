@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "Komento {{command}} {{args}} aikakatkaistiin {{timeout}} ms:n jälkeen",
   "error.failedPort": "Portin noutaminen epäonnistui",
   "menu.remove": "Poista",
+  "error.busy": "{{distro}} on varattu toiseen tehtävään. Yritä uudelleen, kun se on valmis.",
 }

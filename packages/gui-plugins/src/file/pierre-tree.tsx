@@ -7,6 +7,7 @@ import { createKeyed, usePlugin, type FileNode, type MountedSession, type Sessio
 import { startFileDrag } from "./drag"
 import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath } from "./path"
+import treeFocusCss from "./tree-focus.css?inline"
 import {
   createPierreTreeState,
   isPierreTreeMounted,
@@ -85,9 +86,7 @@ const TREE_UNSAFE_CSS = `
     --row-overlay: var(--v2-overlay-simple-overlay-pressed);
     color: var(--v2-text-text-base) !important; background-color: var(--row-overlay) !important;
   }
-  button[data-type="item"]:focus-visible, button[data-type="item"][data-item-focused="true"] {
-    outline: none !important; box-shadow: none !important;
-  }
+  ${treeFocusCss}
   button[data-type="item"]::before,
   [data-item-section="decoration"]:empty { display: none !important; }
   /* A folder holding changes keeps its lane, so the row still ends in the sticky end, but shows no dot. */
@@ -364,9 +363,9 @@ export default function PierreFileTree(props: {
       sort: isLive ? (a, b) => pierreTreeCompareOrder(untrack(machine), a.path, b.path) : "default",
       icons: {
         set: "complete",
-        spriteSheet: `<svg data-icon-sprite aria-hidden="true" width="0" height="0" xmlns="http://www.w3.org/2000/svg"><symbol id="outline-chevron-right" viewBox="${getIcon("outline-chevron-right").viewBox}" fill="none">${getIcon("outline-chevron-right").body}</symbol></svg>`,
+        spriteSheet: `<svg data-icon-sprite aria-hidden="true" width="0" height="0" xmlns="http://www.w3.org/2000/svg"><symbol id="chevron-right" viewBox="${getIcon("chevron-right").viewBox}" fill="none">${getIcon("chevron-right").body}</symbol></svg>`,
         remap: {
-          "file-tree-icon-chevron": { name: "outline-chevron-right", width: 16, height: 16, viewBox: "0 0 16 16" },
+          "file-tree-icon-chevron": { name: "chevron-right", width: 16, height: 16, viewBox: "0 0 16 16" },
         },
       },
       itemHeight: FILE_TREE_ROW_HEIGHT,

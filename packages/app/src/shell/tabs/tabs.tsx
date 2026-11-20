@@ -9,6 +9,7 @@ import { createEffect, createSignal, getOwner, onCleanup, startTransition, untra
 import type { NewSessionStartView } from "@/new-session/machine"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
+import { useSettings } from "@/settings/model"
 import { uuid } from "@opencode/util/uuid"
 import { SessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { sessionHref } from "@/shell/routes/session"
@@ -108,6 +109,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const servers = useServers()
     const pluginServers = usePluginServers()
     const platform = usePlatform()
+    const settings = useSettings()
     const [store, setStore, _, ready] = persisted(Persist.window("tabs"), TabStorage.Tabs, [])
 
     const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), TabStorage.Recent, {
@@ -116,6 +118,11 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     const [info, setInfo, , infoReady] = persisted(Persist.window("tabs.info"), TabStorage.Infos, {})
     const [regions, setRegions, , regionsReady] = persisted(Persist.window("tabs.panes"), TabStorage.Regions, {})
+    // Whether the side region is open in every tab while the shared side panel setting is on.
+    const [sharedSide, setSharedSide] = persisted(Persist.window("tabs.panes.shared"), TabStorage.SharedSide, {})
+
+    const shared = (region: TabRegion) => region === "side" && settings.general.sharedSidePanel()
+
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
     const [promotion, setPromotion] = createSignal(INITIAL_TAB_PROMOTION_STATE)
 
@@ -302,8 +309,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const known = () =>
       new Set<string>([...servers.list.map(ServerConnection.key), ...pluginServers.entries().map((item) => item.key)])
 
+    const serversReady = () => servers.hydrated() && pluginServers.ready()
+
     createEffect(() => {
-      if (!ready() || !recentReady()) return
+      if (!ready() || !recentReady() || !serversReady()) return
       const serversSet = known()
       const next = store.filter((tab) => serversSet.has(tab.server))
       dispatchPromotion({ type: "keep.servers", servers: serversSet })
@@ -340,7 +349,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     })
 
     createEffect(() => {
-      if (!closedReady()) return
+      if (!closedReady() || !serversReady()) return
       const serversSet = known()
       const next = closed.filter((entry) => serversSet.has(entry.tab.server))
 
@@ -431,6 +440,37 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     }
 
     const actions = {
+      restoreReady() {
+        if (!ready() || !recentReady() || !servers.hydrated()) return false
+
+        if (pluginServers.ready()) return true
+        // Plugin discovery only matters when a saved server is still missing.
+        const listed = new Set(servers.list.map(ServerConnection.key))
+
+        return (!recent.target || listed.has(recent.target.server)) && store.every((tab) => listed.has(tab.server))
+      },
+      restoreTab(source?: LayoutRoute) {
+        const listed = new Set(servers.list.map(ServerConnection.key))
+
+        const open = store.filter((tab) => listed.has(tab.server))
+
+        const current = preview.current()
+
+        if (source) {
+          const tab = open.find((tab) => tabMatchesRoute(tab, source))
+
+          if (tab) return tab
+        }
+
+        if (current && listed.has(current.server)) return current
+
+        return open.find((tab) => tabKey(tab) === recentKey()) ?? open.at(-1)
+      },
+      lastTarget: () => recent.target,
+      rememberTarget(server: ServerConnection.Key, directory: string | undefined) {
+        if (recent.target?.server === server && recent.target.directory === directory) return
+        setRecent("target", { server, directory })
+      },
       preview: preview.current,
       previewSession(tab: Omit<SessionTab, "type">) {
         void startTransition(() => preview.open(tab))
@@ -838,10 +878,15 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       region(tab: Tab | undefined, region: TabRegion, fallback = false) {
         if (!tab) return fallback
 
+        if (shared(region)) return sharedSide.opened ?? fallback
+
         return regions[tabKey(tab)]?.[region] ?? fallback
       },
       setRegion(tab: Tab | undefined, region: TabRegion, opened: boolean) {
         if (!tab) return
+
+        if (shared(region)) return setSharedSide("opened", opened)
+
         const key = tabKey(tab)
         const current = regions[key]
 

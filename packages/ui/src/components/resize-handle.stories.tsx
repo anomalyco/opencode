@@ -1,166 +1,81 @@
-// @ts-nocheck
-import { createSignal } from "solid-js"
-import { createStore } from "solid-js/store"
-import * as mod from "./resize-handle"
+import { createEffect, createSignal, on } from "solid-js"
+import { ResizeHandle, type ResizeHandleProps } from "./resize-handle"
 
-const docs = `### Overview
-Drag handle for resizing panels or split views.
-
-Use alongside resizable panels and split layouts.
-
-### API
-- Required: \`direction\`, \`size\`, \`min\`, \`max\`, \`onResize\`.
-- Optional: \`edge\`, \`onCollapse\`, \`collapseThreshold\`.
-
-### Variants and states
-- Horizontal and vertical directions.
-
-### Behavior
-- Drag updates size and calls \`onResize\` with clamped values.
-
-### Accessibility
-- TODO: provide keyboard resizing guidance if needed.
-
-### Theming/tokens
-- Uses \`data-component="resize-handle"\` with direction/edge data attributes.
-
-`
+type Args = Required<Pick<ResizeHandleProps, "direction" | "edge" | "size" | "min" | "max" | "collapseThreshold">>
 
 export default {
   title: "UI/ResizeHandle",
   id: "components-resize-handle",
-  component: mod.ResizeHandle,
+  component: ResizeHandle,
   tags: ["autodocs"],
   parameters: {
     docs: {
       description: {
-        component: docs,
+        component:
+          "Drag the handle to resize the panel. A positive collapse threshold lets a drag below that size collapse it on release.",
       },
     },
   },
-}
+  args: { direction: "horizontal", edge: "end", size: 240, min: 120, max: 480, collapseThreshold: 0 },
+  argTypes: {
+    direction: { control: "select", options: ["horizontal", "vertical"] },
+    edge: { control: "select", options: ["start", "end"] },
+    size: { control: { type: "range", min: 120, max: 320, step: 1 } },
+    min: { control: { type: "range", min: 40, max: 120, step: 1 } },
+    max: { control: { type: "range", min: 320, max: 600, step: 1 } },
+    collapseThreshold: { control: { type: "range", min: 0, max: 200, step: 1 } },
+  },
+  render: (args: Args) => {
+    const [size, setSize] = createSignal(args.size)
 
-export const Basic = {
-  render: () => {
-    const [size, setSize] = createSignal(240)
+    createEffect(
+      on(
+        () => [args.direction, args.edge, args.min, args.max, args.collapseThreshold, args.size],
+        () => setSize(args.size),
+      ),
+    )
+
+    const horizontal = () => args.direction === "horizontal"
 
     return (
-      <div style={{ display: "grid", gap: "8px" }}>
-        <div style={{ color: "var(--text-weak)", "font-size": "12px" }}>Size: {size()}px</div>
+      <div class="grid gap-2">
+        <div class="text-xs text-v2-text-text-muted">{size() === 0 ? "Collapsed" : `Size: ${size()}px`}</div>
         <div
           style={{
-            width: `${size()}px`,
-            height: "48px",
-            "background-color": "var(--background-stronger)",
-            "border-radius": "6px",
+            display: "flex",
+            "flex-direction": horizontal() ? "row" : "column",
+            "justify-content": args.edge === "start" ? "flex-end" : "flex-start",
+            width: horizontal() ? `${args.max}px` : "220px",
+            height: horizontal() ? "48px" : `${args.max}px`,
           }}
-        />
-        <mod.ResizeHandle
-          direction="horizontal"
-          size={size()}
-          min={120}
-          max={480}
-          onResize={setSize}
-          style="height:24px;border:1px dashed color-mix(in oklab, var(--text-base) 20%, transparent)"
-        />
-      </div>
-    )
-  },
-}
-
-export const Vertical = {
-  render: () => {
-    const [size, setSize] = createSignal(180)
-
-    return (
-      <div style={{ display: "grid", gap: "8px", width: "220px" }}>
-        <div style={{ color: "var(--text-weak)", "font-size": "12px" }}>Size: {size()}px</div>
-        <div
-          style={{
-            height: `${size()}px`,
-            "background-color": "var(--background-stronger)",
-            "border-radius": "6px",
-          }}
-        />
-        <mod.ResizeHandle
-          direction="vertical"
-          size={size()}
-          min={120}
-          max={320}
-          onResize={setSize}
-          style="width:24px;border:1px dashed color-mix(in oklab, var(--text-base) 20%, transparent)"
-        />
-      </div>
-    )
-  },
-}
-
-export const Collapse = {
-  render: () => {
-    const [state, setState] = createStore({
-      size: 200,
-      collapsed: false,
-    })
-
-    const size = () => state.size
-    const collapsed = () => state.collapsed
-
-    return (
-      <div style={{ display: "grid", gap: "8px" }}>
-        <div style={{ color: "var(--text-weak)", "font-size": "12px" }}>
-          {collapsed() ? "Collapsed" : `Size: ${size()}px`}
+        >
+          <div
+            style={{
+              position: "relative",
+              width: horizontal() ? `${size()}px` : "100%",
+              height: horizontal() ? "100%" : `${size()}px`,
+              "background-color": "var(--background-stronger)",
+              "border-radius": "6px",
+            }}
+          >
+            <ResizeHandle
+              {...args}
+              size={size()}
+              onResize={setSize}
+              onCollapse={() => setSize(0)}
+              style="border:1px dashed color-mix(in oklab, var(--text-base) 20%, transparent)"
+            />
+          </div>
         </div>
-        <div
-          style={{
-            width: `${collapsed() ? 0 : size()}px`,
-            height: "48px",
-            "background-color": "var(--background-stronger)",
-            "border-radius": "6px",
-          }}
-        />
-        <mod.ResizeHandle
-          direction="horizontal"
-          size={size()}
-          min={80}
-          max={360}
-          collapseThreshold={100}
-          onResize={(next) => {
-            setState("collapsed", false)
-            setState("size", next)
-          }}
-          onCollapse={() => setState("collapsed", true)}
-          style="height:24px;border:1px dashed color-mix(in oklab, var(--text-base) 20%, transparent)"
-        />
       </div>
     )
   },
 }
 
-export const EdgeStart = {
-  render: () => {
-    const [size, setSize] = createSignal(240)
+export const Basic = {}
 
-    return (
-      <div style={{ display: "grid", gap: "8px" }}>
-        <div style={{ color: "var(--text-weak)", "font-size": "12px" }}>Size: {size()}px</div>
-        <div
-          style={{
-            width: `${size()}px`,
-            height: "48px",
-            "background-color": "var(--background-stronger)",
-            "border-radius": "6px",
-          }}
-        />
-        <mod.ResizeHandle
-          direction="horizontal"
-          edge="start"
-          size={size()}
-          min={120}
-          max={480}
-          onResize={setSize}
-          style="height:24px;border:1px dashed color-mix(in oklab, var(--text-base) 20%, transparent)"
-        />
-      </div>
-    )
-  },
-}
+export const Vertical = { args: { direction: "vertical", edge: "start", size: 180, max: 320 } }
+
+export const Collapse = { args: { size: 200, min: 80, max: 360, collapseThreshold: 100 } }
+
+export const EdgeStart = { args: { edge: "start" } }

@@ -187,7 +187,8 @@ test("mobile changes summarize expanded diffs, stage comments, wrap by setting, 
   const note = "Use the existing value instead"
   const commented = review.locator('[data-file="src/review.ts"]')
   await commented.getByRole("button", { expanded: false }).click()
-  await commented.getByText("export const value = 'after'", { exact: true }).click()
+  await commented.getByText("export const value = 'after'", { exact: true }).hover()
+  await commented.getByRole("button", { name: "Comment", exact: true, includeHidden: true }).dispatchEvent("click")
   await expect(commented.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 2")
   await commented.getByRole("textbox").fill(note)
   await commented.locator('[data-slot="line-comment-action"][data-variant="primary"]').click()

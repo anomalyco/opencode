@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Shto server",
   "menu.delete": "Fshi",
+  "error.unavailable": "SSH nuk është i disponueshëm",
 }

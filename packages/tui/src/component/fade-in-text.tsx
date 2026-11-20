@@ -28,7 +28,12 @@ class FadeInTextRenderable extends MaskedTextRenderable {
     this.updateBackdrop()
     if (options.backdrop) this.backdrop = options.backdrop
     if (options.enabled === false) this.enabled = false
-    this.live = this._enabled
+    this.restart()
+  }
+
+  // The app's frame rate, on the shared clock, only while the sweep runs and the text is drawn.
+  private restart() {
+    this.animationFps = this._enabled && this.elapsed < DURATION ? 60 : undefined
   }
 
   set backdrop(value: RGBA) {
@@ -41,7 +46,7 @@ class FadeInTextRenderable extends MaskedTextRenderable {
   set enabled(value: boolean) {
     if (value === this._enabled) return
     this._enabled = value
-    this.live = value && this.elapsed < DURATION
+    this.restart()
     this.requestRender()
   }
 
@@ -61,16 +66,20 @@ class FadeInTextRenderable extends MaskedTextRenderable {
     this.matrix[11] = this._backdrop.b
   }
 
-  protected override renderSelf(buffer: OptimizedBuffer, deltaTime = 0) {
+  protected override onAnimationTick(deltaTime: number) {
+    this.elapsed = Math.min(DURATION, this.elapsed + deltaTime)
+    this.restart()
+    this.requestRender()
+  }
+
+  protected override renderSelf(buffer: OptimizedBuffer) {
     if (!this._enabled || this.elapsed >= DURATION) return super.renderSelf(buffer)
     if (!this.visible || this.isDestroyed || !Number.isFinite(this.width) || this.width <= 0 || this.height <= 0) return
-    this.elapsed = Math.min(DURATION, this.elapsed + deltaTime)
     this.renderMasked(buffer, 1, (end) => {
       const progress = this.elapsed / DURATION
       const front = -FEATHER + coast(progress) * ((this._sweepWidth ?? end) + FEATHER * 2)
       return (column) => 1 - smootherstep(clamp((front - (this._sweepOffset + column)) / FEATHER))
     })
-    if (this.elapsed >= DURATION) this.live = false
   }
 }
 

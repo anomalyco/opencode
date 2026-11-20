@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Χρήση",
   "usage.cost": "Κόστος",
   "usage.view": "Προβολή χρήσης περιβάλλοντος",
-  "systemPrompt.title": "Προτροπή συστήματος",
   "rawMessages.title": "Ακατέργαστα μηνύματα",
   "export.session": "Εξαγωγή συνεδρίας",
   "stats.session": "Συνεδρία",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Η συνεδρία αποθηκεύτηκε στο {{filename}}",
   "export.failed.title": "Αποτυχία εξαγωγής συνεδρίας",
   "export.failed.description": "Παρουσιάστηκε σφάλμα κατά την εξαγωγή της συνεδρίας",
+  "usage.toggle": "Εναλλαγή περιβάλλοντος συνεδρίας",
 }
