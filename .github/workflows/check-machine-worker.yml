@@ -1,0 +1,50 @@
+name: Machine worker
+
+on:
+  pull_request:
+    paths:
+      - packages/machine-worker/**
+      - packages/core/test/fixture/link-v1-transcript.json
+      - packages/core/test/fixture/noise-xx-vectors.json
+      - .github/workflows/check-machine-worker.yml
+  push:
+    branches: [dev]
+    paths:
+      - packages/machine-worker/**
+      - packages/core/test/fixture/link-v1-transcript.json
+      - packages/core/test/fixture/noise-xx-vectors.json
+      - .github/workflows/check-machine-worker.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    working-directory: packages/machine-worker
+
+jobs:
+  check:
+    name: Check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, blacksmith-6vcpu-macos-15, windows-2025]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install Rust
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: machine-worker-${{ matrix.os }}
+          workspaces: packages/machine-worker -> target
+          cache-workspace-crates: true
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
