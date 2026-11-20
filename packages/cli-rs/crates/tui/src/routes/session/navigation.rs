@@ -59,8 +59,9 @@ pub fn find_boundary(
     visible.into_iter().rev().find(|item| item.y < scroll_top)
 }
 
-pub fn slack(top: f64, viewport: f64, scroll_height: f64, current: f64) -> f64 {
-    (top + viewport - (scroll_height - current)).ceil().max(0.0)
+/// The slack that lets a view of `viewport` rows scroll to `top` over `rows` rows.
+pub fn slack(top: f64, viewport: f64, rows: f64) -> f64 {
+    (top + viewport - rows).ceil().max(0.0)
 }
 
 impl super::scroll::Controls {
@@ -143,10 +144,7 @@ impl Inner {
     /// that is laid out.
     fn align(&self, tui: &Tui, id: String, top: f64) {
         self.navigation.replace(Some(id.clone()));
-        let scroll = self.transcript.scroll();
-        let content = f64::from(scroll.content_view().rect().height);
-        let viewport = f64::from(scroll.rect().height);
-        self.set_slack(slack(top, viewport, content, self.slack_height.get()));
+        self.set_slack(slack(top, self.height(), self.rows_height()));
         self.update_away();
         after_layout(
             &tui.app,
