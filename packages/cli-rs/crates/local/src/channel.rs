@@ -36,14 +36,20 @@ fn shared(channel: &str) -> bool {
 }
 
 /// The registration and service config file name: `service.json` for the shared channels, else
-/// `service-<channel>.json` with characters outside `[a-zA-Z0-9._-]` replaced by `-`.
+/// `service-<channel>.json` with each UTF-16 unit outside `[a-zA-Z0-9._-]` replaced by `-`, as the TS regex does.
 pub fn filename(channel: &str) -> String {
     if shared(channel) {
         return "service.json".to_string();
     }
     let safe: String = channel
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c.to_string()
+            } else {
+                "-".repeat(c.len_utf16())
+            }
+        })
         .collect();
     format!("service-{safe}.json")
 }
@@ -112,5 +118,10 @@ mod tests {
         );
         assert_eq!(channels(&[("OPENCODE_CHANNEL", "beta")]).storage, "beta");
         assert_eq!(channels(&[("OPENCODE_CHANNEL", "")]).channel, "latest");
+    }
+
+    #[test]
+    fn filename_replaces_each_utf16_unit() {
+        assert_eq!(filename("a b/ü😀"), "service-a-b----.json");
     }
 }
