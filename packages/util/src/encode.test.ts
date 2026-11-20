@@ -24,4 +24,9 @@ describe("frontend encoding", () => {
     expect(sampledChecksum(value, value.length)).toBe(checksum(value))
     expect(sampledChecksum(value, value.length - 1)).toBe("600:1isj1k5:1isj1k5:1isj1k5:1isj1k5:1isj1k5")
   })
+
+  test.each([500_000, 500_001, 600_000])("detects a same-length tail edit in %i characters", (length) => {
+    const value = "a".repeat(length)
+    expect(sampledChecksum(value.slice(0, -1) + "b")).not.toBe(sampledChecksum(value))
+  })
 })
