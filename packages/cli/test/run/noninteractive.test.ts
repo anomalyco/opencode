@@ -499,6 +499,186 @@ describe("runNonInteractivePrompt", () => {
     expect(seen.filter((event) => event.type === "step_finish")).toHaveLength(1)
   })
 
+  test("emits background subagent completion notices in JSON", async () => {
+    const tokens = { input: 3, output: 5, cache: { read: 1, write: 0 } }
+    const messages = (messageID: string): SessionMessageInfo[] => [
+      idleMessage("succeeded"),
+      {
+        id: "msg_synthetic",
+        type: "synthetic",
+        text: "<subagent>researcher finished</subagent>",
+        metadata: { source: "subagent" },
+        time: { created: 4 },
+      },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { providerID: "test", id: "test-model" },
+        content: [{ type: "text", text: "done" }],
+        finish: "stop",
+        tokens: { ...tokens, reasoning: 0 },
+        time: { created: 2, completed: 3 },
+      },
+      { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+    ]
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID)],
+      wait: () => Promise.resolve(),
+      messages,
+    })
+    const events = output.stdout.split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session.synthetic",
+        part: expect.objectContaining({ id: "msg_synthetic", text: "<subagent>researcher finished</subagent>" }),
+      }),
+    )
+  })
+
+  test("emits shell completion notices in JSON", async () => {
+    const messages = (messageID: string): SessionMessageInfo[] => [
+      idleMessage("succeeded"),
+      {
+        id: "msg_synthetic",
+        type: "synthetic",
+        text: "<shell>ls finished</shell>",
+        metadata: { source: "shell" },
+        time: { created: 4 },
+      },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { providerID: "test", id: "test-model" },
+        content: [{ type: "text", text: "done" }],
+        finish: "stop",
+        time: { created: 2, completed: 3 },
+      },
+      { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+    ]
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID)],
+      wait: () => Promise.resolve(),
+      messages,
+    })
+    const events = output.stdout.split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "session.synthetic", part: expect.objectContaining({ id: "msg_synthetic" }) }),
+    )
+  })
+
+  test("omits synthetic notices whose source is not a background job", async () => {
+    const messages = (messageID: string): SessionMessageInfo[] => [
+      idleMessage("succeeded"),
+      {
+        id: "msg_synthetic",
+        type: "synthetic",
+        text: "some other synthetic",
+        metadata: { source: "ui" },
+        time: { created: 4 },
+      },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { providerID: "test", id: "test-model" },
+        content: [{ type: "text", text: "done" }],
+        finish: "stop",
+        time: { created: 2, completed: 3 },
+      },
+      { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+    ]
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID)],
+      wait: () => Promise.resolve(),
+      messages,
+    })
+    const events = output.stdout.split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    expect(events.find((event) => event.type === "session.synthetic")).toBeUndefined()
+  })
+
+  test("emits completed compactions in JSON", async () => {
+    const tokens = { input: 10, output: 20, reasoning: 0, cache: { read: 2, write: 0 } }
+    const messages = (messageID: string): SessionMessageInfo[] => [
+      idleMessage("succeeded"),
+      {
+        id: "msg_compaction",
+        type: "compaction",
+        status: "completed",
+        reason: "auto",
+        summary: "summarized older turns",
+        cost: 0.05,
+        tokens,
+        time: { created: 4 },
+      },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { providerID: "test", id: "test-model" },
+        content: [{ type: "text", text: "done" }],
+        finish: "stop",
+        time: { created: 2, completed: 3 },
+      },
+      { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+    ]
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID)],
+      wait: () => Promise.resolve(),
+      messages,
+    })
+    const events = output.stdout.split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session.compaction",
+        part: expect.objectContaining({
+          id: "msg_compaction",
+          status: "completed",
+          summary: "summarized older turns",
+          cost: 0.05,
+          tokens,
+        }),
+      }),
+    )
+  })
+
+  test("omits running compactions in JSON", async () => {
+    const messages = (messageID: string): SessionMessageInfo[] => [
+      idleMessage("succeeded"),
+      {
+        id: "msg_compaction",
+        type: "compaction",
+        status: "running",
+        reason: "auto",
+        summary: "summarizing",
+        time: { created: 4 },
+      },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { providerID: "test", id: "test-model" },
+        content: [{ type: "text", text: "done" }],
+        finish: "stop",
+        time: { created: 2, completed: 3 },
+      },
+      { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+    ]
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID)],
+      wait: () => Promise.resolve(),
+      messages,
+    })
+    const events = output.stdout.split("\n").filter(Boolean).map((line) => JSON.parse(line))
+    expect(events.find((event) => event.type === "session.compaction")).toBeUndefined()
+  })
+
   test("reports an observed execution failure before prompt promotion", async () => {
     const output = await capture({
       format: "json",

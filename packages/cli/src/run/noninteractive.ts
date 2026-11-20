@@ -600,6 +600,37 @@ function renderer(input: Input) {
 
     reconcile: async (messages: SessionMessageInfo[]) => {
       for (const message of messages) {
+        if (message.type === "synthetic") {
+          // Background job completion notices (subagent/shell) only reach clients
+          // through projected messages. Skip anything that isn't one of them.
+          const source = message.metadata?.source
+          if (!source || typeof source !== "string" || !["subagent", "shell"].includes(source)) continue
+          if (
+            emit("session.synthetic", message.time.created, {
+              part: { id: message.id, sessionID: input.sessionID, messageID: message.id, type: "synthetic", text: message.text },
+            })
+          )
+            continue
+        }
+        if (message.type === "compaction") {
+          if (message.status !== "completed") continue
+          if (
+            emit("session.compaction", message.time.created, {
+              part: {
+                id: message.id,
+                sessionID: input.sessionID,
+                messageID: message.id,
+                type: "compaction",
+                status: message.status,
+                reason: message.reason,
+                summary: message.summary,
+                cost: message.cost ?? 0,
+                tokens: message.tokens,
+              },
+            })
+          )
+            continue
+        }
         if (message.type !== "assistant") continue
         const timestamp = message.time.completed ?? message.time.created
         const seen = steps.get(message.id)
