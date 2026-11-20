@@ -481,8 +481,12 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     },
     get entries() {
       return [
-        { id: "settings-browser-links", title: ctx.t("settings.links.title"), keywords: "links open system browser" },
-        { id: "settings-browser-agent-pages", title: ctx.t("settings.agentPages.title"), keywords: "agent preview automatic browser pane" },
+        { id: "settings-browser-links", title: ctx.t("settings.links.title"), keywords: "links open system default browser opencode's browser web shift click" },
+        {
+          id: "settings-browser-agent-pages",
+          title: ctx.t("settings.agentPages.title"),
+          keywords: "open the browser when the agent shows a page agent preview automatic browser pane tab file",
+        },
         {
           id: "settings-browser-remote",
           title: ctx.t("settings.remote.title"),
