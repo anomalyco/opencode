@@ -66,7 +66,7 @@ export function rawRequest(input: readonly string[]) {
 
 function resolveRequest(endpoint: Endpoint, input: readonly string[], params: Record<string, string>) {
   const raw = rawRequest(input)
-  if (raw) return Effect.succeed(raw)
+  if (raw) return Effect.sync(() => ({ method: raw.method, path: interpolate(raw.path, params) }))
   if (input.length !== 1) return Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
   return Effect.tryPromise(async () => {
     const response = await fetch(new URL("/openapi.json", endpoint.url), { headers: Service.headers(endpoint) })
@@ -75,14 +75,19 @@ function resolveRequest(endpoint: Endpoint, input: readonly string[], params: Re
   })
 }
 
-function interpolate(path: string, params: Record<string, string>) {
+export function interpolate(path: string, params: Record<string, string>) {
+  const [pathname, existingQuery = ""] = path.split("?", 2)
   const used = new Set<string>()
-  const pathname = path.replaceAll(/\{([^}]+)\}/g, (_, name: string) => {
+  const resolvedPathname = pathname.replaceAll(/\{([^}]+)\}/g, (_, name: string) => {
     const value = params[name]
     if (value === undefined) throw new Error(`Missing path parameter: ${name}`)
     used.add(name)
     return encodeURIComponent(value)
   })
-  const query = new URLSearchParams(Object.entries(params).filter(([name]) => !used.has(name))).toString()
-  return query ? `${pathname}?${query}` : pathname
+  const query = new URLSearchParams(existingQuery)
+  for (const [name, value] of Object.entries(params)) {
+    if (!used.has(name)) query.set(name, value) // explicit --param wins over an existing query value
+  }
+  const qs = query.toString()
+  return qs ? `${resolvedPathname}?${qs}` : resolvedPathname
 }
