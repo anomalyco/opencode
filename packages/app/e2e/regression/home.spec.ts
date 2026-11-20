@@ -64,6 +64,7 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
   await page.keyboard.press("Tab")
   await expect(settings).toBeFocused()
   await expect(settings).toHaveCSS("outline-style", "solid")
+  await expect(settings).not.toHaveCSS("transition-property", /\b(all|outline)\b/)
   await page.keyboard.press("Tab")
   await expect(help).toBeFocused()
   await expect(help).toHaveCSS("outline-style", "solid")
