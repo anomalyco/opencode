@@ -232,6 +232,7 @@ interface ParserState {
   readonly lifecycle: Lifecycle.State
   readonly hop: number
   readonly hasToolCalls: boolean
+  readonly hasText: boolean
   readonly usage?: RawUsage
   readonly continuedUsage: ReadonlyArray<RawUsage | undefined>
   readonly steps: Partial<Record<number, OutputStep>>
@@ -284,6 +285,12 @@ const signature = (metadata: ProviderMetadata | undefined, key: string) => {
   return typeof value?.interactionSignature === "string" ? value.interactionSignature : undefined
 }
 
+// generateContent stores the same signature as `thoughtSignature`, on the part that followed the thinking.
+const generateContentSignature = (metadata: ProviderMetadata | undefined, key: string) => {
+  const value = metadata?.[key]
+  return typeof value?.thoughtSignature === "string" ? value.thoughtSignature : undefined
+}
+
 const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const steps: InputStep[] = []
   const key = request.model.route.providerMetadataKey ?? request.model.provider
@@ -303,6 +310,16 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
       else steps.push({ type, content: [content] })
     }
     let hasSignedStep = false
+    // Interactions carries a signature on the thought step. A conversation that began on generateContent keeps its
+    // signatures by moving each one to the thought step before the part that carried it; without them Gemini returns
+    // completed responses that have no output.
+    const signThought = (value: string) => {
+      const last = steps.at(-1)
+      if (steps.length > start && last?.type === "thought" && last.signature === undefined)
+        steps[steps.length - 1] = { ...last, signature: value }
+      else steps.push({ type: "thought", signature: value })
+      hasSignedStep = true
+    }
     for (const part of message.content) {
       if (message.role === "tool") {
         if (part.type !== "tool-result")
@@ -316,6 +333,13 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
         })
         continue
       }
+      if (
+        message.role === "assistant" &&
+        (part.type === "text" || part.type === "media" || part.type === "tool-call")
+      ) {
+        const carried = generateContentSignature(part.providerMetadata, key)
+        if (carried !== undefined && signature(part.providerMetadata, key) === undefined) signThought(carried)
+      }
       if (part.type === "text") {
         append({ type: "text", text: part.text })
         continue
@@ -325,7 +349,8 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
         continue
       }
       if (message.role === "assistant" && part.type === "reasoning") {
-        const thoughtSignature = signature(part.providerMetadata, key)
+        const thoughtSignature =
+          signature(part.providerMetadata, key) ?? generateContentSignature(part.providerMetadata, key)
         steps.push({
           type: "thought",
           signature: thoughtSignature,
@@ -504,6 +529,7 @@ const onStart = Effect.fnUntraced(function* (state: ParserState, index: number, 
       lifecycle,
       tools,
       hasToolCalls: state.hasToolCalls || step.type === "function_call",
+      hasText: state.hasText || (step.type === "model_output" && (step.content ?? []).some((part) => part.text)),
       steps: { ...state.steps, [index]: step },
     },
     events,
@@ -517,7 +543,11 @@ const onDelta = Effect.fnUntraced(function* (state: ParserState, index: number, 
   const events: LLMEvent[] = []
   if (delta.type === "text" && step.type === "model_output")
     return [
-      { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, blockID(state, index), delta.text) },
+      {
+        ...state,
+        hasText: state.hasText || delta.text.length > 0,
+        lifecycle: Lifecycle.textDelta(state.lifecycle, events, blockID(state, index), delta.text),
+      },
       events,
     ] satisfies StepResult
   if (delta.type === "thought_summary" && step.type === "thought")
@@ -673,6 +703,17 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event | Nex
           `Unexpected terminal Interactions status: ${interaction.status}`,
           encodeJson(event),
         )
+      // Gemini can end a generation as completed with a thought step and no output, where generateContent
+      // reports MALFORMED_RESPONSE. Retry it the same way instead of finishing an empty reply.
+      if (interaction.status === "completed" && !state.hasToolCalls && !state.hasText)
+        return yield* new AIError({
+          reason: new InvalidProviderOutputError({
+            route: state.route,
+            message: "Gemini completed without output",
+            body: encodeJson(event),
+            classification: "incomplete-stream",
+          }),
+        })
       const pending = yield* ToolStream.finishAll(ADAPTER, state.tools)
       const events = [...pending.events]
       const lifecycle = Lifecycle.finish(state.lifecycle, events, {
@@ -879,6 +920,7 @@ export const protocol = Protocol.make({
       lifecycle: Lifecycle.initial(),
       hop: 0,
       hasToolCalls: false,
+      hasText: false,
       continuedUsage: [],
       steps: {},
       tools: ToolStream.empty<number>(),

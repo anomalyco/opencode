@@ -1515,6 +1515,62 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("moves Interactions thought signatures onto the part after the thinking", () =>
+    Effect.gen(function* () {
+      const signed = (interactionSignature: string) => ({ google: { interactionSignature } })
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: gemini3,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "", providerMetadata: signed("sig_calls") },
+              ToolCallPart.make({ id: "tool_0", name: "lookup", input: { query: "weather" } }),
+              ToolCallPart.make({ id: "tool_1", name: "lookup", input: { query: "news" } }),
+            ]),
+            Message.tool({ id: "tool_0", name: "lookup", result: "sunny", resultType: "text" }),
+            Message.tool({ id: "tool_1", name: "lookup", result: "quiet", resultType: "text" }),
+            Message.assistant([
+              { type: "reasoning", text: "Summarize.", providerMetadata: signed("sig_text") },
+              { type: "text", text: "Sunny and quiet." },
+            ]),
+            Message.user("Thanks."),
+            Message.assistant([{ type: "reasoning", text: "", providerMetadata: signed("sig_unused") }]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            { text: "", thought: true },
+            {
+              functionCall: { id: "tool_0", name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "sig_calls",
+            },
+            { functionCall: { id: "tool_1", name: "lookup", args: { query: "news" } } },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            { functionResponse: { id: "tool_0", name: "lookup", response: { name: "lookup", content: "sunny" } } },
+            { functionResponse: { id: "tool_1", name: "lookup", response: { name: "lookup", content: "quiet" } } },
+          ],
+        },
+        {
+          role: "model",
+          parts: [
+            { text: "Summarize.", thought: true },
+            { text: "Sunny and quiet.", thoughtSignature: "sig_text" },
+          ],
+        },
+        { role: "user", parts: [{ text: "Thanks." }] },
+        { role: "model", parts: [{ text: "", thought: true }] },
+      ])
+    }),
+  )
+
   it.effect("emits streamed tool calls and maps finish reason", () =>
     Effect.gen(function* () {
       const body = sseEvents({
