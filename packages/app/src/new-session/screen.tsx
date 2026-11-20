@@ -11,7 +11,7 @@ import { NewSessionView } from "./view"
 import { createNewSessionWorkspaceController } from "./workspace/controller"
 import { useNewSessionCommands } from "./commands"
 import { createDraftMcpControls } from "./mcp"
-import { useNewSessionExtensionsDialog } from "./extensions-dialog"
+import { createNewSessionExtensions, useNewSessionExtensionsDialog } from "./extensions-dialog"
 
 /** The draft-only Session page. Submitting promotes the draft into a real Session. */
 export default function NewSessionPage(props: { draftId: string }) {
@@ -57,7 +57,10 @@ export default function NewSessionPage(props: { draftId: string }) {
 
   const project = createPromptProjectController({ controls: composer.project })
   const location = useNewSessionLocationDialog({ project, workspace, onDone: model.restoreFocus })
-  const extensions = useNewSessionExtensionsDialog({ draftID: props.draftId, mcp, onDone: model.restoreFocus })
+  const extensions = useNewSessionExtensionsDialog({
+    extensions: createNewSessionExtensions({ draftID: props.draftId, mcp }),
+    onDone: model.restoreFocus,
+  })
 
   useNewSessionCommands({
     restoreFocus: model.restoreFocus,

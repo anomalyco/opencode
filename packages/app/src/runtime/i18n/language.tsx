@@ -361,6 +361,13 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
         "",
       )
 
+    // "3 MCPs · 10 skills": both counts always show, so a zero reads as "0 skills" rather than disappearing.
+    const extensionsSummary = (counts: { mcps: number; skills: number }) =>
+      t("session.new.extensions.summary", {
+        mcps: plural("session.new.extensions.mcps", counts.mcps),
+        skills: plural("session.new.extensions.skills", counts.skills),
+      })
+
     const tDynamic = <Key extends Extract<keyof Dictionary, string>>(
       key: TranslationKey<Key>,
       source: string,
@@ -435,6 +442,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       pluralForm,
       activitySummary,
       activitySummaryRich,
+      extensionsSummary,
       rich,
       list,
       setLocale(next: Locale) {

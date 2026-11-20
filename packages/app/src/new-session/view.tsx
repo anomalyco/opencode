@@ -38,6 +38,7 @@ import {
   type CheckoutLabelEvent,
 } from "./workspace/checkout-machine"
 import { BaseBranchPicker } from "./workspace/selector"
+import type { useNewSessionExtensionsDialog } from "./extensions-dialog"
 import { NewSessionBrickBreaker } from "./brick-breaker"
 import { NewSessionPinBoard } from "./pin-board"
 import { NewSessionWordmark } from "./wordmark"
@@ -58,7 +59,7 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
   location: ReturnType<typeof useNewSessionLocationDialog>
-  extensions: () => void
+  extensions: ReturnType<typeof useNewSessionExtensionsDialog>
 }) {
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
     Persist.global("workspace-onboarding"),
@@ -124,7 +125,7 @@ export function NewSessionView(props: {
                       onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
                       onProjects={() => location()}
                       onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
-                      onExtensions={props.extensions}
+                      extensions={props.extensions}
                     />
                   )}
                 </Show>
@@ -203,7 +204,7 @@ function NewSessionLocation(props: {
   onboarding: boolean
   onProjects: () => void
   onWorktree?: () => void
-  onExtensions: () => void
+  extensions: ReturnType<typeof useNewSessionExtensionsDialog>
 }) {
   const language = useLanguage()
   const command = useCommand()
@@ -382,11 +383,12 @@ function NewSessionLocation(props: {
             type="button"
             data-action="prompt-extensions"
             aria-haspopup="dialog"
+            aria-description={language.t("session.new.extensions.title")}
             class={`${TRIGGER} min-w-0`}
-            onClick={props.onExtensions}
+            onClick={props.extensions.open}
           >
             <Icon name="cube" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
-            <span class="min-w-0 truncate">{language.t("session.new.extensions.title")}</span>
+            <span class="min-w-0 truncate">{language.extensionsSummary(props.extensions.counts())}</span>
           </button>
         </div>
       </div>

@@ -14,22 +14,13 @@ import "@/shell/search-list.css"
 
 type Item = { key: string; kind: "mcp" | "skill"; id: string; name: string; status?: string }
 
-/** Opens the dialog that chooses which MCP servers and skills the draft's session starts with. */
-export function useNewSessionExtensionsDialog(input: { draftID: string; mcp: DraftMcpControls; onDone: () => void }) {
-  const dialog = useDialog()
-
-  return () =>
-    void dialog.show(() => <NewSessionExtensionsDialog draftID={input.draftID} mcp={input.mcp} />, input.onDone)
-}
-
-function NewSessionExtensionsDialog(props: { draftID: string; mcp: DraftMcpControls }) {
-  const language = useLanguage()
+/** The draft's MCP servers and skills with whether each starts enabled, shared by the trigger's counts and the dialog. */
+export function createNewSessionExtensions(input: { draftID: string; mcp: DraftMcpControls }) {
   const data = useData()
   const tabs = useTabs()
-  const [query, setQuery] = createSignal("")
 
-  const ref = () => ({ directory: props.mcp.directory() })
-  const disabledSkills = () => tabs.draft(props.draftID).disabledSkills ?? []
+  const ref = () => ({ directory: input.mcp.directory() })
+  const disabledSkills = () => tabs.draft(input.draftID).disabledSkills ?? []
 
   createEffect(() => {
     void Promise.all([data.location.mcp.server.sync(ref()), data.location.skill.sync(ref())]).catch(() => undefined)
@@ -53,25 +44,49 @@ function NewSessionExtensionsDialog(props: { draftID: string; mcp: DraftMcpContr
     return [servers, skills].flatMap((list) => list.toSorted((a, b) => a.name.localeCompare(b.name)))
   })
 
-  const results = createMemo(() => {
-    const current = query().trim()
-
-    if (!current) return items()
-
-    return fuzzysort.go(current, items(), { keys: ["name"] }).map((result) => result.obj)
-  })
-
   const checked = (item: Item) =>
     item.kind === "skill"
       ? !disabledSkills().includes(item.id)
-      : (props.mcp.controls.states[item.id] ?? (item.status !== undefined && item.status !== "disabled"))
+      : (input.mcp.controls.states[item.id] ?? (item.status !== undefined && item.status !== "disabled"))
 
   const toggle = (item: Item, enabled: boolean) => {
-    if (item.kind === "mcp") return props.mcp.controls.change(item.id, enabled)
+    if (item.kind === "mcp") return input.mcp.controls.change(item.id, enabled)
 
     const others = disabledSkills().filter((id) => id !== item.id)
-    tabs.updateDraft(props.draftID, { disabledSkills: enabled ? others : [...others, item.id] })
+    tabs.updateDraft(input.draftID, { disabledSkills: enabled ? others : [...others, item.id] })
   }
+
+  const counts = createMemo(() => ({
+    mcps: items().filter((item) => item.kind === "mcp" && checked(item)).length,
+    skills: items().filter((item) => item.kind === "skill" && checked(item)).length,
+  }))
+
+  return { items, checked, toggle, counts, pending: () => input.mcp.controls.pending }
+}
+
+export type NewSessionExtensions = ReturnType<typeof createNewSessionExtensions>
+
+/** Opens the dialog that chooses which MCP servers and skills the draft's session starts with. */
+export function useNewSessionExtensionsDialog(input: { extensions: NewSessionExtensions; onDone: () => void }) {
+  const dialog = useDialog()
+
+  return {
+    counts: input.extensions.counts,
+    open: () => void dialog.show(() => <NewSessionExtensionsDialog extensions={input.extensions} />, input.onDone),
+  }
+}
+
+function NewSessionExtensionsDialog(props: { extensions: NewSessionExtensions }) {
+  const language = useLanguage()
+  const [query, setQuery] = createSignal("")
+
+  const results = createMemo(() => {
+    const current = query().trim()
+
+    if (!current) return props.extensions.items()
+
+    return fuzzysort.go(current, props.extensions.items(), { keys: ["name"] }).map((result) => result.obj)
+  })
 
   return (
     <Dialog class="command-palette command-palette-compact search-list-dialog mcp-dialog" size="large" fit>
@@ -88,7 +103,7 @@ function NewSessionExtensionsDialog(props: { draftID: string; mcp: DraftMcpContr
           section={(item) => item.kind}
           header={(item) => language.t(item.kind === "mcp" ? "dialog.mcp.title" : "settings.extensions.tab.skills")}
           empty={language.t("session.new.extensions.empty")}
-          onSelect={(item) => toggle(item, !checked(item))}
+          onSelect={(item) => props.extensions.toggle(item, !props.extensions.checked(item))}
         >
           {(item, row) => (
             <div {...row} data-option-key={item().key} data-size="compact">
@@ -102,9 +117,9 @@ function NewSessionExtensionsDialog(props: { draftID: string; mcp: DraftMcpContr
               </span>
               <div class="mcp-trailing" onClick={(event) => event.stopPropagation()}>
                 <Switch
-                  checked={checked(item())}
-                  disabled={item().kind === "mcp" && props.mcp.controls.pending}
-                  onChange={(enabled) => toggle(item(), enabled)}
+                  checked={props.extensions.checked(item())}
+                  disabled={item().kind === "mcp" && props.extensions.pending()}
+                  onChange={(enabled) => props.extensions.toggle(item(), enabled)}
                 >
                   <span class="sr-only">{item().name}</span>
                 </Switch>
