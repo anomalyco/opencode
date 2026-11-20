@@ -276,7 +276,7 @@ fn decode_file_url(value: &str, windows: bool) -> Option<String> {
     if lower.contains("%2f") || lower.contains("%5c") {
         return None;
     }
-    let pathname = decode_uri_component(encoded)?;
+    let pathname = opencode_api_types::js::decode_component(encoded)?;
     let host = url.host_str().filter(|host| !host.is_empty());
     if !windows {
         if host.is_some_and(|host| host != "localhost") {
@@ -293,24 +293,6 @@ fn decode_file_url(value: &str, windows: bool) -> Option<String> {
         Some(host) => Some(format!("\\\\{host}{local}")),
         None => Some(local),
     }
-}
-
-/// `decodeURIComponent`: `None` on a malformed escape or bytes that are not UTF-8.
-fn decode_uri_component(value: &str) -> Option<String> {
-    let bytes = value.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] != b'%' {
-            out.push(bytes[index]);
-            index += 1;
-            continue;
-        }
-        let hex = value.get(index + 1..index + 3)?;
-        out.push(u8::from_str_radix(hex, 16).ok()?);
-        index += 3;
-    }
-    String::from_utf8(out).ok()
 }
 
 /// `parsePastedFilepaths`: whitespace-separated paths with shell quoting and escapes; comment lines of a

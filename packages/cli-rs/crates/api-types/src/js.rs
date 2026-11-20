@@ -19,6 +19,25 @@ pub fn encode_component(value: &str) -> String {
     utf8_percent_encode(value, COMPONENT).to_string()
 }
 
+/// `decodeURIComponent`, or `None` where it throws: a `%` without two hex digits, or bytes that are not UTF-8.
+pub fn decode_component(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'%' {
+            out.push(bytes[index]);
+            index += 1;
+            continue;
+        }
+        // `from_str_radix` alone would take a sign: `%+5`.
+        let hex = value.get(index + 1..index + 3).filter(|hex| hex.bytes().all(|byte| byte.is_ascii_hexdigit()))?;
+        out.push(u8::from_str_radix(hex, 16).ok()?);
+        index += 3;
+    }
+    String::from_utf8(out).ok()
+}
+
 /// `a.localeCompare(b)` for the root locale, as Bun's ICU orders ASCII: punctuation and symbols
 /// first in ICU's order, then digits, then letters without regard to case; ties go to lowercase
 /// first, then to code points. Other characters sort after letters by code point.
@@ -332,6 +351,21 @@ mod tests {
         ];
         for (value, text) in cases {
             assert_eq!(number_to_string(value), text, "{value}");
+        }
+    }
+
+    #[test]
+    fn components_decode_as_javascript_does() {
+        for (text, decoded) in [
+            ("a%20b%C3%bC", Some("a bü")),
+            ("日本%41", Some("日本A")),
+            ("%", None),
+            ("%4", None),
+            ("%+5", None),
+            ("%é", None),
+            ("%C3", None),
+        ] {
+            assert_eq!(decode_component(text).as_deref(), decoded, "{text:?}");
         }
     }
 

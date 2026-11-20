@@ -8,6 +8,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 use std::time::{Duration, Instant, SystemTime};
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
+use opencode_api::js::decode_component;
 use opencode_util::time;
 use serde_json::{Value, json};
 
@@ -405,26 +406,9 @@ fn decode_attributes(value: &str) -> Option<Vec<(String, String)>> {
         .split(',')
         .map(|entry| {
             let index = entry.find('=').filter(|index| *index >= 1)?;
-            Some((percent_decode(&entry[..index])?, percent_decode(&entry[index + 1..])?))
+            Some((decode_component(&entry[..index])?, decode_component(&entry[index + 1..])?))
         })
         .collect()
-}
-
-fn percent_decode(text: &str) -> Option<String> {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == b'%' {
-            let hex = text.get(index + 1..index + 3)?;
-            out.push(u8::from_str_radix(hex, 16).ok()?);
-            index += 3;
-            continue;
-        }
-        out.push(bytes[index]);
-        index += 1;
-    }
-    String::from_utf8(out).ok()
 }
 
 /// One OTLP/JSON log record (Effect's `OtlpLogger.makeLogRecord`). With fields the body is

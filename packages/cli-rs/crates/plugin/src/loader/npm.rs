@@ -4,6 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
+use opencode_api_types::js::decode_component;
+
 /// A package the cache holds.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package {
@@ -242,7 +244,7 @@ fn git_attrs(committish: Option<&str>) -> Result<(), Throws> {
         match name {
             "semver" if named || range => return Err(Throws),
             "semver" => {
-                percent_decode(value).ok_or(Throws)?;
+                decode_component(value).ok_or(Throws)?;
                 range = true;
             }
             "path" if subdir => return Err(Throws),
@@ -310,10 +312,10 @@ fn hosted(spec: &str) -> Option<Option<String>> {
         let path = path.split_once('@').map_or(path, |(_, after)| after);
         let (user, project) = path.rsplit_once('/').map_or((None, path), |(user, project)| (Some(user), project));
         if let Some(user) = user {
-            percent_decode(user)?;
+            decode_component(user)?;
         }
-        percent_decode(project)?;
-        return Some(Some(percent_decode(hash)?).filter(|hash| !hash.is_empty()));
+        decode_component(project)?;
+        return Some(Some(decode_component(hash)?).filter(|hash| !hash.is_empty()));
     }
     let known = HOSTS.iter().find(|known| known.domain == domain)?;
     let scheme = format!("{}:", url.scheme());
@@ -322,11 +324,11 @@ fn hosted(spec: &str) -> Option<Option<String>> {
     }
     let (user, project, committish) = (known.extract)(url.path(), hash)?;
     if let Some(user) = user.filter(|user| !user.is_empty()) {
-        percent_decode(user)?;
+        decode_component(user)?;
     }
-    percent_decode(project)?;
+    decode_component(project)?;
     let committish = match committish {
-        Some(committish) => percent_decode(committish)?,
+        Some(committish) => decode_component(committish)?,
         None => "undefined".to_owned(),
     };
     Some(Some(committish).filter(|committish| !committish.is_empty()))
@@ -510,7 +512,7 @@ fn correct_url(mut giturl: String) -> String {
 
 fn git_slug(spec: &str) -> String {
     let target = spec.split('#').next().unwrap_or_default();
-    let target = percent_decode(target).unwrap_or_else(|| target.to_owned());
+    let target = decode_component(target).unwrap_or_else(|| target.to_owned());
     // `/\.git$/i`.
     let target = match target
         .len()
@@ -538,27 +540,6 @@ fn git_slug(spec: &str) -> String {
     }
     let slug = slug.trim_matches('-');
     if slug.is_empty() { "repository".to_owned() } else { slug.to_owned() }
-}
-
-/// `decodeURIComponent`, or `None` where it throws.
-fn percent_decode(text: &str) -> Option<String> {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while index < bytes.len() {
-        match bytes[index] {
-            b'%' => {
-                let hex = text.get(index + 1..index + 3)?;
-                out.push(u8::from_str_radix(hex, 16).ok()?);
-                index += 3;
-            }
-            byte => {
-                out.push(byte);
-                index += 1;
-            }
-        }
-    }
-    String::from_utf8(out).ok()
 }
 
 /// Windows filenames cannot contain control characters or `<>:"|?*`.
