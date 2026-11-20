@@ -1182,6 +1182,25 @@ fn label_distance(x: i32, y: i32, width: i32, height: i32, path: &[(i32, i32)]) 
         .unwrap_or(i32::MAX)
 }
 
+/// Where a label's top-left cell must lie for the label to come within 8 cells of `path`.
+#[derive(Clone, Copy)]
+struct Near {
+    left: i32,
+    right: i32,
+    top: i32,
+    bottom: i32,
+}
+
+fn near_path(width: i32, height: i32, path: &[(i32, i32)]) -> Option<Near> {
+    let (xs, ys) = (path.iter().map(|p| p.0), path.iter().map(|p| p.1));
+    Some(Near {
+        left: xs.clone().min()? - 8 - (width - 1),
+        right: xs.max()? + 8,
+        top: ys.clone().min()? - 8 - (height - 1),
+        bottom: ys.max()? + 8,
+    })
+}
+
 fn label_candidates(plan: &RenderPlan, width: i32, height: i32) -> Vec<(i32, i32)> {
     let mut candidates: IndexMap<(i32, i32), ()> = IndexMap::new();
     if let Some(label) = &plan.label
@@ -1336,12 +1355,21 @@ fn place_labels(
         });
         let (mut x, mut y) = nearby.or(candidates.first().copied()).unwrap_or((label.x, label.y));
         if nearby.is_none() {
-            'search: for distance in 1..500i32 {
+            let near = near_path(label_width, height, &plan.path);
+            let reach = near.map_or(0, |near| {
+                (x - near.left).abs().max((x - near.right).abs()) + (y - near.top).abs().max((y - near.bottom).abs())
+            });
+            'search: for distance in 1..500.min(reach + 1) {
                 for dx in -distance..=distance {
                     let dy = distance - dx.abs();
                     let ys = if dy == 0 { vec![y] } else { vec![y - dy, y + dy] };
                     for cy in ys {
                         let cx = x + dx;
+                        if near
+                            .is_none_or(|near| cx < near.left || cx > near.right || cy < near.top || cy > near.bottom)
+                        {
+                            continue;
+                        }
                         let path_distance = label_distance(cx, cy, label_width, height, &plan.path);
                         if !(2..=8).contains(&path_distance) || !is_clear(&space, cx, cy) {
                             continue;
