@@ -695,6 +695,14 @@ function boxOf(at: VNode, layout: Json, click: Json, reading: Reading): Json {
   const pad = edges(props, "padding")
   const symmetric = pad && pad.left === pad.right && pad.top === pad.bottom && pad.left >= 0 && pad.top >= 0
   if (typeof (props.onSizeChange ?? (at as unknown as Record<string, unknown>).onSizeChange) === "function") at.measure()
+  // The contract's box has no reversed direction, no even spacing and no baseline.
+  for (const [name, value] of [
+    ["flexDirection", "row-reverse"],
+    ["flexDirection", "column-reverse"],
+    ["justifyContent", "space-evenly"],
+    ["alignItems", "baseline"],
+  ])
+    if (props[name] === value) reading.dropped.add(`${name} ${value}`)
   return compact({
     type: "box",
     id: at.measured ? idOf(at) : undefined,
