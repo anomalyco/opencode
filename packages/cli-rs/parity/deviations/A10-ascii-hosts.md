@@ -40,5 +40,9 @@ and `clippy.toml` forbids calling `url`'s parsers anywhere else:
 The stub also stops `url` from checking UTS 46 rules on punycode labels, so a malformed `xn--`
 label parses where TypeScript rejects it; the server or DNS rejects it later.
 
+`url` also differs from Bun's parser on URLs nobody types: `file:////x` and `file://h//x` lose empty path
+segments, `zed://@` parses, a non-special URL with a host and an empty path gets no `/`, and an opaque path keeps a
+space before `#` that Bun writes as `%20`.
+
 Reason: decision O-58 (E1). Full IDNA pulls ICU4X into the build, 21 crates with 2 build scripts
 and 4 proc macros, for host names that a user can write in punycode.
