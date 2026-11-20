@@ -239,6 +239,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     }),
     Spec.make("login", {
       description: "Connect an integration (alias for auth login)",
+      hidden: true,
       globalFlags: ServerFlags,
       params: LoginParams,
     }),

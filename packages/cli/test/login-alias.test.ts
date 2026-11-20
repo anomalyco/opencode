@@ -1,49 +1,64 @@
-import { describe, expect, test } from "bun:test"
-import path from "node:path"
+import { NodeServices } from "@effect/platform-node"
+import { expect, test } from "bun:test"
+import { Console, Effect, Option, Stdio } from "effect"
+import { Commands, Server } from "../src/commands/commands"
+import { Runtime } from "../src/framework/runtime"
 
-describe("login command", () => {
-  test("is listed in top-level help", async () => {
-    const result = await cli(["--help"])
+test("login is hidden from root help but has the same help as auth login", async () => {
+  const [root, login, auth] = await Promise.all([
+    run(["--help"]),
+    run(["login", "--help"]),
+    run(["auth", "login", "--help"]),
+  ])
 
-    expect(result.exitCode).toBe(0)
-    expect(result.stdout).toMatch(/login\s+Connect an integration \(alias for auth login\)/)
-  })
+  expect(root.help).toMatch(/^\s+auth\s/m)
+  expect(root.help).not.toMatch(/^\s+login\s/m)
+  expect(login.help).toContain("opencode login [flags] [<target>]")
+  expect(sections(login.help)).toEqual(sections(auth.help))
+})
 
-  test("takes the same params and flags as auth login", async () => {
-    const [login, auth] = await Promise.all([cli(["login", "--help"]), cli(["auth", "login", "--help"])])
+test("login parses into the same input as auth login", async () => {
+  const url = "http://127.0.0.1:4096"
+  const args = ["openai", "--method", "api", "--answer", "key=value", "--server", url]
+  const [login, auth] = await Promise.all([run(["login", ...args]), run(["auth", "login", ...args])])
+  const parsed = {
+    input: { target: Option.some("openai"), method: Option.some("api"), answer: ["key=value"] },
+    server: Option.some(url),
+  }
 
-    expect(login.exitCode).toBe(0)
-    expect(auth.exitCode).toBe(0)
-    expect(login.stdout).toContain("opencode login [flags] [<target>]")
-    expect(sections(login.stdout)).toEqual(sections(auth.stdout))
-    for (const flag of ["--method", "--answer", "--standalone", "--server"]) expect(login.stdout).toContain(flag)
-  })
-
-  test("runs the auth login handler", async () => {
-    const [login, auth] = await Promise.all([cli(["login"]), cli(["auth", "login"])])
-
-    expect(login.exitCode).toBe(1)
-    expect(login.stdout + login.stderr).toContain("Pass an integration ID or name")
-    expect(login.stdout + login.stderr).toBe(auth.stdout + auth.stderr)
-  })
+  expect(login.calls).toEqual([{ command: "login", ...parsed }])
+  expect(auth.calls).toEqual([{ command: "auth login", ...parsed }])
 })
 
 function sections(help: string) {
   return help.slice(help.indexOf("ARGUMENTS"))
 }
 
-async function cli(args: string[]) {
-  const child = Bun.spawn([process.execPath, "run", path.join(import.meta.dir, "../src/index.ts"), ...args], {
-    cwd: path.join(import.meta.dir, ".."),
-    env: process.env,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
+async function run(args: ReadonlyArray<string>) {
+  const pages: string[] = []
+  const calls: Array<{ command: string; input: unknown; server: unknown }> = []
+  const capture = (command: string) => async () => ({
+    default: (input: unknown) =>
+      Effect.gen(function* () {
+        calls.push({ command, input, server: yield* Effect.serviceOption(Server).pipe(Effect.map(Option.flatten)) })
+      }),
   })
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ])
-  return { stdout, stderr, exitCode }
+  await Effect.runPromise(
+    Runtime.run(
+      Commands,
+      [
+        { spec: Commands.commands.login.spec, load: capture("login") },
+        { spec: Commands.commands.auth.commands.login.spec, load: capture("auth login") },
+      ],
+      { version: "test" },
+    ).pipe(
+      Effect.provideService(
+        Console.Console,
+        Object.assign(Object.create(console), { log: (page: string) => pages.push(page) }),
+      ),
+      Effect.provide(Stdio.layerTest({ args: Effect.succeed(args) })),
+      Effect.provide(NodeServices.layer),
+    ),
+  )
+  return { help: pages.join("\n"), calls }
 }
