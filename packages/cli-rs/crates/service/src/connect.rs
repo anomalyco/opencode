@@ -190,13 +190,17 @@ pub async fn resolve(
             ensure_missing(transport.clone(), paths, env, &config, own.clone(), options.on_start, missing).await?
         }
     };
-    let found = match options.replace && found.file == own && restarts(env, &found, &options.client_version).await {
-        true => {
-            let version = Some(options.client_version.clone());
-            run_ensure(transport, paths, env, &config, found.file, version, options.on_start).await?
-        }
-        false => found,
-    };
+    // TS's `local` build registers in channel `local`, so it never restarts the shared service. This client's channel
+    // defaults to `latest`, and no TS binary there reports `local`: a `local` build restarts only in channel `local`.
+    let local = options.client_version == "local" && channels.channel != "local";
+    let found =
+        match options.replace && !local && found.file == own && restarts(env, &found, &options.client_version).await {
+            true => {
+                let version = Some(options.client_version.clone());
+                run_ensure(transport, paths, env, &config, found.file, version, options.on_start).await?
+            }
+            false => found,
+        };
     log::info!(
         "service connected channel={} file={} url={}",
         found.channel,

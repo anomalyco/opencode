@@ -8,7 +8,7 @@ commands use any version.
 
 **Rust.** The TUI and `mini` restart a service of another version as TS's do (O-167,
 `connect::Options::replace`, `docs/architecture.md`): same trigger, same message (`Restarting background server
-(version mismatch)...` in the TUI, nothing in `mini`), same failure (the start's error). Three
+(version mismatch)...` in the TUI, nothing in `mini`), same failure (the start's error). Four
 differences remain:
 
 - Only a service in the client's own channel's registration is restarted, as TS reads only that one;
@@ -17,6 +17,9 @@ differences remain:
   binary of that service's own version: TS restarts on itself, which is the client's version by
   construction, while the Rust client may run another TS binary (`OPENCODE_TS_BIN`, `opencode` on
   `PATH` behind a development build) and would otherwise restart on every start.
+- A `local` build (no `OPENCODE_VERSION`) restarts only in channel `local`. TS's `local` build registers in
+  `service-local.json` and never sees the shared service; this client defaults to channel `latest` and shares
+  `service.json`, where no TS binary reports `local`, so it uses that service of any version and logs the mismatch.
 - A service of another version that is still starting is waited for, then restarted; TS replaces it at
   once.
 

@@ -899,6 +899,37 @@ async fn connect_restarts_nothing_else() {
     assert_eq!(spawned(&spawns), 0);
 }
 
+// TS's `local` build registers in channel `local` and never restarts the shared service. A `local` build here uses the
+// shared service of another version, whatever the binary's version, and restarts as TS's does in channel `local`.
+#[tokio::test(flavor = "multi_thread")]
+async fn connect_restarts_for_a_local_build_only_in_channel_local() {
+    needs_bun!();
+    let mut channel = Channel::new();
+    let local = connect::Options { client_version: "local".to_owned(), replace: true, ..connect::Options::default() };
+    channel.fixture.registration = channel.paths.state.join("service.json");
+    let shared = channel.fixture.spawn("incompatible", &[]);
+    channel.fixture.wait_for_file(&channel.fixture.registration).await;
+    let (env, spawns) = restarting(&channel, "2.1.0-next.1", "compatible");
+    let latest = Env { channel: None, ..env };
+    assert_eq!(connect::resolve(transport(), &channel.paths, &latest, &local).await.unwrap().version, "1.9.0");
+    assert!(channel.fixture.running(shared));
+    assert_eq!(spawned(&spawns), 0);
+    signal(shared, Signal::KILL);
+    channel.fixture.exited(shared).await;
+    std::fs::remove_file(&channel.fixture.registration).unwrap();
+
+    channel.fixture.registration = channel.paths.state.join("service-local.json");
+    let old = channel.fixture.spawn("incompatible", &[]);
+    channel.fixture.wait_for_file(&channel.fixture.registration).await;
+    let (env, spawns) = restarting(&channel, "2.1.0-next.1", "compatible");
+    let own = Env { channel: Some("local".to_owned()), ..env };
+    let connection = connect::resolve(transport(), &channel.paths, &own, &local).await.unwrap();
+    channel.fixture.pids.push(channel.fixture.pid());
+    channel.fixture.exited(old).await;
+    assert_eq!(connection.version, "2.1.0-next.1");
+    assert_eq!(spawned(&spawns), 1);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn connect_fails_with_the_start_error_when_the_restart_fails() {
     needs_bun!();
