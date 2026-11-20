@@ -15,6 +15,7 @@ use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use url::Url;
 
+use tokio_tungstenite::tungstenite::error::ProtocolError;
 pub use tokio_tungstenite::tungstenite::{Error, Message};
 
 pub type Stream = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -93,7 +94,8 @@ pub async fn open<T: Frame>(url: Url, headers: Vec<(String, String)>) -> Result<
             let incoming = match message {
                 Ok(Message::Text(text)) => Incoming::Text(text.as_str().to_owned()),
                 Ok(Message::Binary(data)) => Incoming::Binary(data.to_vec()),
-                Ok(Message::Close(_)) => break,
+                // The end of the stream without a close frame closes the socket, as Bun fires `close` alone.
+                Ok(Message::Close(_)) | Err(Error::Protocol(ProtocolError::ResetWithoutClosingHandshake)) => break,
                 Ok(_) => continue,
                 Err(error) => {
                     let _ = deliver.send(Incoming::Failed(error.to_string())).await;
