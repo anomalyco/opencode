@@ -422,7 +422,8 @@ live ones; `init`, `update`, `draw` are optional); only function and `const` dec
 `const` initializer that runs code (calls, `new`, assignments), so nothing runs when the program loads; no prelude name
 (`ui`, `widget`, `submit`, `dismiss`, `send`, the `__widget_*` internals, `__input`, `__host`) is redeclared. Problems
 come back as the tool error with `line N, col M`. `capabilities` are rejected on step templates, and each
-`https.hosts` entry must be a lowercase host name, `*.` plus one, or `*` (1 to 32 entries). Built-in names cannot be overwritten. Saving content that already exists (same version) makes
+`https.hosts` entry must be a lowercase host name (single labels and IPv4 literals included, for clients' dev-mode
+local network), `*.` plus one, optionally with a `:port`, or `*` (1 to 32 entries). Built-in names cannot be overwritten. Saving content that already exists (same version) makes
 that version the latest again and updates its description.
 
 Permission actions are `widget` (resource: the template name) and `widget_template` (resource: the template name, or

@@ -64,8 +64,10 @@ const decodeOption = (value: unknown) =>
   )
 const builtin = new Map(builtins.map((template) => [template.name, decode(template)]))
 
-// An exact host name, or `*.` and a host name for any subdomain of it.
-const HOST = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
+// An exact host name, or `*.` and a host name for any subdomain of it, with an optional port. Single labels and IPv4
+// literals (`localhost`, `127.0.0.1`, `*.local`, `localhost:4097`) are for clients' dev-mode local network
+// (widgets-live.md); clients refuse them otherwise.
+const HOST = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:\d{1,5})?$/
 
 /** Why `capabilities` can't be stored on a template of `mode`, if they can't. */
 export function capabilitiesProblem(mode: Widget.Mode, capabilities: Widget.Capabilities | undefined) {
@@ -77,7 +79,7 @@ export function capabilitiesProblem(mode: Widget.Mode, capabilities: Widget.Capa
   if (hosts.length > 32) return "https.hosts lists more than 32 hosts"
   const bad = hosts.find((host) => host !== "*" && !HOST.test(host))
   if (bad !== undefined)
-    return `https.hosts entry ${JSON.stringify(bad)} is not a host name like "api.example.com", "*.example.com" or "*"`
+    return `https.hosts entry ${JSON.stringify(bad)} is not a host name like "api.example.com", "*.example.com", "localhost:4097" or "*"`
 }
 
 // A version lives under its content address and never changes; `latest:<name>` names the newest saved one.
