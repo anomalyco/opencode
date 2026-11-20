@@ -14,7 +14,16 @@ export class InstallFailedError extends Schema.TaggedError<InstallFailedError>()
   add: Schema.Array(Schema.String).pipe(Schema.optional),
   dir: Schema.String,
   cause: Schema.optional(Schema.Defect()),
-}) {}
+}) {
+  override get message() {
+    const summary = `Failed to install ${this.add?.join(", ") || this.dir}`
+    if (!(this.cause instanceof Error)) return summary
+    // @npmcli/git reports most failures as "An unknown git error occurred" and keeps git's output on `stderr`.
+    const stderr = "stderr" in this.cause && typeof this.cause.stderr === "string" ? this.cause.stderr.trim() : ""
+    if (!stderr) return `${summary}: ${this.cause.message}`
+    return `${summary}: ${this.cause.message}\n${stderr}`
+  }
+}
 
 export interface Package {
   readonly directory: string
@@ -28,6 +37,11 @@ export interface Interface {
   readonly resolve: (pkg: string) => Effect.Effect<Package>
   readonly check: (pkg: string) => Effect.Effect<boolean, InstallFailedError>
   readonly update: (pkg: string) => Effect.Effect<Package, InstallFailedError | EffectFlock.LockError>
+  /**
+   * Stop using the newest installed version when it is `version`, so the previous one is current again. Its files stay
+   * until they expire, for anything still running it. False when it isn't the newest or there is no previous one.
+   */
+  readonly reject: (pkg: string, version: string) => Effect.Effect<boolean, InstallFailedError | EffectFlock.LockError>
   readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
 }
 
@@ -142,7 +156,7 @@ const layer = Layer.effect(
         Effect.orElseSucceed(() => [] as string[]),
         Effect.map((entries) =>
           entries
-            .filter((entry) => /^\d+$/.test(entry))
+            .filter((entry) => /^\d+$/.test(entry) && !entries.includes(`${entry}.rejected`))
             .toSorted((a, b) => Number(a) - Number(b)),
         ),
       )
@@ -327,8 +341,8 @@ const layer = Layer.effect(
       yield* Effect.forEach(
         entries,
         (name) => {
-          const timestamp = /^\d+$/.test(name)
-            ? Number(name)
+          const timestamp = /^\d+(\.rejected)?$/.test(name)
+            ? Number(name.split(".")[0])
             : Number(name.match(/^\.staging-(\d+)-/)?.[1] ?? Number.NaN)
           const maximumAge = name.startsWith(".staging-") ? stagingRetention : retention
           if (!Number.isFinite(timestamp) || keep.has(name) || now - timestamp <= maximumAge) return Effect.void
@@ -403,6 +417,22 @@ const layer = Layer.effect(
       return installed
     }, Effect.scoped)
 
+    const reject = Effect.fn("Npm.reject")(function* (pkg: string, version: string) {
+      const target = yield* Effect.promise(() => parse(pkg))
+      const dir = directory(pkg, target)
+      yield* flock.acquire(`npm-install:${dir}`)
+      const completed = yield* generations(dir)
+      const newest = completed.at(-1)
+      if (completed.length < 2 || !newest) return false
+      const root = path.join(dir, newest)
+      const name = yield* installedName(pkg, root, target)
+      if ((yield* metadata(root, name, path.join(root, "node_modules", name), target)).version !== version) return false
+      yield* fs
+        .writeFileString(path.join(dir, `${newest}.rejected`), "")
+        .pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
+      return true
+    }, Effect.scoped)
+
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
       const target = yield* Effect.promise(() => parse(pkg))
       const root = directory(pkg, target)
@@ -458,6 +488,7 @@ const layer = Layer.effect(
       resolve,
       check,
       update,
+      reject,
       which,
     })
   }),

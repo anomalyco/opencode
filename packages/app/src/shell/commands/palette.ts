@@ -2,7 +2,6 @@ import { getFilename } from "@opencode/util/path"
 import type { Project } from "@/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { useQueryClient } from "@tanstack/solid-query"
 import { createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
 import { commandPaletteOptions, useCommand, type CommandOption } from "@/shell/commands/command"
 import { useFile } from "@/workspaces/files/model"
@@ -15,12 +14,12 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName } from "@opencode/ui/project-avatar"
 import { projectForSession } from "@/shell/layout/helpers"
+import { mergeRootSessionIndex } from "@/runtime/server/session-index"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { looksLikeSessionID } from "@/session/search"
 import { createSettingsPaletteEntries } from "@/settings/palette"
 import type { SettingsSearchResult } from "@/settings/search-results"
-import { matchesCommandPaletteEntry } from "./search"
 import {
   INITIAL_PALETTE_HIGHLIGHT_STATE,
   transitionPaletteHighlight,
@@ -198,6 +197,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(serverSDK.server),
     known: createKnownServerSessions(() => serverCtx),
+    apply: serverCtx.data.session.apply,
     projects: serverCtx.projects.list,
     load: (search, signal) =>
       serverSDK.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
@@ -272,7 +272,7 @@ export function createServerSessionEntries(props: {
   server: ServerConnection.Key
   archived?: boolean
   known?: () => SessionInfo[]
-  /** Hides sessions deleted since they were loaded. */
+  /** Hides sessions deleted since they were loaded and adds a pending send's bump. */
   apply?: (sessions: SessionInfo[]) => SessionInfo[]
   projects: () => Project[]
   load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
@@ -294,17 +294,12 @@ export function createServerSessionEntries(props: {
     }
   >()
 
-  // Let the newest metadata win duplicates before ranking the merged sessions newest-first.
+  // The server's list carries each step's `time.updated` bump. Like Home, keep the cached time until a run ends.
+  // Sort after `apply` so a pending send's bump decides which sessions make the recent group.
   const known = createMemo(() => {
-    const merged = [
-      ...new Map(
-        [...(props.known?.() ?? []), ...sourceState().loaded]
-          .toSorted((a, b) => a.time.updated - b.time.updated)
-          .map((session) => [session.id, session] as const),
-      ).values(),
-    ].toSorted((a, b) => b.time.updated - a.time.updated)
+    const merged = mergeRootSessionIndex(props.known?.() ?? [], sourceState().loaded)
 
-    return props.apply?.(merged) ?? merged
+    return (props.apply?.(merged) ?? merged).toSorted((a, b) => b.time.updated - a.time.updated)
   })
 
   const dispatch = (event: SessionSourceEvent) =>
@@ -434,33 +429,30 @@ export function createServerSessionEntries(props: {
     search,
     items(text: string) {
       const search = text.trim()
-      const all = entries(known(), search)
 
-      if (!search) return all.slice(0, props.recentLimit ?? ENTRY_LIMIT)
+      if (!search) return entries(known().slice(0, props.recentLimit ?? ENTRY_LIMIT), search)
 
-      return all.filter((entry) => matchesCommandPaletteEntry(entry, search)).slice(0, 50)
+      // The server matches titles, so narrow the loaded sessions before building entries for them. Building an entry
+      // per known session on every keystroke is what made search slow once the loaded index grew.
+      const value = search.toLowerCase()
+
+      const matched = known()
+        .filter((session) => (session.title || props.untitled()).toLowerCase().includes(value))
+        .slice(0, ENTRY_LIMIT * 10)
+
+      return entries(matched, search)
     },
   })
 }
 
+/** Sessions this client already has in its data store; the local list search narrows while the server answers. */
 export function createKnownServerSessions(context: Accessor<ServerCtx | undefined>) {
-  const queryClient = useQueryClient()
-
   return () => {
     const server = context()
 
     if (!server) return []
 
-    // Reuse the Home index already loaded before opening the palette; do not fetch an index for search.
-    const cached =
-      queryClient.getQueryData<SessionInfo[]>(["home-sessions", server.sdk.server]) ??
-      queryClient.getQueryData<SessionInfo[]>(["home-sessions", ServerConnection.key(server.sdk.server)]) ??
-      []
-
-    const merged = new Map([...cached, ...server.data.session.list()].map((session) => [session.id, session] as const))
-
-    return server.data.session.apply(
-      [...merged.values()].filter((session) => !session.parentID && !session.time.archived),
-    )
+    // Raw records: `apply` adds the send bump after the merge, so a projected time never reaches it as a server time.
+    return server.data.session.known().filter((session) => !session.parentID && !session.time.archived)
   }
 }

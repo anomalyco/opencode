@@ -15,6 +15,7 @@ import {
   currentToolGroupedRead,
   currentToolHasLoadedFiles,
 } from "../message/current-tool-state"
+import { turnCommentary } from "./commentary"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
 import {
@@ -41,7 +42,7 @@ type FailedIdle = SessionMessageIdle & {
 }
 
 type Entry =
-  | { type: "assistant"; message: SessionMessageAssistant }
+  | { type: "assistant"; message: SessionMessageAssistant; run: number }
   | { type: "notice"; message: Notice }
   | { type: "idle"; message: FailedIdle }
   | { type: "diff"; message: SessionMessageIdle; from: string; files: string[] }
@@ -136,7 +137,6 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     rows,
     sessionMessageByID,
     userContextByID: indexUserContext(input.sessionMessages),
-    previousSelectionByID: indexPreviousSelection(input.sessionMessages),
   }
 }
 
@@ -157,7 +157,6 @@ export function createReactiveTimelineProjection(input: {
   )
 
   const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
-  const previousSelectionByID = createMemo(() => indexPreviousSelection(input.sessionMessages()))
   const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
 
   // Row structure depends on the empty/non-empty boundary, not each text delta.
@@ -258,7 +257,6 @@ export function createReactiveTimelineProjection(input: {
     rows,
     sessionMessageByID,
     userContextByID,
-    previousSelectionByID,
   }
 }
 
@@ -287,6 +285,7 @@ export namespace Timeline {
     const turnByUserID = new Map<string, Turn>()
     const leading: Notice[] = []
     let current: Turn | undefined
+    let openRun = 0
     // Everything since the last idle marker is one turn, including prompts steered in meanwhile.
     let execution: { opener: string; turn: Turn; files: Set<string> } | undefined
 
@@ -323,6 +322,7 @@ export namespace Timeline {
 
       if (message.type === "idle") {
         appendIdle(message)
+        openRun++
 
         // The summary follows the turn's last prompt, after any failure the marker reports.
         // Sorted like the diff route's git order, so the list keeps its order when the diffs arrive.
@@ -343,19 +343,19 @@ export namespace Timeline {
       const existing = current?.user ? current : undefined
 
       if (existing?.user) {
-        existing.entries.push({ type: "assistant", message })
+        existing.entries.push({ type: "assistant", message, run: openRun })
         current = existing
 
         return
       }
 
       if (current && !current.user && !current.shell) {
-        current.entries.push({ type: "assistant", message })
+        current.entries.push({ type: "assistant", message, run: openRun })
 
         return
       }
 
-      const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message }] }
+      const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message, run: openRun }] }
       turns.push(turn)
       current = turn
     })
@@ -403,8 +403,11 @@ export namespace Timeline {
     const commentary = new Set(
       detail && detail.commentary.placement !== "separate"
         ? turns.flatMap((turn) =>
-            turnCommentary(turn.entries, viewTurnPhase(phaseOf(turn)).settled, (content) =>
-              isRenderable(content, showReasoning, detail),
+            turnCommentary(
+              turn.entries.filter((entry) => entry.type === "assistant"),
+              openRun,
+              viewTurnPhase(phaseOf(turn)).settled,
+              (content) => isRenderable(content, showReasoning, detail),
             ),
           )
         : [],
@@ -766,26 +769,6 @@ function shellFailed(message: SessionMessageShell) {
   )
 }
 
-// Text that a tool call follows in the same turn is commentary; text after the last tool call is the answer.
-// OpenAI Responses models label each message with a phase, which wins over position. A settled turn
-// without an answer keeps its last text, so an interrupted turn still ends with something to read.
-function turnCommentary(entries: Entry[], settled: boolean, visible: (content: Content) => boolean) {
-  const contents = entries.flatMap((entry) => (entry.type === "assistant" ? entry.message.content : []))
-  const lastTool = contents.findLastIndex((content) => content.type === "tool")
-
-  const commentary = contents.filter(
-    (content, index) =>
-      content.type === "text" &&
-      (content.native?.phase === "commentary" || (content.native?.phase !== "final_answer" && index < lastTool)),
-  )
-
-  const texts = contents.filter((content) => content.type === "text" && visible(content))
-
-  if (!settled || texts.some((content) => !commentary.includes(content))) return commentary
-
-  return commentary.filter((content) => content !== texts.at(-1))
-}
-
 function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, separate: ReadonlySet<string>) {
   return rows.reduce<TimelineRow.TimelineRow[]>((result, row) => {
     const previous = result.at(-1)
@@ -901,45 +884,6 @@ function indexUserContext(messages: SessionMessageInfo[]) {
     model = message.model
 
     if (userID) result.set(userID, { agent, model })
-  })
-
-  return result
-}
-
-/**
- * The agent and model the previous user message chose, for each user message after the first. A message whose
- * metadata names neither chose what its first reply ran with; later replies, which a steer's switch reconfigures,
- * do not count, so a waiting steer can tell whether it changes the agent or model of the turn it joins.
- */
-function indexPreviousSelection(messages: SessionMessageInfo[]) {
-  const result = new Map<string, UserSelection>()
-  let agent = ""
-  let model: ModelRef = { id: "", providerID: "" }
-  let previous: { chosen: Partial<UserSelection>; current: UserSelection } | undefined
-
-  messages.forEach((message) => {
-    if (message.type === "agent-switched") agent = message.agent
-
-    if (message.type === "model-switched") model = message.model
-
-    if (message.type === "assistant") {
-      agent = message.agent
-      model = message.model
-
-      if (previous) {
-        previous.chosen.agent ??= message.agent
-        previous.chosen.model ??= message.model
-      }
-    }
-
-    if (message.type !== "user") return
-
-    if (previous)
-      result.set(message.id, {
-        agent: previous.chosen.agent ?? previous.current.agent,
-        model: previous.chosen.model ?? previous.current.model,
-      })
-    previous = { chosen: localSelection(message), current: { agent, model } }
   })
 
   return result

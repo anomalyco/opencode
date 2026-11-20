@@ -6,6 +6,8 @@ import {
   visibleWorkspaces,
   WORKSPACE_COLLAPSE_MS,
   WORKSPACE_DELETE_TIMEOUT_MS,
+  WORKSPACE_INSPECT_TIMEOUT_MS,
+  workspaceConfirmView,
   workspaceRowView,
   type WorkspaceDeleteEffect,
   type WorkspaceDeleteEvent,
@@ -42,41 +44,150 @@ const run = (attempt: number, item: WorkspaceTarget, force: boolean, active?: st
   timeoutMs: WORKSPACE_DELETE_TIMEOUT_MS,
 })
 
+const clean = { active: false, linked: false, dirty: false }
+
+const dirty = { active: false, linked: false, dirty: true }
+
+const inspect = (attempt: number, item: WorkspaceTarget, active?: string): WorkspaceDeleteEffect => ({
+  type: "inspect.run",
+  attempt,
+  directory: item.directory,
+  active,
+  timeoutMs: WORKSPACE_INSPECT_TIMEOUT_MS,
+})
+
+// Opens the single-worktree confirmation (attempt 1), passes its check (attempt 2) and accepts it.
+const acceptOne = (item: WorkspaceTarget): WorkspaceDeleteEvent[] => [
+  { type: "confirm.opened", scope: "one", active: undefined, targets: [item] },
+  { type: "inspect.succeeded", attempt: 2, inspection: clean },
+  { type: "confirm.accepted", attempt: 1 },
+]
+
 describe("workspace delete machine", () => {
   test("a closing dialog's late cancel does not cancel the next confirmation", () => {
     const next = replay([
-      { type: "confirm.opened", scope: "one", active: undefined, targets: [a] },
-      { type: "confirm.accepted", attempt: 1 },
-      { type: "delete.skipped", attempt: 2, reason: { kind: "failed", message: "busy" } },
+      ...acceptOne(a),
+      { type: "delete.skipped", attempt: 3, reason: { kind: "failed", message: "busy" } },
       { type: "confirm.opened", scope: "one", active: undefined, targets: [b] },
+      { type: "inspect.succeeded", attempt: 5, inspection: clean },
     ])
 
-    expect(next.state).toMatchObject({ status: "confirming", attempt: 3 })
+    expect(next.state).toMatchObject({ status: "confirming", attempt: 4 })
 
     // The first dialog's exit animation ends now and reports its close.
     const late = transitionWorkspaceDelete(next.state, { type: "confirm.cancelled", attempt: 1 })
     expect(late.state).toBe(next.state)
     expect(isWorkspaceDeleteBusy(late.state)).toBe(true)
-    expect(transitionWorkspaceDelete(late.state, { type: "confirm.accepted", attempt: 3 }).effects).toEqual([
-      run(4, b, true),
+    expect(transitionWorkspaceDelete(late.state, { type: "confirm.accepted", attempt: 4 }).effects).toEqual([
+      run(6, b, true),
     ])
   })
 
-  test("a collapsed row stays hidden until the inventory drops it", () => {
-    const collapsing = replay([
-      { type: "confirm.opened", scope: "one", active: undefined, targets: [a] },
-      { type: "confirm.accepted", attempt: 1 },
-      { type: "delete.succeeded", attempt: 2, target: a },
+  test("a failed check offers Retry instead of stranding the confirmation", () => {
+    const opened = replay([{ type: "confirm.opened", scope: "one", active: "/repo", targets: [a] }])
+    expect(opened.effects).toEqual([
+      { type: "open.confirm", attempt: 1, scope: "one", active: "/repo", targets: [a] },
+      inspect(2, a, "/repo"),
     ])
+    expect(workspaceConfirmView(opened.state, 1)).toEqual({
+      checking: true,
+      failed: false,
+      canDelete: false,
+      inspection: undefined,
+    })
+
+    for (const type of ["inspect.failed", "inspect.timed-out"] as const) {
+      const failed = transitionWorkspaceDelete(opened.state, { type, attempt: 2 })
+      expect(failed.effects).toEqual([{ type: "inspect.stop", attempt: 2 }])
+      expect(workspaceConfirmView(failed.state, 1)).toEqual({
+        checking: false,
+        failed: true,
+        canDelete: false,
+        inspection: undefined,
+      })
+      expect(transitionWorkspaceDelete(failed.state, { type: "confirm.accepted", attempt: 1 }).state).toBe(failed.state)
+
+      const retried = transitionWorkspaceDelete(failed.state, { type: "inspect.retried", attempt: 1 })
+      expect(retried.effects).toEqual([inspect(3, a, "/repo")])
+      expect(workspaceConfirmView(retried.state, 1).checking).toBe(true)
+      // A second click while the retry runs starts nothing.
+      expect(transitionWorkspaceDelete(retried.state, { type: "inspect.retried", attempt: 1 }).state).toBe(
+        retried.state,
+      )
+
+      const ready = replay(
+        [
+          { type: "inspect.succeeded", attempt: 3, inspection: dirty },
+          { type: "confirm.accepted", attempt: 1 },
+        ],
+        retried.state,
+      )
+
+      expect(ready.effects).toEqual([run(4, a, true, "/repo")])
+    }
+  })
+
+  test("Delete does nothing until the check passes, and the dialog keeps its warnings while it closes", () => {
+    const checking = replay([{ type: "confirm.opened", scope: "one", active: undefined, targets: [a] }]).state
+    expect(transitionWorkspaceDelete(checking, { type: "confirm.accepted", attempt: 1 }).state).toBe(checking)
+
+    const deleting = replay(
+      [
+        { type: "inspect.succeeded", attempt: 2, inspection: dirty },
+        { type: "confirm.accepted", attempt: 1 },
+      ],
+      checking,
+    ).state
+
+    expect(workspaceConfirmView(deleting, 1)).toEqual({
+      checking: false,
+      failed: false,
+      canDelete: false,
+      inspection: dirty,
+    })
+  })
+
+  test("closing or leaving a confirmation stops its check, and a late check result is ignored", () => {
+    const checking = replay([{ type: "confirm.opened", scope: "one", active: undefined, targets: [a] }]).state
+
+    const cancelled = transitionWorkspaceDelete(checking, { type: "confirm.cancelled", attempt: 1 })
+    expect(cancelled).toEqual({
+      state: { status: "idle", issued: 2, removed: {} },
+      effects: [{ type: "inspect.stop", attempt: 2 }],
+    })
+    expect(
+      transitionWorkspaceDelete(cancelled.state, { type: "inspect.succeeded", attempt: 2, inspection: clean }).state,
+    ).toBe(cancelled.state)
+
+    expect(transitionWorkspaceDelete(checking, { type: "disposed" })).toEqual({
+      state: { status: "disposed" },
+      effects: [{ type: "inspect.stop", attempt: 2 }],
+    })
+
+    const retried = replay(
+      [
+        { type: "inspect.failed", attempt: 2 },
+        { type: "inspect.retried", attempt: 1 },
+      ],
+      checking,
+    ).state
+
+    expect(transitionWorkspaceDelete(retried, { type: "inspect.succeeded", attempt: 2, inspection: clean }).state).toBe(
+      retried,
+    )
+  })
+
+  test("a collapsed row stays hidden until the inventory drops it", () => {
+    const collapsing = replay([...acceptOne(a), { type: "delete.succeeded", attempt: 3, target: a }])
 
     expect(collapsing.effects).toEqual([
-      { type: "delete.timer.stop", attempt: 2 },
-      { type: "collapse.start", attempt: 2, delayMs: WORKSPACE_COLLAPSE_MS },
+      { type: "delete.timer.stop", attempt: 3 },
+      { type: "collapse.start", attempt: 3, delayMs: WORKSPACE_COLLAPSE_MS },
     ])
     expect(workspaceRowView(collapsing.state, a.key)).toEqual({ deleting: true, collapsing: true })
     expect(visibleWorkspaces(collapsing.state, [a, b], (item) => item.key)).toEqual([a, b])
 
-    const collapsed = transitionWorkspaceDelete(collapsing.state, { type: "collapse.completed", attempt: 2 })
+    const collapsed = transitionWorkspaceDelete(collapsing.state, { type: "collapse.completed", attempt: 3 })
     expect(collapsed.effects).toEqual([{ type: "finalize.removed", target: a }])
     expect(collapsed.state).toMatchObject({ status: "idle" })
     // The inventory still lists it while it refetches, and the row must not come back.
@@ -85,7 +196,7 @@ describe("workspace delete machine", () => {
     expect(stale.state).toBe(collapsed.state)
 
     const synced = transitionWorkspaceDelete(collapsed.state, { type: "inventory.synced", keys: [b.key] })
-    expect(synced.state).toEqual({ status: "idle", issued: 2, removed: {} })
+    expect(synced.state).toEqual({ status: "idle", issued: 3, removed: {} })
   })
 
   test("a bulk delete moves past blocked, failed and timed-out worktrees", () => {
@@ -139,26 +250,18 @@ describe("workspace delete machine", () => {
   })
 
   test("closing the list mid-delete still reconciles what the server removed", () => {
-    const collapsing = replay([
-      { type: "confirm.opened", scope: "one", active: undefined, targets: [a] },
-      { type: "confirm.accepted", attempt: 1 },
-      { type: "delete.succeeded", attempt: 2, target: a },
-    ])
+    const collapsing = replay([...acceptOne(a), { type: "delete.succeeded", attempt: 3, target: a }])
 
     expect(transitionWorkspaceDelete(collapsing.state, { type: "disposed" }).effects).toEqual([
       { type: "collapse.cancel" },
       { type: "finalize.removed", target: a },
     ])
 
-    const deleting = replay([
-      { type: "confirm.opened", scope: "one", active: undefined, targets: [a] },
-      { type: "confirm.accepted", attempt: 1 },
-      { type: "disposed" },
-    ])
+    const deleting = replay([...acceptOne(a), { type: "disposed" }])
 
-    expect(deleting.effects).toEqual([{ type: "delete.timer.stop", attempt: 2 }])
+    expect(deleting.effects).toEqual([{ type: "delete.timer.stop", attempt: 3 }])
     expect(
-      transitionWorkspaceDelete(deleting.state, { type: "delete.succeeded", attempt: 2, target: a }).effects,
+      transitionWorkspaceDelete(deleting.state, { type: "delete.succeeded", attempt: 3, target: a }).effects,
     ).toEqual([{ type: "finalize.removed", target: a }])
     expect(
       transitionWorkspaceDelete(deleting.state, {
@@ -188,7 +291,7 @@ describe("workspace delete machine", () => {
     ).toBe(confirming.state)
     expect(transitionWorkspaceDelete(confirming.state, { type: "confirm.cancelled", attempt: 1 }).state).toEqual({
       status: "idle",
-      issued: 1,
+      issued: 2,
       removed: {},
     })
   })

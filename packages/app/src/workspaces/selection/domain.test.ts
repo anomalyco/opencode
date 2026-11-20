@@ -12,6 +12,7 @@ import {
   listPickerDirectory,
   displayPickerPath,
   shortenPickerRecentPath,
+  pickerBreadcrumbs,
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
@@ -19,7 +20,10 @@ import {
 
 type Sdk = Parameters<typeof listPickerDirectory>[0]
 
-type FileApi = { find?: (input: never) => Promise<object>; list?: (input: never, options: never) => Promise<object> }
+type FileApi = {
+  find?: (input: never, options: never) => Promise<object>
+  list?: (input: never, options: never) => Promise<object>
+}
 
 // SAFETY: the picker only reads `api.file.find` and `api.file.list`, which every fake here provides.
 // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- a partial fake stands in for the generated SDK client
@@ -140,6 +144,41 @@ test.each([
   ],
 ])("uses the selected server path format for %s: %p", (_name, actual, expected) => {
   expect(actual).toBe(expected)
+})
+
+test.each([
+  [
+    "a folder under home",
+    pickerBreadcrumbs("/home/luke/projects/acme", "/home/luke"),
+    [
+      { label: "/", path: "/" },
+      { label: "~", path: "/home/luke" },
+      { label: "projects", path: "/home/luke/projects" },
+      { label: "acme", path: "/home/luke/projects/acme" },
+    ],
+  ],
+  [
+    "a folder outside home",
+    pickerBreadcrumbs("/srv/infra/", "/home/luke"),
+    [
+      { label: "/", path: "/" },
+      { label: "srv", path: "/srv" },
+      { label: "infra", path: "/srv/infra" },
+    ],
+  ],
+  ["the root", pickerBreadcrumbs("/", "/home/luke"), [{ label: "/", path: "/" }]],
+  [
+    "a Windows drive",
+    pickerBreadcrumbs("C:/Users/luke/repo", "C:/Users/luke"),
+    [
+      { label: "C:", path: "C:/" },
+      { label: "Users", path: "C:/Users" },
+      { label: "luke", path: "C:/Users/luke" },
+      { label: "repo", path: "C:/Users/luke/repo" },
+    ],
+  ],
+])("breadcrumbs for %s open each ancestor", (_name, actual, expected) => {
+  expect(actual).toEqual(expected)
 })
 
 test("resolves directory autocomplete from the browser root without changing location", async () => {
@@ -487,6 +526,57 @@ test("aborting one running task frees its slot for the next", async () => {
   await aborted.promise
   expect(await hung).toBeUndefined()
   expect(await next).toBe("next")
+})
+
+test("a folder listing that failed once is read again by the next search", async () => {
+  const location = { directory: "/repo" }
+  const listed: unknown[] = []
+
+  const api = sdk({
+    find: async () => ({ location, data: [] }),
+    list: async (input: { path: string }) => {
+      listed.push(input.path)
+
+      if (listed.length === 1) throw new Error("server is starting")
+
+      return { location, data: [{ path: "components/", type: "directory" }] }
+    },
+  })
+
+  const search = createDirectorySearch({ sdk: api, home: () => "", base: () => "/repo", location: () => location })
+
+  expect(await search("comp")).toEqual([])
+  expect(await search("comp")).toEqual(["/repo/components"])
+  expect(listed).toEqual(["/repo", "/repo"])
+})
+
+test("a search passes its signal to the server search, and closing the picker aborts its folder reads", async () => {
+  const location = { directory: "/repo" }
+  const signals: Array<AbortSignal | undefined> = []
+  const listing = Promise.withResolvers<AbortSignal>()
+
+  const api = sdk({
+    find: async (_input: never, options: { signal?: AbortSignal }) => {
+      signals.push(options.signal)
+
+      return { location, data: [] }
+    },
+    list: (_input: never, options: { signal: AbortSignal }) => {
+      listing.resolve(options.signal)
+
+      return new Promise<object>(() => {})
+    },
+  })
+
+  const search = createDirectorySearch({ sdk: api, home: () => "", base: () => "/repo", location: () => location })
+  const controller = new AbortController()
+  const pending = search("comp", { signal: controller.signal })
+  const read = await listing.promise
+  expect(signals).toEqual([controller.signal])
+
+  search.dispose()
+  expect(read.aborted).toBe(true)
+  expect(await pending).toEqual([])
 })
 
 test("listing a folder passes the abort signal to the request", async () => {

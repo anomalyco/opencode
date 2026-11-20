@@ -583,7 +583,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.generate",
         Effect.fn(function* (ctx) {
-          const text = yield* session
+          const result = yield* session
             .generate({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt })
             .pipe(
               Effect.mapError((error) =>
@@ -592,7 +592,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   : new ServiceUnavailableError({ message: error.message, service: "session generation" }),
               ),
             )
-          return { data: { text } }
+          return { data: result }
         }),
       )
       .handle(

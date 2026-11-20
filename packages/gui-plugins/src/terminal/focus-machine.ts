@@ -45,8 +45,13 @@ export const initialFocusState: FocusState = { status: "idle", request: 0 }
  * return of a closing dialog or menu that started the request does not.
  */
 export function transitionFocus(state: FocusState, event: FocusRequestEvent): FocusState {
-  if (event.type === "request.pending")
+  if (event.type === "request.pending") {
+    // A second new-terminal request joins the create in flight, so it keeps that create's request.
+    if (state.status === "pending" && state.session === event.session)
+      return event.overlay && !state.overlay ? { ...state, overlay: true } : state
+
     return { status: "pending", request: state.request + 1, session: event.session, overlay: event.overlay }
+  }
 
   if (event.type === "request.target") {
     // Showing the tab asks again for the terminal already asked for; that keeps the request and its overlay.

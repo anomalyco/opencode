@@ -82,6 +82,17 @@
   white-space: nowrap;
 }
 
+@media (forced-colors: active) {
+  :is(.palette-menu-row, [data-color-scheme="dark"] .palette-menu-row):is([data-active], :focus-visible) {
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .palette-menu-row:is([data-active], :focus-visible) * {
+    color: inherit;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .palette-menu-search [data-component="text-input-v2"] {
     transition: none;

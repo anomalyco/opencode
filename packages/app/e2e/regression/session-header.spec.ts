@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test"
 import { REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { reviewTabs } from "../utils/side-panel"
+import { chooseUserMessageAction, openUserMessageMenu } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
 
@@ -42,9 +43,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     expect(heights).toEqual([28, 28, 28, 28, 28, 28])
 
+    const rename = header.getByRole("heading").getByRole("button", { name: fixture.expected.targetTitle, exact: true })
+
     for (const editing of [false, true]) {
       if (editing) {
-        await header.getByRole("heading").click()
+        await project.press("Tab")
+        await expect(rename).toBeFocused()
+        await page.keyboard.press("Enter")
         await expect(header.getByRole("textbox")).toHaveValue(fixture.expected.targetTitle)
         await expect(header.getByRole("textbox")).toBeFocused()
       }
@@ -76,6 +81,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     await header.getByRole("textbox").press("Escape")
     await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
+    await expect(rename).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(project).toBeFocused()
+    await details.press("Tab")
+    await expect(review).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(details).toBeFocused()
 
     // The header stays one row at every width.
     for (const width of [900, 1440]) {
@@ -253,7 +265,12 @@ test.describe("location", () => {
       await expect(usageMenu).toBeVisible({ visible: !state.usage })
       await expect(header.locator(".session-location-worktree-icon")).toBeVisible()
       await expect
-        .poll(() => header.getByRole("heading").evaluate((element) => element.scrollWidth > element.clientWidth))
+        .poll(() =>
+          header
+            .getByRole("heading")
+            .getByRole("button")
+            .evaluate((element) => element.scrollWidth > element.clientWidth),
+        )
         .toBe(state.truncated)
       await expect(header.getByRole("button", { name: "More options", exact: true })).toBeInViewport()
       await header.getByRole("heading").hover()
@@ -511,7 +528,6 @@ test.describe("location", () => {
 
   test("an app launch that never answers releases the Open in controls", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.clock.install()
 
     const mock = await mockWorkspace(page, {
       ...workspace,
@@ -533,6 +549,8 @@ test.describe("location", () => {
     await expectSessionTitle(page, "Location session")
     await page.getByRole("button", { name: "Toggle review", exact: true }).click()
     await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+    // Control the launch timeout, not the page's initial focus and panel animation.
+    await page.clock.install()
     const open = page.getByRole("button", { name: "Open in VS Code", exact: true })
     await open.click()
     await expect(page.getByLabel("Opened paths")).toContainText("Visual Studio Code")
@@ -724,7 +742,6 @@ test.describe("revert", () => {
       if (step) settles.push(step)
     })
     const message = page.locator('[data-message-id="msg_second"]')
-    await message.hover()
 
     const response = page.waitForResponse(
       (response) =>
@@ -732,7 +749,8 @@ test.describe("revert", () => {
         new URL(response.url()).pathname === `/api/session/${session.id}/revert/stage`,
     )
 
-    await message.getByRole("button", { name: "Rewind to here" }).click()
+    // The newest prompt's revert undoes the last turn.
+    await chooseUserMessageAction(page, message, "Undo")
     expect((await response).ok()).toBe(true)
 
     await expect(page.getByRole("textbox", { name: "Prompt" })).toHaveText("Second prompt")
@@ -741,15 +759,14 @@ test.describe("revert", () => {
     expect(settles).toEqual(["/interrupt", "/wait", "/revert/stage"])
   })
 
-  test("Undo on the Rewound toast clears the revert and puts the draft back before the staged event arrives", async ({
+  test("Undo on the Reverted toast clears the revert and puts the draft back before the staged event arrives", async ({
     page,
   }) => {
     const { session, editor } = await openSession(page, workspace)
     const prompt = page.getByRole("textbox", { name: "Prompt" })
     await editor.pressSequentially("Unsent draft")
     const message = page.locator('[data-message-id="msg_second"]')
-    await message.hover()
-    await message.getByRole("button", { name: "Rewind to here" }).click()
+    await chooseUserMessageAction(page, message, "Undo")
     await expect(prompt).toHaveText("Second prompt")
 
     const cleared = page.waitForRequest(
@@ -821,9 +838,9 @@ test.describe("revert", () => {
     })
     const prompt = page.getByRole("textbox", { name: "Prompt" })
     await editor.pressSequentially("Draft in source")
+    // The session is already reverted to msg_second, so msg_first is the newest prompt left.
     const message = page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_first"]')
-    await message.hover()
-    await message.getByRole("button", { name: "Rewind to here" }).click()
+    await chooseUserMessageAction(page, message, "Undo")
     await expect(prompt).toHaveText("First prompt")
 
     await tabs(page).filter({ hasText: "Rewind other" }).click()
@@ -883,8 +900,7 @@ test.describe("revert", () => {
     })
     await page.goto(sessionHref("ses_child"))
     await expectSessionTitle(page, "Session message revert")
-    const message = page.locator('[data-message-id="msg_second"]')
-    await message.hover()
-    await expect(message.getByRole("button", { name: "Rewind to here" })).toHaveCount(0)
+    const menu = await openUserMessageMenu(page, page.locator('[data-message-id="msg_second"]'))
+    await expect(menu.getByRole("menuitem", { name: /^(Revert to here|Undo)$/ })).toHaveCount(0)
   })
 })

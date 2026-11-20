@@ -5,7 +5,6 @@ export default {
   "usage.usage": "การใช้งาน",
   "usage.cost": "ต้นทุน",
   "usage.view": "ดูการใช้บริบท",
-  "systemPrompt.title": "พรอมต์ระบบ",
   "rawMessages.title": "ข้อความดิบ",
   "export.session": "ส่งออกเซสชัน",
   "stats.session": "เซสชัน",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "บันทึกเซสชันไปยัง {{filename}} แล้ว",
   "export.failed.title": "ไม่สามารถส่งออกเซสชัน",
   "export.failed.description": "เกิดข้อผิดพลาดขณะส่งออกเซสชัน",
+  "usage.toggle": "สลับบริบทเซสชัน",
 }

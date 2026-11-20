@@ -12,4 +12,12 @@ export default {
   noChanges: "कोई परिवर्तन नहीं",
   "settings.wrapLines.title": "पंक्तियाँ लपेटें",
   "settings.wrapLines.description": "मोबाइल डिफ़ में लंबी पंक्तियों को क्षैतिज रूप से स्क्रॉल करने के बजाय लपेटें",
+  "menu.count.one": "{{count}} फ़ाइल बदली गई",
+  "menu.count.other": "{{count}} फ़ाइलें बदली गईं",
+  "folder.more": "{{count}} · और नहीं दिखाई गईं",
+  "folder.failed": "परिवर्तन लोड नहीं हो सके",
+  "command.open": "समीक्षा खोलें",
+  "load.failed": "परिवर्तन लोड नहीं हो सके",
+  "load.timeout": "सर्वर ने उत्तर देने में बहुत समय लिया",
+  offline: "इस सर्वर तक नहीं पहुँचा जा सकता",
 }

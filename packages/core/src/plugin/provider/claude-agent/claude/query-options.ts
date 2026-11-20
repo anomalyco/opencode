@@ -2,6 +2,8 @@ export * as ClaudeQueryOptions from "./query-options.js"
 
 import type { LanguageModelV3FunctionTool } from "@ai-sdk/provider"
 import type { Options } from "@anthropic-ai/claude-agent-sdk"
+import os from "node:os"
+import path from "node:path"
 import { ToolHooks } from "../tools/hooks.js"
 import type { PendingTools } from "../tools/pending.js"
 import { ToolServer } from "../tools/server.js"
@@ -19,6 +21,11 @@ const ISOLATION_ENV = {
   CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: "1",
   // Raised so opencode's own truncation applies instead
   MAX_MCP_OUTPUT_TOKENS: "200000",
+  // OpenCode changes the system prompt and tools mid-session (agent switches, instruction edits). Without this,
+  // Claude Code replays thinking bound to the old prompt and the API rejects the request.
+  CLAUDE_CODE_POLISHED_DEWDROP: "drop",
+  // The SDK's default `sdk-ts` label uses the 5-hour plan limit about 1.8x faster (anthropics/claude-code#97074)
+  CLAUDE_CODE_ENTRYPOINT: "opencode",
   // Skips OAuth, so the subscription would not be used
   CLAUDE_CODE_SIMPLE: undefined,
   // A shell-level effort override would take precedence over OpenCode's live effort settings.
@@ -39,6 +46,9 @@ export function connectionEnv(connection: {
   if (typeof settings.authToken === "string") env.ANTHROPIC_AUTH_TOKEN = settings.authToken
   if (typeof settings.headerTimeout === "number") env.API_TIMEOUT_MS = String(settings.headerTimeout)
   if (typeof settings.chunkTimeout === "number") env.CLAUDE_STREAM_IDLE_TIMEOUT_MS = String(settings.chunkTimeout)
+  // ClaudeAccounts picks the folder for each request. The login check and model list use the first.
+  const dirs = configDirs(settings.configDir)
+  if (dirs.length > 0) env.CLAUDE_CONFIG_DIR = dirs[0]
   const headers: string[] = []
   for (const [name, value] of Object.entries(connection.headers ?? {})) {
     headers.push(`${name}: ${value}`)
@@ -48,6 +58,28 @@ export function connectionEnv(connection: {
     env.CLAUDE_CODE_EXTRA_BODY = JSON.stringify(connection.body)
   }
   return env
+}
+
+export function configDirs(value: unknown) {
+  const dirs: string[] = []
+  for (const item of Array.isArray(value) ? value : [value]) {
+    if (typeof item !== "string") continue
+    // Claude Code does not expand ~, so a configDir like ~/.claude-work would point inside the project.
+    // An absolute path also means Claude Code and our own transcript lookups agree on the folder.
+    const dir = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
+    dirs.push(path.resolve(dir))
+  }
+  return dirs
+}
+
+// Claude Code keeps its state in ~/.claude.json only while CLAUDE_CONFIG_DIR is unset. Naming the default folder moves
+// that to ~/.claude/.claude.json, which can hold an older model list, so the default folder is used by not naming it.
+export function withoutDefaultFolder(connection: Readonly<Record<string, string>>, io: ClaudeIO.Interface) {
+  if (connection.CLAUDE_CONFIG_DIR !== path.join(os.homedir(), ".claude")) return connection
+  // With the variable already set for opencode, leaving it out would run that folder instead.
+  if (io.env().CLAUDE_CONFIG_DIR !== undefined) return connection
+  const { CLAUDE_CONFIG_DIR: _, ...rest } = connection
+  return rest
 }
 
 export function base(input: {

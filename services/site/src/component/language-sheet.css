@@ -1,0 +1,32 @@
+/* The language sheet's rows (language-sheet.tsx); the sheet itself is site/sheet.css. */
+[data-component="sheet"][data-sheet="language"] {
+  /* Each name in its own script: Inter, then the system's fonts for scripts Inter lacks. */
+  [data-slot="native"] {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-sans);
+    font-size: var(--fs-body);
+    font-weight: 400;
+    line-height: 1.25;
+    text-align: start;
+  }
+
+  [data-slot="english"] {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    line-height: 1.2;
+    color: var(--popover-text-weak);
+  }
+
+  [data-slot="check"] {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    opacity: 0;
+  }
+
+  [aria-current="true"] [data-slot="check"] {
+    opacity: 1;
+  }
+}

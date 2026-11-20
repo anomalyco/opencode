@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Использование",
   "usage.cost": "Стоимость",
   "usage.view": "Показать использование контекста",
-  "systemPrompt.title": "Системный промпт",
   "rawMessages.title": "Исходные сообщения",
   "export.session": "Экспортировать сессию",
   "stats.session": "Сессия",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Сессия сохранена в файл {{filename}}",
   "export.failed.title": "Не удалось экспортировать сессию",
   "export.failed.description": "Произошла ошибка при экспорте сессии",
+  "usage.toggle": "Переключить контекст сессии",
 }

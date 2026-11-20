@@ -84,6 +84,7 @@ export function createHomeProjectsController(home: HomeController) {
       add: home.project.add,
       openNewSession: actions.openNewSession,
       canImportSession: actions.canImportSession,
+      importingSession: actions.importingSession,
       importSession: actions.importSession,
       edit: actions.edit,
       hasUnread: actions.hasUnread,

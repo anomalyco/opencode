@@ -90,8 +90,8 @@ it.effect("Meta package selectors preserve overrides and Chat token policy on cu
         reasoningEffort: "future-effort",
       })
       expect(model.route.endpoint.baseURL).toBe("https://gateway.example/v1")
-      expect(model.route.defaults.headers).toEqual({ "x-client": "test" })
-      expect(model.route.defaults.http?.body).toEqual({ custom: "value" })
+      expect(model.options?.headers).toEqual({ "x-client": "test" })
+      expect(model.options?.http?.body).toEqual({ custom: "value" })
       const compiled = yield* compileRequest(
         ai.request({
           model,

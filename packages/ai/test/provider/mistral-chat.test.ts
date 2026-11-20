@@ -203,7 +203,7 @@ describe("Mistral Chat", () => {
 
       const unsupported = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { supportsPromptCacheKey: false } }),
+          model: LanguageModel.update(model, { capabilities: { promptCacheKey: false } }),
           prompt: "Hello",
           promptCacheKey: "common-key",
           providerOptions: { promptCacheKey: "native-key" },

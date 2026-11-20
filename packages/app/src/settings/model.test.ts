@@ -6,6 +6,8 @@ import {
   settingsSchema,
   settingsPersistence,
   defaultSettings,
+  recentSessionsAvailable,
+  resolveSidebarOrganize,
   monoDefault,
   monoFontFamily,
   sansDefault,
@@ -44,6 +46,7 @@ describe("settings schema", () => {
         showSearch: true,
         experimentalBrowser: false,
         showProjectIcon: true,
+        focusRing: "muted",
         releaseNotes: false,
         mobileDiffWrap: false,
       },
@@ -55,6 +58,7 @@ describe("settings schema", () => {
     expect(settings.general).not.toHaveProperty("showStatus")
     expect(settings.general).not.toHaveProperty("experimentalBrowser")
     expect(settings.general).not.toHaveProperty("showProjectIcon")
+    expect(settings.general).not.toHaveProperty("focusRing")
     expect(settings.appearance).not.toHaveProperty("showProjectName")
 
     const copied = (value: typeof settings) => ({
@@ -91,12 +95,12 @@ describe("settings schema", () => {
     expect(decode({})).toEqual({
       general: {
         timelineDetail: timelinePresets[2].value,
-        showCustomAgents: false,
+        showCustomAgents: true,
         showTurnDiffs: false,
         backgroundActivity: "left",
         timelineWidth: "comfortable",
-        newIcons: false,
         foldUserMessages: false,
+        wrapCodeBlocks: false,
         newQuestionUI: false,
         sidebarOrganize: "list",
         mobileTitlebarPosition: "top",
@@ -126,6 +130,23 @@ describe("settings schema", () => {
         interfaceEnabled: true,
       },
     })
+  })
+
+  test.each(["list", "projects", "customize", "recent", "consolidated"])(
+    "round trips saved side-tab organization %s",
+    (mode) => {
+      const settings = decode({ general: { sidebarOrganize: mode } })
+      expect(decode(encode(settings)).general.sidebarOrganize).toBe(mode)
+    },
+  )
+
+  test("the retired Projects organization moves to Consolidated where offered, and to Customize elsewhere", () => {
+    expect(resolveSidebarOrganize("projects", ["list", "customize", "recent", "consolidated"])).toBe("consolidated")
+    expect(resolveSidebarOrganize("projects", ["list", "customize"])).toBe("customize")
+  })
+
+  test("the retired Recent sessions switch does not opt into Recent organization", () => {
+    expect(decode({ general: { recentSessions: true } }).general.sidebarOrganize).toBe("list")
   })
 
   test("defaults invalid preferences locally while retaining valid siblings", () => {
@@ -201,6 +222,11 @@ describe("settings schema", () => {
       Schema.encodeUnknownSync(settingsSchema)({ ...decode({}), appearance: { fontSize: "large" } }),
     ).toThrow()
   })
+})
+
+test.each(["local", "dev", "beta", "prod", undefined] as const)("Recent availability in %s", (channel) => {
+  expect(recentSessionsAvailable("desktop", channel)).toBe(channel === "local" || channel === "dev")
+  expect(recentSessionsAvailable("web", channel)).toBe(false)
 })
 
 test("font defaults are Inter and IBM Plex Mono", () => {

@@ -1,0 +1,28 @@
+.knobs-panel.knobs-inline[data-controls="components-lab"] {
+  border-radius: 0;
+}
+
+.knobs-panel[data-controls="components-lab"] .knobs-presets-track {
+  counter-reset: lab-preset;
+}
+
+.knobs-panel[data-controls="components-lab"] .knobs-preset-chip {
+  counter-increment: lab-preset;
+  padding-inline-start: 30px;
+  text-align: start;
+}
+
+.knobs-panel[data-controls="components-lab"] .knobs-preset-key {
+  display: none;
+}
+
+.knobs-panel[data-controls="components-lab"] .knobs-preset-chip::before {
+  content: counter(lab-preset);
+  position: absolute;
+  inset-inline-start: 6px;
+  inline-size: 2ch;
+  text-align: end;
+  color: var(--_k-fg-3);
+  font-size: var(--_k-text-meta);
+  font-variant-numeric: tabular-nums;
+}

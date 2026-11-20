@@ -72,7 +72,20 @@ const fromRequest = Effect.fn("OpenAIDecisions.fromRequest")(function* (request:
     ),
     model: request.model.id,
     input: [{ role: "user", content: yield* Effect.forEach(request.input, (part) => inputPart(request, part)) }],
-    questions: request.questions,
+    questions: request.questions.map((question) => {
+      if (question.type !== "predicate") return question
+      // Predicates have no criteria field, so what true and false mean is appended to the instructions.
+      const meanings = [
+        question.criteria?.true === undefined ? [] : [`True means: ${question.criteria.true}`],
+        question.criteria?.false === undefined ? [] : [`False means: ${question.criteria.false}`],
+      ].flat()
+      return {
+        name: question.name,
+        type: question.type,
+        instructions:
+          meanings.length === 0 ? question.instructions : `${question.instructions}\n\n${meanings.join("\n")}`,
+      }
+    }),
   }
 })
 

@@ -11,6 +11,7 @@ import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Model } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
+import { OauthRedirect } from "../../oauth/redirect.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
 import { credentialSettings, metadataSettings } from "./credential-settings.js"
@@ -189,7 +190,8 @@ export const GitLabPlugin = define({
             ).toString("base64url")
             const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
 
-            const callback = yield* Deferred.make<{ code: string; response: ServerResponse }, Error>()
+            // `response` is the browser's pending callback request; a pasted redirect has none.
+            const callback = yield* Deferred.make<{ code: string; response?: ServerResponse }, Error>()
             const { createServer } = yield* Effect.promise(() => import("node:http"))
             const server = createServer((request, response) => {
               const url = new URL(request.url ?? "/", `http://${callbackHost}`)
@@ -233,7 +235,7 @@ export const GitLabPlugin = define({
                 const respond = (error?: string) =>
                   Effect.sync(() =>
                     request.response
-                      .writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
+                      ?.writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
                       .end(
                         error
                           ? OauthCallbackPage.error(error, { provider: "GitLab" })
@@ -256,9 +258,10 @@ export const GitLabPlugin = define({
                   Effect.tap(() => respond()),
                   Effect.tapError((error) => respond(error.message)),
                   // Bun's server.closeAllConnections() leaves an unanswered callback response pending.
-                  Effect.onInterrupt(() => Effect.sync(() => request.response.destroy())),
+                  Effect.onInterrupt(() => Effect.sync(() => request.response?.destroy())),
                 )
               }),
+              submit: OauthRedirect.submit({ state, callback, received: (code) => ({ code }) }),
             }
           }),
       })

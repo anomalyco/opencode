@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
   createDialogGateState,
+  REPEAT_DIALOG_MS,
   selectDialog,
   selectDialogTarget,
   selectOpenDialog,
+  selectSuppressed,
+  selectUserDialog,
   transitionDialogGate,
   type DialogGateEvent,
   type DialogGateState,
@@ -12,12 +15,13 @@ import {
 const replay = (events: readonly DialogGateEvent[], state: DialogGateState = createDialogGateState()) =>
   events.reduce((current, event) => transitionDialogGate(current, event).state, state)
 
-const alert = (message: string): DialogGateEvent => ({
+const alert = (message: string, at?: number): DialogGateEvent => ({
   type: "dialog.opened",
   url: "https://alpha.example/form",
   dialogType: "alert",
   message,
   defaultPrompt: "",
+  at,
 })
 
 describe("handling a dialog", () => {
@@ -53,6 +57,82 @@ describe("handling a dialog", () => {
       resources: ["https://alpha.example/next"],
       key: "3:2:false",
     })
+  })
+})
+
+describe("the user and the agent answering", () => {
+  test("lets the first answer through and finds the dialog closed for the second", () => {
+    const open = replay([alert("first")])
+    const revision = selectOpenDialog(open)!.revision
+    const user = transitionDialogGate(open, { type: "dialog.answering", revision, by: "user" })
+
+    expect(user.answer).toBe("accepted")
+    expect(transitionDialogGate(user.state, { type: "dialog.answering", revision, by: "agent" }).answer).toBe("closed")
+    // The agent's answer after Chromium closed it finds no dialog either.
+    const handled = transitionDialogGate(user.state, { type: "dialog.handled", revision }).state
+    expect(transitionDialogGate(handled, { type: "dialog.answering", revision, by: "agent" }).answer).toBe("closed")
+  })
+
+  test("lets the dialog be answered again when the first answer failed to reach Chromium", () => {
+    const open = replay([alert("first")])
+    const revision = selectOpenDialog(open)!.revision
+
+    const failed = replay(
+      [
+        { type: "dialog.answering", revision, by: "agent" },
+        { type: "dialog.answer-failed", revision },
+      ],
+      open,
+    )
+
+    expect(transitionDialogGate(failed, { type: "dialog.answering", revision, by: "user" }).answer).toBe("accepted")
+  })
+
+  test("never answers a newer dialog with an older one's answer", () => {
+    const first = replay([alert("first")])
+    const revision = selectOpenDialog(first)!.revision
+    const second = replay([{ type: "dialog.closed" }, alert("second")], first)
+
+    expect(transitionDialogGate(second, { type: "dialog.answering", revision, by: "user" }).answer).toBe("closed")
+  })
+
+  test("shows the user scripted dialogs only, not a beforeunload", () => {
+    expect(selectUserDialog(replay([alert("first")]))?.dialog.message).toBe("first")
+    expect(
+      selectUserDialog(
+        replay([{ type: "dialog.opened", url: "https://a.example/", dialogType: "beforeunload", message: "", defaultPrompt: "" }]),
+      ),
+    ).toBeNull()
+  })
+})
+
+describe("repeated dialogs", () => {
+  test("offers to stop them on a dialog that opens soon after the last one closed", () => {
+    const first = replay([alert("one", 0)])
+    expect(selectUserDialog(first)?.repeat).toBe(false)
+
+    const soon = replay([{ type: "dialog.closed", at: 500 }, alert("two", 500 + REPEAT_DIALOG_MS)], first)
+    expect(selectUserDialog(soon)?.repeat).toBe(true)
+
+    const late = replay([{ type: "dialog.closed", at: 500 }, alert("two", 501 + REPEAT_DIALOG_MS)], first)
+    expect(selectUserDialog(late)?.repeat).toBe(false)
+  })
+
+  test("dismisses every dialog once stopped, without interrupting commands, until the next document", () => {
+    const stopped = replay([
+      { type: "run.started", actionType: "click", aborted: false },
+      { type: "dialog.suppressed" },
+    ])
+
+    const opened = transitionDialogGate(stopped, alert("again"))
+
+    expect(selectSuppressed(stopped)).toBe(true)
+    expect(opened.effects).toEqual([{ type: "dismiss" }])
+    expect(selectDialog(opened.state)).toBeNull()
+
+    const next = replay([{ type: "document.committed" }, alert("new page")], stopped)
+    expect(selectSuppressed(next)).toBe(false)
+    expect(selectDialog(next)?.message).toBe("new page")
   })
 })
 

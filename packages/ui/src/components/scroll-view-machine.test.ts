@@ -9,6 +9,7 @@ import {
   SCROLLED,
   selectDraggingAxis,
   selectShowVerticalThumb,
+  selectThumbScrolling,
   selectThumbVisible,
   transitionScrollThumb,
   type ScrollThumbEvent,
@@ -96,6 +97,36 @@ describe("scroll view thumb machine", () => {
     expect(disposed.effects).toEqual(["release-capture", "clear-idle-timer"])
     expect(selectShowVerticalThumb(disposed.state)).toBe(false)
     expect(run(disposed.state, SCROLLED, overflowChanged(true, true)).state).toBe(disposed.state)
+  })
+
+  test("a held drag keeps the scroll reveal off its idle timer until release", () => {
+    // MenuScroll re-armed its 800 ms timer on every drag scroll, so holding the thumb still cleared `data-scrolling`
+    // mid-drag and the release started no idle window.
+    const scrolling = run(overflowing, SCROLLED).state
+    expect(selectThumbScrolling(scrolling)).toBe(true)
+
+    const dragging = run(scrolling, drag())
+    expect(dragging.effects).toEqual(["clear-idle-timer"])
+    expect(selectThumbScrolling(dragging.state)).toBe(false)
+    expect(selectDraggingAxis(dragging.state)).toBe("vertical")
+
+    const held = run(dragging.state, SCROLLED, SCROLL_IDLE_ELAPSED, SCROLLED)
+    expect(held.effects).toEqual([])
+    expect(selectDraggingAxis(held.state)).toBe("vertical")
+
+    const released = run(held.state, { type: "drag.ended", pointerId: 1 })
+    expect(released.effects).toEqual(["release-capture", "reset-idle-timer"])
+    expect(selectThumbScrolling(released.state)).toBe(true)
+    expect(selectThumbScrolling(run(released.state, SCROLL_IDLE_ELAPSED).state)).toBe(false)
+  })
+
+  test("a drag frame allocates no transition once the drag has scrolled", () => {
+    const dragging = run(overflowing, drag(), SCROLLED).state
+
+    expect(transitionScrollThumb(dragging, SCROLLED)).toBe(transitionScrollThumb(dragging, SCROLLED))
+    expect(transitionScrollThumb(dragging, overflowChanged(true, false))).toBe(
+      transitionScrollThumb(dragging, overflowChanged(true, false)),
+    )
   })
 
   test("repeated scroll, wheel and resize events reuse one transition", () => {

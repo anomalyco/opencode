@@ -4,6 +4,7 @@ import type { ServerSDK } from "@/runtime/server/client"
 import {
   createSessionHandoffState,
   selectSessionHandoff,
+  selectSessionHandoffHeld,
   transitionSessionHandoff,
   type SessionHandoffEffect,
   type SessionHandoffEvent,
@@ -99,8 +100,11 @@ export function createSessionMessageHandoffs(input: {
   return {
     /** The prompt a session's timeline shows before the server admits it. Reactive. */
     get: (sessionID: string | undefined) => selectSessionHandoff(state(), sessionID),
+    /** Whether the prompt is held, unsent, for its Location's agents and models. Reactive. */
+    held: (sessionID: string, messageID: string) => selectSessionHandoffHeld(state(), sessionID, messageID),
     forSession: (sessionID: string) => ({
       set: (handoff: SessionMessageHandoff) => dispatch({ type: "handoff.set", sessionID, handoff }),
+      hold: (handoff: SessionMessageHandoff) => dispatch({ type: "handoff.held", sessionID, handoff }),
       settle: (messageID: string) => dispatch({ type: "prompt.settled", sessionID, messageID }),
       clear: (messageID: string) => dispatch({ type: "handoff.cleared", sessionID, messageID }),
     }),

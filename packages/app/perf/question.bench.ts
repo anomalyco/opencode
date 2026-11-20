@@ -17,9 +17,10 @@ export default bench({
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1440, height: 900 },
-      async prepare({ playwright, mock, url }) {
+      async prepare(ctx) {
+        const { url } = ctx
         const server = new URL(url).origin
-        const page = cached(playwright.page, mock)
+        const page = cached(ctx)
 
         await mockOpenCodeServer(page, {
           server,

@@ -3,7 +3,7 @@ import type { CommandPaletteEntry } from "./palette"
 
 export const PALETTE_SEARCH_TIMEOUT_MS = 10_000
 
-export const PALETTE_SESSION_DEBOUNCE_MS = 100
+export const PALETTE_SESSION_DEBOUNCE_MS = 150
 
 /** A source's last answer and the query it answered. */
 export type PaletteSearchSettled = {

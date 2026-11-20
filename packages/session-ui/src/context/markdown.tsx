@@ -1,5 +1,6 @@
-import type { IconName } from "@opencode/ui/icons/catalog"
+import type { IconProps } from "@opencode/ui/icon"
 import { createContext, useContext, type ParentProps } from "solid-js"
+import type { SessionReferenceMenu } from "../components/markdown-session-links"
 
 export type ReadMarkdownImage = (path: string, signal: AbortSignal) => Promise<Blob | undefined>
 
@@ -30,8 +31,8 @@ export type MarkdownCodeBlockMatch = {
 
 /** A button beside a code block's Copy button. */
 export type MarkdownCodeAction = {
-  /** The button's icon. */
-  readonly icon: IconName
+  /** The button's icon: a catalog name, or the name of registered artwork. */
+  readonly icon: IconProps["name"]
   /** The accessible name and tooltip. */
   readonly title: string
   /** Runs when the user clicks the button. */
@@ -55,23 +56,30 @@ export type MarkdownCodeBlocks = {
 }
 
 const context = createContext<{
+  readonly appLinks?: boolean
   readonly readImage?: ReadMarkdownImage
   readonly openLocalFile?: OpenMarkdownLocalFile
   readonly localFileExists?: MarkdownLocalFileExists
   readonly openSession?: (sessionID: string) => void
   readonly sessionTitle?: (sessionID: string) => string | undefined
+  readonly sessionMenu?: SessionReferenceMenu
   readonly codeBlocks?: MarkdownCodeBlocks
+  readonly codeWrap?: boolean
 }>()
 
 export function MarkdownProvider(
   props: ParentProps<{
+    appLinks?: boolean
     readImage?: ReadMarkdownImage
     openLocalFile?: OpenMarkdownLocalFile
     localFileExists?: MarkdownLocalFileExists
     openSession?: (id: string) => void
     sessionTitle?: (id: string) => string | undefined
+    sessionMenu?: SessionReferenceMenu
     /** Content for code blocks; inherited when omitted. `false` turns it off below, e.g. inside such content. */
     codeBlocks?: MarkdownCodeBlocks | false
+    /** Whether code blocks wrap long lines by default; inherited when omitted. Each block can still switch. */
+    codeWrap?: boolean
   }>,
 ) {
   const parent = useMarkdown()
@@ -79,6 +87,9 @@ export function MarkdownProvider(
   return (
     <context.Provider
       value={{
+        get appLinks() {
+          return props.appLinks ?? parent?.appLinks
+        },
         get readImage() {
           return props.readImage
         },
@@ -94,10 +105,16 @@ export function MarkdownProvider(
         get sessionTitle() {
           return props.sessionTitle ?? parent?.sessionTitle
         },
+        get sessionMenu() {
+          return props.sessionMenu ?? parent?.sessionMenu
+        },
         get codeBlocks() {
           if (props.codeBlocks === false) return undefined
 
           return props.codeBlocks ?? parent?.codeBlocks
+        },
+        get codeWrap() {
+          return props.codeWrap ?? parent?.codeWrap
         },
       }}
     >

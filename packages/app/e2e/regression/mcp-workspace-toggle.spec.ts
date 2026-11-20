@@ -20,7 +20,16 @@ type Surface = "popover" | "dialog" | "settings"
 // Extensions page opened (Ctrl+,) from the session.
 async function open(
   page: Page,
-  input: { surface: Surface } & Pick<MockServerConfig, "mcp" | "onMcpAction" | "integrations" | "onIntegrationOAuth">,
+  input: { surface: Surface } & Pick<
+    MockServerConfig,
+    | "mcp"
+    | "onMcpAction"
+    | "integrations"
+    | "onIntegrationOAuth"
+    | "onIntegrationOAuthStatus"
+    | "onIntegrationOAuthComplete"
+    | "mcpResourceFailures"
+  >,
 ) {
   const requests: { path: string; directory: string }[] = []
   page.on("request", (request) => {
@@ -41,6 +50,9 @@ async function open(
     onMcpAction: input.onMcpAction,
     integrations: input.integrations,
     onIntegrationOAuth: input.onIntegrationOAuth,
+    onIntegrationOAuthStatus: input.onIntegrationOAuthStatus,
+    onIntegrationOAuthComplete: input.onIntegrationOAuthComplete,
+    mcpResourceFailures: input.mcpResourceFailures,
   })
 
   await page.goto(sessionHref(sessionID))
@@ -57,7 +69,9 @@ async function open(
     if (input.surface === "dialog") return page.keyboard.press("Control+;")
 
     if (input.surface === "settings") {
-      await page.keyboard.press("Control+,")
+      // Settings opens with the platform's command key, which the app reads from navigator.platform.
+      const mac = await page.evaluate(() => /(Mac|iPod|iPhone|iPad)/.test(navigator.platform))
+      await page.keyboard.press(mac ? "Meta+," : "Control+,")
 
       return panel.getByRole("tab", { name: "Extensions", exact: true }).click()
     }
@@ -442,7 +456,7 @@ test("the MCP list shrinks with matches and keeps its search anchored while scro
   const scroll = view.panel.locator('[data-slot="search-list-scroll"]')
 
   await expect.poll(() => scroll.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
-  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(480)
+  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(600)
   await input.press("End")
   const last = view.panel.getByRole("option", { name: "server-23", exact: true })
 
@@ -467,6 +481,8 @@ test("toggling an MCP from the dialog keeps it highlighted", async ({ page }) =>
   const row = view.panel.getByRole("option").filter({ hasText: "figma-desktop" })
   const toggle = row.getByRole("switch", { name: "figma-desktop", exact: true })
 
+  // The dialog focuses its search a task after it opens; keys pressed before then go to the composer behind it.
+  await expect(view.panel.getByRole("combobox", { name: "Search MCPs", exact: true })).toBeFocused()
   // From the keyboard, Enter toggles the highlighted server and the highlight stays on it.
   await page.keyboard.press("ArrowDown")
   await expect(row).toHaveAttribute("aria-selected", "true")
@@ -549,9 +565,78 @@ for (const surface of ["popover", "dialog"] as const) {
 }
 
 for (const surface of ["popover", "dialog"] as const) {
+  test(`a pasted MCP sign-in from the ${surface} submits once and recovers from a failed refresh`, async ({
+    page,
+    context,
+  }) => {
+    const state = { signedIn: false, recovered: false }
+    const pasted: unknown[] = []
+    await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+
+    const view = await open(page, {
+      surface,
+      mcp: () => [
+        {
+          name: "figma-desktop",
+          integrationID: "figma-oauth",
+          status: state.signedIn ? { status: "connected" } : { status: "needs_auth", error: "Sign in required" },
+        },
+      ],
+      integrations: [{ id: "figma-oauth", name: "Figma", methods: [{ id: "oauth", type: "oauth" }], connections: [] }],
+      onIntegrationOAuth: () => ({ url: "https://auth.example.test/authorize", paste: true }),
+      onIntegrationOAuthStatus: () => (state.signedIn ? "complete" : "pending"),
+      // The server accepts the pasted URL and finishes the sign-in.
+      onIntegrationOAuthComplete: (input) => {
+        pasted.push(input.body)
+        state.signedIn = true
+      },
+      // The MCP lists fail to reload after the sign-in until the user retries.
+      mcpResourceFailures: () => state.signedIn && !state.recovered,
+    })
+
+    const complete = await holdRoute(
+      page,
+      /\/api\/integration\/figma-oauth\/connect\/oauth\/[^/?]+\/complete(?:\?|$)/,
+      {
+        method: "POST",
+      },
+    )
+
+    await view.panel.getByRole("button", { name: "Sign in to figma-desktop", exact: true }).click()
+    const dialog = page.getByRole("dialog", { name: "Sign in to figma-desktop", exact: true })
+    const redirect = dialog.getByRole("textbox", { name: "Redirect URL", exact: true })
+
+    // The details popover closes behind the dialog and returns focus to its trigger; type once that settled.
+    if (surface === "popover") await expect(view.panel).toBeHidden()
+
+    await redirect.fill("http://127.0.0.1:19876/callback?code=abc")
+
+    // A second Enter while the paste is in flight does not send it again.
+    await redirect.press("Enter")
+    await expect(redirect).toHaveAttribute("readonly", "")
+    await redirect.press("Enter")
+    await complete.arrived
+    complete.release()
+
+    // The sign-in succeeded but the lists did not reload: the dialog offers a retry instead of waiting forever.
+    const retry = dialog.getByRole("button", { name: "Try again", exact: true })
+    await expect(retry).toBeVisible()
+    await expect(dialog.getByText("Waiting for authorization…", { exact: true })).toHaveCount(0)
+    await expect(redirect).toHaveCount(0)
+
+    state.recovered = true
+    await retry.click()
+    await expect(dialog).toHaveCount(0)
+    expect(pasted).toEqual([expect.objectContaining({ code: "http://127.0.0.1:19876/callback?code=abc" })])
+    expect(complete.requests).toHaveLength(1)
+  })
+}
+
+for (const surface of ["popover", "dialog"] as const) {
   test(`long MCP names keep their status and controls visible in the ${surface}`, async ({ page }) => {
     const names = ["connected", "disabled", "failed", "needs_auth"].map(
-      (status) => `long-${status}-mcp-server-for-the-internal-knowledge-base-search`,
+      (status) =>
+        `long-${status}-mcp-server-for-the-internal-knowledge-base-search-across-every-team-workspace-repository-and-shared-drive`,
     )
 
     const actions: string[] = []

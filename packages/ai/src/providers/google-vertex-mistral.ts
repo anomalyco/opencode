@@ -2,16 +2,16 @@ import { Effect, Schema, Struct } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { MistralChat } from "../protocols/mistral-chat.js"
 import { Auth } from "../route/auth.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export const id = ProviderID.make("google-vertex")
 
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   GoogleVertexShared.OAuthOptions & {
     readonly baseURL?: string
     readonly location?: string

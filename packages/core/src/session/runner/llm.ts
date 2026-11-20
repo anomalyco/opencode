@@ -29,13 +29,11 @@ import { llmClient } from "../../effect/app-node-platform.js"
 import { StepFailedError } from "../error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
+import { PersistentPty } from "../../persistent-pty/index.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
-
-const CONTINUE_AFTER_INCOMPLETE_STREAM =
-  "The previous response was interrupted. Continue from where you left off without repeating completed content."
 
 const CONTINUE_AFTER_OUTPUT_LIMIT =
   "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
@@ -57,6 +55,7 @@ const layer = Layer.effect(
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
+    const pty = yield* PersistentPty.Service
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
@@ -132,7 +131,10 @@ const layer = Layer.effect(
                   Effect.gen(function* () {
                     yield* plugins.awaitActivation
                     const selected = yield* context.select(sessionID)
-                    const model = yield* context.resolveModel(selected.session)
+                    const model = yield* context.resolveModel(selected.session, {
+                      kind: "compaction",
+                      agent: selected.agent.id,
+                    })
                     // Preview updates without admitting them after the already-delivered compaction marker.
                     const history = yield* SessionHistory.preview(db, sessionID, selected.instructions, model.ref)
                     return yield* compaction.compact({
@@ -178,7 +180,9 @@ const layer = Layer.effect(
                 // The Session would go idle; a plugin may admit input to keep this execution working.
                 yield* restore(
                   SessionBackground.outstanding(jobs, store, sessionID).pipe(
-                    Effect.flatMap((background) => hooks.trigger("session", "experimental.idle", { sessionID, background })),
+                    Effect.flatMap((background) =>
+                      hooks.trigger("session", "experimental.idle", { sessionID, background }),
+                    ),
                   ),
                 )
                 if (!(yield* SessionInbox.has(db, sessionID, "input"))) return DrainResult.Complete()
@@ -212,7 +216,7 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step)
+        continuing = yield* runStep(next.context, step, input.interruption)
         stepped = true
         step++
         force = false
@@ -230,13 +234,18 @@ const layer = Layer.effect(
     })
 
     /** Owns logical Step policy; each attempt owns its streaming, tools, and durable settlement. */
-    const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
+    const runStep = Effect.fn("SessionRunner.runStep")(function* (
+      first: SessionContext.Loaded,
+      step: number,
+      interruption: DrainInput["interruption"],
+    ) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
       const retry = yield* SessionRunnerRetry.make(bus, sessionID)
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
+      let retryAttempt: number | undefined
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
@@ -285,6 +294,8 @@ const layer = Layer.effect(
           )
         const outcome = yield* steps.attempt({
           isLocationClosed: lifecycle.isClosed,
+          interruption,
+          handoffPrepared: pty.handoffPrepared,
           sessionID,
           assistantMessageID,
           agent: loaded.agent.id,
@@ -294,6 +305,7 @@ const layer = Layer.effect(
             // A tool call can arrive during a reload; its permission check reads the session's agent.
             executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
           },
+          retryAttempt,
           retry: (cause, error, proposed) =>
             retry.decide({
               cause,
@@ -312,6 +324,7 @@ const layer = Layer.effect(
               : Effect.succeed(false),
           ),
         })
+        retryAttempt = undefined
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: Effect.fnUntraced(function* (outcome) {
             // The Session is about to go idle, which leaves the background summary time to finish.
@@ -321,20 +334,14 @@ const layer = Layer.effect(
               )
             return outcome.needsContinuation
           }),
-          Retry: (outcome) =>
-            retry.wait({
-              decision: outcome.decision,
-              error: outcome.error,
-              assistantMessageID,
-            }),
-          Continue: Effect.fnUntraced(function* (outcome) {
+          Retry: Effect.fnUntraced(function* (outcome) {
+            retryAttempt = outcome.decision.attempt
             yield* retry.wait({
               decision: outcome.decision,
               error: outcome.error,
               assistantMessageID,
             })
-            yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_INCOMPLETE_STREAM })
-            assistantMessageID = SessionMessage.ID.create()
+            if (outcome.freshAssistant) assistantMessageID = SessionMessage.ID.create()
           }),
           OutputLimit: Effect.fn("SessionRunner.continueOutputLimit")(function* (outcome) {
             // The current response is included. User input or any other finish breaks the streak.
@@ -456,6 +463,7 @@ export const node = makeLocationNode({
     Job.node,
     SessionTitle.node,
     Snapshot.node,
+    PersistentPty.node,
     ToolOutput.node,
     Database.node,
   ],

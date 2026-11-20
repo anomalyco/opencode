@@ -35,7 +35,7 @@ describe("Route.with", () => {
       path: "/chat/completions",
       query: { keep: "patch", base: "1", patch: "1" },
     })
-    expect(route.defaults.headers).toEqual({
+    expect(route.options?.headers).toEqual({
       "x-base": "base",
       "x-override": "patch",
       "x-patch": "patch",
@@ -48,7 +48,7 @@ describe("Route.with", () => {
 
     expect(route.providerMetadataKey).toBe("azure")
     expect(overridden.providerMetadataKey).toBe("custom-azure")
-    expect(overridden.defaults).not.toHaveProperty("providerMetadataKey")
+    expect(overridden.options).not.toHaveProperty("providerMetadataKey")
   })
 })
 

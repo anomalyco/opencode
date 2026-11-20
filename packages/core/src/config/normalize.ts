@@ -353,14 +353,15 @@ function normalizeCompaction(
   unsupportedIfPresent(input.compaction, "tail_turns", ["compaction", "tail_turns"], diagnostics)
   unsupportedIfPresent(input.compaction, "prune", ["compaction", "prune"], diagnostics)
   const result: Record<string, unknown> = {}
-  if (own(input.compaction, "auto")) {
+  for (const key of ["auto", "background"] as const) {
+    if (!own(input.compaction, key)) continue
     const value = decodeEncoded(
-      ConfigCompaction.Info.fields.auto,
-      input.compaction.auto,
-      ["compaction", "auto"],
+      ConfigCompaction.Info.fields[key],
+      input.compaction[key],
+      ["compaction", key],
       diagnostics,
     )
-    if (value !== undefined) result.auto = value
+    if (value !== undefined) result[key] = value
   }
   const legacyTokens = own(input.compaction, "preserve_recent_tokens")
     ? decodeEncoded(
@@ -622,7 +623,7 @@ function diagnoseSelectionMap(value: unknown, path: string[], diagnostics: Diagn
 }
 
 function diagnoseSelection(value: Record<string, unknown>, path: string[], diagnostics: Diagnostic[]) {
-  const modelValid = typeof value.model === "string" && /^[^/#]+\/[^#]+$/.test(value.model)
+  const modelValid = typeof value.model === "string" && ConfigMigrateV1.modelSelection(value.model) !== undefined
   if (own(value, "model") && typeof value.model === "string" && !modelValid)
     diagnostics.push({
       kind: "unsupported",
