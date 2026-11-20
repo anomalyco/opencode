@@ -1,9 +1,7 @@
 // A reply streams a LaTeX fence whose first line renders, then math that does not and the closing fence without its
 // line ending, and pauses there. Both clients hold the closer's line, so the fence still streams and keeps the formula
 // (TS since #63989, on Core's engine; `parity/deviations/OT2049-markdown-engine.md` has the history). Once more text
-// comes, both show the source, which Rust draws in the syntax theme's `default` color
-// (`parity/deviations/OT-plain-fence-fg.md`). TS draws the formula a row lower
-// (`parity/deviations/F16-plugin-fence-margin.md`).
+// comes, both show the source. TS draws the formula a row lower (`parity/deviations/F16-plugin-fence-margin.md`).
 import { defineSim } from "../../sim/scenario"
 
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
@@ -32,11 +30,6 @@ export default defineSim({
     { sleep: 1500 },
     { checkpoint: "closed", deviation: [{ file: "F16-plugin-fence-margin", cells: 4 }] },
     { release: "closed" },
-    {
-      checkpoint: "done",
-      until: "Done.",
-      masks: [duration],
-      deviation: [{ file: "OT-plain-fence-fg", cells: 21, styleOnly: true }],
-    },
+    { checkpoint: "done", until: "Done.", masks: [duration] },
   ],
 })

@@ -22,20 +22,20 @@
   {"path":"/api/session/ses_g/inbox","json":{"data":[]}}
  ],
  "steps": [
-  {"checkpoint":"settled","until":"E = mc^2","deviation":[{"file":"F16-plugin-fence-margin","cells":44},{"file":"OT-plain-fence-fg","cells":16}],"fixture":"P.8/good-fences/settled"},
+  {"checkpoint":"settled","until":"E = mc^2","deviation":[{"file":"F16-plugin-fence-margin","cells":44}],"fixture":"P.8/good-fences/settled"},
   {"event":{"id":"evt_1","created":11,"type":"session.text.delta","durable":{"aggregateID":"ses_g","seq":1,"version":1},"data":{"sessionID":"ses_g","assistantMessageID":"msg_2","ordinal":0,"delta":"\nOne more:\n\n```py\nprint('streaming')\n"}}},
-  {"checkpoint":"streaming","until":"print('streaming')","deviation":[{"file":"F16-plugin-fence-margin","cells":44},{"file":"OT-plain-fence-fg","cells":16}],"fixture":"P.8/good-fences/streaming"},
+  {"checkpoint":"streaming","until":"print('streaming')","deviation":[{"file":"F16-plugin-fence-margin","cells":44}],"fixture":"P.8/good-fences/streaming"},
   {"event":{"id":"evt_2","created":12,"type":"session.text.delta","durable":{"aggregateID":"ses_g","seq":2,"version":1},"data":{"sessionID":"ses_g","assistantMessageID":"msg_2","ordinal":0,"delta":"print('done')\n```\n\nThat is all.\n"}}},
-  {"checkpoint":"streamed","until":"That is all.","deviation":[{"file":"F16-plugin-fence-margin","cells":44},{"file":"OT-plain-fence-fg","cells":16}],"fixture":"P.8/good-fences/streamed"},
+  {"checkpoint":"streamed","until":"That is all.","deviation":[{"file":"F16-plugin-fence-margin","cells":44}],"fixture":"P.8/good-fences/streamed"},
   {"type":"/themes"},
-  {"checkpoint":"slash","until":"Switch theme","deviation":[{"file":"F16-plugin-fence-margin","cells":44},{"file":"OT-plain-fence-fg","cells":16}],"fixture":"P.8/good-fences/slash"},
+  {"checkpoint":"slash","until":"Switch theme","deviation":[{"file":"F16-plugin-fence-margin","cells":44}],"fixture":"P.8/good-fences/slash"},
   {"keys":["enter"]},
   {"wait":500},
   {"type":"tokyonight"},
   {"wait":500},
   {"keys":["enter"]},
   {"wait":1000},
-  {"checkpoint":"themed","until":"That is all.","deviation":[{"file":"F16-plugin-fence-margin","cells":75},{"file":"OT-plain-fence-fg","cells":16}],"fixture":"P.8/good-fences/themed"}
+  {"checkpoint":"themed","until":"That is all.","deviation":[{"file":"F16-plugin-fence-margin","cells":75}],"fixture":"P.8/good-fences/themed"}
  ],
  "requests": {
   "writes": [],

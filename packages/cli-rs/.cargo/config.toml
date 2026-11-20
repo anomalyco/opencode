@@ -5,7 +5,7 @@
 # fails in opentui-sys, which prints OPENTUI_LIB_HINT as its advice. Values set in the shell win (CI, cross-target
 # builds).
 [env]
-OPENTUI_LIB_DIR = { value = ".opentui/v0.9.6/host", relative = true, force = false }
+OPENTUI_LIB_DIR = { value = ".opentui/v0.9.7/host", relative = true, force = false }
 OPENTUI_LIB_HINT = { value = "run `bun run opentui:native` in packages/cli-rs, or build through `bun run cargo`, which runs it first", force = false }
 # Luau's C++ (the luau feature) with line tables only, as Rust gets from `debug = "line-tables-only"`: cargo's DEBUG
 # makes cc-rs pass full `-g`, and luau0-src appends these flags after it. In a cold -j3 release build (luau-dx) Luau's
