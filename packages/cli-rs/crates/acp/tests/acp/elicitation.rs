@@ -118,7 +118,8 @@ async fn answers_a_question_form_through_elicitation_and_continues_the_turn() {
             elicitation: Some(Arc::new(|_| {
                 Reply::Result(json!({
                     "action": "accept",
-                    "content": { "q0": "Bun", "q1": ["Fast"], "q1_custom": "Small" },
+                    // A custom answer of white space, a BOM included, keeps the chosen option.
+                    "content": { "q0": "Bun", "q0_custom": "\u{feff} ", "q1": ["Fast"], "q1_custom": "Small" },
                 }))
             })),
             on_form_reply: Some(Arc::new(|reply: Value| {
