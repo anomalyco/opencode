@@ -886,6 +886,34 @@ it.effect("execute sends at most one progress update per 100 ms with the latest 
   }),
 )
 
+it.effect("execute interrupted right after a change sends the change it has not reported yet", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.promise(() => tmpdir())
+    const started = yield* Deferred.make<void>()
+    const progress: Array<Tool.Metadata> = []
+    const wait: Info = {
+      name: "wait",
+      description: "Wait",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+    }
+    const fiber = yield* createCodeMode(new Map([["wait", wait]]), allowAll, codeModeServices(tmp.path))
+      .execute(
+        { code: 'await Bun.write("a.txt", "x\\n"); await Bun.write("b.txt", "y\\n"); return await tools.wait({})' },
+        { ...context, progress: (update) => Effect.sync(() => progress.push(update)) },
+      )
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(started)
+    const before = progress.at(-1)?.files
+    yield* Fiber.interrupt(fiber)
+    yield* Effect.promise(() => tmp[Symbol.asyncDispose]())
+
+    expect(Array.isArray(before) ? before.length : 0).toBeLessThan(2)
+    expect(progress.at(-1)?.files).toMatchObject([{ file: "a.txt" }, { file: "b.txt" }])
+  }),
+)
+
 it.effect("interrupted execute sends its latest progress rows before it settles", () =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>()

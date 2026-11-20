@@ -233,8 +233,8 @@ function scriptChanges(tool: Tool, read: Reads) {
   const metadata = read.metadata()
   const script = Option.getOrUndefined(decodeScript(metadata))
 
-  // A running script's background flag says only that it can move there.
-  if (script?.jobID !== undefined || (status !== "running" && script?.background === true)) return []
+  // Until a script finishes, its background flag says only that it can move there: one stopped or declined keeps it.
+  if (script?.jobID !== undefined || (status === "completed" && script?.background === true)) return []
 
   return Option.getOrElse(decodeFiles(metadata.files), () => [])
     .flatMap((file) => Option.toArray(decodeFile(file)))
@@ -467,6 +467,13 @@ function scriptFileFactOf(
   status: Tool["state"]["status"],
 ): FileFact {
   return { ...fileFact(file, by, status, "script"), id: `${by}:file:${index}:${file.file}` }
+}
+
+const fileFactKeys = ["id", "path", "status", "additions", "deletions", "change", "patch", "by", "via"] as const
+
+/** Whether two reads of a change show the same: a script's changes never change once made, only its status does. */
+export function sameFileFact(previous: FileFact, next: FileFact) {
+  return fileFactKeys.every((key) => previous[key] === next[key])
 }
 
 const scriptFilePart = /^(.*?):file:(\d+):/

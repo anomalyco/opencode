@@ -1,6 +1,7 @@
+import type { JsonValue } from "@opencode/client/promise"
 import { describe, expect, test } from "bun:test"
 import { storyTool } from "../storybook/current-session-scenarios"
-import { factsOf, summarize } from "./facts"
+import { factsOf, sameFileFact, summarize, type FileFact } from "./facts"
 import { categoryOf } from "./place"
 
 describe("timeline facts", () => {
@@ -84,5 +85,32 @@ describe("timeline facts", () => {
     ])
 
     expect(script).toMatchObject({ kind: "call", toolCalls: 2, provider: "exa", matches: 3 })
+  })
+
+  const liveFiles = [
+    { file: "/repo/a.ts", status: "modified", additions: 1, deletions: 0, patch: "@@ -1 +1,2 @@\n a\n+b\n" },
+  ]
+
+  const scriptFiles = (status: "running" | "error" | "completed", metadata: Record<string, JsonValue>) =>
+    factsOf([storyTool("x", "execute", status, { code: "1" }, { metadata })]).filter(
+      (fact): fact is FileFact => fact.kind === "file",
+    )
+
+  test("a stopped or declined script keeps the changes it made, though it could have moved to the background", () => {
+    expect(scriptFiles("error", { background: true, files: liveFiles }).map((fact) => fact.path)).toEqual([
+      "/repo/a.ts",
+    ])
+    expect(scriptFiles("running", { background: true, files: liveFiles })).toHaveLength(1)
+    expect(scriptFiles("completed", { background: true, files: liveFiles })).toEqual([])
+    expect(scriptFiles("error", { jobID: "cm_1", files: liveFiles })).toEqual([])
+  })
+
+  test("a progress report that only adds calls reads each change the same, so its card stays", () => {
+    const [before] = scriptFiles("running", { toolCalls: [], files: liveFiles })
+    const [after] = scriptFiles("running", { toolCalls: [{ tool: "shell", status: "running" }], files: liveFiles })
+
+    expect(before).not.toBe(after)
+    expect(sameFileFact(before!, after!)).toBe(true)
+    expect(sameFileFact(before!, scriptFiles("completed", { files: liveFiles })[0]!)).toBe(false)
   })
 })

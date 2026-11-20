@@ -3471,7 +3471,7 @@ function Execute(props: ToolProps) {
       </Show>
       <Show when={files().length > 0}>
         <box marginTop={1}>
-          <PatchedFiles files={files()} part={props.part} />
+          <PatchedFiles files={files()} />
         </box>
       </Show>
     </>
@@ -3751,7 +3751,8 @@ function formatSessionTranscript(
 // Files a patch, or a Code Mode script, changed: one block per change with its diff, or its counts when the diff is
 // missing (a deleted file, or a script's change past the size cap). A change without counts shows only its path.
 // Blocks are kept by position, so a running script's stay put as its changes arrive.
-function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; part: ToolProps["part"] }) {
+// A script's error and permission request stay on its own row, so its changes take no part.
+function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; part?: ToolProps["part"] }) {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()

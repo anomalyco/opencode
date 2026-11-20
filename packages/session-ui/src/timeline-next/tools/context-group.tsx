@@ -25,7 +25,7 @@ import {
 import { TimelineEventRow } from "../event-row"
 import { toolEvent, workKey, type TimelineEvent } from "../events"
 import { toolRule } from "../rules"
-import { toolStopped } from "../../timeline/facts"
+import { sameFileFact, toolStopped } from "../../timeline/facts"
 import { activityLabel, activityText, usedLabel } from "./activity-label"
 import { FileGroup } from "./file-group"
 import { ThoughtRow } from "./thought"
@@ -219,14 +219,25 @@ export function ContextGroup(props: {
                     return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
                   })
 
+                  // A change keeps its card while progress reports rebuild the list around it.
+                  const file = createMemo(
+                    () => {
+                      const value = item()
+
+                      return !Array.isArray(value) && value.type === "file" ? value : undefined
+                    },
+                    undefined,
+                    {
+                      equals: (previous, next) =>
+                        previous === next || (!!previous && !!next && sameFileFact(previous.file, next.file)),
+                    },
+                  )
+
                   const callback = createMemo(() => {
                     const value = item()
 
                     return !Array.isArray(value) &&
-                      (value.type === "notice" ||
-                        value.type === "shell" ||
-                        value.type === "text" ||
-                        value.type === "file")
+                      (value.type === "notice" || value.type === "shell" || value.type === "text")
                       ? value
                       : undefined
                   })
@@ -247,8 +258,16 @@ export function ContextGroup(props: {
                             <Show
                               when={work()}
                               fallback={
-                                <Show when={callback()}>
-                                  {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                                <Show
+                                  when={file()}
+                                  keyed
+                                  fallback={
+                                    <Show when={callback()}>
+                                      {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                                    </Show>
+                                  }
+                                >
+                                  {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
                                 </Show>
                               }
                             >
