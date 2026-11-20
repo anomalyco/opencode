@@ -6,8 +6,6 @@ pub mod parse;
 mod symbols;
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod tex_rows;
 
 use std::cell::RefCell;
 use std::collections::HashMap;

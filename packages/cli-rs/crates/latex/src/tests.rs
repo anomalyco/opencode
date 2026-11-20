@@ -49,7 +49,8 @@ fn oracle_case(case: &Value) -> Value {
         compact_scripts: case["options"]["compactScripts"].as_bool().unwrap_or(true),
         ..Options::default()
     };
-    let mut record = match crate::render_with(source, &options) {
+    let mode = crate::Mode { permissive: case["options"]["strict"] == false, ..crate::Mode::default() };
+    let mut record = match crate::render_mode(source, &options, mode) {
         Err(_) => serde_json::json!({ "error": true }),
         Ok(layout) => serde_json::json!({
             "text": layout.to_string(),
@@ -326,11 +327,223 @@ fn removed_streaming_fences_leave_nothing_kept() {
     assert!(shown.borrow().is_empty(), "{:?}", shown.borrow());
 }
 
+/// Named colors, bold relations and italics reach the drawn cells. A fence draws the rest in the theme's text and
+/// structure colors; inline math keeps the color of the text around it.
 #[test]
-fn an_oversized_matrix_falls_back_to_the_source() {
-    let source = format!("\\begin{{matrix}}{}{}\\end{{matrix}}", "&".repeat(1500), "\\\\".repeat(1500));
-    assert!(source.len() < 10_000);
-    assert!(crate::render(&source).is_err());
+fn styles_reach_the_drawn_cells() {
+    let cells = |source: &str| {
+        let (app, theme) = app(40, 6);
+        app.root().add(&markdown(&app, &theme, false).set_markdown(source));
+        app.render().cells.into_iter().filter(|cell| !cell.symbol.trim().is_empty()).collect::<Vec<_>>()
+    };
+    let find = |cells: &[opentui::native::Cell], symbol: &str| {
+        cells.iter().find(|cell| cell.symbol == symbol).cloned().unwrap()
+    };
+    let fence = cells("```latex\n\\mathbf{x+\\mathit{y}}+\\textcolor{red}{z} \\le w\n```");
+    let (y, z, le, w) = (find(&fence, "y"), find(&fence, "z"), find(&fence, "≤"), find(&fence, "w"));
+    assert!(y.attributes.contains(Attributes::BOLD | Attributes::ITALIC), "{y:?}");
+    assert!(le.attributes.contains(Attributes::BOLD) && !w.attributes.contains(Attributes::BOLD), "{le:?} {w:?}");
+    assert_ne!(z.fg, w.fg);
+    let inline = cells("Then $a \\le \\mathit{b} + \\textcolor{#f00}{c} + \\sqrt{2}$ end");
+    let (text, a, le, b, c, root) = (
+        find(&inline, "T"),
+        find(&inline, "a"),
+        find(&inline, "≤"),
+        find(&inline, "b"),
+        find(&inline, "c"),
+        find(&inline, "√"),
+    );
+    assert!(le.attributes.contains(Attributes::BOLD) && b.attributes.contains(Attributes::ITALIC), "{le:?} {b:?}");
+    assert_eq!((a.fg, root.fg), (text.fg, text.fg));
+    assert_ne!(c.fg, text.fg);
+}
+
+/// Inline math draws on the text's row. Each formula is a list item, one row each.
+#[test]
+fn inline_math_takes_one_row() {
+    let cases = [
+        ("x^2", "x²"),
+        ("E = mc^2", "E = mc²"),
+        ("a_n + b_{ij}", "aₙ + bᵢⱼ"),
+        ("\\alpha + \\beta = \\gamma", "α + β = γ"),
+        ("x^{ab}", "xᵃᵇ"),
+        ("e^{i\\pi}", "e^(iπ)"),
+        ("x_{\\alpha}", "x_α"),
+        ("\\frac{a}{b}", "a/b"),
+        ("\\frac{x+1}{y}", "(x + 1)/y"),
+        ("\\frac{1}{1+\\frac{1}{x}}", "1/(1 + 1/x)"),
+        ("\\sqrt{2}", "√2"),
+        ("\\sqrt{x+1}", "√(x + 1)"),
+        ("\\sqrt[3]{x}", "∛x"),
+        ("\\sqrt[n]{x}", "ⁿ√x"),
+        ("\\sum\\limits_{i=1}^{n} i", "∑ⁿᵢ₌₁ i"),
+        ("\\int_0^1 f(x)\\,dx", "∫¹₀ f(x)dx"),
+        ("\\lim_{x \\to 0}", "lim_(x → 0)"),
+        ("\\hat{x}", "x\u{302}"),
+        ("\\vec{v} \\cdot \\bar{u}", "v\u{20d7} · u\u{304}"),
+        ("\\overline{AB}", "A\u{305}B\u{305}"),
+        ("\\hat{\\frac{a}{b}}", "(a/b)^"),
+        ("\\hat{\\mathbf{x}}", "x\u{302}"),
+        ("\\tilde{\\mathbb{R}}", "ℝ\u{303}"),
+        ("\\mathbb{R}^n", "ℝⁿ"),
+        ("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}", "(a, b; c, d)"),
+        ("\\begin{aligned}x &= 1 \\\\ y &= 2\\end{aligned}", "x = 1; y = 2"),
+        ("\\binom{n}{k}", "(n k)"),
+        ("\\overset{def}{=}", "=ᵈᵉᶠ"),
+        ("\\underbrace{a+b}_{n}", "a + bₙ"),
+        ("\\left(\\frac{a}{b}\\right)", "(a/b)"),
+        ("f'(x) \\le \\infty", "f'(x) ≤ ∞"),
+    ];
+    let source: Vec<String> = cases.iter().map(|(tex, _)| format!("- ${tex}$")).collect();
+    let (app, theme) = app(40, cases.len() as u16);
+    app.root().add(&markdown(&app, &theme, false).set_markdown(source.join("\n")));
+    let frame = app.render().text();
+    for (row, (tex, shown)) in frame.lines().zip(cases) {
+        assert!(row.contains(shown), "{tex:?}\n{frame}");
+    }
+}
+
+/// A fence that is still streaming draws the formula so far, with a placeholder for each part not yet written. What
+/// can never close fails.
+#[test]
+fn streaming_previews_draw_what_has_arrived() {
+    let preview = |source: &str| {
+        let options = Options { display: false, ..Options::default() };
+        crate::render_mode(source, &options, crate::Mode { permissive: false, incomplete: true }).map(|l| l.to_string())
+    };
+    for (source, expected) in [
+        ("\\frac", " □\n───\n □"),
+        ("\\operatorname*", "□"),
+        ("\\overbrace{", "╭┴╮\n □"),
+        ("\\mathbb", "□"),
+        ("\\textcolor{red}{", "□"),
+        ("\\left(x\\right\\", "(x"),
+        ("x\u{305}^", " □\nx\u{305}"),
+        ("\\left[\u{305}x", "[\u{305}x"),
+        ("\\sqrt[\\frac{1}{2}", " 1\n───\n 2 ╭─\n  √ □"),
+        ("\\sqrt[a_b]{", "a\n b╭─\n √ □"),
+        ("\\sum\\limits_", "∑\n□"),
+        ("x^\\displaystyle", " □\nx"),
+        ("\\begin{matrix}1&&2", "1  2"),
+        ("\\begin{matrix}1&&", "1  □"),
+        ("\\begin{matrix}1& % comment", "1 □"),
+        ("\\begin{matrix}   ", "□"),
+        ("\\begin{array}{|", "│ □"),
+        ("\\displaylines{a\\\\b", "a\nb"),
+        ("\\cfrac[l]{1}{123", " 1\n─────\n 123"),
+        ("\\cfrac[r]{1}{123", "   1\n─────\n 123"),
+        ("\\cfrac[", " □\n───\n □"),
+        ("\\frac{1}{", " 1\n───\n □"),
+        ("\\text{abc", "abc"),
+        ("\\mathbf{\\sum_1}\\limits^2", "2\n∑\n1"),
+    ] {
+        assert_eq!(preview(source).as_deref(), Ok(expected), "{source:?}");
+    }
+    let both = crate::Mode { permissive: true, incomplete: true };
+    let kept = crate::render_mode("\\left(x\\rightfoo", &Options::default(), both).unwrap().to_string();
+    assert!(kept.contains("\\rightfoo"), "{kept}");
+    for source in [
+        "a}b",
+        "\\frac}",
+        "\\not}",
+        "\\left(x\\right}",
+        "\\end{matrix}",
+        "\\begin{matrix}1\\end{pmatrix}",
+        "\\begin{unknown}x",
+        "\\alpha\u{305}}",
+        "\\begin{array}{p{2cm}}x",
+        "\\cfrac[c]12",
+        "\\cfrac[l{1}{2}",
+        "\\displaylines[l]{x}",
+        "\\begin{matrix}x}",
+    ] {
+        assert!(preview(source).is_err(), "{source:?} drew a preview");
+    }
+}
+
+/// Properties over every formula of the P.2 oracle: a complete formula previews as it renders, every prefix of one
+/// previews or fails without a panic, and empty scripts add no geometry.
+#[test]
+fn previews_and_empty_scripts_keep_the_layout() {
+    let cases: Vec<Value> = serde_json::from_str(include_str!("../../../parity/fixtures/P.2/layouts.json")).unwrap();
+    let incomplete = crate::Mode { permissive: false, incomplete: true };
+    for source in cases.iter().filter(|case| case["options"].is_null()).filter_map(|case| case["source"].as_str()) {
+        let strict = crate::render(source);
+        if strict.is_ok() {
+            assert_eq!(crate::render_mode(source, &Options::default(), incomplete).ok(), strict.ok(), "{source:?}");
+        }
+        for (at, _) in source.char_indices() {
+            let _ = crate::render_mode(&source[..at], &Options::default(), incomplete);
+        }
+    }
+    for base in
+        ["x", r"\frac{1}{2}", r"\sqrt{x}", r"\begin{pmatrix}a\\b\end{pmatrix}", r"\overbrace{abcd}", r"\sum\limits"]
+    {
+        for display in [false, true] {
+            let options = Options { display, ..Options::default() };
+            let render = |tail: &str| crate::render_with(&format!("{base}{tail}"), &options).unwrap();
+            for empty in ["", r"\text{}", r"\textcolor{red}{}"] {
+                for tail in [format!("^{{{empty}}}"), format!("_{{{empty}}}"), format!("^{{{empty}}}_{{{empty}}}")] {
+                    assert_eq!(render(&tail), render(""), "{base}{tail}");
+                }
+                assert_eq!(render(&format!("^{{{empty}}}_q")), render("_q"), "{base}");
+            }
+        }
+    }
+}
+
+/// Limits: source length, layout cells, and nesting depth, which would otherwise exhaust the stack.
+#[test]
+fn sources_layouts_and_nesting_are_bounded() {
+    use crate::parse::{Environment, Node};
+    let text = |value: &str| Node::Text(value.into());
+    assert_eq!(crate::render(&"x".repeat(4096)).unwrap().width, 4096);
+    assert_eq!(crate::render(&"x\u{305}".repeat(1365)).unwrap().width, 1365);
+    for source in [String::new(), "x".repeat(4097), "x\u{305}".repeat(1366), "\u{1f600}".repeat(1025), "   ".into()] {
+        assert!(crate::render(&source).is_err(), "{} bytes", source.len());
+    }
+    assert!(crate::render(&format!("{}x{}", "\\sqrt[".repeat(100), "]{x}".repeat(100))).is_err());
+    let matrix = format!("\\begin{{matrix}}{}{}\\end{{matrix}}", "&".repeat(1500), "\\\\".repeat(1500));
+    assert!(matrix.len() < 10_000 && crate::render(&matrix).is_err());
     let small = format!("\\begin{{matrix}}{}{}\\end{{matrix}}", "x&".repeat(60), "x\\\\".repeat(60));
     assert!(crate::render(&small).is_ok());
+    let options = Options { display: false, ..Options::default() };
+    assert_eq!(crate::layout::layout(&text(&"x".repeat(16384)), &options).map(|l| l.width), Some(16384));
+    assert!(crate::layout::layout(&text(&"x".repeat(16385)), &options).is_none());
+    let fraction =
+        Node::Fraction { numerator: Box::new(text("1")), denominator: Box::new(text("2")), bar: true, align: None };
+    let wide = Node::Matrix {
+        rows: vec![vec![text(&"x".repeat(8192)), text("y")], vec![fraction, text("z")]],
+        environment: Environment::Array,
+        columns: Some("|l||r|".into()),
+    };
+    assert!(crate::layout::layout(&wide, &options).is_none());
+    assert!(
+        crate::layout::layout(&Node::Brace { body: Box::new(text(&"x".repeat(8193))), over: true }, &options).is_none()
+    );
+    // Zero-width delimiter marks may fail to render, but must not panic.
+    for display in [false, true] {
+        for incomplete in [false, true] {
+            let mode = crate::Mode { permissive: false, incomplete };
+            let source = "\\left\u{3164}\u{305}\\frac{1}{2}\\right.";
+            let _ = crate::render_mode(source, &Options { display, ..Options::default() }, mode);
+        }
+    }
+    // 256 levels of commands take about 4 MB of a debug build's stack: the main thread's 8 MB, where the TUI parses,
+    // not a test thread's 2 MB.
+    let deep =
+        |prefix: &str, middle: &str, suffix: &str| format!("{}{middle}{}", prefix.repeat(257), suffix.repeat(257));
+    let sources = [
+        deep("{", "", "}"),
+        deep("\\frac", "x", ""),
+        deep("\\mathbb{", "x", "}"),
+        deep("\\displaylines{", "x", "}"),
+        deep("\\color{red}", "x", ""),
+        deep("\\text{", "", "}"),
+    ];
+    let parsed = std::thread::Builder::new()
+        .stack_size(8 << 20)
+        .spawn(move || sources.iter().map(|source| crate::parse::parse(source).is_err()).collect::<Vec<_>>());
+    assert_eq!(parsed.unwrap().join().unwrap(), [true; 6]);
+    assert_eq!(crate::render(&format!("{}x{}", "{".repeat(255), "}".repeat(255))).unwrap().to_string(), "x");
 }
