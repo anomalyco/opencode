@@ -78,14 +78,19 @@ const CONSOLE_MCP = "opencode_console"
  * delivers (`DELIVERIES`). Console that doesn't know `record` records them all, as it did.
  */
 const CANDIDATES = { limit: 10, minScore: 0, maxTokens: 20_000, record: false }
-/** Asks Console to add the repository's live conventions and procedures to the candidates, however they rank. */
-const RULES = { conventions: true }
-/** Where the plugin records the entries it delivered to a session, each at its revision, once. */
+/**
+ * Asks Console to add the repository's live conventions and procedures, and general ones, to the candidates however they
+ * rank, after the ranked ones (`via: "repository"`), up to 20 within the token budget.
+ */
+const RULES = { includeRepository: true }
+/** Where the plugin records the entries it delivered to a session, each at the revision Console gave, once. */
 const DELIVERIES = "/api/memory/deliveries"
 /** The most entries one injection delivers that apply to the task, failure or action at hand, as Console does. */
 const MAX_DELIVERED = 3
 /** And at a task's start, the most of the repository's rules for all its work, besides. */
 const MAX_RULES = 3
+/** The most deliveries one call records, as Console takes them. */
+const MAX_RECORDED = 20
 /** The instructions source that holds the instruction files: AGENTS.md (or CLAUDE.md) and configured ones. */
 const INSTRUCTION_FILES = "core/instructions"
 const InstructionsMetadata = Schema.Struct({
@@ -121,6 +126,7 @@ const Injected = Schema.Struct({
   body: Schema.String,
   revision: Schema.Number,
   score: Schema.Number,
+  via: Schema.optional(Schema.Literals(["ranking", "repository"])),
 })
 const Source = Schema.Struct({
   repo: Schema.optional(Schema.String),
@@ -904,7 +910,6 @@ export const make = Effect.fnUntraced(function* (
   const start = Effect.fnUntraced(function* () {
     const lease = yield* Scope.Scope
     const capturing = yield* flags.enabled("memory_capture")
-    const holding = yield* flags.enabled("memory_action_rules")
     // The agent whose model distillation runs on, which config may set.
     yield* ctx.agent.transform((editor) =>
       editor.update(WRITER, (agent) => {
@@ -1083,9 +1088,24 @@ export const make = Effect.fnUntraced(function* (
       entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>,
     ) =>
       Effect.gen(function* () {
+        // At a task's start each candidate is asked whether it's a rule for all the repository's work, and a ranked one
+        // whether it applies to the task too; elsewhere only whether it applies.
+        const source = yield* repository
+        const name =
+          ("repo" in source && source.repo ? repoName(source.repo) : undefined) ?? path.basename(ctx.location.directory)
         const judged = yield* Effect.forEach(
           entries,
-          (entry) => decide.applies(moment, task, entry).pipe(Effect.map((p) => ({ entry, ...p }))),
+          (entry) =>
+            Effect.all(
+              {
+                applies:
+                  moment.type === "prompt" && entry.via === "repository"
+                    ? Effect.succeed(undefined)
+                    : decide.applies(moment, task, entry),
+                repo: moment.type === "prompt" ? decide.repoWide(entry, name) : Effect.succeed(undefined),
+              },
+              { concurrency: 2 },
+            ).pipe(Effect.map((p) => ({ entry, ...p }))),
           { concurrency: 4 },
         )
         const rules =
@@ -1129,13 +1149,11 @@ export const make = Effect.fnUntraced(function* (
         ? Effect.succeed(entries.slice(0, Math.max(0, budget)))
         : Effect.forEach(
             entries.slice(0, budget),
-            (entry) => decide.stated(instructions, entry).pipe(Effect.map((p) => ({ entry, p }))),
+            (entry) => decide.stated(instructions, entry).pipe(Effect.map((stated) => ({ entry, stated }))),
             { concurrency: budget },
           ).pipe(
             Effect.flatMap((judged) => {
-              const fresh = judged
-                .filter((item) => item.p !== undefined && item.p < OpencodeMemoryDecide.STATED)
-                .map((item) => item.entry)
+              const fresh = judged.filter((item) => item.stated === false).map((item) => item.entry)
               return unstated(entries.slice(budget), budget - fresh.length, instructions).pipe(
                 Effect.map((rest) => [...fresh, ...rest]),
               )
@@ -1143,11 +1161,16 @@ export const make = Effect.fnUntraced(function* (
           )
     // Console records each delivered revision once, so what its own scoring handed out and already recorded isn't
     // recorded twice.
+    // The reader's reachable set goes with them, as Console needs it for an entry of a repository that isn't public.
     const report = (sessionID: Session.ID, entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>) =>
-      call(Schema.Unknown, "POST", DELIVERIES, {
-        sessionID,
-        entries: entries.map((entry) => ({ id: entry.id, revision: entry.revision })),
-      }).pipe(
+      reader.pipe(
+        Effect.flatMap((set) =>
+          call(Schema.Unknown, "POST", DELIVERIES, {
+            sessionID,
+            entries: entries.slice(0, MAX_RECORDED).map((entry) => ({ id: entry.id, revision: entry.revision })),
+            ...set,
+          }),
+        ),
         Effect.catch((cause) => Effect.logDebug("memory delivery not recorded", { cause })),
         Effect.forkIn(lease, { startImmediately: true }),
       )
@@ -1248,7 +1271,7 @@ export const make = Effect.fnUntraced(function* (
         const state = tracked(event.sessionID)
         // A session's first commit and first pull request are held once, when the decision model finds rules of the
         // repository's for them, so the agent reads them before acting: as the call's error, run again after it.
-        if (action !== undefined && holding && !state.acted.has(action) && (yield* decide.available)) {
+        if (action !== undefined && !state.acted.has(action) && (yield* decide.available)) {
           state.acted.add(action)
           const moment = { type: "action" as const, action, command }
           const entries = yield* ask(event.sessionID, moment)

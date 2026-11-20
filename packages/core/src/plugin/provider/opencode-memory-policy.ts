@@ -28,6 +28,8 @@ export interface Injected {
   readonly body: string
   readonly revision: number
   readonly score: number
+  /** Why Console answered it: it ranked above the bar, or it's one of the repository's conventions and procedures. */
+  readonly via?: "ranking" | "repository"
 }
 
 /** An entry this session was given, injected or read, as it last saw it. */

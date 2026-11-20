@@ -11,8 +11,10 @@ import type { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
 
 /** The decision model the questions and thresholds below were chosen on, unless config names another. */
 export const MODEL = Model.Ref.make({ providerID: Provider.ID.make("opencode"), id: Model.ID.make("jev-1.13") })
-/** How much of the repository's instructions D5 is shown: an AGENTS.md of about 3,000 tokens. */
+/** How much of the repository's instructions D5b is shown, the end cut: an AGENTS.md of about 3,000 tokens. */
 const MAX_INSTRUCTIONS = 12_000
+/** D4b answers kept by entry revision: whether a note is a rule for all work doesn't depend on the task. */
+const MAX_REPO_WIDE = 500
 /** The longest a decision may take; past it the caller does what it does without one. */
 const DEADLINE = "5 seconds"
 
@@ -25,10 +27,14 @@ export const CORRECTS = 0.5
 export const DURABLE = 0.574
 /** D4.t3: an entry applies to the task, or the failure, at hand. */
 export const APPLIES = 0.64
-/** D4b: an entry is a rule or procedure for all work in its repository. A placeholder until it's set from labels. */
-export const REPO_WIDE = 0.5
-/** D5: the repository's loaded instructions already state what an entry says. A placeholder until it's set from labels. */
-export const STATED = 0.5
+/**
+ * D4b.t1: an entry is a rule or procedure for every change in its repository. Jev answers this question with low
+ * probabilities even for clear positives (Brier 0.20), so the cut sits near the bottom of the scale and answers come in
+ * steps of 0.01: this is the train precision >= 0.95 point. Check it again whenever the decision model changes.
+ */
+export const REPO_WIDE = 0.08
+/** D5b.t1: the repository's instructions already tell the agent what an entry does, unless the verbatim check holds. */
+export const STATED = 0.94
 
 /** A yes-or-no question, scored by the probability of yes. */
 const predicate = (name: string, instructions: string, yes: string, no: string): DecisionQuestion => ({
@@ -69,16 +75,16 @@ const D4 = predicate(
 
 const D4b = predicate(
   "repo_wide",
-  "Is this note a rule, convention or procedure that holds for all work in this repository, rather than a fact about particular code?",
-  "The note states how all work in this repository is done: how commits, pull requests or changelogs are written, which commands build, lint or run the tests, which tools, package managers or styles to use, or another house rule any change here must follow.",
-  "The note is about particular code: a function, module, feature, bug, error or file, a one-off situation, or general advice not specific to this repository.",
+  "Does this note say how every change in this repository is made, checked or recorded, whatever code it touches, rather than describing particular code?",
+  "Yes when following the note is part of any task in this repository: how to commit, write commit messages, open PRs or record changes (changelog, news fragments); the commands, flags, interpreter or environment variables needed to run the tests, linters, type checks or docs build; which tools or package managers to use; a style rule for all code or all tests, such as how docstrings, exception messages or imports are written. Phrased as a gotcha or a procedure doesn't matter.",
+  "No when the note is about particular code: a bug or its cause, how a particular function, module or feature behaves or must behave, a decision about one feature, steps that only apply when editing certain files, or one particular test's quirks (such as a flaky or slow test), even when written as a rule.",
 )
 
-const D5 = predicate(
-  "stated",
-  "Do the repository's instructions already state what this note says?",
-  "Everything the note tells an agent to do or know is already stated in the instructions, in the same or other words, so reading the note adds nothing.",
-  "The note adds something the instructions don't state: a rule, command, fact or detail missing from them, or one that differs from what they say.",
+const D5b = predicate(
+  "already_stated",
+  "Does some part of these repository instructions already tell the agent what this note tells it, even in different words?",
+  "Some instruction gives the same rule, command, setting or action as the note's main point, worded differently or with a different example: for instance the same test command or environment variable, the same commit or changelog rule, the same instruction about a flaky test. Extra detail in the note, such as the reason, an error message it prints, or an alternative way to do the same thing, doesn't count as new.",
+  "The instructions never give the note's main rule, command, setting or action: they cover other topics, mention the topic without the note's specific requirement, or say the opposite of the note.",
 )
 
 /** Decisions in flight across this process, as Console's rate limit allows. */
@@ -129,6 +135,8 @@ export const make = (input: {
     probability === undefined
       ? Effect.logDebug("memory decision failed, taken as no", { question, ms, ...extra })
       : Effect.logDebug("memory decision", { question, probability, ms, ...extra })
+
+  const repoWide = new Map<string, number>()
 
   return {
     /** Whether a decision model resolves, so the judgements that need one are on. */
@@ -198,10 +206,7 @@ export const make = (input: {
         yield* logged("D3.t2", result.ms, p)
         return p
       }),
-    /**
-     * D4 and D4b, in one call: the probability an entry applies to the task at hand, the failure just seen or the
-     * action about to run, and the probability it's a rule or procedure for all work in the repository.
-     */
+    /** D4: the probability an entry applies to the task at hand, the failure just seen or the action about to run. */
     applies: (moment: OpencodeMemoryPolicy.Moment, task: string, entry: OpencodeMemoryPolicy.Injected) =>
       Effect.gen(function* () {
         const happening =
@@ -212,26 +217,65 @@ export const make = (input: {
               : ""
         const result = yield* ask(
           `Task given to an AI coding agent:\n${task}${happening}\n\nNote from the team's shared memory (${entry.kind}): ${entry.title}\n${entry.body.slice(0, 3000)}`,
-          [D4, D4b],
+          [D4],
         )
-        const applies = probability(result.answers, "applies")
-        const repo = probability(result.answers, "repo_wide")
-        yield* logged("D4.t3", result.ms, applies, { entry: entry.id })
-        yield* logged("D4b", result.ms, repo, { entry: entry.id })
-        return { applies, repo }
-      }),
-    /** D5: the probability the repository's loaded instructions already state what an entry says. */
-    stated: (instructions: string, entry: OpencodeMemoryPolicy.Injected) =>
-      Effect.gen(function* () {
-        const result = yield* ask(
-          `Instructions an AI coding agent was given for this repository:\n\n${instructions.slice(0, MAX_INSTRUCTIONS)}\n\nNote from the team's shared memory (${entry.kind}): ${entry.title}\n${entry.body.slice(0, 3000)}`,
-          [D5],
-        )
-        const p = probability(result.answers, "stated")
-        yield* logged("D5", result.ms, p, { entry: entry.id })
+        const p = probability(result.answers, "applies")
+        yield* logged("D4.t3", result.ms, p, { entry: entry.id })
         return p
       }),
+    /**
+     * D4b: the probability an entry says how every change in `repo` is made, checked or recorded, asked once per
+     * revision, since it doesn't depend on the task.
+     */
+    repoWide: (entry: OpencodeMemoryPolicy.Injected, repo: string) =>
+      Effect.gen(function* () {
+        const key = `${entry.id}@${entry.revision}`
+        const known = repoWide.get(key)
+        if (known !== undefined) return known
+        const result = yield* ask(
+          `Note from a team's shared memory about the ${repo} repository:\n\nKind: ${entry.kind}\nTitle: ${entry.title}\n\n${entry.body}`,
+          [D4b],
+        )
+        const p = probability(result.answers, "repo_wide")
+        yield* logged("D4b.t1", result.ms, p, { entry: entry.id })
+        if (p === undefined) return p
+        repoWide.set(key, p)
+        if (repoWide.size > MAX_REPO_WIDE) repoWide.delete(repoWide.keys().next().value ?? key)
+        return p
+      }),
+    /**
+     * D5b: whether the repository's instructions already tell the agent what an entry does: its normalised title or the
+     * start of its normalised body is in them, or else the decision finds it at or above the cut. Undefined when that
+     * decision can't be had.
+     */
+    stated: (instructions: string, entry: OpencodeMemoryPolicy.Injected) =>
+      Effect.gen(function* () {
+        if (verbatim(instructions, entry)) return true
+        const result = yield* ask(
+          `Repository instructions (AGENTS.md):\n\n${instructions.slice(0, MAX_INSTRUCTIONS)}\n\nNote from the team's shared memory:\n${entry.title}\n${entry.body}`,
+          [D5b],
+        )
+        const p = probability(result.answers, "already_stated")
+        yield* logged("D5b.t1", result.ms, p, { entry: entry.id })
+        return p === undefined ? undefined : p >= STATED
+      }),
   }
+}
+
+/** The verbatim check: an entry's normalised title (12 characters or more) or the first 60 of its body are in them. */
+export function verbatim(instructions: string, entry: { readonly title: string; readonly body: string }) {
+  const text = normal(instructions)
+  const title = normal(entry.title)
+  const body = normal(entry.body).slice(0, 60)
+  return (title.length >= 12 && text.includes(title)) || (body.length >= 30 && text.includes(body))
+}
+
+/** Lower case, every run of other characters than letters and digits one space, trimmed. */
+function normal(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
 }
 
 export type Decide = ReturnType<typeof make>

@@ -445,28 +445,20 @@ decision model from your providers, or set `false` to turn decisions off.
 
 With a decision model, memory delivers entries at these moments.
 
-| Moment             | What is delivered                                                                                        |
-| ------------------ | -------------------------------------------------------------------------------------------------------- |
-| A task starts      | Up to three entries that apply to the task, and up to three of the repository's rules for all its work   |
-| A command fails    | Up to three entries that apply to the failure                                                            |
-| First commit or PR | The repository's rules for committing or opening a pull request, before the command runs (opt-in, below) |
+| Moment             | What is delivered                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------ |
+| A task starts      | Up to three entries that apply to the task, and up to three of the repository's rules for all its work |
+| A command fails    | Up to three entries that apply to the failure                                                          |
+| First commit or PR | The repository's rules for committing or opening a pull request, before the command runs               |
 
 Rules for all of a repository's work, such as how commits are written or which
 command runs the tests, reach every task in it, so memory works without an
 `AGENTS.md`. When the repository has one, or another instruction file is loaded,
 an entry that file already states isn't delivered.
 
-Holding a session's first `git commit` and first `gh pr create` is
-experimental. When rules apply, the command fails once with those rules, and the
-agent runs it again following them. Turn it on with a flag.
-
-```jsonc
-{
-  "experimental": {
-    "memory_action_rules": true,
-  },
-}
-```
+Before a session's first `git commit` and first `gh pr create`, memory looks for
+the repository's rules for that action. When some apply, the command fails once
+with those rules, and the agent runs it again following them.
 
 Without a decision model, either turned off or not offered by any provider, the
 features that need one are off.

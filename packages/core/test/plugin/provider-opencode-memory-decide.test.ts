@@ -67,8 +67,7 @@ describe("OpencodeMemoryDecide", () => {
           ])
         if (question.name === "durable")
           return Effect.succeed([predicate("durable", 0.8), predicate("fix_record", 0.25)])
-        if (question.name === "stated") return Effect.succeed([predicate("stated", 0.2)])
-        return Effect.succeed([predicate("applies", 0.66), predicate("repo_wide", 0.3)])
+        return Effect.succeed([predicate("applies", 0.66)])
       })
       const decide = OpencodeMemoryDecide.make({
         decisions: fake.decisions,
@@ -119,8 +118,7 @@ describe("OpencodeMemoryDecide", () => {
       ).toBeCloseTo(0.6, 10)
       expect(fake.asked[2]?.questions.map((question) => question.name)).toEqual(["durable", "fix_record"])
 
-      // At a failure, the command and the end of what it printed come with the task; whether the note applies and
-      // whether it's a rule for all the repository's work are asked in one call.
+      // At a failure, the command and the end of what it printed come with the task.
       const output = `${"x".repeat(2500)}\nError: wrangler not found`
       expect(
         yield* decide.applies(
@@ -128,14 +126,14 @@ describe("OpencodeMemoryDecide", () => {
           "Deploy the worker",
           entry,
         ),
-      ).toEqual({ applies: 0.66, repo: 0.3 })
+      ).toBe(0.66)
       expect(fake.asked[3]?.input).toEqual([
         {
           type: "text",
           text: `Task given to an AI coding agent:\nDeploy the worker\n\nThe agent ran \`bun run deploy\` and it failed with:\n${output.slice(-2000)}\n\nNote from the team's shared memory (procedure): Deploys use wrangler\nRun wrangler deploy.`,
         },
       ])
-      expect(fake.asked[3]?.questions.map((question) => question.name)).toEqual(["applies", "repo_wide"])
+      expect(fake.asked[3]?.questions.map((question) => question.name)).toEqual(["applies"])
 
       // Before an action, the command about to run comes with the task.
       yield* decide.applies(
@@ -149,17 +147,113 @@ describe("OpencodeMemoryDecide", () => {
           text: "Task given to an AI coding agent:\nDeploy the worker\n\nThe agent is about to run `git commit -m wip`.\n\nNote from the team's shared memory (procedure): Deploys use wrangler\nRun wrangler deploy.",
         },
       ])
+    }),
+  )
 
-      // Whether the repository's instructions already state the note, shown at most 12,000 characters of them.
-      const instructions = `Use wrangler.\n${"y".repeat(13_000)}`
-      expect(yield* decide.stated(instructions, entry)).toBe(0.2)
-      expect(fake.asked[5]?.input).toEqual([
+  it.live(
+    "asks whether a note is a rule for every change in the repository once per revision, as the bench framed it",
+    () =>
+      Effect.gen(function* () {
+        const fake = generation((request) =>
+          request.input[0]?.type === "text" && request.input[0].text.includes("Title: Flaky")
+            ? Effect.fail(
+                new ProviderRequestError({ providerID: "opencode", reason: "provider", message: "down", status: 503 }),
+              )
+            : Effect.succeed([predicate("repo_wide", 0.09)]),
+        )
+        const decide = OpencodeMemoryDecide.make({
+          decisions: fake.decisions,
+          model: Effect.succeed(OpencodeMemoryDecide.MODEL),
+        })
+        expect(yield* decide.repoWide(entry, "github.com/acme/app")).toBe(0.09)
+        expect(fake.asked[0]?.input).toEqual([
+          {
+            type: "text",
+            text: "Note from a team's shared memory about the github.com/acme/app repository:\n\nKind: procedure\nTitle: Deploys use wrangler\n\nRun wrangler deploy.",
+          },
+        ])
+        expect(fake.asked[0]?.questions).toEqual([
+          {
+            type: "predicate",
+            name: "repo_wide",
+            instructions:
+              "Does this note say how every change in this repository is made, checked or recorded, whatever code it touches, rather than describing particular code?",
+            criteria: {
+              true: "Yes when following the note is part of any task in this repository: how to commit, write commit messages, open PRs or record changes (changelog, news fragments); the commands, flags, interpreter or environment variables needed to run the tests, linters, type checks or docs build; which tools or package managers to use; a style rule for all code or all tests, such as how docstrings, exception messages or imports are written. Phrased as a gotcha or a procedure doesn't matter.",
+              false:
+                "No when the note is about particular code: a bug or its cause, how a particular function, module or feature behaves or must behave, a decision about one feature, steps that only apply when editing certain files, or one particular test's quirks (such as a flaky or slow test), even when written as a rule.",
+            },
+          },
+        ])
+        // The same revision isn't asked again; a new one is.
+        expect(yield* decide.repoWide(entry, "github.com/acme/app")).toBe(0.09)
+        expect(fake.asked).toHaveLength(1)
+        yield* decide.repoWide({ ...entry, revision: 2 }, "github.com/acme/app")
+        expect(fake.asked).toHaveLength(2)
+        // An answer that couldn't be had isn't kept: it's asked again.
+        const flaky = { ...entry, id: "mem_f", title: "Flaky" }
+        expect(yield* decide.repoWide(flaky, "github.com/acme/app")).toBeUndefined()
+        expect(yield* decide.repoWide(flaky, "github.com/acme/app")).toBeUndefined()
+        expect(fake.asked).toHaveLength(4)
+        expect(OpencodeMemoryDecide.REPO_WIDE).toBe(0.08)
+      }),
+  )
+
+  it.live("takes a note the instructions hold verbatim as stated without asking, and asks the decision otherwise", () =>
+    Effect.gen(function* () {
+      const fake = generation((request) => {
+        const text = request.input[0]?.type === "text" ? request.input[0].text : ""
+        if (text.includes("Broken"))
+          return Effect.fail(
+            new ProviderRequestError({ providerID: "opencode", reason: "provider", message: "down", status: 503 }),
+          )
+        return Effect.succeed([predicate("already_stated", text.includes("Paraphrased") ? 0.95 : 0.93)])
+      })
+      const decide = OpencodeMemoryDecide.make({
+        decisions: fake.decisions,
+        model: Effect.succeed(OpencodeMemoryDecide.MODEL),
+      })
+      const instructions =
+        "# AGENTS.md\n\n## Commit messages, written as follows\nRun the tests with: TZ=UTC bun run test --bail from the package!"
+      // Its title, normalised, is in them; or the start of its body is.
+      expect(yield* decide.stated(instructions, { ...entry, title: "Commit Messages -- written as follows" })).toBe(
+        true,
+      )
+      expect(
+        yield* decide.stated(instructions, {
+          ...entry,
+          title: "Tests",
+          body: "Run the tests with TZ=UTC bun run test --bail from the package, always.",
+        }),
+      ).toBe(true)
+      expect(fake.asked).toHaveLength(0)
+      // A title under 12 characters doesn't count, nor does a body under 30.
+      expect(OpencodeMemoryDecide.verbatim("tests and more", { title: "Tests", body: "tests and more" })).toBe(false)
+
+      // Otherwise the decision, at 0.94 or above, framed as the bench framed it with the end of the instructions cut.
+      const long = `${instructions}\n${"y".repeat(13_000)}`
+      expect(yield* decide.stated(long, { ...entry, title: "Paraphrased rule" })).toBe(true)
+      expect(fake.asked[0]?.input).toEqual([
         {
           type: "text",
-          text: `Instructions an AI coding agent was given for this repository:\n\n${instructions.slice(0, 12_000)}\n\nNote from the team's shared memory (procedure): Deploys use wrangler\nRun wrangler deploy.`,
+          text: `Repository instructions (AGENTS.md):\n\n${long.slice(0, 12_000)}\n\nNote from the team's shared memory:\nParaphrased rule\nRun wrangler deploy.`,
         },
       ])
-      expect(fake.asked[5]?.questions.map((question) => question.name)).toEqual(["stated"])
+      expect(fake.asked[0]?.questions).toEqual([
+        {
+          type: "predicate",
+          name: "already_stated",
+          instructions:
+            "Does some part of these repository instructions already tell the agent what this note tells it, even in different words?",
+          criteria: {
+            true: "Some instruction gives the same rule, command, setting or action as the note's main point, worded differently or with a different example: for instance the same test command or environment variable, the same commit or changelog rule, the same instruction about a flaky test. Extra detail in the note, such as the reason, an error message it prints, or an alternative way to do the same thing, doesn't count as new.",
+            false:
+              "The instructions never give the note's main rule, command, setting or action: they cover other topics, mention the topic without the note's specific requirement, or say the opposite of the note.",
+          },
+        },
+      ])
+      expect(yield* decide.stated(long, { ...entry, title: "Another rule" })).toBe(false)
+      expect(yield* decide.stated(long, { ...entry, title: "Broken rule" })).toBeUndefined()
     }),
   )
 
