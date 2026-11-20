@@ -47,6 +47,7 @@ import { HttpApiBuilder } from "effect/http-api"
 import { Context, Effect, Layer, Option } from "effect"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
+import { ClientSpaceStore } from "./client-space-store"
 import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
@@ -88,6 +89,7 @@ const applicationServiceNodes = [
   Credential.node,
   WellKnown.node,
   ServerPairing.node,
+  ClientSpaceStore.node,
   LocationServiceMap.node,
   LocationActivity.node,
   SessionRestart.node,

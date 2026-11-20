@@ -10498,6 +10498,25 @@
               "description": "Only send events of these types, plus the initial server.connected event. When omitted, all events are sent."
             },
             "required": false
+          },
+          {
+            "name": "experimental.kv",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ClientKV.Subscription"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientKV.Subscription"
+                  }
+                }
+              ],
+              "description": "Experimental: spaces to sync, each as `space` or `space:revision`. After server.connected, sends per space an experimental.kv.delta with the keys changed since that revision when it is one this server issued, otherwise an experimental.kv.snapshot; then every later experimental.kv.updated and experimental.kv.deleted in those spaces, with nothing missed or repeated. experimental.kv.* events reach only subscribers that request their space, whatever `types` says."
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -13794,6 +13813,125 @@
         "summary": "Cancel background job"
       }
     },
+    "/api/experimental/kv/{space}/{key}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.kv.set",
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/ClientKV.Space"
+            },
+            "required": true
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/ClientKV.Key"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Store a client-defined JSON value, replacing any previous value, and send it to the space's subscribers. The server does not interpret it. Subscribers read values through `experimental.kv` on /api/event. Experimental: may change without compatibility guarantees.",
+        "summary": "Set value",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "$ref": "#/components/schemas/ClientKV.Value"
+                  }
+                },
+                "required": ["value"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.kv.delete",
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/ClientKV.Space"
+            },
+            "required": true
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/ClientKV.Key"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Remove a stored value and tell the space's subscribers. Removing an unset key succeeds. Subscribers read values through `experimental.kv` on /api/event. Experimental: may change without compatibility guarantees.",
+        "summary": "Delete value"
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -16792,6 +16930,57 @@
         },
         "required": ["_tag", "blobID", "message"],
         "additionalProperties": false
+      },
+      "ClientKV.Entry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/ClientKV.Key"
+          },
+          "value": {
+            "$ref": "#/components/schemas/ClientKV.Value"
+          }
+        },
+        "required": ["key", "value"],
+        "additionalProperties": false
+      },
+      "ClientKV.Key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "ClientKV.Revision": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "ClientKV.Space": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]{1,128}$",
+        "description": "Client-chosen namespace: 1-128 letters, digits, '.', '_' or '-'."
+      },
+      "ClientKV.Subscription": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]{1,128}(:.*)?$"
+      },
+      "ClientKV.Value": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array"
+          },
+          {
+            "type": "object"
+          }
+        ]
       },
       "Command.Info": {
         "type": "object",
@@ -26256,6 +26445,18 @@
             "$ref": "#/components/schemas/experimental.mcp.event"
           },
           {
+            "$ref": "#/components/schemas/experimental.kv.snapshot"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.kv.delta"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.kv.updated"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.kv.deleted"
+          },
+          {
             "$ref": "#/components/schemas/V2Event.rpc"
           },
           {
@@ -27011,6 +27212,177 @@
               }
             },
             "required": ["info"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.kv.deleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.kv.deleted"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "$ref": "#/components/schemas/ClientKV.Space"
+              },
+              "key": {
+                "$ref": "#/components/schemas/ClientKV.Key"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/ClientKV.Revision"
+              }
+            },
+            "required": ["space", "key", "revision"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.kv.delta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.kv.delta"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "$ref": "#/components/schemas/ClientKV.Space"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/ClientKV.Revision"
+              },
+              "entries": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ClientKV.Entry"
+                }
+              },
+              "deleted": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ClientKV.Key"
+                }
+              }
+            },
+            "required": ["space", "revision", "entries", "deleted"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.kv.snapshot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.kv.snapshot"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "$ref": "#/components/schemas/ClientKV.Space"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/ClientKV.Revision"
+              },
+              "entries": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ClientKV.Entry"
+                }
+              }
+            },
+            "required": ["space", "revision", "entries"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.kv.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.kv.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "$ref": "#/components/schemas/ClientKV.Space"
+              },
+              "key": {
+                "$ref": "#/components/schemas/ClientKV.Key"
+              },
+              "value": {
+                "$ref": "#/components/schemas/ClientKV.Value"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/ClientKV.Revision"
+              }
+            },
+            "required": ["space", "key", "value", "revision"],
             "additionalProperties": false
           }
         },
