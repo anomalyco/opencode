@@ -7,15 +7,16 @@ import electron, { type BrowserWindow } from "electron"
 import { Cause, Deferred, Effect, ManagedRuntime, Option, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
-import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
+import type { Embeds, Log, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
-import { browserFailure, CodedError, missingArtifact, pageReports } from "./errors"
+import { browserFailure, CodedError, missingArtifact, PageEndedError, pageReports } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
 import { activityOwner, agentDriven, agentTabShow, agentRefusal, childActivity, createdActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { FindAction, PaneEvent, PromptAnswer, Viewport } from "./ipc"
 import { createPageFind } from "./page-find"
+import { exitCodeFields, type PageEnd } from "./page-log"
 import {
   attachmentFailure,
   createPaneState,
@@ -62,6 +63,8 @@ type Target = { readonly server: string; readonly session: string; readonly rest
 type Handle = {
   window: number
   win: BrowserWindow
+  /** The session the binding shows, which the desktop log names beside a page that ended. */
+  session: string
   partition: string
   /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
   shared: boolean
@@ -94,6 +97,9 @@ type Handle = {
 /** The pane machine's current state; only `dispatch` replaces it. */
 type PaneMachine = { state: PaneState }
 
+/** How often the pane notes each live page's process memory. */
+const MEMORY_SAMPLE_MS = 30_000
+
 export type Pane = ReturnType<typeof createBrowserPane>
 
 export function createBrowserPane(input: {
@@ -114,6 +120,8 @@ export function createBrowserPane(input: {
   readonly toolbar: boolean
   /** The plugin instance's file verifier, for workspace files. */
   readonly verifier: HandlePath
+  /** The desktop log, which hears why a page ended or stalled (page-log.ts). */
+  readonly log: Log
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
@@ -138,6 +146,35 @@ export function createBrowserPane(input: {
   const downloads = input.profile.downloads
   // Warnings about Electron internals a page relies on, each logged once for the pane.
   const warned = new Set<string>()
+
+  const livePages = () => Array.from(handles.values()).flatMap((handle) => Array.from(handle.pages.values()))
+
+  // The GPU, network and utility processes take pages down without a renderer of theirs ending. A clean exit is a
+  // helper that finished.
+  const childGone = (_event: Electron.Event, details: Electron.Details) => {
+    if (details.reason === "clean-exit") return
+    input.log.write("error", "browser child process gone", {
+      type: details.type,
+      name: details.name,
+      service: details.serviceName,
+      reason: details.reason,
+      ...exitCodeFields(details.exitCode),
+      pages: livePages().length,
+    })
+  }
+
+  electron.app.on("child-process-gone", childGone)
+
+  // Electron lists a process's memory only while it runs, so a page that ends reports what was last seen here.
+  const sampling = setInterval(() => {
+    const pages = livePages()
+
+    if (!pages.length) return
+    const metrics = electron.app.getAppMetrics()
+    pages.forEach((page) => page.sampleMemory(metrics))
+  }, MEMORY_SAMPLE_MS)
+
+  sampling.unref()
 
   return {
     /**
@@ -194,6 +231,7 @@ export function createBrowserPane(input: {
         previewFailure: previews.failure,
         window,
         win,
+        session: sessionID,
         partition,
         shared,
         abort,
@@ -321,7 +359,8 @@ export function createBrowserPane(input: {
                       requestID,
                       await execute(binding, command, abort.signal, "agent").then(
                         (result) => ({ type: "success" as const, result }),
-                        (cause: unknown) => browserFailure(command.action, cause),
+                        // A command stopped because its tab's page ended hears why, not that it was cancelled.
+                        (cause: unknown) => browserFailure(command.action, abort.signal.reason instanceof PageEndedError ? abort.signal.reason : cause),
                       ),
                     )
                   }),
@@ -584,6 +623,8 @@ export function createBrowserPane(input: {
      * suspended attachment, like an idle server eviction, and register again once the pane is back.
      */
     async dispose() {
+      clearInterval(sampling)
+      electron.app.off("child-process-gone", childGone)
       dispatch({ type: "disposed" })
       await Promise.all(releasing)
       await runtime.dispose()
@@ -651,7 +692,7 @@ export function createBrowserPane(input: {
     }
 
     if (effect.type === "abort-requests")
-      return effect.requestIDs.forEach((requestID) => handle.requests.get(requestID)?.abort())
+      return effect.requestIDs.forEach((requestID) => handle.requests.get(requestID)?.abort(effect.ended && new PageEndedError(effect.ended)))
 
     if (effect.type === "release-pages")
       return effect.attempts.forEach((attempt) => {
@@ -782,13 +823,14 @@ export function createBrowserPane(input: {
     const current = () => isCurrentPage(machine.state, binding, id, attempt)
     const focused = () => isFocusedPage(machine.state, binding, id, attempt)
 
-    const fail = () => {
+    const fail = (ended: PageEnd) => {
       if (current())
         dispatchBinding(binding, {
           type: "tab.crashed",
           tabID: id,
           attempt,
           tab: page.contents.isDestroyed() ? undefined : page.state(),
+          ended,
         })
     }
 
@@ -855,6 +897,7 @@ export function createBrowserPane(input: {
         void runtime.runFork(Effect.logWarning(message))
       },
       fail,
+      log: (level, message, data) => input.log.write(level, message, { session: handle.session, ...data }),
       refused: (notice, token, site) => {
         if (current()) emit(binding, { type: "refusal", tabID: id, notice, token, site })
       },
@@ -920,9 +963,10 @@ export function createBrowserPane(input: {
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.
     emit(binding, { type: "embed", tabID: id, embed: page.embed })
+    // A page that does not become ready reports that itself, through `fail`.
     void page.ready.then(() => {
       if (current()) dispatchBinding(binding, { type: "tab.published", tabID: id, attempt, tab: page.state() })
-    }, fail)
+    }, () => undefined)
 
     registering.move()
 
