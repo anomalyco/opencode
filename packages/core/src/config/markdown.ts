@@ -21,6 +21,14 @@ export function parseOption(content: string) {
   }
 }
 
+// Join a legacy separate `variant` into a string `model` so it survives native decoding.
+// Embedded and structured native selections, and a variant without a model, stay unchanged.
+export function joinLegacyVariant(data: Record<string, unknown>) {
+  if (typeof data.model !== "string" || data.model.includes("#")) return data
+  if (typeof data.variant !== "string" || !/^[^#]+$/.test(data.variant)) return data
+  return { ...data, model: `${data.model}#${data.variant}` }
+}
+
 // Other coding agents accept unquoted colons and leading tags like `[Tag] text`
 // in frontmatter values. Retry those values as YAML block scalars so existing
 // config files keep working without rewriting valid YAML flow collections.
