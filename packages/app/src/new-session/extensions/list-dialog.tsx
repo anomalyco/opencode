@@ -1,4 +1,5 @@
 import { Dialog, DialogBody, DialogTitle } from "@opencode/ui/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { SearchList } from "@opencode/ui/search-list"
 import { Switch } from "@opencode/ui/switch"
 import { TruncatedText } from "@opencode/ui/truncated-text"
@@ -8,15 +9,28 @@ import type { NewSessionExtensionList } from "./list"
 import "@/shell/commands/dialog.css"
 import "@/shell/search-list.css"
 
-/** A searchable list with a switch per entry, shared by the MCPs and skills dialogs, which supply the copy. */
-export function NewSessionExtensionListDialog(props: {
+type Copy = { title: string; placeholder: string; empty: string; searchEmpty: string }
+
+/**
+ * Opens a searchable list with a switch per entry. The MCPs and skills dialogs are this with their own copy; `copy` is
+ * read when the dialog renders, so it follows the language.
+ */
+export function useNewSessionExtensionListDialog(input: {
   list: NewSessionExtensionList
-  title: string
-  placeholder: string
-  empty: string
-  searchEmpty: string
+  copy: () => Copy
   status?: boolean
+  onDone: () => void
 }) {
+  const dialog = useDialog()
+
+  return () =>
+    void dialog.show(
+      () => <NewSessionExtensionListDialog list={input.list} status={input.status} {...input.copy()} />,
+      input.onDone,
+    )
+}
+
+function NewSessionExtensionListDialog(props: Copy & { list: NewSessionExtensionList; status?: boolean }) {
   const [query, setQuery] = createSignal("")
 
   const results = createMemo(() => {
