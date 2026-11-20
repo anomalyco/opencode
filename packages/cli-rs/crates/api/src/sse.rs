@@ -125,7 +125,9 @@ impl Decoder {
             if std::mem::replace(&mut self.has_data, true) {
                 self.data.push('\n');
             }
-            self.data.push_str(value.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{feff}'));
+            // JavaScript's `trimStart`: Unicode white space without U+0085, and the BOM.
+            self.data
+                .push_str(value.trim_start_matches(|c: char| (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}'));
         }
     }
 
