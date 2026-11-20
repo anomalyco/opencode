@@ -370,7 +370,8 @@ pub struct Events {
 }
 
 impl Source<V2Event> for Events {
-    type Error = opencode_api::error::Error;
+    /// The error as TS's connection records it: a declared error's message, else the client error's text.
+    type Error = String;
 
     fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<V2Event, Self::Error>> {
         let client = self.client.clone();
@@ -384,6 +385,7 @@ impl Source<V2Event> for Events {
             Ok(stream) => stream,
             Err(error) => futures_util::stream::once(async move { Err(error) }).boxed(),
         })
+        .map(|item| item.map_err(|error| error.error_message()))
         .boxed()
     }
 

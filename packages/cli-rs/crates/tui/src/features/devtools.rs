@@ -475,7 +475,7 @@ impl Bar {
         if state.attempt > 0 {
             panel.add(&row(app, theme, "Reconnect", &state.attempt.to_string()));
         }
-        if let Some(error) = &state.error {
+        if let Some(error) = state.error.as_ref().filter(|error| !error.is_empty()) {
             panel.add(&row(app, theme, "Last error", error));
         }
         match self.server.borrow().as_ref() {

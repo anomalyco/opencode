@@ -16,8 +16,8 @@ pub enum Error {
     /// declared error: the status and the body's text, cut short.
     #[error("UnexpectedStatus: {status}{}", if .body.is_empty() { String::new() } else { format!(": {}", .body) })]
     Status { status: u16, body: String },
-    /// The response has the wrong content type.
-    #[error("UnsupportedContentType: {}", .0.as_deref().unwrap_or("none"))]
+    /// The response has the wrong content type. A missing or empty one adds nothing, as `ClientError`'s detail.
+    #[error("UnsupportedContentType{}", .0.as_deref().filter(|value| !value.is_empty()).map(|value| format!(": {value}")).unwrap_or_default())]
     UnsupportedContentType(Option<String>),
     /// The response body is empty or not valid for its type.
     #[error("MalformedResponse: {0}")]
