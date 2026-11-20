@@ -373,6 +373,8 @@ pub struct Node {
 pub struct Tree {
     pub nodes: Vec<Node>,
     pub errors: usize,
+    /// Whether a container nested past [`MAX_DEPTH`].
+    pub too_deep: bool,
 }
 
 impl Tree {
@@ -442,7 +444,7 @@ pub const MAX_DEPTH: usize = 512;
 pub fn parse_tree(text: &str) -> Tree {
     let mut parser = Parser {
         scanner: Scanner::new(text),
-        tree: Tree { nodes: vec![node(Kind::Array, 0, None, Value::Null)], errors: 0 },
+        tree: Tree { nodes: vec![node(Kind::Array, 0, None, Value::Null)], errors: 0, too_deep: false },
         current: 0,
         depth: 0,
     };
@@ -585,6 +587,7 @@ impl Parser<'_> {
 
     fn parse_container(&mut self, object: bool) -> bool {
         if self.depth == MAX_DEPTH {
+            self.tree.too_deep = true;
             self.skip_container();
             return false;
         }
@@ -819,12 +822,19 @@ pub enum EditError {
     WrongParent(&'static str, &'static str),
     #[error("Can not {0} Array index {1} as length is not sufficient")]
     ArrayIndex(&'static str, usize),
+    #[error("Can not edit a document nested deeper than {MAX_DEPTH} levels")]
+    TooDeep,
 }
 
 /// `applyEdits(text, modify(text, path, value, { formattingOptions: { tabSize: 2, insertSpaces: true } }))`.
 /// `None` removes the property or item.
 pub fn modify(text: &str, path: &[Segment], value: Option<&Value>) -> Result<String, EditError> {
     let tree = parse_tree(text);
+    // Formatting indents every level of the lines it touches: past the bound, the text it writes could grow with the
+    // square of the depth.
+    if tree.too_deep {
+        return Err(EditError::TooDeep);
+    }
     let root = tree.root();
     let mut path = path.to_vec();
     let mut value = value.cloned();
