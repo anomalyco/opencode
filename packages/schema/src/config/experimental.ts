@@ -43,7 +43,7 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   }),
   part_rows: Schema.Boolean.pipe(optional).annotate({
     description:
-      "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
+      "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to true; set false to fall back to whole-message writes.",
   }),
   image_generate: Schema.Union([
     Schema.Boolean,
