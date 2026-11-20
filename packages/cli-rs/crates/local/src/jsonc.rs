@@ -854,12 +854,16 @@ pub fn modify(text: &str, path: &[Segment], value: Option<&Value>) -> Result<Str
             let children = &parent_node.children;
             match value {
                 None => {
+                    // TS counts back from the array's end in UTF-16 units.
+                    let parent_end = parent_node.offset + parent_node.length;
+                    let before_end =
+                        |units| parent_end - opencode_util::text_boundary::tail(&text[..parent_end], units).len();
                     // As in `edit.js`, a one-item array loses its item whatever the index.
                     let (offset, length) = if children.len() == 1 {
-                        (parent_node.offset + 1, parent_node.length - 2)
-                    } else if index > 0 && children.len() - 1 == index {
+                        (parent_node.offset + 1, before_end(1).saturating_sub(parent_node.offset + 1))
+                    } else if index > 0 && children.len() == index + 1 {
                         let offset = end(children[index - 1]);
-                        (offset, (parent_node.offset + parent_node.length).saturating_sub(2 + offset))
+                        (offset, before_end(2).saturating_sub(offset))
                     } else if index + 1 < children.len() {
                         let offset = tree.node(children[index]).offset;
                         (offset, tree.node(children[index + 1]).offset - offset)

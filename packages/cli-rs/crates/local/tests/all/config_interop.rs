@@ -103,6 +103,9 @@ fn jsonc_edits_and_parse_match_typescript() {
         "{ \"a\": [ { \"b\": 1 } ], \"ü\": \"é\" }",
         "{\n  \"b\": {\n    // only a comment\n  }\n}",
         "{\n    \"a\": 1\n}\n",
+        // Wide characters before the closing bracket: removals count back in UTF-16 units.
+        "{ \"a\": [1, 2\u{a0}] }",
+        "{ \"a\": [\"日本\"\u{2028}] }",
     ];
     let edits = [
         json!({"path": ["a"], "value": 2}),
