@@ -97,7 +97,7 @@ export function SettingsProjectRow(props: {
             type="button"
             aria-label={displayName(props.project)}
             title={props.project.worktree}
-            class="flex h-full min-w-0 flex-1 items-center gap-2 rounded-[4px] bg-transparent text-start focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--v2-border-border-focus)]"
+            class="flex h-full min-w-0 flex-1 items-center gap-2 rounded-[4px] bg-transparent text-start focus-visible:outline-none"
             onClick={() => props.onOpen(props.project)}
           >
             <ProjectIcon project={props.project} class="shrink-0" />

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Nýtsla",
   "usage.cost": "Kostnaður",
   "usage.view": "Vís samanhangsnýtslu",
-  "systemPrompt.title": "Skipanarboð",
   "rawMessages.title": "Rá boð",
   "export.session": "Útflutningsløta",
   "stats.session": "Seta",

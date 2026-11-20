@@ -15,6 +15,27 @@ describe("icon emphasis", () => {
   })
 })
 
+describe("focus ring colour", () => {
+  test.each([
+    { mode: "light", expected: "var(--v2-blue-500)" },
+    { mode: "dark", expected: "var(--v2-blue-400)" },
+  ] as const)("$mode uses the same focus token for OpenCode and custom-theme fallbacks", ({ mode, expected }) => {
+    expect(resolveThemeV2(theme)[mode]["v2-border-border-focus"]).toBe(expected)
+    expect(
+      resolveThemeVariantV2({ ...theme[mode], v2Overrides: undefined }, mode === "dark")["v2-border-border-focus"],
+    ).toBe(expected)
+  })
+
+  test("a custom theme can override the focus ring colour", () => {
+    const tokens = resolveThemeVariantV2(
+      { ...theme.dark, v2Overrides: { "v2-border-border-focus": "var(--v2-green-500)" } },
+      true,
+    )
+
+    expect(tokens["v2-border-border-focus"]).toBe("var(--v2-green-500)")
+  })
+})
+
 describe("contrast icon-button tokens", () => {
   test("OC-2 dark mode uses a light background and an inverse icon matching the base surface", () => {
     const tokens = resolveThemeV2(theme).dark

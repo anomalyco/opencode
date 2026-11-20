@@ -1,3 +1,4 @@
+import type { Locator, Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 import type { Accessor, ParentProps } from "solid-js"
 import type { Command, MenuItem } from "@opencode/plugin/gui"
@@ -214,6 +215,18 @@ story.beforeEach(async ({ mount, page }) => {
   }, modules)
 })
 
+story("routes an exact HTML file to the pane and reports an unavailable pane instead of opening a file preview", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  const open = root.getByRole("button", { name: "Open workspace HTML" })
+  await open.click()
+  await expect(root.getByText("file:///repo/report.html", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Pane away" }).click()
+  await open.click()
+  await expect(root.getByText(/Can't open this workspace file in the browser pane/)).toBeVisible()
+  await expect(root.getByRole("tab", { name: "report.html" })).toHaveCount(0)
+})
+
 story("closes a blank browser tab from its address field without closing the session", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const outside = root.getByRole("button", { name: "Beta", exact: true })
@@ -249,31 +262,31 @@ story("toggles the element picker from the shortcut only inside the browser pane
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
 
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
-  const inspect = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  // The comment tool has no button in the bar; while it waits for a pick, the pane says so in a status line.
+  const picking = root.getByText("Click part of the page to comment on it. Press Escape to cancel.", { exact: true })
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
-  await expect(inspect).toBeDisabled()
   await address.click()
   await address.press("ControlOrMeta+Shift+c")
   await expect(root.getByTestId("browser-inspects")).toHaveText("[]")
 
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
-  await expect(inspect).toBeEnabled()
+  await expect(address).not.toHaveValue("")
 
   await outside.focus()
   await outside.press("ControlOrMeta+Shift+c")
-  await expect(inspect).toHaveAttribute("aria-pressed", "false")
+  await expect(picking).toHaveCount(0)
   await expect(root.getByTestId("browser-inspects")).toHaveText("[]")
 
   await address.click()
   await expect(address).toBeFocused()
   await address.press("ControlOrMeta+Shift+c")
-  await expect(inspect).toHaveAttribute("aria-pressed", "true")
+  await expect(picking).toBeAttached()
   await expect(root.getByTestId("browser-inspects")).toHaveText(
     '[{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":true}]',
   )
 
   await address.press("ControlOrMeta+Shift+c")
-  await expect(inspect).toHaveAttribute("aria-pressed", "false")
+  await expect(picking).toHaveCount(0)
   await expect(root.getByTestId("browser-inspects")).toHaveText(
     '[{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":true},{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":false}]',
   )
@@ -323,6 +336,23 @@ story("keeps in-page shortcuts in the editor and forwards toolbar, review and cl
   await expect(editor).toHaveValue("handled:k")
   await expect(root.getByTestId("browser-closes")).toHaveText('["tab_33333333-3333-3333-3333-333333333333"]')
   await expect(root.getByTestId("session-state")).toHaveText("open")
+})
+
+story("the pane's toolbar shortcut works from inside the options menu's More tools", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
+  const toggle = root.getByRole("button", { name: "Toggle browser toolbar", exact: true })
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  // The submenu is a portal of its own, outside the pane: it must still count as the pane for the pane's shortcuts.
+  await root.getByRole("button", { name: "Browser options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "More tools", exact: true }).press("ArrowRight")
+  await expect(page.getByRole("menu", { name: "More tools", exact: true }).getByRole("menuitem").first()).toBeFocused()
+  await page.keyboard.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
 })
 
 story(
@@ -663,13 +693,13 @@ story("selects side tabs with ⌘1–9 and ⇧⌘[ ] inside the side panel and s
   await expect(selected).toHaveText(/^browser:/)
 })
 
-story("keeps a restored browser tab selected and undrawn until the desktop's first inventory", async ({ page }) => {
+story("keeps a restored browser tab with no saved page selected and undrawn until the desktop's first inventory", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const tabs = root.getByRole("tab")
   await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await expect(tabs).toHaveText(["alpha.ts"])
 
-  // Beta was left on its browser tab, which the desktop has not reported yet.
+  // Beta was left on its browser tab, which the desktop has not reported yet and no earlier run saved a title for.
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
   await expect(root.getByTestId("selected")).toHaveText(/^browser:tab_/)
@@ -678,6 +708,229 @@ story("keeps a restored browser tab selected and undrawn until the desktop's fir
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   await expect(tabs).toHaveText(["beta.ts", "Preview"])
   await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+})
+
+// What main sends for Beta's two tabs, as production builds it: the inventory `pane-machine.ts` publishes and the page
+// details `chromium.ts` reports. `electron-restore.test.ts` reads the titles a restored page publishes in real Electron.
+type MainTab = {
+  id: string
+  url: string
+  title: string
+  loading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  generation: number
+}
+
+// The fixture reads each one through the pane Ipc's own event schema, so a shape main cannot send fails there.
+type MainEvent =
+  | { type: "state"; state: { tabs: MainTab[]; focusedTabID: string } | null; error?: string }
+  | { type: "page"; tabID: string; zoom: number; viewport: { mode: "auto" }; icon?: string }
+  | { type: "embed"; tabID: string; embed: string }
+
+const preview = "tab_33333333-3333-3333-3333-333333333333"
+
+const docs = "tab_66666666-6666-6666-6666-666666666666"
+
+// A page's icon, as the data URL main reports.
+const icon = (fill: string) =>
+  `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='${fill}'/%3E%3C/svg%3E`
+
+const previewIcon = icon("teal")
+
+const docsIcon = icon("orange")
+
+const reported = (tab: Pick<MainTab, "id" | "url" | "title"> & Partial<MainTab>): MainTab => ({
+  loading: false,
+  canGoBack: false,
+  canGoForward: false,
+  generation: 0,
+  ...tab,
+})
+
+const inventory = (...tabs: MainTab[]): MainEvent => ({ type: "state", state: { tabs, focusedTabID: preview } })
+
+const details = (tabID: string, icon?: string): MainEvent =>
+  icon
+    ? { type: "page", tabID, zoom: 1, viewport: { mode: "auto" }, icon }
+    : { type: "page", tabID, zoom: 1, viewport: { mode: "auto" } }
+
+// The tabs as main restores them: saved by id and address, their pages not loaded, so neither reports a title.
+const restoredPreview = reported({ id: preview, url: "http://localhost:4173/", title: "", generation: 1 })
+
+const restoredDocs = reported({ id: docs, url: "https://example.com/docs", title: "", generation: 1 })
+
+const send = async (root: Locator, event: MainEvent) => {
+  await root.getByRole("textbox", { name: "Main event", exact: true }).fill(JSON.stringify(event))
+  await root.getByRole("button", { name: "Send main event", exact: true }).dispatchEvent("click")
+}
+
+// Each strip tab's box, label and icon, as drawn now.
+const drawn = (tabs: Locator) =>
+  tabs.evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const box = node.getBoundingClientRect()
+
+      return { x: box.x, width: box.width, text: node.textContent, icon: node.querySelector("img")?.getAttribute("src") ?? "none" }
+    }),
+  )
+
+// Beta with two loaded browser tabs beside its file tab, then the app quits and opens again.
+const reopen = async (page: Page, quit: () => Promise<void> = async () => {}) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const tabs = root.getByRole("tab")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+  await send(root, inventory(reported({ id: preview, url: "http://localhost:4173/", title: "Preview" }), reported({ id: docs, url: "https://example.com/docs", title: "Docs" })))
+  await send(root, details(preview, previewIcon))
+  await send(root, details(docs, docsIcon))
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
+  await quit()
+  await root.getByRole("button", { name: "Quit and reopen", exact: true }).dispatchEvent("click")
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(root.getByRole("status", { name: "Loading", exact: true })).toBeVisible()
+  const first = await drawn(tabs)
+  const nodes = await tabs.elementHandles()
+
+  // The same boxes, labels and icons as the first frame after the reopen, in the same elements: nothing moved.
+  const stable = async () => {
+    expect(await drawn(tabs)).toEqual(first)
+    expect(
+      await page.evaluate(
+        ([before, after]) => before.length === after.length && before.every((node, index) => node === after[index]),
+        [nodes, await tabs.elementHandles()],
+      ),
+    ).toBe(true)
+  }
+
+  return { root, first, stable }
+}
+
+// After a restart the strip showed no browser tab until the desktop had attached, and then each tab changed its label,
+// and so its width and the place of every tab after it, as its page loaded: saved title, address, title again.
+story("holds every restored tab's box, label and icon from the reopen until its page has loaded", async ({ page }) => {
+  // The pane's Ipc is still starting when the window draws its first frame.
+  const { root, first, stable } = await reopen(page, () => page.getByTestId("browser-region-fixture").getByRole("button", { name: "Pane away", exact: true }).click())
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+
+  await root.getByRole("button", { name: "Pane back", exact: true }).click()
+  await expect(root.getByText("Registrations: 3", { exact: true })).toBeVisible()
+  await stable()
+
+  // Main attached and restored both tabs. Docs is never selected, so its page never loads and it never reports a title.
+  await send(root, inventory(restoredPreview, restoredDocs))
+  await expect(address).toHaveValue("http://localhost:4173/")
+  await expect(root.getByRole("status", { name: "Loading", exact: true })).toHaveCount(0)
+  await stable()
+
+  // The pane shows Preview, so main creates its page, which starts to load.
+  await send(root, { type: "embed", tabID: preview, embed: "embed-preview" })
+  await send(root, inventory({ ...restoredPreview, loading: true }, restoredDocs))
+  await expect(root.getByRole("button", { name: "Stop", exact: true })).toBeVisible()
+  await stable()
+
+  // The document commits where its address redirected to, with no title and no icon yet.
+  const committed = { ...restoredPreview, url: "http://localhost:4173/app", loading: true }
+  await send(root, inventory(committed, restoredDocs))
+  await send(root, details(preview))
+  await expect(address).toHaveValue("http://localhost:4173/app")
+  await stable()
+
+  // It names itself, its icon arrives, and it stops loading.
+  await send(root, inventory({ ...committed, title: "Preview" }, restoredDocs))
+  await stable()
+  await send(root, details(preview, previewIcon))
+  await stable()
+  await send(root, inventory({ ...committed, title: "Preview", loading: false }, restoredDocs))
+  await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeVisible()
+  await stable()
+  // What held all along is the saved icon of each page, not the globe.
+  expect(first.map((tab) => tab.icon)).toEqual([expect.any(String), previewIcon, docsIcon])
+})
+
+// A server without a browser left its restored tabs on a loader with no end.
+story("a restored tab on a server without a browser says that the browser could not open, and keeps its box", async ({ page }) => {
+  const { root, stable } = await reopen(page)
+  const failed = root.getByRole("alert").filter({ hasText: "The browser couldn't open" })
+  const loading = root.getByRole("status", { name: "Loading", exact: true })
+  await expect(root.getByText("Registrations: 3", { exact: true })).toBeVisible()
+
+  // Main closes the binding: the session's server has no browser.
+  await send(root, { type: "state", state: null, error: "browser.pane.unsupported" })
+  await expect(failed).toBeVisible()
+  await expect(loading).toHaveCount(0)
+  await stable()
+
+  // Trying again registers once more and waits for it; the tabs stay where they are, and the browser opens.
+  await failed.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(root.getByText("Registrations: 4", { exact: true })).toBeVisible()
+  await expect(loading).toBeVisible()
+  await stable()
+  await send(root, inventory(restoredPreview, restoredDocs))
+  await expect(root.getByRole("combobox", { name: "Browser address", exact: true })).toHaveValue("http://localhost:4173/")
+  await stable()
+})
+
+// An agent's tabs.open or tabs.focus shows its tab: it comes to the front over the file the person had selected.
+story("an agent show request selects its tab over the selected file, and a plugin open wakes the suspended binding", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  const file = root.getByRole("tab", { name: "beta.ts" })
+  await file.click()
+  await root.getByRole("button", { name: "Agent show request" }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(file).toHaveAttribute("aria-selected", "false")
+  await root.getByRole("button", { name: "Suspend binding" }).click()
+  await root.getByRole("button", { name: "Plugin open and close" }).click()
+  await expect(root.getByText("Plugin closed: true", { exact: true })).toBeVisible()
+  await expect(root.getByText("Registrations: 3", { exact: true })).toBeVisible()
+})
+
+story("an agent show request opens the closed pane and leaves the keyboard in the composer", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
+  const composer = root.getByRole("textbox", { name: "Composer", exact: true })
+  const side = root.getByTestId("side-state")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await composer.focus()
+  await page.keyboard.press(mac ? "Meta+Shift+r" : "Control+Shift+r")
+  await expect(side).toHaveText("closed")
+  // The agent's request arrives with no input from the person, so nothing but the reveal could move the keyboard.
+  await root.getByRole("button", { name: "Agent show request" }).dispatchEvent("click")
+  await expect(side).toHaveText("open")
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(composer).toBeFocused()
+})
+
+story("?W right after an agent shows another page closes that browser tab, not the session", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  // The request arrives with no input from the person: the keyboard stays in the pane, where ?W is the pane's.
+  await root.getByRole("button", { name: "Agent shows another page", exact: true }).dispatchEvent("click")
+  await expect(root.getByRole("tab", { selected: true })).toHaveCount(1)
+  await expect(root.getByTestId("selected")).toHaveText("browser:tab_55555555-5555-5555-5555-555555555555")
+  await expect(address).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(root.getByTestId("browser-closes")).toHaveText('["tab_55555555-5555-5555-5555-555555555555"]')
+  await expect(root.getByTestId("session-state")).toHaveText("open")
+})
+
+story("a browser tab behind a file tab says that its page waits for the person", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await root.getByRole("tab", { name: "beta.ts" }).click()
+  await root.getByRole("button", { name: "Page prompt" }).click()
+  await expect(root.getByRole("img", { name: "Waiting for you" })).toBeVisible()
 })
 
 story(
@@ -701,5 +954,84 @@ story(
     await expect(root.getByText("Registrations: 4", { exact: true })).toBeVisible()
     await expect(root.getByText("Beta restores: 1", { exact: true })).toBeVisible()
     await expect(tabs).toHaveText(["beta.ts", "Preview"])
+  },
+)
+
+story(
+  "runs no shortcut from a page prompt, even after a click on its dimmed page; the permission bar and a drawer keep theirs",
+  async ({ page }) => {
+    const root = page.getByTestId("browser-region-fixture")
+    const reloads = root.getByTestId("browser-reloads")
+    const reviews = root.getByTestId("review-toggles")
+    await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+    await root.getByRole("button", { name: "Beta", exact: true }).click()
+    await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+    await root.getByRole("button", { name: "First inventory", exact: true }).click()
+
+    await root.getByRole("button", { name: "Page prompt", exact: true }).click()
+    const dialog = root.getByRole("alertdialog", { name: "beta.example says" })
+    const field = dialog.getByRole("textbox", { name: "Your answer" })
+    const dimmed = root.locator("[data-browser-prompt]")
+    await expect(field).toBeFocused()
+    // Neither the pane's reload nor the session's review toggle runs from the prompt.
+    await field.press("ControlOrMeta+r")
+    await field.press("ControlOrMeta+Shift+r")
+    // A click on the dimmed page keeps the keyboard in the prompt rather than giving it to the pane behind.
+    await dimmed.click({ position: { x: 4, y: 4 } })
+    await expect(field).toBeFocused()
+    await page.keyboard.press("ControlOrMeta+r")
+    await expect(reloads).toHaveText("0")
+    await expect(reviews).toHaveText("0")
+
+    // F6, Shift+F6 and the address shortcut leave the prompt open for the address field, as in Chrome; Tab comes back.
+    const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+
+    for (const chord of ["F6", "Shift+F6", "ControlOrMeta+l"]) {
+      await field.focus()
+      await page.keyboard.press(chord)
+      await expect(address).toBeFocused()
+      await expect(dialog).toBeVisible()
+    }
+
+    await expect(async () => {
+      await page.keyboard.press("Tab")
+      await expect(field).toBeFocused({ timeout: 100 })
+    }).toPass()
+
+    // The prompt is modal for its tab only: on the address field the pane's shortcuts work and the prompt stays open.
+    await address.click()
+    await address.press("ControlOrMeta+r")
+    await expect(reloads).toHaveText("1")
+    await expect(dialog).toBeVisible()
+    // A click on the dimmed page brings the keyboard back, where Escape is the prompt's cancel.
+    await dimmed.click({ position: { x: 4, y: 4 } })
+    await expect(field).toBeFocused()
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeHidden()
+
+    // The permission bar is not modal: the pane's shortcuts work there, and Escape is its "not now".
+    await root.getByRole("button", { name: "Permission request", exact: true }).click()
+    const bar = root.locator('[data-component="browser-prompt"]')
+    const never = bar.getByRole("button", { name: "Never allow", exact: true })
+    await expect(never).toBeFocused()
+    await never.press("ControlOrMeta+r")
+    await expect(reloads).toHaveText("2")
+    await never.press("Escape")
+    await expect(bar).toBeHidden()
+
+    // Another modal surface, as a mobile drawer, keeps the app's shortcuts; markup alone, as a chat message's, cannot
+    // claim the keyboard.
+    await page.evaluate(() => {
+      const drawer = document.createElement("div")
+      drawer.setAttribute("role", "dialog")
+      drawer.setAttribute("aria-modal", "true")
+      drawer.setAttribute("data-owns-keyboard", "")
+      drawer.append(Object.assign(document.createElement("button"), { textContent: "Drawer action" }))
+      document.body.append(drawer)
+    })
+    const action = page.getByRole("button", { name: "Drawer action", exact: true })
+    await action.focus()
+    await action.press("ControlOrMeta+Shift+r")
+    await expect(reviews).toHaveText("1")
   },
 )

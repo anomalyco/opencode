@@ -5,7 +5,6 @@ export default {
   "usage.usage": "استخدام",
   "usage.cost": "تكلفة",
   "usage.view": "عرض استخدام السياق",
-  "systemPrompt.title": "موجّه النظام",
   "rawMessages.title": "الرسائل الخام",
   "export.session": "تصدير الجلسة",
   "stats.session": "جلسة",

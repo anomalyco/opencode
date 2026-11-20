@@ -26,6 +26,7 @@ const generate = makeLocationNode({
         start: () => Effect.succeed({ id: "provider_1" }),
         status: () => Effect.succeed({ status: "completed" }),
         result: () => Effect.succeed([{ mime: "video/mp4", stream: Stream.make(video) }]),
+        cancel: () => Effect.void,
       },
     }),
   ),
@@ -126,6 +127,8 @@ it.live("generates a video in the background and serves its blob with Range and 
     // An ID that isn't one never reaches the disk.
     expect((yield* call(`${base}/blob/blob_..%2F..%2Fsecret`)).status).toBe(400)
   }).pipe(Effect.scoped),
+  // The first status check runs at the next 5-second check.
+  15_000,
 )
 
 it.live("rejects video routes while experimental.video_generate is off", () =>

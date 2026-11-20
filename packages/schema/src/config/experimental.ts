@@ -24,12 +24,26 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
         : `${description} Defaults to on in local and dev builds and off in releases.`,
     }),
   ),
+  // The flag also takes settings; an object turns it on.
+  video_generate: Schema.Union([
+    Schema.Boolean,
+    Schema.Struct({
+      model: ConfigModel.Selection.pipe(optional).annotate({
+        description:
+          "Default model for the experimental_video_generate tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
+      }),
+    }),
+  ])
+    .pipe(optional)
+    .annotate({
+      description: `${ConfigFlag.registry.video_generate} Defaults to on in local and dev builds and off in releases. An object turns it on and sets the tool's options.`,
+    }),
   schedules: Schema.Boolean.pipe(optional).annotate({
     description: "Deprecated: use experimental.automations.",
   }),
   part_rows: Schema.Boolean.pipe(optional).annotate({
     description:
-      "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
+      "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to true; set false to fall back to whole-message writes.",
   }),
   image_generate: Schema.Union([
     Schema.Boolean,

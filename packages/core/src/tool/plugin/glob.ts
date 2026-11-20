@@ -6,13 +6,10 @@ import { Effect, Schema } from "effect"
 import path from "path"
 import { toolFailure } from "../runtime.js"
 import { ToolSearch } from "../search.js"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
-import { Environment } from "../../environment/index.js"
-import { Flag } from "../../flag.js"
 import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
+import { Environment } from "../../environment/index.js"
 import { Ripgrep } from "../../ripgrep.js"
 import { RelativePath } from "../../schema.js"
 import { Permission } from "../../permission.js"
@@ -50,19 +47,14 @@ export const toModelContent = (entries: EncodedOutput, truncated = false) => {
 export const Plugin = {
   id: "opencode.tool.glob",
   effect: Effect.fn("GlobTool.Plugin")(function* (ctx: Context) {
-    const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
     const access = yield* FileAccess.Service
+    const environment = yield* Environment.Service
     const permission = yield* Permission.Service
-    const config = yield* Config.Service
-    // Internal plugins are not re-run on config changes, so reload the tool transform instead.
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
-    const flags = yield* Flag.Service
 
     yield* ctx.tool
-      .transform((editor) => {
-        if (flags.resolve(loaded.entries).full_codemode.enabled) return
+      .transform((editor) =>
         editor.add({
           name,
           options: { codemode: false },
@@ -73,6 +65,11 @@ export const Plugin = {
             Effect.gen(function* () {
               const searchPath = input.path === "undefined" || input.path === "null" ? undefined : input.path
               const target = yield* access.resolve({ path: searchPath ?? ".", kind: "directory" })
+              // Search walks files with a ripgrep binary on this server, so another machine's files cannot be searched here.
+              if (target.environment.id !== environment.id)
+                return yield* new ToolFailure({
+                  message: `Search is not available on ${target.environment.id} yet.`,
+                })
               yield* access.authorizeExternal([target], context)
               yield* permission.assert({
                 action: name,
@@ -86,14 +83,20 @@ export const Plugin = {
                 },
                 ...Permission.invocation(context),
               })
-              const type = yield* ToolSearch.pathType(environment.files, target.absolute, searchPath ?? ".")
+              const type = yield* ToolSearch.pathType(target.environment.files, target.absolute, searchPath ?? ".")
               if (type !== "directory")
                 return yield* Effect.fail(
                   new ToolFailure({ message: `Search path is not a directory: ${searchPath ?? "."}` }),
                 )
               const root = target.absolute
               const result = yield* ToolSearch.bounded(input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, (limit) =>
-                ripgrep.glob({ cwd: root, pattern: input.pattern, hidden: input.hidden, limit }),
+                ripgrep.glob({
+                  environment: target.environment,
+                  cwd: root,
+                  pattern: input.pattern,
+                  hidden: input.hidden,
+                  limit,
+                }),
               )
               return {
                 entries: result.items.map((entry) =>
@@ -119,8 +122,8 @@ export const Plugin = {
                   : toolFailure(`Unable to find files matching ${input.pattern}`)(error),
               ),
             ),
-        })
-      })
+        }),
+      )
       .pipe(Effect.orDie)
   }),
 }

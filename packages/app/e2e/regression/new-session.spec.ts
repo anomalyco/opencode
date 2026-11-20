@@ -33,6 +33,30 @@ const editor = (page: Page) => page.locator('[data-component="composer-editor"]'
 
 const submit = (page: Page) => page.locator('[data-action="composer-submit"]')
 
+test("new-session project picker and provider tip show keyboard focus", async ({ page }) => {
+  await openDraft(page, { name: "DraftFocus", provider: NO_PROVIDER })
+
+  const projectPicker = newSessionLocation(page)
+
+  const tip = page.locator('[data-component="new-session-tip"]')
+
+  const connect = tip.getByRole("button", { name: /Connect to 75\+ providers/ })
+
+  const dismiss = tip.getByRole("button", { name: "Dismiss", exact: true })
+
+  await newSessionWorktree(page).press("Shift+Tab")
+  await expect(projectPicker).toBeFocused()
+  await expect(projectPicker).toHaveCSS("outline-style", "solid")
+
+  await expect(connect).toBeVisible()
+  await dismiss.press("Shift+Tab")
+  await expect(connect).toBeFocused()
+  await expect(connect).toHaveCSS("outline-style", "solid")
+  await page.keyboard.press("Tab")
+  await expect(dismiss).toBeFocused()
+  await expect(dismiss).toHaveCSS("outline-style", "solid")
+})
+
 const tabLink = (page: Page, sessionID: string) =>
   page.locator(`[data-titlebar-tab-link][href="${sessionHref(sessionID)}"]`)
 
@@ -1308,7 +1332,7 @@ test("the location dialog separates added projects from server projects and tags
   await expect(options.nth(0)).toHaveCSS("height", "32px")
   await expect(dialog.locator(".palette-menu-search [data-component='text-input-v2']")).toHaveCSS("height", "28px")
   await expect(dialog.locator(".new-session-location-hints")).toHaveCount(0)
-  await expect(dialog.locator("..")).toHaveCSS("width", "720px")
+  await expect(dialog.locator("..")).toHaveCSS("width", "680px")
   await expect(options.nth(0)).toHaveCSS("display", "flex")
   await expect(names.nth(0).locator(".command-palette-title")).toHaveCSS("font-size", "13px")
   await expect(names.nth(0).locator(".command-palette-title")).toHaveCSS("white-space", "nowrap")

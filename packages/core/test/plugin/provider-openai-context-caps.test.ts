@@ -17,7 +17,7 @@ const full = { context: 1_050_000, input: 922_000, output: 128_000 }
 const setup = Effect.fn(function* (value: Credential.Value) {
   const catalog = yield* Provider.Service
   yield* catalog.transform((catalog) => {
-    for (const id of ["gpt-5.5", "gpt-5.6-sol", "gpt-6-luna", "gpt-6.1-sol", "gpt-7"])
+    for (const id of ["gpt-5.5", "gpt-5.6-sol", "gpt-6-luna", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-7", "gpt-7-astra"])
       catalog.models.update(Provider.ID.openai, Model.ID.make(id), (model) => {
         model.limit = full
       })
@@ -63,6 +63,8 @@ describe("OpenAIContextCapsPlugin", () => {
         expect(yield* limit("gpt-6.1-sol")).toEqual(current)
         expect(yield* limit("gpt-6.1-sol-fast")).toEqual(current)
         expect(yield* limit("gpt-7")).toEqual(current)
+        expect(yield* limit("gpt-6.2-astra")).toEqual(legacy)
+        expect(yield* limit("gpt-7-astra")).toEqual(legacy)
         expect(yield* limit("gpt-6.2-mini")).toEqual(legacy)
       }),
     )

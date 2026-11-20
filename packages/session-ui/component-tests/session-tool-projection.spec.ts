@@ -193,6 +193,7 @@ story("wraps execute details code, pads it evenly, and starts line numbers near 
     const number = root.querySelector("[data-line-number-content]")!
     const lines = [...root.querySelectorAll("[data-line]")].map((line) => line.getBoundingClientRect())
     const box = element.getBoundingClientRect()
+
     return {
       paddingTop: lines[0].top - box.top,
       paddingBottom: box.bottom - lines.at(-1)!.bottom,
@@ -249,6 +250,46 @@ story("keeps long execute calls inside the tool and shows the script output", as
   })
 
   expect(overflow).toBeLessThanOrEqual(0)
+})
+
+story("opens execute rows while a text field elsewhere keeps its selection", async ({ mount }) => {
+  const timeline = await mount("current-session-terminal-work--execute-code")
+  const rows = timeline.locator('[data-timeline-part-id="tool_execute_long_call"] [data-slot="execute-tool-call"]')
+
+  // As in the app: its shell makes the rows non-selectable, so a press on one clears no selection, and a field such
+  // as the browser's address keeps the text it selected after focus leaves it.
+  await timeline.evaluate((root) => {
+    const field = document.createElement("input")
+    field.setAttribute("aria-label", "Address")
+    field.value = "https://alpha.example/"
+    field.style.userSelect = "text"
+    root.style.userSelect = "none"
+    root.prepend(field)
+  })
+  await timeline.getByRole("textbox", { name: "Address" }).selectText()
+
+  await rows.nth(1).click()
+  await expect(rows.nth(1)).toHaveAttribute("aria-expanded", "true")
+  await rows.first().click()
+  await expect(rows.first()).toHaveAttribute("aria-expanded", "true")
+  // The rows opened under the field's selection, not because a press cleared it.
+  expect(await timeline.evaluate(() => window.getSelection()?.toString())).toBe("https://alpha.example/")
+})
+
+story("keeps an execute row closed when the press selects its text", async ({ mount }) => {
+  const timeline = await mount("current-session-terminal-work--execute-code")
+  const row = timeline.locator('[data-timeline-part-id="tool_execute_long_call"] [data-slot="execute-tool-call"]').first()
+  const name = await row.locator('[data-slot="execute-tool-call-name"]').boundingBox()
+
+  if (!name) throw new Error("The execute call has no name to select")
+  const page = timeline.page()
+  await page.mouse.move(name.x + 1, name.y + name.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(name.x + name.width - 1, name.y + name.height / 2, { steps: 4 })
+  await page.mouse.up()
+
+  expect(await timeline.evaluate(() => window.getSelection()?.toString())).not.toBe("")
+  await expect(row).toHaveAttribute("aria-expanded", "false")
 })
 
 story("shows a failed execution's error in place of its output", async ({ mount }) => {

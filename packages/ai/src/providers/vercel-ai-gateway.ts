@@ -16,6 +16,7 @@ import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
 import type { Protocol } from "../route/protocol.js"
 import {
+  mergeTransport,
   type LLMRequest,
   ModelID,
   ProviderID,
@@ -251,8 +252,7 @@ export const configure = (input: Config = {}) => {
     provider: id,
     endpoint: { baseURL: configured.endpoint.baseURL },
     auth: configured.auth,
-    headers: input.headers,
-    http: input.http,
+    ...mergeTransport(input),
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model({ id: modelID, providerOptions })
@@ -260,8 +260,7 @@ export const configure = (input: Config = {}) => {
     provider: id,
     endpoint: { baseURL: configured.endpoint.baseURL },
     auth: configured.auth,
-    headers: input.headers,
-    http: input.http,
+    ...mergeTransport(input),
   })
   const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     embeddingRoute.model({ id: modelID, providerOptions })

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Χρήση",
   "usage.cost": "Κόστος",
   "usage.view": "Προβολή χρήσης περιβάλλοντος",
-  "systemPrompt.title": "Προτροπή συστήματος",
   "rawMessages.title": "Ακατέργαστα μηνύματα",
   "export.session": "Εξαγωγή συνεδρίας",
   "stats.session": "Συνεδρία",

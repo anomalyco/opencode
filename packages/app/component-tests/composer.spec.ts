@@ -1,5 +1,22 @@
 import { expect, story } from "../../stories/playwright/story"
 
+story("outsets the Send ring without changing the scrolling toolbar rings", async ({ mount, page }) => {
+  const component = await mount("opencode-composer-flow--toolbar-overflow", { args: { alternate: "none" } })
+
+  const send = component.locator('[data-action="composer-submit"]')
+
+  const variant = component.getByRole("button", { name: "Choose model variant" })
+
+  await expect(send).toBeEnabled()
+  await send.press("Shift+Tab")
+  await expect(variant).toBeFocused()
+  await expect(variant).toHaveCSS("outline-offset", "-2px")
+  await page.keyboard.press("Tab")
+  await expect(send).toBeFocused()
+  await expect(send).toHaveCSS("outline-style", "solid")
+  await expect(send).toHaveCSS("outline-offset", "2px")
+})
+
 story("cycles full prompts with plain arrows without opening the picker", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--prompt-history")
   const input = component.getByRole("textbox", { name: "Prompt", exact: true })

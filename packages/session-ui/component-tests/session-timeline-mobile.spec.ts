@@ -119,32 +119,50 @@ story("desktop user message actions still appear on hover and keyboard focus", a
   await expect(actions).toHaveCSS("pointer-events", "auto")
 })
 
-story("desktop response copy stays visible while its metadata waits for hover or focus", async ({ mount, page }) => {
-  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "interruption" } })
+story("desktop keeps only the latest response copy visible at rest", async ({ mount, page }) => {
+  const timeline = await mount("current-session-timeline-rows--response-speed", { args: { steered: true } })
   expect(await page.evaluate(() => matchMedia("(hover: hover)").matches)).toBe(true)
 
-  const actions = timeline.locator('[data-slot="text-part-copy-wrapper"]')
+  const latest = timeline.locator('[data-component="text-part"]').filter({ hasText: "The timeline checks passed." })
+
+  const latestActions = latest.locator('[data-slot="text-part-copy-wrapper"]')
+
+  const latestMeta = latestActions.locator('[data-slot="text-part-meta"]')
+
+  await expect(latestActions).toHaveCSS("opacity", "1")
+  await expect(latestActions.getByRole("button", { name: "Copy response", exact: true })).toBeVisible()
+  await expect(latestMeta).toHaveCSS("opacity", "0")
+  await latest.locator('[data-slot="text-part-body"]').hover()
+  await expect(latestMeta).toHaveCSS("opacity", "1")
+
+  const earlier = timeline.locator('[data-component="text-part"]').filter({ hasText: "I'll inspect the timeline" })
+
+  const actions = earlier.locator('[data-slot="text-part-copy-wrapper"]')
   await expect(actions).toHaveCount(1)
   await expect(actions).toHaveCSS("height", "20px")
   await expect(actions).toHaveCSS("margin-top", "8px")
   await expect(actions).toHaveCSS("gap", "4px")
-  await expect(actions).toHaveCSS("opacity", "1")
-  await expect(actions).toHaveCSS("pointer-events", "auto")
+  await expect(actions).toHaveCSS("opacity", "0")
+  await expect(actions).toHaveCSS("pointer-events", "none")
 
   const copy = actions.getByRole("button", { name: "Copy response", exact: true })
-  await expect(copy).toBeVisible()
+
   await expect(copy).toHaveCSS("width", "20px")
   await expect(copy).toHaveCSS("height", "20px")
   await expect(copy.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "14px")
   const rest = await copy.boundingBox()
 
   const meta = actions.locator('[data-slot="text-part-meta"]')
-  await expect(meta).toHaveCSS("opacity", "0")
-  await expect(meta).toHaveCSS("pointer-events", "none")
+
   await expect(meta).toHaveCSS("font-size", "12px")
   await expect(meta).toHaveCSS("line-height", "18px")
   await expect(meta).toHaveCSS("gap", "4px")
-  await expect(meta.locator('[data-slot="text-part-meta-item"]')).toHaveText(["Build", "Claude Sonnet 4", "4s"])
+  await expect(meta.locator('[data-slot="text-part-meta-item"]')).toHaveText([
+    "Build",
+    "Claude Sonnet 4",
+    "Balanced",
+    "4m 50s",
+  ])
   const separators = meta.locator('[data-slot="text-part-meta-separator"]')
   await expect(separators).toHaveCount(2)
 
@@ -152,15 +170,16 @@ story("desktop response copy stays visible while its metadata waits for hover or
     await expect(separator).toHaveText("\u00B7")
   }
 
-  await actions.locator("..").hover()
-  await expect(meta).toHaveCSS("opacity", "1")
-  await expect(meta).toHaveCSS("pointer-events", "auto")
+  await earlier.locator('[data-slot="text-part-body"]').hover()
+  await expect(actions).toHaveCSS("opacity", "1")
+  await expect(actions).toHaveCSS("pointer-events", "auto")
   expect(await copy.boundingBox()).toEqual(rest)
+  await copy.hover()
+  await expect(actions).toHaveCSS("opacity", "1")
 
   await page.mouse.move(0, 0)
-  await expect(meta).toHaveCSS("opacity", "0")
-  await expect(actions).toHaveCSS("opacity", "1")
+  await expect(actions).toHaveCSS("opacity", "0")
   await copy.focus()
-  await expect(meta).toHaveCSS("opacity", "1")
-  await expect(meta).toHaveCSS("pointer-events", "auto")
+  await expect(actions).toHaveCSS("opacity", "1")
+  await expect(actions).toHaveCSS("pointer-events", "auto")
 })
