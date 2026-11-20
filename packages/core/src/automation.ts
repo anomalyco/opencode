@@ -453,23 +453,13 @@ const layer = Layer.effect(
       const run = row.run_count + 1
       const late = now - (row.next_due_at ?? now) >= LATE_AFTER
       const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
-      if (row.session_id !== null && !owner)
-        return yield* pauseWith(row, now, "The session that authorized this command no longer exists")
-      if (owner && (owner.projectID !== row.project_id || owner.location.directory !== row.directory))
+      if (!owner) return yield* pauseWith(row, now, "The session that authorized this command no longer exists")
+      if (owner.projectID !== row.project_id || owner.location.directory !== row.directory)
         return yield* pauseWith(row, now, "The session that authorized this command moved")
 
       const admitted = yield* Deferred.make<void, FileSystem.DirectoryNotFoundError>()
       yield* Effect.gen(function* () {
         const started = yield* AutomationShell.start(owner, action, row.directory).pipe(Effect.result)
-        if (Result.isFailure(started)) {
-          const error = started.failure
-          if (
-            typeof error === "string" ||
-            error._tag === "Permission.BlockedError" ||
-            error._tag === "Session.NotFoundError"
-          )
-            return yield* pauseWith(row, now, typeof error === "string" ? error : error.message)
-        }
 
         // Advance on launch, so the next timer slot or event can start before this command exits.
         yield* settle(
@@ -489,7 +479,7 @@ const layer = Layer.effect(
         const output = captured
           ? `Exit code: ${captured.exit ?? "unknown"}\n${captured.output}`
           : Result.isFailure(started)
-            ? String(started.failure)
+            ? started.failure.message
             : ""
         // A late completion must not replace a newer run's result or the reason the automation paused.
         yield* db
@@ -510,7 +500,7 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
       }).pipe(
         Effect.asVoid,
-        owner ? instances.provide(owner) : inDirectory(row.directory),
+        instances.provide(owner),
         Effect.onExit((exit) => Deferred.done(admitted, exit)),
         Effect.forkIn(scope),
       )
@@ -1063,8 +1053,9 @@ const layer = Layer.effect(
         return { type: "prompt" as const, prompt: action.prompt, to }
       }
       if (action.type === "shell") {
-        yield* AutomationShell.authorize(owner, input.name, trigger, action, directory, invocation).pipe(
-          owner ? instances.provide(owner) : inDirectory(directory),
+        if (!owner) return yield* new InvalidError({ reason: "A shell action needs a session" })
+        yield* AutomationShell.authorize(owner, input.name, trigger, action, invocation).pipe(
+          instances.provide(owner),
           Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
         )
         return action

@@ -5,7 +5,6 @@ import { AutomationTable } from "@opencode/core/automation/sql"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Instance } from "@opencode/core/instance/service"
-import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Permission } from "@opencode/core/permission"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Session } from "@opencode/core/session"
@@ -24,32 +23,27 @@ import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([Automation.node, Database.node, Instance.node, LocationServiceMap.node, Session.node]),
-    [
-      offlineModels,
-      PersistentPty.node.replace(disabledPersistentPtyLayer),
-      SessionExecution.node.replace(
-        Layer.mock(SessionExecution.Service, { wake: () => Effect.die("Shell actions must not wake a session") }),
-      ),
-    ],
-  ),
+  AppNodeBuilder.build(LayerNode.group([Automation.node, Database.node, Instance.node, Session.node]), [
+    offlineModels,
+    PersistentPty.node.replace(disabledPersistentPtyLayer),
+    SessionExecution.node.replace(
+      Layer.mock(SessionExecution.Service, { wake: () => Effect.die("Shell actions must not wake a session") }),
+    ),
+  ]),
 )
 
 const command = "echo automation-output; exit 7"
 const trigger = { type: "every", every: "1 hour" } as const
 
-it.live("approves the fixed command once, records a failed exit, and pauses after a configured deny", () =>
+it.live("approves the fixed command once and records a failed exit without waking a session", () =>
   Effect.gen(function* () {
     const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
-    const writeConfig = (shell: "ask" | Record<string, "deny">) =>
-      Effect.promise(() =>
-        Bun.write(
-          path.join(directory, "opencode.json"),
-          JSON.stringify({ experimental: { automations: true }, permission: { shell } }),
-        ),
-      )
-    yield* writeConfig("ask")
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(directory, "opencode.json"),
+        JSON.stringify({ experimental: { automations: true }, permission: { shell: "ask" } }),
+      ),
+    )
     const sessions = yield* Session.Service
     const session = yield* sessions.create({ location: { directory } })
     const instances = yield* Instance.Service
@@ -86,15 +80,12 @@ it.live("approves the fixed command once, records a failed exit, and pauses afte
 
     const created = yield* Fiber.join(create)
     const database = yield* Database.Service
-    const tick = Effect.gen(function* () {
-      yield* database.db
-        .update(AutomationTable)
-        .set({ next_due_at: yield* Clock.currentTimeMillis })
-        .where(eq(AutomationTable.id, created.id))
-        .run()
-      yield* automations.tick
-    })
-    yield* tick
+    yield* database.db
+      .update(AutomationTable)
+      .set({ next_due_at: yield* Clock.currentTimeMillis })
+      .where(eq(AutomationTable.id, created.id))
+      .run()
+    yield* automations.tick
     const ran = yield* automations
       .get(created.id)
       .pipe(
@@ -108,16 +99,44 @@ it.live("approves the fixed command once, records a failed exit, and pauses afte
       lastOutput: expect.stringMatching(/^Exit code: 7\s+automation-output/),
     })
     expect(yield* database.db.select().from(SessionInboxTable).all()).toEqual([])
+  }),
+)
 
-    yield* writeConfig({ "echo *": "deny" })
-    const locations = yield* LocationServiceMap.Service
-    yield* locations.invalidate(session.location)
-    yield* tick
-    expect(yield* automations.get(created.id)).toMatchObject({
-      status: "paused",
-      runCount: 1,
-      lastOutcome: "failed",
-      lastOutput: "Permission denied: shell",
+it.live("rejects a shell action that changes to a denied external directory", () =>
+  Effect.gen(function* () {
+    const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(directory, "opencode.json"),
+        JSON.stringify({
+          experimental: { automations: true },
+          permission: { shell: "allow", external_directory: "deny" },
+        }),
+      ),
+    )
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ location: { directory } })
+    const automations = yield* Automation.Service
+    const error = yield* automations
+      .create(
+        {
+          name: "outside",
+          sessionID: session.id,
+          trigger,
+          action: { type: "shell", command: "cd ..; echo outside" },
+        },
+        Permission.invocation({
+          sessionID: session.id,
+          agent: Agent.defaultID,
+          messageID: SessionMessage.ID.make("msg_external_directory"),
+          id: Tool.CallID.make("automation_create"),
+        }),
+      )
+      .pipe(Effect.flip)
+    expect(error).toMatchObject({
+      _tag: "Permission.BlockedError",
+      permission: "external_directory",
     })
+    expect(yield* automations.list()).toEqual([])
   }),
 )

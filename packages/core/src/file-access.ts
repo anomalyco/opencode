@@ -52,6 +52,19 @@ export interface Target {
   readonly environment: Environment.Interface
 }
 
+export function externalDirectoryRequest(targets: readonly Target[]) {
+  const external = Array.dedupeWith(
+    targets.flatMap((target) => (target.externalDirectory ? [target.externalDirectory] : [])),
+    (left, right) => left.resource === right.resource,
+  )
+  if (external.length === 0) return
+  return {
+    action: "external_directory",
+    resources: external.map((item) => item.resource),
+    save: external.map((item) => item.save),
+  }
+}
+
 /**
  * Identifies a target's file: the same path in two environments is two files. The id's length comes first so no
  * id and path can read as another pair's key, and the keys of one environment sort as its paths do.
@@ -221,15 +234,10 @@ const layer = Layer.effect(
       context: Invocation,
       metadata?: Permission.AssertInput["metadata"],
     ) {
-      const external = Array.dedupeWith(
-        targets.flatMap((target) => (target.externalDirectory ? [target.externalDirectory] : [])),
-        (left, right) => left.resource === right.resource,
-      )
-      if (external.length === 0) return
+      const request = externalDirectoryRequest(targets)
+      if (!request) return
       yield* permission.assert({
-        action: "external_directory",
-        resources: external.map((item) => item.resource),
-        save: external.map((item) => item.save),
+        ...request,
         ...(metadata === undefined ? {} : { metadata }),
         ...Permission.invocation(context),
       })

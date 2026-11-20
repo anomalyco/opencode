@@ -20,7 +20,7 @@ import { Session } from "../../session.js"
 import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
-import { ShellParse } from "../../shell/parse.js"
+import { ShellPermissions } from "../../shell/permissions.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
 import { toolFailure } from "../runtime.js"
@@ -333,22 +333,17 @@ export const Plugin = {
             })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
-      const local = target.environment.id === environment.id
-      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, {
-        home: local ? undefined : null,
+      const requests = yield* ShellPermissions.requests(access, {
+        command: invocation.command,
+        program: invocation.shell,
+        target,
+        local: target.environment.id === environment.id,
       })
-      // A directory the command names is written relative to its working directory, on that same machine.
-      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-        access.resolve({ path: directory, base: target, kind: "directory" }),
+      yield* Effect.forEach(
+        requests,
+        (request) => permission.assert({ ...request, ...Permission.invocation(context) }),
+        { discard: true },
       )
-      yield* access.authorizeExternal([target, ...directories], context)
-      if (parsed.commands.length > 0)
-        yield* permission.assert({
-          action: name,
-          resources: parsed.commands.map((command) => command.resource),
-          save: parsed.commands.map((command) => command.save),
-          ...Permission.invocation(context),
-        })
       // Approval can outlive the directory, so validate immediately before spawning.
       const workdir = yield* Environment.typeFollowing(target.environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () =>

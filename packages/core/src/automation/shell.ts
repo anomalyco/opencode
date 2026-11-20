@@ -3,49 +3,62 @@ export * as AutomationShell from "./shell.js"
 import type { Automation } from "@opencode/schema/automation"
 import { Effect } from "effect"
 import { Agent } from "../agent.js"
+import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
 import { Permission } from "../permission.js"
 import { Plugin } from "../plugin.js"
 import type { SessionSchema } from "../session/schema.js"
 import { Shell } from "../shell.js"
-import { ShellParse } from "../shell/parse.js"
+import { ShellPermissions } from "../shell/permissions.js"
 import { ShellSelect } from "../shell/select.js"
 import { type Invocation, matchesAuthor } from "./author.js"
 
-const request = Effect.fnUntraced(function* (command: string, shell: string, directory: string) {
-  const parsed = yield* ShellParse.scan(command, shell, directory).pipe(Effect.mapError((error) => error.message))
-  return {
-    action: "shell",
-    resources: parsed.commands.length ? parsed.commands.map((item) => item.resource) : [command],
-  }
-})
-
 export const authorize = Effect.fnUntraced(function* (
-  owner: SessionSchema.Info | undefined,
+  owner: SessionSchema.Info,
   name: string,
   trigger: Automation.Trigger,
   action: Automation.ShellAction,
-  directory: string,
   invocation?: Invocation,
 ) {
   if (invocation) yield* Plugin.awaitActivation
   const agents = yield* Agent.Service
-  const agent = yield* agents.select(owner?.agent)
-  if (invocation && (!owner || !matchesAuthor(owner, agent.info, invocation)))
+  const agent = yield* agents.select(owner.agent)
+  if (invocation && !matchesAuthor(owner, agent.info, invocation))
     return yield* Effect.fail("Create the automation with the session's current agent")
   const select = yield* ShellSelect.Service
+  const environment = yield* Environment.Service
+  const access = yield* FileAccess.Service
   const permission = yield* Permission.Service
-  const input = {
-    ...(yield* request(action.command, yield* select.resolve({ priority: "compat" }), directory)),
-    agent: agent.id,
-    metadata: { automation: name, trigger, unattended: true, command: action.command },
-  }
+  const program = yield* select.resolve({ priority: "compat" })
+  const target = yield* access
+    .resolve({
+      path: ".",
+      base: { absolute: owner.location.directory, environment },
+      kind: "directory",
+    })
+    .pipe(Effect.mapError((error) => error.message))
+  const requests = yield* ShellPermissions.requests(access, {
+    command: action.command,
+    program,
+    target,
+    local: true,
+    once: true,
+  }).pipe(Effect.mapError((error) => error.message))
   // No save patterns: approval applies only to the command stored in this automation.
-  if (owner) return yield* permission.assert({ ...input, ...(invocation ?? { sessionID: owner.id }) })
-  yield* permission.assertNotDeniedWithoutSession(input).pipe(Effect.provideService(Permission.Unattended, []))
+  yield* Effect.forEach(
+    requests,
+    (request) =>
+      permission.assert({
+        ...request,
+        ...(invocation ?? { sessionID: owner.id, agent: agent.id }),
+        metadata: { automation: name, trigger, unattended: true, command: action.command },
+      }),
+    { discard: true },
+  )
 })
 
 export const start = Effect.fnUntraced(function* (
-  owner: SessionSchema.Info | undefined,
+  owner: SessionSchema.Info,
   action: Automation.ShellAction,
   directory: string,
 ) {
@@ -53,22 +66,15 @@ export const start = Effect.fnUntraced(function* (
   const shell = yield* Shell.Service
   const select = yield* ShellSelect.Service
   const program = yield* select.resolve({ priority: "compat" })
-  const permission = yield* Permission.Service
   const info = yield* shell.create(
-    { command: action.command, cwd: directory, shell: program, metadata: owner && { sessionID: owner.id } },
+    { command: action.command, cwd: directory, shell: program, metadata: { sessionID: owner.id } },
     (input) =>
-      Effect.gen(function* () {
-        if (input.command !== action.command || input.cwd !== directory || input.shell !== program)
-          return yield* Effect.fail("A shell hook changed the approved invocation")
+      Effect.sync(() => {
+        // Hooks can set the environment, but the stored command and its working directory are fixed.
+        input.command = action.command
+        input.cwd = directory
+        input.shell = program
         input.timeout = 0
-        const check = yield* request(input.command, input.shell, input.cwd)
-        yield* (
-          owner
-            ? permission.assertNotDenied({ ...check, sessionID: owner.id })
-            : permission.assertNotDeniedWithoutSession(check)
-        )
-          // This grant is only in scope for the check of the stored command. Configured denies still win.
-          .pipe(Effect.provideService(Permission.Unattended, [{ action: "shell", resource: "*", effect: "allow" }]))
       }),
   )
   return shell.result(info).pipe(Effect.onInterrupt(() => shell.stop(info.id, "killed").pipe(Effect.ignore)))
