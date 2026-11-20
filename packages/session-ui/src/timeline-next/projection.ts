@@ -23,18 +23,10 @@ import {
   type TurnThinkingPlacement,
 } from "../timeline/turn-phase-machine"
 import { errorInfo } from "./errors"
-import { noticeEvent, toolEvent, workKey, type TimelineEvent } from "./events"
-import {
-  contentGroup,
-  contentShows,
-  echoesUserShell,
-  hidesActivity,
-  liveThinkingShows,
-  movedInPlace,
-  noticePlacement,
-  textShows,
-  toolRule,
-} from "./rules"
+import { factsOf } from "../timeline/facts"
+import { hidesActivity, placeContent, placeItems, placeNotice } from "../timeline/place"
+import { noticeEvent, workKey, type TimelineEvent } from "./events"
+import { echoesUserShell, liveThinkingShows, movedInPlace, sessionEvent, textShows } from "./rules"
 
 type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" | "idle" }>
 
@@ -149,7 +141,7 @@ export function createNextTimelineProjection(input: {
       turnDiffs: input.turnDiffs?.() ?? false,
       shows: (content) =>
         content.type === "tool"
-          ? contentShows(detail, content)
+          ? placeContent(content, detail, "next").placement !== "hidden"
           : (content.type === "text" || detail.thinking.placement !== "hidden") && textVisible().get(content)!(),
     })
   })
@@ -288,7 +280,8 @@ function constructRows(input: Input) {
   const visible = (content: Content) =>
     !(input.detail.commentary.placement === "hidden" && commentary.has(content)) && input.shows(content)
 
-  const noticeShows = (message: Notice) => noticePlacement(input.detail, message) !== "hidden"
+  const noticeShows = (message: Notice) =>
+    placeNotice(message, input.detail, "next", sessionEvent(message)) !== "hidden"
 
   // Your messages and the commands you ran always show; any other turn shows when something in it does.
   const visibleTurns = turns.filter(
@@ -571,7 +564,7 @@ function turnRows(
 
         return
       case "notice":
-        if (noticePlacement(detail, entry.message) === "hidden") return
+        if (placeNotice(entry.message, detail, "next", sessionEvent(entry.message)) === "hidden") return
         appendAssistantSegment(assistantSegment)
         assistantSegment = []
         rows.push(new TimelineRow.Notice({ userMessageID: turn.id, messageID: entry.message.id }))
@@ -735,9 +728,10 @@ function launches(
     key !== undefined &&
     group.refs.some((ref) => {
       const content = resolveContent(messageByID.get(ref.messageID), ref.partID)
-      const launch = content?.type === "tool" && toolRule(content).layout === "event" ? toolEvent(content) : undefined
 
-      return launch !== undefined && workKey(launch) === key
+      return (
+        content?.type === "tool" && factsOf([content]).some((fact) => fact.kind === "call" && fact.launch?.key === key)
+      )
     })
   )
 }
@@ -745,7 +739,7 @@ function launches(
 function noticeGroup(detail: TimelineDetail, message: SessionMessageInfo, event?: TimelineEvent) {
   if (event) return event.kind === "subagent" ? ("subagent" as const) : ("events" as const)
 
-  return noticePlacement(detail, message) === "grouped" ? ("context" as const) : undefined
+  return placeNotice(message, detail, "next", sessionEvent(message)) === "grouped" ? ("context" as const) : undefined
 }
 
 export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
@@ -918,8 +912,11 @@ function groupContent(
     adjacent = undefined
   }
 
-  items.forEach((item) => {
-    const type = contentGroup(detail, item.content, commentary)
+  const placed = placeItems(items, detail, "next", commentary)
+
+  items.forEach((item, index) => {
+    const group = placed[index]!.group
+    const type = group === "part" ? undefined : group
 
     if (type === "subagent") {
       flush()

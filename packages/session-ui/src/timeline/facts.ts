@@ -1,8 +1,12 @@
 import type { SessionMessageAssistant } from "@opencode/client/promise"
 import { getFilename } from "@opencode/util/path"
 import { Option, Predicate, Schema } from "effect"
-import { currentToolFailed, currentToolInput, currentToolMetadata } from "../message/current-tool-state"
-import type { TimelineDetail } from "./detail"
+import {
+  currentToolFailed,
+  currentToolGroupedRead,
+  currentToolInput,
+  currentToolMetadata,
+} from "../message/current-tool-state"
 import { isInterruptedError } from "./turn-phase-machine"
 
 /**
@@ -23,7 +27,9 @@ export type FactOutcome = { kind: "shell" | "subagent"; verb: FactVerb; failed: 
 
 /** What facts are read from: a message part, a user's shell command, or what background work reported. */
 export type FactPart =
-  | (Content & { id?: string; messageID?: string })
+  | (Tool & { id?: string; messageID?: string })
+  | { type: "text"; id?: string; messageID?: string; text?: string }
+  | { type: "reasoning"; id?: string; messageID?: string; text?: string }
   | { type: "shell"; id: string; messageID?: string }
   | { type: "notice"; id: string; messageID?: string }
   | { type: "outcome"; id: string; messageID?: string; outcome: FactOutcome }
@@ -37,6 +43,12 @@ export type CallFact = {
   mode: FactMode
   status: Tool["state"]["status"] | "user"
   failed: boolean
+  /** The user stopped it, by stopping the turn or cancelling its command. */
+  stopped: boolean
+  /** The model finished writing what to call it with. */
+  called: boolean
+  /** A plain file read, which reads well beside the reads around it. */
+  groupedRead: boolean
   /** Runs on after the call returns, reporting back as an outcome. */
   background: boolean
   path?: string
@@ -116,7 +128,19 @@ function partFacts(part: FactPart): Fact[] {
 
   if (part.type === "shell")
     return [
-      { kind: "call", id, name: "shell", tool: "shell", mode: "run", status: "user", failed: false, background: false },
+      {
+        kind: "call",
+        id,
+        name: "shell",
+        tool: "shell",
+        mode: "run",
+        status: "user",
+        failed: false,
+        stopped: false,
+        called: true,
+        groupedRead: false,
+        background: false,
+      },
     ]
 
   return toolFacts(part, id)
@@ -160,6 +184,9 @@ function toolFacts(tool: Tool, id: string): Fact[] {
     mode,
     status: state.status,
     failed: !stopped(tool) && currentToolFailed({ ...tool, name }),
+    stopped: stopped(tool),
+    called: Object.keys(currentToolInput(tool)).length > 0,
+    groupedRead: currentToolGroupedRead(tool),
     background,
   }
 
@@ -342,23 +369,4 @@ function shells(facts: readonly Fact[]) {
     verbs: Array.from(counts, ([verb, count]) => ({ verb, count })),
     failed: list.filter((outcome) => outcome.failed).length,
   }
-}
-
-/** The detail setting that shows or hides a fact. */
-export function categoryOf(fact: Fact): keyof TimelineDetail | undefined {
-  if (fact.kind === "thought") return "thinking"
-
-  if (fact.kind === "file") return "edit"
-
-  if (fact.kind === "outcome") return "notices"
-
-  if (fact.kind !== "call") return
-
-  if (fact.name === "shell" || fact.name === "execute") return "shell"
-
-  if (fact.mode === "edit") return "edit"
-
-  if (fact.name === "subagent") return "subagents"
-
-  return "tools"
 }

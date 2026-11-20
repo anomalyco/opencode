@@ -49,8 +49,8 @@ import { taskAgentName, ToolRegistry, type ContextGroupPart } from "../tools/too
 import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
-import { timelineCategory, type TimelineDetail } from "./detail"
-import { currentToolFailed } from "../message/current-tool-state"
+import type { TimelineDetail } from "./detail"
+import { placeContent } from "./place"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
 import {
@@ -601,18 +601,9 @@ export function createSessionTimelineRowRenderer(input: {
     if (item.type === "tool" && item.name === "execute") return true
 
     if (input.timelineDetail) {
-      const category = timelineCategory(item)
+      const opens = placeContent(item, input.timelineDetail(), "current").opens
 
-      if (
-        category &&
-        input.timelineDetail()[category].placement === "hidden" &&
-        item.type === "tool" &&
-        currentToolFailed(item)
-      )
-        return true
-
-      if (category === "shell" || category === "edit" || category === "thinking")
-        return input.timelineDetail()[category].details === "expanded"
+      if (opens !== undefined || item.type !== "reasoning") return opens
     }
 
     if (item.type === "reasoning") return input.reasoningMode() === "full"

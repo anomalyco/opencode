@@ -9,15 +9,11 @@ import type {
 } from "@opencode/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
 import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
-import {
-  currentContentDefaultOpen,
-  currentToolFailed,
-  currentToolGroupedRead,
-  currentToolHasLoadedFiles,
-} from "../message/current-tool-state"
+import { currentContentDefaultOpen, currentToolHasLoadedFiles } from "../message/current-tool-state"
 import { turnCommentary } from "./commentary"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
-import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
+import { timelineNoticeRequired, type TimelineDetail } from "./detail"
+import { placeContent, placeItems, placeNotice } from "./place"
 import {
   IDLE_TURN_PHASE,
   isInterruptedError,
@@ -417,7 +413,7 @@ export namespace Timeline {
       !(detail?.commentary.placement === "hidden" && commentary.has(content)) &&
       isRenderable(content, showReasoning, detail)
 
-    const visibleNotice = (message: Notice) => !detail || timelineNoticePlacement(message, detail) !== "hidden"
+    const visibleNotice = (message: Notice) => !detail || placeNotice(message, detail, "current") !== "hidden"
 
     const visibleTurns = detail
       ? turns.filter((turn) => {
@@ -505,7 +501,7 @@ export namespace Timeline {
                 message.type === "compaction" ||
                 message.type === "model-switched" ||
                 message.type === "location-switched" ||
-                (message.type === "synthetic" && timelineNoticePlacement(message, detail) === "separate")
+                (message.type === "synthetic" && placeNotice(message, detail, "current") === "separate")
                   ? [message.id]
                   : [],
               ),
@@ -636,7 +632,7 @@ export namespace Timeline {
 
           return
         case "notice":
-          if (detail && timelineNoticePlacement(entry.message, detail) === "hidden") return
+          if (detail && placeNotice(entry.message, detail, "current") === "hidden") return
           appendAssistantSegment(assistantSegment)
           assistantSegment = []
           rows.push(new TimelineRow.Notice({ userMessageID: turnID, messageID: entry.message.id }))
@@ -964,13 +960,11 @@ function renderable(content: Content, showReasoning: boolean, detail?: TimelineD
   if (content.type === "reasoning")
     return (detail ? detail.thinking.placement !== "hidden" : showReasoning) && !!content.text.trim()
 
-  if (detail && currentToolFailed(content)) return true
+  if (detail) return placeContent(content, detail, "current").placement !== "hidden"
 
   if (content.name === "todowrite") return false
 
   if (content.name === "question") return content.state.status !== "streaming" && content.state.status !== "running"
-
-  if (detail && detail[timelineCategory(content)!].placement === "hidden") return false
 
   return true
 }
@@ -1011,15 +1005,22 @@ function groupContent(
     adjacent = undefined
   }
 
-  items.forEach((item) => {
-    const type = contentGroupType(
-      item.content,
-      shellToolDefaultOpen,
-      editToolDefaultOpen,
-      adjacent?.type === "context" && adjacent.tools,
-      commentary,
-      detail,
-    )
+  const placed = detail ? placeItems(items, detail, "current", commentary) : undefined
+
+  items.forEach((item, index) => {
+    const group = placed?.[index]?.group
+
+    const type = placed
+      ? group === "context" || group === "read" || group === "file"
+        ? group
+        : undefined
+      : contentGroupType(
+          item.content,
+          shellToolDefaultOpen,
+          editToolDefaultOpen,
+          adjacent?.type === "context" && adjacent.tools,
+          commentary,
+        )
 
     if (type) {
       if (adjacent?.type !== type) flush()
@@ -1042,19 +1043,19 @@ function groupContent(
   return groups
 }
 
+// Without a detail setting, as in stories and embeds, groups follow the older shell and edit toggles.
 function contentGroupType(
   content: Content,
   shellExpanded: boolean,
   editExpanded: boolean,
   hasContextGroup: boolean,
   commentary: ReadonlySet<Content>,
-  detail?: TimelineDetail,
 ) {
-  if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup, detail)
+  if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup)
 
   if (content.type === "text") return commentary.has(content) ? "context" : undefined
 
-  return detail && detail.thinking.placement !== "grouped" ? undefined : "context"
+  return "context"
 }
 
 function toolGroupType(
@@ -1062,23 +1063,7 @@ function toolGroupType(
   shellExpanded: boolean,
   editExpanded: boolean,
   hasContextGroup: boolean,
-  detail?: TimelineDetail,
 ) {
-  if (detail) {
-    if (content.name === "question" && !currentToolFailed(content)) return undefined
-    const category = timelineCategory(content)!
-
-    if (detail[category].placement === "grouped") return "context"
-
-    if (currentToolGroupedRead(content)) return "read"
-
-    if (currentToolFailed(content)) return undefined
-
-    if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
-
-    return undefined
-  }
-
   if (content.name === "question" || currentToolHasLoadedFiles(content)) return undefined
 
   if (content.state.status === "error") {
