@@ -165,6 +165,37 @@ describe("Npm.cacheKey", () => {
   })
 })
 
+describe("Npm.followsLatest", () => {
+  test("follows name@latest and Git branches, and keeps everything else pinned or notify-only", async () => {
+    const commit = "0123456789abcdef0123456789abcdef01234567"
+    const specs = {
+      "plugin@latest": true,
+      "@acme/plugin@latest": true,
+      plugin: false,
+      "plugin@next": false,
+      "plugin@^1.2.0": false,
+      "plugin@1.2.0": false,
+      "github:acme/plugin": true,
+      "acme/plugin#dev": true,
+      "github:acme/plugins#dev::path:packages/plugin": true,
+      "git+ssh://git@github.com/acme%2Fplugins.git": true,
+      "git+https://example.com/acme/plugin.git#main": true,
+      // Without asking the remote a tag looks like a branch, and a short hash may be either.
+      "github:acme/plugin#v1.2.0": true,
+      "github:acme/plugin#0123456": true,
+      [`github:acme/plugin#${commit}`]: false,
+      [`git+ssh://git@github.com/acme/plugins.git#${commit}::path:packages/plugin`]: false,
+      "github:acme/plugin#semver:^1.2.0": false,
+      "./plugin": false,
+      "alias@npm:plugin@latest": false,
+    }
+    const followed = await Promise.all(
+      Object.keys(specs).map(async (spec) => [spec, await Npm.followsLatest(spec)] as const),
+    )
+    expect(Object.fromEntries(followed)).toEqual(specs)
+  })
+})
+
 describe("Npm.add", () => {
   test("locates cached scoped package specs without reifying", async () => {
     await using tmp = await tmpdir()

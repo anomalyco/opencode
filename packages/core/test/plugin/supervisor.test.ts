@@ -206,18 +206,37 @@ describe("PluginSupervisor", () => {
     }),
   )
 
-  it.effect("updates only packages written as name@latest when a newer version is out", () =>
+  it.effect("updates only name@latest and Git branch packages, once per check interval", () =>
     Effect.gen(function* () {
-      source.operations = ["latest-plugin@latest", "plain-plugin", "ranged-plugin@^1.0.0", "next-plugin@next"].map(
-        (target) => ({ type: "add" as const, target, options: {} }),
-      )
+      const follows = [
+        "latest-plugin@latest",
+        "github:acme/default-plugin",
+        "git+ssh://git@github.com/acme%2Fbranch-plugin.git#dev",
+        "github:acme/plugins#dev::path:packages/subdirectory-plugin",
+      ]
+      source.operations = [
+        ...follows,
+        "plain-plugin",
+        "ranged-plugin@^1.0.0",
+        "next-plugin@next",
+        "exact-plugin@1.0.0",
+        "github:acme/pinned-plugin#0123456789abcdef0123456789abcdef01234567",
+        "github:acme/ranged-plugin#semver:^1.0.0",
+      ].map((target) => ({ type: "add" as const, target, options: {} }))
       packages.available = true
       packages.updated = []
       const directory = yield* tmpdirScoped()
       const locations = yield* LocationServiceMap.Service
       yield* Effect.gen(function* () {
         yield* Plugin.Service
-        yield* advance(() => packages.updated.length > 0)
+        yield* advance(() => packages.updated.length >= follows.length)
+        // Each update reloads and checks again; the newer version is still reported but isn't installed twice.
+        yield* drain
+        expect(packages.updated.toSorted()).toEqual(follows.toSorted())
+        // The next interval's scheduled check installs again.
+        yield* TestClock.adjust(PluginUpdate.interval)
+        yield* advance(() => packages.updated.length >= follows.length * 2)
+        yield* drain
       }).pipe(
         Effect.scoped,
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
@@ -228,7 +247,7 @@ describe("PluginSupervisor", () => {
           }),
         ),
       )
-      expect(packages.updated).toEqual(["latest-plugin@latest"])
+      expect(packages.updated.toSorted()).toEqual([...follows, ...follows].toSorted())
     }),
   )
 

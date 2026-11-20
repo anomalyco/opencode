@@ -136,8 +136,8 @@ export const layer = Layer.effectDiscard(
     let running = new Map<string, Plugin.Generation>()
     let outdated = new Set<string>()
     const updating = new Set<string>()
-    // The check interval in which each `@latest` plugin last updated on its own. One attempt per interval, so an update
-    // that doesn't take, or a new version that fails to load, isn't retried on every reload.
+    // The check interval in which each self-updating plugin last updated on its own. One attempt per interval, so an
+    // update that doesn't take, or a new version that fails to load, isn't retried on every reload.
     const attempted = new Map<string, number>()
     let cycle = 0
     let generation = 0
@@ -206,20 +206,19 @@ export const layer = Layer.effectDiscard(
         Effect.flatMap((checked) =>
           Effect.gen(function* () {
             if (current !== generation) return
-            // Only a plugin written as `name@latest` updates on its own; the update reloads it.
+            // Only `name@latest` and Git branch plugins update on their own; the update reloads them.
             yield* Effect.forEach(
-              checked.filter(
-                ([target, available]) =>
-                  available &&
-                  target.endsWith("@latest") &&
-                  attempted.get(target) !== cycle,
-              ),
-              ([target]) =>
-                // Recorded first: the update itself triggers reloads, which check again while it runs.
-                Effect.sync(() => attempted.set(target, cycle)).pipe(
-                  Effect.andThen(updates.update(target)),
-                  Effect.catchCause((cause) => Effect.logWarning("failed to update plugin", { target, cause })),
-                ),
+              checked,
+              ([target, available]) =>
+                Effect.gen(function* () {
+                  if (!available || !(yield* Effect.promise(() => Npm.followsLatest(target)))) return
+                  if (attempted.get(target) === cycle) return
+                  // Recorded first: the update itself triggers reloads, which check again while it runs.
+                  attempted.set(target, cycle)
+                  yield* updates
+                    .update(target)
+                    .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to update plugin", { target, cause })))
+                }),
               { concurrency: "unbounded", discard: true },
             )
             const next = new Set(checked.flatMap(([target, available]) => (available ? [target] : [])))
