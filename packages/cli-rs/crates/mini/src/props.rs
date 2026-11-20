@@ -160,20 +160,24 @@ impl Fold {
                 let item = content.iter_mut().find(|item| item["id"] == call.as_str()).expect("started above");
                 let state = &mut item["state"];
                 let input = state["input"].as_object().cloned().unwrap_or_default();
-                match &tool["session.tool.".len()..] {
-                    "input.started" => {
+                match tool {
+                    "session.tool.input.started" => {
                         item["name"] = data["name"].clone();
                         item["state"] = json!({ "status": "streaming", "input": "" });
                     }
-                    "called" if state["status"] != "completed" && state["status"] != "error" => {
+                    "session.tool.called" if state["status"] != "completed" && state["status"] != "error" => {
                         *state = json!({ "status": "running", "input": data["input"], "metadata": {} });
                     }
-                    "progress" if state["status"] == "running" => state["metadata"] = data["metadata"].clone(),
-                    "success" => {
+                    "session.tool.progress" if state["status"] == "running" => {
+                        state["metadata"] = data["metadata"].clone()
+                    }
+                    "session.tool.success" => {
                         *state = json!({ "status": "completed", "input": input, "content": data["content"],
                             "metadata": data["metadata"] });
                     }
-                    "failed" => *state = json!({ "status": "error", "input": input, "error": data["error"] }),
+                    "session.tool.failed" => {
+                        *state = json!({ "status": "error", "input": input, "error": data["error"] })
+                    }
                     _ => {}
                 }
             }
