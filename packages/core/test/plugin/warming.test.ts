@@ -117,9 +117,11 @@ const run = Effect.fnUntraced(function* (
       Config.testLayer([new Document({ type: "document", info: Schema.decodeUnknownSync(Info)({ warming }) })]),
     ),
   )
-  const hook = (name: string) => {
+  const hook = (name: string, override?: Partial<SessionContext>) => {
     const callback = hooks.get(name)
-    return callback ? callback({ ...context }) : Effect.die(`warming plugin did not register a ${name} hook`)
+    return callback
+      ? callback({ ...context, ...override })
+      : Effect.die(`warming plugin did not register a ${name} hook`)
   }
   const durable = { aggregateID: sessionID, seq: Event.Seq.make(0), version: Event.Version.make(1) }
   const emit = (event: Effect.Effect<void>) => event.pipe(Effect.andThen(Effect.yieldNow))
@@ -127,6 +129,7 @@ const run = Effect.fnUntraced(function* (
   const send = hook("context")
   /** A compaction request being sent. */
   const compact = hook("compaction")
+  const compactWith = (ref: SessionContext["model"]) => hook("compaction", { model: ref })
   /** A step ending with the given token usage. */
   const stepEnd = (tokens: PingUsage) =>
     emit(
@@ -175,7 +178,7 @@ const run = Effect.fnUntraced(function* (
   /** One whole turn whose response ends right away. */
   const turn = send.pipe(Effect.andThen(end))
   const at = (minutes: number) => TestClock.setTime(minutes * 60_000).pipe(Effect.andThen(Effect.yieldNow))
-  return { warms, send, stepEnd, end, compact, compactionFailed, remove, turn, at }
+  return { warms, send, stepEnd, end, compact, compactWith, compactionFailed, remove, turn, at }
 })
 
 describe("WarmingPlugin interval", () => {
@@ -319,6 +322,31 @@ describe("WarmingPlugin cache miss", () => {
         { input: 10, read: 1000, write: 0 },
       ])
       yield* warming.send
+      yield* warming.stepEnd({ input: 10, read: 1000, write: 0 })
+      yield* warming.end
+      for (const minutes of [4, 8, 12]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("doesn't let a compaction hook on another model overwrite the step model before step.ended", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(
+        true,
+        undefined,
+        [
+          { input: 1000, read: 0, write: 0 },
+          { input: 10, read: 1000, write: 0 },
+        ],
+        Duration.zero,
+        [],
+        model,
+      )
+      yield* warming.send
+      yield* warming.compactWith({
+        id: Model.ID.make("compaction-model"),
+        providerID: model.providerID,
+      })
       yield* warming.stepEnd({ input: 10, read: 1000, write: 0 })
       yield* warming.end
       for (const minutes of [4, 8, 12]) yield* warming.at(minutes)

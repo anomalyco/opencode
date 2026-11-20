@@ -162,14 +162,13 @@ export const Plugin = define({
       }
     })
 
-    const hook = (tracked: boolean) => (event: SessionHooks["context"]) =>
+    const hook = (kind: "context" | "compaction" | "generate") => (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
         const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
         if (session.parentID) return
-        if (tracked) {
-          sessionModels.set(event.sessionID, modelKey(event.model))
-          if (!running.has(event.sessionID)) running.set(event.sessionID, yield* Deferred.make<void>())
-        }
+        if (kind === "context") sessionModels.set(event.sessionID, modelKey(event.model))
+        if (kind !== "generate" && !running.has(event.sessionID))
+          running.set(event.sessionID, yield* Deferred.make<void>())
         const stop = FiberMap.remove(loops, event.sessionID)
         yield* Decision.$match(yield* decide(event), {
           Warm: ({ settings }) =>
@@ -213,10 +212,10 @@ export const Plugin = define({
             }),
         })
       })
-    yield* ctx.session.hook("context", hook(true))
-    yield* ctx.session.hook("compaction", hook(true))
+    yield* ctx.session.hook("context", hook("context"))
+    yield* ctx.session.hook("compaction", hook("compaction"))
     // Generate requests report no end, so they don't count as running.
-    yield* ctx.session.hook("generate", hook(false))
+    yield* ctx.session.hook("generate", hook("generate"))
 
     // A turn always ends with an execution event and a compaction with its own, so a request that ends without its
     // own event can't stay running past them.
