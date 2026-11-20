@@ -40,6 +40,7 @@ export function createFieldFocus() {
   const [visible, setVisible] = createSignal(false)
 
   let pointer = false
+  let returning = false
   let timer: ReturnType<typeof setTimeout> | undefined
 
   const clearPointer = () => {
@@ -60,10 +61,14 @@ export function createFieldFocus() {
     },
     enter: (element: HTMLElement) => {
       fieldRings.set(element, setVisible)
-      setVisible(restoring.get(element) ?? !pointer)
+      setVisible(restoring.get(element) ?? (!pointer && !returning))
+      returning = false
       clearPointer()
     },
-    leave: () => {
+    leave: (event: FocusEvent) => {
+      // Switching to another window blurs the field but leaves it the active element, and focus returns to it on the way
+      // back. That return isn't the user moving focus to the field, so it shows no ring.
+      returning = event.currentTarget === document.activeElement
       setVisible(false)
       clearPointer()
     },
