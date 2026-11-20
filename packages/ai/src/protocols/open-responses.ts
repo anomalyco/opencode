@@ -550,6 +550,7 @@ const lowerToolCall = (
   part: ToolCallPart,
   providerMetadataKey: string,
   custom: OpenAIFreeform.Custom | undefined,
+  toolNames: ReadonlySet<string>,
 ): OpenResponsesInputItem => {
   const id = OpenAIFreeform.keepsItemID(part.providerMetadata, providerMetadataKey, custom !== undefined)
     ? itemID(part.providerMetadata, providerMetadataKey)
@@ -566,7 +567,7 @@ const lowerToolCall = (
     type: "function_call",
     ...(id === undefined ? {} : { id }),
     call_id: part.id,
-    name: part.name,
+    name: ProviderShared.openAIReplayToolName(part.name, toolNames),
     namespace: part.namespace,
     arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   }
@@ -659,6 +660,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
   const custom = OpenAIFreeform.tools(request)
   const customTool = (part: ToolCallPart | ToolResultPart) =>
     part.namespace === undefined ? custom.get(part.name) : undefined
+  const toolNames = new Set(ProviderShared.flattenTools(request.tools).map((tool) => tool.name))
 
   for (const message of request.messages) {
     const rawMetadata =
@@ -760,7 +762,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part, providerMetadataKey, customTool(part)))
+          input.push(lowerToolCall(part, providerMetadataKey, customTool(part), toolNames))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
