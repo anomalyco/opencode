@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use indexmap::{IndexMap, IndexSet};
@@ -742,11 +742,6 @@ fn route_intersects_labels(route: &Route, labels: &[LabelLayout]) -> bool {
     labels.iter().any(|label| label_line_rects(label).any(|rect| path_intersects_bounds(&route.points, &rect, None)))
 }
 
-fn paths_intersect(left: &[Point], right: &[Point]) -> bool {
-    let occupied: HashSet<Point> = orthogonal_path_points(left).into_iter().collect();
-    orthogonal_path_points(right).iter().any(|point| occupied.contains(point))
-}
-
 fn endpoint_disjoint(left: &Edge, right: &Edge) -> bool {
     left.from != right.from && left.from != right.to && left.to != right.from && left.to != right.to
 }
@@ -856,6 +851,13 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
     let others = || routes.iter().enumerate().filter(move |(other, _)| *other != index).map(|(_, route)| route);
     let other_labels: Vec<LabelLayout> =
         others().filter(|other| !other.edge.label.is_empty()).map(route_label_layout).collect();
+    // The other routes on each cell, so a candidate looks up its own cells instead of walking every route.
+    let mut routes_at: HashMap<Point, Vec<&Route>> = HashMap::new();
+    for other in others() {
+        for cell in orthogonal_path_points(&other.points) {
+            routes_at.entry(cell).or_default().push(other);
+        }
+    }
     let intersects_node = |candidate: &Route| {
         nodes.iter().any(|bound| {
             let source = bound.id == route.edge.from;
@@ -893,11 +895,14 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
             })
     };
     let intersects_routing = |candidate: &Route| {
-        intersects_structural(candidate)
-            || endpoint_conflicts(candidate, others())
-            || others().any(|other| {
-                endpoint_disjoint(&candidate.edge, &other.edge) && paths_intersect(&candidate.points, &other.points)
-            })
+        if intersects_structural(candidate) || endpoint_conflicts(candidate, others()) {
+            return true;
+        }
+        orthogonal_path_points(&candidate.points).iter().any(|cell| {
+            routes_at
+                .get(cell)
+                .is_some_and(|routes| routes.iter().any(|other| endpoint_disjoint(&candidate.edge, &other.edge)))
+        })
     };
     let intersects = |candidate: &Route| {
         let label = (!candidate.edge.label.is_empty()).then(|| route_label_layout(candidate));
