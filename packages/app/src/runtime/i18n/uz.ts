@@ -207,6 +207,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Tezkor",
   "session.child.backToParent": "Asosiy sessiyaga qaytish.",
+  "session.child.message.placeholder": "Bu subagentga xabar yuborish",
   "prompt.action.attachFile": "Fayllarni qo'shish",
   "prompt.toast.attachmentDuplicate.title": "Bu fayl allaqachon yuklangan",
   "prompt.toast.modelAgentRequired.title": "Agent va modelni tanlang",
@@ -1247,6 +1248,8 @@ export const dict = {
     "Agent bajargan ishlarni guruhlaydigan, qadam ostida bitta holat qatori bo‘lgan qayta ishlangan sessiya vaqt jadvali",
   "settings.experimental.row.newQuestionUI.title": "Yangi savol interfeysi",
   "settings.experimental.row.newQuestionUI.description": "Klaviaturaga yo‘naltirilgan savol panelini sinab ko‘ring",
+  "settings.experimental.row.subagentComposer.title": "Subagent yozuv maydoni",
+  "settings.experimental.row.subagentComposer.description": "Subagentga uning o'z sessiyasidan xabar yuborish",
   "settings.experimental.row.sidebarOrganize.title": "Vertikal yon panelni tartiblash",
   "settings.experimental.row.sidebarOrganize.description":
     "Sessiyalar yon panelda qanday ro‘yxatlanishini tanlang. Faqat yon varaqlarga taalluqli.",

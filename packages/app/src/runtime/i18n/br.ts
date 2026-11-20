@@ -424,6 +424,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Voltar à sessão principal.",
+  "session.child.message.placeholder": "Kas ur gemennadenn d'an isagent-mañ",
   "prompt.action.attachFile": "Adicionar arquivos",
   "prompt.toast.attachmentDuplicate.title": "Este arquivo já foi enviado",
   "prompt.toast.modelAgentRequired.title": "Selecione um agente e modelo",
@@ -1279,6 +1280,8 @@ export const dict = {
     "Uma linha do tempo da sessão redesenhada que agrupa o que o agente fez, com uma única linha de status abaixo do turno",
   "settings.experimental.row.newQuestionUI.title": "Nova interface de perguntas",
   "settings.experimental.row.newQuestionUI.description": "Visualizar o painel de perguntas focado no teclado",
+  "settings.experimental.row.subagentComposer.title": "Embanner isagent",
+  "settings.experimental.row.subagentComposer.description": "Kas ur gemennadenn d'an isagent eus e sesioun dezhañ",
   "settings.experimental.row.sidebarOrganize.title": "Organizar barra lateral vertical",
   "settings.experimental.row.sidebarOrganize.description":
     "Escolha como as sessões são listadas na barra lateral. Aplica-se apenas às abas laterais.",

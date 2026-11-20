@@ -211,6 +211,7 @@ export const dict = {
   "prompt.mode.shell": "शेल",
   "prompt.mode.normal": "प्रम्प्ट",
   "session.child.backToParent": "मुख्य सत्रमा फर्कनुहोस्।",
+  "session.child.message.placeholder": "यो सह-एजेन्टलाई सन्देश पठाउनुहोस्",
   "prompt.action.attachFile": "फाइलहरू थप्नुहोस्",
   "prompt.toast.attachmentDuplicate.title": "यो फाइल पहिले नै अपलोड गरिएको छ",
   "prompt.toast.modelAgentRequired.title": "एक एजेन्ट र मोडेल चयन गर्नुहोस्",
@@ -1235,6 +1236,8 @@ export const dict = {
     "एजेन्टले गरेका कामलाई समूहबद्ध गर्ने, पालोको तल एउटा स्थिति लाइनसहितको पुनः डिजाइन गरिएको सत्र समयरेखा",
   "settings.experimental.row.newQuestionUI.title": "नयाँ प्रश्न UI",
   "settings.experimental.row.newQuestionUI.description": "किबोर्ड-प्रथम प्रश्न डकको पूर्वावलोकन गर्नुहोस्",
+  "settings.experimental.row.subagentComposer.title": "सह-एजेन्ट कम्पोजर",
+  "settings.experimental.row.subagentComposer.description": "सह-एजेन्टलाई उसको आफ्नै सत्रबाट सन्देश पठाउनुहोस्",
   "settings.experimental.row.sidebarOrganize.title": "ठाडो साइडबार व्यवस्थित गर्नुहोस्",
   "settings.experimental.row.sidebarOrganize.description":
     "साइडबारमा सत्रहरू कसरी सूचीबद्ध हुने छान्नुहोस्। साइड ट्याबहरूमा मात्र लागू हुन्छ।",

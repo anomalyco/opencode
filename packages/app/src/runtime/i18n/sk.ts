@@ -232,6 +232,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Výzva",
   "session.child.backToParent": "Späť na hlavnú reláciu.",
+  "session.child.message.placeholder": "Poslať správu tomuto podagentovi",
   "prompt.action.attachFile": "Pridať súbory",
   "prompt.toast.attachmentDuplicate.title": "Tento súbor už bol nahraný",
   "prompt.toast.modelAgentRequired.title": "Vyberte agenta a model",
@@ -1280,6 +1281,8 @@ export const dict = {
     "Prepracovaná časová os relácie, ktorá zoskupuje činnosť agenta, s jedným stavovým riadkom pod krokom",
   "settings.experimental.row.newQuestionUI.title": "Nové rozhranie otázok",
   "settings.experimental.row.newQuestionUI.description": "Ukážka panela otázok ovládaného primárne klávesnicou",
+  "settings.experimental.row.subagentComposer.title": "Editor podagenta",
+  "settings.experimental.row.subagentComposer.description": "Poslať správu podagentovi z jeho vlastnej relácie",
   "settings.experimental.row.sidebarOrganize.title": "Usporiadanie zvislého bočného panela",
   "settings.experimental.row.sidebarOrganize.description":
     "Vyberte, ako sa relácie zobrazujú v bočnom paneli. Platí iba pre bočné karty.",

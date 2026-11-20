@@ -210,6 +210,7 @@ export const dict = {
   "prompt.mode.shell": "សែល",
   "prompt.mode.normal": "ប្រអប់បញ្ចូល",
   "session.child.backToParent": "ត្រឡប់ទៅសម័យមេ។",
+  "session.child.message.placeholder": "ផ្ញើសារទៅភ្នាក់ងាររងនេះ",
   "prompt.action.attachFile": "បន្ថែមឯកសារ",
   "prompt.toast.attachmentDuplicate.title": "ឯកសារនេះត្រូវបានផ្ទុកឡើងរួចហើយ",
   "prompt.toast.uploading.percent": "{{percent}}%",
@@ -1223,6 +1224,8 @@ export const dict = {
     "បន្ទាត់ពេលវេលាសម័យដែលបានរចនាឡើងវិញ ដែលដាក់ជាក្រុមនូវអ្វីដែលភ្នាក់ងារបានធ្វើ ជាមួយបន្ទាត់ស្ថានភាពមួយនៅខាងក្រោមវេន",
   "settings.experimental.row.newQuestionUI.title": "UI សំណួរថ្មី",
   "settings.experimental.row.newQuestionUI.description": "មើលផ្ទាំងសំណួរដែលផ្តោតលើក្តារចុចជាមុន",
+  "settings.experimental.row.subagentComposer.title": "កម្មវិធីសរសេរភ្នាក់ងាររង",
+  "settings.experimental.row.subagentComposer.description": "ផ្ញើសារទៅភ្នាក់ងាររងពីសេសសិនរបស់វា",
   "settings.experimental.row.sidebarOrganize.title": "រៀបចំរបារចំហៀងបញ្ឈរ",
   "settings.experimental.row.sidebarOrganize.description":
     "ជ្រើសរបៀបរាយបញ្ជីសម័យក្នុងរបារចំហៀង។ អនុវត្តចំពោះផ្ទាំងចំហៀងតែប៉ុណ្ណោះ។",

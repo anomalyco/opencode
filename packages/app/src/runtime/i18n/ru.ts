@@ -223,6 +223,7 @@ export const dict = {
   "prompt.mode.shell": "Оболочка",
   "prompt.mode.normal": "Промпт",
   "session.child.backToParent": "Вернуться к основной сессии.",
+  "session.child.message.placeholder": "Отправить сообщение этому субагенту",
 
   "prompt.action.attachFile": "Прикрепить файл",
 
@@ -1346,6 +1347,8 @@ export const dict = {
     "Переработанная хронология сессии, которая группирует действия агента и показывает одну строку статуса под ходом",
   "settings.experimental.row.newQuestionUI.title": "Новый интерфейс вопросов",
   "settings.experimental.row.newQuestionUI.description": "Предпросмотр панели вопросов с управлением с клавиатуры",
+  "settings.experimental.row.subagentComposer.title": "Ввод для субагента",
+  "settings.experimental.row.subagentComposer.description": "Отправить сообщение субагенту из его собственной сессии",
   "settings.experimental.row.sidebarOrganize.title": "Упорядочить вертикальную боковую панель",
   "settings.experimental.row.sidebarOrganize.description":
     "Выберите, как сессии отображаются на боковой панели. Применяется только к боковым вкладкам.",

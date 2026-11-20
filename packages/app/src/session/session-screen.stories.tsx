@@ -283,6 +283,8 @@ export const ChildSession = {
       title="Inspect the child Session"
       description={description}
       document={subagentDocument}
+      childSessionID="ses_child_surface"
+      subagentComposer
       child={{
         agent: "surveyor",
         model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
@@ -299,6 +301,8 @@ export const ChildSessionNoOutcome = {
       title="Inspect a child Session with no recorded outcome"
       description={description}
       document={subagentDocument}
+      childSessionID="ses_child_surface_no_outcome"
+      subagentComposer
       child={{
         agent: "surveyor",
         model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
@@ -308,12 +312,32 @@ export const ChildSessionNoOutcome = {
   ),
 }
 
-function finishedChild(title: string, status: Exclude<SubagentStatus, "running">) {
+// The setting is off by default, so this story omits `subagentComposer` to show the shipped surface.
+export const ChildSessionComposerOff = {
+  render: () => (
+    <SessionPreview
+      title="Inspect a child Session without the subagent composer"
+      description={description}
+      document={subagentDocument}
+      childSessionID="ses_child_surface_composer_off"
+      child={{
+        agent: "surveyor",
+        model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
+        status: "running",
+        started: Date.now() - 65_000,
+      }}
+    />
+  ),
+}
+
+function finishedChild(title: string, status: Exclude<SubagentStatus, "running">, childSessionID: string) {
   return (
     <SessionPreview
       title={title}
       description={description}
       document={subagentDocument}
+      childSessionID={childSessionID}
+      subagentComposer
       child={{
         agent: "surveyor",
         model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
@@ -326,15 +350,15 @@ function finishedChild(title: string, status: Exclude<SubagentStatus, "running">
 }
 
 export const ChildSessionDone = {
-  render: () => finishedChild("Inspect a finished child Session", "succeeded"),
+  render: () => finishedChild("Inspect a finished child Session", "succeeded", "ses_child_surface_done"),
 }
 
 export const ChildSessionFailed = {
-  render: () => finishedChild("Inspect a failed child Session", "failed"),
+  render: () => finishedChild("Inspect a failed child Session", "failed", "ses_child_surface_failed"),
 }
 
 export const ChildSessionInterrupted = {
-  render: () => finishedChild("Inspect an interrupted child Session", "interrupted"),
+  render: () => finishedChild("Inspect an interrupted child Session", "interrupted", "ses_child_surface_interrupted"),
 }
 
 export const MobileLayout = {

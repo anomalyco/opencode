@@ -36,6 +36,7 @@ import type { Upload } from "../attachments/uploads"
 import { CommentCard, commentCardTarget, quoteTooltip } from "@opencode/session-ui/comment-card"
 import { typeLabel } from "@opencode/session-ui/message-file"
 import { getFilename } from "@opencode/util/path"
+import { TOUCH_MEDIA_QUERY } from "../touch"
 import { Skill } from "@opencode/schema/skill"
 import type {
   ComposerAgentPart,
@@ -117,7 +118,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
   // A history preview holds the composer at the height it had when the list opened.
   const historyHeight = createMemo(() => composerHistoryPreviewHeight(state))
   // Phones and tablets, whatever their width: a narrow desktop window keeps the desktop composer.
-  const touch = createMediaQuery("(hover: none) and (pointer: coarse)")
+  const touch = createMediaQuery(TOUCH_MEDIA_QUERY)
   // The shell's slot at the bottom of the screen; without one (a story), the touch bar stays under the composer.
   const [dock, setDock] = createSignal<HTMLElement>()
 

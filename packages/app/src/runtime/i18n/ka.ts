@@ -206,6 +206,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "მოთხოვნა",
   "session.child.backToParent": "უკან მთავარ სესიაზე.",
+  "session.child.message.placeholder": "შეტყობინების გაგზავნა ამ ქვეაგენტთან",
   "prompt.action.attachFile": "ფაილების დამატება",
   "prompt.toast.attachmentDuplicate.title": "ეს ფაილი უკვე ატვირთულია",
   "prompt.toast.modelAgentRequired.title": "აირჩიეთ აგენტი და მოდელი",
@@ -1235,6 +1236,8 @@ export const dict = {
     "სესიის გადამუშავებული დროის ხაზი, რომელიც აჯგუფებს აგენტის ქმედებებს და სვლის ქვემოთ აჩვენებს ერთ სტატუსის ხაზს",
   "settings.experimental.row.newQuestionUI.title": "კითხვების ახალი ინტერფეისი",
   "settings.experimental.row.newQuestionUI.description": "კლავიატურაზე ორიენტირებული კითხვების პანელის წინასწარი ნახვა",
+  "settings.experimental.row.subagentComposer.title": "ქვეაგენტის რედაქტორი",
+  "settings.experimental.row.subagentComposer.description": "გაუგზავნეთ შეტყობინება ქვეაგენტს მისივე სესიიდან",
   "settings.experimental.row.sidebarOrganize.title": "ვერტიკალური გვერდითი ზოლის ორგანიზება",
   "settings.experimental.row.sidebarOrganize.description":
     "აირჩიეთ, როგორ ჩამოითვალოს სესიები გვერდით ზოლში. ეხება მხოლოდ გვერდით ჩანართებს.",

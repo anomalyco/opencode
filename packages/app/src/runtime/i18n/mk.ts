@@ -207,6 +207,7 @@ export const dict = {
   "prompt.mode.shell": "Школка",
   "prompt.mode.normal": "Прашај",
   "session.child.backToParent": "Назад на главната сесија.",
+  "session.child.message.placeholder": "Испрати порака до овој подагент",
   "prompt.action.attachFile": "Додадете датотеки",
   "prompt.toast.attachmentDuplicate.title": "Оваа датотека е веќе поставена",
   "prompt.toast.modelAgentRequired.title": "Изберете агент и модел",
@@ -1243,6 +1244,8 @@ export const dict = {
     "Редизајнирана временска линија на сесијата што групира што направил агентот, со еден статусен ред под одговорот",
   "settings.experimental.row.newQuestionUI.title": "Нов интерфејс за прашања",
   "settings.experimental.row.newQuestionUI.description": "Прегледајте ја панелата за прашања прилагодена за тастатура",
+  "settings.experimental.row.subagentComposer.title": "Уредувач на подагент",
+  "settings.experimental.row.subagentComposer.description": "Испрати порака до подагент од неговата сесија",
   "settings.experimental.row.sidebarOrganize.title": "Организирај вертикална странична лента",
   "settings.experimental.row.sidebarOrganize.description":
     "Изберете како се прикажуваат сесиите во страничната лента. Важи само за страничните картички.",

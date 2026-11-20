@@ -206,6 +206,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Viip",
   "session.child.backToParent": "Tagasi põhiseansse.",
+  "session.child.message.placeholder": "Saada sellele allagendile sõnum",
   "prompt.action.attachFile": "Lisa faile",
   "prompt.toast.attachmentDuplicate.title": "See fail on juba üles laaditud",
   "prompt.toast.modelAgentRequired.title": "Valige agent ja mudel",
@@ -1221,6 +1222,8 @@ export const dict = {
     "Ümber kujundatud seansi ajaskaala, mis rühmitab agendi tegevused ja näitab vooru all üht olekurida",
   "settings.experimental.row.newQuestionUI.title": "Uus küsimuste liides",
   "settings.experimental.row.newQuestionUI.description": "Vaata klaviatuurikeskse küsimuste doki eelvaadet",
+  "settings.experimental.row.subagentComposer.title": "Allagendi koostaja",
+  "settings.experimental.row.subagentComposer.description": "Saada allagendile sõnum tema enda seansist",
   "settings.experimental.row.sidebarOrganize.title": "Korrasta vertikaalset külgriba",
   "settings.experimental.row.sidebarOrganize.description":
     "Vali, kuidas seansse külgribal loetletakse. Kehtib ainult külgvahekaartidele.",

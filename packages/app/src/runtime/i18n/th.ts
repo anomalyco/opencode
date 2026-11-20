@@ -228,6 +228,7 @@ export const dict = {
   "prompt.mode.shell": "เชลล์",
   "prompt.mode.normal": "พรอมต์",
   "session.child.backToParent": "กลับไปยังเซสชันหลัก",
+  "session.child.message.placeholder": "ส่งข้อความถึงเอเจนต์ย่อยนี้",
 
   "prompt.action.attachFile": "แนบไฟล์",
 
@@ -1268,6 +1269,8 @@ export const dict = {
     "ไทม์ไลน์เซสชันที่ออกแบบใหม่ ซึ่งจัดกลุ่มสิ่งที่เอเจนต์ทำ พร้อมบรรทัดสถานะเดียวใต้เทิร์น",
   "settings.experimental.row.newQuestionUI.title": "UI คำถามใหม่",
   "settings.experimental.row.newQuestionUI.description": "ดูตัวอย่างแผงคำถามที่เน้นการใช้แป้นพิมพ์",
+  "settings.experimental.row.subagentComposer.title": "ช่องพิมพ์เอเจนต์ย่อย",
+  "settings.experimental.row.subagentComposer.description": "ส่งข้อความถึงเอเจนต์ย่อยจากเซสชันของมันเอง",
   "settings.experimental.row.sidebarOrganize.title": "จัดระเบียบแถบด้านข้างแนวตั้ง",
   "settings.experimental.row.sidebarOrganize.description":
     "เลือกวิธีแสดงรายการเซสชันในแถบด้านข้าง ใช้กับแท็บด้านข้างเท่านั้น",

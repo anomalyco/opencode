@@ -211,6 +211,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "ပင်မစက်ရှင်သို့ ပြန်သွားရန်။",
+  "session.child.message.placeholder": "ဤခွဲအေးဂျင့်ထံ မက်ဆေ့ချ်ပို့ရန်",
   "prompt.action.attachFile": "ဖိုင်များထည့်ပါ။",
   "prompt.toast.attachmentDuplicate.title": "ဤဖိုင်ကို အပ်လုဒ်လုပ်ပြီးပါပြီ။",
   "prompt.toast.uploading.percent": "{{percent}}%",
@@ -1244,6 +1245,8 @@ export const dict = {
     "အေးဂျင့်လုပ်ဆောင်ခဲ့သည်များကို အုပ်စုဖွဲ့ပြီး အလှည့်အောက်တွင် အခြေအနေလိုင်းတစ်ကြောင်းပြသသော ပြန်လည်ဒီဇိုင်းထားသည့် စက်ရှင်အချိန်ဇယား",
   "settings.experimental.row.newQuestionUI.title": "မေးခွန်း UI အသစ်",
   "settings.experimental.row.newQuestionUI.description": "ကီးဘုတ်ဦးစားပေး မေးခွန်းအကွက်ကို အစမ်းကြည့်ပါ",
+  "settings.experimental.row.subagentComposer.title": "ခွဲအေးဂျင့် စာရေးကွက်",
+  "settings.experimental.row.subagentComposer.description": "၎င်း၏ကိုယ်ပိုင်စက်ရှင်မှ ခွဲအေးဂျင့်ထံ မက်ဆေ့ချ်ပို့ရန်",
   "settings.experimental.row.sidebarOrganize.title": "ဒေါင်လိုက် ဘေးဘားကို စီစဉ်ရန်",
   "settings.experimental.row.sidebarOrganize.description":
     "ဘေးဘားတွင် စက်ရှင်များ စာရင်းပြပုံကို ရွေးပါ။ ဘေးတက်ဘ်များတွင်သာ သက်ရောက်သည်။",

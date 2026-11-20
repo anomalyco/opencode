@@ -210,6 +210,7 @@ export const dict = {
   "prompt.mode.shell": "ෂෙල්",
   "prompt.mode.normal": "ප්‍රොම්ප්ට්",
   "session.child.backToParent": "ප්‍රධාන සැසිය වෙත ආපසු.",
+  "session.child.message.placeholder": "මෙම උප නියෝජිතයාට පණිවිඩයක් යවන්න",
   "prompt.action.attachFile": "ගොනු එකතු කරන්න",
   "prompt.toast.attachmentDuplicate.title": "මෙම ගොනුව දැනටමත් උඩුගත කර ඇත",
   "prompt.toast.modelAgentRequired.title": "නියෝජිතයෙකු සහ ආකෘතියක් තෝරන්න",
@@ -1236,6 +1237,8 @@ export const dict = {
     "නියෝජිතයා කළ දේ සමූහගත කරන, වාරයට පහළින් එක් තත්ත්ව පේළියක් සහිත නැවත සැලසුම් කළ සැසි කාලරේඛාවක්",
   "settings.experimental.row.newQuestionUI.title": "නව ප්‍රශ්න UI",
   "settings.experimental.row.newQuestionUI.description": "යතුරුපුවරුව-මූලික ප්‍රශ්න ඩොක් එක පෙරදසුන් කරන්න",
+  "settings.experimental.row.subagentComposer.title": "උප නියෝජිත සංයුකාරකය",
+  "settings.experimental.row.subagentComposer.description": "එහිම සැසියෙන් උප නියෝජිතයෙකුට පණිවිඩයක් යවන්න",
   "settings.experimental.row.sidebarOrganize.title": "සිරස් පැති තීරුව සංවිධානය කරන්න",
   "settings.experimental.row.sidebarOrganize.description":
     "පැති තීරුවේ සැසි ලැයිස්තුගත කරන ආකාරය තෝරන්න. පැති ටැබ් සඳහා පමණක් අදාළ වේ.",

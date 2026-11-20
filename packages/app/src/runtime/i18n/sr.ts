@@ -220,6 +220,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Промпт",
   "session.child.backToParent": "Назад на главну сесију.",
+  "session.child.message.placeholder": "Пошаљи поруку овом подагенту",
   "prompt.action.attachFile": "Додајте датотеке",
   "prompt.toast.attachmentDuplicate.title": "Ова датотека је већ отпремљена",
   "prompt.toast.modelAgentRequired.title": "Изаберите агента и модел",
@@ -1258,6 +1259,8 @@ export const dict = {
     "Редизајнирана временска линија сесије која групише шта је агент урадио, са једним статусним редом испод корака",
   "settings.experimental.row.newQuestionUI.title": "Нови интерфејс за питања",
   "settings.experimental.row.newQuestionUI.description": "Испробајте панел за питања прилагођен тастатури",
+  "settings.experimental.row.subagentComposer.title": "Уређивач подагента",
+  "settings.experimental.row.subagentComposer.description": "Пошаљи поруку подагенту из његове сесије",
   "settings.experimental.row.sidebarOrganize.title": "Организација вертикалне бочне траке",
   "settings.experimental.row.sidebarOrganize.description":
     "Изаберите како се сесије приказују на бочној траци. Важи само за бочне картице.",

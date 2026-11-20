@@ -216,6 +216,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Lời nhắc",
   "session.child.backToParent": "Quay lại phiên chính.",
+  "session.child.message.placeholder": "Gửi tin nhắn cho tác nhân con này",
   "prompt.action.attachFile": "Thêm tệp",
   "prompt.toast.attachmentDuplicate.title": "Tệp này đã được tải lên",
   "prompt.toast.uploading.percent": "{{percent}}%",
@@ -1233,6 +1234,8 @@ export const dict = {
     "Dòng thời gian phiên được thiết kế lại, nhóm những gì tác nhân đã làm, với một dòng trạng thái bên dưới lượt",
   "settings.experimental.row.newQuestionUI.title": "Giao diện câu hỏi mới",
   "settings.experimental.row.newQuestionUI.description": "Xem trước khu vực câu hỏi ưu tiên bàn phím",
+  "settings.experimental.row.subagentComposer.title": "Ô nhập tác nhân con",
+  "settings.experimental.row.subagentComposer.description": "Gửi tin nhắn cho tác nhân con từ phiên của chính nó",
   "settings.experimental.row.sidebarOrganize.title": "Sắp xếp thanh bên dọc",
   "settings.experimental.row.sidebarOrganize.description":
     "Chọn cách liệt kê phiên trong thanh bên. Chỉ áp dụng cho tab bên.",

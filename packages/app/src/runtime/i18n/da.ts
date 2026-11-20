@@ -354,6 +354,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Tilbage til hovedsessionen.",
+  "session.child.message.placeholder": "Send en besked til denne underagent",
 
   "prompt.action.attachFile": "Vedhæft fil",
 
@@ -1288,6 +1289,8 @@ export const dict = {
     "En nydesignet sessionstidslinje, der grupperer, hvad agenten gjorde, med én statuslinje under turen",
   "settings.experimental.row.newQuestionUI.title": "Ny spørgsmålsvisning",
   "settings.experimental.row.newQuestionUI.description": "Prøv den tastaturvenlige spørgsmålsdock",
+  "settings.experimental.row.subagentComposer.title": "Underagent-skrivefelt",
+  "settings.experimental.row.subagentComposer.description": "Send en besked til en underagent fra dens egen session",
   "settings.experimental.row.sidebarOrganize.title": "Organiser lodret sidepanel",
   "settings.experimental.row.sidebarOrganize.description":
     "Vælg, hvordan sessioner vises i sidepanelet. Gælder kun sidefaner.",

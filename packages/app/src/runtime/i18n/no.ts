@@ -757,6 +757,7 @@ export const dict = {
   "common.clear": "Tøm",
 
   "session.child.backToParent": "Tilbake til hovedsesjonen.",
+  "session.child.message.placeholder": "Send en melding til denne underagenten",
 
   "error.page.description.localServerStartup": "Det oppstod en feil under oppstart av den lokale serveren.",
   "error.page.action.exportLogs": "Eksporter logger",
@@ -1297,6 +1298,8 @@ export const dict = {
     "En redesignet økttidslinje som grupperer det agenten gjorde, med én statuslinje under runden",
   "settings.experimental.row.newQuestionUI.title": "Nytt spørsmålsgrensesnitt",
   "settings.experimental.row.newQuestionUI.description": "Forhåndsvis det tastaturstyrte spørsmålspanelet",
+  "settings.experimental.row.subagentComposer.title": "Underagent-skrivefelt",
+  "settings.experimental.row.subagentComposer.description": "Send en melding til en underagent fra dens egen økt",
   "settings.experimental.row.sidebarOrganize.title": "Organiser loddrett sidepanel",
   "settings.experimental.row.sidebarOrganize.description":
     "Velg hvordan økter listes i sidepanelet. Gjelder bare sidefaner.",

@@ -252,6 +252,7 @@ export const dict = {
   "prompt.mode.shell": "Команда",
   "prompt.mode.normal": "Запит",
   "session.child.backToParent": "Назад до основної сесії.",
+  "session.child.message.placeholder": "Надіслати повідомлення цьому субагенту",
 
   "prompt.action.attachFile": "Додати файли",
 
@@ -1347,6 +1348,8 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.title": "Новий інтерфейс запитань",
   "settings.experimental.row.newQuestionUI.description":
     "Попередній перегляд панелі запитань з керуванням із клавіатури",
+  "settings.experimental.row.subagentComposer.title": "Поле субагента",
+  "settings.experimental.row.subagentComposer.description": "Надіслати повідомлення субагенту з його власної сесії",
   "settings.experimental.row.sidebarOrganize.title": "Упорядкування вертикальної бічної панелі",
   "settings.experimental.row.sidebarOrganize.description":
     "Виберіть, як показувати сесії на бічній панелі. Застосовується лише до бічних вкладок.",

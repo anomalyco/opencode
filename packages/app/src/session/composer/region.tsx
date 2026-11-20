@@ -49,6 +49,8 @@ import { resolveSessionComposerSelection } from "./selection"
 import { composerModelLabelKey, composerModelLabels, composerProviderName } from "@/composer/model-label"
 import { useProviders } from "@/providers/catalog/providers"
 import { SubagentBar } from "./subagent-bar"
+import { SubagentDock } from "./subagent-composer"
+import { sendSubagentMessage } from "./subagent-admission"
 import { createSessionRequestModel } from "../requests/model"
 import type { Region } from "@/runtime/plugin/panels"
 import { SessionLocationMissing } from "./location-missing"
@@ -574,6 +576,11 @@ export function ActiveSessionComposerRegion(props: {
     return props.session.data.info()?.outcome
   }
 
+  // A steer reaches the child's run at its next step boundary, or resumes it once it is idle; its own agent and model
+  // stay selected, since the message is only its next step's input.
+  const sendToSubagent = (sessionID: string, text: string, id: string) =>
+    sendSubagentMessage({ data, sessionID, id, text })
+
   const freeLimit = useFreeLimit(() => props.model.composer.model.paid)
 
   return (
@@ -582,13 +589,19 @@ export function ActiveSessionComposerRegion(props: {
       subagent={
         <Show when={props.session.data.info()}>
           {(info) => (
-            <SubagentBar
-              agent={info().agent}
-              model={subagentModel()}
-              status={subagentStatus()}
-              started={info().time.created}
-              ended={subagentStatus() === "running" ? undefined : (info().time.idle ?? info().time.updated)}
-              onBack={props.model.region.openParent}
+            <SubagentDock
+              sessionID={info().id}
+              send={(text, id) => sendToSubagent(info().id, text, id)}
+              bar={
+                <SubagentBar
+                  agent={info().agent}
+                  model={subagentModel()}
+                  status={subagentStatus()}
+                  started={info().time.created}
+                  ended={subagentStatus() === "running" ? undefined : (info().time.idle ?? info().time.updated)}
+                  onBack={props.model.region.openParent}
+                />
+              }
             />
           )}
         </Show>

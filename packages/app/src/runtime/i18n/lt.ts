@@ -219,6 +219,7 @@ export const dict = {
   "prompt.mode.shell": "Apvalkalas",
   "prompt.mode.normal": "Užklausa",
   "session.child.backToParent": "Grįžti į pagrindinį seansą.",
+  "session.child.message.placeholder": "Siųsti žinutę šiam pagalbiniam agentui",
   "prompt.action.attachFile": "Pridėti failus",
   "prompt.toast.attachmentDuplicate.title": "Šis failas jau buvo įkeltas",
   "prompt.toast.modelAgentRequired.title": "Pasirinkite agentą ir modelį",
@@ -1282,6 +1283,8 @@ export const dict = {
     "Pertvarkyta seanso laiko juosta, grupuojanti agento veiksmus, su viena būsenos eilute po etapu",
   "settings.experimental.row.newQuestionUI.title": "Nauja klausimų sąsaja",
   "settings.experimental.row.newQuestionUI.description": "Išbandykite klaviatūra valdomą klausimų skydelį",
+  "settings.experimental.row.subagentComposer.title": "Pagalbinio agento redaktorius",
+  "settings.experimental.row.subagentComposer.description": "Siųsti žinutę pagalbiniam agentui iš jo sesijos",
   "settings.experimental.row.sidebarOrganize.title": "Vertikalios šoninės juostos tvarka",
   "settings.experimental.row.sidebarOrganize.description":
     "Pasirinkite, kaip seansai išdėstomi šoninėje juostoje. Taikoma tik šoniniams skirtukams.",

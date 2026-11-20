@@ -7,6 +7,20 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useTabs } from "@/shell/tabs/tabs"
 import { ServerConnection } from "@/runtime/server/registry"
 
+/** A prompt is admitted once its inbox row exists, and stays admitted when its durable message replaces that row. */
+export function createSessionAdmitted(
+  data: {
+    session: {
+      input: { has: (sessionID: string, messageID: string) => boolean }
+      message: { get: (sessionID: string, messageID: string) => object | undefined }
+    }
+  },
+  sessionID: string,
+) {
+  return (messageID: string) =>
+    data.session.input.has(sessionID, messageID) || !!data.session.message.get(sessionID, messageID)
+}
+
 export function createActiveComposerAdapter(input: {
   sessionID: string
   sessionKey: Accessor<string>
@@ -50,7 +64,7 @@ export function createActiveComposerAdapter(input: {
       file: server.api.file,
       data,
       current: () => data.session.get(id),
-      admitted: (messageID) => data.session.input.has(id, messageID) || !!data.session.message.get(id, messageID),
+      admitted: createSessionAdmitted(data, id),
       background: input.background,
     }),
     interrupt: () =>

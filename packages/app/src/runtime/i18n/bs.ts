@@ -224,6 +224,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Nazad na glavnu sesiju.",
+  "session.child.message.placeholder": "Pošalji poruku ovom podagentu",
 
   "prompt.action.attachFile": "Dodaj datoteke",
 
@@ -1317,6 +1318,8 @@ export const dict = {
     "Redizajnirana vremenska linija sesije koja grupiše šta je agent uradio, s jednom statusnom linijom ispod poteza",
   "settings.experimental.row.newQuestionUI.title": "Novi interfejs za pitanja",
   "settings.experimental.row.newQuestionUI.description": "Isprobajte panel za pitanja prilagođen tastaturi",
+  "settings.experimental.row.subagentComposer.title": "Sastavljač podagenta",
+  "settings.experimental.row.subagentComposer.description": "Pošaljite poruku podagentu iz njegove sesije",
   "settings.experimental.row.sidebarOrganize.title": "Organizuj vertikalnu bočnu traku",
   "settings.experimental.row.sidebarOrganize.description":
     "Odaberite kako se sesije prikazuju na bočnoj traci. Primjenjuje se samo na bočne kartice.",

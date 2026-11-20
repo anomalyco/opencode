@@ -207,6 +207,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Kërkesë",
   "session.child.backToParent": "Kthehu në sesionin kryesor.",
+  "session.child.message.placeholder": "Dërgo një mesazh këtij nënagjenti",
   "prompt.action.attachFile": "Shtoni skedarë",
   "prompt.toast.attachmentDuplicate.title": "Ky skedar tashmë është ngarkuar",
   "prompt.toast.modelAgentRequired.title": "Zgjidhni një agjent dhe model",
@@ -1239,6 +1240,8 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.title": "Ndërfaqe e re pyetjesh",
   "settings.experimental.row.newQuestionUI.description":
     "Shikoni paraprakisht panelin e pyetjeve të orientuar nga tastiera",
+  "settings.experimental.row.subagentComposer.title": "Redaktori i nënagjentit",
+  "settings.experimental.row.subagentComposer.description": "Dërgo një mesazh një nënagjenti nga sesioni i tij",
   "settings.experimental.row.sidebarOrganize.title": "Organizo shiritin anësor vertikal",
   "settings.experimental.row.sidebarOrganize.description":
     "Zgjidhni si renditen sesionet në shiritin anësor. Vlen vetëm për skedat anësore.",

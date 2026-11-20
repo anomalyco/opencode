@@ -406,6 +406,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Tillbaka till huvudsessionen.",
+  "session.child.message.placeholder": "Skicka ett meddelande till den här underagenten",
   "prompt.action.attachFile": "Lägg till filer",
   "prompt.toast.attachmentDuplicate.title": "Den här filen har redan laddats upp",
   "prompt.toast.modelAgentRequired.title": "Välj en agent och modell",
@@ -1237,6 +1238,9 @@ export const dict = {
     "En omgjord sessionstidslinje som grupperar vad agenten gjorde, med en statusrad under turen",
   "settings.experimental.row.newQuestionUI.title": "Nytt frågegränssnitt",
   "settings.experimental.row.newQuestionUI.description": "Förhandsgranska den tangentbordsstyrda frågepanelen",
+  "settings.experimental.row.subagentComposer.title": "Underagent-fält",
+  "settings.experimental.row.subagentComposer.description":
+    "Skicka ett meddelande till en underagent från dess egen session",
   "settings.experimental.row.sidebarOrganize.title": "Ordna vertikalt sidofält",
   "settings.experimental.row.sidebarOrganize.description":
     "Välj hur sessioner listas i sidofältet. Gäller endast sidoflikar.",

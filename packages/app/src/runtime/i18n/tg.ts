@@ -207,6 +207,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Промпт",
   "session.child.backToParent": "Бозгашт ба ҷаласаи асосӣ.",
+  "session.child.message.placeholder": "Ба ин зероагент паём фиристодан",
   "prompt.action.attachFile": "Илова кардани файлҳо",
   "prompt.toast.attachmentDuplicate.title": "Ин файл аллакай бор карда шудааст",
   "prompt.toast.modelAgentRequired.title": "Агент ва моделро интихоб кунед",
@@ -1250,6 +1251,8 @@ export const dict = {
     "Ҷадвали вақти аз нав тарҳрезишудаи сессия, ки корҳои агентро гурӯҳбандӣ мекунад ва дар зери давр як сатри ҳолат дорад",
   "settings.experimental.row.newQuestionUI.title": "Интерфейси нави саволҳо",
   "settings.experimental.row.newQuestionUI.description": "Пешнамоиши панели саволҳо бо идоракунии асосан аз клавиатура",
+  "settings.experimental.row.subagentComposer.title": "Воридкунандаи зероагент",
+  "settings.experimental.row.subagentComposer.description": "Ба зероагент аз сессияи худаш паём фиристодан",
   "settings.experimental.row.sidebarOrganize.title": "Ташкили панели паҳлӯи амудӣ",
   "settings.experimental.row.sidebarOrganize.description":
     "Интихоб кунед, ки сессияҳо дар панели паҳлӯ чӣ тавр нишон дода шаванд. Танҳо ба варақаҳои паҳлӯ дахл дорад.",

@@ -211,6 +211,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Arahan",
   "session.child.backToParent": "Kembali ke sesi utama.",
+  "session.child.message.placeholder": "Hantar mesej kepada subejen ini",
   "prompt.action.attachFile": "Tambah fail",
   "prompt.toast.attachmentDuplicate.title": "Fail ini telah dimuat naik",
   "prompt.toast.uploading.percent": "{{percent}}%",
@@ -1237,6 +1238,8 @@ export const dict = {
     "Garis masa sesi yang direka semula yang mengumpulkan perkara yang dilakukan ejen, dengan satu baris status di bawah giliran",
   "settings.experimental.row.newQuestionUI.title": "UI soalan baharu",
   "settings.experimental.row.newQuestionUI.description": "Pratonton dok soalan yang mengutamakan papan kekunci",
+  "settings.experimental.row.subagentComposer.title": "Komposer subejen",
+  "settings.experimental.row.subagentComposer.description": "Hantar mesej kepada subejen dari sesinya sendiri",
   "settings.experimental.row.sidebarOrganize.title": "Susun bar sisi menegak",
   "settings.experimental.row.sidebarOrganize.description":
     "Pilih cara sesi disenaraikan dalam bar sisi. Hanya terpakai pada tab sisi.",

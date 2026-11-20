@@ -206,6 +206,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Solicitare",
   "session.child.backToParent": "Înapoi la sesiunea principală.",
+  "session.child.message.placeholder": "Trimite un mesaj acestui subagent",
   "prompt.action.attachFile": "Adaugă fișiere",
   "prompt.toast.attachmentDuplicate.title": "Acest fișier a fost deja încărcat",
   "prompt.toast.modelAgentRequired.title": "Selectează un agent și un model",
@@ -1265,6 +1266,8 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.title": "Interfață nouă pentru întrebări",
   "settings.experimental.row.newQuestionUI.description":
     "Previzualizează panoul de întrebări optimizat pentru tastatură",
+  "settings.experimental.row.subagentComposer.title": "Editor pentru subagent",
+  "settings.experimental.row.subagentComposer.description": "Trimite un mesaj unui subagent din sesiunea lui",
   "settings.experimental.row.sidebarOrganize.title": "Organizează bara laterală verticală",
   "settings.experimental.row.sidebarOrganize.description":
     "Alege cum sunt listate sesiunile în bara laterală. Se aplică doar filelor laterale.",

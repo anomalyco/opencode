@@ -210,6 +210,7 @@ export const dict = {
   "prompt.mode.shell": "Terminal",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Wróć do głównej sesji.",
+  "session.child.message.placeholder": "Wyślij wiadomość do tego podagenta",
   "prompt.action.attachFile": "Dodaj pliki",
   "prompt.toast.attachmentDuplicate.title": "Ten plik został już przesłany",
   "prompt.toast.modelAgentRequired.title": "Wybierz agenta i model",
@@ -1292,6 +1293,8 @@ export const dict = {
     "Przeprojektowana oś czasu sesji, która grupuje działania agenta, z jednym wierszem statusu pod turą",
   "settings.experimental.row.newQuestionUI.title": "Nowy interfejs pytań",
   "settings.experimental.row.newQuestionUI.description": "Wypróbuj panel pytań obsługiwany przede wszystkim klawiaturą",
+  "settings.experimental.row.subagentComposer.title": "Pole podagenta",
+  "settings.experimental.row.subagentComposer.description": "Wyślij wiadomość do podagenta z jego własnej sesji",
   "settings.experimental.row.sidebarOrganize.title": "Porządkuj pionowy pasek boczny",
   "settings.experimental.row.sidebarOrganize.description":
     "Wybierz sposób wyświetlania sesji na pasku bocznym. Dotyczy tylko kart bocznych.",

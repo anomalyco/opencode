@@ -219,6 +219,7 @@ export const dict = {
   "prompt.mode.shell": "Ljuska",
   "prompt.mode.normal": "Upit",
   "session.child.backToParent": "Povratak na glavnu sesiju.",
+  "session.child.message.placeholder": "Pošalji poruku ovom podagentu",
   "prompt.action.attachFile": "Dodajte datoteke",
   "prompt.toast.attachmentDuplicate.title": "Ova datoteka je već učitana",
   "prompt.toast.modelAgentRequired.title": "Odaberite agenta i model",
@@ -1261,6 +1262,8 @@ export const dict = {
     "Redizajnirana vremenska traka sesije koja grupira ono što je agent učinio, s jednim retkom statusa ispod koraka",
   "settings.experimental.row.newQuestionUI.title": "Novo sučelje za pitanja",
   "settings.experimental.row.newQuestionUI.description": "Isprobajte ploču za pitanja prilagođenu tipkovnici",
+  "settings.experimental.row.subagentComposer.title": "Sastavljač podagenta",
+  "settings.experimental.row.subagentComposer.description": "Pošalji poruku podagentu iz njegove sesije",
   "settings.experimental.row.sidebarOrganize.title": "Organiziraj okomitu bočnu traku",
   "settings.experimental.row.sidebarOrganize.description":
     "Odaberite kako se sesije prikazuju na bočnoj traci. Primjenjuje se samo na bočne kartice.",

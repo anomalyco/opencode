@@ -210,6 +210,7 @@ export const dict = {
   "prompt.mode.shell": "ޝެލް",
   "prompt.mode.normal": "ޕްރޮމްޕްޓް",
   "session.child.backToParent": "އަނބުރާ މައި ސެޝަނަށް.",
+  "session.child.message.placeholder": "މި ސަބްއެޖެންޓަށް މެސެޖެއް ފޮނުވާ",
   "prompt.action.attachFile": "ފައިލްތައް އިތުރުކުރުން",
   "prompt.toast.attachmentDuplicate.title": "މި ފައިލް މިހާރު ވަނީ އަޕްލޯޑްކޮށްފައެވެ",
   "prompt.toast.modelAgentRequired.title": "އޭޖެންޓަކާއި މޮޑެލްއެއް ހޮވުން",
@@ -1274,6 +1275,8 @@ export const dict = {
     "އޭޖެންޓް ކުރި ކަންތައްތައް ގްރޫޕްކޮށް، ޓަރނުގެ ތިރީގައި އެއް ސްޓޭޓަސް ލައިން ދައްކާ އަލުން ޑިޒައިންކުރި ސެޝަން ޓައިމްލައިން",
   "settings.experimental.row.newQuestionUI.title": "އާ ސުވާލު UI",
   "settings.experimental.row.newQuestionUI.description": "ކީބޯޑަށް އިސްކަންދޭ ސުވާލު ޑޮކް ޕްރިވިއު ކުރާ",
+  "settings.experimental.row.subagentComposer.title": "ސަބްއެޖެންޓް ކޮމްޕޯޒަރ",
+  "settings.experimental.row.subagentComposer.description": "އެއީ އޭގެ ޒާތީ ސެޝަނުން ސަބްއެޖެންޓަކަށް މެސެޖެއް ފޮނުވާ",
   "settings.experimental.row.sidebarOrganize.title": "ވަރޓިކަލް ސައިޑްބާރ ތަރުތީބުކުރާ",
   "settings.experimental.row.sidebarOrganize.description":
     "ސައިޑްބާރުގައި ސެޝަންތައް ލިސްޓްކުރާނެ ގޮތް ހޮވާށެވެ. ފަރާތުގެ ޓެބްތަކަށް އެކަނި ފުދޭ.",

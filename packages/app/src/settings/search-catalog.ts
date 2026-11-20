@@ -134,6 +134,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
+    label: "settings.experimental.row.subagentComposer.title",
+    target: "settings-subagent-composer",
+    description: "settings.experimental.row.subagentComposer.description",
+    keywords: "subagent child session composer message steer follow-up",
+  },
+  {
+    tab: "experimental",
     label: "settings.experimental.row.tabGroups.title",
     target: "settings-tab-groups",
     description: "settings.experimental.row.tabGroups.description",

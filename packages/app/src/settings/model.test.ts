@@ -100,6 +100,7 @@ describe("settings schema", () => {
         foldUserMessages: false,
         wrapCodeBlocks: false,
         newQuestionUI: false,
+        subagentComposer: false,
         sidebarOrganize: "list",
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",

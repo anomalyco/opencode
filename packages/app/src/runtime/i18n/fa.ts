@@ -216,6 +216,7 @@ export const dict = {
   "prompt.mode.shell": "پوسته",
   "prompt.mode.normal": "پرامپت",
   "session.child.backToParent": "بازگشت به جلسه اصلی",
+  "session.child.message.placeholder": "به این زیرعامل پیام بفرست",
   "prompt.action.attachFile": "فایل ها را اضافه کنید",
   "prompt.toast.attachmentDuplicate.title": "این فایل قبلا آپلود شده است",
   "prompt.toast.modelAgentRequired.title": "یک عامل و مدل را انتخاب کنید",
@@ -1228,6 +1229,8 @@ export const dict = {
     "خط زمانی بازطراحی‌شده جلسه که کارهای عامل را گروه‌بندی می‌کند و یک خط وضعیت زیر هر نوبت دارد",
   "settings.experimental.row.newQuestionUI.title": "رابط جدید سؤال",
   "settings.experimental.row.newQuestionUI.description": "پیش‌نمایش پنل سؤال مبتنی بر صفحه‌کلید",
+  "settings.experimental.row.subagentComposer.title": "نویسنده زیرعامل",
+  "settings.experimental.row.subagentComposer.description": "از نشست خودش به زیرعامل پیام بفرست",
   "settings.experimental.row.sidebarOrganize.title": "سازمان‌دهی نوار کناری عمودی",
   "settings.experimental.row.sidebarOrganize.description":
     "نحوه فهرست شدن جلسه‌ها در نوار کناری را انتخاب کنید. فقط برای برگه‌های کناری اعمال می‌شود.",

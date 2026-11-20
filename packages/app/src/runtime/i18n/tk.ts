@@ -207,6 +207,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Esasy sessiýa dolan.",
+  "session.child.message.placeholder": "Bu kiçi agenta habar iber",
   "prompt.action.attachFile": "Faýl goşuň",
   "prompt.toast.attachmentDuplicate.title": "Bu faýl eýýäm ýüklendi",
   "prompt.toast.modelAgentRequired.title": "Agent we model saýlaň",
@@ -1229,6 +1230,8 @@ export const dict = {
     "Agentiň eden işlerini toparlaýan we tapgyryň aşagynda bir ýagdaý setirini görkezýän täzeden işlenen sessiýa wagt çyzgysy",
   "settings.experimental.row.newQuestionUI.title": "Täze sorag interfeýsi",
   "settings.experimental.row.newQuestionUI.description": "Klawiatura esasly sorag panelini synap görüň",
+  "settings.experimental.row.subagentComposer.title": "Kiçi agent meýdançasy",
+  "settings.experimental.row.subagentComposer.description": "Kiçi agenta öz sessiýasyndan habar iber",
   "settings.experimental.row.sidebarOrganize.title": "Dik gapdal paneli tertiplemek",
   "settings.experimental.row.sidebarOrganize.description":
     "Sessiýalaryň gapdal panelde nähili sanalýandygyny saýlaň. Diňe gapdal goýmalara degişli.",

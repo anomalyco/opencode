@@ -412,6 +412,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Terug naar de hoofdsessie.",
+  "session.child.message.placeholder": "Bericht sturen naar deze subagent",
   "prompt.action.attachFile": "Bestanden toevoegen",
   "prompt.toast.attachmentDuplicate.title": "Dit bestand is al geüpload",
   "prompt.toast.modelAgentRequired.title": "Selecteer een agent en model",
@@ -1249,6 +1250,9 @@ export const dict = {
     "Een vernieuwde sessietijdlijn die groepeert wat de agent deed, met één statusregel onder de beurt",
   "settings.experimental.row.newQuestionUI.title": "Nieuwe vraag-UI",
   "settings.experimental.row.newQuestionUI.description": "Bekijk het vragenpaneel dat op het toetsenbord is gericht",
+  "settings.experimental.row.subagentComposer.title": "Subagent-invoerveld",
+  "settings.experimental.row.subagentComposer.description":
+    "Stuur een bericht naar een subagent vanuit zijn eigen sessie",
   "settings.experimental.row.sidebarOrganize.title": "Verticale zijbalk ordenen",
   "settings.experimental.row.sidebarOrganize.description":
     "Kies hoe sessies in de zijbalk worden weergegeven. Geldt alleen voor zijtabbladen.",

@@ -206,6 +206,7 @@ export const dict = {
   "prompt.mode.shell": "Čaula",
   "prompt.mode.normal": "Uzdot",
   "session.child.backToParent": "Atpakaļ uz galveno sesiju.",
+  "session.child.message.placeholder": "Sūtīt ziņu šim apakšagentam",
   "prompt.action.attachFile": "Pievienot failus",
   "prompt.toast.attachmentDuplicate.title": "Šis fails jau ir augšupielādēts",
   "prompt.toast.modelAgentRequired.title": "Izvēlieties aģentu un modeli",
@@ -1265,6 +1266,8 @@ export const dict = {
     "Pārveidota sesijas laika skala, kas grupē aģenta paveikto, ar vienu statusa rindu zem gājiena",
   "settings.experimental.row.newQuestionUI.title": "Jauna jautājumu saskarne",
   "settings.experimental.row.newQuestionUI.description": "Priekšskatīt uz tastatūru orientētu jautājumu paneli",
+  "settings.experimental.row.subagentComposer.title": "Apakšagenta ievade",
+  "settings.experimental.row.subagentComposer.description": "Sūtīt ziņu apakšagentam no viņa sesijas",
   "settings.experimental.row.sidebarOrganize.title": "Kārtot vertikālo sānjoslu",
   "settings.experimental.row.sidebarOrganize.description":
     "Izvēlieties, kā sesijas tiek uzskaitītas sānjoslā. Attiecas tikai uz sānu cilnēm.",

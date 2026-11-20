@@ -10,8 +10,8 @@ import { formatElapsed } from "./activity-chips"
 
 export type SubagentStatus = "running" | "succeeded" | "failed" | "interrupted"
 
-// A subagent session takes no prompts, so its composer slot is one quiet status line on the timeline's own surface:
-// the run's state and duration, the agent, model and variant, and the way back.
+// The identity and status line above the subagent's own composer: the run's state and duration, the agent, model and
+// variant, and the way back. It shares the timeline's surface, which fades into it.
 export function SubagentBar(props: {
   agent?: string
   model?: { provider?: string; name: string; variant?: string }

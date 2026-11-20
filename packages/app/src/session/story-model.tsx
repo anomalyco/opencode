@@ -10,8 +10,9 @@ import { SessionActivityChips, type SessionActivityItem } from "@/session/compos
 import { SessionComposerLane } from "@/session/composer/composer-lane"
 import { SessionTodoPill } from "@/session/composer/todo-pill"
 import type { Todo } from "@/session/composer/todos"
-import { SettingsProvider } from "@/settings/model"
+import { SettingsProvider, useSettings } from "@/settings/model"
 import { SubagentBar } from "@/session/composer/subagent-bar"
+import { SubagentDock } from "@/session/composer/subagent-composer"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/client/promise"
 import type { SessionDocument } from "@opencode/session-ui/document"
@@ -23,7 +24,7 @@ import type { ComposerPersistedState } from "@/composer/types"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { children, Show, type ComponentProps, type JSX } from "solid-js"
+import { children, createEffect, Show, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { WebSearchRequestModel } from "./requests/websearch"
@@ -93,6 +94,10 @@ export type SessionPreviewProps = {
     | { type: "question" | "websearch" | "elicitation"; value: FormInfo }
   reviewOpened?: boolean
   child?: Omit<ComponentProps<typeof SubagentBar>, "onBack">
+  /** The child Session's own draft key, so sibling child stories do not share one stored message. */
+  childSessionID?: string
+  /** The experimental setting's value for this story; omitted follows its default. */
+  subagentComposer?: boolean
   activity?: {
     subagents: SessionActivityItem[]
     shells: SessionActivityItem[]
@@ -132,6 +137,34 @@ export function SessionPreview(props: SessionPreviewProps) {
       </Show>
     </QueryClientProvider>
   )
+}
+
+// The story mounts the production dock and sets the experimental setting, so both of its branches are exercisable;
+// omitting `enabled` follows the setting's own default.
+function StorySubagentDock(props: {
+  enabled?: boolean
+  sessionID: string
+  send: (text: string, id: string) => Promise<void>
+  bar: JSX.Element
+}) {
+  return (
+    <SettingsProvider>
+      <StorySubagentSetting enabled={props.enabled} />
+      <SubagentDock bar={props.bar} sessionID={props.sessionID} send={props.send} />
+    </SettingsProvider>
+  )
+}
+
+function StorySubagentSetting(props: { enabled?: boolean }) {
+  const settings = useSettings()
+
+  createEffect(() => {
+    if (props.enabled === undefined) return
+
+    settings.general.setSubagentComposer(props.enabled)
+  })
+
+  return null
 }
 
 export function createPromptController(input: {
@@ -303,9 +336,20 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                     subagent={
                       <Show when={props.child}>
                         {(child) => (
-                          <SubagentBar
-                            {...child()}
-                            onBack={() => setState("activity", "Opened the parent Session locally")}
+                          <StorySubagentDock
+                            enabled={props.subagentComposer}
+                            sessionID={props.childSessionID ?? props.document.sessionID}
+                            send={(text) => {
+                              setState("activity", `Sent to the subagent locally: ${text}`)
+
+                              return Promise.resolve()
+                            }}
+                            bar={
+                              <SubagentBar
+                                {...child()}
+                                onBack={() => setState("activity", "Opened the parent Session locally")}
+                              />
+                            }
                           />
                         )}
                       </Show>

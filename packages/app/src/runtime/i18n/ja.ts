@@ -214,6 +214,7 @@ export const dict = {
   "prompt.mode.shell": "シェル",
   "prompt.mode.normal": "プロンプト",
   "session.child.backToParent": "メインセッションに戻る。",
+  "session.child.message.placeholder": "このサブエージェントにメッセージを送信",
   "prompt.action.attachFile": "ファイルを添付",
   "prompt.toast.attachmentDuplicate.title": "このファイルはすでにアップロードされています",
   "prompt.toast.uploading.percent": "{{percent}}%",
@@ -1245,6 +1246,8 @@ export const dict = {
     "エージェントの作業をグループ化し、ターンの下に1行のステータスを表示する、再設計されたセッションタイムライン",
   "settings.experimental.row.newQuestionUI.title": "新しい質問UI",
   "settings.experimental.row.newQuestionUI.description": "キーボード操作を重視した質問ドックをプレビュー",
+  "settings.experimental.row.subagentComposer.title": "サブエージェント入力欄",
+  "settings.experimental.row.subagentComposer.description": "サブエージェント自身のセッションからメッセージを送信",
   "settings.experimental.row.sidebarOrganize.title": "縦型サイドバーの整理",
   "settings.experimental.row.sidebarOrganize.description":
     "サイドバーでのセッションの表示方法を選択します。サイドタブでのみ適用されます。",

@@ -230,6 +230,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Kembali ke sesi utama.",
+  "session.child.message.placeholder": "Kirim pesan ke subagen ini",
 
   "prompt.action.attachFile": "Tambah berkas",
 
@@ -1299,6 +1300,8 @@ export const dict = {
     "Garis waktu sesi yang didesain ulang, mengelompokkan apa yang dilakukan agen, dengan satu baris status di bawah giliran",
   "settings.experimental.row.newQuestionUI.title": "UI pertanyaan baru",
   "settings.experimental.row.newQuestionUI.description": "Pratinjau panel pertanyaan yang mengutamakan keyboard",
+  "settings.experimental.row.subagentComposer.title": "Komposer subagen",
+  "settings.experimental.row.subagentComposer.description": "Kirim pesan ke subagen dari sesinya sendiri",
   "settings.experimental.row.sidebarOrganize.title": "Atur bilah sisi vertikal",
   "settings.experimental.row.sidebarOrganize.description":
     "Pilih cara sesi dicantumkan di bilah sisi. Hanya berlaku untuk tab samping.",

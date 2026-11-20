@@ -17,6 +17,7 @@ import type { SessionQueueView } from "./queue"
 import { SessionQueuePanel } from "./queue-panel"
 import { SessionComposerRegion, type SessionComposerRegionViewController } from "./session-composer-region"
 import { SubagentBar } from "./subagent-bar"
+import { SubagentComposer } from "./subagent-composer"
 
 type DockArgs = {
   question: boolean
@@ -193,13 +194,16 @@ function ComposerDocksPreview(props: DockArgs) {
               controller={region}
               above={<SessionQueuePanel queue={queue} hidden={blocked()} />}
               subagent={
-                <SubagentBar
-                  agent="surveyor"
-                  model={{ provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" }}
-                  status="running"
-                  started={Date.now() - 65_000}
-                  onBack={() => setState("subagent", false)}
-                />
+                <>
+                  <SubagentBar
+                    agent="surveyor"
+                    model={{ provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" }}
+                    status="running"
+                    started={Date.now() - 65_000}
+                    onBack={() => setState("subagent", false)}
+                  />
+                  <SubagentComposer sessionID="ses_subagent_dock" send={() => Promise.resolve()} />
+                </>
               }
               composer={
                 <div class="relative z-10">

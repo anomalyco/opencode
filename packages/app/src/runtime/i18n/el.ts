@@ -207,6 +207,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Προτροπή",
   "session.child.backToParent": "Επιστροφή στην κύρια συνεδρία.",
+  "session.child.message.placeholder": "Στείλε μήνυμα σε αυτόν τον υποπράκτορα",
   "prompt.action.attachFile": "Προσθήκη αρχείων",
   "prompt.toast.attachmentDuplicate.title": "Αυτό το αρχείο έχει ήδη μεταφορτωθεί",
   "prompt.toast.modelAgentRequired.title": "Επιλέξτε έναν πράκτορα και μοντέλο",
@@ -1264,6 +1265,9 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.title": "Νέο περιβάλλον ερωτήσεων",
   "settings.experimental.row.newQuestionUI.description":
     "Προεπισκόπηση του πλαισίου ερωτήσεων με προτεραιότητα στο πληκτρολόγιο",
+  "settings.experimental.row.subagentComposer.title": "Συντάκτης υποπράκτορα",
+  "settings.experimental.row.subagentComposer.description":
+    "Στείλε μήνυμα σε έναν υποπράκτορα από τη δική του συνεδρία",
   "settings.experimental.row.sidebarOrganize.title": "Οργάνωση κάθετης πλευρικής γραμμής",
   "settings.experimental.row.sidebarOrganize.description":
     "Επιλέξτε πώς εμφανίζονται οι συνεδρίες στην πλευρική γραμμή. Ισχύει μόνο για τις πλευρικές καρτέλες.",

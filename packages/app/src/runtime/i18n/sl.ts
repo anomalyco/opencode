@@ -232,6 +232,7 @@ export const dict = {
   "prompt.mode.shell": "školjka",
   "prompt.mode.normal": "Poziv",
   "session.child.backToParent": "Nazaj na glavno sejo.",
+  "session.child.message.placeholder": "Pošlji sporočilo temu podagentu",
   "prompt.action.attachFile": "Dodajte datoteke",
   "prompt.toast.attachmentDuplicate.title": "Ta datoteka je že naložena",
   "prompt.toast.modelAgentRequired.title": "Izberite agenta in model",
@@ -1278,6 +1279,8 @@ export const dict = {
     "Prenovljena časovnica seje, ki združi, kaj je agent naredil, z eno vrstico stanja pod korakom",
   "settings.experimental.row.newQuestionUI.title": "Nov vmesnik za vprašanja",
   "settings.experimental.row.newQuestionUI.description": "Predogled podokna za vprašanja, prilagojenega tipkovnici",
+  "settings.experimental.row.subagentComposer.title": "Vnosno polje podagenta",
+  "settings.experimental.row.subagentComposer.description": "Pošlji sporočilo podagentu iz njegove seje",
   "settings.experimental.row.sidebarOrganize.title": "Organiziraj navpično stransko vrstico",
   "settings.experimental.row.sidebarOrganize.description":
     "Izberite, kako so seje navedene v stranski vrstici. Velja samo za stranske zavihke.",

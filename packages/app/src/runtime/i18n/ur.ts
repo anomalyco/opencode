@@ -214,6 +214,7 @@ export const dict = {
   "prompt.mode.shell": "شیل",
   "prompt.mode.normal": "پرامپٹ",
   "session.child.backToParent": "مرکزی سیشن پر واپس جائیں۔",
+  "session.child.message.placeholder": "اس ذیلی ایجنٹ کو پیغام بھیجیں",
   "prompt.action.attachFile": "فائلیں شامل کریں۔",
   "prompt.toast.attachmentDuplicate.title": "یہ فائل پہلے ہی اپ لوڈ ہو چکی ہے",
   "prompt.toast.modelAgentRequired.title": "ایک ایجنٹ اور ماڈل منتخب کریں۔",
@@ -1247,6 +1248,8 @@ export const dict = {
     "سیشن کی نئے انداز کی ٹائم لائن جو ایجنٹ کے کیے گئے کاموں کو گروپ کرتی ہے، اور باری کے نیچے ایک اسٹیٹس لائن دکھاتی ہے",
   "settings.experimental.row.newQuestionUI.title": "سوالات کا نیا UI",
   "settings.experimental.row.newQuestionUI.description": "کی بورڈ پر مبنی سوالات کے پینل کا پیش منظر دیکھیں",
+  "settings.experimental.row.subagentComposer.title": "سب ایجنٹ کمپوزر",
+  "settings.experimental.row.subagentComposer.description": "سب ایجنٹ کو اس کے اپنے سیشن سے پیغام بھیجیں",
   "settings.experimental.row.sidebarOrganize.title": "عمودی سائیڈ بار ترتیب دیں",
   "settings.experimental.row.sidebarOrganize.description":
     "منتخب کریں کہ سائیڈ بار میں سیشنز کیسے دکھائے جائیں۔ صرف سائیڈ ٹیبز پر لاگو ہوتا ہے۔",

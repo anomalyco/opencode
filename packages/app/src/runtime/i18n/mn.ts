@@ -207,6 +207,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Промпт",
   "session.child.backToParent": "Үндсэн хуралдаан руу буцах.",
+  "session.child.message.placeholder": "Энэ дэд агент руу мессеж илгээх",
   "prompt.action.attachFile": "Файл нэмэх",
   "prompt.toast.attachmentDuplicate.title": "Энэ файлыг аль хэдийн байршуулсан байна",
   "prompt.toast.modelAgentRequired.title": "Агент болон загварыг сонгоно уу",
@@ -1244,6 +1245,8 @@ export const dict = {
     "Агентын хийсэн зүйлсийг бүлэглэж, ээлжийн доор нэг төлөвийн мөр харуулдаг шинэчилсэн сессийн цагийн шугам",
   "settings.experimental.row.newQuestionUI.title": "Асуултын шинэ UI",
   "settings.experimental.row.newQuestionUI.description": "Гарт тулгуурласан асуултын самбарыг урьдчилан үзэх",
+  "settings.experimental.row.subagentComposer.title": "Дэд агентын бичих талбар",
+  "settings.experimental.row.subagentComposer.description": "Дэд агентад өөрийн сессээс мессеж илгээх",
   "settings.experimental.row.sidebarOrganize.title": "Босоо хажуугийн самбарыг цэгцлэх",
   "settings.experimental.row.sidebarOrganize.description":
     "Хажуугийн самбарт сессүүд хэрхэн жагсахыг сонгоно уу. Зөвхөн хажуугийн табуудад хамаарна.",

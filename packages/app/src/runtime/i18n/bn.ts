@@ -211,6 +211,7 @@ export const dict = {
   "prompt.mode.shell": "শেল",
   "prompt.mode.normal": "প্রম্পট",
   "session.child.backToParent": "মূল সেশনে ফিরে যান।",
+  "session.child.message.placeholder": "এই সাবএজেন্টকে বার্তা পাঠান",
   "prompt.action.attachFile": "ফাইল যোগ করুন",
   "prompt.toast.attachmentDuplicate.title": "এই ফাইল ইতিমধ্যে আপলোড করা হয়েছে",
   "prompt.toast.modelAgentRequired.title": "একটি এজেন্ট এবং মডেল নির্বাচন করুন",
@@ -1236,6 +1237,8 @@ export const dict = {
     "নতুনভাবে ডিজাইন করা সেশন টাইমলাইন, যা এজেন্টের কাজগুলোকে গোষ্ঠীবদ্ধ করে এবং টার্নের নিচে একটি স্থিতি লাইন দেখায়",
   "settings.experimental.row.newQuestionUI.title": "নতুন প্রশ্ন UI",
   "settings.experimental.row.newQuestionUI.description": "কীবোর্ড-কেন্দ্রিক প্রশ্ন ডকের পূর্বরূপ দেখুন",
+  "settings.experimental.row.subagentComposer.title": "সাবএজেন্ট কম্পোজার",
+  "settings.experimental.row.subagentComposer.description": "নিজের সেশন থেকে সাবএজেন্টকে বার্তা পাঠান",
   "settings.experimental.row.sidebarOrganize.title": "উল্লম্ব সাইডবার সাজান",
   "settings.experimental.row.sidebarOrganize.description":
     "সাইডবারে সেশনগুলো কীভাবে তালিকাভুক্ত হবে তা বেছে নিন। শুধুমাত্র পাশের ট্যাবে প্রযোজ্য।",

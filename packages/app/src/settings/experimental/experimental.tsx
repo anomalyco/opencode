@@ -85,6 +85,20 @@ export const SettingsExperimental: Component = () => {
                 </Switch>
               </div>
             </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.experimental.row.subagentComposer.title")}
+              description={language.t("settings.experimental.row.subagentComposer.description")}
+            >
+              <div data-action="settings-subagent-composer">
+                <Switch
+                  checked={settings.general.subagentComposer()}
+                  onChange={(checked) => settings.general.setSubagentComposer(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.subagentComposer.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
           </SettingsList>
         </div>
       </div>

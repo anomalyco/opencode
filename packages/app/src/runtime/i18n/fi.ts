@@ -340,6 +340,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Kehote",
   "session.child.backToParent": "Takaisin pääistuntoon.",
+  "session.child.message.placeholder": "Lähetä viesti tälle ala-agentille",
   "prompt.action.attachFile": "Lisää tiedostoja",
   "prompt.toast.attachmentDuplicate.title": "Tämä tiedosto on jo ladattu",
   "prompt.toast.modelAgentRequired.title": "Valitse agentti ja malli",
@@ -1233,6 +1234,8 @@ export const dict = {
     "Uudistettu istunnon aikajana, joka ryhmittelee agentin toimet ja näyttää yhden tilarivin vuoron alla",
   "settings.experimental.row.newQuestionUI.title": "Uusi kysymysnäkymä",
   "settings.experimental.row.newQuestionUI.description": "Esikatsele näppäimistökeskeistä kysymyspaneelia",
+  "settings.experimental.row.subagentComposer.title": "Ala-agentin kirjoituskenttä",
+  "settings.experimental.row.subagentComposer.description": "Lähetä viesti ala-agentille sen omasta istunnosta",
   "settings.experimental.row.sidebarOrganize.title": "Järjestä pystysivupalkki",
   "settings.experimental.row.sidebarOrganize.description":
     "Valitse, miten istunnot luetellaan sivupalkissa. Koskee vain sivuvälilehtiä.",

@@ -365,6 +365,7 @@ export const dict = {
   "session.child.status.succeeded": "Done",
   "session.child.status.failed": "Failed",
   "session.child.status.interrupted": "Interrupted",
+  "session.child.message.placeholder": "Message this subagent",
 
   "prompt.action.attachFile": "Add files",
 
@@ -895,6 +896,8 @@ export const dict = {
     "A redesigned session timeline that groups what the agent did, with one status line below the turn",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
+  "settings.experimental.row.subagentComposer.title": "Subagent composer",
+  "settings.experimental.row.subagentComposer.description": "Send a message to a subagent from its own session",
   "settings.experimental.row.tabGroups.title": "Tab groups",
   "settings.experimental.row.tabGroups.description":
     "Group session tabs in side tabs with inline session search",

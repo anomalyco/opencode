@@ -230,6 +230,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "返回主要工作階段。",
+  "session.child.message.placeholder": "傳訊息給此子代理",
 
   "prompt.action.attachFile": "附加檔案",
 
@@ -1240,6 +1241,8 @@ export const dict = {
     "重新設計的工作階段時間軸，會將代理程式的動作分組，並在每一輪下方顯示一行狀態",
   "settings.experimental.row.newQuestionUI.title": "新問題介面",
   "settings.experimental.row.newQuestionUI.description": "預覽以鍵盤為主的問題面板",
+  "settings.experimental.row.subagentComposer.title": "子代理輸入框",
+  "settings.experimental.row.subagentComposer.description": "從子代理自身的會話傳訊息給它",
   "settings.experimental.row.sidebarOrganize.title": "整理垂直側邊欄",
   "settings.experimental.row.sidebarOrganize.description": "選擇工作階段在側邊欄中的列出方式。僅適用於側邊分頁。",
   "settings.experimental.sidebarOrganize.recent": "最近",

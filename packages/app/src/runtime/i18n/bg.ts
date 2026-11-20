@@ -207,6 +207,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "подкана",
   "session.child.backToParent": "Назад към основната сесия.",
+  "session.child.message.placeholder": "Изпрати съобщение до този субагент",
   "prompt.action.attachFile": "Добавете файлове",
   "prompt.toast.attachmentDuplicate.title": "Този файл вече е качен",
   "prompt.toast.modelAgentRequired.title": "Изберете агент и модел",
@@ -1247,6 +1248,8 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.title": "Нов интерфейс за въпроси",
   "settings.experimental.row.newQuestionUI.description":
     "Предварителен преглед на панела за въпроси, управляван от клавиатурата",
+  "settings.experimental.row.subagentComposer.title": "Редактор за подагент",
+  "settings.experimental.row.subagentComposer.description": "Изпратете съобщение до подагент от собствената му сесия",
   "settings.experimental.row.sidebarOrganize.title": "Организиране на вертикалната странична лента",
   "settings.experimental.row.sidebarOrganize.description":
     "Изберете как да се изброяват сесиите в страничната лента. Важи само за страничните раздели.",

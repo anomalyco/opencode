@@ -213,6 +213,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "پرامپٹ",
   "session.child.backToParent": "مین سیشن تے واپس جاؤ۔",
+  "session.child.message.placeholder": "ਇਸ ਸਬਏਜੰਟ ਨੂੰ ਸੁਨੇਹਾ ਭੇਜੋ",
   "prompt.action.attachFile": "فائلاں شامل کرو",
   "prompt.toast.attachmentDuplicate.title": "ایہہ فائل پہلے ای اپ لوڈ ہو چکی اے",
   "prompt.toast.modelAgentRequired.title": "اک ایجنٹ تے ماڈل چنو",
@@ -1241,6 +1242,8 @@ export const dict = {
     "نویں ڈیزائن آلی سیشن ٹائم لائن جیہڑی ایجنٹ دے کیتے کم نوں گروپ کردی اے، واری دے تھلے اک سٹیٹس لائن نال",
   "settings.experimental.row.newQuestionUI.title": "نویں سوال UI",
   "settings.experimental.row.newQuestionUI.description": "کی بورڈ پہلاں آلے سوال ڈاک دا پیش نظارہ ویکھو",
+  "settings.experimental.row.subagentComposer.title": "ਸਬਏਜੰਟ ਕੰਪੋਜ਼ਰ",
+  "settings.experimental.row.subagentComposer.description": "ਸਬਏਜੰਟ ਨੂੰ ਉਸ ਦੇ ਆਪਣੇ ਸੈਸ਼ਨ ਤੋਂ ਸੁਨੇਹਾ ਭੇਜੋ",
   "settings.experimental.row.sidebarOrganize.title": "کھڑویں سائڈبار نوں ترتیب دیو",
   "settings.experimental.row.sidebarOrganize.description":
     "چنو کہ سائڈبار وچ سیشن کیویں دسے جان۔ صرف پاسے دیاں ٹیباں تے لاگو ہوندا اے۔",

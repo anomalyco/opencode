@@ -219,6 +219,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "موجّه",
   "session.child.backToParent": "العودة إلى الجلسة الرئيسية.",
+  "session.child.message.placeholder": "أرسل رسالة إلى هذا الوكيل الفرعي",
   "prompt.action.attachFile": "إضافة ملفات",
   "prompt.toast.attachmentDuplicate.title": "تم تحميل هذا الملف بالفعل",
   "prompt.toast.modelAgentRequired.title": "حدد وكيلاً ونموذجاً",
@@ -1308,6 +1309,8 @@ export const dict = {
     "مخطط زمني للجلسة بتصميم جديد يجمع ما قام به الوكيل، مع سطر حالة واحد أسفل الدور",
   "settings.experimental.row.newQuestionUI.title": "واجهة أسئلة جديدة",
   "settings.experimental.row.newQuestionUI.description": "معاينة لوحة الأسئلة المعتمدة على لوحة المفاتيح",
+  "settings.experimental.row.subagentComposer.title": "محرر الوكيل الفرعي",
+  "settings.experimental.row.subagentComposer.description": "أرسل رسالة إلى وكيل فرعي من جلسته الخاصة",
   "settings.experimental.row.sidebarOrganize.title": "تنظيم الشريط الجانبي العمودي",
   "settings.experimental.row.sidebarOrganize.description":
     "اختر طريقة عرض الجلسات في الشريط الجانبي. ينطبق على علامات التبويب الجانبية فقط.",

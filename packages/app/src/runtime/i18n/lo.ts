@@ -210,6 +210,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "ກັບໄປທີ່ເຊດຊັນຫຼັກ.",
+  "session.child.message.placeholder": "ສົ່ງຂໍ້ຄວາມຫາຕົວແທນຍ່ອຍນີ້",
   "prompt.action.attachFile": "ເພີ່ມໄຟລ໌",
   "prompt.toast.attachmentDuplicate.title": "ໄຟລ໌ນີ້ໄດ້ຖືກອັບໂຫລດໄປກ່ອນແລ້ວ",
   "prompt.toast.uploading.percent": "{{percent}}%",
@@ -1216,6 +1217,8 @@ export const dict = {
     "ທາມລາຍເຊດຊັນທີ່ອອກແບບໃໝ່ ເຊິ່ງຈັດກຸ່ມສິ່ງທີ່ຕົວແທນໄດ້ເຮັດ, ພ້ອມແຖວສະຖານະດຽວຢູ່ລຸ່ມຮອບ",
   "settings.experimental.row.newQuestionUI.title": "UI ຄຳຖາມໃໝ່",
   "settings.experimental.row.newQuestionUI.description": "ສະແດງຕົວຢ່າງແຖບຄຳຖາມທີ່ເນັ້ນການໃຊ້ແປ້ນພິມ",
+  "settings.experimental.row.subagentComposer.title": "ແບບຟອມຕົວແທນຍ່ອຍ",
+  "settings.experimental.row.subagentComposer.description": "ສົ່ງຂໍ້ຄວາມຫາຕົວແທນຍ່ອຍຈາກເຊສຊັນຂອງມັນ",
   "settings.experimental.row.sidebarOrganize.title": "ຈັດລະບຽບແຖບດ້ານຂ້າງແນວຕັ້ງ",
   "settings.experimental.row.sidebarOrganize.description":
     "ເລືອກວິທີສະແດງລາຍການເຊດຊັນໃນແຖບດ້ານຂ້າງ. ໃຊ້ກັບແຖບດ້ານຂ້າງເທົ່ານັ້ນ.",

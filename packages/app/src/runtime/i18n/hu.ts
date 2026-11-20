@@ -219,6 +219,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Utasítás",
   "session.child.backToParent": "Vissza a fő munkamenethez.",
+  "session.child.message.placeholder": "Üzenet küldése ennek az alügynöknek",
   "prompt.action.attachFile": "Fájlok hozzáadása",
   "prompt.toast.attachmentDuplicate.title": "Ezt a fájlt már feltöltötték",
   "prompt.toast.modelAgentRequired.title": "Válasszon egy ügynököt és modellt",
@@ -1247,6 +1248,8 @@ export const dict = {
     "Újratervezett munkamenet-idővonal, amely csoportosítja az ügynök tevékenységét, a kör alatt egyetlen állapotsorral",
   "settings.experimental.row.newQuestionUI.title": "Új kérdésfelület",
   "settings.experimental.row.newQuestionUI.description": "A billentyűzetközpontú kérdéspanel előnézete",
+  "settings.experimental.row.subagentComposer.title": "Alügynök-írófelület",
+  "settings.experimental.row.subagentComposer.description": "Üzenet küldése egy alügynöknek a saját munkamenetéből",
   "settings.experimental.row.sidebarOrganize.title": "Függőleges oldalsáv rendezése",
   "settings.experimental.row.sidebarOrganize.description":
     "Válassza ki, hogyan jelenjenek meg a munkamenetek az oldalsávban. Csak oldalsó lapoknál érvényes.",

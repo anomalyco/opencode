@@ -218,6 +218,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "འདི་འཕྲོ་ལས",
   "session.child.backToParent": "ལཱ་ཡུན་ངོ་མ་ལུ་ལོག་འགྱོ།",
+  "session.child.message.placeholder": "དེ་ལུ་བརྡ་འཕྲིན་གཏང་།",
   "prompt.action.attachFile": "ཡིག་སྣོད་ཚུ་ཁ་སྐོང་རྐྱབས།",
   "prompt.toast.attachmentDuplicate.title": "ཡིག་སྣོད་འདི་ཧེ་མ་ལས་སྐྱེལ་བཙུགས་འབད་ཡི།",
   "prompt.toast.modelAgentRequired.title": "ལས་ཚབ་དང་དཔེ་ཚད་ཅིག་སེལ་འཐུ་འབད།",
@@ -1260,6 +1261,8 @@ export const dict = {
     "ལས་ཚབ་ཀྱིས་འབད་མི་ཚུ་ སྡེ་ཚན་བཟོ་ཡོད་པའི་ ལཱ་ཡུན་དུས་ཚོད་ཐིག་ལོག་བཟོ་ཡོད་མི་ཅིག་ཨིན་ ཐེངས་ཀྱི་འོག་ལུ་ གནས་སྟངས་གྲལ་ཐིག་གཅིག་ཡོདཔ།",
   "settings.experimental.row.newQuestionUI.title": "དྲི་བའི་ UI གསརཔ།",
   "settings.experimental.row.newQuestionUI.description": "ལྡེ་སྒྲོམ་ལུ་གཙོ་བོར་བཏོན་མི་ དྲི་བའི་ལྡེབ་ སྔོན་ལྟ་འབད།",
+  "settings.experimental.row.subagentComposer.title": "ཡན་ལག་ལས་འགན་ཕྲེང་བ",
+  "settings.experimental.row.subagentComposer.description": "རང་གི་ལཱ་ཡུན་ལས་ ཡན་ལག་ལས་འགན་ལུ་བརྡ་འཕྲིན་གཏང་།",
   "settings.experimental.row.sidebarOrganize.title": "ཀེར་ཕྲང་ཟུར་ཁའི་ཕྲ་རིང་སྒྲིག",
   "settings.experimental.row.sidebarOrganize.description":
     "ཟུར་ཁའི་ཕྲ་རིང་ནང་ ལཱ་ཡུན་ཚུ་ ག་དེ་སྦེ་ཐོ་བཀོད་འབད་ནི་ཨིན་ན་ གདམ་ཁ་རྐྱབས། ཟུར་ཁའི་མཆོང་ལྡེ་ལུ་རྐྱངམ་ཅིག་འཇུགཔ་ཨིན།",

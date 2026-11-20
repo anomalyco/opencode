@@ -206,6 +206,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Aftur til høvuðsløtu.",
+  "session.child.message.placeholder": "Send hesum undirhandara boð",
   "prompt.action.attachFile": "Legg fílur til",
   "prompt.toast.attachmentDuplicate.title": "Hendan fílan er longu løgd upp.",
   "prompt.toast.modelAgentRequired.title": "Vel agent og modell",
@@ -1229,6 +1230,8 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.title": "Nýtt spurningaviðmót",
   "settings.experimental.row.newQuestionUI.description":
     "Forskoða spurningaviðmótið, sum fyrst og fremst verður stýrt við knappaborðinum",
+  "settings.experimental.row.subagentComposer.title": "Undirhandara skrivifelt",
+  "settings.experimental.row.subagentComposer.description": "Send einum undirhandara boð frá hans egnu setu",
   "settings.experimental.row.sidebarOrganize.title": "Skipa loddrættu síðulinjuna",
   "settings.experimental.row.sidebarOrganize.description":
     "Vel hvussu setur verða listaðar í síðulinjuni. Er bert galdandi fyri síðuflipar.",

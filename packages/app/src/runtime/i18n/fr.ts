@@ -428,6 +428,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Invite",
   "session.child.backToParent": "Revenir à la session principale.",
+  "session.child.message.placeholder": "Envoyer un message à ce sous-agent",
   "prompt.action.attachFile": "Joindre un fichier",
   "prompt.toast.attachmentDuplicate.title": "Ce fichier a déjà été téléversé",
   "prompt.toast.modelAgentRequired.title": "Sélectionnez un agent et un modèle",
@@ -1292,6 +1293,9 @@ export const dict = {
     "Une chronologie de session repensée qui regroupe les actions de l’agent, avec une seule ligne d’état sous le tour",
   "settings.experimental.row.newQuestionUI.title": "Nouvelle interface des questions",
   "settings.experimental.row.newQuestionUI.description": "Prévisualiser le panneau de questions pensé pour le clavier",
+  "settings.experimental.row.subagentComposer.title": "Composeur de sous-agent",
+  "settings.experimental.row.subagentComposer.description":
+    "Envoyer un message à un sous-agent depuis sa propre session",
   "settings.experimental.row.sidebarOrganize.title": "Organiser la barre latérale verticale",
   "settings.experimental.row.sidebarOrganize.description":
     "Choisissez comment les sessions sont listées dans la barre latérale. S’applique uniquement aux onglets latéraux.",

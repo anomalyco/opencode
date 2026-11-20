@@ -440,6 +440,7 @@ export const dict = {
   "model.tooltip.reasoning": "추론",
   "common.clear": "지우기",
   "session.child.backToParent": "메인 세션으로 돌아가기.",
+  "session.child.message.placeholder": "이 하위 에이전트에 메시지 보내기",
 
   "error.page.description.localServerStartup": "로컬 서버를 시작하는 동안 오류가 발생했습니다.",
   "error.page.action.exportLogs": "로그 내보내기",
@@ -1232,6 +1233,8 @@ export const dict = {
     "에이전트가 한 일을 그룹으로 묶고 턴 아래에 상태 줄 하나를 표시하는 새로 디자인된 세션 타임라인",
   "settings.experimental.row.newQuestionUI.title": "새 질문 UI",
   "settings.experimental.row.newQuestionUI.description": "키보드 중심의 질문 도크 미리 보기",
+  "settings.experimental.row.subagentComposer.title": "하위 에이전트 입력창",
+  "settings.experimental.row.subagentComposer.description": "하위 에이전트의 세션에서 메시지 보내기",
   "settings.experimental.row.sidebarOrganize.title": "세로 사이드바 정리",
   "settings.experimental.row.sidebarOrganize.description":
     "사이드바에 세션을 나열하는 방식을 선택하세요. 사이드 탭에만 적용됩니다.",

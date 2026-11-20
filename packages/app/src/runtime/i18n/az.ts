@@ -208,6 +208,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Əsas sessiyaya qayıt.",
+  "session.child.message.placeholder": "Bu alt agentə mesaj göndər",
   "prompt.action.attachFile": "Fayllar əlavə et",
   "prompt.toast.attachmentDuplicate.title": "Bu fayl artıq yüklənib",
   "prompt.toast.modelAgentRequired.title": "Agent və model seçin",
@@ -1239,6 +1240,8 @@ export const dict = {
     "Agentin etdiklərini qruplaşdıran və gedişin altında bir status sətri göstərən yenidən dizayn edilmiş sessiya zaman xətti",
   "settings.experimental.row.newQuestionUI.title": "Yeni sual interfeysi",
   "settings.experimental.row.newQuestionUI.description": "Klaviatura yönümlü sual panelinə önizləmə",
+  "settings.experimental.row.subagentComposer.title": "Alt agent redaktoru",
+  "settings.experimental.row.subagentComposer.description": "Alt agentə öz sessiyasından mesaj göndərin",
   "settings.experimental.row.sidebarOrganize.title": "Şaquli yan paneli təşkil et",
   "settings.experimental.row.sidebarOrganize.description":
     "Sessiyaların yan paneldə necə siyahılanacağını seçin. Yalnız yan tablara aiddir.",

@@ -356,6 +356,7 @@ export const dict = {
   "prompt.mode.shell": "Shell",
   "prompt.mode.normal": "Prompt",
   "session.child.backToParent": "Zurück zur Hauptsitzung.",
+  "session.child.message.placeholder": "Nachricht an diesen Subagenten senden",
   "prompt.action.attachFile": "Datei anhängen",
   "prompt.toast.attachmentDuplicate.title": "Diese Datei wurde bereits hochgeladen",
   "prompt.toast.modelAgentRequired.title": "Wählen Sie einen Agenten und ein Modell",
@@ -1271,6 +1272,9 @@ export const dict = {
     "Eine neu gestaltete Sitzungs-Timeline, die die Aktionen des Agenten gruppiert, mit einer Statuszeile unter der Runde",
   "settings.experimental.row.newQuestionUI.title": "Neue Fragen-Oberfläche",
   "settings.experimental.row.newQuestionUI.description": "Vorschau des tastaturorientierten Fragenbereichs",
+  "settings.experimental.row.subagentComposer.title": "Subagenten-Eingabe",
+  "settings.experimental.row.subagentComposer.description":
+    "Sende einem Subagenten eine Nachricht aus seiner eigenen Sitzung",
   "settings.experimental.row.sidebarOrganize.title": "Vertikale Seitenleiste organisieren",
   "settings.experimental.row.sidebarOrganize.description":
     "Wählen Sie, wie Sitzungen in der Seitenleiste aufgelistet werden. Gilt nur für seitliche Tabs.",

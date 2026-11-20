@@ -236,6 +236,7 @@ export const dict = {
   "prompt.mode.shell": "Kabuk",
   "prompt.mode.normal": "İstem",
   "session.child.backToParent": "Ana oturuma dön.",
+  "session.child.message.placeholder": "Bu alt ajana mesaj gönder",
 
   "prompt.action.attachFile": "Dosya ekle",
 
@@ -1309,6 +1310,8 @@ export const dict = {
     "Ajanın yaptıklarını gruplayan ve turun altında tek bir durum satırı gösteren yeniden tasarlanmış oturum zaman çizelgesi",
   "settings.experimental.row.newQuestionUI.title": "Yeni soru arayüzü",
   "settings.experimental.row.newQuestionUI.description": "Klavye öncelikli soru panelini önizleyin",
+  "settings.experimental.row.subagentComposer.title": "Alt ajan giriş alanı",
+  "settings.experimental.row.subagentComposer.description": "Alt ajana kendi oturumundan mesaj gönder",
   "settings.experimental.row.sidebarOrganize.title": "Dikey kenar çubuğunu düzenle",
   "settings.experimental.row.sidebarOrganize.description":
     "Oturumların kenar çubuğunda nasıl listeleneceğini seçin. Yalnızca yan sekmelerde geçerlidir.",
