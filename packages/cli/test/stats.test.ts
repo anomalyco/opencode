@@ -99,6 +99,38 @@ describe("stats rendering", () => {
     expect(output).toContain("+1 more tool")
   })
 
+  test("aligns wide stats labels by terminal width", () => {
+    const output = renderStats(
+      {
+        ...stats,
+        models: ["model", "模型", "e\u0301", "猫".repeat(30)].map((id) => ({
+          model: { providerID: "custom", id },
+          steps: 6,
+          tokens: { input: 42, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          cost: 12.34,
+        })),
+        tools: {
+          mode: "detail",
+          totals: { calls: 10, succeeded: 8, failed: 2, unfinished: 0 },
+          usage: [{ name: "工具", calls: 10, succeeded: 8, failed: 2, unfinished: 0, durationP50: 250 }],
+        },
+      },
+      options({ models: true, tools: true, width: 80 }),
+    )
+    const rows = output.split(/\r?\n/)
+    const modelRows = rows.filter((line) => line.startsWith("custom/"))
+    const toolRow = rows.find((line) => line.startsWith("工具")) ?? ""
+
+    expect(modelRows).toHaveLength(4)
+    const asciiRows = renderStats(stats, options({ models: true, tools: true, width: 80 })).split(/\r?\n/)
+    expect(asciiRows).toContain("anthropic/sonnet                       18.5k           6      $12.34")
+    expect(asciiRows).toContain("private_tool                              10       20.0%       250ms")
+    expect({
+      modelColumns: modelRows.map((row) => Bun.stringWidth(row.slice(0, row.indexOf("42")))),
+      toolColumn: Bun.stringWidth(toolRow.slice(0, toolRow.indexOf("10"))),
+    }).toEqual({ modelColumns: [42, 42, 42, 42], toolColumn: 42 })
+  })
+
   test("uses the OpenCode palette in color mode", () => {
     const output = renderStats(stats, options({ color: true }))
     expect(output).toContain("\x1b[1;36m")
@@ -110,6 +142,24 @@ describe("stats rendering", () => {
     expect(output).toContain("anthropic/sonnet")
     expect(output).toContain("18.5k tokens · 6 steps · $12.34")
     expect(output.split(/\r?\n/).every((line) => line.length <= 48)).toBe(true)
+
+    const compact = renderStats(
+      {
+        ...stats,
+        models: [
+          {
+            model: { providerID: "custom", id: "x".repeat(10) + "👩‍💻suffix" },
+            steps: 6,
+            tokens: { input: 42, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            cost: 12.34,
+          },
+        ],
+      },
+      options({ models: true, width: 20 }),
+    )
+    const label = compact.split(/\r?\n/).find((line) => line.startsWith("custom/")) ?? ""
+    expect(label).toBe("custom/xxxxxxxxxx👩‍💻…")
+    expect(Bun.stringWidth(label)).toBe(20)
   })
 
   test("renders a concise empty state", () => {
