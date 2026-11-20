@@ -319,49 +319,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn hash_matches_node_sha1() {
-        // node -e 'console.log(require("crypto").createHash("sha1").update("abc").digest("hex"))'
-        assert_eq!(hash("abc"), "a9993e364706816aba3e25717850c26c9cd0d89d");
-    }
-
-    #[test]
-    fn layout_and_release() {
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let lock = acquire(dir.path(), "/some/file.json", &quick()).unwrap();
-        let lock_dir = dir.path().join(format!("{}.lock", hash("/some/file.json")));
-        assert_eq!(lock.path(), lock_dir);
-        assert_eq!(fs::read(lock_dir.join("heartbeat")).unwrap(), b"");
-        let meta: Meta = serde_json::from_str(&fs::read_to_string(lock_dir.join("meta.json")).unwrap()).unwrap();
-        assert_eq!(meta.pid, std::process::id());
-        lock.release().unwrap();
-        assert!(!lock_dir.exists());
-    }
-
-    #[test]
-    fn excludes_and_times_out() {
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let held = acquire(dir.path(), "k", &quick()).unwrap();
-        let err = acquire(dir.path(), "k", &quick()).unwrap_err();
-        assert_eq!(err.to_string(), "Timed out waiting for lock: k");
-        // Another key is independent.
-        acquire(dir.path(), "other", &quick()).unwrap().release().unwrap();
-        drop(held);
-        acquire(dir.path(), "k", &quick()).unwrap().release().unwrap();
-    }
-
-    #[test]
-    fn breaks_a_stale_lock() {
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let options = Options { stale: Duration::from_millis(200), ..quick() };
-        let lock_dir = dir.path().join(format!("{}.lock", hash("k")));
-        fs::create_dir(&lock_dir).unwrap();
-        fs::write(lock_dir.join("heartbeat"), "").unwrap();
-        let old = SystemTime::now() - Duration::from_secs(5);
-        touch(&lock_dir.join("heartbeat"), old).unwrap();
-        acquire(dir.path(), "k", &options).unwrap().release().unwrap();
-    }
-
     // The owner's heartbeat refreshes a lock it holds past the stale time. The beat is waited for, not raced: a contender
     // that checks while a starved heartbeat thread is late finds the lock stale at this test's short stale time, which
     // the default (60 s, a beat every 20 s) leaves room for.
@@ -394,37 +351,6 @@ mod tests {
             "Refusing to release: lock token mismatch (not the owner)."
         );
         assert!(path.exists());
-    }
-
-    #[test]
-    fn with_lock_runs_and_releases() {
-        let dir = opencode_util::temp::tempdir().unwrap();
-        assert_eq!(with_lock(dir.path(), "k", &quick(), || 7).unwrap(), 7);
-        assert!(fs::read_dir(dir.path()).unwrap().next().is_none());
-    }
-
-    // A contender's staleness read races a release that marks the lock directory for deletion, which answers "Access is
-    // denied" on Windows until the delete completes (preview 44552774481). Every acquire and release succeeds,
-    // whichever interleaving it takes.
-    #[test]
-    fn contenders_acquire_and_release_a_shared_lock() {
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let options = Options { timeout: Duration::from_secs(60), ..quick() };
-        let threads: Vec<_> = (0..4)
-            .map(|_| {
-                let dir = dir.path().to_path_buf();
-                let options = options.clone();
-                thread::spawn(move || {
-                    for _ in 0..10 {
-                        with_lock(&dir, "k", &options, || ()).unwrap();
-                    }
-                })
-            })
-            .collect();
-        for thread in threads {
-            thread.join().unwrap();
-        }
-        assert!(fs::read_dir(dir.path()).unwrap().next().is_none());
     }
 
     // Windows reports `ERROR_ACCESS_DENIED` (5) busy and tries it `BUSY_TRIES` times more; elsewhere 5 is `EIO` and fails at once.

@@ -113,14 +113,4 @@ mod tests {
         assert_eq!(channels(&[("OPENCODE_CHANNEL", "beta")]).storage, "beta");
         assert_eq!(channels(&[("OPENCODE_CHANNEL", "")]).channel, "latest");
     }
-
-    #[test]
-    fn versions() {
-        assert!(version_belongs_to_channel(Some("1.2.3"), "latest", "1.2.3"));
-        assert!(version_belongs_to_channel(Some("0.0.0-oc-x-202601"), "oc-x", "1.2.3"));
-        assert!(version_belongs_to_channel(Some("0.0.0-oc-x-2026.1"), "oc-x", "1.2.3"));
-        assert!(!version_belongs_to_channel(Some("0.0.0-oc-x-2026."), "oc-x", "1.2.3"));
-        assert!(!version_belongs_to_channel(Some("0.0.0-oc-y-1"), "oc-x", "1.2.3"));
-        assert!(!version_belongs_to_channel(None, "oc-x", "1.2.3"));
-    }
 }

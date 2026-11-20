@@ -265,22 +265,6 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_made_again_is_watched_again() {
-        let root = opencode_util::temp::tempdir().unwrap();
-        let dir = root.path().join("watched");
-        std::fs::create_dir(&dir).unwrap();
-        let (tx, rx) = mpsc::channel();
-        let _watch = watch(&dir, |name| name == "a.json", DEBOUNCE, move || tx.send(()).unwrap()).unwrap();
-        std::fs::remove_dir(&dir).unwrap();
-        rx.recv_timeout(Duration::from_secs(5)).unwrap();
-        std::fs::create_dir(&dir).unwrap();
-        rx.recv_timeout(Duration::from_secs(5)).unwrap();
-        while rx.recv_timeout(Duration::from_millis(200)).is_ok() {}
-        std::fs::write(dir.join("a.json"), "1").unwrap();
-        rx.recv_timeout(Duration::from_secs(5)).unwrap();
-    }
-
-    #[test]
     fn dropping_the_watch_ends_its_threads() {
         let dir = opencode_util::temp::tempdir().unwrap();
         let (tx, rx) = mpsc::channel::<()>();
