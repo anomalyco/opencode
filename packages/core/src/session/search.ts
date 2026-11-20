@@ -18,11 +18,8 @@ type DatabaseService = Database.Interface["db"]
 
 /** Characters of context on each side of a snippet's match. */
 const SNIPPET_CONTEXT = 120
-const MAX_TEXT = 3_000
-const MAX_TOOL_SUMMARY_INPUT = 120
-const MAX_TOOL_INPUT = 1_000
-const MAX_TOOL_OUTPUT = 2_000
-const MAX_TOOL_ERROR = 500
+/** Characters of a tool's input shown in its one-line summary. Full text goes through the tool output limit. */
+const TOOL_SUMMARY_INPUT = 120
 const MAX_MATCHES_PER_SESSION = 3
 
 const VISIBLE_TYPES = ["user", "assistant", "compaction", "shell", "synthetic", "skill"] as const
@@ -482,7 +479,7 @@ function formatMessage(
   }
 
   if (message.type === "user" || message.type === "synthetic" || message.type === "system" || message.type === "skill") {
-    const text = cap(message.text, MAX_TEXT)
+    const text = nonEmpty(message.text)
     if (text !== undefined) base.text = text
     return base
   }
@@ -493,14 +490,14 @@ function formatMessage(
         : message.status === "failed"
           ? message.error.message
           : "(compaction running)"
-    const text = cap(raw, MAX_TEXT)
+    const text = nonEmpty(raw)
     if (text !== undefined) base.text = text
     return base
   }
   if (message.type === "shell") {
     const raw =
       includeTools && message.output?.output ? `$ ${message.command}\n${message.output.output}` : `$ ${message.command}`
-    const text = cap(raw, MAX_TEXT)
+    const text = nonEmpty(raw)
     if (text !== undefined) base.text = text
     return base
   }
@@ -508,7 +505,7 @@ function formatMessage(
     const joined = message.content
       .flatMap((part) => (part.type === "text" && part.text.trim() ? [part.text] : []))
       .join("\n\n")
-    const text = cap(joined, MAX_TEXT)
+    const text = nonEmpty(joined)
     if (text !== undefined) base.text = text
     const tools = message.content.flatMap((part) =>
       part.type === "tool" ? [formatTool(part, includeTools)] : [],
@@ -522,7 +519,7 @@ function formatMessage(
 function formatTool(part: SessionMessage.AssistantTool, includeTools: boolean): string | ToolDetail {
   const inputText = part.state.status === "streaming" ? part.state.input : JSON.stringify(part.state.input)
   if (!includeTools) {
-    const args = cap(inputText, MAX_TOOL_SUMMARY_INPUT) ?? ""
+    const args = cap(inputText, TOOL_SUMMARY_INPUT) ?? ""
     const suffix = part.state.status === "error" ? " → error" : ""
     return `${part.name}(${args})${suffix}`
   }
@@ -533,17 +530,17 @@ function formatTool(part: SessionMessage.AssistantTool, includeTools: boolean): 
     output?: string
     error?: string
   } = { name: part.name, status: part.state.status }
-  const cappedInput = cap(inputText, MAX_TOOL_INPUT)
-  if (cappedInput !== undefined) detail.input = cappedInput
+  const input = nonEmpty(inputText)
+  if (input !== undefined) detail.input = input
   if (part.state.status === "completed") {
-    const output = cap(toolContentText(part.state.content), MAX_TOOL_OUTPUT)
+    const output = nonEmpty(toolContentText(part.state.content))
     if (output !== undefined) detail.output = output
   }
   if (part.state.status === "error") {
-    const error = cap(part.state.error.message, MAX_TOOL_ERROR)
+    const error = nonEmpty(part.state.error.message)
     if (error !== undefined) detail.error = error
     if (part.state.content) {
-      const output = cap(toolContentText(part.state.content), MAX_TOOL_OUTPUT)
+      const output = nonEmpty(toolContentText(part.state.content))
       if (output !== undefined) detail.output = output
     }
   }
@@ -708,6 +705,10 @@ function normalizeWithOffsets(value: string) {
     offset += char.length
   }
   return { normalized, offsets }
+}
+
+function nonEmpty(text: string | undefined) {
+  return text ? text : undefined
 }
 
 function cap(text: string | undefined, max: number) {

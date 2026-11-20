@@ -387,6 +387,17 @@ describe("SessionSearch", () => {
     }),
   )
 
+  it.effect("returns long message text whole, so a match deep in a message stays readable", () =>
+    Effect.gen(function* () {
+      const { search, addSession, addMessages } = yield* setup
+      const long = `${"filler ".repeat(2_000)}needle at the end`
+      yield* addSession({ id: "a", title: "Long message" })
+      yield* addMessages("a", [user("01", long)])
+      const page = yield* search.read({ sessionID: ses("a") })
+      expect(page.messages[0]?.text).toBe(long)
+    }),
+  )
+
   it.effect("reads cleanly when a session contains a corrupt row by skipping only the bad row", () =>
     Effect.gen(function* () {
       const { db, search, addSession, addMessages } = yield* setup
