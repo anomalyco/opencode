@@ -1116,6 +1116,33 @@ describe("ShellTool", () => {
     }),
   )
 
+  it.live("reports a session directory removed after the session started", () =>
+    withTempDir((tmp) => {
+      reset()
+      const removed = path.join(tmp.path, "removed")
+      return Effect.promise(() => fs.mkdir(removed)).pipe(
+        Effect.andThen(
+          withSession(removed, (registry) =>
+            Effect.promise(() => fs.rm(removed, { recursive: true })).pipe(
+              Effect.andThen(executeTool(registry, call({ command: cwdCommand }))),
+            ),
+          ),
+        ),
+        Effect.andThen((settled) =>
+          Effect.sync(() =>
+            expect(settled).toEqual({
+              status: "error",
+              error: {
+                type: "unknown",
+                message: `Working directory does not exist: ${removed}. The session directory was removed; set workdir to an existing directory or move the session.`,
+              },
+            }),
+          ),
+        ),
+      )
+    }),
+  )
+
   it.live(
     "permissions compound commands separately",
     () =>
