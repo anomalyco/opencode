@@ -257,14 +257,23 @@ async fn ensure_missing(
     run_ensure(transport, paths, env, config, missing.pending.unwrap_or(file), None, on_start).await
 }
 
-// A development client and its server binary can have different versions. Replacing a service with the same server
-// version would restart it on every launch. Try the binary if its version probe times out.
+// A development client and its server binary can have different versions. A restart that cannot fix the mismatch
+// would restart the service on every launch: never restart through the binary the service already runs, or through
+// one that reports the service's version. Try the binary if its version probe times out.
 async fn restarts(env: &Env, found: &discover::Found, client_version: &str) -> bool {
     let running = found.service.version.as_deref();
     if running == Some(client_version) {
         return false;
     }
     let ts = env.ts();
+    if discover::runs(&ts, found.service.registration.pid) {
+        log::info!(
+            "background service version={} differs from this client's {client_version}, but it runs {:?}, which a restart would start again; not restarted",
+            running.unwrap_or_default(),
+            ts.program
+        );
+        return false;
+    }
     let binary = discover::binary_version(&ts).await;
     if binary.is_some() && binary.as_deref() == running {
         log::info!(
