@@ -65,7 +65,8 @@ fn jsonc_never_panics() {
     }
 }
 
-// Nesting past the bound is a parse error rather than a stack overflow, in any thread.
+// Nesting past the bound is a parse error rather than a stack overflow, in any thread, and an edit fails rather than
+// formatting gigabytes.
 #[test]
 fn deep_jsonc_is_invalid_not_a_crash() {
     let nested = |depth: usize| "[".repeat(depth) + &"]".repeat(depth);
@@ -73,5 +74,7 @@ fn deep_jsonc_is_invalid_not_a_crash() {
     for depth in [MAX_DEPTH + 1, 100_000] {
         assert_eq!(parse(&nested(depth)), None, "{depth}");
         assert!(parse_tree(&nested(depth)).errors > 0, "{depth}");
+        let edit = modify(&nested(depth), &[Segment::Index(0)], Some(&serde_json::json!(1)));
+        assert_eq!(edit.unwrap_err().to_string(), "Can not edit a document nested deeper than 512 levels");
     }
 }
