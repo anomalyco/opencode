@@ -304,22 +304,41 @@ download_with_progress() {
     return $ret
 }
 
-download_and_install() {
-    print_message info "\n${MUTED}Installing ${NC}$APP ${MUTED}version: ${NC}$specific_version"
-    local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
-    mkdir -p "$tmp_dir"
+download() {
+    local tmp_dir="$1"
+    mkdir -p "$tmp_dir" || return 1
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
         local ret=0
         curl -f -# -L -o "$tmp_dir/$filename" "$url" || ret=$?
-        # curl exits 23 when it cannot write the file, usually because the temporary directory is full.
+        return "$ret"
+    fi
+}
+
+download_and_install() {
+    print_message info "\n${MUTED}Installing ${NC}$APP ${MUTED}version: ${NC}$specific_version"
+    local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
+
+    local ret=0
+    download "$tmp_dir" || ret=$?
+
+    # curl exits 23 when it cannot write the file. A snap-confined curl bind-mounts a
+    # private /tmp, so it cannot see the staging directory this shell just created and
+    # fails even though nothing is full. Its home interface does expose non-hidden paths
+    # under $HOME, so retry there instead of blaming free space.
+    if [ "$ret" -eq 23 ] && [ "$tmp_dir" != "$HOME/tmp/opencode_install_$$" ]; then
+        rm -rf "$tmp_dir"
+        tmp_dir="$HOME/tmp/opencode_install_$$"
+        ret=0
+        download "$tmp_dir" || ret=$?
+    fi
+
+    if [ "$ret" -ne 0 ]; then
         if [ "$ret" -eq 23 ]; then
             print_message error "Could not write the download to $tmp_dir. Make sure it has enough free space, or set TMPDIR to another directory, then try again." >&2
         fi
-        if [ "$ret" -ne 0 ]; then
-            exit "$ret"
-        fi
+        exit "$ret"
     fi
 
     tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
