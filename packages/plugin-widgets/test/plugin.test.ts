@@ -181,6 +181,7 @@ describe("live templates", () => {
 
         const broken = yield* save({ name: "broken", source: "async function main(data) { let = }" })
         expect(String(failure(broken))).toContain('Invalid widget template "broken": example:')
+        expect(String(failure(broken))).toContain("line 1")
 
         // The widget tool validates the data and posts without running main.
         expect(yield* execute(fake, "widget", { template: "ticker", data: { items: ["x"] } })).toMatchObject(
@@ -192,6 +193,37 @@ describe("live templates", () => {
       }),
     ))
 })
+
+test("the skill's live game example is the one the runtime's guidance tests", async () => {
+  const guidance = await Bun.file(new URL("../../widget/docs/live-guidance.md", import.meta.url)).text()
+  const game = guidance.slice(guidance.indexOf("```js\n// Catch the ball"))
+  const run = await Effect.runPromise(
+    Effect.gen(function* () {
+      const fake = yield* make
+      yield* WidgetsPlugin.effect(fake.context)
+      return fake.skills[0]!.content
+    }).pipe(Effect.scoped),
+  )
+  expect(run).toContain(game.slice(0, game.indexOf("\n```\n")))
+})
+
+test("the built-in minigame is a live template end to end", () =>
+  run((fake) =>
+    Effect.gen(function* () {
+      const minigame = builtins.find((template) => template.name === "minigame")!
+      expect(
+        (yield* fake.call<ReadonlyArray<Widget.Summary>>("templates", {})).find((item) => item.name === "minigame"),
+      ).toMatchObject({ mode: "live", version: minigame.version, builtin: true })
+      expect(yield* fake.call<Widget.Program>("program", { name: "minigame" })).toMatchObject({
+        mode: "live",
+        program: program(minigame.source),
+      })
+      // Posting only validates the data and compiles the program; `main` runs on the user's device.
+      expect(
+        yield* execute(fake, "widget", { template: "minigame", data: { title: "Tap the dots", seconds: 10 } }),
+      ).toMatchObject(Exit.succeed({ metadata: { template: { name: "minigame", version: minigame.version } } }))
+    }),
+  ))
 
 describe("capabilities", () => {
   const source = `async function main(data) {

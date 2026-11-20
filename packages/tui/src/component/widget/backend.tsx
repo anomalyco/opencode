@@ -204,10 +204,7 @@ export function cached(template: { name: string; version: string }, load: () => 
   if (existing) return existing
   const builtin = builtins.find((item) => item.name === template.name && item.version === template.version)
   const pending: Promise<WidgetProgram> = builtin
-    ? Promise.resolve({
-        program: program(builtin.source),
-        mode: "mode" in builtin && builtin.mode === "live" ? "live" : "step",
-      })
+    ? Promise.resolve({ program: program(builtin.source), mode: builtin.mode })
     : load()
   programs.set(key, pending)
   // A failed fetch must not stick, so the next mount retries.

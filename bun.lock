@@ -591,7 +591,6 @@
         "@opencode/schema": "workspace:*",
         "@opencode/widget": "workspace:*",
         "effect": "catalog:",
-        "psychoscript": "0.2.1",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
