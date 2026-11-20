@@ -319,16 +319,24 @@ download() {
 download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}$APP ${MUTED}version: ${NC}$specific_version"
     local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
+    local home_tmp_created=false
+    local retried=false
 
     local ret=0
     download "$tmp_dir" || ret=$?
 
     # curl exits 23 when it cannot write the file. A snap-confined curl bind-mounts a
     # private /tmp, so it cannot see the staging directory this shell just created and
-    # fails even though nothing is full. Its home interface does expose non-hidden paths
-    # under $HOME, so retry there instead of blaming free space.
-    if [ "$ret" -eq 23 ] && [ "$tmp_dir" != "$HOME/tmp/opencode_install_$$" ]; then
+    # fails even though nothing is full. Retry under $HOME, whose non-hidden paths the
+    # snap home interface exposes. Only when TMPDIR is unset: a TMPDIR the user picked
+    # is theirs to fix, and the free-space hint is the right message there.
+    if [ "$ret" -eq 23 ] && [ -z "${TMPDIR:-}" ]; then
+        retried=true
+        if [ ! -d "$HOME/tmp" ]; then
+            home_tmp_created=true
+        fi
         rm -rf "$tmp_dir"
+        print_message warning "curl could not write the download to $tmp_dir. Retrying in $HOME/tmp."
         tmp_dir="$HOME/tmp/opencode_install_$$"
         ret=0
         download "$tmp_dir" || ret=$?
@@ -337,6 +345,12 @@ download_and_install() {
     if [ "$ret" -ne 0 ]; then
         if [ "$ret" -eq 23 ]; then
             print_message error "Could not write the download to $tmp_dir. Make sure it has enough free space, or set TMPDIR to another directory, then try again." >&2
+        fi
+        if [ "$retried" = "true" ]; then
+            rm -rf "$tmp_dir"
+        fi
+        if [ "$home_tmp_created" = "true" ]; then
+            rmdir "$HOME/tmp" 2>/dev/null || true
         fi
         exit "$ret"
     fi
@@ -349,6 +363,9 @@ download_and_install() {
     mv "$tmp_dir/package/bin/$binary_name" "$INSTALL_DIR/$installed_binary"
     chmod 755 "$INSTALL_DIR/$installed_binary"
     rm -rf "$tmp_dir"
+    if [ "$home_tmp_created" = "true" ]; then
+        rmdir "$HOME/tmp" 2>/dev/null || true
+    fi
 }
 
 install_from_binary() {
