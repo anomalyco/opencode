@@ -1,6 +1,8 @@
 import { ClientError, OpenCode, type SessionStatsInfo } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
 import { TokenUsage } from "@opencode/schema/token-usage"
+import { truncateWidth } from "@opencode/tui/util/locale"
+import { stringWidth } from "@opencode/tui/util/string-width"
 import { activityCalendar } from "@opencode/util/activity-calendar"
 import { Effect, Option } from "effect"
 import { EOL } from "node:os"
@@ -213,7 +215,7 @@ function renderModels(stats: SessionStatsInfo, limit: number, width: number) {
     return [
       "MODELS",
       ...models.flatMap((item) => [
-        truncate(
+        truncateWidth(
           `${item.model.providerID}/${item.model.id}${item.model.variant ? `#${item.model.variant}` : ""}`,
           width,
         ),
@@ -247,7 +249,7 @@ function renderTools(stats: SessionStatsInfo, limit: number, width: number) {
       ...tools.flatMap((tool) => {
         const terminal = tool.succeeded + tool.failed
         return [
-          truncate(tool.name, width),
+          truncateWidth(tool.name, width),
           `  ${formatNumber(tool.calls)} calls · ${terminal === 0 ? "-" : formatPercent((tool.failed / terminal) * 100)} error · ${tool.durationP50 === undefined ? "-" : formatDuration(tool.durationP50)} p50`,
         ]
       }),
@@ -274,7 +276,7 @@ function renderTools(stats: SessionStatsInfo, limit: number, width: number) {
 }
 
 function row(label: string, value: string) {
-  return `  ${label.padEnd(20)}${value}`
+  return `  ${padEnd(label, 20)}${value}`
 }
 
 function tableHeader(label: string, second: string, third: string, fourth: string) {
@@ -282,11 +284,15 @@ function tableHeader(label: string, second: string, third: string, fourth: strin
 }
 
 function tableRow(label: string, second: string, third: string, fourth: string) {
-  return `${truncate(label, 34).padEnd(34)}${second.padStart(10)}${third.padStart(12)}${fourth.padStart(12)}`
+  return `${padEnd(truncateWidth(label, 34), 34)}${padStart(second, 10)}${padStart(third, 12)}${padStart(fourth, 12)}`
 }
 
-function truncate(value: string, width: number) {
-  return value.length <= width ? value : value.slice(0, width - 1) + "…"
+function padEnd(value: string, width: number) {
+  return value + " ".repeat(Math.max(0, width - stringWidth(value)))
+}
+
+function padStart(value: string, width: number) {
+  return " ".repeat(Math.max(0, width - stringWidth(value))) + value
 }
 
 function formatNumber(value: number) {
