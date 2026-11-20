@@ -95,7 +95,6 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 - Changing any of these restarts the Claude process.
 - Without an explicit max output, we drop opencode's automatic limit and let Claude pick its own.
 - `configDir` expands a leading `~/`, because Claude Code does not. Each config folder has its own transcripts, so a session keeps one record per folder, and forks are made and deleted in the folder they belong to.
-- `configDir` can be a list. When a subscription limit refuses a request before any output, the request retries on the next folder. A session starts on the folder that last answered it, then the last folder that worked; a side call starts on its parent's folder and never moves it. API keys and auth tokens never rotate.
 - A `configDir` of `~/.claude` is the default folder, and is used by not setting `CLAUDE_CONFIG_DIR`. Setting it moves Claude Code's state from `~/.claude.json` to `~/.claude/.claude.json`, which can hold an older model list, and would give existing sessions a new record. It stays set when opencode itself was started with `CLAUDE_CONFIG_DIR`, since leaving it out would then run that folder.
 
 ## History and Switching Models
@@ -127,7 +126,6 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 - Why not Claude's own cost: it is a running total for the turn, so it cannot be split per response.
 - Claude Code reports usage for one model response several times while it streams, and again as a total for the turn. Adding these up would count the same response several times and make opencode compact too early. We keep the highest count for each response, and use the last response's input as the context size.
 - Each model's context size comes from Claude. Without it, opencode's 200k default applies.
-- Claude Code does not name a model the same way every time: it lists Fable under the name the chat was started with (`fable`, `claude-fable-5-2`, `claude-fable-5-2[1m]`), and each account keeps its own list. A chat or the config may hold any ID that was ever listed, so no ID is removed. A model is told apart by what Claude says its name resolves to (`resolvedModel`): an ID already offered stays the one offered, and another name for it, or an ID Claude stops listing, still runs but is marked deprecated, which keeps it out of the model pickers. Each report builds on the saved list, so one project folder cannot drop an ID another saved.
 - The model list is refreshed whenever Claude reports it: on `/connect`, when the login changes, and each time a new Claude process starts. A new process doesn't report context sizes, so a model it lists without a saved size triggers one full check. The list is saved, with where the login's prices come from, so opencode can show models and costs at startup without running `claude`.
 
 ### Titles, Summaries and Compaction

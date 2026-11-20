@@ -130,6 +130,22 @@ describe("Claude sessions", () => {
     }),
   )
 
+  it.effect("a logged-out config folder fails with the command to log in to it", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup({ account: { tokenSource: "none", apiProvider: "firstParty" } }),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude)
+      const folder = path.resolve("/claude-work")
+      const work = yield* TestSessions.model(test.sessions, { configDir: folder })
+      const error = yield* TestSessions.reply(work, first).pipe(Effect.flip)
+      expect(String(error.cause)).toContain(`CLAUDE_CONFIG_DIR="${folder}" claude auth login`)
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
   it.effect("cancellation drains past the interrupt receipt before accepting another turn", () =>
     Effect.gen(function* () {
       const drain = Promise.withResolvers<void>()

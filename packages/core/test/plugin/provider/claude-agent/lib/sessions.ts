@@ -3,7 +3,6 @@ export * as TestSessions from "./sessions"
 import type { LanguageModelV3Prompt, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Effect } from "effect"
-import { ClaudeAccounts } from "@opencode/core/plugin/provider/claude-agent/claude/accounts"
 import { ClaudeQueryOptions } from "@opencode/core/plugin/provider/claude-agent/claude/query-options"
 import { ClaudeSessions } from "@opencode/core/plugin/provider/claude-agent/claude/sessions"
 import { ClaudeStatus } from "@opencode/core/plugin/provider/claude-agent/claude/status"
@@ -18,7 +17,7 @@ export function storage() {
   return {
     data,
     get: (key: string) => Effect.sync(() => data.get(key)),
-    set: (key: string, value: SessionRecord.Record | string) =>
+    set: (key: string, value: SessionRecord.Record) =>
       Effect.sync(() => {
         data.set(key, value)
       }),
@@ -41,31 +40,16 @@ export function followup(text = "What was the marker? Reply only with it."): Lan
 }
 
 // `settings` are the provider settings from opencode.json, such as `configDir`.
-export const model = (sessions: ClaudeSessions.Interface, settings?: Record<string, unknown>) =>
-  build((request) => sessions.run(request), settings)
-
-export const rotating = (accounts: ClaudeAccounts.Interface, settings?: Record<string, unknown>) => {
-  const configDirs = ClaudeQueryOptions.configDirs(settings?.configDir)
-  return build((request) => accounts.run(request, configDirs), settings)
-}
-
-const build = Effect.fn(function* (
-  run: (request: ClaudeSessions.Request) => Effect.Effect<void, Error>,
-  settings?: Record<string, unknown>,
-) {
+export const model = Effect.fn(function* (sessions: ClaudeSessions.Interface, settings?: Record<string, unknown>) {
   const context = yield* Effect.context<never>()
   return new ClaudeAgentLanguageModel.Model(
     "haiku",
-    { run: (request, signal) => Effect.runPromiseWith(context)(run(request), { signal }) },
+    { run: (request, signal) => Effect.runPromiseWith(context)(sessions.run(request), { signal }) },
     ClaudeQueryOptions.connectionEnv({ settings }),
   )
 })
 
-export const start = Effect.fn(function* (
-  claude: FakeClaude.Fake,
-  saved = storage(),
-  settings?: Record<string, unknown>,
-) {
+export const start = Effect.fn(function* (claude: FakeClaude.Fake, saved = storage()) {
   const registry = ClaudeSessions.registry()
   yield* Effect.addFinalizer(() => registry.close())
   const io = FakeIO.make({ claude })
@@ -76,8 +60,7 @@ export const start = Effect.fn(function* (
     directory: "/tmp/opencode",
   }
   const sessions = yield* registry.attach(input)
-  const accounts = ClaudeAccounts.make({ sessions, storage: saved })
-  return { registry, input, sessions, accounts, model: yield* rotating(accounts, settings), storage: saved }
+  return { registry, input, sessions, model: yield* model(sessions), storage: saved }
 })
 
 export function stream(
