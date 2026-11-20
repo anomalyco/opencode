@@ -131,7 +131,7 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
             tui,
             theme,
             if index == selected { RowState::Focused } else { RowState::Base },
-            Label { text: command.to_owned(), status: None, truncate: false },
+            Label { text: command.to_owned(), status: None, truncate: false, gap: 0 },
             hover,
             click,
         ));
