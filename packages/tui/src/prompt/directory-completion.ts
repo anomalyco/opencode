@@ -101,12 +101,16 @@ export async function mentionAutocomplete(
     }
   }
 
-  const matches = fuzzysort.go(search.fragment, entries, { key: "name", limit }).map((item) => item.obj)
+  const matches = fuzzysort.go(search.fragment, entries, { key: "name", limit })
   fuzzysort.cleanup()
-  // Stable sort keeps fuzzysort's score order within each group while putting
-  // directories first, matching the empty-fragment listing so descent stays predictable.
-  matches.sort((a, b) => Number(b.directory) - Number(a.directory))
-  return { search, entries: matches }
+  // Rank by score so weak directory matches don't push strong file matches out of view;
+  // directories only win ties, which keeps descent predictable.
+  return {
+    search,
+    entries: [...matches]
+      .sort((a, b) => b.score - a.score || Number(b.obj.directory) - Number(a.obj.directory))
+      .map((item) => item.obj),
+  }
 }
 
 export function mentionFileName(prefix: string, absolute: string, directory: boolean) {

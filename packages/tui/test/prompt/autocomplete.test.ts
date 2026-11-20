@@ -442,23 +442,30 @@ describe("mentionAutocomplete", () => {
     })
   })
 
-  test("keeps directories first when a fuzzy fragment ranks a file higher", async () => {
+  test("ranks a fuzzy fragment by score before directories", async () => {
     const location = { directory: "/project/current" }
     const { file } = mentionList(location, [
-      { absolute: "/project/reports", type: "directory" },
-      { absolute: "/project/rep", type: "file" },
-      { absolute: "/project/repo", type: "file" },
+      { absolute: "/project/opt", type: "directory" },
+      { absolute: "/project/apt", type: "directory" },
+      { absolute: "/project/passwd", type: "file" },
+      { absolute: "/project/profile", type: "file" },
     ])
 
-    // fuzzysort scores "rep" (exact) above "reports" (prefix) above "repo"; the
-    // directory must still lead so typing through directories stays predictable.
+    // Weak directory matches ("opt", "apt") must not outrank files that start with "p".
+    const result = await mentionAutocomplete(file, location, "../p", "/home/user", 20)
+    expect(result?.entries.map((entry) => entry.name).slice(0, 2).sort()).toEqual(["passwd", "profile"])
+  })
+
+  test("lets directories win fuzzy score ties", async () => {
+    const location = { directory: "/project/current" }
+    const { file } = mentionList(location, [
+      { absolute: "/project/repb", type: "file" },
+      { absolute: "/project/repa", type: "directory" },
+    ])
+
     expect(await mentionAutocomplete(file, location, "../rep", "/home/user", 20)).toEqual({
       search: { directory: path.resolve("/project"), prefix: "../", fragment: "rep" },
-      entries: [
-        mentionEntry(location, "/project/reports", "directory"),
-        mentionEntry(location, "/project/rep", "file"),
-        mentionEntry(location, "/project/repo", "file"),
-      ],
+      entries: [mentionEntry(location, "/project/repa", "directory"), mentionEntry(location, "/project/repb", "file")],
     })
   })
 
