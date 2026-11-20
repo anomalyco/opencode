@@ -141,7 +141,10 @@ pub fn realign_mentions(
             None => groups.push((mention.text.clone(), vec![(index, mention)])),
         }
     }
-    groups.sort_by(|(left, _), (right, _)| right.len().cmp(&left.len()).then(left.cmp(right)));
+    let units = |text: &str| text.encode_utf16().count();
+    groups.sort_by(|(left, _), (right, _)| {
+        units(right).cmp(&units(left)).then_with(|| opencode_api_types::js::locale_compare(left, right))
+    });
     let mut protected: Vec<Candidate> = Vec::new();
     for (text, items) in groups {
         let candidates = occurrences(content, &text, &offset);
@@ -229,6 +232,13 @@ mod tests {
         let mention = Mention { start: 299_997, end: 299_999, text: "@x".to_owned() };
         let aligned = realign_mentions(&"@x ".repeat(100_000), &[Some(mention.clone())], |index| index as u32);
         assert_eq!(aligned, [Some(mention)]);
+    }
+
+    #[test]
+    fn the_longer_text_in_utf16_claims_an_overlap() {
+        let mention = |text: &str| Some(Mention { start: 0, end: 0, text: text.to_owned() });
+        let aligned = realign_mentions("@abc日日", &[mention("@abc"), mention("c日日")], |index| index as u32);
+        assert_eq!(aligned, [Some(Mention { start: 0, end: 4, text: "@abc".to_owned() }), None]);
     }
 
     #[test]
