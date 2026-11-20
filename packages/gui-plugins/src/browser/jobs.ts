@@ -223,16 +223,20 @@ export function createProfileJobs(
 
     const loss = importLoss(result)
 
-    // A cookie file is cookies and says so in counts: how many came, and how many did not. A browser's import counts
-    // them only when none came.
-    if (loss?.reason === "other" && (result.imported === 0 || finished.job.type === "import-file"))
+    // A cookie file is cookies and says so in counts: how many came, and how many did not. A browser's import never
+    // counts cookies.
+    if (loss?.reason === "other" && finished.job.type === "import-file")
       return { text: ctx.plural("signins.imported.incomplete", result.imported, { omitted: loss.count }), error: result.imported === 0 }
 
-    if (result.imported === 0 && loss)
+    if (result.imported === 0 && loss?.reason === "protected")
       return {
         text: browser ? ctx.t("signins.protected.named", { browser }) : ctx.t("signins.protected"),
         error: true,
       }
+
+    // No sign-in could be brought and no history came with them: nothing was imported.
+    if (result.imported === 0 && loss && !result.pages)
+      return { text: browser ? ctx.t("signins.imported.none.from", { browser }) : ctx.t("settings.failed.import"), error: true }
 
     // Some sign-ins stayed behind, as Chrome's and Edge's app-bound ones on Windows do: their sites open signed out.
     if (loss)

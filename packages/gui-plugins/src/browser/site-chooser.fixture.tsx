@@ -26,6 +26,10 @@ export type SiteScenario = {
   readonly empty?: boolean
   readonly site?: { readonly name: string; readonly choose: boolean }
   readonly pages?: number
+  /** No cookie could be brought: the import counts none, whatever it lost. */
+  readonly none?: boolean
+  /** The app runs on macOS, where a Chromium browser's import waits at the Keychain prompt: this one waits for the test. */
+  readonly keychain?: boolean
 }
 
 /** The dialog host, once the opener mounts under it: the offer opens its own import dialog there. */
@@ -105,8 +109,10 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     },
     importBrowser: async (request: { source: string; profile: string; sites?: readonly string[]; cookies?: boolean; history?: boolean }): Promise<ImportResult> => {
       setStore("imports", (items) => [...items, request])
+
+      if (input.scenario.keychain) await held.promise
       // Without a list of sites, main imports the whole profile; without cookies, only its history.
-      const count = request.cookies === false ? 0 : (request.sites?.length ?? 5) * 2
+      const count = request.cookies === false || input.scenario.none ? 0 : (request.sites?.length ?? 5) * 2
 
       return {
         type: "imported",
@@ -135,7 +141,7 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
       t(`${key}.${count === 1 ? "one" : "other"}`, { ...params, count }),
     use: () => live,
     signal: controller.signal,
-    desktop: { os: "windows" },
+    desktop: { os: input.scenario.keychain ? "macos" : "windows" },
     stores: { preferences: { value: { links: true, welcomed: !input.offer }, set() {} } },
     layout: { settings() {} },
     dialogs: {

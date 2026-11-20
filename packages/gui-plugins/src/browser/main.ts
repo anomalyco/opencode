@@ -34,7 +34,7 @@ const setup: Plugin.MainSetup = (ctx) => {
   const loads = new Map<number, ReturnType<typeof Promise.withResolvers<Pane>>>()
   let disposing: Promise<void> | undefined
   const refs = ctx.storage.store("refs", RefsStore)
-  // The permission decisions the user kept for sites; "Sign out everywhere" keeps them, as they are settings.
+  // The permission decisions the user kept for sites; "Clear browsing data" keeps them, as they are settings.
   const sites = createSitePermissions(ctx.storage, () => sitesIpc.changed())
   // The desktop's one browser profile, created the first time a pane or the settings page needs it. A failed creation
   // is forgotten, so the next request tries again.
