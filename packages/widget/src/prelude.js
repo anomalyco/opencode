@@ -137,11 +137,11 @@ function __widget_step(input) {
 }
 
 // Live mode (specs/v2/widgets-live.md): `main(data)` runs once, for as long as the widget is open, on the host's
-// `__host.post`, `__host.receive`, `__host.sleep` and `__host.now`. Messages from the client are buffered here, so
-// waiting for one kind (a frame) keeps the others (events) for later.
+// `__host.post`, `__host.receive`, `__host.sleep`, `__host.now` and `__host.fetch`. Messages from the client are
+// buffered here, so waiting for one kind (a frame) keeps the others (events) for later.
 const widget = (() => {
   const events = []
-  const live = { frame: null, requested: false, receiving: null, alarm: null, visible: true, done: false }
+  const live = { frame: null, requested: false, receiving: null, alarm: null, paused: null, done: false }
   const post = (message) => {
     if (!live.done) __host.post(message)
   }
@@ -152,7 +152,8 @@ const widget = (() => {
       live.requested = false
       live.frame = message.frame
     }
-    if (message.type === "visibility") live.visible = message.visible !== false
+    // Resumes not seen yet add up into one.
+    if (message.type === "resumed") live.paused = (live.paused ?? 0) + message.pausedMs
   }
   // At most one receive is in flight: one left over from a timed-out wait is reused by the next wait.
   const pull = () => live.receiving ?? (live.receiving = __host.receive().then(accept))
@@ -176,10 +177,17 @@ const widget = (() => {
     live.frame = null
     return frame
   }
+  const response = (raw) => {
+    const text = raw.body ?? atob(raw.body64 ?? "")
+    return {
+      ok: raw.status >= 200 && raw.status < 300,
+      status: raw.status,
+      headers: raw.headers ?? {},
+      text: async () => text,
+      json: async () => JSON.parse(text),
+    }
+  }
   return {
-    get visible() {
-      return live.visible
-    },
     render: (node) => post({ type: "render", node }),
     draw: (id, commands) =>
       post({ type: "draw", id, commands: commands instanceof __WidgetDraw ? commands.commands : commands }),
@@ -199,6 +207,11 @@ const widget = (() => {
       const deadline = typeof options?.timeout === "number" ? __host.now() + Math.max(0, options.timeout) : undefined
       if (frame) request()
       while (true) {
+        if (live.paused !== null) {
+          const pausedMs = live.paused
+          live.paused = null
+          return { type: "resumed", pausedMs }
+        }
         if (events.length > 0) return { type: "event", event: events.shift() }
         if (frame && live.frame) return { type: "frame", frame: take() }
         if (deadline === undefined) await pull()
@@ -213,6 +226,15 @@ const widget = (() => {
     dismiss: () => {
       post({ type: "dismiss" })
       live.done = true
+    },
+    fetch: async (url, init) => {
+      const request = { url: String(url), method: init?.method ?? "GET", headers: init?.headers ?? {} }
+      if (init?.body !== undefined) request.body = String(init.body)
+      try {
+        return response(await __host.fetch(request))
+      } catch (error) {
+        throw { kind: error?.kind ?? "Network", message: error?.message ?? String(error) }
+      }
     },
     send: (value, options) => post({ type: "send", value: value ?? null, wake: options?.wake !== false }),
   }

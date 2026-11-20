@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
-import { builtins, prelude, program, step, version } from "../src/index.js"
+import { builtins, compile, prelude, program, step, version } from "../src/index.js"
 import { backdrop, chart, confirm, form, minigame, suggestions } from "../src/source.js"
 
 const src = path.resolve(import.meta.dir, "../src")
@@ -88,4 +88,26 @@ test("ui builders build every node type", async () => {
       { type: "text", text: "override" },
     ],
   })
+})
+
+test("version covers the mode and a live template's capabilities", () => {
+  const data = { type: "object" } as const
+  const hash = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex").slice(0, 16)
+  const base = prelude + "\nsource\n" + JSON.stringify(data)
+  expect(version("source", data, "step")).toBe(hash(base))
+  expect(version("source", data, "live")).toBe(hash(base + "\nlive"))
+  const capabilities = { https: { hosts: ["api.example.com"] } }
+  expect(version("source", data, "live", capabilities)).toBe(hash(base + "\nlive\n" + JSON.stringify(capabilities)))
+  expect(builtins.find((template) => template.name === "minigame")?.mode).toBe("live")
+})
+
+test("compile checks syntax without running, with lines counted in the source", () => {
+  expect(compile("async function main() { while (true) await widget.sleep(1) }", "live")).toBeUndefined()
+  expect(compile("function view() { return ui.text(1) }")).toBeUndefined()
+  expect(compile("async function main() {\n  const x = (\n}", "live")).toEqual({
+    message: "SyntaxError: Unexpected token. Code must be plain JavaScript written as a program body. (line 3, col 1)",
+    line: 3,
+    column: 1,
+  })
+  expect(compile("function view() { await x }")).toMatchObject({ line: 1 })
 })

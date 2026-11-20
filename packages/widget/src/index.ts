@@ -47,6 +47,15 @@ export {
   ManualClock,
   realClock,
 } from "./live.js"
-export { prelude, program, version } from "./program.js"
+export { compile, type CompileError, entry, prelude, program, version } from "./program.js"
+export {
+  FETCH_LIMITS,
+  type FetchError,
+  type FetchErrorKind,
+  type FetchRequest,
+  type FetchResponse,
+  platformTransport,
+  type Transport,
+} from "./fetch.js"
 export { draw, StepError, type StepOptions, TIMEOUT_MS, WidgetSession, step } from "./session.js"
-export { builtins, type Mode, NAME, type Template } from "./template.js"
+export { builtins, type Capabilities, type Mode, NAME, type Template } from "./template.js"

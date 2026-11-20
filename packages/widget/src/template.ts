@@ -5,10 +5,18 @@ import { backdrop, chart, confirm, form, minigame, suggestions } from "./source.
 /** `step` (default): short init/update/view/draw steps. `live`: one long-running `main(data)` (widgets-live.md). */
 export type Mode = "step" | "live"
 
+/**
+ * What a live template may use beyond rendering (widgets-live.md, Capabilities). `https.hosts` entries are exact host
+ * names, `*.` suffix wildcards, or `"*"` for any host.
+ */
+export interface Capabilities {
+  readonly https?: { readonly hosts: ReadonlyArray<string> }
+}
+
 export interface Template {
   /** /^[a-z][a-z0-9-]{0,47}$/, unique per server */
   readonly name: string
-  /** `version(source, data, mode)`: a content address; a version is immutable. */
+  /** `version(source, data, mode, capabilities)`: a content address; a version is immutable. */
   readonly version: string
   /** One line, shown to the model when listing templates. */
   readonly description: string
@@ -18,6 +26,8 @@ export interface Template {
   readonly source: string
   readonly builtin: boolean
   readonly mode: Mode
+  /** Live templates only. */
+  readonly capabilities?: Capabilities
 }
 
 export const NAME = /^[a-z][a-z0-9-]{0,47}$/

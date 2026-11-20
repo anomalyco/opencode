@@ -2,6 +2,18 @@ import { Result, Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
 import { type Command, DrawOutput, type Frame, Node, type WidgetEvent } from "./node.js"
 import { prune, StepError } from "./session.js"
+import {
+  denied,
+  encode,
+  FETCH_LIMITS,
+  type FetchError,
+  type FetchErrorKind,
+  type FetchRequest,
+  type FetchResponse,
+  platformTransport,
+  type Transport,
+} from "./fetch.js"
+import type { Capabilities } from "./template.js"
 
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
 export type LiveFrame = Omit<Frame, "id">
@@ -19,7 +31,7 @@ export type LiveMessage =
 export type LiveInput =
   | { readonly type: "event"; readonly event: WidgetEvent }
   | { readonly type: "frame"; readonly frame: LiveFrame }
-  | { readonly type: "visibility"; readonly visible: boolean }
+  | { readonly type: "resumed"; readonly pausedMs: number }
 
 /** How a live program ended. `return`: `main` returned without an answer; its last view stays. */
 export type LiveEnd =
@@ -88,26 +100,35 @@ export interface LiveOptions {
   readonly postsPerSecond?: number
   /** Every valid message the program posts, in order. */
   readonly onMessage?: (message: LiveMessage) => void
+  /** The template's capabilities; without `https`, `fetch` rejects with `CapabilityDenied`. */
+  readonly capabilities?: Capabilities
+  /** Performs `fetch` requests that passed the contract's checks; the platform `fetch` by default. */
+  readonly transport?: Transport
 }
 
 /**
  * A running live widget (specs/v2/widgets-live.md) on the TypeScript interpreter: the reference host for client authors
- * and the test harness for live templates. Feed it client input with `event`, `frame` and `visibility`; read the last
- * `view` and canvas `drawings`.
+ * and the test harness for live templates. Feed it client input with `event` and `frame`, `pause` and `resume` it as
+ * the widget leaves and comes back into view, and read the last `view` and canvas `drawings`.
  */
 export interface LiveWidget {
   readonly view: Node | undefined
   readonly drawings: ReadonlyMap<string, ReadonlyArray<Command>>
   /** The program asked for a frame and hasn't got it yet. */
   readonly frameRequested: boolean
-  readonly visible: boolean
+  readonly paused: boolean
   readonly warnings: ReadonlyArray<string>
   readonly ended: LiveEnd | undefined
   readonly done: Promise<LiveEnd>
   readonly event: (event: WidgetEvent) => void
-  /** Delivers a frame if the program asked for one and the widget is visible; returns whether it did. */
+  /** Delivers a frame if the program asked for one and isn't paused; returns whether it did. */
   readonly frame: (frame: LiveFrame) => boolean
-  readonly visibility: (visible: boolean) => void
+  /**
+   * Holds everything for the program: events, timer firings and fetch results wait, and `now()` stops, until `resume`,
+   * which first delivers `{ type: "resumed", pausedMs }`.
+   */
+  readonly pause: () => void
+  readonly resume: () => void
   /** Resolves once `predicate` holds, checked now and after every post; rejects if the program ends first. */
   readonly when: (predicate: (widget: LiveWidget) => boolean) => Promise<void>
   readonly stop: () => Promise<LiveEnd>
@@ -120,6 +141,8 @@ export const LiveWidget = {
     const busyMs = options?.busyMs ?? 50
     const postsPerSecond = options?.postsPerSecond ?? 240
     const started = clock.now()
+    const capabilities = options?.capabilities
+    const transport = options?.transport ?? platformTransport
     const controller = new AbortController()
     const inbox: LiveInput[] = []
     const waiting: Array<(input: LiveInput) => void> = []
@@ -134,12 +157,20 @@ export const LiveWidget = {
     const current = {
       view: undefined as Node | undefined,
       requested: false,
-      visible: true,
+      pausedAt: undefined as number | undefined,
+      pausedMs: 0,
       ended: undefined as LiveEnd | undefined,
       pending: 0,
       busy: undefined as ReturnType<typeof setTimeout> | undefined,
       window: { start: started, posts: 0, warned: false },
+      fetches: { inFlight: 0, starts: [] as number[] },
     }
+    // Inputs and fetch results that arrive while paused, released in order on resume.
+    const held: Array<() => void> = []
+    const timers = new Set<{ due: number; fire: () => void; cancel: () => void }>()
+    // Running time: the clock minus the time spent paused; it stands still while paused.
+    const now = () => (current.pausedAt ?? clock.now()) - started - current.pausedMs
+    const later = (run: () => void) => (current.pausedAt === undefined ? run() : void held.push(run))
 
     const end = (result: LiveEnd) => {
       if (current.ended) return
@@ -175,12 +206,13 @@ export const LiveWidget = {
       }, busyMs)
     }
 
-    const deliver = (input: LiveInput) => {
-      if (current.ended) return
-      const next = waiting.shift()
-      if (next) next(input)
-      else inbox.push(input)
-    }
+    const deliver = (input: LiveInput) =>
+      later(() => {
+        if (current.ended) return
+        const next = waiting.shift()
+        if (next) next(input)
+        else inbox.push(input)
+      })
 
     const receive = (signal: AbortSignal) =>
       track(
@@ -202,10 +234,99 @@ export const LiveWidget = {
     const sleep = (ms: unknown, signal: AbortSignal) =>
       track(
         new Promise<void>((resolve) => {
-          const cancel = clock.schedule(Math.max(0, Number(ms) || 0), resolve)
-          signal.addEventListener("abort", cancel, { once: true })
+          const timer = {
+            due: now() + Math.max(0, Number(ms) || 0),
+            fire: () => {
+              timers.delete(timer)
+              resolve()
+            },
+            cancel: () => {},
+          }
+          timers.add(timer)
+          if (current.pausedAt === undefined) timer.cancel = clock.schedule(timer.due - now(), timer.fire)
+          signal.addEventListener(
+            "abort",
+            () => {
+              timer.cancel()
+              timers.delete(timer)
+            },
+            { once: true },
+          )
         }),
       )
+
+    const fetch = (input: unknown, signal: AbortSignal) =>
+      track(
+        request(input, signal).then(
+          (response) => new Promise<FetchResponse>((resolve) => later(() => resolve(response))),
+          (error: FetchError) => new Promise<never>((_, reject) => later(() => reject(error))),
+        ),
+      )
+
+    // Runs one `fetch` under the contract's rules (widgets-live.md, Capabilities) and rejects with a `FetchError`.
+    const request = async (input: unknown, signal: AbortSignal): Promise<FetchResponse> => {
+      const first = fetchRequest(input)
+      const at = clock.now()
+      current.fetches.starts = current.fetches.starts.filter((start) => at - start < 1000)
+      if (current.fetches.inFlight >= FETCH_LIMITS.inFlight || current.fetches.starts.length >= FETCH_LIMITS.perSecond)
+        throw failure(
+          "RateLimited",
+          `At most ${FETCH_LIMITS.inFlight} fetches in flight and ${FETCH_LIMITS.perSecond} per second`,
+        )
+      if (!FETCH_LIMITS.methods.some((method) => method === first.method))
+        throw failure("CapabilityDenied", `Method ${first.method} is not allowed`)
+      if (first.body !== undefined && Buffer.byteLength(first.body) > FETCH_LIMITS.requestBytes)
+        throw failure("TooLarge", `The request body is over ${FETCH_LIMITS.requestBytes / 1024} KB`)
+      current.fetches.starts.push(at)
+      current.fetches.inFlight++
+      const abort = new AbortController()
+      signal.addEventListener("abort", () => abort.abort(), { once: true })
+      const timeout = Promise.withResolvers<never>()
+      const cancel = clock.schedule(FETCH_LIMITS.timeoutMs, () => {
+        abort.abort()
+        timeout.reject(failure("Timeout", `No response within ${FETCH_LIMITS.timeoutMs / 1000} s`))
+      })
+      try {
+        return await Promise.race([follow(first, abort.signal), timeout.promise])
+      } finally {
+        cancel()
+        current.fetches.inFlight--
+      }
+    }
+
+    // Follows up to `FETCH_LIMITS.redirects` redirects, checking every URL against the capability.
+    const follow = async (first: FetchRequest, signal: AbortSignal): Promise<FetchResponse> => {
+      const hop = { request: first, count: 0 }
+      while (true) {
+        const url = URL.parse(hop.request.url)
+        if (!url) throw failure("Network", `Invalid URL: ${hop.request.url}`)
+        const problem = denied(url, capabilities)
+        if (problem) throw failure("CapabilityDenied", problem)
+        const response = await transport(hop.request, signal).catch((error: unknown) => {
+          throw failure("Network", error instanceof Error ? error.message : String(error))
+        })
+        const location = response.headers.location
+        if ([301, 302, 303, 307, 308].includes(response.status) && location) {
+          if (hop.count === FETCH_LIMITS.redirects)
+            throw failure("Network", `More than ${FETCH_LIMITS.redirects} redirects`)
+          // 303, and 301/302 after a POST, continue as a GET without a body, as browsers do.
+          const get =
+            response.status === 303 ||
+            (response.status !== 307 && response.status !== 308 && hop.request.method === "POST")
+          hop.request = {
+            url: new URL(location, url).href,
+            method: get ? "GET" : hop.request.method,
+            headers: hop.request.headers,
+            ...(get || hop.request.body === undefined ? {} : { body: hop.request.body }),
+          }
+          hop.count++
+          continue
+        }
+        if (response.body.byteLength > FETCH_LIMITS.responseBytes)
+          throw failure("TooLarge", `The response body is over ${FETCH_LIMITS.responseBytes / 1024 / 1024} MB`)
+        return { status: response.status, headers: response.headers, ...encode(response.headers, response.body) }
+      }
+    }
 
     const post = (message: unknown) => {
       if (current.ended) return
@@ -273,8 +394,8 @@ export const LiveWidget = {
       get frameRequested() {
         return current.requested
       },
-      get visible() {
-        return current.visible
+      get paused() {
+        return current.pausedAt !== undefined
       },
       warnings,
       get ended() {
@@ -283,14 +404,24 @@ export const LiveWidget = {
       done: ending.promise,
       event: (event) => deliver({ type: "event", event }),
       frame: (frame) => {
-        if (!current.requested || !current.visible || current.ended) return false
+        if (!current.requested || current.pausedAt !== undefined || current.ended) return false
         current.requested = false
         deliver({ type: "frame", frame })
         return true
       },
-      visibility: (visible) => {
-        current.visible = visible
-        deliver({ type: "visibility", visible })
+      pause: () => {
+        if (current.pausedAt !== undefined || current.ended) return
+        current.pausedAt = clock.now()
+        timers.forEach((timer) => timer.cancel())
+      },
+      resume: () => {
+        if (current.pausedAt === undefined) return
+        const pausedMs = clock.now() - current.pausedAt
+        current.pausedMs += pausedMs
+        current.pausedAt = undefined
+        deliver({ type: "resumed", pausedMs })
+        held.splice(0).forEach((run) => run())
+        timers.forEach((timer) => (timer.cancel = clock.schedule(timer.due - now(), timer.fire)))
       },
       when: (predicate) => {
         if (predicate(widget)) return Promise.resolve()
@@ -311,7 +442,8 @@ export const LiveWidget = {
           post: Host.fn(([message]) => post(message)),
           receive: Host.fn((_, call) => receive(call.signal), { type: "async", idempotent: true }),
           sleep: Host.fn(([ms], call) => sleep(ms, call.signal), { type: "async", idempotent: true }),
-          now: Host.fn(() => clock.now() - started),
+          now: Host.fn(() => now()),
+          fetch: Host.fn(([request], call) => fetch(request, call.signal), { type: "async" }),
         },
       }),
     })
@@ -336,6 +468,23 @@ const decodeDraw = Schema.decodeUnknownResult(DrawOutput)
 // Lets a program react to what just happened: it continues in microtasks and 1 ms slices between event-loop turns.
 async function turns() {
   for (let index = 0; index < 20; index++) await new Promise((resolve) => setImmediate(resolve))
+}
+
+function fetchRequest(input: unknown): FetchRequest {
+  if (!isRecord(input) || typeof input.url !== "string") throw failure("Network", "fetch needs a request with a url")
+  const headers = isRecord(input.headers)
+    ? Object.fromEntries(Object.entries(input.headers).map(([name, value]) => [name, String(value)]))
+    : {}
+  return {
+    url: input.url,
+    method: typeof input.method === "string" ? input.method.toUpperCase() : "GET",
+    headers,
+    ...(input.body === undefined || input.body === null ? {} : { body: String(input.body) }),
+  }
+}
+
+function failure(kind: FetchErrorKind, message: string): FetchError {
+  return { kind, message }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
