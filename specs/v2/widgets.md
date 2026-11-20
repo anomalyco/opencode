@@ -146,6 +146,7 @@ type WidgetEvent = { id: string; type: "press" | "change" | "pointer"; value?: u
 | `input` | `change`, `value: string` (on commit / blur / debounce >= 300 ms) |
 | `carousel` with `id` | `change`, `value: number` (new page index) |
 | `canvas` with `id` | `pointer`, `value: { kind, x, y, width, height }` (see Canvas) |
+| `shader` with `id` | `pointer`, the same as a canvas: `value: { kind, x, y, width, height }` in the node's logical pixels; `move` only while down, at most once per frame |
 
 ## Nodes
 
@@ -268,6 +269,10 @@ padded), which the template sets from state in `view`. Rune passes WGSL to wgpu 
 ES 3.00 translated with naga (`opencode-widget-ffi`). Source is capped at 16 KB. A shader that fails to compile shows
 `poster` (an image src) or `alt` with the error inline; one that takes over 50 ms per frame three frames in a row stops
 and shows its last frame. The TUI shows `poster`/`alt` for `shader` and `alt` for `canvas`.
+
+A `shader` node with an `id` sends `pointer` events like a canvas (see Events). When a new view changes only a shader's
+`values` (same `wgsl`, same place in the tree), clients update its uniforms in place: no recompile, no rebuilt view, no
+restart of `widget.time`. Live programs drive shader games that way, re-rendering with new `values` every frame.
 
 ## Server plugin
 

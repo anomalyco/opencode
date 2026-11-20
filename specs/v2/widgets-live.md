@@ -53,6 +53,13 @@ The prelude exposes a `widget` object inside `main` (implemented with `__host`):
 
 `Math.random()` is allowed in live mode.
 
+## Shaders
+
+A live program animates a `shader` by calling `widget.render` with the same view and new `values` (up to 16 floats)
+once per frame; clients must apply that as a uniform update without recompiling the shader or rebuilding the view (see
+`widgets.md`, Shader). A `shader` with an `id` sends `pointer` events like a canvas, so a tap on a full-screen shader can
+drive a game (`widget.event()` / `widget.next()`).
+
 ## Client ↔ program messages
 
 Program → client (`post`): `{ type: "render", node }`, `{ type: "draw", id, commands }`, `{ type: "frame" }` (one
