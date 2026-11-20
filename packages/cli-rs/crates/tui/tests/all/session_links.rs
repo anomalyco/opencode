@@ -109,6 +109,12 @@ fn loaded_sessions_show_their_titles_and_the_rest_stay_ids() {
     rename(&h, &known, "Renamed");
     h.wait_for("@Renamed");
     assert_eq!(linked(&h), ["@Renamed"]);
+    // A fallback title reads without its timestamp.
+    rename(&h, &known, "New session - 2026-03-01T12:00:00.000Z");
+    h.wait_for("@New session");
+    assert_eq!(linked(&h), ["@New session"]);
+    rename(&h, &known, "Renamed");
+    h.wait_for("@Renamed");
     for session in [&known, &archived, &missing] {
         assert_eq!(lookups(&log, session), 1, "{session}: {:?}", support::lines(&log));
     }

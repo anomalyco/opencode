@@ -127,15 +127,3 @@ pub fn key(diffs: &Diffs) -> String {
 fn short(reference: &str) -> &str {
     reference.strip_prefix("refs/heads/").or_else(|| reference.strip_prefix("refs/remotes/")).unwrap_or(reference)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn refs_show_as_branch_names() {
-        assert_eq!(short("refs/heads/main"), "main");
-        assert_eq!(short("refs/remotes/origin/dev"), "origin/dev");
-        assert_eq!(short("main"), "main");
-    }
-}

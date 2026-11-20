@@ -914,12 +914,9 @@ fn take_end(value: &str, max: usize) -> String {
 mod tests {
     use super::*;
 
+    // Windows paths, which no test on another system draws: `\` and drive and UNC roots.
     #[test]
-    fn file_paths_truncate_as_typescript_does() {
-        assert_eq!(truncate_file_path("/tmp/a", 10), "/tmp/a");
-        assert_eq!(truncate_file_path("/home/user/projects/opencode", 20), "/…/projects/opencode");
-        assert_eq!(truncate_file_path("/a/very-long-name.txt", 10), "/…/ve….txt");
-        assert_eq!(truncate_file_path("/x", 0), "");
+    fn windows_file_paths_truncate_as_typescript_does() {
         for (path, max, expected) in [
             ("packages\\tui\\src\\ui\\dialog-select.tsx", 22, "…\\ui\\dialog-select.tsx"),
             ("dir/file\\name.ts", 14, "…/file\\name.ts"),
@@ -931,15 +928,5 @@ mod tests {
         ] {
             assert_eq!(truncate_file_path(path, max), expected, "{path}");
         }
-    }
-
-    #[test]
-    fn time_ago_steps() {
-        let minute = 60_000.0;
-        assert_eq!(time_ago(10.0 * minute, 10.0 * minute), "now");
-        assert_eq!(time_ago(10.0 * minute, 5.0 * minute), "5m");
-        assert_eq!(time_ago(200.0 * minute, 0.0), "3h");
-        assert_eq!(time_ago(3.0 * 1440.0 * minute, 0.0), "3d");
-        assert_eq!(time_ago(400.0 * 1440.0 * minute, 0.0), "1y");
     }
 }

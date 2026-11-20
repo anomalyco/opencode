@@ -689,22 +689,3 @@ pub fn is_image(file: &str) -> bool {
     let lower = file.to_ascii_lowercase();
     [".png", ".jpg", ".jpeg", ".webp", ".gif"].iter().any(|extension| lower.ends_with(extension))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn images_match_by_extension() {
-        assert!(is_image("assets/logo.PNG"));
-        assert!(is_image("a.jpeg") && is_image("a.jpg") && is_image("a.webp") && is_image("a.gif"));
-        assert!(!is_image("a.svg") && !is_image("png"));
-    }
-
-    #[test]
-    fn the_full_layout_needs_room_for_a_docked_panel_of_patches() {
-        assert_eq!(FULL_LAYOUT_MIN_WIDTH, 88);
-        assert_eq!(sources(false), [Mode::Branch, Mode::Committed, Mode::Working]);
-        assert_eq!(sources(true).last(), Some(&Mode::Turn));
-    }
-}

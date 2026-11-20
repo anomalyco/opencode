@@ -462,16 +462,3 @@ pub fn locale(value: f64) -> String {
     }
     if rounded < 0 { format!("-{grouped}") } else { grouped }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn locale_groups_thousands() {
-        assert_eq!(locale(0.0), "0");
-        assert_eq!(locale(999.0), "999");
-        assert_eq!(locale(1234.0), "1,234");
-        assert_eq!(locale(1_234_567.0), "1,234,567");
-    }
-}

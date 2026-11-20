@@ -349,33 +349,3 @@ fn wrapped_rows(text: Option<&str>, width: usize) -> usize {
     let Some(text) = text.filter(|text| !text.is_empty()) else { return 0 };
     text.split('\n').map(|line| line.chars().count().div_ceil(width.max(1)).max(1)).sum()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{highlighted, wrapped_rows};
-
-    #[test]
-    fn highlighted_output_splits_the_json_from_the_logs() {
-        assert_eq!(highlighted("plain"), None);
-        assert_eq!(highlighted("{ not json"), None);
-        assert_eq!(
-            highlighted("{\"a\":1}\n\nLogs:\nhello\n"),
-            Some(("{\n  \"a\": 1\n}".to_owned(), Some("Logs:\nhello".to_owned())))
-        );
-        assert_eq!(
-            highlighted("{\"a\":1,\"b\":[2]}"),
-            Some(("{\n  \"a\": 1,\n  \"b\": [\n    2\n  ]\n}".to_owned(), None))
-        );
-        assert_eq!(
-            highlighted("[\"x\"]\n\nWarnings:\n- [unhandled] boom\n\nLogs:\nhi"),
-            Some(("[\n  \"x\"\n]".to_owned(), Some("Warnings:\n- [unhandled] boom\n\nLogs:\nhi".to_owned())))
-        );
-    }
-
-    #[test]
-    fn wrapped_rows_break_by_character() {
-        assert_eq!(wrapped_rows(None, 10), 0);
-        assert_eq!(wrapped_rows(Some(""), 10), 0);
-        assert_eq!(wrapped_rows(Some("abc\n\n12345678901"), 10), 4);
-    }
-}

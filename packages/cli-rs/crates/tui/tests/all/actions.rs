@@ -376,6 +376,35 @@ fn undo_puts_the_attachments_back_after_the_composer_parts() {
     assert!(body.contains("data:image/png;base64,iVBORw0KGgo="), "{body}");
 }
 
+/// The web client stores a mention as string indexes; undo moves it to the cells that a tab and a wide character
+/// shift it to (`promptMentionsToCells`).
+#[test]
+fn undo_moves_a_web_mention_from_string_indexes_to_cells() {
+    let mut messages = turns();
+    messages[2] = json!({
+        "id": "msg_03", "type": "user", "text": "\t中 @note.ts x", "time": { "created": 1_772_539_260_000_u64 },
+        "files": [{
+            "data": "", "mime": "text/plain", "name": "note.ts",
+            "source": { "type": "uri", "uri": "file:///project/note.ts" },
+            "mention": { "start": 3, "end": 11, "text": "@note.ts" },
+        }],
+    });
+    let kit = Kit::new(session("ses_a", json!({})), messages, vec![]);
+    kit.ready();
+    kit.leader("u");
+    kit.wait_writes(3);
+    let found = kit.app.wait_until(WAIT, || kit.prompt_text() == "\t中 @note.ts x");
+    assert!(found, "{:?}", kit.prompt_text());
+    let start = opencode_ui::prompt_input::parse::measure(&kit.app, "\t中 ");
+    let marks = kit
+        .tui
+        .textarea
+        .borrow()
+        .as_ref()
+        .map(|textarea| textarea.extmarks().iter().map(|mark| (mark.start, mark.end)).collect::<Vec<_>>());
+    assert_eq!(marks, Some(vec![(start, start + 8)]));
+}
+
 #[test]
 fn undo_cancels_a_prompt_still_in_the_inbox() {
     let inbox = vec![json!({

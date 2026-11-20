@@ -107,20 +107,3 @@ pub(crate) fn is_fallback(title: &str) -> bool {
             other => byte == *other,
         })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn titles_follow_the_tui() {
-        assert_eq!(session_title(None), "OpenCode");
-        assert_eq!(session_title(Some("New session - 2026-03-01T12:00:00.000Z")), "OpenCode");
-        assert_eq!(session_title(Some("Child session - 2026-03-01T12:00:00.000Z")), "OpenCode");
-        assert_eq!(session_title(Some("New session - yesterday")), "OC | New session - yesterday");
-        assert_eq!(session_title(Some("Fix the parser")), "OC | Fix the parser");
-        let long = "a".repeat(41);
-        assert_eq!(session_title(Some(&long)), format!("OC | {}…", "a".repeat(37)));
-        assert_eq!(session_title(Some(&"a".repeat(40))), format!("OC | {}", "a".repeat(40)));
-    }
-}

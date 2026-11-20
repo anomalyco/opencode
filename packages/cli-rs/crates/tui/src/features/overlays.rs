@@ -181,15 +181,3 @@ fn set_migration(tui: &Tui, progress: Option<String>) {
     *tui.overlays.migration.borrow_mut() = Some(view);
     tui.app.request_redraw();
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn formats_migration_progress() {
-        use serde_json::json;
-        let progress = |value| super::progress(&value);
-        assert_eq!(progress(json!({ "label": "Sessions" })), "Sessions");
-        assert_eq!(progress(json!({ "label": "Sessions", "numerator": 3 })), "Sessions 3");
-        assert_eq!(progress(json!({ "label": "Sessions", "numerator": 3, "denominator": 9 })), "Sessions 3/9");
-    }
-}

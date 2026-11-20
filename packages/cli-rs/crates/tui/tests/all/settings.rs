@@ -256,6 +256,29 @@ fn slash_and_palette_commands_open_settings_and_debug() {
     wait_for(&app, "Search settings");
 }
 
+/// The terminal row names the program, its version and the multiplexer from the environment, so it runs in a child.
+#[test]
+fn the_debug_dialog_names_the_terminal_from_the_environment() {
+    if std::env::var_os("OPENCODE_RS_TERMINAL_CHILD").is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "settings::the_debug_dialog_names_the_terminal_from_the_environment"])
+            .env("OPENCODE_RS_TERMINAL_CHILD", "1")
+            .env("TERM_PROGRAM", "ghostty")
+            .env("TERM_PROGRAM_VERSION", "1.2")
+            .env("TMUX", "/tmp/tmux")
+            .env_remove("STY")
+            .output()
+            .unwrap();
+        let (stdout, stderr) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        assert!(output.status.success() && stdout.contains("1 passed"), "{stdout}\n{stderr}");
+        return;
+    }
+    let app = TestApp::new(100, 30);
+    let tui = support::mount_empty(&app, support::component_info(json!({})), None);
+    tui.keymap.dispatch("opencode.debug", None);
+    wait_for(&app, "ghostty 1.2 in tmux");
+}
+
 #[test]
 fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     let app = TestApp::new(100, 30);
@@ -374,6 +397,12 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
         text,
         "{\n  // my settings\n  \"$schema\": \"https://opencode.ai/v2/cli.json\",\n  \"session\": {\n    \"thinking\": \"show\"\n  },\n  \"experimental\": {\n    \"client-mcp\": true\n  }\n}\n"
     );
+    // A whole number is written without a fraction, as JavaScript writes it.
+    settings::show(&tui, None);
+    app.type_text("leader");
+    app.press("right");
+    let written = || std::fs::read_to_string(&file).unwrap();
+    assert!(app.wait_until(WAIT, || written().contains("\"timeout\": 2250\n")), "{}", written());
 
     let twin = opencode_util::temp::tempdir().unwrap();
     let twin_file = support::xdg_paths(twin.path()).config.join("cli.json");

@@ -45,26 +45,3 @@ pub fn install(tui: &Tui) {
         Focus::Blurred
     })));
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn requests_wait_on_the_focus_they_ask_for() {
-        let table = [
-            (When::Always, Focus::Unknown, None),
-            (When::Always, Focus::Focused, None),
-            (When::Always, Focus::Blurred, None),
-            (When::Blurred, Focus::Unknown, Some(Skip::FocusUnknown)),
-            (When::Blurred, Focus::Focused, Some(Skip::Focused)),
-            (When::Blurred, Focus::Blurred, None),
-            (When::Focused, Focus::Unknown, Some(Skip::FocusUnknown)),
-            (When::Focused, Focus::Focused, None),
-            (When::Focused, Focus::Blurred, Some(Skip::Blurred)),
-        ];
-        for (when, focus, expected) in table {
-            assert_eq!(skip(when, focus), expected, "{when:?} under {focus:?}");
-        }
-    }
-}

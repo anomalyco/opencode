@@ -231,36 +231,3 @@ fn mix(a: Color, b: Color, amount: f64) -> Color {
     };
     Color::rgb(channel(a.r, b.r), channel(a.g, b.g), channel(a.b, b.b))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn colors() -> Colors {
-        Colors {
-            background: Color::rgb(10, 10, 10),
-            primary: Color::rgb(250, 178, 131),
-            logo_base: Color::rgb(150, 150, 150),
-        }
-    }
-
-    #[test]
-    fn mixes_as_core_stores_bytes() {
-        assert_eq!(mix(Color::rgb(0, 0, 0), Color::rgb(255, 255, 255), 0.5), Color::rgb(128, 128, 128));
-        assert_eq!(mix(Color::rgb(10, 20, 30), Color::rgb(200, 100, 0), 2.0), Color::rgb(200, 100, 0));
-        assert_eq!(mix(Color::rgb(10, 20, 30), Color::rgb(200, 100, 0), -1.0), Color::rgb(10, 20, 30));
-    }
-
-    #[test]
-    fn draws_the_logo_on_its_anchor_row() {
-        let cells = frame(&colors(), STILL, 40, 12, 3);
-        assert_eq!(cells.len(), 40 * 12);
-        let row = |y: usize| -> String { (0..40).map(|x| cells[y * 40 + x].0).collect() };
-        assert_eq!(row(4).trim(), "▀▀▀▀ ▀▀▀▀");
-        assert_eq!(row(5).trim(), "▀ ▀▀ ▀  ▀");
-        assert_eq!(row(6).trim(), "▀▀▀▀ ▀▀▀▀");
-        assert_eq!(row(3).trim(), "");
-        let low = frame(&colors(), STILL, 40, 12, 20);
-        assert_eq!((0..40).map(|x| low[11 * 40 + x].0).collect::<String>().trim(), "▀▀▀▀ ▀▀▀▀");
-    }
-}

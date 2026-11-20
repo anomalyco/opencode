@@ -455,59 +455,6 @@ mod tests {
     }
 
     #[test]
-    fn a_still_pulse_draws_only_its_glow() {
-        let idle = Pulse::new(false, Input { active: true, ..Input::default() });
-        assert!(paint(&idle, &colors(), None, 10).is_none(), "no sweep without animations");
-        assert!(!idle.live());
-        let glow = Pulse::new(false, Input { glow: true, ..Input::default() });
-        let cells = paint(&glow, &colors(), None, 10).unwrap();
-        // Full strength over the first two cells, fading along the tail.
-        assert_eq!(cells[0].1, Color::rgb(41, 0, 0));
-        assert_eq!(cells[1].1, Color::rgb(41, 0, 0));
-        assert!(cells[5].1.r < 41 && cells[9].1.r < cells[5].1.r);
-    }
-
-    #[test]
-    fn a_glow_set_without_animations_holds_at_once() {
-        let mut pulse = Pulse::new(false, Input::default());
-        pulse.set(Input { glow: true, ..Input::default() });
-        assert!(paint(&pulse, &colors(), None, 4).is_some());
-        pulse.set(Input::default());
-        assert!(paint(&pulse, &colors(), None, 4).is_none());
-    }
-
-    #[test]
-    fn the_sweep_runs_while_active_and_fades_after() {
-        let mut pulse = Pulse::new(true, Input { active: true, ..Input::default() });
-        assert!(pulse.live());
-        pulse.advance(Duration::from_millis(1_000));
-        assert!(pulse.level(20) > 0.0 || paint(&pulse, &colors(), None, 20).is_some());
-        pulse.set(Input { complete: true, ..Input::default() });
-        pulse.advance(Duration::from_millis(5_000));
-        pulse.advance(Duration::from_millis(5_000));
-        assert!(!pulse.live());
-        assert!(paint(&pulse, &colors(), None, 20).is_none());
-    }
-
-    #[test]
-    fn turning_animations_off_settles_and_on_resumes_the_sweep() {
-        let input = Input { active: true, glow: true, ..Input::default() };
-        let mut pulse = Pulse::new(true, input);
-        pulse.set(Input { prompt_pulse: 1, ..input });
-        pulse.advance(Duration::from_millis(1_000));
-        pulse.set_enabled(false);
-        assert!(!pulse.live());
-        assert_eq!(pulse.level(20), 0.0);
-        // Only the held glow is left, as `a_still_pulse_draws_only_its_glow` draws it.
-        let still = Pulse::new(false, Input { prompt_pulse: 1, ..input });
-        assert_eq!(paint(&pulse, &colors(), None, 10), paint(&still, &colors(), None, 10));
-        pulse.set_enabled(true);
-        assert!(pulse.live());
-        pulse.advance(Duration::from_millis(RUN_ATTACK as u64));
-        assert_ne!(paint(&pulse, &colors(), None, 10), paint(&still, &colors(), None, 10), "no sweep after turning on");
-    }
-
-    #[test]
     fn a_tab_mounted_busy_flashes_at_once_as_its_setters_run() {
         let busy = Input { active: true, ..Input::default() };
         let mut mounted = Pulse::mount(true, busy);

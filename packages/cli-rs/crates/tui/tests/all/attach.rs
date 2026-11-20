@@ -258,16 +258,22 @@ fn clipboard_images_attach_preview_and_open_in_the_dialog() {
     let png = base64::engine::general_purpose::STANDARD.decode(PNG).unwrap();
     let setup = Setup::with(opencode_util::temp::tempdir().unwrap(), prompt_config(None, true), false);
     let read = || ClipboardOutcome::Read { mime_type: "image/png".into(), data: png.clone() };
-    capture.0.clipboard.borrow_mut().extend([read(), read()]);
+    // Another picture: the same image with a byte after its end, which decoders skip.
+    let other = [png.clone(), vec![0]].concat();
+    let other_read = ClipboardOutcome::Read { mime_type: "image/png".into(), data: other.clone() };
+    capture.0.clipboard.borrow_mut().extend([read(), read(), other_read]);
     setup.app.press("ctrl+v");
     setup.wait_text("[Image 1] ");
     setup.app.press("ctrl+v");
     setup.wait_text("[Image 1] [Image 1] ");
+    // Another image counts up.
+    setup.app.press("ctrl+v");
+    setup.wait_text("[Image 1] [Image 1] [Image 2] ");
 
-    // `<leader>i`: the preview dialog shows the image once, under its label.
+    // `<leader>i`: the preview dialog shows each image once, under its label.
     setup.app.press("ctrl+x");
     setup.app.press("i");
-    let screen = setup.wait_for("Image 1 of 1");
+    let screen = setup.wait_for("Image 1 of 2");
     assert!(screen.contains("[Image 1]"), "{screen}");
     setup.app.press("escape");
     setup.wait_gone("Image 1 of 1");
@@ -279,9 +285,14 @@ fn clipboard_images_attach_preview_and_open_in_the_dialog() {
         json!([
             { "uri": uri, "name": "clipboard", "mention": { "start": 0, "end": 9, "text": "[Image 1]" } },
             { "uri": uri, "name": "clipboard", "mention": { "start": 10, "end": 19, "text": "[Image 1]" } },
+            {
+                "uri": format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&other)),
+                "name": "clipboard",
+                "mention": { "start": 20, "end": 29, "text": "[Image 2]" },
+            },
         ])
     );
-    assert_eq!(sent["text"], "[Image 1] [Image 1] ");
+    assert_eq!(sent["text"], "[Image 1] [Image 1] [Image 2] ");
 }
 
 #[test]
@@ -335,6 +346,9 @@ fn pasted_paths_attach_files_and_svgs_paste_their_text() {
             "mention": { "start": 0, "end": 9, "text": "[Image 1]" },
         }])
     );
+    // A list of dropped paths splits at whitespace outside quotes, and each attaches.
+    setup.app.paste(&format!("'{}' {}", png.display(), svg.display()));
+    setup.wait_text("[Image 1] [SVG: logo.svg] ");
 }
 
 #[test]
@@ -376,6 +390,8 @@ fn a_failed_stash_save_shows_a_toast() {
 fn stash_pushes_pops_and_lists_with_delete_confirm() {
     let setup = Setup::new();
     setup.app.type_text("first idea");
+    setup.app.press("ctrl+j");
+    setup.app.type_text("more");
     setup.dispatch("prompt.stash");
     setup.wait_text("");
     setup.app.paste("x\ny\nz");
@@ -384,7 +400,7 @@ fn stash_pushes_pops_and_lists_with_delete_confirm() {
     setup.wait_text("");
     let file = setup.wait_stash_file(|file| file.lines().count() == 2);
     let entries: Vec<Value> = file.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
-    assert_eq!(entries[0]["prompt"]["text"], "first idea");
+    assert_eq!(entries[0]["prompt"]["text"], "first idea\nmore");
     assert_eq!(entries[1]["prompt"]["pasted"][0]["text"], "x\ny\nz");
     assert!(entries[1]["timestamp"].is_number());
 
@@ -395,19 +411,19 @@ fn stash_pushes_pops_and_lists_with_delete_confirm() {
     setup.dispatch("prompt.stash");
     setup.wait_text("");
 
-    // The list shows the newest first; Ctrl+D twice deletes; Enter takes one out.
+    // The list shows the newest first, each by its first line; Ctrl+D twice deletes; Enter takes one out.
     setup.dispatch("prompt.stash.list");
     let screen = setup.wait_for("Stash");
     let (newest, oldest) = (screen.find("[Pasted ~3 lines] second").unwrap(), screen.find("first idea").unwrap());
     assert!(newest < oldest, "{screen}");
-    assert!(screen.contains("just now"), "{screen}");
+    assert!(screen.contains("just now") && screen.contains("~2 lines") && !screen.contains("more"), "{screen}");
     setup.app.press("ctrl+d");
     setup.wait_for("Press ctrl+d again to confirm");
     setup.app.press("ctrl+d");
     setup.wait_gone("second");
     setup.wait_stash_file(|file| file.lines().count() == 1);
     setup.app.press("return");
-    setup.wait_text("first idea");
+    setup.wait_text("first idea\nmore");
     setup.wait_gone("Press ctrl+d");
     setup.wait_stash_file(str::is_empty);
 }

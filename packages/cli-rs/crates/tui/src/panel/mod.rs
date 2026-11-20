@@ -115,18 +115,3 @@ fn paint(tui: &Tui, root: &View) {
         Presentation::Fullscreen => theme.background.base,
     });
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn panels_split_only_with_room_for_both_panes() {
-        let panels = Panels::default();
-        panels.requested.set(Presentation::Panel);
-        panels.set_width(107);
-        assert_eq!(panels.presentation(), Presentation::Fullscreen);
-        panels.set_width(108);
-        assert_eq!(panels.presentation(), Presentation::Panel);
-    }
-}

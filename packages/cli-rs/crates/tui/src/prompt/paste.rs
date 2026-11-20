@@ -410,13 +410,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pastes_expand_right_to_left() {
-        let text = "[A] 世 [B] end";
-        let ranges = vec![(0, 3, "one\ntwo".to_owned()), (8, 11, "three".to_owned())];
-        assert_eq!(expand_tracked(text, ranges), "one\ntwo 世 three end");
-    }
-
-    #[test]
     fn copied_labels_become_their_text_in_paste_order() {
         let pasted = [
             json!({ "text": "B", "source": { "start": 20, "text": "[Pasted ~3 lines]" } }),

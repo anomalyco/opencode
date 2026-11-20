@@ -193,28 +193,6 @@ mod tests {
     }
 
     #[test]
-    fn notifications_follow_the_config_and_the_focus() {
-        let blurred = request(Some(When::Blurred), Some(When::Always));
-        let sent = Some(("Session done".to_owned(), "Demo session".to_owned()));
-        let done = Some((AttentionSoundName::Done, 0.4));
-        let notified = Outcome { ok: true, notification: true, ..Outcome::default() };
-        let sounded = Outcome { ok: true, sound: true, ..Outcome::default() };
-        let both = Outcome { ok: true, notification: true, sound: true, skipped: None };
-        let table = [
-            (info(false, false), Focus::Blurred, skipped(Skip::AttentionDisabled), None, None),
-            (info(true, false), Focus::Blurred, notified, sent.clone(), None),
-            (info(true, false), Focus::Focused, skipped(Skip::Focused), None, None),
-            (info(true, false), Focus::Unknown, skipped(Skip::FocusUnknown), None, None),
-            (info(false, true), Focus::Focused, sounded, None, done),
-            (info(true, true), Focus::Focused, sounded, None, done),
-            (info(true, true), Focus::Blurred, both, sent, done),
-        ];
-        for (info, focus, outcome, notification, sound) in table {
-            assert_eq!(run_with_sound(&info, focus, &blurred), (outcome, notification, sound), "{focus:?}");
-        }
-    }
-
-    #[test]
     fn requests_choose_their_own_rules() {
         let on = info(true, true);
         assert_eq!(

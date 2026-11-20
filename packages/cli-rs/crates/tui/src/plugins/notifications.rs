@@ -283,27 +283,6 @@ mod tests {
         notified("Demo session", "Session done", SoundName::Done, true)
     }
 
-    // Expected: each event the plugin follows crosses the C ABI as JSON and reads back as the same value.
-    #[test]
-    fn the_followed_events_read_back_from_json_as_written() {
-        let events = [
-            form("created", "form-1", "session", "Confirm"),
-            form("replied", "form-1", "session", ""),
-            form("cancelled", "form-1", "session", ""),
-            permission("asked", "per_1"),
-            permission("replied", "per_1"),
-            execution("started", "session"),
-            execution("succeeded", "session"),
-            execution("interrupted", "session"),
-            failed("session", "unknown"),
-        ];
-        assert_eq!(events.iter().map(V2Event::tag).collect::<Vec<_>>(), EVENTS);
-        for event in events {
-            let json = serde_json::to_string(&event).unwrap();
-            assert_eq!(serde_json::from_str::<V2Event>(&json).unwrap(), event, "{json}");
-        }
-    }
-
     #[test]
     fn failures_toast_once_per_execution_except_usage_limits() {
         let fake = Fake::new();
@@ -361,23 +340,6 @@ mod tests {
                 asked(),
             ]
         );
-    }
-
-    #[test]
-    fn sessions_are_done_once_per_execution() {
-        let fake = Fake::new();
-        let mut tracker = Tracker::default();
-        let actions = run(
-            &fake,
-            &mut tracker,
-            &[
-                execution("succeeded", "session"),
-                execution("succeeded", "session"),
-                execution("started", "session"),
-                execution("interrupted", "session"),
-            ],
-        );
-        assert_eq!(actions, [done(), done()]);
     }
 
     #[test]

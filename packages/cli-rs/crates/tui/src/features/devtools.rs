@@ -839,6 +839,7 @@ fn process_age_ms() -> f64 {
 mod tests {
     use super::*;
 
+    // The graph and the status read live process samples, which no test can hold still.
     #[test]
     fn braille_graph_matches_typescript() {
         assert_eq!(braille_graph(&[], 4), "⠀⠀⠀⠀");
@@ -848,7 +849,7 @@ mod tests {
     }
 
     #[test]
-    fn status_helpers_match_typescript() {
+    fn runtime_status_matches_typescript() {
         let at = Instant::now();
         let sample =
             |delay: f64, seconds: u64| Sample { cpu: 0.0, memory: 0.0, delay, time: at + Duration::from_secs(seconds) };
@@ -857,12 +858,9 @@ mod tests {
         assert_eq!(runtime_status(&[sample(150.0, 0), sample(1.0, 6)]), RuntimeStatus::Normal);
         assert_eq!(runtime_status(&[sample(150.0, 1), sample(1.0, 6)]), RuntimeStatus::High);
         assert_eq!(status_icon(RuntimeStatus::Medium), "⦿");
-        assert_eq!(connection_indicator(Status::Connected, 0).1, "✓");
-        assert_eq!(connection_indicator(Status::Reconnecting, 2).1, "↻");
-        assert_eq!(connection_indicator(Status::Reconnecting, 3).1, "×");
-        assert_eq!(connection_indicator(Status::Connecting, 9).1, "↻");
     }
 
+    // The server panel shows its address only once connected, which no test of the panel reaches.
     #[test]
     fn url_host_matches_the_url_api() {
         assert_eq!(url_host("http://127.0.0.1:4096/"), "127.0.0.1:4096");

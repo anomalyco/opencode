@@ -449,16 +449,3 @@ fn slash_head(text: &str) -> Option<(String, String)> {
 fn warn(tui: &Tui, message: &str) {
     tui.toasts.show(ToastOptions::new(Variant::Warning, message));
 }
-
-#[cfg(test)]
-mod tests {
-    use super::slash_head;
-
-    #[test]
-    fn slash_head_splits_at_the_first_whitespace() {
-        assert_eq!(slash_head("/cd ../x y"), Some(("cd".into(), "../x y".into())));
-        assert_eq!(slash_head("/init"), Some(("init".into(), String::new())));
-        assert_eq!(slash_head("/review\nmore"), Some(("review".into(), "more".into())));
-        assert_eq!(slash_head("hello"), None);
-    }
-}

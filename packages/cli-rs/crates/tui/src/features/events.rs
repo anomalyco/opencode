@@ -314,14 +314,3 @@ fn mcp_toasts(tui: &Tui) {
         ));
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn each_handled_tag_names_its_variant() {
-        for (tag, variant) in super::HANDLED {
-            let name: String = tag.split(['.', '-']).map(|part| part[..1].to_uppercase() + &part[1..]).collect();
-            assert_eq!(&name, variant, "{tag}");
-        }
-    }
-}
