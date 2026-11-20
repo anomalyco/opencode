@@ -1,7 +1,47 @@
 import { Schema } from "effect"
-import { HttpApiEndpoint, OpenApi } from "effect/http-api"
+import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
+import { ConflictError, ForbiddenError, InvalidRequestError, MachineNotFoundError } from "../errors.js"
 
 export const MACHINE_LINK_PATH = "/api/experimental/machine/link"
+
+const EXPERIMENTAL = "Behind the machines flag. Experimental: may change without compatibility guarantees."
+
+const annotations = (identifier: string, summary: string, description: string) =>
+  OpenApi.annotations({
+    identifier: `experimental.machine.${identifier}`,
+    summary,
+    description: `${description} ${EXPERIMENTAL}`,
+    transform: (operation) => ({ ...operation, tags: ["experimental"] }),
+  })
+
+export const MachineInfo = Schema.Struct({
+  id: Schema.String,
+  online: Schema.Boolean,
+  paired: Schema.Boolean,
+  os: Schema.optionalKey(Schema.String),
+  arch: Schema.optionalKey(Schema.String),
+}).annotate({ identifier: "Machine.Info" })
+export type MachineInfo = typeof MachineInfo.Type
+
+export const MachineReach = Schema.Struct({
+  type: Schema.Literal("url"),
+  url: Schema.String,
+}).annotate({ identifier: "Machine.Reach" })
+export type MachineReach = typeof MachineReach.Type
+
+export const MachineAddPayload = Schema.Struct({
+  name: Schema.String,
+  reach: Schema.Array(MachineReach),
+  replace: Schema.optional(Schema.Boolean),
+}).annotate({ identifier: "Machine.AddPayload" })
+export type MachineAddPayload = typeof MachineAddPayload.Type
+
+export const MachineInvite = Schema.Struct({
+  name: Schema.String,
+  join: Schema.String,
+  expires: Schema.Int,
+}).annotate({ identifier: "Machine.Invite" })
+export type MachineInvite = typeof MachineInvite.Type
 
 /**
  * Whether a request asks to become a WebSocket, the one request the machine link serves and the one the server lets in
@@ -42,3 +82,30 @@ export const MachineLinkEndpoint = HttpApiEndpoint.get("machine.link", MACHINE_L
     transform: (operation) => ({ ...operation, "x-websocket": true, tags: ["experimental"] }),
   }),
 )
+
+/** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
+export const MachineEndpoints = [
+  MachineLinkEndpoint,
+  HttpApiEndpoint.get("machine.list", "/api/experimental/machine", {
+    success: Schema.Struct({ data: Schema.Array(MachineInfo) }),
+    error: [ForbiddenError],
+  }).annotateMerge(annotations("list", "List machines", "List known machines and whether each is paired and online.")),
+  HttpApiEndpoint.post("machine.add", "/api/experimental/machine", {
+    payload: MachineAddPayload,
+    success: Schema.Struct({ data: MachineInvite }),
+    error: [InvalidRequestError, ForbiddenError, MachineNotFoundError, ConflictError],
+  }).annotateMerge(
+    annotations(
+      "add",
+      "Add or invite a machine",
+      "Add a machine by name if it does not exist, then create a single-use join string carrying the given reach addresses.",
+    ),
+  ),
+  HttpApiEndpoint.delete("machine.remove", "/api/experimental/machine/:name", {
+    params: { name: Schema.String },
+    success: HttpApiSchema.NoContent,
+    error: [ForbiddenError],
+  }).annotateMerge(
+    annotations("remove", "Remove a machine", "Forget a machine by name, closing any live link and revoking its key."),
+  ),
+] as const
