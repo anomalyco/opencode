@@ -77,7 +77,7 @@ const objects = (db: Database.Interface["db"]) =>
 
 const failOn = (db: Database.Interface["db"], ids: string) =>
   db.run(
-    `CREATE TRIGGER fail_queue BEFORE INSERT ON session_search_queue WHEN NEW.source_id IN (${ids}) BEGIN SELECT RAISE(ABORT, 'induced'); END`,
+    `CREATE TRIGGER fail_document BEFORE INSERT ON session_search_document WHEN NEW.source_id IN (${ids}) BEGIN SELECT RAISE(ABORT, 'induced'); END`,
   )
 
 describe("SessionSearchBuild", () => {

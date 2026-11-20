@@ -217,8 +217,8 @@ describe("SessionSearchIndex", () => {
         text: yield* hash("text"),
       }).toEqual({
         version: 1,
-        compact: "b1c48849f77f650749dd222fb340426cc0b9e8849f604f68d9e9afc3509c24bf",
-        text: "4c23344aacfacef37a00d3048607c8a77bb5889aefbd264529bef761e8ff0671",
+        compact: "2e71a11e28e2a65887e43b78786ab1b19d4c2f57f758008f7c8aa13a8a13ca36",
+        text: "26eb886bf1c5d1098ded9280ba792b37c46bdb8fd3ed2d81b4efc8f6ad0f8437",
       })
     }),
   )
@@ -322,20 +322,29 @@ describe("SessionSearchIndex", () => {
           .run()
         expect(yield* find(db, "rewritten editedpart second")).toEqual([id("a1")])
 
-        // Deleting a session skips per-part reindexing and only queues the session and its messages once.
+        // Deleting a session skips per-part reindexing and only deletes the session and its messages once.
         yield* addMessages(db, sessionA, [assistant("a4", [])], 2)
         yield* addParts(db, id("a4"), [text("cascade1"), text("cascade2"), text("cascade3")])
-        yield* db.run("CREATE TABLE _queued (n INTEGER)")
-        yield* db.run("CREATE TRIGGER _count_queue BEFORE INSERT ON session_search_queue BEGIN INSERT INTO _queued VALUES (1); END")
+        yield* db.run("CREATE TABLE _events (kind TEXT)")
+        yield* db.run(
+          "CREATE TRIGGER _count_delete BEFORE DELETE ON session_search_document BEGIN INSERT INTO _events VALUES ('delete'); END",
+        )
+        yield* db.run(
+          "CREATE TRIGGER _count_insert BEFORE INSERT ON session_search_document BEGIN INSERT INTO _events VALUES ('insert'); END",
+        )
         yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionA)).run()
-        expect((yield* db.all(sql`SELECT * FROM _queued`)).length).toBe(3)
+        expect(yield* db.all<{ kind: string }>(sql`SELECT kind FROM _events`)).toEqual([
+          { kind: "delete" },
+          { kind: "delete" },
+          { kind: "delete" },
+        ])
         expect(yield* documents(db)).toEqual([id("b1"), sessionB])
 
         // Deleting a project cascades through its sessions and their messages.
         yield* db.delete(ProjectTable).run()
         expect(yield* documents(db)).toEqual([])
         expect(yield* find(db, "beta")).toEqual([])
-        expect(yield* db.all(sql`SELECT * FROM session_search_queue`)).toEqual([])
+        expect(yield* db.all(sql`SELECT * FROM session_search_document`)).toEqual([])
       }),
     )
 
@@ -418,10 +427,10 @@ describe("SessionSearchIndex", () => {
 
       // A chunk that fails rolls back with its cursor, so the next run starts from the same row.
       yield* db.run(
-        "CREATE TRIGGER fail_queue BEFORE INSERT ON session_search_queue BEGIN SELECT RAISE(ABORT, 'induced'); END",
+        "CREATE TRIGGER fail_document BEFORE INSERT ON session_search_document BEGIN SELECT RAISE(ABORT, 'induced'); END",
       )
       expect(Exit.isFailure(yield* SessionSearchIndex.buildChunk(db).pipe(Effect.exit))).toBe(true)
-      yield* db.run("DROP TRIGGER fail_queue")
+      yield* db.run("DROP TRIGGER fail_document")
       expect(yield* SessionSearchIndex.buildChunk(db)).toEqual({ done: true })
       expect(yield* find(db, "gannet")).toEqual([id("1")])
       expect(yield* SessionSearchIndex.state(db)).toMatchObject({ status: "done", processed: 5, total: 5, skipped: 0 })

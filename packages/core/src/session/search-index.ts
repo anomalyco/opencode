@@ -9,11 +9,11 @@ import { SessionMessage } from "./message.js"
 
 /**
  * A full-text index of session titles and message text that SQLite maintains itself. Triggers on the source tables
- * queue a changed source ID; the queue's own trigger reindexes it from the `session_search_source` view and removes the
- * row, so the extraction rules live in one place and no process has to keep up. The `compact` layout is a contentless
- * FTS5 table that removes entries by rowid (contentless_delete, SQLite 3.43+). Older SQLite (e.g. macOS 13's) needs the
- * indexed text to remove an entry, so the `text` layout keeps it in `session_search_document`, at about three times the
- * size. Nothing here uses `->>`: SQLite before 3.38 could not even open a schema containing it.
+ * reindex changed rows from the `session_search_source` view, so the extraction rules live in one place and no process
+ * has to keep up. The `compact` layout is a contentless FTS5 table that removes entries by rowid (contentless_delete,
+ * SQLite 3.43+). Older SQLite (e.g. macOS 13's) needs the indexed text to remove an entry, so the `text` layout keeps
+ * it in `session_search_document`, at about three times the size. Nothing here uses `->>`: SQLite before 3.38 could not
+ * even open a schema containing it.
  */
 
 type DatabaseService = Database.Interface["db"]
@@ -119,8 +119,8 @@ export const ensure = Effect.fn("SessionSearchIndex.ensure")(function* (
 })
 
 /**
- * Queues the next chunk of the build and advances the cursor in the same IMMEDIATE transaction, so concurrent servers
- * share one cursor. Titles are queued 50 at a time; messages also stop at {@link MaxChunkBytes} of stored rows, the
+ * Indexes the next chunk of the build and advances the cursor in the same IMMEDIATE transaction, so concurrent servers
+ * share one cursor. Titles are indexed 50 at a time; messages also stop at {@link MaxChunkBytes} of stored rows, the
  * first always fitting. `skip` passes the next row without indexing it, for a row that fails on its own.
  */
 export const buildChunk = Effect.fn("SessionSearchIndex.buildChunk")(function* (
@@ -144,11 +144,12 @@ export const buildChunk = Effect.fn("SessionSearchIndex.buildChunk")(function* (
           sql`SELECT id FROM session_v2 WHERE ${after} ORDER BY id LIMIT ${limit}`,
         )
         const last = rows.at(-1)?.id
-        if (last !== undefined && !options.skip)
-          yield* db.run(sql`
-            INSERT OR IGNORE INTO session_search_queue (source_id)
-            SELECT id FROM session_v2 WHERE ${after} AND id <= ${last}
-          `)
+        if (rows.length > 0 && !options.skip)
+          yield* reindexBatch(
+            db,
+            state.layout,
+            rows.map((row) => ({ id: row.id, session: row.id })),
+          )
         yield* writeState(db, {
           ...state,
           ...counted(rows.length),
@@ -160,23 +161,21 @@ export const buildChunk = Effect.fn("SessionSearchIndex.buildChunk")(function* (
       // header but needs SQLite 3.43+, like the compact layout.
       const size = sql.raw(state.layout === "compact" ? "octet_length" : "length")
       const before = state.after === undefined ? sql`1 = 1` : sql`id < ${state.after}`
-      const candidates = yield* db.all<{ id: string; bytes: number }>(sql`
-        SELECT message.id, CASE WHEN message.type IN (${sql.raw(Indexed)}) THEN ${size}(message.data) + coalesce((
-          SELECT sum(${size}(part.data)) FROM session_part AS part WHERE part.message_id = message.id
-        ), 0) ELSE 0 END AS bytes
+      const candidates = yield* db.all<{ id: string; session: string; indexed: number; bytes: number }>(sql`
+        SELECT message.id, message.session_id AS session,
+          CASE WHEN message.type IN (${sql.raw(Indexed)}) THEN 1 ELSE 0 END AS indexed,
+          CASE WHEN message.type IN (${sql.raw(Indexed)}) THEN ${size}(message.data) + coalesce((
+            SELECT sum(${size}(part.data)) FROM session_part AS part WHERE part.message_id = message.id
+          ), 0) ELSE 0 END AS bytes
         FROM session_message AS message WHERE ${before}
         ORDER BY message.id DESC LIMIT ${limit}
       `)
-      const ids = budget(candidates)
-      const last = ids.at(-1)
-      if (last !== undefined && !options.skip)
-        yield* db.run(sql`
-          INSERT OR IGNORE INTO session_search_queue (source_id)
-          SELECT id FROM session_message
-          WHERE type IN (${sql.raw(Indexed)}) AND ${before} AND id >= ${last}
-        `)
-      const done = last === undefined || (candidates.length < limit && ids.length === candidates.length)
-      yield* writeState(db, { ...state, ...counted(ids.length), ...(done ? { status: "done" } : { after: last }) })
+      const picked = budget(candidates)
+      const last = picked.at(-1)?.id
+      const indexed = picked.filter((row) => row.indexed === 1)
+      if (indexed.length > 0 && !options.skip) yield* reindexBatch(db, state.layout, indexed)
+      const done = last === undefined || (candidates.length < limit && picked.length === candidates.length)
+      yield* writeState(db, { ...state, ...counted(picked.length), ...(done ? { status: "done" } : { after: last }) })
       return { done }
     }),
   )
@@ -272,67 +271,61 @@ SELECT source_id, session_id, ${fold("title")}, ${fold("summary")}, ${fold("user
   WHERE m.type IN (${Indexed}) AND json_valid(m.data) AND json_type(m.data) = 'object'
 ) WHERE coalesce(title, summary, user_text, assistant_text) IS NOT NULL`
 
-const queue = (id: string) => `INSERT OR IGNORE INTO session_search_queue (source_id) VALUES (${id});`
 // OR and CASE short-circuit, so json_extract never sees invalid JSON.
 const finished = (row: string) =>
   `(${row}.type <> 'assistant' OR NOT json_valid(${row}.data) OR json_extract(${row}.data, '$.time.completed') IS NOT NULL)`
 const parentFinished = (row: string) =>
   `EXISTS (SELECT 1 FROM session_message AS m WHERE m.id = ${row}.message_id AND m.type = 'assistant' AND json_valid(m.data) AND json_extract(m.data, '$.time.completed') IS NOT NULL)`
 
-/** A streaming assistant is not queued, so it keeps its last finished text and only the finishing write reindexes it. */
-const SourceTriggers = {
-  session_search_message_insert: `AFTER INSERT ON session_message WHEN NEW.type IN (${Indexed}) AND ${finished("NEW")} BEGIN ${queue("NEW.id")} END`,
-  session_search_message_update: `AFTER UPDATE OF type, data ON session_message WHEN (NEW.type IN (${Indexed}) AND ${finished("NEW")}) OR (OLD.type IN (${Indexed}) AND NEW.type NOT IN (${Indexed})) BEGIN ${queue("NEW.id")} END`,
-  session_search_message_delete: `AFTER DELETE ON session_message WHEN OLD.type IN (${Indexed}) BEGIN ${queue("OLD.id")} END`,
-  session_search_part_insert: `AFTER INSERT ON session_part WHEN NEW.type = 'text' AND ${parentFinished("NEW")} BEGIN ${queue("NEW.message_id")} END`,
-  session_search_part_update: `AFTER UPDATE OF type, data, ordinal ON session_part WHEN (NEW.type = 'text' OR OLD.type = 'text') AND ${parentFinished("NEW")} BEGIN ${queue("NEW.message_id")} END`,
+const remove = (layout: Layout, id: string) =>
+  layout === "compact"
+    ? `DELETE FROM session_search WHERE rowid = (SELECT id FROM session_search_document WHERE source_id = ${id});
+       DELETE FROM session_search_document WHERE source_id = ${id};`
+    : `DELETE FROM session_search_document WHERE source_id = ${id};`
+
+// Compact inserts a document row per existing source, even one without text, so the index row can be written from one
+// view read. Each read filters by `source.source_id` so SQLite pushes it into both arms of `session_search_source`.
+const reindex = (layout: Layout, id: string, session: string) =>
+  layout === "compact"
+    ? `${remove("compact", id)}
+       INSERT INTO session_search_document (source_id, session_id) VALUES (${id}, ${session});
+       INSERT INTO session_search (rowid, ${Columns})
+         SELECT document.id, source.title, source.summary, source.user_text, source.assistant_text
+         FROM session_search_source AS source, session_search_document AS document
+         WHERE source.source_id = ${id} AND document.source_id = ${id};`
+    : `DELETE FROM session_search_document WHERE source_id = ${id};
+       INSERT INTO session_search_document (source_id, session_id, ${Columns})
+         SELECT source_id, session_id, ${Columns} FROM session_search_source WHERE source_id = ${id};`
+
+/** A streaming assistant is not indexed until it finishes, so it keeps its last finished text meanwhile. */
+const sourceTriggers = (layout: Layout) => ({
+  session_search_message_insert: `AFTER INSERT ON session_message WHEN NEW.type IN (${Indexed}) AND ${finished("NEW")} BEGIN ${reindex(layout, "NEW.id", "NEW.session_id")} END`,
+  session_search_message_update: `AFTER UPDATE OF type, data ON session_message WHEN (NEW.type IN (${Indexed}) AND ${finished("NEW")}) OR (OLD.type IN (${Indexed}) AND NEW.type NOT IN (${Indexed})) BEGIN ${reindex(layout, "NEW.id", "NEW.session_id")} END`,
+  session_search_message_delete: `AFTER DELETE ON session_message WHEN OLD.type IN (${Indexed}) BEGIN ${remove(layout, "OLD.id")} END`,
+  session_search_part_insert: `AFTER INSERT ON session_part WHEN NEW.type = 'text' AND ${parentFinished("NEW")} BEGIN ${reindex(layout, "NEW.message_id", "NEW.session_id")} END`,
+  session_search_part_update: `AFTER UPDATE OF type, data, ordinal ON session_part WHEN (NEW.type = 'text' OR OLD.type = 'text') AND ${parentFinished("NEW")} BEGIN ${reindex(layout, "NEW.message_id", "NEW.session_id")} END`,
   // In a cascade from session_message or session_v2, the parent row is already gone, so this is skipped and the
   // message's own trigger removes the entry.
-  session_search_part_delete: `AFTER DELETE ON session_part WHEN OLD.type = 'text' AND EXISTS (SELECT 1 FROM session_v2 AS s WHERE s.id = OLD.session_id) AND ${parentFinished("OLD")} BEGIN ${queue("OLD.message_id")} END`,
-  session_search_session_insert: `AFTER INSERT ON session_v2 WHEN trim(coalesce(NEW.title, '')) <> '' BEGIN ${queue("NEW.id")} END`,
-  session_search_session_update: `AFTER UPDATE OF title ON session_v2 WHEN NEW.title IS NOT OLD.title BEGIN ${queue("NEW.id")} END`,
-  session_search_session_delete: `AFTER DELETE ON session_v2 BEGIN ${queue("OLD.id")} END`,
-}
+  session_search_part_delete: `AFTER DELETE ON session_part WHEN OLD.type = 'text' AND EXISTS (SELECT 1 FROM session_v2 AS s WHERE s.id = OLD.session_id) AND ${parentFinished("OLD")} BEGIN ${reindex(layout, "OLD.message_id", "OLD.session_id")} END`,
+  session_search_session_insert: `AFTER INSERT ON session_v2 WHEN trim(coalesce(NEW.title, '')) <> '' BEGIN ${reindex(layout, "NEW.id", "NEW.id")} END`,
+  session_search_session_update: `AFTER UPDATE OF title ON session_v2 WHEN NEW.title IS NOT OLD.title BEGIN ${reindex(layout, "NEW.id", "NEW.id")} END`,
+  session_search_session_delete: `AFTER DELETE ON session_v2 BEGIN ${remove(layout, "OLD.id")} END`,
+})
 
 const fts = (name: string, layout: Layout) =>
   layout === "compact"
     ? `CREATE VIRTUAL TABLE ${name} USING fts5(${Columns}, content='', contentless_delete=1, ${Tokenizer})`
     : `CREATE VIRTUAL TABLE ${name} USING fts5(${Columns}, content='session_search_document', content_rowid='id', ${Tokenizer})`
 
-const dequeue = "DELETE FROM session_search_queue WHERE source_id = NEW.source_id;"
-
-/**
- * Per layout: the document table and the triggers that reindex a queued source. Each reads the source view once,
- * filtered by the source ID so SQLite pushes it into both arms of the view.
- */
+/** Per layout: the document table and any triggers on it. */
 const Layouts = {
   compact: {
     document: `CREATE TABLE session_search_document (id INTEGER PRIMARY KEY, source_id TEXT NOT NULL UNIQUE, session_id TEXT NOT NULL)`,
-    // A document row per existing source, even one without text, so the index row can be written from one read.
-    triggers: {
-      session_search_queue_insert: `AFTER INSERT ON session_search_queue BEGIN
-        DELETE FROM session_search WHERE rowid = (SELECT id FROM session_search_document WHERE source_id = NEW.source_id);
-        DELETE FROM session_search_document WHERE source_id = NEW.source_id;
-        INSERT INTO session_search_document (source_id, session_id)
-          SELECT id, session_id FROM session_message WHERE id = NEW.source_id
-          UNION ALL SELECT id, id FROM session_v2 WHERE id = NEW.source_id;
-        INSERT INTO session_search (rowid, ${Columns})
-          SELECT document.id, source.title, source.summary, source.user_text, source.assistant_text
-          FROM session_search_source AS source, session_search_document AS document
-          WHERE source.source_id = NEW.source_id AND document.source_id = NEW.source_id;
-        ${dequeue}
-      END`,
-    },
+    triggers: {},
   },
   text: {
     document: `CREATE TABLE session_search_document (id INTEGER PRIMARY KEY, source_id TEXT NOT NULL UNIQUE, session_id TEXT NOT NULL, ${Columns})`,
     triggers: {
-      session_search_queue_insert: `AFTER INSERT ON session_search_queue BEGIN
-        DELETE FROM session_search_document WHERE source_id = NEW.source_id;
-        INSERT INTO session_search_document (source_id, session_id, ${Columns})
-          SELECT source_id, session_id, ${Columns} FROM session_search_source WHERE source_id = NEW.source_id;
-        ${dequeue}
-      END`,
       // External content: removing an entry takes the text it was indexed with.
       session_search_document_insert: `AFTER INSERT ON session_search_document BEGIN
         INSERT INTO session_search (rowid, ${Columns}) VALUES (NEW.id, NEW.title, NEW.summary, NEW.user_text, NEW.assistant_text);
@@ -344,18 +337,59 @@ const Layouts = {
   },
 } satisfies Record<Layout, { document: string; triggers: Record<string, string> }>
 
-const Tables = ["session_search", "session_search_document", "session_search_queue"]
+const Tables = ["session_search", "session_search_document"]
 const expected = (layout: Layout) => [
   ...Tables,
   "session_search_source",
-  ...Object.keys(SourceTriggers),
+  ...Object.keys(sourceTriggers(layout)),
   ...Object.keys(Layouts[layout].triggers),
 ]
+
+/**
+ * Bulk-reindexes a batch of sources using bound `IN (?, ...)` lists (not subqueries) on `source.source_id`, so SQLite
+ * pushes `id = ?` into both arms of `session_search_source` on SQLite < 3.46 as well.
+ */
+const reindexBatch = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  layout: Layout,
+  rows: ReadonlyArray<{ readonly id: string; readonly session: string }>,
+) {
+  for (let start = 0; start < rows.length; start += ChunkLimit) {
+    const batch = rows.slice(start, start + ChunkLimit)
+    const ids = sql.join(
+      batch.map((row) => sql`${row.id}`),
+      sql`, `,
+    )
+    if (layout === "text") {
+      yield* db.run(sql`DELETE FROM session_search_document WHERE source_id IN (${ids})`)
+      yield* db.run(sql`
+        INSERT INTO session_search_document (source_id, session_id, ${sql.raw(Columns)})
+        SELECT source_id, session_id, ${sql.raw(Columns)} FROM session_search_source WHERE source_id IN (${ids})
+      `)
+      continue
+    }
+    const values = sql.join(
+      batch.map((row) => sql`(${row.id}, ${row.session})`),
+      sql`, `,
+    )
+    yield* db.run(sql`
+      DELETE FROM session_search WHERE rowid IN (SELECT id FROM session_search_document WHERE source_id IN (${ids}))
+    `)
+    yield* db.run(sql`DELETE FROM session_search_document WHERE source_id IN (${ids})`)
+    yield* db.run(sql`INSERT INTO session_search_document (source_id, session_id) VALUES ${values}`)
+    yield* db.run(sql`
+      INSERT INTO session_search (rowid, ${sql.raw(Columns)})
+      SELECT document.id, source.title, source.summary, source.user_text, source.assistant_text
+      FROM session_search_source AS source
+      JOIN session_search_document AS document ON document.source_id = source.source_id
+      WHERE source.source_id IN (${ids})
+    `)
+  }
+})
 
 const reset = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout) {
   yield* unlink(db)
   for (const name of Tables) yield* db.run(`DROP TABLE IF EXISTS ${name}`)
-  yield* db.run("CREATE TABLE session_search_queue (source_id TEXT PRIMARY KEY)")
   yield* db.run(Layouts[layout].document)
   yield* db.run(fts("session_search", layout))
   yield* link(db, layout)
@@ -372,7 +406,7 @@ const unlink = Effect.fnUntraced(function* (db: DatabaseService) {
 
 const link = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout) {
   yield* db.run(SourceView)
-  for (const [name, body] of Object.entries({ ...Layouts[layout].triggers, ...SourceTriggers }))
+  for (const [name, body] of Object.entries({ ...Layouts[layout].triggers, ...sourceTriggers(layout) }))
     yield* db.run(`CREATE TRIGGER ${name} ${body}`)
 })
 
@@ -497,13 +531,13 @@ const update = (db: DatabaseService, change: (state: State) => State | undefined
   )
 
 /** The first message always fits, so a larger one still progresses. */
-const budget = (rows: ReadonlyArray<{ id: string; bytes: number }>) => {
-  const ids: string[] = []
+const budget = <T extends { readonly bytes: number }>(rows: ReadonlyArray<T>) => {
+  const picked: T[] = []
   let bytes = 0
   for (const row of rows) {
-    if (ids.length > 0 && bytes + row.bytes > MaxChunkBytes) break
-    ids.push(row.id)
+    if (picked.length > 0 && bytes + row.bytes > MaxChunkBytes) break
+    picked.push(row)
     bytes += row.bytes
   }
-  return ids
+  return picked
 }
