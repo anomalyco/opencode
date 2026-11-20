@@ -72,4 +72,10 @@ test.each([
   expect(allowed(".env", ".env", true)).toBe(false)
   expect(previewAllowed(home, "index.html", "other.txt", false, home)).toBe(false)
   expect(previewAllowed(home, "site/index.html", "site/assets/x", false, home)).toBe(true)
+
+  expect(previewAllowed(root, "solo.html", "solo.html", true, home, [root])).toBe(true)
+  expect(previewAllowed(root, "solo.html", "other.txt", false, home, [root])).toBe(false)
+  expect(previewAllowed(root, "solo.html", "uploads/secret.txt", false, home, [root])).toBe(false)
+  expect(previewAllowed(root, "report/index.html", "report/app.js", false, home, [root])).toBe(true)
+  expect(previewAllowed(root, "report/index.html", "uploads/secret.txt", false, home, [root])).toBe(false)
 })

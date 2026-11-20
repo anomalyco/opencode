@@ -12,6 +12,7 @@ import { artifactKind } from "@opencode/util/artifact"
 import { remotePath, workspacePrefix } from "./preview-path.js"
 import { Browser } from "./rpc.js"
 import { BrowserSkill } from "./skill.js"
+import { tempRoots } from "./workspace.js"
 
 export const register = Effect.fn("BrowserTools.register")(function* (
   ctx: Pick<Context, "tool" | "skill" | "location" | "permission">,
@@ -103,11 +104,15 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     )
   })
 
-  // Send the exact workspace entry we checked, not the unverified input (which might be a line link).
+  // Send the exact workspace or approved temp entry we checked, not the unverified input (which might be a line link).
   const previewable = Effect.fn("BrowserTools.previewable")(function* (input: string, call: string, tool: Tool.Context) {
     // tabs.list shows a remote server's file as workspace://<session>/<path>. Another session's address names nothing here.
     const path = /^workspace:/i.test(input.trim()) ? remotePath(input.trim(), workspacePrefix(tool.sessionID)) : input
-    const located = path === undefined ? undefined : yield* BrowserFiles.locate(path, ctx.location.directory, absolute => BrowserFiles.authorize(ctx, tool, "read", [absolute]))
+    const extra = yield* Effect.promise(() => tempRoots())
+    const located =
+      path === undefined
+        ? undefined
+        : yield* BrowserFiles.locate(path, ctx.location.directory, (absolute) => BrowserFiles.authorize(ctx, tool, "read", [absolute]), extra)
     if (located && "invalid" in located) return yield* new Tool.Error({ metadata: { code: "invalid_path" }, message: "This path is not a valid workspace filename on the server." })
     if (!located || "outside" in located)
       return yield* new Tool.Error({ metadata: { code: "outside_workspace" }, message: `${call} cannot show a file outside this session's workspace. Choose a file inside the workspace.` })
@@ -121,7 +126,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
         metadata: { code: "file_not_found" },
         message: `${call} found no file at ${located.absolute}. Paths are on the server, relative to the workspace (${ctx.location.directory}) or absolute. Check the path, for example with glob, then call ${call} again.`,
       })
-    return relative(ctx.location.directory, located.absolute).split(sep).join("/")
+    return "temp" in located ? located.absolute : relative(ctx.location.directory, located.absolute).split(sep).join("/")
   })
 
   // The path forms of tabs.open and navigate. The server checks the file; the desktop shows it.

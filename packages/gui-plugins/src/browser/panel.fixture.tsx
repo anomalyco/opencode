@@ -454,6 +454,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             page(tab)
           }
         })
+
+        return { fileRoots: [] }
       },
       load: async () => undefined,
       command: async (value) => {
@@ -1391,6 +1393,8 @@ export function mountBrowserRegion(input: RegionHost) {
           ...items,
           { binding: value.binding, session: value.session, restore: value.restore?.tabs.length ?? 0 },
         ])
+
+        return { fileRoots: [] }
       },
       load: async () => undefined,
       command: async (value) => {

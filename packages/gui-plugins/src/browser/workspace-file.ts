@@ -23,8 +23,8 @@ export type WorkspaceSource =
 type PreviewScope = { document: string; takeEntry(): boolean; denied(): void }
 
 export type PreviewSource =
-  // `identity` names this machine's workspace folder as it was when the grant was made.
-  | (Extract<WorkspaceSource, { type: "local" }> & PreviewScope & { identity: string })
+  // `identity` names this machine's preview root folder as it was when the grant was made.
+  | (Extract<WorkspaceSource, { type: "local" }> & PreviewScope & { identity: string; sharedRoots?: readonly string[] })
   | (Extract<WorkspaceSource, { type: "remote" }> & PreviewScope)
   | { type: "artifact"; id: string; read(route: string, method: string, signal: AbortSignal): Promise<Response> }
 
@@ -88,7 +88,7 @@ export async function resolvePreviewRequest(
   if (!root) return
   const path = relative(root, fileURLToPath(file)).replaceAll("\\", "/")
   const entry = path === grant.document && initiator === undefined && grant.takeEntry()
-  const target = await openPreviewFile(verifier, root, grant.document, path, entry, grant.identity).catch(FileVerificationError.orMissing)
+  const target = await openPreviewFile(verifier, root, grant.document, path, entry, grant.identity, grant.sharedRoots).catch(FileVerificationError.orMissing)
 
   if (target === "denied") {
     grant.denied()

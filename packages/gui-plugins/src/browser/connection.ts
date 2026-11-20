@@ -44,7 +44,7 @@ export function openBinding(input: {
   listen: (binding: string, listener: (event: PaneEvent) => void) => () => void
   target: { server: string; session: string; restore?: Browser.State }
   /** Main took the binding. */
-  accepted: () => void
+  accepted: (fileRoots: readonly string[]) => void
   /** Main refused or closed the binding, or the Ipc could not answer. */
   failed: (cause: unknown) => void
   listener: (event: PaneEvent) => void
@@ -59,8 +59,8 @@ export function openBinding(input: {
 
   const ready = client.register({ binding, ...input.target })
   void ready.then(
-    () => {
-      if (!status.closed) input.accepted()
+    (result) => {
+      if (!status.closed) input.accepted(result.fileRoots)
     },
     (cause: unknown) => {
       if (!status.closed) input.failed(cause)

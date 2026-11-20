@@ -23,12 +23,23 @@ const tab = (digit: string, url = `https://${digit}.example/`): Browser.Tab => (
 // `given` is what the window knows of that server, the sessions' location and the pane's Ipc as the model starts.
 // With `slow`, main takes a registration only once the test calls `answer`, as while it attaches to the server.
 function fixture(
-  given: { connected?: boolean; compatible?: boolean; local?: boolean; located?: boolean; ipc?: "active" | "pending" | "inactive"; slow?: boolean } = {},
+  given: {
+    connected?: boolean
+    compatible?: boolean
+    local?: boolean
+    builtin?: boolean
+    located?: boolean
+    ipc?: "active" | "pending" | "inactive"
+    slow?: boolean
+    fileRoots?: readonly string[]
+    screen?: { root: string; absolute(path: string): boolean }
+  } = {},
 ) {
   const bindings = new Map<string, string>()
   const listeners = new Set<(value: { binding: string; event: PaneEvent }) => void>()
   // What main rejects the next commands with, first in, first out.
   const rejections: string[] = []
+  const commands: Browser.Action[] = []
   const [connected, setConnected] = createSignal(given.connected ?? true)
   const [ipc, setIpc] = createSignal(given.ipc ?? "active")
   const answered = Promise.withResolvers<void>()
@@ -42,7 +53,7 @@ function fixture(
       return connected()
     },
     local: given.local ?? true,
-    builtin: true,
+    builtin: given.builtin ?? true,
     data: { on: () => () => undefined, session: { status: () => "idle" } },
   }
 
@@ -61,9 +72,12 @@ function fixture(
     register: async (input) => {
       bindings.set(input.session, input.binding)
       await answered.promise
+
+      return { fileRoots: [...(given.fileRoots ?? [])] }
     },
     load: async () => undefined,
-    command: async () => {
+    command: async (input) => {
+      commands.push(input.command)
       const message = rejections.shift()
 
       if (message !== undefined) throw new Error(message)
@@ -99,7 +113,7 @@ function fixture(
     t: (key: string, params?: Record<string, string>) => (params ? `${key} ${JSON.stringify(params)}` : key),
     use: () => live,
     sessions: { current, list: () => refs },
-    screen: { current: () => undefined },
+    screen: { current: () => (given.screen ? { file: given.screen } : undefined) },
     links: { open: () => undefined },
     layout: { narrow: () => false, stored: () => [], state: () => "closed", open() {}, close() {}, side: { opened: () => false } },
     stores: { history },
@@ -122,7 +136,7 @@ function fixture(
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const sessions = refs.map((ref) => ref as unknown as SessionRef)
 
-  return { ...owned, sessions, route: setCurrent, refs, emit, send, rejections, setConnected, setIpc, answer: answered.resolve, registered: () => Array.from(bindings.keys()) }
+  return { ...owned, sessions, route: setCurrent, refs, emit, send, rejections, commands, setConnected, setIpc, answer: answered.resolve, registered: () => Array.from(bindings.keys()) }
 }
 
 // Runs the promise jobs queued so far, which the fake clock does not: more turns than a registration takes.
@@ -431,5 +445,55 @@ test("a command main rejects says what the person tried, never the app's generic
   } finally {
     warned.mockRestore()
     app.dispose()
+  }
+})
+
+test("canOpen and openFile allow approved temp paths on the built-in server and refuse them on remote servers or outside roots", async () => {
+  const screen = {
+    root: "/repo",
+    absolute: (path: string) => path.startsWith("/") || /^[a-z]:[\\/]/i.test(path) || path.startsWith("\\\\"),
+  }
+
+  const local = fixture({
+    builtin: true,
+    slow: true,
+    fileRoots: ["/repo", "/private/var/folders/x/T/opencode", "/var/folders/x/T/opencode"],
+    screen,
+  })
+
+  const remote = fixture({
+    builtin: false,
+    fileRoots: [],
+    screen,
+  })
+
+  try {
+    const [alpha] = local.sessions
+    // Before registration resolves with fileRoots, temp paths are not yet allowed.
+    expect(local.model.canOpen(alpha, "/private/var/folders/x/T/opencode/report/index.html")).toBe(false)
+    local.answer()
+    await Bun.sleep(0)
+    expect(local.model.canOpen(alpha, "report/index.html")).toBe(true)
+    expect(local.model.canOpen(alpha, "/private/var/folders/x/T/opencode/report/index.html")).toBe(true)
+    expect(local.model.canOpen(alpha, "/var/folders/x/T/opencode/report/index.html")).toBe(true)
+    expect(local.model.canOpen(alpha, "/private/var/folders/x/T/opencode-other/index.html")).toBe(false)
+    expect(local.model.canOpen(alpha, "/private/var/folders/x/T/opencode/../secret.html")).toBe(false)
+    expect(local.model.canOpen(alpha, "/etc/passwd")).toBe(false)
+    expect(local.model.canOpen(alpha, "\\\\server\\share\\index.html")).toBe(false)
+
+    local.model.openFile(alpha, "/private/var/folders/x/T/opencode/report/index.html")
+    local.model.openFile(alpha, "/var/folders/x/T/opencode/report/index.html")
+    await Bun.sleep(0)
+    expect(local.commands).toEqual([
+      { type: "tabs.open", url: "file:///private/var/folders/x/T/opencode/report/index.html" },
+      { type: "tabs.open", url: "file:///var/folders/x/T/opencode/report/index.html" },
+    ])
+
+    const [remoteAlpha] = remote.sessions
+    expect(remote.model.canOpen(remoteAlpha, "report/index.html")).toBe(true)
+    expect(remote.model.canOpen(remoteAlpha, "/private/var/folders/x/T/opencode/report/index.html")).toBe(false)
+  } finally {
+    local.dispose()
+    remote.dispose()
   }
 })

@@ -72,12 +72,13 @@ export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], na
 )
 
 /**
- * The workspace entry a path or `file:` address names, decided from its text alone, with no look at the disk: the
- * address and its percent-encoding decoded, a line suffix dropped, `.` and `..` resolved. `entry` is the result
- * relative to the workspace, with forward slashes. Undefined for an address that is no file. `unresolved` for text
- * that is no path, `outside` for one that leaves the workspace, `invalid` for a name the desktop cannot open.
+ * The workspace or approved temp entry a path or `file:` address names, decided from its text alone, with no look at
+ * the disk: the address and its percent-encoding decoded, a line suffix dropped, `.` and `..` resolved. `entry` is the
+ * result relative to the matched root, with forward slashes. Undefined for an address that is no file. `unresolved`
+ * for text that is no path, `outside` for one that leaves the allowed roots, `invalid` for a name the desktop cannot
+ * open.
  */
-export function entry(path: string, directory: string) {
+export function entry(path: string, directory: string, extraRoots: readonly string[] = []) {
   const value = path.trim()
   if (address(value) && !/^file:/i.test(value)) return undefined
   const local = localPath(value)
@@ -85,10 +86,11 @@ export function entry(path: string, directory: string) {
   if (local === "") return { absolute: value, outside: true as const }
   const plain = local.replace(/(?:#L\d+(?:C\d+)?(?:-L?\d+(?:C\d+)?)?|:\d+(?::\d+)?(?:-\d+(?::\d+)?)?:?)$/i, "")
   const absolute = resolve(directory, plain)
-  if (!FSUtil.contains(directory, absolute)) return { absolute, outside: true as const }
-  const name = relative(directory, absolute).replaceAll("\\", "/")
+  const root = [directory, ...extraRoots].find((candidate) => FSUtil.contains(candidate, absolute))
+  if (!root) return { absolute, outside: true as const }
+  const name = relative(root, absolute).replaceAll("\\", "/")
   if (name && !previewPath(name, process.platform === "win32")) return { absolute, invalid: true as const }
-  return { absolute, entry: name }
+  return { absolute, entry: name, root, workspace: root === directory }
 }
 
 // A `file:` address as a local path, with forward slashes. Empty for one that names another host; undefined for text
@@ -104,8 +106,13 @@ function localPath(value: string) {
 }
 
 /** Resolve and authorize the exact entry. A missing agent path must not trigger a search of unapproved directories. */
-export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, directory: string, approve: (absolute: string) => Effect.Effect<void, Tool.Error>) {
-  const resolved = entry(path, directory)
+export const locate = Effect.fn("BrowserFiles.locate")(function* (
+  path: string,
+  directory: string,
+  approve: (absolute: string) => Effect.Effect<void, Tool.Error>,
+  extraRoots: readonly string[] = [],
+) {
+  const resolved = entry(path, directory, extraRoots)
   if (!resolved) return undefined
   const invalid = () => new Tool.Error({ metadata: { code: "unresolved_path" }, message: "This path does not resolve to a file inside the workspace." })
   if ("unresolved" in resolved) return yield* invalid()
@@ -115,18 +122,20 @@ export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, 
   if ("outside" in resolved) return { ...missing, outside: true }
   if ("invalid" in resolved) return { ...missing, invalid: true }
   yield* approve(absolute)
-  const target = yield* Effect.tryPromise({ try: () => workspaceTarget(absolute, [directory]), catch: cause => cause instanceof Error && "code" in cause && (cause.code === "ENOENT" || cause.code === "ENOTDIR") ? "missing" as const : invalid() }).pipe(
+  const target = yield* Effect.tryPromise({ try: () => workspaceTarget(absolute, [resolved.root]), catch: cause => cause instanceof Error && "code" in cause && (cause.code === "ENOENT" || cause.code === "ENOTDIR") ? "missing" as const : invalid() }).pipe(
     Effect.catchIf(error => error === "missing", () => Effect.succeed(null)),
   )
   if (target === null) return missing
   if (!target) return { ...missing, outside: true }
-  // The physical file, named under the workspace as the session spells it: a workspace reached through a symlink
+  // The physical file, named under the root as the session spells it: a root reached through a symlink
   // (macOS's /var is /private/var) keeps its own path, and only a link inside it to another entry needs approval.
-  const root = yield* Effect.tryPromise({ try: () => realpath(directory), catch: invalid })
-  const physical = resolve(directory, relative(root, target))
+  const root = yield* Effect.tryPromise({ try: () => realpath(resolved.root), catch: invalid })
+  const physical = resolve(resolved.root, relative(root, target))
   if (physical !== absolute) yield* approve(physical)
   const info = yield* Effect.tryPromise({ try: () => stat(target), catch: invalid })
-  return { absolute: physical, found: info.isFile(), directory: info.isDirectory() }
+  return resolved.workspace
+    ? { absolute: physical, found: info.isFile(), directory: info.isDirectory() }
+    : { absolute: target, found: info.isFile(), directory: info.isDirectory(), temp: true as const }
 })
 
 /** Whether a preview path is an address with a scheme, such as https:, skill: or file:. A drive letter is no scheme. */

@@ -22,7 +22,7 @@ import {
 } from "./connection"
 import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
-import { workspaceFileURL } from "./link"
+import { pathWithinRoots, workspaceFileURL } from "./link"
 import { workspacePrefix } from "./remote-address"
 import {
   BrowserPane,
@@ -42,6 +42,7 @@ import {
   sessionBrowser,
   sessionEmbed,
   sessionFailure,
+  sessionFileRoots,
   sessionPending,
   sessionRegistration,
   sessionAttaching,
@@ -303,7 +304,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           return () => void listeners.delete(binding)
         },
         target: effect.restore ? { ...target, restore: effect.restore } : target,
-        accepted: () => dispatch({ type: "register.accepted", sessionKey, attempt }),
+        accepted: (fileRoots) => dispatch({ type: "register.accepted", sessionKey, attempt, fileRoots }),
         failed: (cause) =>
           dispatch({
             type: "register.failed",
@@ -683,14 +684,19 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     return screen && sessions.current()?.key === session.key ? screen.file : undefined
   }
 
-  // Both kinds of binding can open workspace files. Only the disk owner interprets their paths.
+  // Both kinds of binding can open workspace files; the local built-in server also allows OpenCode's temp folder.
+  // Only the disk owner interprets their paths.
   const canOpen = (session: SessionRef, path?: string) => {
     if (!available(session) || !attached(session)) return false
 
     if (path === undefined) return true
     const current = files(session)
 
-    return !!current && !current.absolute(path)
+    if (!current) return false
+
+    if (!current.absolute(path)) return true
+
+    return session.server.builtin && pathWithinRoots(path, sessionFileRoots(machine(), session.key))
   }
 
   const openFile = (session: SessionRef, path: string) => {

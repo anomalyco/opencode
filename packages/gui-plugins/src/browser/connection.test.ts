@@ -33,12 +33,13 @@ test("viewport IPC accepts Auto or two bounded whole CSS dimensions", () => {
 })
 
 // The client stands in for the pane's main entry; `reject` is the error its register rejects with.
-function fixture(reject?: Error) {
+function fixture(reject?: Error, fileRoots: readonly string[] = []) {
   const listeners = new Map<string, (event: PaneEvent) => void>()
   const registered: Parameters<Client["register"]>[0][] = []
   const closed: string[] = []
   const highlights: Parameters<Client["highlight"]>[0][] = []
   const outcomes: string[] = []
+  const receivedRoots: (readonly string[])[] = []
   const events: PaneEvent[] = []
 
   const client: Client = {
@@ -47,6 +48,8 @@ function fixture(reject?: Error) {
       registered.push(input)
 
       if (reject) throw reject
+
+      return { fileRoots: [...fileRoots] }
     },
     load: async () => undefined,
     command: async () => undefined,
@@ -82,7 +85,10 @@ function fixture(reject?: Error) {
       return () => listeners.delete(binding)
     },
     target: { server: "browser-test", session: "ses_browser" },
-    accepted: () => outcomes.push("accepted"),
+    accepted: (roots) => {
+      outcomes.push("accepted")
+      receivedRoots.push(roots)
+    },
     failed: (cause) => outcomes.push(cause instanceof Error ? cause.message : "failed"),
     listener: (event) => events.push(event),
   })
@@ -90,7 +96,7 @@ function fixture(reject?: Error) {
   const binding = registered[0].binding
   const emit = (event: PaneEvent) => listeners.get(binding)?.(event)
 
-  return { registration, binding, emit, listeners, closed, highlights, outcomes, events }
+  return { registration, binding, emit, listeners, closed, highlights, outcomes, receivedRoots, events }
 }
 
 test("highlights of picked elements reach the page", async () => {
@@ -118,10 +124,11 @@ test("a closed binding stops its events and answers, and closes once with main",
 })
 
 test("main's answer to the register reaches the owner", async () => {
-  const accepted = fixture()
+  const accepted = fixture(undefined, ["/repo", "/private/tmp/opencode"])
   const rejected = fixture(new Error("browser.pane.registration.invalid"))
   await Bun.sleep(0)
   expect(accepted.outcomes).toEqual(["accepted"])
+  expect(accepted.receivedRoots).toEqual([["/repo", "/private/tmp/opencode"]])
   expect(rejected.outcomes).toEqual(["browser.pane.registration.invalid"])
 })
 

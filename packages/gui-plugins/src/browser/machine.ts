@@ -73,6 +73,8 @@ export type Failure = {
 export type Attachment = {
   readonly serverID: string
   readonly phase: Phase
+  /** Local directories whose files may open as scoped previews; empty for remote servers. */
+  readonly fileRoots: readonly string[]
   /** The desktop's tab inventory, kept while suspended or retrying so a new binding restores it. */
   readonly browser: Browser.State | null
   /** Host embed per tab page of the current binding. */
@@ -210,7 +212,12 @@ export type Event =
   /** The person closed the failure's notice, or its time ran out. */
   | { readonly type: "failure.dismissed"; readonly sessionKey: string; readonly id: number }
   | { readonly type: "address.focused"; readonly sessionKey: string; readonly tabID: Browser.TabID }
-  | { readonly type: "register.accepted"; readonly sessionKey: string; readonly attempt: number }
+  | {
+      readonly type: "register.accepted"
+      readonly sessionKey: string
+      readonly attempt: number
+      readonly fileRoots: readonly string[]
+    }
   | {
       readonly type: "register.failed"
       readonly sessionKey: string
@@ -368,6 +375,10 @@ export function sessionAttached(state: State, sessionKey: string) {
   const attachment = attachmentOf(state, sessionKey)
 
   return !!attachment && (attachment.phase.status === "ready" || attachment.browser !== null)
+}
+
+export function sessionFileRoots(state: State, sessionKey: string) {
+  return attachmentOf(state, sessionKey)?.fileRoots ?? []
 }
 
 /**
@@ -532,6 +543,7 @@ function attached(state: Open, event: Extract<Event, { type: "session.attached" 
   return put(state, event.sessionKey, {
     serverID: event.serverID,
     phase: { status: "idle" },
+    fileRoots: [],
     browser: null,
     embeds: {},
     failure: undefined,
@@ -717,9 +729,12 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
     case "register.accepted": {
       if (phase.status !== "registering" || phase.attempt !== event.attempt) return { state, effects: [] }
 
-      return put(state, key, { ...attachment, phase: { status: "ready", attempt: phase.attempt } }, [
-        { type: "cancel-register-timeout", sessionKey: key },
-      ])
+      return put(
+        state,
+        key,
+        { ...attachment, phase: { status: "ready", attempt: phase.attempt }, fileRoots: event.fileRoots },
+        [{ type: "cancel-register-timeout", sessionKey: key }],
+      )
     }
 
     case "register.failed": {

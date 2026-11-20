@@ -5,6 +5,7 @@ import { join } from "node:path"
 import type { PermissionEvaluation } from "@opencode/plugin/effect/permission"
 import type { Permission } from "@opencode/schema/permission"
 import { Tool } from "@opencode/schema/tool"
+import { Global } from "@opencode/util/global"
 import { Effect, Fiber, Schedule, Stream } from "effect"
 import { BrowserConnection } from "../src/connection.js"
 import { Browser } from "../src/rpc.js"
@@ -44,6 +45,7 @@ function plugin(input: {
   const tools: ToolDefinition[] = []
   const asserts: AssertCall[] = []
   const controls: Control[] = []
+  const actions: Browser.Action[] = []
   const agents = Object.entries(input.agents ?? { build: [] }).map(([id, permissions]) => ({ id, permissions: [...permissions] }))
   const rpc: { handlers?: Record<string, (input: object, call: object) => Effect.Effect<unknown, unknown>> } = {}
   const call = { error: (code: string, message: string) => new Error(`${code}: ${message}`) }
@@ -95,10 +97,17 @@ function plugin(input: {
                   // The desktop asks for the command and answers it, after the plugin's step releases its lock.
                   if (control.type === "command")
                     void Effect.runPromise(
-                      handlers.result(
-                        { sessionID: [...sessions.keys()][0], connectionID: control.connectionID, requestID: control.requestID, outcome: { type: "success", result: { value: input.answer ?? { tabs: [], focusedTabID: null }, files: [] } } },
-                        call,
-                      ),
+                      handlers
+                        .command({ sessionID: [...sessions.keys()][0], connectionID: control.connectionID, requestID: control.requestID }, call)
+                        .pipe(
+                          Effect.tap((command) => Effect.sync(() => void actions.push((command as Browser.Command).action))),
+                          Effect.andThen(
+                            handlers.result(
+                              { sessionID: [...sessions.keys()][0], connectionID: control.connectionID, requestID: control.requestID, outcome: { type: "success", result: { value: input.answer ?? { tabs: [], focusedTabID: null }, files: [] } } },
+                              call,
+                            ),
+                          ),
+                        ),
                     ).catch(() => undefined)
                 }),
             },
@@ -121,6 +130,7 @@ function plugin(input: {
     sessions,
     storage,
     asserts,
+    actions,
     commands: () => controls.filter((control) => control.type === "command").length,
     evaluate: (event: PermissionEvaluation) => Effect.forEach(hooks, (hook) => hook(event), { discard: true }).pipe(Effect.as(event)),
     prompt: (sessionID: string) => Effect.forEach(prompts, (hook) => hook({ sessionID }), { discard: true }),
@@ -341,6 +351,42 @@ describe("the file route", () => {
 
     expect(messages).toEqual(["Permission denied: read", "Permission denied: external_directory"])
     expect(fake.commands()).toBe(0)
+  })
+
+  test("tabs.open and navigate allow HTML files in OpenCode's temp directory and send their canonical path", async () => {
+    await using dir = await workspace()
+    await mkdir(Global.Path.tmp, { recursive: true })
+    const tempDir = await mkdtemp(join(Global.Path.tmp, "browser-temp-preview-"))
+
+    try {
+      const page = join(tempDir, "index.html")
+      await writeFile(page, "<h1>temp</h1>")
+      const canonical = await realpath(page)
+      const shownTab = { ...tab, url: `file://${canonical.replaceAll("\\", "/")}` }
+      const fake = plugin({
+        directory: dir.root,
+        sessions: [session("ses_a", dir.root)],
+        answer: { path: canonical, tabID, url: shownTab.url, tab: shownTab },
+      })
+
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          yield* BrowserConnection.make(fake.context).pipe(Effect.flatMap((connection) => BrowserTools.register(fake.context, connection)))
+          yield* fake.attach("ses_a")
+          const opened = yield* fake.run("tabs.open", { path: page }, "ses_a")
+          expect(opened).toMatchObject({ output: { id: tabID, path: canonical } })
+          const navigated = yield* fake.run("navigate", { tabID, path: page }, "ses_a")
+          expect(navigated).toMatchObject({ output: { id: tabID, path: canonical } })
+        }).pipe(Effect.scoped),
+      )
+
+      expect(fake.actions).toEqual([
+        { type: "preview", path: canonical },
+        { type: "navigate.path", tabID, path: canonical },
+      ])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
   })
 })
 
