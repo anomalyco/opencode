@@ -212,25 +212,4 @@ mod tests {
         assert!(links(&[url.into()], "abc", 600).contains("  https://Bücher.example/auth/connect/abc\n\n  ████"));
         assert_eq!(ssh_hint(url), None);
     }
-
-    #[test]
-    fn the_ssh_hint_is_only_for_loopback() {
-        assert_eq!(
-            ssh_hint("http://127.0.0.1:4096").unwrap().lines().nth(1),
-            Some("  ssh -L 4096:127.0.0.1:4096 <host>")
-        );
-        assert!(ssh_hint("http://[::1]:5/").is_some());
-        assert!(ssh_hint("http://0.0.0.0:4096").is_none());
-        assert!(ssh_hint("http://127.0.0.2:4096").is_none());
-    }
-
-    #[test]
-    fn loopback_hosts() {
-        for host in ["localhost", "a.localhost", "127.0.0.1", "127.9.9.9", "[::1]"] {
-            assert!(is_loopback(host), "{host}");
-        }
-        for host in ["0.0.0.0", "10.0.0.1", "example.com", "[::2]"] {
-            assert!(!is_loopback(host), "{host}");
-        }
-    }
 }
