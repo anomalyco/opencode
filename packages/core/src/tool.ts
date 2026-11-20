@@ -76,10 +76,11 @@ export interface SnapshotOptions {
 
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<RegisteredTool>>
+  readonly codeModeTools: (paths: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, RegisteredTool>>
   readonly snapshot: (permissions?: Permission.Ruleset, options?: SnapshotOptions) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
-   * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
+   * whole-tool permission filtering and each tool's own executor policy).
    */
   readonly check: (input: CheckInput) => Effect.Effect<CodeMode.Result>
 }
@@ -90,6 +91,7 @@ export interface CheckInput {
   readonly bindings: Readonly<Record<string, CodeMode.DataValue>>
   readonly permissions: Permission.Ruleset
   readonly limits: CodeMode.ExecutionLimits
+  readonly services?: Context.Context<CodeModeTool.Services>
   readonly context: Omit<Tool.Context, "id">
 }
 
@@ -302,6 +304,7 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
+      codeModeTools: (paths) => Effect.sync(() => new Map(codeModeTools(state.get().tools, paths))),
       snapshot: Effect.fn("Tool.snapshot")((permissions, options) =>
         Effect.gen(function* () {
           const rules = permissions ?? []
@@ -410,21 +413,21 @@ const layer = Layer.effect(
           } satisfies CodeMode.Result
         }
         const data = state.get()
-        const allowed = new Set(input.tools)
         const tools = new Map(
-          Array.from(data.tools).filter(
-            ([name, tool]) =>
-              defaultCodeMode(tool) &&
-              allowed.has(CodeModeTool.qualifiedName(tool)) &&
-              !whollyDisabled(tool.options?.permission ?? name, input.permissions),
-          ),
+          codeModeTools(data.tools, input.tools)
+            .filter(([, tool]) => !whollyDisabled(tool.options?.permission ?? tool.id, input.permissions))
+            .map(([, tool]) => [tool.id, tool] as const),
         )
         const callSeq = yield* Ref.make(0)
+        const full = input.services !== undefined && (yield* flags.enabled("full_codemode"))
         return yield* CodeModeTool.check(
           { tools, namespaces: data.namespaces },
-          input.code,
-          input.bindings,
-          input.limits,
+          {
+            ...input,
+            context: { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) },
+            permission,
+            services: full ? input.services : undefined,
+          },
           (name, tool, toolInput) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callSeq, (value) => value + 1)
@@ -467,6 +470,13 @@ function commit(editor: Data, id: string, input: RegisteredTool) {
   }
   editor.tools.set(id, tool)
   editor.definitions.set(id, registered.success)
+}
+
+function* codeModeTools(registered: Data["tools"], paths: ReadonlyArray<string>) {
+  for (const path of paths) {
+    const tool = registered.get(path.replaceAll(".", "_"))
+    if (tool && defaultCodeMode(tool) && CodeModeTool.qualifiedName(tool) === path) yield [path, tool] as const
+  }
 }
 
 const whollyDisabled = (action: string, rules: Permission.Ruleset) => {

@@ -89,6 +89,22 @@ export type Inventory = {
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
 }
 
+const extensions = [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension] as const
+const fetchOnly = [CodeModeFetch.extension] as const
+const runExtensions = (full: boolean) => (full ? extensions : fetchOnly)
+
+const executionServices = (
+  context: ToolContext,
+  permission: Permission.Interface,
+  services?: Context.Context<Services>,
+) =>
+  Effect.map(Effect.abortSignal, (signal) =>
+    (services ?? Context.empty()).pipe(
+      Context.add(CodeModeExecution.Service, { ...context, signal }),
+      Context.add(Permission.Service, permission),
+    ),
+  )
+
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions. With `full_codemode`,
 // the runtime also has Bun's file APIs.
 const description = (full: boolean) =>
@@ -153,9 +169,7 @@ export const create = (
         const diffs = CodeModeDiffs.make(record((items) => items))
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
-            extensions: services
-              ? [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension]
-              : [CodeModeFetch.extension],
+            extensions: runExtensions(services !== undefined),
           })
           .pipe(
             Effect.provideService(Run, {
@@ -193,10 +207,8 @@ export const create = (
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
-            Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
-            Effect.provideService(Permission.Service, permission),
+            Effect.provide(yield* executionServices(context, permission, services)),
             Effect.provideService(CodeModeDiffs.Service, diffs),
-            (program) => (services ? Effect.provideContext(program, services) : program),
           )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -326,41 +338,43 @@ const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution
 function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
   if (cached) return cached
-  const tools = inventoryTools(inventory)
-  // Every extension a run may get; `create` picks each run's.
-  const created = CodeMode.make<
-    typeof tools,
-    [typeof CodeModeFetch.extension, typeof CodeModePath.extension, typeof CodeModeBun.extension]
-  >({
-    tools,
-    extensions: [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension],
-    hooks: runHooks,
-  })
+  const created = CodeMode.make({ tools: inventoryTools(inventory), extensions, hooks: runHooks })
   runtimes.set(inventory, created)
   return created
 }
 
 /**
- * Runs one program over `inventory` alone with no model step and no `fetch`, binding `bindings` as outer globals.
+ * Runs one program over `inventory` with no model step, binding `bindings` as outer globals.
  */
 export const check = (
   inventory: Inventory,
-  code: string,
-  bindings: Readonly<Record<string, CodeMode.DataValue>>,
-  limits: CodeMode.ExecutionLimits,
+  input: {
+    readonly code: string
+    readonly bindings: Readonly<Record<string, CodeMode.DataValue>>
+    readonly limits: CodeMode.ExecutionLimits
+    readonly context: ToolContext
+    readonly permission: Permission.Interface
+    readonly services?: Context.Context<Services>
+  },
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
 ) =>
   CodeMode.make({
     tools: inventoryTools(inventory),
+    extensions,
     hooks: runHooks,
-    limits,
+    limits: input.limits,
   })
-    .execute(code, bindings)
+    .execute(input.code, input.bindings, { extensions: runExtensions(input.services !== undefined) })
     .pipe(
       Effect.provideService(Run, {
         executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
         hooks: {},
       }),
+      (program) =>
+        Effect.flatMap(executionServices(input.context, input.permission, input.services), (services) =>
+          Effect.provide(program, services),
+        ),
+      Effect.scoped,
     )
 
 function inventoryTools(inventory: Inventory) {

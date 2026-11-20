@@ -111,10 +111,7 @@ it.live("uses the saved location after the creating session moves and pauses if 
     const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
     const destination = AbsolutePath.make((yield* tmpdirScoped()).path)
     yield* Effect.promise(() =>
-      Bun.write(
-        path.join(directory, "opencode.json"),
-        JSON.stringify({ experimental: { automations: true } }),
-      ),
+      Bun.write(path.join(directory, "opencode.json"), JSON.stringify({ experimental: { automations: true } })),
     )
     const sessions = yield* Session.Service
     const session = yield* sessions.create({
@@ -214,5 +211,88 @@ it.live("rejects a shell action that changes to a denied external directory", ()
       permission: "external_directory",
     })
     expect(yield* automations.list()).toEqual([])
+  }),
+)
+
+it.live("scheduled code uses session capabilities after one-time approval", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("ready") })),
+      (server) => Effect.promise(() => server.stop(true)),
+    )
+    const sessions = yield* Session.Service
+    const automations = yield* Automation.Service
+    const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(directory, "opencode.json"),
+        JSON.stringify({
+          experimental: { automations: true, full_codemode: true },
+          permission: {
+            execute: "allow",
+            shell: "ask",
+            webfetch: "ask",
+            read: "ask",
+            edit: "ask",
+            external_directory: "ask",
+            glob: "ask",
+          },
+        }),
+      ),
+    )
+    yield* Effect.promise(() => Bun.write(path.join(directory, "fixture.txt"), "fixture contents"))
+    const session = yield* sessions.create({ location: { directory } })
+    const creating = yield* automations
+      .create({
+        name: "check capabilities",
+        sessionID: session.id,
+        trigger,
+        action: {
+          type: "code",
+          args: server.url.href,
+          code: `
+              const file = Bun.file(path.resolve("fixture.txt"))
+              const files = await new Bun.Glob("*.txt").scan()
+              await Bun.write("result.txt", await file.text())
+              const shell = await tools.shell({ command: "echo automation-output", description: "Print a test line" })
+              const text = await (await fetch(args)).text()
+              return { state: { files, output: shell.output.trim(), exitCode: shell.exitCode, text }, done: true }
+            `,
+        },
+      })
+      .pipe(Effect.forkChild)
+    const instances = yield* Instance.Service
+    yield* Effect.gen(function* () {
+      const permission = yield* Permission.Service
+      for (const action of ["shell", "webfetch", "read", "external_directory", "edit"]) {
+        const asks = yield* permission
+          .forSession(session.id)
+          .pipe(
+            Effect.repeat({ until: (asks) => asks.length > 0, schedule: Schedule.spaced("10 millis") }),
+            Effect.timeout("10 seconds"),
+          )
+        expect(asks).toMatchObject([
+          { action, resources: expect.arrayContaining(["*"]), metadata: { unattended: true, tools: ["shell"] } },
+        ])
+        expect(asks[0]?.save).toBeUndefined()
+        for (const ask of asks) yield* permission.reply({ requestID: ask.id, reply: "once" })
+      }
+    }).pipe(instances.provide(session))
+    // An unexpected extra request would keep creation waiting for approval.
+    const created = yield* Fiber.join(creating).pipe(Effect.timeout("10 seconds"))
+    // Run now instead of waiting for the one-hour interval.
+    const database = yield* Database.Service
+    yield* database.db
+      .update(AutomationTable)
+      .set({ next_due_at: yield* Clock.currentTimeMillis })
+      .where(eq(AutomationTable.id, created.id))
+      .run()
+    yield* automations.tick
+    expect(yield* automations.get(created.id)).toMatchObject({
+      status: "done",
+      lastOutcome: "fired",
+      state: { files: ["fixture.txt"], output: "automation-output", exitCode: 0, text: "ready" },
+    })
+    expect(yield* Effect.promise(() => Bun.file(path.join(directory, "result.txt")).text())).toBe("fixture contents")
   }),
 )
