@@ -488,7 +488,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           title: ctx.t("settings.remote.title"),
           keywords: "remote server sign in cookies share",
         },
-        { id: "settings-browser-cookies", title: ctx.t("settings.cookies.title"), keywords: "cookies sign out history clear" },
+        { id: "settings-browser-cookies", title: ctx.t("settings.cookies.title"), keywords: "cookies sign out browsing data history clear" },
         {
           id: "settings-browser-import",
           title: ctx.t("settings.import.title"),

@@ -12,6 +12,9 @@ type SiteScenario = {
   site?: { name: string; choose: boolean }
   reveal?: boolean
   pages?: number
+  none?: boolean
+  keychain?: boolean
+  unreadable?: boolean
 }
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
@@ -300,7 +303,7 @@ story("shows what the list is doing in its place, with a way to try again", asyn
 story("says why a profile has no list, and reads it again on Try again", async ({ page }) => {
   const view = await open(page, { sites: "locked" })
 
-  await expect(view.dialog.getByRole("alert")).toHaveText("Google Chrome keeps its cookies locked while it runs. Quit Google Chrome, then import again.")
+  await expect(view.dialog.getByRole("alert")).toHaveText("Quit Google Chrome and try again.")
   await view.dialog.getByRole("button", { name: "Try again" }).click()
   await expect(view.record).toHaveAttribute("data-reads", "Default,Default")
 })
@@ -527,6 +530,42 @@ story("the bar's own dialog brings history alone when Sign-ins is unticked, and 
   await expect(bar.confirmation).toHaveText("Imported history from Google Chrome")
   // No sign-in came, so the page has nothing new to load with.
   await expect(bar.record).toHaveAttribute("data-imported", "0")
+})
+
+story("a browser's import never counts cookies: with none brought the bar says nothing was imported, or that the browser locks them", async ({ page }) => {
+  // One sign-in could not be written and none came: no history either, so nothing was imported.
+  const bar = await offer(page, { sites: 5, none: true, partial: true })
+
+  await bar.importing.click()
+  await expect(page.getByRole("alert")).toHaveText("Nothing was imported from Google Chrome.")
+  await expect(bar.confirmation).toHaveCount(0)
+})
+
+story("the import dialog stays open to say that the browser locks its sign-ins from other apps", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false, none: true, protected: 12 })
+
+  await view.importButton.click()
+  await expect(view.dialog.getByRole("alert")).toHaveText("Google Chrome locks its sign-ins from other apps. Sign in here instead.")
+  await expect(view.record).toHaveAttribute("data-closed", "false")
+})
+
+story("a browser whose data cannot be read says so about the browser, with what to do", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false, unreadable: true })
+
+  await view.importButton.click()
+  await expect(view.dialog.getByRole("alert")).toHaveText("Could not read this browser's data. Close it and try again.")
+  await expect(view.record).toHaveAttribute("data-closed", "false")
+})
+
+story("on macOS the dialog says what the Keychain prompt asks while a Chromium import waits, and not to choose Always Allow", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false, keychain: true })
+
+  await view.importButton.click()
+  await expect(view.dialog.getByRole("status")).toHaveText(
+    'macOS asks for your password (shown as "security") to import Google Chrome\'s sign-ins. Choose Allow, not Always Allow, which lets any app read them without asking.',
+  )
+  await page.getByTestId("site-chooser-release").dispatchEvent("click")
+  await expect(view.record).toHaveAttribute("data-closed", "true")
 })
 
 story("the offer card has a title and no paragraph, and its Import brings both", async ({ page }) => {

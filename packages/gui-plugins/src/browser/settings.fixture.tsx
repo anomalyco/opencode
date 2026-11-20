@@ -6,7 +6,7 @@ import { liveAccessor, PluginContext } from "@opencode/plugin/gui/host"
 import type { Context, SetupContext, Ui } from "@opencode/plugin/gui"
 import browserEn from "./i18n/en"
 import type definition from "./index"
-import type { ExtensionAccess, ExtensionCompatibility, InstallResult, ProfileSource } from "./profile/ipc"
+import type { ExtensionAccess, ExtensionCompatibility, ImportResult, InstallResult, ProfileSource } from "./profile/ipc"
 import BrowserSettings from "./settings"
 
 type SampleExtension = {
@@ -77,8 +77,16 @@ const sampleExtensionEntries: readonly (readonly [string, readonly SampleExtensi
 // their Ipcs, and the stored preferences shown beside the page. `target` is the entry a settings search is revealing,
 // which stays set for the whole visit, as the host leaves it. With `extensions`, Chromium browsers and their extensions
 // are populated so the real Add an extension dialog can be driven end to end. `historyKept` is a sign-out that left
-// main's history behind: its file could not be removed.
-export function mountBrowserSettings(input: { ui: Ui; target?: string; extensions?: boolean; installed?: boolean; historyKept?: boolean }) {
+// main's history behind: its file could not be removed. `file` is what importing the cookie file the person picks
+// brings: how many cookies came and how many could not be imported, or that the file could not be read.
+export function mountBrowserSettings(input: {
+  ui: Ui
+  target?: string
+  extensions?: boolean
+  installed?: boolean
+  historyKept?: boolean
+  file?: { imported: number; failed: number } | "unreadable"
+}) {
   const host = document.createElement("main")
   host.dataset.testid = "browser-settings-fixture"
   document.body.appendChild(host)
@@ -127,6 +135,11 @@ export function mountBrowserSettings(input: { ui: Ui; target?: string; extension
     sources: async () => (input.extensions ? [...sampleSources] : []),
     summary: async () => ({ cookies: 0, persistent: true }),
     clear: async () => ({ history: !input.historyKept }),
+    importFile: async (): Promise<ImportResult> => {
+      if (input.file === "unreadable") return { type: "failed", reason: "read" }
+
+      return { type: "imported", imported: input.file?.imported ?? 0, skipped: 0, protected: 0, failed: input.file?.failed ?? 0 }
+    },
     browserExtensions: async (request: { source: string; profile: string }) =>
       input.extensions
         ? (sampleExtensions.get(request.source) ?? []).map((item) => ({
@@ -205,7 +218,8 @@ export function mountBrowserSettings(input: { ui: Ui; target?: string; extension
         t(`${key}.${count === 1 ? "one" : "other"}`, { ...params, count }),
       use: () => live,
       signal: controller.signal,
-      desktop: { os: "windows" },
+      // The person picks a made-up cookie file.
+      desktop: { os: "windows", pick: async () => ["C:\\made-up\\cookies.txt"] },
       dialogs: {
         open: (content: (handle: { close: () => void }) => JSX.Element) => {
           const handle = { close: () => dialog.close() }
