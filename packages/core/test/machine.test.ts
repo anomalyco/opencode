@@ -23,7 +23,6 @@ const text = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
 const cause = (error: PlatformError.PlatformError) => error.reason.cause
 const hello = (processes: Machine.Hello["processes"] = []): Machine.Hello => ({
   type: "hello",
-  name: "gpu",
   os: "linux",
   arch: "x64",
   home: "/home/worker",

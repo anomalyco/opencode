@@ -110,7 +110,7 @@ describe("MachineInstructions", () => {
       )
       const unchanged = { values: initialized.values, text: "", changed: false }
 
-      const worker = yield* makeWorker({ environment: { id }, connect: machines.connect })
+      const worker = yield* makeWorker({ connect: (connection) => machines.connect(id, connection) })
       yield* worker.restore
       expect(yield* machines.list()).toEqual([
         new Machines.Info({ id, online: true, paired: false, os: "linux", arch: "x64" }),

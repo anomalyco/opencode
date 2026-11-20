@@ -42,6 +42,19 @@ const badMessage = Result.fail<Failure>("BadMessage")
 const tooLong = Result.fail<Failure>("TooLong")
 const badKey = Result.fail<Failure>("BadKey")
 
+/** The two CipherStates of section 5.2's Split: one for the messages this side sends, one for those it receives. */
+export interface Transport {
+  readonly send: {
+    readonly encrypt: (plaintext: Uint8Array) => Result.Result<Uint8Array, Failure>
+    readonly rekey: () => void
+  }
+  /** Any message but the next one fails: transport messages arrive in order or not at all. */
+  readonly receive: {
+    readonly decrypt: (ciphertext: Uint8Array) => Result.Result<Uint8Array, Failure>
+    readonly rekey: () => void
+  }
+}
+
 /**
  * Raw 32-byte X25519 keys. Nothing here zeroes a private key after use: the runtime keeps copies this module cannot
  * reach, so it would be theatre. Dropping the handshake when it is done is the real lifetime control.
@@ -196,10 +209,9 @@ export const handshake = (options: Options) => {
       const [initiatorToResponder, responderToInitiator] = hkdf(ck, EMPTY)
       const send = cipherState(initiator ? initiatorToResponder : responderToInitiator)
       const receive = cipherState(initiator ? responderToInitiator : initiatorToResponder)
-      return Result.succeed({
-        send: { encrypt: (plaintext: Uint8Array) => send.encryptWithAd(EMPTY, plaintext) },
-        /** Any message but the next one fails: transport messages arrive in order or not at all. */
-        receive: { decrypt: (ciphertext: Uint8Array) => receive.decryptWithAd(EMPTY, ciphertext) },
+      return Result.succeed<Transport>({
+        send: { encrypt: (plaintext) => send.encryptWithAd(EMPTY, plaintext), rekey: send.rekey },
+        receive: { decrypt: (ciphertext) => receive.decryptWithAd(EMPTY, ciphertext), rekey: receive.rekey },
       })
     },
   })
@@ -209,7 +221,8 @@ export const handshake = (options: Options) => {
  * Section 5.1. Unlike the spec, which keeps n after a failed DECRYPT so a caller may skip the message, any failure ends
  * the CipherState: on an ordered link a forged or lost message ends the link.
  */
-const cipherState = (k: Uint8Array | undefined) => {
+const cipherState = (initial: Uint8Array | undefined) => {
+  let k = initial
   let n = 0n
   let failed = false
   const usable = () => !failed && n < MAX_NONCE
@@ -231,6 +244,13 @@ const cipherState = (k: Uint8Array | undefined) => {
       if (!usable()) return wrongStep
       if (ciphertext.length > MAX_MESSAGE) return advance(tooLong)
       return advance(decrypt(k, n, ad, ciphertext))
+    },
+    /**
+     * Section 5.1 Rekey() with section 4.2's default REKEY: k becomes the first 32 bytes of
+     * ENCRYPT(k, maxnonce, zerolen, zeros[32]). n is kept.
+     */
+    rekey: () => {
+      if (k !== undefined) k = encrypt(k, MAX_NONCE, EMPTY, new Uint8Array(32)).slice(0, 32)
     },
   }
 }
