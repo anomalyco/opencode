@@ -1,6 +1,6 @@
 import type { JsonValue } from "@opencode/client"
 import { builtins } from "@opencode/widget"
-import type { WidgetMessageInfo } from "../../../component/widget/backend"
+import type { WidgetInfo } from "../../../component/widget/backend"
 
 export const widgetFixtures: Record<
   "suggestions" | "form" | "confirm" | "chart" | "backdrop",
@@ -110,20 +110,22 @@ export type WidgetFixtureName = keyof typeof widgetFixtures
 
 export function widgetFixtureMessage(
   name: WidgetFixtureName,
-  status: WidgetMessageInfo["status"] = "open",
+  status: WidgetInfo["status"] = "open",
   id = `msg_widget_${name}`,
-): WidgetMessageInfo {
+): WidgetInfo {
   const fixture = widgetFixtures[name]
   const template = builtins.find((item) => item.name === name)
   if (!template) throw new Error(`Unknown built-in widget template: ${name}`)
   return {
-    id,
-    type: "widget",
-    time: { created: 0, ...(status === "open" ? {} : { responded: 1 }) },
+    id: `${id}:call_widget`,
+    sessionID: "ses_widget_story",
+    messageID: id,
+    callID: "call_widget",
     title: fixture.title,
     template: { name: template.name, version: template.version },
     data: fixture.data,
     status,
+    wait: false,
     ...(status === "submitted" ? { response: fixture.response } : {}),
   }
 }

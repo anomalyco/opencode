@@ -10,7 +10,7 @@ import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
 import { SplitBorder } from "../../ui/border"
 import { errorMessage } from "../../util/error"
-import { useWidgetBackend, WidgetConflict, type WidgetMessageInfo, type WidgetResponse } from "./backend"
+import { useWidgetBackend, WidgetConflict, type WidgetInfo, type WidgetResponse } from "./backend"
 import { WIDGET_MODE, WidgetView } from "./view"
 
 export type WidgetFocus = {
@@ -24,7 +24,9 @@ export type WidgetFocus = {
  * Keyboard ownership for the widgets of one timeline. The newest open widget takes the keyboard when it appears;
  * escape hands it back to the prompt and a click takes it again.
  */
-export function createWidgetFocus(widgets: Accessor<readonly WidgetMessageInfo[]>): WidgetFocus {
+export function createWidgetFocus(
+  widgets: Accessor<readonly { readonly id: string; readonly status: WidgetInfo["status"] }[]>,
+): WidgetFocus {
   const keymap = Keymap.use()
   const dialog = useDialog()
   const [engaged, setEngaged] = createSignal<string>()
@@ -43,10 +45,10 @@ export function createWidgetFocus(widgets: Accessor<readonly WidgetMessageInfo[]
   }
 }
 
-type Status = WidgetMessageInfo["status"]
+type Status = WidgetInfo["status"]
 
 /** A widget message in the timeline: loads its template program, runs steps and sends the response. */
-export function WidgetMessage(props: { message: WidgetMessageInfo; sessionID: string; focus: WidgetFocus }) {
+export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }) {
   const theme = useTheme()
   const backend = useWidgetBackend()
   const keymap = Keymap.use()
@@ -101,19 +103,25 @@ export function WidgetMessage(props: { message: WidgetMessageInfo; sessionID: st
         output.warnings?.forEach((warning) => log.warn(warning, { template: props.message.template.name }))
         setStore({ view: output.view, error: undefined })
         if (output.dismiss) return respond({ dismiss: true })
-        // Programs run on a JSON-only interpreter, so a submitted value is always JSON.
+        // Programs run on a JSON-only interpreter, so a submitted or sent value is always JSON.
         if ("submit" in output) return respond({ value: output.submit as JsonValue })
+        if (output.send) return send(output.send.value as JsonValue, output.send.wake)
       })
       .catch((error) => {
         if (session() === current) setStore("error", stepMessage(error))
       })
   }
 
+  function send(value: JsonValue, wake: boolean) {
+    if (status() !== "open") return
+    return backend.send({ widget: props.message, value, wake }).catch((error) => setStore("error", errorMessage(error)))
+  }
+
   function respond(response: WidgetResponse) {
     if (store.sending || status() !== "open") return
     setStore({ sending: true, error: undefined })
     return backend
-      .respond({ sessionID: props.sessionID, messageID: props.message.id, response })
+      .respond({ widget: props.message, response })
       .then(() =>
         setStore("dismiss" in response ? { sent: "dismissed" } : { sent: "submitted", response: response.value }),
       )
@@ -238,4 +246,16 @@ function summary(response: unknown) {
           .join(" · ")
       : JSON.stringify(response)
   return text.length > 200 ? text.slice(0, 199) + "…" : text
+}
+
+/** A widget answer or message in the timeline, as one quiet line. */
+export function WidgetNotice(props: { text: string }) {
+  const theme = useTheme()
+  return (
+    <box paddingLeft={3} flexShrink={0}>
+      <text fg={theme.text.muted} wrapMode="word">
+        ◈ {props.text}
+      </text>
+    </box>
+  )
 }

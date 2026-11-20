@@ -10,7 +10,7 @@ import {
   cached,
   WidgetBackendProvider,
   type WidgetBackend,
-  type WidgetMessageInfo,
+  type WidgetInfo,
   type WidgetResponse,
 } from "../../src/component/widget/backend"
 import { createWidgetFocus, WidgetMessage } from "../../src/component/widget/message"
@@ -21,7 +21,7 @@ import {
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
-async function render(name: WidgetFixtureName, options: { width?: number; status?: WidgetMessageInfo["status"] } = {}) {
+async function render(name: WidgetFixtureName, options: { width?: number; status?: WidgetInfo["status"] } = {}) {
   const responses: WidgetResponse[] = []
   const [message, setMessage] = createSignal(widgetFixtureMessage(name, options.status))
   const backend: WidgetBackend = {
@@ -34,10 +34,11 @@ async function render(name: WidgetFixtureName, options: { width?: number; status
         ...("value" in input.response ? { response: input.response.value } : {}),
       }))
     },
+    async send() {},
   }
   function Harness() {
     const focus = createWidgetFocus(() => [message()])
-    return <WidgetMessage message={message()} sessionID="ses_widget" focus={focus} />
+    return <WidgetMessage message={message()} focus={focus} />
   }
   const setup = await testRender(
     () => (
