@@ -39,11 +39,20 @@ const http = Layer.succeed(
   HttpClient.make((request, _url, signal) =>
     Effect.sync(() => {
       signals.push(signal)
-      if (request.body._tag !== "Uint8Array") throw new Error(`Unexpected request body: ${request.body._tag}`)
+      // GET providers (SearXNG) send no body; record undefined for them and
+      // keep failing on anything that is neither bytes nor empty.
+      let body: unknown
+      if (request.body._tag === "Uint8Array") {
+        body = JSON.parse(new TextDecoder().decode(request.body.body))
+      } else if (request.body._tag === "Empty") {
+        body = undefined
+      } else {
+        throw new Error(`Unexpected request body: ${request.body._tag}`)
+      }
       requests.push({
         url: request.url,
         headers: request.headers,
-        body: JSON.parse(new TextDecoder().decode(request.body.body)),
+        body,
       })
       return HttpClientResponse.fromWeb(
         request,
