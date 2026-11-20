@@ -13,10 +13,14 @@ use opencode_util::{err, error};
 
 use super::Context;
 use crate::args::RootArgs;
+use crate::help;
+use crate::output::Exit;
 
 pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
     // Unlike `run` and `mini`, TS changes directory only for an explicit one and ignores `PWD`.
     let directory = match &args.directory {
+        // `opencode login` reads as a mistyped command more often than a directory, so answer with help, not ENOENT.
+        Some(directory) if !std::path::Path::new(directory).is_dir() => return not_a_directory(directory),
         Some(directory) => paths::enter(std::path::Path::new(directory))?,
         None => paths::current_dir()?,
     };
@@ -124,6 +128,14 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
         plugins: Some(plugins),
     })?;
     Ok(())
+}
+
+/// TS fails with `CliError.ShowHelp`: the root help on stdout, the error on stderr, and exit 1.
+fn not_a_directory(directory: &str) -> error::Result<()> {
+    help::show(&[&crate::args::ROOT])?;
+    let errors = [format!("No directory or command named \"{directory}\"")];
+    eprint!("{}", help::error_output(&errors, help::colors(), help::stderr_colors()));
+    Err(Exit(1).into())
 }
 
 /// A remote server may not see the client's working directory; fall back to the server's directory.

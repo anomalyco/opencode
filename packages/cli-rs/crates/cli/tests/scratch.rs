@@ -49,6 +49,31 @@ fn the_root_command_ignores_a_stale_pwd() {
     assert!(!stderr.contains("Failed to change directory"), "{stderr}");
 }
 
+/// A root argument that names no directory, here a mistyped command or a file, shows the help instead of ENOENT.
+#[test]
+fn the_root_command_shows_help_for_a_missing_directory() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let file = home.path().join("file.txt");
+    std::fs::write(&file, "").unwrap();
+    for argument in [OsStr::new("login"), file.as_os_str()] {
+        let output = scratch(
+            Command::new(env!("CARGO_BIN_EXE_opencode-native")).arg(argument).args(["--server", "http://127.0.0.1:1"]),
+            home.path(),
+        )
+        .current_dir(home.path())
+        .env("OPENCODE_TS_BIN", "/bin/false")
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1), "{stderr}");
+        assert!(stdout.contains(" <subcommand> [flags] [<directory>]\n"), "{stdout}");
+        let error = format!("\nERROR\n  No directory or command named \"{}\"\n", argument.to_string_lossy());
+        assert_eq!(stderr, error);
+    }
+}
+
 #[test]
 fn the_log_file_follows_the_run_time_channel() {
     for (channel, file) in [("local", "opencode-local.log"), ("oc-x", "opencode.log")] {
