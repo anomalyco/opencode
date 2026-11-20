@@ -179,7 +179,7 @@ test.each([
   { name: "append after the last tab is the end", after: "c", expected: ["a", "b", "c", "new"] },
   { name: "append after a tab the strip does not store is the end", after: "gone", expected: ["a", "b", "c", "new"] },
 ])("$name", ({ after, expected }) => {
-  expect(appendSessionTab({ all: ["a", "b", "c"], active: "b" }, "new", after)).toEqual({ all: expected, active: "b" })
+  expect(appendSessionTab({ all: ["a", "b", "c"], active: "b" }, "new", after)).toEqual({ all: [...expected], active: "b" })
 })
 
 test("append leaves a tab the strip stores where it is", () => {

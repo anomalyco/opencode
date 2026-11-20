@@ -640,12 +640,14 @@ describe("browser pane machine", () => {
   test("a tab a link opened is added to the strip after the tab the desktop names, and only when the inventory adds it", () => {
     const start = ready()
     const placed = { tabID: tabB, after: tabA }
-    const opened = transition(start, { ...paneState(start, inventory(tab(tabA), tab(tabB), tab(tabC))), placed })
+    // The inventory as main reports it once, with where its new tab stands.
+    const report = (state: State, browser: Browser.State): Event => ({ type: "pane.state", sessionKey: key, attempt: attempt(state), state: browser, error: undefined, placed })
+    const opened = transition(start, report(start, inventory(tab(tabA), tab(tabB), tab(tabC))))
     expect(opened.effects.filter((effect) => effect.type === "sync-strip")).toEqual([
       { type: "sync-strip", sessionKey: key, keep: [tabA, tabB, tabC], open: [tabB, tabC], placed },
     ])
     // A tab the strip has already is not placed again: it stays where the person sees it.
-    const again = transition(opened.state, { ...paneState(opened.state, inventory(tab(tabA), tab(tabB))), placed })
+    const again = transition(opened.state, report(opened.state, inventory(tab(tabA), tab(tabB))))
     expect(again.effects.filter((effect) => effect.type === "sync-strip")).toEqual([
       { type: "sync-strip", sessionKey: key, keep: [tabA, tabB], open: [] },
     ])

@@ -866,7 +866,7 @@ story("a tab a link opens stands beside the tab it came from, moves no tab again
   const middle = reported({ id: docs, url: "https://example.com/docs", title: "Docs" })
   const last = reported({ id: guide, url: "https://example.com/guide", title: "Guide" })
   // Main's inventory with the new tab after Docs, and Docs still in front.
-  const listed = (tab: MainTab): MainEvent => ({ type: "state", state: { tabs: [first, middle, tab, last], focusedTabID: docs } })
+  const listed = (tab: MainTab) => ({ type: "state" as const, state: { tabs: [first, middle, tab, last], focusedTabID: docs } })
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
   await send(root, inventory(first, middle, last))
