@@ -50,6 +50,14 @@ export function shellResultFailed(metadata: Schema.JsonObject) {
   return metadata.timeout === true || (Predicate.isNumber(metadata.exit) && metadata.exit !== 0)
 }
 
+export function currentToolBackgroundShell(tool: SessionMessageAssistantTool) {
+  if (tool.name !== "shell" && tool.name !== "bash") return false
+
+  if ("metadata" in tool.state && tool.state.metadata?.status === "running") return true
+
+  return currentToolInput(tool).background === true
+}
+
 function executeToolFailed(metadata: Schema.JsonObject) {
   return metadata.error === true || executeToolCalls(metadata).some((call) => call.status === "error")
 }

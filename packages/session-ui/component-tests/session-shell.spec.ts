@@ -91,3 +91,46 @@ story("keeps Copied for two seconds after the latest click", async ({ mount, pag
   await expect(result.getByRole("button", { name: "Copy output", exact: true })).toBeVisible()
   await expect(page.getByRole("tooltip")).toBeHidden()
 })
+
+story(
+  "shows a live background shell in compact mode while the session is idle and settles on exit",
+  async ({ mount }) => {
+    const root = await mount("current-session-terminal-work--background-shell-compact")
+    const shell = root.locator('[data-timeline-part-id="tool_shell_bg"]')
+    const shimmer = shell.locator('[data-slot="basic-tool-tool-title"] [data-component="text-shimmer"]')
+
+    await expect(shell.locator('[data-component="shell-submessage"]')).toHaveText("bun run dev")
+    await expect(shimmer).toHaveAttribute("data-active", "true")
+
+    const handle = await shell.elementHandle()
+
+    await root.getByRole("button", { name: "Complete background shell", exact: true }).click()
+
+    // The same row settles in place without remounting.
+    await expect(shimmer).toHaveAttribute("data-active", "false")
+    expect(await handle!.evaluate((node) => node.isConnected)).toBe(true)
+  },
+)
+
+for (const [preset, selector, verb] of [
+  ["compact", '[data-component="collapsed-tool-group"]', "Explored"],
+  ["detailed", '[data-component="timeline-event-row"]', "Started"],
+] as const) {
+  story(
+    `shimmers a running background shell in the New timeline (${preset}) and settles on exit`,
+    async ({ mount }) => {
+      const root = await mount("timeline-playground--background-shell", { args: { preset } })
+      const row = root.locator(selector)
+      const label = row.locator('[data-slot="context-tool-group-verb"]')
+      const shimmer = label.locator('[data-component="text-shimmer"]')
+
+      await expect(shimmer).toHaveAttribute("aria-label", verb)
+      await expect(shimmer).toHaveAttribute("data-active", "true")
+
+      await root.getByRole("button", { name: "Complete background shell", exact: true }).click()
+
+      await expect(shimmer).toHaveCount(0)
+      await expect(label).toHaveText(verb)
+    },
+  )
+}

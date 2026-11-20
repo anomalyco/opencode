@@ -18,6 +18,7 @@ import {
   terminalRunningDocument,
 } from "../storybook/current-session-fixtures"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
+import { timelinePresets } from "./detail"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -448,4 +449,62 @@ export const FixedAndPassed = {
       shellToolDefaultOpen
     />
   ),
+}
+
+export const BackgroundShellCompact = {
+  args: { running: true },
+  render: (args: { running: boolean }) => {
+    const [running, setRunning] = createSignal(args.running)
+    createEffect(() => setRunning(args.running))
+
+    const compact = timelinePresets.find((preset) => preset.id === "compact")!.value
+
+    const base = storyDocument([
+      storyTool("tool_read_bg", "read", "completed", { path: "package.json" }),
+      storyTool(
+        "tool_shell_bg",
+        "shell",
+        "completed",
+        { command: "bun run dev", background: true },
+        {
+          output: "Command moved to the background (shell ID: shell_bg).",
+          metadata: { status: "running", shellID: "shell_bg" },
+        },
+      ),
+      { type: "text", text: "Started the dev server in the background." },
+    ])
+
+    const document = createMemo(() => ({
+      ...base,
+      status: { type: "idle" as const },
+      messages: [
+        ...base.messages,
+        ...(running()
+          ? []
+          : [
+              {
+                id: "msg_shell_bg_done",
+                type: "synthetic" as const,
+                text: "Background shell bun run dev exited with code 0.",
+                description: "bun run dev",
+                metadata: { source: "shell", shellID: "shell_bg", state: "completed", exit: 0 },
+                time: { created: STORY_TIME + 500 },
+              },
+            ]),
+      ],
+    }))
+
+    return (
+      <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
+        <div class="flex gap-3">
+          <button type="button" onClick={() => setRunning(false)}>
+            Complete background shell
+          </button>
+        </div>
+        <CurrentSessionProviders document={document()} shellRunning={(id) => id === "shell_bg" && running()}>
+          <SessionTimeline document={document()} timelineDetail={compact} />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
 }

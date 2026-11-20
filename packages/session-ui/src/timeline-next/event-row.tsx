@@ -1,5 +1,6 @@
 import { Badge } from "@opencode/ui/badge"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { For, Show, createMemo } from "solid-js"
 import { BasicTool } from "../components/basic-tool"
 import { useData } from "../context/data"
@@ -16,16 +17,29 @@ export function TimelineEventRow(props: {
   onRevealShell?: (shellID: string) => void
 }) {
   const i18n = useI18n()
+  const data = useData()
   const summary = createMemo(() => summarizeShells(props.events))
   const items = createMemo(() => props.events.filter((event) => event.title))
+
+  const running = createMemo(() =>
+    props.events.some(
+      (event) =>
+        event.kind === "shell" &&
+        event.verb === "started" &&
+        !!event.shellID &&
+        data.shellRunning?.(event.shellID) === true,
+    ),
+  )
 
   return (
     <Show when={summary().verbs.length > 0}>
       <div data-component="timeline-event-row">
         <BasicTool
           icon="task"
+          status={running() ? "running" : "completed"}
           compact
           hasContent={items().length > 0}
+          allowOpenWhilePending
           open={props.open}
           onOpenChange={props.onOpenChange}
           trigger={
@@ -37,7 +51,11 @@ export function TimelineEventRow(props: {
                       <Show when={index() > 0}>
                         <span data-slot="context-tool-group-separator">·</span>
                       </Show>
-                      <span data-slot="context-tool-group-verb">{i18n.t(verbKeys[bucket.verb])}</span>
+                      <span data-slot="context-tool-group-verb">
+                        <Show when={bucket.verb === "started" && running()} fallback={i18n.t(verbKeys[bucket.verb])}>
+                          <TextShimmer text={i18n.t(verbKeys[bucket.verb])} active />
+                        </Show>
+                      </span>
                       <span data-slot="context-tool-group-detail">
                         {i18n.plural("ui.timeline.event.shells", bucket.count)}
                       </span>
@@ -111,6 +129,12 @@ export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?:
     return props.event.verb
   }
 
+  const shellRunning = () =>
+    props.event.kind === "shell" &&
+    props.event.verb === "started" &&
+    !!props.event.shellID &&
+    data.shellRunning?.(props.event.shellID) === true
+
   return (
     <a
       data-slot="timeline-event-item"
@@ -140,7 +164,11 @@ export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?:
           {i18n.t(statusKeys[state()])}
         </span>
       </Show>
-      <span data-slot="timeline-event-item-name">{name()}</span>
+      <span data-slot="timeline-event-item-name">
+        <Show when={shellRunning()} fallback={name()}>
+          <TextShimmer text={name()} active />
+        </Show>
+      </span>
       <Show when={props.event.title}>
         <bdi dir="auto" data-slot="timeline-event-item-title">
           {props.event.title}

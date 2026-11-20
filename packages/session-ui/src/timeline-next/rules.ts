@@ -1,5 +1,10 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
-import { currentToolFailed, currentToolGroupedRead, currentToolInput } from "../message/current-tool-state"
+import {
+  currentToolBackgroundShell,
+  currentToolFailed,
+  currentToolGroupedRead,
+  currentToolInput,
+} from "../message/current-tool-state"
 import { timelineNoticeRequired, type TimelineDetail, type TimelinePlacement } from "../timeline/detail"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
 import { Predicate } from "effect"
@@ -73,8 +78,8 @@ export function toolRule(tool: SessionMessageAssistantTool): ToolRule & { name: 
   const name = renamed.get(tool.name) ?? tool.name
   const rule = tools.get(name) ?? other
 
-  // A shell the agent started in the background reports back like a subagent.
-  if (name === "shell" && currentToolInput(tool).background === true) return { ...rule, name, layout: "event" }
+  // A shell the agent started in the background (or that moved to the background) reports back like a subagent.
+  if (name === "shell" && currentToolBackgroundShell(tool)) return { ...rule, name, layout: "event" }
 
   return { ...rule, name }
 }

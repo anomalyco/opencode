@@ -70,6 +70,12 @@ describe("starting work that runs on follows its own setting", () => {
   test("a background shell joins the activity group where shells are grouped, and stands alone where separate", () => {
     expect(contentGroup(preset("compact"), backgroundShell, new Set())).toBe("context")
     expect(contentGroup(preset("everything"), backgroundShell, new Set())).toBe("events")
+
+    // A foreground shell that timed out into the background carries metadata.status === "running" without background: true.
+    const timedOutToBackground = tool("shell", { command: "bun test" }, { status: "running", shellID: "sh_bg" })
+
+    expect(contentGroup(preset("compact"), timedOutToBackground, new Set())).toBe("context")
+    expect(contentGroup(preset("everything"), timedOutToBackground, new Set())).toBe("events")
   })
 
   test("prompting an existing child produces an update linked to that session", () => {

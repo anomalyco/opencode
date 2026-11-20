@@ -7,6 +7,8 @@ import { getFilename } from "@opencode/util/path"
 import { Option, Schema } from "effect"
 import { createMemo, For, Index, Match, Show, Switch } from "solid-js"
 import { BasicTool } from "../../components/basic-tool"
+import { useData } from "../../context"
+import { shellToolRunning } from "../../tools/run-machine"
 import {
   currentToolError,
   currentToolGroupedRead,
@@ -59,7 +61,15 @@ export function ContextGroup(props: {
   onRevealShell?: (shellID: string) => void
 }) {
   const i18n = useI18n()
+  const data = useData()
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
+
+  const shellActive = createMemo(
+    () =>
+      tools().some((tool) => shellToolRunning(tool, data.shellRunning)) ||
+      props.parts.some((part) => part.type === "shell" && part.running === true),
+  )
+
   const reasoning = createMemo(() => props.parts.flatMap((part) => (part.type === "reasoning" ? [part] : [])))
   const thoughtsOnly = createMemo(() => reasoning().length > 0 && reasoning().length === props.parts.length)
   const events = createMemo(() => [...workEvents(props.parts).values()])
@@ -187,7 +197,7 @@ export function ContextGroup(props: {
         >
           <BasicTool
             icon="glasses"
-            status="completed"
+            status={shellActive() ? "running" : "completed"}
             compact
             hasContent
             allowOpenWhilePending
@@ -198,7 +208,11 @@ export function ContextGroup(props: {
                 <Show when={activity()} fallback={<UsedTitle label={usedLabel(props.parts, i18n)} />}>
                   {(value) => (
                     <span data-slot="context-tool-group-title" data-activity="">
-                      <span data-slot="context-tool-group-verb">{value().verb}</span>
+                      <span data-slot="context-tool-group-verb">
+                        <Show when={shellActive()} fallback={value().verb}>
+                          <TextShimmer text={value().verb} active />
+                        </Show>
+                      </span>
                       <Show when={value().main}>
                         <span data-slot="context-tool-group-detail">{value().main}</span>
                       </Show>
