@@ -62,9 +62,9 @@ pub(crate) fn luau_with(lua: &Lua, value: &serde_json::Value, nulls: Nulls) -> m
         serde_json::Value::Number(number) => Value::Number(number.as_f64().unwrap_or_default()),
         serde_json::Value::String(text) => Value::String(lua.create_string(text)?),
         // SAFETY: `exec_raw` runs the closure in protected mode with room for three slots, two of which take the
-        // markers, and `push` checks for room for each table deeper. What it leaves on the stack is the value
-        // returned: the markers' slots are dropped. It holds no Rust value that needs dropping across a call that can
-        // raise.
+        // markers; the keys' slots are checked for, and `push` checks for room for each table deeper. What it leaves
+        // on the stack is the value returned: the markers' and the keys' slots are dropped. It holds no Rust value that
+        // needs dropping across a call that can raise.
         tree => unsafe {
             lua.exec_raw::<Value>((), |state| {
                 let base = ffi::lua_gettop(state);
@@ -72,7 +72,10 @@ pub(crate) fn luau_with(lua: &Lua, value: &serde_json::Value, nulls: Nulls) -> m
                     [ARRAY, OBJECT].map(|name| ffi::lua_rawgetfield(state, ffi::LUA_REGISTRYINDEX, name.as_ptr()));
                 // A VM the carrier did not set up has no markers: its tables go unmarked.
                 let marks = (marks == [ffi::LUA_TTABLE; 2]).then_some((base + 1, base + 2));
-                push(state, tree, Build { marks, nulls });
+                ffi::luaL_checkstack(state, KEYS as c_int, c"a value nested too deep".as_ptr());
+                ffi::lua_settop(state, base + 2 + KEYS as c_int);
+                let mut keys = Keys { first: base + 3, names: [""; KEYS], len: 0, next: 0 };
+                push(state, tree, Build { marks, nulls }, &mut keys);
                 ffi::lua_replace(state, base + 1);
                 ffi::lua_settop(state, base + 1);
             })?
@@ -87,11 +90,56 @@ struct Build {
     nulls: Nulls,
 }
 
+/// The most keys one conversion keeps ([`Keys`]).
+const KEYS: usize = 32;
+
+/// The object keys of one conversion, each made a Luau string once. The records of a page repeat their keys in the same
+/// order, so the key asked for is most often the one after the last found. Key `i` of `names` is kept in stack slot
+/// `first + i`, which keeps it alive while the conversion runs.
+struct Keys<'a> {
+    first: c_int,
+    names: [&'a str; KEYS],
+    len: usize,
+    next: usize,
+}
+
+impl<'a> Keys<'a> {
+    /// Pushes `name`: the kept string when there is one, else a new one, kept while there is room.
+    ///
+    /// # Safety
+    /// In a protected call, with room for two slots, the [`KEYS`] slots from `first` the keys'.
+    unsafe fn push(&mut self, state: *mut ffi::lua_State, name: &'a str) {
+        let kept = &self.names[..self.len];
+        // The next key, else a scan while there is room to keep more: once full, a miss is a new string.
+        let found = match kept.get(self.next) == Some(&name) {
+            true => Some(self.next),
+            false if self.len < KEYS => kept.iter().position(|known| *known == name),
+            false => None,
+        };
+        // SAFETY: as the caller's.
+        unsafe {
+            if let Some(at) = found {
+                ffi::lua_pushvalue(state, self.first + at as c_int);
+                self.next = at + 1;
+                return;
+            }
+            ffi::lua_pushlstring_(state, name.as_ptr().cast(), name.len());
+            if self.len < KEYS {
+                ffi::lua_pushvalue(state, -1);
+                ffi::lua_replace(state, self.first + self.len as c_int);
+                self.names[self.len] = name;
+                self.len += 1;
+                self.next = self.len;
+            }
+        }
+    }
+}
+
 /// Pushes `value` onto the stack of `state`, a top-level `null` as `nil`.
 ///
 /// # Safety
-/// In a protected call, with room for three slots, `build`'s marker slots valid.
-unsafe fn push(state: *mut ffi::lua_State, value: &serde_json::Value, build: Build) {
+/// In a protected call, with room for three slots, `build`'s marker slots and `keys`' slots valid.
+unsafe fn push<'a>(state: *mut ffi::lua_State, value: &'a serde_json::Value, build: Build, keys: &mut Keys<'a>) {
     let size = |count: usize| c_int::try_from(count).unwrap_or(0);
     let null = || unsafe { ffi::lua_pushlightuserdata(state, std::ptr::null_mut()) };
     // SAFETY: as the caller's; a table checks for room for its key, its value and what the value needs to be built.
@@ -107,7 +155,7 @@ unsafe fn push(state: *mut ffi::lua_State, value: &serde_json::Value, build: Bui
                 for (index, item) in items.iter().enumerate() {
                     match item {
                         serde_json::Value::Null => null(),
-                        item => push(state, item, build),
+                        item => push(state, item, build, keys),
                     }
                     ffi::lua_rawseti_(state, -2, c_int::try_from(index + 1).unwrap_or(c_int::MAX));
                 }
@@ -123,12 +171,12 @@ unsafe fn push(state: *mut ffi::lua_State, value: &serde_json::Value, build: Bui
                     match (field, build.nulls) {
                         (serde_json::Value::Null, Nulls::Carrier) => continue,
                         (serde_json::Value::Null, Nulls::Sentinel) => {
-                            ffi::lua_pushlstring_(state, name.as_ptr().cast(), name.len());
+                            keys.push(state, name);
                             null();
                         }
                         (field, _) => {
-                            ffi::lua_pushlstring_(state, name.as_ptr().cast(), name.len());
-                            push(state, field, build);
+                            keys.push(state, name);
+                            push(state, field, build, keys);
                         }
                     }
                     ffi::lua_rawset(state, -3);
