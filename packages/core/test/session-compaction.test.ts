@@ -17,7 +17,9 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { EventTable } from "@opencode/core/event/sql"
 import { Instructions } from "@opencode/core/instructions/index"
+import { Job } from "@opencode/core/job"
 import { SessionCompaction } from "@opencode/core/session/compaction"
+import { SessionCompactionSubagents } from "@opencode/core/session/compaction-subagents"
 import type { SessionContext } from "@opencode/core/session/context"
 import { MessageDecodeError } from "@opencode/core/session/error"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -113,6 +115,7 @@ const it = testEffect(
     LayerNode.group([
       Database.node,
       Bus.node,
+      Job.node,
       SessionProjector.node,
       SessionStore.node,
       SessionCompaction.node,
@@ -1568,5 +1571,324 @@ it.effect("a background summary waits for a response whose prompt is still cache
     expect(yield* summarizedAfterBreak("ses_precompute_cold")).toContain("Third question")
     // A model that keeps its cache for an hour summarizes the older response right away.
     expect(yield* summarizedAfterBreak("ses_precompute_hour", "1h")).not.toContain("Third question")
+  }),
+)
+
+test("compaction prompt scopes session ID omission to this session and excludes subagents wrapper tags on update", () => {
+  expect(SessionCompaction.buildPrompt(false)).toContain("environment details like this session's ID")
+  expect(SessionCompaction.buildPrompt(false)).not.toContain("environment details like the session ID")
+  expect(SessionCompaction.buildPrompt(true)).toContain("<subagents>")
+})
+
+it.effect("compaction preserves direct running and idle subagent session IDs and omits block when none exist", () =>
+  Effect.gen(function* () {
+    requests = []
+    const store = yield* SessionStore.Service
+    const jobs = yield* Job.Service
+
+    const plainID = Session.ID.make("ses_no_subagents")
+    const plain = yield* insertSession(plainID)
+    const plainMessages = [textUser("Work without subagents")]
+    yield* storeMessages(plainID, plainMessages)
+    expect(yield* compactManually(plain, plainMessages)).toEqual({ status: "completed" })
+    const plainContext = yield* store.context(plainID)
+    expect(plainContext[0]?.metadata?.subagents).toBeUndefined()
+    expect(JSON.stringify(toLLMMessages(plainContext, resolved.ref))).not.toContain("<subagents>")
+
+    const parentID = Session.ID.make("ses_with_subagents")
+    const parent = yield* insertSession(parentID)
+    const runningChildID = Session.ID.make("ses_child_running")
+    const idleChildID = Session.ID.make("ses_child_idle")
+    yield* insertSession(runningChildID, {
+      parent_id: parentID,
+      agent: Agent.ID.make("explore"),
+      title: "Inspect auth middleware",
+      time_updated: 100,
+    })
+    yield* insertSession(idleChildID, {
+      parent_id: parentID,
+      agent: Agent.ID.make("general"),
+      title: "Refactor cache layer",
+      time_updated: 200,
+    })
+
+    const release = yield* Deferred.make<void>()
+    yield* jobs.start({
+      id: runningChildID,
+      type: "subagent",
+      title: "Inspect auth middleware",
+      background: true,
+      recovery: {
+        kind: "subagent",
+        parentSessionID: parentID,
+        childSessionID: runningChildID,
+        agent: "explore",
+        description: "Inspect auth middleware",
+      },
+      run: Deferred.await(release).pipe(Effect.as("done")),
+    })
+
+    const messages = [textUser("Earlier question"), textUser("Latest question")]
+    yield* storeMessages(parentID, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+    yield* Deferred.succeed(release, undefined)
+
+    const context = yield* store.context(parentID)
+    expect(context[0]?.metadata?.subagents).toEqual([
+      { id: runningChildID, agent: "explore", title: "Inspect auth middleware", status: "running" },
+      { id: idleChildID, agent: "general", title: "Refactor cache layer", status: "idle" },
+    ])
+    const rendered = toLLMMessages(context, resolved.ref)
+    const text = rendered[0]?.content[0]?.type === "text" ? rendered[0].content[0].text : ""
+    expect(text).toContain("<subagents>")
+    expect(text).toContain(`- ${runningChildID} (explore, running): Inspect auth middleware`)
+    expect(text).toContain(`- ${idleChildID} (general, idle): Refactor cache layer`)
+    expect(text.indexOf(runningChildID)).toBeLessThan(text.indexOf(idleChildID))
+  }),
+)
+
+it.effect("repeated compactions refresh subagent entries without duplicating the block", () =>
+  Effect.gen(function* () {
+    requests = []
+    const db = (yield* Database.Service).db
+    const store = yield* SessionStore.Service
+    const parentID = Session.ID.make("ses_repeat_subagents")
+    const parent = yield* insertSession(parentID)
+    const firstChildID = Session.ID.make("ses_repeat_child_1")
+    yield* insertSession(firstChildID, {
+      parent_id: parentID,
+      agent: Agent.ID.make("explore"),
+      title: "First scan",
+      time_busy: 100,
+      time_updated: 100,
+    })
+
+    const firstMessages = [textUser("First question")]
+    yield* storeMessages(parentID, firstMessages)
+    expect(yield* compactManually(parent, firstMessages)).toEqual({ status: "completed" })
+
+    // First child goes idle and a second child starts before the next compaction.
+    yield* db
+      .update(SessionTable)
+      .set({ time_idle: 200, time_updated: 200 })
+      .where(eq(SessionTable.id, firstChildID))
+      .run()
+      .pipe(Effect.orDie)
+    const secondChildID = Session.ID.make("ses_repeat_child_2")
+    yield* insertSession(secondChildID, {
+      parent_id: parentID,
+      agent: Agent.ID.make("general"),
+      title: "Second task",
+      time_busy: 300,
+      time_updated: 300,
+    })
+
+    const afterFirst = yield* store.context(parentID)
+    const followUp = textUser("Continue with second task")
+    const nextSeq = (yield* Bus.latestSequence(db, parentID)) + 1
+    yield* db
+      .insert(SessionMessageTable)
+      .values({
+        id: followUp.id,
+        session_id: parentID,
+        type: "user",
+        seq: nextSeq,
+        time_created: 1,
+        data: { text: followUp.text, time: { created: 1 } },
+      })
+      .run()
+      .pipe(Effect.orDie)
+    yield* Bus.reserveSequence(db, parentID, nextSeq)
+    expect(yield* compactManually(parent, [...afterFirst, followUp])).toEqual({ status: "completed" })
+
+    const afterSecond = yield* store.context(parentID)
+    const rendered = toLLMMessages(afterSecond, resolved.ref)
+    const text = rendered[0]?.content[0]?.type === "text" ? rendered[0].content[0].text : ""
+    expect(text.match(/<subagents>/g)).toHaveLength(1)
+    expect(text.match(new RegExp(firstChildID, "g"))).toHaveLength(1)
+    expect(text.match(new RegExp(secondChildID, "g"))).toHaveLength(1)
+    expect(text).toContain(`- ${secondChildID} (general, running): Second task`)
+    expect(text).toContain(`- ${firstChildID} (explore, idle): First scan`)
+  }),
+)
+
+it.effect("precomputed compaction captures subagents spawned after precompute started", () =>
+  Effect.gen(function* () {
+    requests = []
+    const store = yield* SessionStore.Service
+    const compaction = yield* SessionCompaction.Service
+    const parentID = Session.ID.make("ses_precompute_subagents")
+    const parent = yield* insertSession(parentID)
+    const history = precomputeHistory()
+    yield* storeMessages(parentID, history.due)
+
+    const beforeChildID = Session.ID.make("ses_before_precompute")
+    yield* insertSession(beforeChildID, {
+      parent_id: parentID,
+      agent: Agent.ID.make("explore"),
+      title: "Before precompute",
+      time_updated: 100,
+    })
+
+    yield* compaction.precompute(Effect.succeed(loaded(parent, history.near)))
+
+    const afterChildID = Session.ID.make("ses_after_precompute")
+    yield* insertSession(afterChildID, {
+      parent_id: parentID,
+      agent: Agent.ID.make("general"),
+      title: "After precompute",
+      time_busy: 200,
+      time_updated: 200,
+    })
+
+    expect(yield* compaction.compact({ reason: "auto", context: loaded(parent, history.due) })).toEqual({
+      status: "completed",
+    })
+    expect(requests).toHaveLength(1)
+
+    const context = yield* store.context(parentID)
+    const rendered = toLLMMessages(context, resolved.ref)
+    const text = rendered[0]?.content[0]?.type === "text" ? rendered[0].content[0].text : ""
+    expect(text).toContain(`- ${afterChildID} (general, running): After precompute`)
+    expect(text).toContain(`- ${beforeChildID} (explore, idle): Before precompute`)
+  }),
+)
+
+it.effect("compaction caps idle subagents while prioritizing all running children", () =>
+  Effect.gen(function* () {
+    requests = []
+    const store = yield* SessionStore.Service
+    const parentID = Session.ID.make("ses_capped_subagents")
+    const parent = yield* insertSession(parentID)
+
+    // Running children have older timestamps than every idle child and must still be kept first.
+    const runningOldID = Session.ID.make("ses_running_old")
+    const runningOlderID = Session.ID.make("ses_running_older")
+    yield* insertSession(runningOlderID, {
+      parent_id: parentID,
+      agent: Agent.ID.make("explore"),
+      title: "Older running",
+      time_busy: 10,
+      time_updated: 10,
+    })
+    yield* insertSession(runningOldID, {
+      parent_id: parentID,
+      agent: Agent.ID.make("general"),
+      title: "Newer running",
+      time_busy: 20,
+      time_updated: 20,
+    })
+
+    const totalIdle = SessionCompactionSubagents.MAX_IDLE + 5
+    const idleIDs = Array.from({ length: totalIdle }, (_, index) =>
+      Session.ID.make(`ses_idle_${String(index + 1).padStart(2, "0")}`),
+    )
+    for (const [index, childID] of idleIDs.entries()) {
+      yield* insertSession(childID, {
+        parent_id: parentID,
+        agent: Agent.ID.make("explore"),
+        title: `Idle task ${index + 1}`,
+        time_updated: 1_000 + index,
+      })
+    }
+
+    const messages = [textUser("Compact with many children")]
+    yield* storeMessages(parentID, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+
+    const [compaction] = yield* store.context(parentID)
+    const preserved =
+      compaction?.type === "compaction" && compaction.status === "completed"
+        ? SessionCompactionSubagents.read(compaction)
+        : []
+    expect(preserved).toHaveLength(2 + SessionCompactionSubagents.MAX_IDLE)
+    expect(preserved.slice(0, 2).map((entry) => entry.id)).toEqual([runningOldID, runningOlderID])
+    expect(preserved.slice(2).map((entry) => entry.id)).toEqual(
+      idleIDs.slice(-SessionCompactionSubagents.MAX_IDLE).toReversed(),
+    )
+  }),
+)
+
+it.effect("compaction excludes archived, grandchild, other-session, and fork-parent subagents", () =>
+  Effect.gen(function* () {
+    requests = []
+    const bus = yield* Bus.Service
+    const store = yield* SessionStore.Service
+
+    const parentID = Session.ID.make("ses_filter_parent")
+    const otherID = Session.ID.make("ses_filter_other")
+    const parent = yield* insertSession(parentID)
+    yield* insertSession(otherID)
+
+    const directID = Session.ID.make("ses_filter_direct")
+    const archivedID = Session.ID.make("ses_filter_archived")
+    const grandchildID = Session.ID.make("ses_filter_grandchild")
+    const otherChildID = Session.ID.make("ses_filter_other_child")
+
+    yield* insertSession(directID, {
+      parent_id: parentID,
+      agent: Agent.ID.make("explore"),
+      title: "Direct child",
+      time_updated: 100,
+    })
+    yield* insertSession(archivedID, {
+      parent_id: parentID,
+      agent: Agent.ID.make("explore"),
+      title: "Archived child",
+      time_archived: 150,
+      time_updated: 150,
+    })
+    yield* insertSession(grandchildID, {
+      parent_id: directID,
+      agent: Agent.ID.make("explore"),
+      title: "Grandchild",
+      time_updated: 200,
+    })
+    yield* insertSession(otherChildID, {
+      parent_id: otherID,
+      agent: Agent.ID.make("explore"),
+      title: "Other session child",
+      time_updated: 250,
+    })
+
+    const messages = [textUser("Compact filtered children")]
+    yield* storeMessages(parentID, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+
+    const parentContext = yield* store.context(parentID)
+    expect(parentContext[0]?.metadata?.subagents).toEqual([
+      { id: directID, agent: "explore", title: "Direct child", status: "idle" },
+    ])
+
+    // Forking the parent after compaction must not carry over the parent's subagents.
+    const forkID = Session.ID.make("ses_filter_fork")
+    yield* bus.publish(SessionEvent.Forked, {
+      sessionID: forkID,
+      parentID,
+      boundary: { type: "through", messageID: parentContext[0]!.id },
+    })
+    const forkContext = yield* store.context(forkID)
+    expect(forkContext[0]?.metadata?.subagents).toBeUndefined()
+    expect(JSON.stringify(toLLMMessages(forkContext, resolved.ref))).not.toContain(directID)
+    expect(JSON.stringify(toLLMMessages(forkContext, resolved.ref))).not.toContain("<subagents>")
+
+    // Compacting the fork only includes the fork's own direct children.
+    const forkSession = yield* store
+      .get(forkID)
+      .pipe(Effect.flatMap((value) => (value ? Effect.succeed(value) : Effect.die("missing fork"))))
+    const forkOwnChildID = Session.ID.make("ses_filter_fork_child")
+    yield* insertSession(forkOwnChildID, {
+      parent_id: forkID,
+      agent: Agent.ID.make("general"),
+      title: "Fork child",
+      time_updated: 300,
+    })
+    expect(yield* compactManually(forkSession, [...forkContext, textUser("Continue on fork")])).toEqual({
+      status: "completed",
+    })
+    const compactedFork = yield* store.context(forkID)
+    expect(compactedFork[0]?.metadata?.subagents).toEqual([
+      { id: forkOwnChildID, agent: "general", title: "Fork child", status: "idle" },
+    ])
   }),
 )

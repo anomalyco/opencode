@@ -21,7 +21,9 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { SessionSchema } from "@opencode/core/session/schema"
+import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime, Deferred, Effect, Fiber, Schema } from "effect"
@@ -339,6 +341,76 @@ it.live("manual and automatic endpoint compaction keep the provider replacement 
     expect(fixture.headers[0]?.get("x-http-hook")).toBe("compaction")
     expect(fixture.bodies[0]).toMatchObject({ tools: [expect.objectContaining({ name: "read" })] })
     expect(fixture.bodies[0]).not.toHaveProperty("context_management")
+  }),
+)
+
+it.live("native compaction preserves direct subagent session IDs across repeated compactions", () =>
+  Effect.gen(function* () {
+    const fixture = yield* setup()
+    const db = (yield* Database.Service).db
+    const childID = SessionSchema.ID.make("ses_native_child")
+    yield* db
+      .insert(SessionTable)
+      .values({
+        id: childID,
+        project_id: Project.ID.global,
+        parent_id: fixture.sessionID,
+        slug: childID,
+        directory: "/project",
+        title: "Investigate native flow",
+        agent: Agent.ID.make("explore"),
+        version: "test",
+        time_busy: 100,
+        time_updated: 100,
+      })
+      .run()
+      .pipe(Effect.orDie)
+
+    yield* fixture.prompt("Start work with subagent")
+    expect(yield* fixture.compact).toEqual({ status: "completed" })
+
+    const first = yield* fixture.checkpoint
+    expect(first.metadata?.subagents).toEqual([
+      { id: childID, agent: "explore", title: "Investigate native flow", status: "running" },
+    ])
+    // Native provider window stays pure while LLM replay appends the subagents block.
+    expect(decode(first).map((message) => message.role)).toEqual(["user", "assistant"])
+    const replayed = toLLMMessages([first], fixture.model.ref)
+    expect(replayed.map((message) => message.role)).toEqual(["user", "assistant", "user"])
+    expect(replayed[2]?.content).toEqual([
+      Message.text(
+        [
+          "<subagents>",
+          "Direct subagent sessions of this session (pass sessionID to the subagent tool to continue one):",
+          `- ${childID} (explore, running): Investigate native flow`,
+          "</subagents>",
+        ].join("\n"),
+      ),
+    ])
+
+    // Subsequent primary request carries both the encrypted checkpoint and the subagents block.
+    yield* fixture.prompt("Follow up after native compaction")
+    const context = yield* fixture.load
+    const prepared = yield* fixture.requests.primary({
+      session: context.session,
+      agent: context.agent.id,
+      model: context.model,
+      tools: context.tools,
+      ...SessionModelRequest.baseTranscript({ ...context, agent: context.agent.info }),
+    })
+    const client = yield* LLMClient.Service
+    yield* client.generate(prepared.request, prepared.options)
+    expect(JSON.stringify(fixture.bodies[1])).toContain("encrypted_1")
+    expect(JSON.stringify(fixture.bodies[1])).toContain(childID)
+
+    // A second native compaction refreshes subagent state without duplicating prior subagent blocks into retained users.
+    expect(yield* fixture.compact).toEqual({ status: "completed" })
+    const second = yield* fixture.checkpoint
+    const retainedUsers = decode(second).filter((message) => message.role === "user")
+    expect(retainedUsers).toHaveLength(2)
+    expect(JSON.stringify(retainedUsers)).not.toContain("<subagents>")
+    const secondReplayed = toLLMMessages([second], fixture.model.ref)
+    expect(JSON.stringify(secondReplayed).match(/<subagents>/g)).toHaveLength(1)
   }),
 )
 
