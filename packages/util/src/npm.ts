@@ -1,8 +1,9 @@
 export * as Npm from "./npm.js"
 
+import os from "os"
 import path from "path"
 import { createHash, randomUUID } from "node:crypto"
-import { Clock, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
+import { Clock, Duration, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
 import { EffectFlock } from "./effect-flock.js"
@@ -140,6 +141,27 @@ const PackageLock = Schema.Struct({
   packages: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ resolved: Schema.optional(Schema.String) }))),
 })
 
+const DEFAULT_GIT_SSH_COMMAND = "ssh -oBatchMode=yes -oStrictHostKeyChecking=accept-new"
+const DEFAULT_INSTALL_TIMEOUT = Duration.minutes(2)
+const DEFAULT_CHECK_TIMEOUT = Duration.seconds(30)
+
+export function nonInteractiveGitEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  hasCustomSshCommand = false,
+): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    GIT_TERMINAL_PROMPT: "0",
+    GCM_INTERACTIVE: "never",
+    GIT_ASKPASS: "",
+    SSH_ASKPASS: "",
+    SSH_ASKPASS_REQUIRE: "never",
+    ...(env.GIT_SSH_COMMAND === undefined && !hasCustomSshCommand
+      ? { GIT_SSH_COMMAND: DEFAULT_GIT_SSH_COMMAND }
+      : {}),
+  }
+}
+
 const retention = 7 * 24 * 60 * 60 * 1_000
 const stagingRetention = 60 * 60 * 1_000
 
@@ -151,6 +173,23 @@ const layer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
     const directory = (pkg: string, target: Target | undefined) => path.join(global.cache, "npm", key(pkg, target))
+    const hasCustomSshCommand = Effect.fnUntraced(function* () {
+      if (process.env.GIT_SSH_COMMAND !== undefined) return true
+      for (const file of globalGitConfigPaths(process.env)) {
+        const content = yield* fs.readFileString(file).pipe(Effect.option)
+        if (Option.isSome(content) && hasCoreSshCommand(content.value)) return true
+      }
+      return false
+    })
+    // @npmcli/git replaces its own default env when `opts.env` is passed, so carry the non-interactive
+    // git/GCM/SSH defaults together and close stdin so background installs never wait on a prompt.
+    const nonInteractiveGitOptions = Effect.fnUntraced(function* () {
+      const customSsh = yield* hasCustomSshCommand()
+      return {
+        env: nonInteractiveGitEnv(process.env, customSsh),
+        stdio: ["ignore", "pipe", "pipe"] as ("ignore" | "pipe")[],
+      }
+    })
     const generations = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readDirectory(dir).pipe(
         Effect.orElseSucceed(() => [] as string[]),
@@ -228,31 +267,46 @@ const layer = Layer.effect(
           // Audit reports are unused here, but Arborist waits for them before completing an install.
           audit: false,
           windowsHide: true,
+          ...(yield* nonInteractiveGitOptions()),
         }
-        const arborist = new Arborist({
-          ...options,
-          path: input.dir,
-          binLinks: true,
-          progress: false,
-          savePrefix: "",
-          ignoreScripts: true,
-        })
         return yield* Effect.tryPromise({
-          try: () =>
-            arborist.reify({
-              ...options,
+          try: (signal) => {
+            const scoped = { ...options, signal }
+            const arborist = new Arborist({
+              ...scoped,
+              path: input.dir,
+              binLinks: true,
+              progress: false,
+              savePrefix: "",
+              ignoreScripts: true,
+            })
+            return arborist.reify({
+              ...scoped,
               add,
               update: input.update,
               save: true,
               saveType: "prod",
-            }),
+            })
+          },
           catch: (cause) =>
             new InstallFailedError({
               cause,
               add,
               dir: input.dir,
             }),
-        }) as Effect.Effect<ArboristTree, InstallFailedError>
+        }).pipe(
+          Effect.timeoutOrElse({
+            duration: DEFAULT_INSTALL_TIMEOUT,
+            orElse: () =>
+              Effect.fail(
+                new InstallFailedError({
+                  add,
+                  dir: input.dir,
+                  cause: new Error(`Timed out after ${Duration.format(DEFAULT_INSTALL_TIMEOUT)}`),
+                }),
+              ),
+          }),
+        ) as Effect.Effect<ArboristTree, InstallFailedError>
       }).pipe(
         Effect.withSpan("Npm.reify", {
           attributes: input,
@@ -392,12 +446,28 @@ const layer = Layer.effect(
         ignoreScripts: true,
         // Pacote spawns Git directly rather than through AppProcess.
         windowsHide: true,
+        ...(yield* nonInteractiveGitOptions()),
       }
       const available = yield* Effect.tryPromise({
-        try: async () =>
-          target.type === "git" ? gitRevision(await resolve(pkg, options)) : (await manifest(pkg, options)).version,
+        try: async (signal) => {
+          const scoped = { ...options, signal }
+          return target.type === "git"
+            ? gitRevision(await resolve(pkg, scoped))
+            : (await manifest(pkg, scoped)).version
+        },
         catch: (cause) => new InstallFailedError({ dir: root, cause }),
-      })
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: DEFAULT_CHECK_TIMEOUT,
+          orElse: () =>
+            Effect.fail(
+              new InstallFailedError({
+                dir: root,
+                cause: new Error(`Timed out after ${Duration.format(DEFAULT_CHECK_TIMEOUT)}`),
+              }),
+            ),
+        }),
+      )
       if (!available)
         return yield* new InstallFailedError({ dir: root, cause: new Error(`Package revision not found: ${pkg}`) })
       return installed !== available
@@ -496,9 +566,37 @@ const layer = Layer.effect(
 
 export const node = makeGlobalNode({
   service: Service,
-  layer: layer,
+  layer,
   deps: [FSUtil.node, Global.node, filesystem, EffectFlock.node],
 })
+
+function globalGitConfigPaths(env: NodeJS.ProcessEnv) {
+  if (env.GIT_CONFIG_GLOBAL !== undefined) {
+    return env.GIT_CONFIG_GLOBAL ? [env.GIT_CONFIG_GLOBAL] : []
+  }
+  const home = env.HOME || env.USERPROFILE || os.homedir()
+  const xdg = env.XDG_CONFIG_HOME || (home ? path.join(home, ".config") : undefined)
+  return [
+    ...(home ? [path.join(home, ".gitconfig")] : []),
+    ...(xdg ? [path.join(xdg, "git", "config")] : []),
+  ]
+}
+
+function hasCoreSshCommand(content: string) {
+  let inCore = false
+  for (const raw of content.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (!line || line.startsWith("#") || line.startsWith(";")) continue
+    const section = line.match(/^\[([^\]]+)\](.*)$/)
+    if (section) {
+      inCore = section[1].trim().toLowerCase() === "core"
+      if (inCore && /^sshcommand\s*=/i.test(section[2].trim())) return true
+      continue
+    }
+    if (inCore && /^sshcommand\s*=/i.test(line)) return true
+  }
+  return false
+}
 
 function gitRevision(resolved: string | undefined) {
   return resolved?.match(/#([a-f0-9]{40}|[a-f0-9]{64})(?=::|$)/i)?.[1]

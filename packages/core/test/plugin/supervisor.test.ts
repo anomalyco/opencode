@@ -52,7 +52,13 @@ const sourceLayer = Layer.succeed(
 )
 
 // Package checks report `available` after `delay`; updates are recorded instead of installed.
-const packages = { available: false, delay: Duration.zero, checks: 0, updated: [] as string[] }
+const packages = {
+  available: false,
+  delay: Duration.zero,
+  checks: 0,
+  updated: [] as string[],
+  addError: undefined as ((pkg: string) => Npm.InstallFailedError) | undefined,
+}
 
 const instances = Layer.effect(
   LocationServiceMap.Service,
@@ -72,11 +78,12 @@ const instances = Layer.effect(
           Npm.Service.of({
             add: (pkg) =>
               Effect.fail(
-                new Npm.InstallFailedError({
-                  add: [pkg],
-                  dir: "",
-                  cause: new Error(`Unexpected Npm.add(${pkg})`),
-                }),
+                packages.addError?.(pkg) ??
+                  new Npm.InstallFailedError({
+                    add: [pkg],
+                    dir: "",
+                    cause: new Error(`Unexpected Npm.add(${pkg})`),
+                  }),
               ),
             resolve: (name) => Effect.succeed({ directory: "", name }),
             check: () =>
@@ -466,6 +473,49 @@ describe("PluginSupervisor", () => {
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
       )
       expect(language).toBe(fakeLanguageModel)
+    }),
+  )
+
+  it.effect("surfaces the underlying npm install error in Plugin.list() instead of a generic message", () =>
+    Effect.gen(function* () {
+      const target = "github:org/private-plugin"
+      source.operations = [{ type: "add", target, options: {} }]
+      packages.addError = (pkg) =>
+        new Npm.InstallFailedError({
+          add: [pkg],
+          dir: "",
+          cause: Object.assign(new Error("An unknown git error occurred"), {
+            stderr: "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+          }),
+        })
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const inventory = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        return yield* plugins.list()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        Effect.ensuring(
+          Effect.sync(() => {
+            source.operations = []
+            packages.addError = undefined
+          }),
+        ),
+      )
+
+      const failed = inventory.find((plugin) => plugin.source.type === "package" && plugin.source.target === target)
+      expect(failed).toBeDefined()
+      expect(failed?.state.status).toBe("failed")
+      if (failed?.state.status === "failed") {
+        expect(failed.state.error).toContain(`Failed to install ${target}`)
+        expect(failed.state.error).toContain("terminal prompts disabled")
+        expect(failed.state.error).not.toBe("Plugin failed to load")
+      }
+      expect(
+        inventory.some((plugin) => plugin.id?.startsWith("opencode.") && plugin.state.status === "active"),
+      ).toBe(true)
     }),
   )
 })

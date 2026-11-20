@@ -2,10 +2,14 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Deferred, Effect, Fiber } from "effect"
+import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
+import { withEnv } from "./fixture/env"
 import { tmpdir } from "./fixture/tmpdir"
 
 const win = process.platform === "win32"
@@ -20,7 +24,9 @@ const writePackage = (dir: string, pkg: Record<string, unknown>) =>
   )
 
 const npmLayer = (cache: string) =>
-  AppNodeBuilder.build(Npm.node, [Global.node.replace(Global.layerWith({ cache, state: path.join(cache, "state") }))])
+  AppNodeBuilder.build(LayerNode.group([Npm.node, EffectFlock.node]), [
+    Global.node.replace(Global.layerWith({ cache, state: path.join(cache, "state") })),
+  ])
 
 async function createGitFixture(directory: string) {
   const repository = path.join(directory, "repository")
@@ -376,6 +382,240 @@ describe("Npm.add", () => {
     expect(result.added.version).toBe(fixture.commit)
     expect(result.current).toBeFalse()
     expect(result.outdated).toBeTrue()
+  }, 30_000)
+
+  test("fails fast on 401 Git auth with non-interactive env and respects core.sshCommand", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const captureFile = path.join(tmp.path, "helper-env.json")
+    const helperScript = path.join(tmp.path, "credential-helper.js")
+    const gitConfig = path.join(tmp.path, "gitconfig")
+
+    // Simulates Git Credential Manager honoring GCM_INTERACTIVE=never instead of blocking on a browser login.
+    await Bun.write(
+      helperScript,
+      `const fs = require("node:fs")
+fs.writeFileSync(${JSON.stringify(captureFile)}, JSON.stringify({
+  GIT_TERMINAL_PROMPT: process.env.GIT_TERMINAL_PROMPT,
+  GCM_INTERACTIVE: process.env.GCM_INTERACTIVE,
+  GIT_ASKPASS: process.env.GIT_ASKPASS,
+  SSH_ASKPASS: process.env.SSH_ASKPASS,
+  SSH_ASKPASS_REQUIRE: process.env.SSH_ASKPASS_REQUIRE,
+  GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND,
+}))
+if (process.env.GCM_INTERACTIVE === "never") {
+  process.stderr.write("fatal: interactive authentication disabled\\n")
+  process.exit(1)
+}
+setInterval(() => {}, 1000)
+`,
+    )
+    const helperCmd = `!"${process.execPath.replaceAll("\\", "/")}" "${helperScript.replaceAll("\\", "/")}"`
+    await Bun.write(gitConfig, `[credential]\n\thelper = \n\thelper = ${helperCmd}\n`)
+
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        return new Response(null, {
+          status: 401,
+          headers: { "WWW-Authenticate": 'Basic realm="private"' },
+        })
+      },
+    })
+
+    try {
+      const spec = `git+http://127.0.0.1:${server.port}/org/private-plugin.git`
+      const error = await withEnv(
+        {
+          GIT_CONFIG_GLOBAL: gitConfig,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_SSH_COMMAND: undefined,
+          GIT_ASKPASS: "/nonexistent/interactive-askpass",
+          GCM_INTERACTIVE: "always",
+        },
+        () =>
+          Effect.gen(function* () {
+            const npm = yield* Npm.Service
+            return yield* npm.add(spec).pipe(Effect.flip)
+          }),
+      ).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+      expect(error).toBeInstanceOf(Npm.InstallFailedError)
+      expect(error.message).toContain(`Failed to install ${spec}`)
+      expect(error.message).toContain("interactive authentication disabled")
+
+      const captured = await Bun.file(captureFile).json()
+      expect(captured).toEqual({
+        GIT_TERMINAL_PROMPT: "0",
+        GCM_INTERACTIVE: "never",
+        GIT_ASKPASS: "",
+        SSH_ASKPASS: "",
+        SSH_ASKPASS_REQUIRE: "never",
+        GIT_SSH_COMMAND: "ssh -oBatchMode=yes -oStrictHostKeyChecking=accept-new",
+      })
+
+      // When core.sshCommand is configured in git config, GIT_SSH_COMMAND must stay unset so git uses it.
+      await Bun.write(
+        gitConfig,
+        `[core]\n\tsshCommand = ssh -i /custom/key\n[credential]\n\thelper = \n\thelper = ${helperCmd}\n`,
+      )
+      await withEnv(
+        {
+          GIT_CONFIG_GLOBAL: gitConfig,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_SSH_COMMAND: undefined,
+        },
+        () =>
+          Effect.gen(function* () {
+            const npm = yield* Npm.Service
+            return yield* npm.add(spec).pipe(Effect.flip)
+          }),
+      ).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+      const capturedCustom = await Bun.file(captureFile).json()
+      expect(capturedCustom.GIT_SSH_COMMAND).toBeUndefined()
+    } finally {
+      await server.stop(true)
+    }
+  }, 30_000)
+
+  test("times out a hung Git install, removes staging, and releases the lock", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const arrived = Deferred.makeUnsafe<void>()
+
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        Deferred.doneUnsafe(arrived, Effect.succeed(undefined))
+        return new Response(new ReadableStream({ start() {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/x-git-upload-pack-advertisement" },
+        })
+      },
+    })
+
+    try {
+      const spec = `git+http://127.0.0.1:${server.port}/org/hung-plugin.git`
+      const pkgDir = path.join(cache, "npm", await Npm.cacheKey(spec))
+
+      const error = await Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        const fiber = yield* npm.add(spec).pipe(Effect.flip, Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(arrived)
+        yield* TestClock.adjust("2 minutes")
+        const err = yield* Fiber.join(fiber)
+        const flock = yield* EffectFlock.Service
+        yield* Effect.scoped(flock.acquire(`npm-install:${pkgDir}`, undefined, { timeoutMs: 1_000 }))
+        return err
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(npmLayer(cache)),
+        Effect.provide(TestClock.layer()),
+        Effect.runPromise,
+      )
+
+      expect(error).toBeInstanceOf(Npm.InstallFailedError)
+      expect(error.message).toContain(`Failed to install ${spec}`)
+      expect(error.message).toContain("Timed out after 2m")
+
+      const entries = await fs.readdir(pkgDir).catch(() => [] as string[])
+      expect(entries.filter((entry) => entry.startsWith(".staging-"))).toEqual([])
+    } finally {
+      await server.stop(true)
+    }
+  }, 30_000)
+
+  test("interrupting a hung Git install cleans staging and releases the lock", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const arrived = Deferred.makeUnsafe<void>()
+
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        Deferred.doneUnsafe(arrived, Effect.succeed(undefined))
+        return new Response(new ReadableStream({ start() {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/x-git-upload-pack-advertisement" },
+        })
+      },
+    })
+
+    try {
+      const spec = `git+http://127.0.0.1:${server.port}/org/interrupted-plugin.git`
+      const pkgDir = path.join(cache, "npm", await Npm.cacheKey(spec))
+
+      await Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        const fiber = yield* npm.add(spec).pipe(Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(arrived).pipe(Effect.timeout("5 seconds"))
+        yield* Fiber.interrupt(fiber)
+        const flock = yield* EffectFlock.Service
+        yield* Effect.scoped(flock.acquire(`npm-install:${pkgDir}`, undefined, { timeoutMs: 1_000 }))
+      }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+      const entries = await fs.readdir(pkgDir).catch(() => [] as string[])
+      expect(entries.filter((entry) => entry.startsWith(".staging-"))).toEqual([])
+    } finally {
+      await server.stop(true)
+    }
+  }, 30_000)
+
+  test("times out a hung Git update check", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const arrived = Deferred.makeUnsafe<void>()
+
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        Deferred.doneUnsafe(arrived, Effect.succeed(undefined))
+        return new Response(new ReadableStream({ start() {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/x-git-upload-pack-advertisement" },
+        })
+      },
+    })
+
+    try {
+      const spec = `git+http://127.0.0.1:${server.port}/org/hung-check.git#main`
+      const generation = path.join(cache, "npm", await Npm.cacheKey(spec), "1000")
+      await fs.mkdir(path.join(generation, "node_modules", "hung-check"), { recursive: true })
+      await Bun.write(path.join(generation, "package.json"), JSON.stringify({ dependencies: { "hung-check": spec } }))
+      await Bun.write(
+        path.join(generation, "package-lock.json"),
+        JSON.stringify({
+          packages: {
+            "node_modules/hung-check": {
+              resolved: `git+http://127.0.0.1:${server.port}/org/hung-check.git#0123456789abcdef0123456789abcdef01234567`,
+            },
+          },
+        }),
+      )
+
+      const error = await Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        const fiber = yield* npm.check(spec).pipe(Effect.flip, Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(arrived)
+        yield* TestClock.adjust("30 seconds")
+        return yield* Fiber.join(fiber)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(npmLayer(cache)),
+        Effect.provide(TestClock.layer()),
+        Effect.runPromise,
+      )
+
+      expect(error).toBeInstanceOf(Npm.InstallFailedError)
+      expect(error.message).toContain("Timed out after 30s")
+    } finally {
+      await server.stop(true)
+    }
   }, 30_000)
 })
 

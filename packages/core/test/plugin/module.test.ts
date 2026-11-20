@@ -12,6 +12,7 @@ import { PluginModule } from "@opencode/core/plugin/module"
 import { Rpc } from "@opencode/core/rpc"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
+import { EffectFlock } from "@opencode/util/effect-flock"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
 import { createForeignPackageFilter, ensurePluginRuntime } from "@opencode/plugin/runtime"
@@ -492,3 +493,58 @@ for (const target of ["policy-fixture@1.2.3", "@scope/policy-fixture@1.2.3"]) {
     }),
   )
 }
+
+it.live("wraps npm install and lock failures into PluginModule.LoadError with their detail", () =>
+  Effect.gen(function* () {
+    const modules = yield* PluginModule.make()
+    const gitCause = Object.assign(new Error("An unknown git error occurred"), {
+      stderr: "fatal: Authentication failed for 'https://github.com/org/private-plugin.git/'",
+    })
+    const installFailure = new Npm.InstallFailedError({
+      add: ["github:org/private-plugin"],
+      dir: "/tmp/staging",
+      cause: gitCause,
+    })
+    const installError = yield* modules
+      .load({ type: "add", target: "github:org/private-plugin", options: {} }, { install: true })
+      .pipe(
+        Effect.provideService(
+          Npm.Service,
+          Npm.Service.of({
+            add: () => Effect.fail(installFailure),
+            resolve: (name) => Effect.succeed({ directory: "", name }),
+            check: () => Effect.succeed(false),
+            update: () => Effect.fail(installFailure),
+            reject: () => Effect.succeed(false),
+            which: () => Effect.undefined,
+          }),
+        ),
+        Effect.flip,
+      )
+    expect(installError).toBeInstanceOf(PluginModule.LoadError)
+    expect(installError.message).toContain("Failed to install github:org/private-plugin")
+    expect(installError.message).toContain("fatal: Authentication failed")
+    expect(installError.cause).toBe(installFailure)
+
+    const lockFailure = new EffectFlock.LockTimeoutError({ key: "npm-install:/tmp/cache" })
+    const lockError = yield* modules
+      .load({ type: "add", target: "github:org/private-plugin", options: {} }, { install: true })
+      .pipe(
+        Effect.provideService(
+          Npm.Service,
+          Npm.Service.of({
+            add: () => Effect.fail(lockFailure),
+            resolve: (name) => Effect.succeed({ directory: "", name }),
+            check: () => Effect.succeed(false),
+            update: () => Effect.fail(lockFailure),
+            reject: () => Effect.succeed(false),
+            which: () => Effect.undefined,
+          }),
+        ),
+        Effect.flip,
+      )
+    expect(lockError).toBeInstanceOf(PluginModule.LoadError)
+    expect(lockError.message).toBe("Timed out waiting for install lock for github:org/private-plugin")
+    expect(lockError.cause).toBe(lockFailure)
+  }),
+)

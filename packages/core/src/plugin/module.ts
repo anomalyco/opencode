@@ -5,6 +5,7 @@ import { Host } from "@opencode/plugin/host"
 import { GuiBundle, type Source } from "@opencode/schema/plugin"
 import { createPluginSources } from "@opencode/plugin/source"
 import { Hash } from "@opencode/util/hash"
+import type { EffectFlock } from "@opencode/util/effect-flock"
 import { Npm } from "@opencode/util/npm"
 import { Deferred, Effect, FiberSet, PubSub, Schema, Stream } from "effect"
 import path from "path"
@@ -110,7 +111,9 @@ const load = Effect.fn("PluginModule.load")(function* (
     ? undefined
     : options?.install === false
       ? yield* npm.resolve(operation.target)
-      : yield* npm.add(operation.target)
+      : yield* npm.add(operation.target).pipe(
+          Effect.mapError((cause) => new LoadError({ message: installErrorMessage(operation.target, cause), cause })),
+        )
   // Legacy auto-discovery still admits standalone server sources. Configured
   // local plugins always arrive here as directories.
   const entrypoints: Host.Entrypoints =
@@ -184,3 +187,9 @@ const loadServer = Effect.fn("PluginModule.loadServer")(function* (
   )).default
   return { plugin: "effect" in value ? value : PluginPromise.fromPromise(value), version: loaded.version }
 })
+
+function installErrorMessage(target: string, cause: Npm.InstallFailedError | EffectFlock.LockError) {
+  if (cause._tag === "NpmInstallFailedError") return cause.message
+  if (cause._tag === "LockTimeoutError") return `Timed out waiting for install lock for ${target}`
+  return `Failed to install ${target}: ${cause.detail}`
+}
