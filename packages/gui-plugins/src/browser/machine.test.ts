@@ -4,6 +4,7 @@ import {
   addressFocusTab,
   createInitialState,
   HELD_REQUEST_TTL_MS,
+  PENDING_RETRIES,
   REGISTER_TIMEOUT_MS,
   sessionSupported,
   sessionError,
@@ -14,6 +15,7 @@ import {
   revealGuard,
   sessionSuspended,
   sessionTabs,
+  sessionUnavailable,
   transition,
   type Attachment,
   type Event,
@@ -572,20 +574,65 @@ describe("browser pane machine", () => {
     for (const state of [createInitialState(active), start, backoff, unsupported, paused])
       expect(sessionTabs(state, target, stored)).toEqual(stored)
 
-    // A tab drawn meanwhile shows its content loading only while something can still bring the inventory unasked.
-    expect([start, backoff, unsupported, paused].map((state) => sessionPending(state, target))).toEqual([
-      true,
-      true,
-      true,
-      false,
-    ])
-
     // The inventory decides, and prunes the stored tabs it lacks.
     expect(sessionTabs(ready(start), target, stored)).toEqual([tabA])
 
-    // Another window's session and one the server lacks have no tabs here.
+    // Another window's session, one the server lacks, and one that will not attach have no tabs here.
     for (const error of ["browser.pane.replaced", "browser.pane.missing"])
       expect(sessionTabs(transition(start, paneState(start, null, error)).state, target, stored)).toEqual([])
+    expect(
+      sessionTabs(createInitialState(active), { ...target, server: { id: server, compatible: false } }, stored),
+    ).toEqual([])
+  })
+
+  // A tab drawn before the first inventory shows a loader for its content. That wait must end: in the pane, or in
+  // the pane saying that the browser could not open, with a way to try again.
+  test("a pane with no inventory waits only while one is on its way, then says the browser could not open", () => {
+    const start = replay(attach()).state
+
+    const fail = (state: State): State =>
+      transition(state, { type: "register.timed-out", sessionKey: key, attempt: attempt(state) }).state
+
+    const retry = (state: State): State =>
+      transition(state, { type: "retry.due", sessionKey: key, attempt: attempt(state) }).state
+
+    // Each failure in a row, in backoff: the first PENDING_RETRIES still wait, the next does not.
+    const failures = Array.from({ length: PENDING_RETRIES + 1 }).reduce<State[]>(
+      (states) => [...states, fail(states.length ? retry(states[states.length - 1]!) : start)],
+      [],
+    )
+
+    const unsupported = transition(start, paneState(start, null, "browser.pane.unsupported")).state
+    const paused = replay(attach(), createInitialState({ status: "inactive" })).state
+    const view = (state: State) => [sessionPending(state, target), sessionUnavailable(state, key)]
+
+    expect(view(start)).toEqual([true, false])
+    expect(failures.map(view)).toEqual([...Array.from({ length: PENDING_RETRIES }, () => [true, false]), [false, true]])
+    // The timer's next registration changes nothing the person sees; their own retry of it waits again, without a
+    // second registration.
+    const again = retry(failures[failures.length - 1]!)
+    const asked = transition(again, { type: "session.retry", sessionKey: key })
+    expect(view(again)).toEqual([false, true])
+    expect([view(asked.state), asked.effects]).toEqual([[true, false], []])
+    expect(view(unsupported)).toEqual([false, true])
+    // A paused pane says so itself, and one with an inventory shows its tabs.
+    expect(view(paused)).toEqual([false, false])
+    expect(view(ready(start))).toEqual([false, false])
+
+    // The person's retry registers at once, in place of the timer, and waits again.
+    for (const state of [failures[failures.length - 1]!, unsupported]) {
+      const retried = transition(state, { type: "session.retry", sessionKey: key })
+      expect(phase(retried.state)).toMatchObject({ status: "registering", attempts: 0 })
+      expect(types(retried.effects).filter((type) => type !== "cancel-retry")).toEqual(["open-registration", "schedule-register-timeout"])
+      expect(view(retried.state)).toEqual([true, false])
+    }
+
+    expect(types(transition(failures[0]!, { type: "session.retry", sessionKey: key }).effects)).toContain("cancel-retry")
+    // Nothing to try again where the pane is on its first way, open, or another window's.
+    const replaced = transition(start, paneState(start, null, "browser.pane.replaced")).state
+
+    for (const state of [start, ready(start), replaced, paused])
+      expect(transition(state, { type: "session.retry", sessionKey: key }).state).toBe(state)
   })
 
   // A tab drawn from the saved state can be closed or selected before the desktop reports it. With no inventory there

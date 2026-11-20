@@ -21,7 +21,7 @@ import {
   type Zoom,
 } from "./connection"
 import { recordable, remember, withIcon } from "./history"
-import { forgetTabs, saveTabs } from "./saved-tabs"
+import { forgetTabs, saveIcon, saveTabs } from "./saved-tabs"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
 import { workspacePrefix } from "./remote-address"
@@ -49,6 +49,7 @@ import {
   sessionSuspended,
   sessionTab,
   sessionTabs,
+  sessionUnavailable,
   unseenActivity,
   revealGuard,
   transition,
@@ -467,8 +468,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     })
   }
 
-  // The session's tabs as the desktop reports them, which the strip draws when the app opens again, before the desktop
-  // has attached.
+  // The session's tabs as the desktop reports them. The strip draws them when the app opens again, before the desktop
+  // has attached, and holds each label until the tab's page has its own again.
   const save = (sessionKey: string) => {
     const tabs = sessionBrowser(machine(), sessionKey)?.tabs
     const next = tabs && saveTabs(saved.value, sessionKey, tabs)
@@ -505,6 +506,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     const visits = url && event.icon ? withIcon(history.value.visits, url, event.icon) : undefined
 
     if (visits) history.set({ visits })
+    const kept = event.icon ? saveIcon(saved.value, sessionKey, event.tabID, event.icon) : undefined
+
+    if (kept) saved.set(kept)
   }
 
   const detach = (sessionKey: string) => {
@@ -938,6 +942,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       history.set({ visits: [] })
     },
     pending: (session: SessionRef) => sessionPending(machine(), session),
+    /** The browser could not open and has no tabs to show: the pane says so and offers `retry`. */
+    unavailable: (session: Session) => sessionUnavailable(machine(), session.key),
+    retry: (session: Session) => dispatch({ type: "session.retry", sessionKey: session.key }),
     /**
      * Tab IDs to list in the side panel: the desktop's inventory, limited to tabs stored in the strip. Until the first
      * inventory arrives, the stored tabs, so a restored selection holds; that inventory then prunes the ones it lacks.

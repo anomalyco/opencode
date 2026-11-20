@@ -1205,7 +1205,6 @@ export function mountBrowserRegion(input: RegionHost) {
     const alpha = "browser-test\nses_alpha"
     const beta = "browser-test\nses_beta"
     const tabID = Browser.TabID.make("tab_33333333-3333-3333-3333-333333333333")
-    const docsID = Browser.TabID.make("tab_66666666-6666-6666-6666-666666666666")
 
     const [store, setStore] = createStore<RegionFixtureState>({
       session: alpha,
@@ -1530,15 +1529,16 @@ export function mountBrowserRegion(input: RegionHost) {
       )
     }
 
-    // A second page of Beta's, beside the tab it was left on.
-    const docs = (title: string) => ({ ...tab(docsID), url: "https://example.com/docs", title })
+    // What main sends Beta's latest registration, as the JSON a test wrote, read by the Ipc's own event schema.
+    const [mainEvent, setMainEvent] = createSignal<HTMLTextAreaElement>()
 
-    // The desktop answers Beta's latest registration with both of its tabs.
-    const report = (tabs: Browser.Tab[]) => {
+    const sendMainEvent = () => {
       const binding = latest()?.binding
+      const field = mainEvent()
 
-      if (binding)
-        listeners.forEach((listener) => listener({ binding, event: { type: "state", state: { tabs, focusedTabID: tabID } } }))
+      if (!binding || !field) return
+      const sent = Schema.decodeUnknownSync(BrowserPane.spec.events.event)({ binding, event: JSON.parse(field.value) })
+      listeners.forEach((listener) => listener(sent))
     }
 
     // As main reports a page's prompt on Beta's tab.
@@ -1756,7 +1756,6 @@ export function mountBrowserRegion(input: RegionHost) {
               </button>
               {/* Off screen, like the agent's request above, so the strip keeps its place: a test dispatches each click. */}
               <div style={{ position: "absolute", left: "-9999px" }}>
-                <button onClick={() => report([tab(tabID), docs("Docs")])}>Two tabs</button>
                 {/* The plugin's instance ends and a new one starts over the same storage and strip, as the app does. */}
                 <button
                   onClick={() => {
@@ -1766,8 +1765,8 @@ export function mountBrowserRegion(input: RegionHost) {
                 >
                   Quit and reopen
                 </button>
-                {/* As main reports tabs it restored: their pages are not loaded, so they carry no title yet. */}
-                <button onClick={() => report([{ ...tab(tabID), title: "" }, docs("")])}>Restored inventory</button>
+                <textarea aria-label="Main event" ref={setMainEvent} />
+                <button onClick={sendMainEvent}>Send main event</button>
               </div>
               <button onClick={() => setStore("away", true)}>Pane away</button>
               <button onClick={() => setStore("away", false)}>Pane back</button>

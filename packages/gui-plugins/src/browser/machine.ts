@@ -7,6 +7,12 @@ export const RETRY_BASE_MS = 1_000
 
 export const RETRY_MAX_MS = 30_000
 
+/**
+ * How many registrations may fail in a row while a pane with nothing to show yet still counts as on its way. Past
+ * that the retries go on, and the pane says the browser could not open.
+ */
+export const PENDING_RETRIES = 4
+
 /** The pane's main-process Ipc: running in a generation, starting or restarting, or gone. */
 export type Ipc =
   | { readonly status: "active"; readonly generation: number }
@@ -195,6 +201,8 @@ export type Event =
   | { readonly type: "session.located"; readonly sessionKey: string; readonly located: boolean }
   /** A user or agent edge asks for the pane: focus, a key, the route, or a Session execution. */
   | { readonly type: "session.wake"; readonly sessionKey: string }
+  /** The person asks to open the browser again, from a pane that said it could not (`sessionUnavailable`). */
+  | { readonly type: "session.retry"; readonly sessionKey: string }
   /** The server finished creating the session. */
   | { readonly type: "session.created"; readonly sessionKey: string }
   | {
@@ -392,9 +400,9 @@ export function sessionAttached(state: State, sessionKey: string) {
 }
 
 /**
- * The desktop has not answered with its first inventory yet, and can without the person acting: the routed session is
- * about to attach, it registered and waits, it waits for the pane's Ipc to start, a retry timer registers it again, or
- * its server has no browser yet, which lifts when the server's plugins change.
+ * The desktop has not answered with its first inventory yet, and is on its way to: the routed session is about to
+ * attach, it registered and waits, it waits for the pane's Ipc to start, or it registers again after no more than
+ * `PENDING_RETRIES` failures in a row.
  */
 export function sessionPending(state: State, target: Target) {
   if (state.status === "disposed") return false
@@ -406,28 +414,46 @@ export function sessionPending(state: State, target: Target) {
   const phase = attachment.phase
 
   return (
-    phase.status === "registering" ||
     phase.status === "ready" ||
-    phase.status === "backoff" ||
-    (phase.status === "blocked" && phase.reason === "unsupported") ||
+    ((phase.status === "registering" || phase.status === "backoff") && phase.attempts <= PENDING_RETRIES) ||
     (phase.status === "suspended" && phase.reason === "ipc" && state.ipc.status === "pending")
   )
 }
 
 /**
+ * The session's browser could not open, and no inventory says what it had: its server has no browser, or registering
+ * failed more than `PENDING_RETRIES` times in a row, while the retries go on. The pane says so in place of the page
+ * and offers to try again (`session.retry`), never a loader with no end.
+ */
+export function sessionUnavailable(state: State, sessionKey: string) {
+  const attachment = attachmentOf(state, sessionKey)
+
+  if (!attachment || attachment.browser) return false
+  const phase = attachment.phase
+
+  return (
+    (phase.status === "blocked" && phase.reason === "unsupported") ||
+    ((phase.status === "registering" || phase.status === "backoff") && phase.attempts > PENDING_RETRIES)
+  )
+}
+
+/**
  * Tab IDs to list in the side panel: the desktop's inventory, limited to tabs stored in the strip. Until the first
- * inventory arrives, the stored tabs, whatever the binding does meanwhile, so the strip keeps its tabs and its
- * selection; that inventory then prunes the ones it lacks. A session another window took, or one the server lacks,
+ * inventory arrives, the stored tabs, whatever the session's binding does meanwhile, so the strip keeps its tabs and
+ * its selection; that inventory then prunes the ones it lacks. A session another window took, or one the server lacks,
  * lists none.
  */
 export function sessionTabs(state: State, target: Target, open: readonly string[]) {
   if (state.status === "disposed") return []
   const attachment = state.sessions[target.key]
 
-  if (attachment?.browser) return attachment.browser.tabs.flatMap((tab) => (open.includes(tab.id) ? [tab.id] : []))
-  const phase = attachment?.phase
+  // Not attached, as on a server whose version does not work with this app: only a session about to attach lists.
+  if (!attachment) return sessionPending(state, target) ? open : []
 
-  return phase?.status === "blocked" && phase.reason !== "unsupported" ? [] : open
+  if (attachment.browser) return attachment.browser.tabs.flatMap((tab) => (open.includes(tab.id) ? [tab.id] : []))
+  const phase = attachment.phase
+
+  return phase.status === "blocked" && phase.reason !== "unsupported" ? [] : open
 }
 
 export function sessionBrowser(state: State, sessionKey: string) {
@@ -700,6 +726,19 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       const next = wake(state,key,suspend(attachment,"idle"),false)
 
       return {...next,effects:[...stop(key,phase),...next.effects]}
+    }
+
+    case "session.retry": {
+      // A registration is already under way: it only counts the failures in a row from the start again.
+      if (phase.status === "registering")
+        return phase.attempts === 0 ? { state, effects: [] } : put(state, key, { ...attachment, phase: { ...phase, attempts: 0 } })
+
+      if (phase.status !== "backoff" && !(phase.status === "blocked" && phase.reason === "unsupported"))
+        return { state, effects: [] }
+      // Registers now, in place of a retry timer.
+      const next = wake(state, key, suspend(attachment, "idle"), false)
+
+      return { ...next, effects: [...stop(key, phase), ...next.effects] }
     }
 
     case "session.located":

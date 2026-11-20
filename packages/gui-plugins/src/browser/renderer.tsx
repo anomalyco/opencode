@@ -30,7 +30,7 @@ import {
   type BrowserModelEvent,
 } from "./model-machine"
 import { PageIcon } from "./page-icon"
-import { savedTab, tabTitle } from "./saved-tabs"
+import { savedTab, tabIcon, tabTitle } from "./saved-tabs"
 import { artifactLink, artifactWebURL } from "./artifact-link"
 import { attachable } from "./prompt-gate"
 import { remotePath, workspacePrefix } from "./remote-address"
@@ -514,7 +514,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   const tabs = new Map<string, Map<string, BuiltinPanelTab>>()
 
   const create = (session: string, id: string): BuiltinPanelTab => {
-    // The tab's page as the last run left it, which the strip draws until the desktop reports the tab again.
+    // The tab's page as the last run left it. The strip draws it until the desktop reports the tab again, and keeps
+    // its title and icon until the tab's page has its own, so the label never changes while a restored page loads.
     const saved = () => savedTab(ctx.stores.tabs.value, session, id)
     const page = () => model()?.tab({ key: session }, id) ?? saved()
 
@@ -524,12 +525,10 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       return !tab?.url || tab.url === "about:blank" ? ctx.t("tab.new") : tabTitle(tab, saved()) || tab.url
     }
 
-    // Until the tab's page reports its own icon, the one the history keeps for its address.
     const icon = () => {
-      const details = model()?.page({ key: session }, id)
-      const url = page()?.url
+      const tab = page()
 
-      return details ? details.icon : ctx.stores.history.value.visits.find((visit) => visit.url === url)?.icon
+      return tab && tabIcon(tab, model()?.page({ key: session }, id)?.icon, saved())
     }
 
     return {
@@ -568,6 +567,22 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     </div>
   )
 
+  // The browser could not open: its model failed to load (`detail` says why), or the session's server has no browser
+  // or keeps refusing the pane. The strip keeps the tab, which can still be closed.
+  const Failed = (props: { detail?: string; retry: () => void }) => (
+    <div role="alert" class="size-full flex flex-col items-center justify-center gap-3 px-4 text-center">
+      <div class="flex flex-col gap-1">
+        <div class="text-13-regular text-text-strong">{ctx.t("model.failed")}</div>
+        <Show when={props.detail}>
+          <div class="text-12-regular text-text-weak break-words">{props.detail}</div>
+        </Show>
+      </div>
+      <Button size="small" variant="outline" onClick={() => props.retry()}>
+        {ctx.t("common.retry")}
+      </Button>
+    </div>
+  )
+
   const SessionBrowserPane = lazy(() => import("./panel"))
   onCleanup(onIdle(() => void SessionBrowserPane.preload()))
   ctx.add(BuiltinPanel, {
@@ -589,35 +604,35 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
       return [...next.values()]
     },
-    // Until the desktop's first inventory names its tabs, the pane has no page to show: the tab's content loads.
+    // Until the desktop's first inventory names its tabs, the pane has no page to show: the tab's content loads, or
+    // says that the browser could not open. Every wait ends in the pane or in that.
     render: (props) => (
       <Switch fallback={<Waiting />}>
         <Match when={model()}>
           {(value) => (
-            <Show when={!value().pending(props.session)} fallback={<Waiting />}>
-              <Suspense>
-                <SessionBrowserPane
-                  tab={() => props.tab}
-                  session={props.session}
-                  screen={props.screen}
-                  model={value()}
-                />
-              </Suspense>
-            </Show>
+            <Switch
+              fallback={
+                <Suspense>
+                  <SessionBrowserPane
+                    tab={() => props.tab}
+                    session={props.session}
+                    screen={props.screen}
+                    model={value()}
+                  />
+                </Suspense>
+              }
+            >
+              <Match when={value().pending(props.session)}>
+                <Waiting />
+              </Match>
+              <Match when={value().unavailable(props.session)}>
+                <Failed retry={() => value().retry(props.session)} />
+              </Match>
+            </Switch>
           )}
         </Match>
         <Match when={selectBrowserModelError(modelState())}>
-          {(error) => (
-            <div role="alert" class="size-full flex flex-col items-center justify-center gap-3 px-4 text-center">
-              <div class="flex flex-col gap-1">
-                <div class="text-13-regular text-text-strong">{ctx.t("model.failed")}</div>
-                <div class="text-12-regular text-text-weak break-words">{error()}</div>
-              </div>
-              <Button size="small" variant="outline" onClick={() => dispatchModel({ type: "retry.requested" })}>
-                {ctx.t("common.retry")}
-              </Button>
-            </div>
-          )}
+          {(error) => <Failed detail={error()} retry={() => dispatchModel({ type: "retry.requested" })} />}
         </Match>
       </Switch>
     ),
