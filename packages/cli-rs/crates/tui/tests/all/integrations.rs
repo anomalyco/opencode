@@ -246,7 +246,7 @@ fn integrations_match_typescript() {
     let open = |keys: &[&str], text: &str, fixture: &str| open_with("auto", keys, text, fixture);
     open(&["return"], "Connected accounts", "E.17a/accounts");
     open(&["down", "return"], "Connect OpenAI", "E.17a/methods");
-    open(&["down", "return", "down", "return"], "submit", "E.17a/key");
+    open(&["down", "return", "down", "return"], "Submit", "E.17a/key");
     open(&["down", "down", "return"], "Deployment", "E.17a/form");
     open(&["down", "down", "return", "return"], "Waiting for authorization", "E.17a/oauth");
     open_with("code", &["down", "return", "return"], "Authorization code", "E.17a/oauth-code");
@@ -262,7 +262,7 @@ fn an_api_key_connects_and_opens_the_provider_models() {
     kit.wait_for("Connect OpenAI");
     kit.down(1);
     kit.app.press("return");
-    kit.wait_for("submit");
+    kit.wait_for("Submit");
     kit.app.press("return");
     kit.app.type_text("sk-test");
     // Counted before the submit: the catalog read after it can land during the key press.
