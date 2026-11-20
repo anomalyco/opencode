@@ -156,6 +156,7 @@ fn draw_plan(grid: &mut Grid, plan: &RenderPlan, ramp: bool) {
 /// Draws with the source direction; a horizontal diagram wider than `max_width` folds to vertical when that is
 /// narrower.
 pub fn draw(source: &Diagram, max_width: Option<i32>) -> Result<Grid, DrawError> {
+    super::routing::LABEL_CHECKS.set(super::routing::MAX_LABEL_CHECKS);
     let direction = source.direction;
     let (Some(max_width), true) = (max_width, direction.horizontal()) else { return draw_with(source, direction) };
     let fallback = if direction == FlowDirection::RL { FlowDirection::BT } else { FlowDirection::TB };

@@ -169,3 +169,138 @@ impl SpatialIndex {
         true
     }
 }
+
+/// The cells of a set of claims, by role: answers [`SpatialIndex::is_free`] for a claim with no owner or contacts
+/// among them from per-row counts, instead of a walk over every claim.
+pub struct CellIndex {
+    left: i32,
+    top: i32,
+    width: i32,
+    rows: i32,
+    roles: Vec<u8>,
+    /// For each role and row, how many of the row's first columns hold that role.
+    counts: Vec<u32>,
+}
+
+const ROLES: [Role; 5] = [Role::Label, Role::Route, Role::Body, Role::Boundary, Role::Terminal];
+
+fn role_index(role: Role) -> usize {
+    ROLES.iter().position(|candidate| *candidate == role).unwrap_or(0)
+}
+
+impl CellIndex {
+    pub fn new(index: &SpatialIndex) -> Self {
+        let mut cells = Self { left: 0, top: 0, width: 0, rows: 0, roles: Vec::new(), counts: Vec::new() };
+        let spans = || index.claims.iter().flat_map(|claim| &claim.spans);
+        if let (Some(left), Some(right), Some(top), Some(bottom)) = (
+            spans().map(|span| span.from_x).min(),
+            spans().map(|span| span.to_x).max(),
+            spans().map(|span| span.y).min(),
+            spans().map(|span| span.y).max(),
+        ) {
+            cells.cover(left, top, right, bottom);
+        }
+        for claim in &index.claims {
+            cells.mark(claim);
+        }
+        for role in 0..ROLES.len() {
+            for row in 0..cells.rows {
+                cells.count(role, row);
+            }
+        }
+        cells
+    }
+
+    pub fn add(&mut self, claim: &Claim) {
+        let Some(left) = claim.spans.iter().map(|span| span.from_x).min() else { return };
+        let right = claim.spans.iter().map(|span| span.to_x).max().unwrap_or(left);
+        let top = claim.spans.iter().map(|span| span.y).min().unwrap_or(0);
+        let bottom = claim.spans.iter().map(|span| span.y).max().unwrap_or(top);
+        self.cover(left, top, right, bottom);
+        self.mark(claim);
+        for row in top..=bottom {
+            self.count(role_index(claim.role), row - self.top);
+        }
+    }
+
+    fn mark(&mut self, claim: &Claim) {
+        let role = role_index(claim.role);
+        for span in &claim.spans {
+            let row = span.y - self.top;
+            for column in span.from_x - self.left..=span.to_x - self.left {
+                self.roles[(row * self.width + column) as usize] |= 1 << role;
+            }
+        }
+    }
+
+    /// Grows the grid, with a margin, to hold the cells from `(left, top)` to `(right, bottom)`.
+    fn cover(&mut self, left: i32, top: i32, right: i32, bottom: i32) {
+        let inside = |cells: &Self| {
+            left >= cells.left
+                && top >= cells.top
+                && right < cells.left + cells.width
+                && bottom < cells.top + cells.rows
+        };
+        if self.width > 0 && inside(self) {
+            return;
+        }
+        let empty = self.width == 0;
+        let new_left = if empty { left } else { self.left.min(left) } - 32;
+        let new_top = if empty { top } else { self.top.min(top) } - 32;
+        let new_right = if empty { right } else { (self.left + self.width - 1).max(right) } + 32;
+        let new_bottom = if empty { bottom } else { (self.top + self.rows - 1).max(bottom) } + 32;
+        let (width, rows) = (new_right - new_left + 1, new_bottom - new_top + 1);
+        let mut roles = vec![0; (width * rows) as usize];
+        for row in 0..self.rows {
+            for column in 0..self.width {
+                let at = ((row + self.top - new_top) * width + column + self.left - new_left) as usize;
+                roles[at] = self.roles[(row * self.width + column) as usize];
+            }
+        }
+        *self = Self {
+            left: new_left,
+            top: new_top,
+            width,
+            rows,
+            roles,
+            counts: vec![0; ROLES.len() * (rows * (width + 1)) as usize],
+        };
+        for role in 0..ROLES.len() {
+            for row in 0..rows {
+                self.count(role, row);
+            }
+        }
+    }
+
+    /// Recounts `row` of `role`.
+    fn count(&mut self, role: usize, row: i32) {
+        let base = ((role as i32 * self.rows + row) * (self.width + 1)) as usize;
+        let mut total = 0;
+        for column in 0..self.width as usize {
+            total += u32::from(self.roles[row as usize * self.width as usize + column] & (1 << role) != 0);
+            self.counts[base + column + 1] = total;
+        }
+    }
+
+    /// Whether a cell from `from` to `to` on row `y` holds `role`.
+    fn any(&self, role: usize, y: i32, from: i32, to: i32) -> bool {
+        let row = y - self.top;
+        let (start, end) = ((from - self.left).max(0), (to - self.left + 1).min(self.width));
+        if row < 0 || row >= self.rows || start >= end {
+            return false;
+        }
+        let base = (role as i32 * self.rows + row) * (self.width + 1);
+        self.counts[(base + end) as usize] > self.counts[(base + start) as usize]
+    }
+
+    /// Whether `spans` keep each role's `clearance` from every claimed cell.
+    pub fn is_free(&self, spans: &[SpatialSpan], clearance: impl Fn(Role) -> Clearance) -> bool {
+        ROLES.iter().enumerate().all(|(role, &kind)| {
+            let clearance = clearance(kind);
+            spans.iter().all(|span| {
+                (span.y - clearance.y..=span.y + clearance.y)
+                    .all(|y| !self.any(role, y, span.from_x - clearance.x, span.to_x + clearance.x))
+            })
+        })
+    }
+}

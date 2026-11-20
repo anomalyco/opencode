@@ -6,7 +6,7 @@ use super::layout::{NoteBox, note_connector_of};
 use super::{Diagram, StateKind, Transition, is_hidden_composite_marker, manhattan_path, search_space};
 use crate::core::drawing::{CornerStyle, Directions, LineStyle, ROUNDED, line_glyph};
 use crate::core::geometry::{Bounds, Direction, Point, orthogonal_path_points};
-use crate::core::spatial::{Clearance, ClearancePolicy, Policy, Role, SpatialIndex, path_claim, rect_claim};
+use crate::core::spatial::{CellIndex, Clearance, Policy, Role, SpatialIndex, path_claim, rect_claim, rect_spans};
 use crate::core::text::{split_lines, width};
 use crate::flowchart::types::FlowDirection;
 
@@ -1202,6 +1202,75 @@ fn near_path(width: i32, height: i32, path: &[(i32, i32)]) -> Option<Near> {
     })
 }
 
+/// Each cell's distance to a route, capped at 9, over the cells a label whose top-left cell is `near` covers. A label's
+/// distance to the route is the least of its cells', so one breadth-first pass answers every spot of the search.
+struct Field {
+    left: i32,
+    top: i32,
+    width: i32,
+    distance: Vec<u8>,
+}
+
+impl Field {
+    fn new(near: Near, label_width: i32, height: i32, path: &[(i32, i32)]) -> Self {
+        let (left, top) = (near.left, near.top);
+        let width = near.right + label_width - left;
+        let rows = near.bottom + height - top;
+        let mut distance = vec![9u8; (width * rows) as usize];
+        let mut queue: std::collections::VecDeque<(i32, i32)> = std::collections::VecDeque::new();
+        for &(x, y) in path {
+            let slot = ((y - top) * width + x - left) as usize;
+            if distance[slot] != 0 {
+                distance[slot] = 0;
+                queue.push_back((x, y));
+            }
+        }
+        while let Some((x, y)) = queue.pop_front() {
+            let next = distance[((y - top) * width + x - left) as usize] + 1;
+            if next >= 9 {
+                continue;
+            }
+            for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
+                if nx < left || nx >= left + width || ny < top || ny >= top + rows {
+                    continue;
+                }
+                let slot = ((ny - top) * width + nx - left) as usize;
+                if distance[slot] > next {
+                    distance[slot] = next;
+                    queue.push_back((nx, ny));
+                }
+            }
+        }
+        Self { left, top, width, distance }
+    }
+
+    /// [`label_distance`] for a label whose top-left cell lies in the field's `Near`, or 9 past 8.
+    fn label(&self, x: i32, y: i32, label_width: i32, height: i32) -> i32 {
+        (y..y + height)
+            .flat_map(|row| (x..x + label_width).map(move |column| (column, row)))
+            .map(|(column, row)| {
+                i32::from(self.distance[((row - self.top) * self.width + column - self.left) as usize])
+            })
+            .min()
+            .unwrap_or(9)
+    }
+}
+
+/// The spots `distance` steps from `(x, y)`, in the order the label searches go round, on the rows from `rows.0` to
+/// `rows.1` only: by column, then by row.
+fn ring(x: i32, y: i32, distance: i32, rows: (i32, i32)) -> Vec<(i32, i32)> {
+    let mut spots = Vec::new();
+    for row in rows.0.max(y - distance)..=rows.1.min(y + distance) {
+        let dx = distance - (row - y).abs();
+        spots.push((x - dx, row));
+        if dx != 0 {
+            spots.push((x + dx, row));
+        }
+    }
+    spots.sort_unstable();
+    spots
+}
+
 fn label_candidates(plan: &RenderPlan, width: i32, height: i32) -> Vec<(i32, i32)> {
     let mut candidates: IndexMap<(i32, i32), ()> = IndexMap::new();
     if let Some(label) = &plan.label
@@ -1255,6 +1324,15 @@ fn path_points(path: &[(i32, i32)]) -> Vec<Point> {
     path.iter().map(|&(x, y)| Point { x, y }).collect()
 }
 
+/// The label spots one diagram may check: a few thousand for the diagrams people draw, about three million for 128
+/// labeled transitions between two states. Past it the layout fails and the fence shows its source.
+pub const MAX_LABEL_CHECKS: u64 = 4_000_000;
+
+thread_local! {
+    /// The label spots the diagram being drawn may still check.
+    pub(super) static LABEL_CHECKS: std::cell::Cell<u64> = const { std::cell::Cell::new(MAX_LABEL_CHECKS) };
+}
+
 fn place_labels(
     plans: Vec<RenderPlan>,
     diagram: &Diagram,
@@ -1284,7 +1362,8 @@ fn place_labels(
         }
     }
     claims.extend(note_claims(notes, bounds));
-    let mut space = SpatialIndex::default().add(claims);
+    // Claims of one ID replace each other, as in a spatial index.
+    let mut cells = CellIndex::new(&SpatialIndex::default().add(claims));
 
     let mut counts: HashMap<(&str, &str), i32> = HashMap::new();
     for plan in &plans {
@@ -1335,73 +1414,72 @@ fn place_labels(
             None
         };
         let corridor_bottom = plan.path.iter().map(|p| p.1).max().unwrap_or(0);
-        let strict = plan.repaired || side || lanes || corridor_top.is_some();
-        let policy = Policy {
-            contacts: Vec::new(),
-            clearance: ClearancePolicy::ByRole(vec![
-                (Role::Body, Clearance { x: padding, y: padding }),
-                (Role::Label, Clearance { x: 1, y: 1 }),
-                (Role::Route, if strict { Clearance { x: 1, y: 0 } } else { Clearance::default() }),
-            ]),
+        // The rows a label may take: `is_clear` refuses the others.
+        let (lowest, highest) = match corridor_top {
+            Some(top) => (top.max(0), corridor_bottom),
+            None => (0, i32::MAX),
         };
-        let is_clear = |space: &SpatialIndex, x: i32, y: i32| {
+        let strict = plan.repaired || side || lanes || corridor_top.is_some();
+        let clearance = |role: Role| match role {
+            Role::Body => Clearance { x: padding, y: padding },
+            Role::Label => Clearance { x: 1, y: 1 },
+            Role::Route if strict => Clearance { x: 1, y: 0 },
+            _ => Clearance::default(),
+        };
+        let is_clear = |cells: &CellIndex, x: i32, y: i32| {
+            let left = LABEL_CHECKS.get();
+            if left == 0 {
+                return false;
+            }
+            LABEL_CHECKS.set(left - 1);
             if x < 0 || y < 0 || corridor_top.is_some_and(|top| y < top || y > corridor_bottom) {
                 return false;
             }
-            space.is_free(&claim(x, y), &policy)
+            cells.is_free(&rect_spans(&Bounds::rect(x, y, label_width, height)), clearance)
+        };
+        let near = near_path(label_width, height, &plan.path);
+        let field = std::cell::OnceCell::new();
+        // `label_distance`, or 9 for any distance past 8.
+        let path_distance = |x: i32, y: i32| match near {
+            _ if label_width <= 0 => label_distance(x, y, label_width, height, &plan.path),
+            None => i32::MAX,
+            Some(near) if x < near.left || x > near.right || y < near.top || y > near.bottom => 9,
+            Some(near) => {
+                field.get_or_init(|| Field::new(near, label_width, height, &plan.path)).label(x, y, label_width, height)
+            }
         };
         let candidates = label_candidates(plan, label_width, height);
-        let nearby = candidates.iter().copied().find(|&(x, y)| {
-            (!strict || label_distance(x, y, label_width, height, &plan.path) >= 2) && is_clear(&space, x, y)
-        });
+        let nearby =
+            candidates.iter().copied().find(|&(x, y)| (!strict || path_distance(x, y) >= 2) && is_clear(&cells, x, y));
         let (mut x, mut y) = nearby.or(candidates.first().copied()).unwrap_or((label.x, label.y));
         if nearby.is_none() {
-            let near = near_path(label_width, height, &plan.path);
             let reach = near.map_or(0, |near| {
                 (x - near.left).abs().max((x - near.right).abs()) + (y - near.top).abs().max((y - near.bottom).abs())
             });
-            'search: for distance in 1..500.min(reach + 1) {
-                for dx in -distance..=distance {
-                    let dy = distance - dx.abs();
-                    let ys = if dy == 0 { vec![y] } else { vec![y - dy, y + dy] };
-                    for cy in ys {
-                        let cx = x + dx;
-                        if near
-                            .is_none_or(|near| cx < near.left || cx > near.right || cy < near.top || cy > near.bottom)
-                        {
-                            continue;
-                        }
-                        let path_distance = label_distance(cx, cy, label_width, height, &plan.path);
-                        if !(2..=8).contains(&path_distance) || !is_clear(&space, cx, cy) {
-                            continue;
-                        }
-                        x = cx;
-                        y = cy;
-                        break 'search;
-                    }
-                }
+            if let Some(near) = near {
+                let rows = (near.top.max(lowest), near.bottom.min(highest));
+                let spot = (1..500.min(reach + 1)).flat_map(|distance| ring(x, y, distance, rows)).find(|&(cx, cy)| {
+                    cx >= near.left
+                        && cx <= near.right
+                        && (2..=8).contains(&path_distance(cx, cy))
+                        && is_clear(&cells, cx, cy)
+                });
+                (x, y) = spot.unwrap_or((x, y));
             }
         }
-        if !is_clear(&space, x, y) {
-            'fallback: for distance in 1..500i32 {
-                for dx in -distance..=distance {
-                    let dy = distance - dx.abs();
-                    let ys = if dy == 0 { vec![y] } else { vec![y - dy, y + dy] };
-                    for cy in ys {
-                        if !is_clear(&space, x + dx, cy) {
-                            continue;
-                        }
-                        x += dx;
-                        y = cy;
-                        break 'fallback;
-                    }
-                }
-            }
+        if !is_clear(&cells, x, y) {
+            let spot = (1..500)
+                .flat_map(|distance| ring(x, y, distance, (lowest, highest)))
+                .find(|&(cx, cy)| is_clear(&cells, cx, cy));
+            (x, y) = spot.unwrap_or((x, y));
         }
-        if !is_clear(&space, x, y) {
+        if LABEL_CHECKS.get() == 0 {
+            return Err("State transition labels need too many checks".to_string());
+        }
+        if !is_clear(&cells, x, y) {
             return Err(format!("Transition {} has no clear label position", plan.route.from_id));
         }
-        space = space.add([claim(x, y)]);
+        cells.add(&claim(x, y));
         let mut next = plan.clone();
         next.label = Some(Label { x, y, lines: label.lines.clone() });
         placed.insert(index, next);
