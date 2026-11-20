@@ -13,9 +13,10 @@ export function createDesktopNotify(api: DesktopNotifyAPI): Platform["notify"] {
 
     if (focused) return
 
+    // No icon: the system already shows the app icon, and an icon here shows the logo a second time, as a thumbnail
+    // on macOS and a large image on Windows.
     const notification = new Notification(title, {
       body: description ?? "",
-      icon: "https://opencode.ai/favicon-96x96-v3.png",
       silent: true,
     })
 
