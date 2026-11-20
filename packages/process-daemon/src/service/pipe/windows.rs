@@ -949,8 +949,9 @@ fn compare_keys(a: &[u16], b: &[u16]) -> Ordering {
 /// PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_DISABLE_PROCESS_TREE, which
 /// windows-sys does not define. By default a Store app such as Store
 /// PowerShell 7 starts its children outside its package, and so outside every
-/// job; with this policy they stay in the job. Descendants inherit it, so it
-/// also holds for a Store app started further down the tree.
+/// job; with this policy they stay in the job. It only helps when the Store app
+/// is the program itself: one started further down the tree, e.g. by cmd.exe,
+/// still breaks away with its children.
 static KEEP_DESKTOP_APP_CHILDREN: u32 = 0x02;
 
 /// An initialized process-attribute list and the buffer it points into, freed
