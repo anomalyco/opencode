@@ -19,7 +19,7 @@ import type { Tool } from "./tool.js"
 export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type
 
-/** Where a typed path points, from its text alone. */
+/** Where a typed path points. */
 export const Place = Schema.Struct({
   absolute: AbsolutePath,
   environment: Schema.Struct({ id: Environment.ID }),
@@ -67,7 +67,11 @@ export interface ReadOptions {
 }
 
 export interface Interface {
-  /** Where a typed path points, from its text alone: nothing is looked up and no disk is touched. */
+  /**
+   * Where a typed path points, from its text: no disk is touched and no machine is called. Only a path that starts at
+   * a machine's home consults anything: the home in that machine's live hello, held in memory. It fails when the
+   * machine is unknown or offline.
+   */
   readonly locate: (path: string, base?: Place) => Effect.Effect<Place, Environment.Failed>
   /** Resolve a lexical path and its permission resources, without requesting approval. */
   readonly resolve: (input: ResolveInput) => Effect.Effect<Target, Environment.Failed>
@@ -117,33 +121,28 @@ const layer = Layer.effect(
       // Only text the model typed can name a machine: text derived from a target is a plain path on that target's
       // machine, and a shell there does not understand `gpu:`.
       const machine = !base && enabled ? MachinePath.parse(text) : undefined
-      if (machine) {
-        if (!machine.path.startsWith("/"))
-          return yield* new Environment.Failed({
-            path: text,
-            cause: new MachinePath.NotAbsolute({ machine: machine.machine }),
-          })
+      const id = machine?.machine ?? base?.environment.id ?? environment.id
+      if (!machine && id === environment.id)
         return {
-          absolute: AbsolutePath.make(path.posix.normalize(machine.path)),
-          environment: { id: machine.machine },
+          absolute: AbsolutePath.make(resolvePath(base?.absolute ?? location.directory, text)),
+          environment: { id },
         } satisfies Place
-      }
-      const home = base?.environment.id ?? environment.id
-      if (base && home !== environment.id) {
-        // A machine's home is not known yet, and its paths use POSIX rules rather than this server's.
-        if (text.startsWith("~"))
-          return yield* new Environment.Failed({
-            path: text,
-            cause: new MachinePath.NotAbsolute({ machine: home }),
-          })
-        return {
-          absolute: AbsolutePath.make(path.posix.resolve(base.absolute, text)),
-          environment: { id: home },
-        } satisfies Place
-      }
+      // A machine's paths use POSIX rules rather than this server's, and `~` there is that machine's home, never this
+      // server's. Only `~` and `~/` are read: another user's home or a shell's `~+` is not known here. With the flag
+      // off no home is asked for, so a base on another machine refuses every `~`.
+      const written = machine?.path ?? text
+      const rooted =
+        enabled && (written === "~" || written.startsWith("~/"))
+          ? path.posix.join(
+              yield* machines.home(id).pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause }))),
+              written.slice(1),
+            )
+          : written
+      if (rooted.startsWith("~"))
+        return yield* new Environment.Failed({ path: text, cause: new MachinePath.NotAbsolute({ machine: id }) })
       return {
-        absolute: AbsolutePath.make(resolvePath(base?.absolute ?? location.directory, text)),
-        environment: { id: home },
+        absolute: AbsolutePath.make(base ? path.posix.resolve(base.absolute, rooted) : path.posix.normalize(rooted)),
+        environment: { id },
       } satisfies Place
     })
 

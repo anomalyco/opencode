@@ -58,6 +58,8 @@ export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
   /** The machine's environment, connected or not: calls on an offline machine fail with `NotSent`. */
   readonly get: (id: Environment.ID) => Effect.Effect<Environment.Interface, NotFound>
+  /** The home directory in the hello of the machine's connection, failing with `NotSent` while it is offline. */
+  readonly home: (id: Environment.ID) => Effect.Effect<string, NotFound | Machine.NotSent>
   /** Serves one worker's connection, routed by the name in its hello, until it is lost or replaced. */
   readonly connect: (connection: Machine.Connection) => Effect.Effect<void, NotFound>
 }
@@ -121,6 +123,13 @@ const layer = Layer.effect(
         const machine = instances.get(id)
         if (!machine) return yield* new NotFound({ machine: id })
         return machine.environment
+      }),
+      home: Effect.fn("Machines.home")(function* (id) {
+        const machine = instances.get(id)
+        if (!machine) return yield* new NotFound({ machine: id })
+        const hello = machine.hello()
+        if (!hello) return yield* new Machine.NotSent({ machine: id })
+        return hello.home
       }),
       connect: Effect.fn("Machines.connect")(function* (connection) {
         const id = Environment.ID.make(connection.hello.name)
