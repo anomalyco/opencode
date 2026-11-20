@@ -226,15 +226,17 @@ pub fn schema() -> Value {
         } { }),
         ),
         ("Cause", unit!(Cause { First, Resized, Version, Animate })),
-        (
-            "Duration",
-            object(
+        ("Duration", {
+            let mut duration = object(
                 &[("secs", uint64()), ("nanos", json!({ "type": "integer", "minimum": 0, "maximum": 999_999_999 }))],
                 &[],
                 None,
-                "A span of time in whole seconds and nanoseconds, as serde writes `std::time::Duration`.",
-            ),
-        ),
+                "A span of time in whole seconds and nanoseconds, as serde writes `std::time::Duration`, which \
+                     refuses a field it does not know.",
+            );
+            duration["additionalProperties"] = json!(false);
+            duration
+        }),
         (
             "Palette",
             object!(Palette, "Every token of the page theme, by its path.", {

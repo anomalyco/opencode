@@ -272,7 +272,7 @@ export type Dragged = {
 --- What a `draw` request answers: bytes, not JSON, and none to keep the list the host holds. A version byte (1), then records: an operation byte, the payload's length as a little-endian u32, and the payload. Every integer is little-endian; coordinates are cells from the canvas's top left corner. A color is r, g, b, a bytes. A style is 10 bytes: flags (1 a foreground, 2 a background), attributes (bold 1, dim 2, italic 4, underline 8, inverse 16, strikethrough 32), then the foreground and the background colors, each written whether it is set or not. A border is 0 single, 1 double, 2 rounded, 3 heavy. A reader skips a record of an operation it does not know, which is how a later 2.x adds one; a list the host cannot read fails the plugin, and one over a limit shows a placeholder.
 export type DrawList = any
 
---- A span of time in whole seconds and nanoseconds, as serde writes `std::time::Duration`.
+--- A span of time in whole seconds and nanoseconds, as serde writes `std::time::Duration`, which refuses a field it does not know.
 export type Duration = {
     secs: number,
     nanos: number,
