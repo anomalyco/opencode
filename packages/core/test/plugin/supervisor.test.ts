@@ -206,23 +206,20 @@ describe("PluginSupervisor", () => {
     }),
   )
 
-  it.effect("updates only name@latest and Git branch packages, once per check interval", () =>
+  it.effect("updates every package with a newer version, once per check interval", () =>
     Effect.gen(function* () {
+      // Exact versions and full commit hashes never report a newer version (see Npm.check), so they aren't listed.
       const follows = [
         "latest-plugin@latest",
+        "plain-plugin",
+        "next-plugin@next",
+        "ranged-plugin@^1.0.0",
         "github:acme/default-plugin",
         "git+ssh://git@github.com/acme%2Fbranch-plugin.git#dev",
         "github:acme/plugins#dev::path:packages/subdirectory-plugin",
-      ]
-      source.operations = [
-        ...follows,
-        "plain-plugin",
-        "ranged-plugin@^1.0.0",
-        "next-plugin@next",
-        "exact-plugin@1.0.0",
-        "github:acme/pinned-plugin#0123456789abcdef0123456789abcdef01234567",
         "github:acme/ranged-plugin#semver:^1.0.0",
-      ].map((target) => ({ type: "add" as const, target, options: {} }))
+      ]
+      source.operations = follows.map((target) => ({ type: "add" as const, target, options: {} }))
       packages.available = true
       packages.updated = []
       const directory = yield* tmpdirScoped()

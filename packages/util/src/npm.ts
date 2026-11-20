@@ -66,44 +66,20 @@ export async function cacheKey(pkg: string) {
   return key(pkg, await parse(pkg))
 }
 
-/**
- * Whether newer versions of a package should install on their own: `name@latest`, or a Git branch or the repository's
- * default branch. A Git ref can't be told apart from a tag without asking the remote, so tags count too; they only
- * change when someone moves them. Exact versions, ranges, other dist-tags, `semver:` Git ranges and full commit
- * hashes don't.
- */
-export async function followsLatest(pkg: string) {
-  return (await parse(pkg))?.follows ?? false
-}
-
 type Target =
-  | {
-      readonly type: "registry"
-      readonly name: string
-      readonly spec: string
-      readonly mutable: boolean
-      readonly follows: boolean
-    }
-  | {
-      readonly type: "git"
-      readonly name?: string
-      readonly slug: string
-      readonly mutable: boolean
-      readonly follows: boolean
-    }
+  | { readonly type: "registry"; readonly name: string; readonly spec: string; readonly mutable: boolean }
+  | { readonly type: "git"; readonly name?: string; readonly slug: string; readonly mutable: boolean }
 
 async function parse(pkg: string): Promise<Target | undefined> {
   const { default: npa } = await import("npm-package-arg")
   try {
     const result = npa(pkg)
     if (result.type === "git") {
-      const mutable = !isCommit(result.gitCommittish)
       return {
         type: "git",
         ...(result.name ? { name: result.name } : {}),
         slug: gitSlug(pkg),
-        mutable,
-        follows: mutable && !result.gitRange,
+        mutable: !isCommit(result.gitCommittish),
       }
     }
     if (!result.name || !["version", "range", "tag"].includes(result.type)) return
@@ -112,7 +88,6 @@ async function parse(pkg: string): Promise<Target | undefined> {
       name: result.name,
       spec: result.raw === result.name ? "latest" : result.rawSpec,
       mutable: result.type !== "version",
-      follows: result.type === "tag" && result.raw !== result.name && result.rawSpec === "latest",
     }
   } catch {
     return

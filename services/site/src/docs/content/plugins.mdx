@@ -107,10 +107,15 @@ opencode plugin remove opencode-acme-plugin@1.2.0
 pass a configured package target to check or update only that package. Local plugins and exact package revisions are
 skipped.
 
-A package written as `name@latest`, or a Git package that follows a branch or the repository's default branch, updates
-itself: OpenCode checks it on startup and every 24 hours, installs a newer version, and reloads it. If the new version
-fails to load, the previous one keeps running and stays installed. Other npm tags, ranges, and Git `semver:` ranges only
-report that an update is available. A Git tag is handled like a branch, so it only updates if the tag is moved.
+Package plugins update themselves unless they're pinned to an exact npm version or a full Git commit hash. OpenCode
+checks them on startup and every 24 hours, installs a newer version, and reloads it. If the new version fails to load,
+the previous one keeps running and stays installed. Which version is newer depends on the target:
+
+- `name` and `name@latest` follow npm's `latest` tag. Other tags, such as `name@next`, follow that tag.
+- A range, such as `name@^1.2.0`, `name@~1.2.0`, `name@1.x` or `name@>=1.2.0 <2`, installs the newest version in
+  the range and never one outside it.
+- A Git package follows its branch, or the repository's default branch. A Git tag is handled like a branch, so it only
+  updates if the tag is moved. A Git `semver:` range installs the newest matching tag in the range.
 
 Package installation accepts npm names with versions, tags, or ranges, plus npm-compatible Git package specifications.
 Git repositories can use hosted shortcuts, HTTPS, or SSH, including private repositories available through your existing
