@@ -94,6 +94,10 @@ exports[`New timeline placement everything 1`] = `
   "assistant-part:part:part:msg_a12:exec_files [part] exec_files*",
   "assistant-part:file:part:msg_a12:exec_files:file:0:/repo/merged.ts [file diffs open] exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:part:part:msg_a13:exec_live [part] exec_live*",
+  "assistant-part:file:part:msg_a13:exec_live:file:0:/repo/live.ts [file diffs open] exec_live:file:0:/repo/live.ts",
 ]
 `;
 
@@ -183,6 +187,10 @@ exports[`New timeline placement detailed 1`] = `
   "assistant-part:part:part:msg_a12:exec_files [part] exec_files*",
   "assistant-part:file:part:msg_a12:exec_files:file:0:/repo/merged.ts [file diffs open] exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:part:part:msg_a13:exec_live [part] exec_live*",
+  "assistant-part:file:part:msg_a13:exec_live:file:0:/repo/live.ts [file diffs open] exec_live:file:0:/repo/live.ts",
 ]
 `;
 
@@ -256,6 +264,9 @@ exports[`New timeline placement compact 1`] = `
   "user-message:msg_u12",
   "assistant-part:context:context:msg_a12:exec_files [context] exec_files-, exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2-",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:context:context:msg_a13:exec_live [context] exec_live-, exec_live:file:0:/repo/live.ts",
 ]
 `;
 
@@ -317,6 +328,9 @@ exports[`New timeline placement quiet 1`] = `
   "user-message:msg_u12",
   "assistant-part:context:context:msg_a12:exec_files:file:0:/repo/merged.ts [context] exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2-",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:context:context:msg_a13:exec_live:file:0:/repo/live.ts [context] exec_live:file:0:/repo/live.ts",
 ]
 `;
 
@@ -367,6 +381,8 @@ exports[`New timeline placement text-only 1`] = `
   "turn-gap:msg_u12",
   "user-message:msg_u12",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
 ]
 `;
 
@@ -454,6 +470,10 @@ exports[`New timeline placement edits grouped and collapsed 1`] = `
   "assistant-part:part:part:msg_a12:exec_files [part] exec_files*",
   "assistant-part:context:context:msg_a12:exec_files:file:0:/repo/merged.ts [context] exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2-",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:part:part:msg_a13:exec_live [part] exec_live*",
+  "assistant-part:context:context:msg_a13:exec_live:file:0:/repo/live.ts [context] exec_live:file:0:/repo/live.ts",
 ]
 `;
 
@@ -551,6 +571,10 @@ exports[`New timeline placement edits collapsed 1`] = `
   "assistant-part:part:part:msg_a12:exec_files [part] exec_files*",
   "assistant-part:file:part:msg_a12:exec_files:file:0:/repo/merged.ts [file] exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:part:part:msg_a13:exec_live [part] exec_live*",
+  "assistant-part:file:part:msg_a13:exec_live:file:0:/repo/live.ts [file] exec_live:file:0:/repo/live.ts",
 ]
 `;
 
@@ -637,6 +661,10 @@ exports[`New timeline placement commentary grouped 1`] = `
   "assistant-part:part:part:msg_a12:exec_files [part] exec_files*",
   "assistant-part:file:part:msg_a12:exec_files:file:0:/repo/merged.ts [file diffs open] exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:part:part:msg_a13:exec_live [part] exec_live*",
+  "assistant-part:file:part:msg_a13:exec_live:file:0:/repo/live.ts [file diffs open] exec_live:file:0:/repo/live.ts",
 ]
 `;
 
@@ -706,6 +734,9 @@ exports[`New timeline placement commentary hidden 1`] = `
   "user-message:msg_u12",
   "assistant-part:context:context:msg_a12:exec_files [context] exec_files-, exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2-",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:context:context:msg_a13:exec_live [context] exec_live-, exec_live:file:0:/repo/live.ts",
 ]
 `;
 
@@ -795,6 +826,10 @@ exports[`New timeline placement thinking grouped and expanded 1`] = `
   "assistant-part:part:part:msg_a12:exec_files [part] exec_files*",
   "assistant-part:file:part:msg_a12:exec_files:file:0:/repo/merged.ts [file diffs open] exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:part:part:msg_a13:exec_live [part] exec_live*",
+  "assistant-part:file:part:msg_a13:exec_live:file:0:/repo/live.ts [file diffs open] exec_live:file:0:/repo/live.ts",
 ]
 `;
 
@@ -878,6 +913,10 @@ exports[`New timeline placement notices and subagents hidden 1`] = `
   "assistant-part:part:part:msg_a12:exec_files [part] exec_files*",
   "assistant-part:file:part:msg_a12:exec_files:file:0:/repo/merged.ts [file diffs open] exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:part:part:msg_a13:exec_live [part] exec_live*",
+  "assistant-part:file:part:msg_a13:exec_live:file:0:/repo/live.ts [file diffs open] exec_live:file:0:/repo/live.ts",
 ]
 `;
 
@@ -944,5 +983,8 @@ exports[`New timeline placement shell and tools hidden 1`] = `
   "user-message:msg_u12",
   "assistant-part:file:part:msg_a12:exec_files:file:0:/repo/merged.ts [file diffs open] exec_files:file:0:/repo/merged.ts, exec_files:file:1:/repo/merged.ts, exec_files:file:2:/repo/created.ts, exec_files:file:3:/repo/removed.bin, patch_2",
   "assistant-part:part:part:msg_a12:msg_a12:text:0 [part] msg_a12:text:0-",
+  "turn-gap:msg_u13",
+  "user-message:msg_u13",
+  "assistant-part:file:part:msg_a13:exec_live:file:0:/repo/live.ts [file diffs open] exec_live:file:0:/repo/live.ts",
 ]
 `;

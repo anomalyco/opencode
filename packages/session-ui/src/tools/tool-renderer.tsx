@@ -255,7 +255,7 @@ export function displayDirectory(path: string | undefined) {
 }
 
 import { resolveFileDiff } from "../components/session-diff"
-import { factsOf, summarize, type FileFact } from "../timeline/facts"
+import { factsOf, sameFileFact, summarize, type FileFact } from "../timeline/facts"
 import { contextGroupLabel, webSearchProviderLabel } from "./context-group-label"
 import type { FileRun } from "./file-runs"
 
@@ -580,11 +580,25 @@ export function CurrentContextToolGroup(props: {
                 return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
               })
 
+              // A change keeps its card while progress reports rebuild the list around it.
+              const file = createMemo(
+                () => {
+                  const value = item()
+
+                  return !Array.isArray(value) && value.type === "file" ? value : undefined
+                },
+                undefined,
+                {
+                  equals: (previous, next) =>
+                    previous === next || (!!previous && !!next && sameFileFact(previous.file, next.file)),
+                },
+              )
+
               const callback = createMemo(() => {
                 const value = item()
 
                 return !Array.isArray(value) &&
-                  (value.type === "notice" || value.type === "shell" || value.type === "text" || value.type === "file")
+                  (value.type === "notice" || value.type === "shell" || value.type === "text")
                   ? value
                   : undefined
               })
@@ -596,8 +610,16 @@ export function CurrentContextToolGroup(props: {
                     <Show
                       when={reasoning()}
                       fallback={
-                        <Show when={callback()}>
-                          {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                        <Show
+                          when={file()}
+                          keyed
+                          fallback={
+                            <Show when={callback()}>
+                              {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                            </Show>
+                          }
+                        >
+                          {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
                         </Show>
                       }
                     >
@@ -1098,17 +1120,32 @@ export function ScriptChanges(props: {
     <div data-component="tool-part-wrapper" data-script-changes="">
       <Index each={props.files}>
         {(file) => {
-          const diff = createMemo(() => {
-            const value = {
-              file: file().path,
-              patch: file().patch,
-              additions: file().additions ?? 0,
-              deletions: file().deletions ?? 0,
-              status: file().change ?? "modified",
-            }
+          const diff = createMemo(
+            () => {
+              const value = {
+                file: file().path,
+                patch: file().patch,
+                additions: file().additions ?? 0,
+                deletions: file().deletions ?? 0,
+                status: file().change ?? "modified",
+              }
 
-            return changedFileDiff(value) ? value : undefined
-          })
+              return changedFileDiff(value) ? value : undefined
+            },
+            undefined,
+            // A progress report reads each change again; the same diff keeps its parsed view.
+            {
+              equals: (previous, next) =>
+                previous === next ||
+                (!!previous &&
+                  !!next &&
+                  previous.file === next.file &&
+                  previous.patch === next.patch &&
+                  previous.additions === next.additions &&
+                  previous.deletions === next.deletions &&
+                  previous.status === next.status),
+            },
+          )
 
           return (
             <Show

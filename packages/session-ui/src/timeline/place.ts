@@ -1,4 +1,5 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
+import { untrack } from "solid-js"
 import { timelineNoticeRequired, type TimelineDetail, type TimelinePlacement } from "./detail"
 import { placeFactOf, scriptChangePaths, scriptFilePartID, type Fact, type PlaceFact } from "./facts"
 
@@ -112,7 +113,8 @@ export function scriptChangeItems(
 
   if (factOf(content).changes === 0) return []
 
-  return scriptChangePaths(content).map((path, index) => ({
+  // Changes only append, so their count says when the paths change and a progress report that adds none moves nothing.
+  return untrack(() => scriptChangePaths(content)).map((path, index) => ({
     messageID,
     messageIndex,
     partID: scriptFilePartID(content.id, index, path),
