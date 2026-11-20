@@ -28,6 +28,7 @@ const connection = (name: string, os: string, arch: string) =>
       name,
       os,
       arch,
+      home: "/home/worker",
       instance: Machine.Instance.make(crypto.randomUUID()),
       processes: [],
     },
@@ -89,6 +90,20 @@ service.effect("takes a machine offline when its connection is lost", () =>
   }),
 )
 
+service.effect("gives a machine's home only while its worker is connected", () =>
+  Effect.gen(function* () {
+    const machines = yield* Machines.Service
+    const id = yield* machines.add("gpu")
+    expect(yield* machines.home(id).pipe(Effect.flip)).toBeInstanceOf(Machine.NotSent)
+    const worker = yield* dial(machines, id)
+    yield* worker.restore
+    expect(yield* machines.home(id)).toBe("/home/worker")
+    yield* worker.cut
+    expect(yield* machines.home(id).pipe(Effect.flip)).toBeInstanceOf(Machine.NotSent)
+    expect(yield* machines.home(machineID("ghost")).pipe(Effect.flip)).toBeInstanceOf(Machines.NotFound)
+  }),
+)
+
 service.effect("serves the newer of two connections and keeps it when the first one ends", () =>
   Effect.gen(function* () {
     const machines = yield* Machines.Service
@@ -120,6 +135,7 @@ service.effect("refuses a connection for a machine it does not know and serves n
           name: "ghost",
           os: "linux",
           arch: "x64",
+          home: "/home/ghost",
           instance: Machine.Instance.make("ghost"),
           processes: [],
         },

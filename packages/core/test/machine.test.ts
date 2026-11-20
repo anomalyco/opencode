@@ -26,6 +26,7 @@ const hello = (processes: Machine.Hello["processes"] = []): Machine.Hello => ({
   name: "gpu",
   os: "linux",
   arch: "x64",
+  home: "/home/worker",
   instance: Machine.Instance.make("a"),
   processes,
 })

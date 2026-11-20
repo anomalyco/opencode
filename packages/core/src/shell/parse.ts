@@ -165,7 +165,7 @@ export function scan(
   cwd: string,
   options: { readonly home?: string | null } = {},
 ): Effect.Effect<Result, Error> {
-  // A machine's home is unknown, so `~` there is left as written for locating to refuse.
+  // A machine's home is not this server's, so `~` there is left as written for locating to resolve on that machine.
   const home = options.home === null ? undefined : (options.home ?? os.homedir())
   return Effect.suspend(() => {
     const powershell = ShellSelect.ps(shell)
@@ -568,8 +568,10 @@ function expandKnownDirectory(
   if (value.includes("$") || value.includes("`") || (powershell && value.startsWith("("))) return
   const resolved = value.replaceAll("\0", "$")
   if (resolved.startsWith("~")) {
-    // A machine has no known home: leave `~` as written so locating refuses the directory.
-    if (home === undefined) return resolved
+    // A machine's home is not this server's: leave `~` as written so locating resolves it on that machine. A quoted
+    // or escaped `~` is a directory of that name to `sh`, and `./` keeps locating from reading it as a home.
+    // PowerShell words carry no such flag and stay as written.
+    if (home === undefined) return unquotedTilde || powershell ? resolved : `./${resolved}`
     if (resolved === "~") return home
     if (resolved.startsWith("~/") || (process.platform === "win32" && resolved.startsWith("~\\")))
       return path.join(home, resolved.slice(2))
