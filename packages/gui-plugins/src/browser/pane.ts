@@ -680,9 +680,14 @@ export function createBrowserPane(input: {
     }
 
     if (effect.type === "await-name") {
-      const timer = setTimeout(() => dispatchBinding(effect.binding, { type: "tab.due", tabID: effect.tabID, attempt: effect.attempt }), effect.ms)
+      const stop = () => clearTimeout(timer)
 
-      return handle.abort.signal.addEventListener("abort", () => clearTimeout(timer), { once: true })
+      const timer = setTimeout(() => {
+        handle.abort.signal.removeEventListener("abort", stop)
+        dispatchBinding(effect.binding, { type: "tab.due", tabID: effect.tabID, attempt: effect.attempt })
+      }, effect.ms)
+
+      return handle.abort.signal.addEventListener("abort", stop, { once: true })
     }
 
     if (effect.type === "resolve-register") {
