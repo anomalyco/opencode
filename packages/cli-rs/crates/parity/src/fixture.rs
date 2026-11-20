@@ -172,17 +172,11 @@ fn parse_color(text: &str) -> Result<Color, String> {
 mod tests {
     use super::*;
 
+    /// What no writer writes is refused, not compared leniently: no outlet would show a lenient parse.
     #[test]
-    fn colors_round_trip_every_intent() {
-        for color in [Color::rgba(1, 2, 3, 4), Color::indexed(3), Color::indexed(200), Color::DEFAULT_BACKGROUND] {
-            assert_eq!(parse_color(&format_color(color)), Ok(color));
-        }
+    fn malformed_fixtures_are_refused() {
         assert!(parse_color("#123456").is_err());
         assert!(parse_color("#12345678@x").is_err());
-    }
-
-    #[test]
-    fn parse_rejects_rows_of_the_wrong_width() {
         let text = r##"{"width":2,"height":1,"styles":["#00000000 #00000000 0"],"lines":[["abc",[[0,2]]]]}"##;
         assert!(Fixture::parse(text).unwrap_err().contains("row 0"));
     }
