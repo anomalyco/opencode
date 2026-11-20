@@ -46,6 +46,7 @@ const Options = Schema.Struct({
   thinkingLevel: lenient(ThinkingLevel),
   thinkingSummaries: lenient(knownString<"auto" | "none">()),
   serviceTier: lenient(knownString<"standard" | "flex" | "priority" | "deferred">()),
+  safetySettings: lenient(Schema.Array(GeminiGenerateContent.SafetySetting)),
 })
 export type OptionsInput = typeof Options.Encoded
 export type ProviderOptionsInput = OptionsInput
@@ -98,6 +99,7 @@ const Body = Schema.Struct({
   continuation_token: Schema.optional(Schema.String),
   system_instruction: Schema.optional(Schema.String),
   service_tier: Schema.optional(Schema.String),
+  safety_settings: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String, threshold: Schema.String }))),
   tools: Schema.optional(
     Schema.Array(
       Schema.Struct({
@@ -376,6 +378,10 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
     previous_interaction_id: options.previousInteractionId,
     system_instruction: request.system.length ? ProviderShared.joinText(request.system) : undefined,
     service_tier: options.serviceTier,
+    safety_settings: options.safetySettings?.map((setting) => ({
+      type: setting.category.replace(/^HARM_CATEGORY_/, "").toLowerCase(),
+      threshold: setting.threshold.toLowerCase(),
+    })),
     tools: flattened.tools.length
       ? flattened.tools.map((tool) => ({
           type: "function" as const,
