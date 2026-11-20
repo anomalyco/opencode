@@ -46,15 +46,20 @@ export type Finished = { readonly job: Job; readonly outcome: Outcome }
 /**
  * A surface runs one job at a time; main runs the jobs of every surface one after another.
  * - `idle`: nothing runs; `last` is the previous job and its outcome, until the next one starts.
+ * - `confirming`: the person is asked whether `job` should run, as `attempt`; nothing has run yet, and `last` comes
+ *   back if they say no. An answer to any other attempt is stale.
  * - `running`: `job` runs as `attempt`; a result of any other attempt is stale.
  */
 export type JobsState =
   | { readonly status: "idle"; readonly attempt: number; readonly last: Finished | undefined }
+  | { readonly status: "confirming"; readonly attempt: number; readonly job: Job; readonly last: Finished | undefined }
   | { readonly status: "running"; readonly attempt: number; readonly job: Job }
   | { readonly status: "disposed" }
 
 export type JobsEvent =
   | { readonly type: "started"; readonly job: Job }
+  /** The person answered the question of `attempt`. Closing the question any other way is a no. */
+  | { readonly type: "answered"; readonly attempt: number; readonly confirmed: boolean }
   | { readonly type: "finished"; readonly attempt: number; readonly outcome: Outcome }
   | { readonly type: "failed"; readonly attempt: number }
   | { readonly type: "timed-out"; readonly attempt: number }
@@ -63,6 +68,8 @@ export type JobsEvent =
   | { readonly type: "disposed" }
 
 export type JobsEffect =
+  /** Asks the person whether `job` should run; the answer names `attempt`. */
+  | { readonly type: "confirm"; readonly attempt: number; readonly job: Job }
   | { readonly type: "run"; readonly attempt: number; readonly job: Job; readonly timeoutMs: number }
   /** Ends the attempt's timer and drops its call's reply. */
   | { readonly type: "abort"; readonly attempt: number }
@@ -104,13 +111,24 @@ export function transitionJobs(state: JobsState, event: JobsEvent): JobsTransiti
   }
 
   if (event.type === "started") {
-    if (state.status === "running") return { state, effects: [] }
+    // One job at a time: a second press while one runs, or while its question is open, starts nothing.
+    if (state.status !== "idle") return { state, effects: [] }
     const attempt = state.attempt + 1
 
-    return {
-      state: { status: "running", attempt, job: event.job },
-      effects: [{ type: "run", attempt, job: event.job, timeoutMs: JOB_TIMEOUT_MS[event.job.type] }],
-    }
+    // What a job deletes cannot be brought back, so it asks first, wherever it was started from.
+    if (deletes(event.job))
+      return { state: { status: "confirming", attempt, job: event.job, last: state.last }, effects: [{ type: "confirm", attempt, job: event.job }] }
+
+    return run(attempt, event.job)
+  }
+
+  if (event.type === "answered") {
+    if (state.status !== "confirming" || event.attempt !== state.attempt) return { state, effects: [] }
+
+    if (event.confirmed) return run(state.attempt, state.job)
+
+    // Nothing ran: the surface is as it was before the question.
+    return { state: { status: "idle", attempt: state.attempt, last: state.last }, effects: [] }
   }
 
   if (state.status !== "running" || event.attempt !== state.attempt) return { state, effects: [] }
@@ -132,8 +150,18 @@ export function runningJob(state: JobsState) {
   return state.status === "running" ? state.job : undefined
 }
 
+/** The last job and its outcome, which stay on the surface while the person is asked about the next one. */
 export function lastFinished(state: JobsState) {
-  return state.status === "idle" ? state.last : undefined
+  return state.status === "idle" || state.status === "confirming" ? state.last : undefined
+}
+
+/** Whether a job deletes what cannot be brought back, so the person is asked before it runs. */
+function deletes(job: Job) {
+  return job.type === "clear"
+}
+
+function run(attempt: number, job: Job): JobsTransition {
+  return { state: { status: "running", attempt, job }, effects: [{ type: "run", attempt, job, timeoutMs: JOB_TIMEOUT_MS[job.type] }] }
 }
 
 /** Whether an import wrote cookies, so the user is signed in where the other browser was. */
