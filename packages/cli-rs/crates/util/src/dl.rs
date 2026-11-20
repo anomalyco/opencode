@@ -5,8 +5,9 @@
 
 #![allow(unsafe_code)]
 
-// A static musl executable has no dynamic loader, so `dlopen` would fail for every plugin library.
-#[cfg(all(target_env = "musl", target_feature = "crt-static"))]
+// A static musl executable has no dynamic loader, so `dlopen` would fail for every plugin library. Without native plugins
+// (the `native` feature) nothing needs one: the editor context's SQLite then is not found, as on a machine without it.
+#[cfg(all(feature = "native", target_env = "musl", target_feature = "crt-static"))]
 compile_error!(
     "build musl with `-C target-feature=-crt-static` (packages/cli-rs/.cargo/config.toml sets it unless RUSTFLAGS \
      replaces it): a static musl executable cannot load native plugins"
