@@ -2,8 +2,10 @@
 
 Agents show interactive widgets in a session: suggestion cards with image carousels, forms with sliders, checkboxes and
 selects, confirmations. A widget is a PsychoScript program from a named template plus JSON data. The server stores
-templates; the agent posts a widget message into the session history; every client (TUI, Rune desktop) downloads the template program, runs it in its own PsychoScript interpreter, and renders the JSON view tree it
-returns with native components. A submission goes back to the agent as the next prompt.
+templates; the agent calls the `widget` tool, and that tool call in the session history is the widget; every client
+(TUI, Rune desktop, iOS, Android) downloads the template program, runs it in its own PsychoScript interpreter, and
+renders the JSON view tree it returns with native components. A submission goes back to the agent, as the next prompt or
+as the tool's result.
 
 This document is the contract between the server, the shared TypeScript runtime and every client. Change it here first.
 
@@ -12,7 +14,8 @@ This document is the contract between the server, the shared TypeScript runtime 
 | Piece | Where | Owner |
 | --- | --- | --- |
 | Widget runtime (prelude, node schema, `WidgetSession`, built-in templates) | `packages/widget` (`@opencode/widget`) | runtime |
-| Widget message, events, template store, `widget` and `widget_template` tools, HTTP API | `packages/schema`, `packages/core`, `packages/protocol`, `packages/server`, `packages/client` | core |
+| RPC contract (`Widget.Definition`, `opencode.widget`) | `packages/schema/src/widget.ts` | core |
+| Server plugin: `widget` and `widget_template` tools, `widgets` skill, template store, widget states, RPC handlers | `packages/plugin-widgets` (`@opencode/plugin-widgets`), registered by `packages/core/src/plugin/internal.ts` | core |
 | TUI renderer | `packages/tui` | tui |
 | Rune desktop renderer (Rust PsychoScript) | `anomalyco/rune-desktop` (`crates/opencode-widget` runner, `crates/opencode-widget-view` renderer) | rune |
 | Mobile runner bindings (UniFFI: step, draw, WGSL translation via naga) | `anomalyco/rune-desktop` `crates/opencode-widget-ffi` | ffi |
@@ -38,12 +41,15 @@ type Template = {
   description: string   // one line, shown to the model when listing templates
   data: JSONSchema      // JSON Schema (draft 2020-12 subset) for the data the template takes
   source: string        // the template's PsychoScript source (see "Template source")
+  mode: "step" | "live" // how clients run it; "live" templates are in widgets-live.md (stored versions without a
+                        // mode are "step"). A live version hashes program + "\n" + JSON(data) + "\nlive", so the
+                        // mode is part of the content address
   builtin: boolean
 }
 ```
 
 A template version is immutable. Saving a template with an existing name creates a new version and makes it the
-latest; old versions stay retrievable forever so old widget messages keep rendering.
+latest; old versions stay retrievable forever so old widgets keep rendering.
 
 Built-in templates ship in `@opencode/widget` and are always present: `suggestions`, `form`, `confirm`, `chart`,
 `backdrop`.
@@ -258,101 +264,112 @@ ES 3.00 translated with naga (`opencode-widget-ffi`). Source is capped at 16 KB.
 `poster` (an image src) or `alt` with the error inline; one that takes over 50 ms per frame three frames in a row stops
 and shows its last frame. The TUI shows `poster`/`alt` for `shader` and `alt` for `canvas`.
 
-## Widget message
+## Server plugin
 
-A new session message type in `Session.Message.Info` (`packages/schema/src/session-message.ts`):
+Widgets are an internal server plugin, `@opencode/plugin-widgets`, built only on the public plugin API
+(`@opencode/plugin/effect`): tools, a skill, plugin storage, an RPC registration and Session calls. Core registers it
+only while the `widgets` flag is on. The flag is opt-in only: off in every build, including local and dev; enable it
+with `OPENCODE_FLAGS=widgets` or `experimental.widgets: true`. Nothing in Core, Protocol, Server or the session history
+schema knows about widgets.
+
+### The widget in history
+
+A widget is the `widget` tool call: an assistant tool part with `name: "widget"` and input
+`{ template: string; data: object; title?: string; wait?: boolean }`. It is identified by the assistant message ID
+plus the call ID (`messageID`, `callID`; a call ID is unique only within its message). Clients find widgets by walking
+tool parts named `widget` and look up their state by `(messageID, callID)`. The completed tool part's `metadata` is
+`{ template: { name, version } }`; while the call runs (or when it failed after posting) the version comes from the
+state.
+
+### State
+
+The plugin keeps one state record per widget in its storage and is the only writer:
 
 ```ts
-type Widget = {
-  id: MessageID
-  type: "widget"
-  time: { created: DateTime; responded?: DateTime }
-  metadata?: Record<string, unknown>
-  title?: string
+type State = {
+  sessionID: string
+  messageID: string                     // assistant message holding the widget tool call
+  callID: string
   template: { name: string; version: string }
-  data: unknown
-  tool?: { messageID: MessageID; callID: string }  // the assistant tool call that posted it
+  title?: string
   status: "open" | "submitted" | "dismissed"
-  response?: unknown                                // the submitted value
+  response?: unknown                    // the submitted value
+  wait: boolean                         // the tool call waits for the answer (see Tools)
+  time: { created: number; responded?: number }   // epoch ms
 }
 ```
 
-`status` is `"open"` until the one response; `response` is set only for `"submitted"` (it may be `null`). On the wire
-`time.*` are epoch milliseconds, like every other message.
+A widget goes `open → submitted` or `open → dismissed`, once. States of a deleted Session are removed.
 
-Events (durable, event-sourced like other messages, in the `/api/event` stream and the session log):
+### RPC: `opencode.widget`
 
-```ts
-type WidgetPosted = {
-  type: "session.widget.posted"
-  data: {
-    sessionID: SessionID
-    messageID: MessageID                             // the widget message's ID
-    title?: string
-    template: { name: string; version: string }
-    data: unknown
-    tool?: { messageID: MessageID; callID: string }
-  }
-}
-type WidgetResponded = {
-  type: "session.widget.responded"
-  data: { sessionID: SessionID; messageID: MessageID; status: "submitted" | "dismissed"; response?: unknown }
-}
-```
+`Widget.Definition` in `@opencode/schema/widget`. Clients call `POST /api/rpc/opencode.widget/<method>` (through
+`client.rpc(Widget.Definition)`), passing the Session's Location, and follow the event like the goal plugin's.
 
-The posted event projects a widget message with `status: "open"` and `time.created` = the event's `created`; the
-responded event sets `status`, `response` and `time.responded` (= the event's `created`) on an open widget and is
-ignored for one that is not open. A widget can be responded to once; later responses fail with a conflict.
-
-Model-facing: the widget message itself is not sent to the model. The `widget` tool result tells the model the widget is
-shown and to end its turn. A response appends a synthetic prompt to the session (steered, waking the session like a user
-prompt; `metadata: { widget: { messageID } }`, `description` `Responded to "<label>"` / `Dismissed "<label>"`), with
-text `User responded to widget "<label>": <JSON value>` or `User dismissed widget "<label>"`, where `<label>` is the
-title, or the template name when there is no title.
-
-## HTTP API
-
-The routes are experimental (repo rule for new endpoints), so they live under `/api/experimental` and in the generated
-client under `client.experimental`. Like every other route, JSON success bodies are wrapped in `{ data }`; the generated
-TypeScript client unwraps it. Template routes are global (no location query).
-
-| Route | Response | SDK |
-| --- | --- | --- |
-| `GET /api/experimental/widget/template` | `{ data: Summary[] }`: latest version of every template, without `source`, sorted by name | `experimental.widget.template.list()` |
-| `GET /api/experimental/widget/template/{name}` | `{ data: Program }`: the latest version | `experimental.widget.template.latest({ name })` |
-| `GET /api/experimental/widget/template/{name}/{version}` | `{ data: Program }` with `Cache-Control: public, max-age=31536000, immutable` | `experimental.widget.template.get({ name, version })` |
-| `POST /api/experimental/session/{sessionID}/widget/{messageID}/respond` | 204; body `{ value: unknown }` or `{ dismiss: true }` | `experimental.session.widget.respond({ sessionID, messageID, payload })` |
+| Method | Input | Output | Errors |
+| --- | --- | --- | --- |
+| `templates` | `{}` | `Summary[]`: latest version of every template, sorted by name, without source | |
+| `program` | `{ name, version? }` | `Program`: that immutable version, or the latest when `version` is omitted | `not_found` |
+| `states` | `{ sessionID }` | `State[]` of the Session, oldest first | |
+| `respond` | `{ sessionID, messageID, callID, response: { value } \| { dismiss: true } }` | the new `State` | `not_found`, `closed` (`data: { status }`) |
+| `send` | `{ sessionID, messageID, callID, value, wake? }` | the `State` (unchanged) | `not_found`, `closed`, `rate_limited` |
 
 ```ts
-type Summary = { name: string; version: string; description: string; data: JSONSchema; builtin: boolean }
+type Summary = { name: string; version: string; description: string; data: JSONSchema; mode: "step" | "live"; builtin: boolean }
 type Program = Summary & { source: string; program: string }   // program = prelude + "\n" + source
 ```
 
-Errors (JSON bodies with a `_tag`):
+Event `changed`, `{ sessionID, state: State }`, published (as `rpc.opencode.widget.changed`) in the Session's Location
+whenever a widget is posted or answered. A client fetches `states` when it opens a Session or reconnects, since changes
+published meanwhile were missed, and applies `changed` after that.
 
-- template routes: 404 `{ _tag: "WidgetTemplateNotFoundError", template, version?, message }`.
-- respond: 404 `SessionNotFoundError` (unknown session), 404 `MessageNotFoundError` (no widget message with that ID in
-  the session), 409 `{ _tag: "WidgetAlreadyRespondedError", sessionID, messageID, status: "submitted" | "dismissed",
-  message }`, 400 for a body that is neither shape.
+`program` responses never change for a given `name@version`; clients cache them forever. Every version a widget refers
+to stays retrievable, including built-in versions from older releases (the plugin stores a built-in's version when a
+widget uses it). `send` allows 10 messages per widget per second (process-local); past that it fails with
+`rate_limited` and clients should drop or coalesce.
 
-Every template version a widget message refers to stays retrievable by `name@version`, including built-in versions
-from older releases (the server stores a built-in's version when a widget using it is posted).
+### Delivery to the model
 
-Clients get widget messages through the normal session message list (`type=widget` filters them) and event stream,
-like every other message.
+Answers and sends reach the model as synthetic messages admitted with `ctx.session.synthetic`, which steer like a
+prompt: an idle Session starts a turn, a busy one takes them at its next step.
+
+| | `text` | `description` | `metadata.widget.kind` | wakes |
+| --- | --- | --- | --- | --- |
+| submitted | `User responded to widget "<label>": <JSON value>` | `Responded to "<label>"` | `response` | yes |
+| dismissed | `User dismissed widget "<label>"` | `Dismissed "<label>"` | `response` | yes |
+| send | `Widget "<label>" sent: <JSON value>` | `<label>: <value>` (strings raw, else JSON, cut at 80) | `message` | `wake` (default true) |
+
+`metadata` is `{ widget: { messageID, callID, kind } }`; clients detect these by `metadata.widget`, never by text, and
+show them as one quiet line (`◈ <description>` in the TUI). `<label>` is the title, or the template name. A send with
+`wake: false` is admitted without waking (`resume: false`): it stays pending and the model sees it with the next turn.
+
+Waiting tool calls and the lock that serializes respond and send live in the server process, shared by every Location
+and plugin reload in it; this assumes one server process per database, like the goal plugin.
+
+Respond writes the state first and then admits the message. These are two writes without a transaction: if the server
+dies between them, the widget shows as answered but the model never hears of it (the user can say so in the prompt).
+Respond and send for one process are serialized, so a widget is answered once.
 
 ## Tools
 
 `widget` — show a widget.
 
 ```ts
-input: { template: string; data: unknown; title?: string }
+input: { template: string; data: object; title?: string; wait?: boolean }
 ```
 
-The server resolves the latest version, validates `data` against the template's JSON Schema, and runs the `init` step
-with `@opencode/widget` once to fail fast on broken programs (errors go back to the model as the tool error). On success
-it posts the widget message and returns `Widget "<title>" is shown to the user. Their response arrives as the next
-message; end your turn now unless there is unrelated work to do.`
+The plugin resolves the latest version, validates `data` against the template's JSON Schema, and runs the `init` step
+with `@opencode/widget` once to fail fast on broken programs (errors go back to the model as the tool error). It then
+stores the widget's state and publishes `changed`.
+
+- `wait` omitted or `false`: returns at once with `Widget "<title>" is shown to the user. Their response arrives as the
+  next message; end your turn now unless there is unrelated work to do.` The answer arrives as a synthetic message.
+- `wait: true`: blocks until the final answer from any client, like the `question` tool. A submission returns
+  `User responded to widget "<label>": <JSON value>` as the tool result (metadata adds `response`); a dismissal returns a
+  tool error `User dismissed widget "<label>"`, which the model sees and continues with; no synthetic message is
+  admitted for an answer the tool returned. Waiters live in the server process: when the user stops the call
+  (interrupt), or the server restarts, the call ends, the widget stays open, and a later answer is delivered as a
+  synthetic message with a wake. A send while the tool waits is still a synthetic message.
 
 `widget_template` — manage templates. The input is one flat object (union inputs are poorly supported by some
 providers); fields an action needs are checked at run time.
@@ -364,20 +381,22 @@ input: {
   description?: string             // save
   data?: JSONSchema                // save; top-level `type` must be "object"
   source?: string                  // save
-  example?: unknown                // save
+  mode?: "step" | "live"           // save; default "step"
+  example?: object                 // save
 }
 ```
 
 `save` validates the name, checks `example` against the schema, and runs `init` (which renders the first `view`) with
-`example` before storing. Built-in names cannot be overwritten. Saving content that already exists (same version) makes
+`example` before storing; a live template is only compiled. The `widget` tool likewise validates data and only
+compiles a live template's program, never running `main`. Built-in names cannot be overwritten. Saving content that already exists (same version) makes
 that version the latest again and updates its description.
 
-Both tools are registered behind the `widgets` flag (on in local and dev builds, off in releases until shipped). Their
-permission actions are `widget` (resource: the template name) and `widget_template` (resource: the template name, or
-`*` for list); the Build agent allows both, Plan allows `widget`, and the `general` subagent denies `widget`.
+Permission actions are `widget` (resource: the template name) and `widget_template` (resource: the template name, or
+`*` for list). The plugin's agent transform allows both for the Build agent, `widget` for Plan, and denies `widget` for
+the `general` subagent; configured rules still win.
 
-Tool descriptions should teach the model the node set and the ABI briefly and point at `suggestions` and `form` as
-examples to copy.
+The `widgets` skill (shipped by the plugin) covers when to show a widget, when to `wait`, how to fill each built-in,
+and the template language. Tool descriptions teach the node set and the ABI briefly and point at it.
 
 ## Built-in templates
 
@@ -436,11 +455,12 @@ slider (0–2, 0 pauses with `fps: 0`); `values` is `[speed, accent r, g, b]`.
 
 ## Client behaviour
 
-- Render the widget message inline in the timeline at its position.
+- Render each `widget` tool call inline in the timeline at its position, from its tool input plus its state.
 - `open`: interactive. `submitted` / `dismissed`: render the final view read-only with a status line ("Submitted",
   "Dismissed"); for a submitted widget, rerun `init` and show the response summary (clients do not persist the local
   state).
 - Local state lives only on the client that the user is interacting with; other clients see the result when the
-  message turns `submitted`.
+  state turns `submitted`.
+- Post a step's `send` output with `send`; keep the widget interactive.
 - Fetch templates by `name@version` and cache them; show a loading placeholder while fetching.
 - Run steps off the render path where the platform allows; steps are small, so synchronous is acceptable in v1.

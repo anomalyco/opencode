@@ -17,7 +17,6 @@ import { Skill as SkillSchema } from "./skill.js"
 import { Money } from "./money.js"
 import { Snapshot } from "./snapshot.js"
 import { TokenUsage } from "./token-usage.js"
-import { Widget as WidgetSchema } from "./widget.js"
 
 export const ID = Schema.String.check(Schema.isStartingWith("msg_")).pipe(
   Schema.brand("Session.Message.ID"),
@@ -133,25 +132,6 @@ export const Shell = Schema.Struct({
     completed: DateTimeUtcFromMillis.pipe(optional),
   }),
 }).annotate({ identifier: "Session.Message.Shell" })
-
-/** An interactive widget an agent posted: a template program run by every client, plus its JSON data. */
-export interface Widget extends Schema.Schema.Type<typeof Widget> {}
-export const Widget = Schema.Struct({
-  ...Base,
-  type: Schema.tag("widget"),
-  title: Schema.String.pipe(optional),
-  template: WidgetSchema.Ref,
-  data: Schema.Json,
-  /** The assistant tool call that posted it. */
-  tool: Schema.Struct({ messageID: ID, callID: Schema.String }).pipe(optional),
-  status: WidgetSchema.Status,
-  /** The submitted value. */
-  response: Schema.Json.pipe(optional),
-  time: Schema.Struct({
-    created: DateTimeUtcFromMillis,
-    responded: DateTimeUtcFromMillis.pipe(optional),
-  }),
-}).annotate({ identifier: "Session.Message.Widget" })
 
 export interface ToolStateStreaming extends Schema.Schema.Type<typeof ToolStateStreaming> {}
 export const ToolStateStreaming = Schema.Struct({
@@ -337,7 +317,6 @@ export const Info = Schema.Union([
   System,
   Skill,
   Shell,
-  Widget,
   Assistant,
   Compaction,
   Idle,
@@ -351,7 +330,6 @@ export type Info =
   | System
   | Skill
   | Shell
-  | Widget
   | Assistant
   | Compaction
   | Idle
@@ -367,7 +345,6 @@ export const MediaInfo = Schema.Union([
   System,
   Skill,
   Shell,
-  Widget,
   Assistant,
   Compaction,
   Idle,

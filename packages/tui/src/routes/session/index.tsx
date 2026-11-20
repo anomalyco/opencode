@@ -92,8 +92,8 @@ import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
 import { FormPrompt } from "./form"
-import { widgetMessage, type WidgetMessageInfo } from "../../component/widget/backend"
-import { createWidgetFocus, WidgetMessage } from "../../component/widget/message"
+import { createWidgetStates, widgetInfo, widgetKey, widgetNotice } from "../../component/widget/backend"
+import { createWidgetFocus, WidgetMessage, WidgetNotice } from "../../component/widget/message"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
 import { useConfig, useNewDesigns } from "../../config"
@@ -223,12 +223,13 @@ export function Session(props: {
       .flatMap((sessionID) => data.session.form.list(sessionID) ?? [])
       .concat(global)
   })
+  const widgets = createWidgetStates(() => route.sessionID)
   const widgetFocus = createWidgetFocus(
     createMemo(() =>
-      data.session.message.list(route.sessionID).flatMap((message) => {
-        const widget = widgetMessage(message)
-        return widget ? [widget] : []
-      }),
+      widgets
+        .list()
+        .toSorted((a, b) => a.time.created - b.time.created)
+        .map((state) => ({ id: widgetKey(state.messageID, state.callID), status: state.status })),
     ),
   )
   const pendingUsers = createMemo(() =>
@@ -1530,6 +1531,7 @@ export function Session(props: {
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
         widgetFocus,
+        widgets,
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1955,7 +1957,7 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
 function SessionMessageView(props: { message: SessionMessageInfo }) {
   return (
     <Switch>
-      <Match when={widgetMessage(props.message)}>{(widget) => <SessionWidget message={widget()} />}</Match>
+      <Match when={widgetNotice(props.message)}>{(text) => <WidgetNotice text={text()} />}</Match>
       <Match when={props.message.type === "user"}>
         <UserMessage message={props.message as SessionMessageUser} />
       </Match>
@@ -1988,11 +1990,18 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
   )
 }
 
-function SessionWidget(props: { message: WidgetMessageInfo }) {
+/**
+ * A `widget` tool call, rendered as the widget once the plugin has stored its state; until then, or when the call
+ * failed before posting, as the generic tool row.
+ */
+function SessionWidget(props: { toolprops: ToolProps; messageID: string }) {
   const ctx = use()
+  const widget = createMemo(() =>
+    widgetInfo(props.toolprops.part, props.messageID, ctx.widgets?.get(props.messageID, props.toolprops.part.id)),
+  )
   return (
-    <Show when={ctx.widgetFocus}>
-      {(focus) => <WidgetMessage message={props.message} sessionID={ctx.sessionID} focus={focus()} />}
+    <Show when={ctx.widgetFocus && widget()} fallback={<GenericTool {...props.toolprops} />}>
+      <WidgetMessage message={widget()!} focus={ctx.widgetFocus!} />
     </Show>
   )
 }
@@ -2036,7 +2045,11 @@ function SessionPartView(props: {
             />
           </Match>
           <Match when={item().type === "tool"}>
-            <ToolPart part={item() as SessionMessageAssistantTool} images={props.images} />
+            <ToolPart
+              part={item() as SessionMessageAssistantTool}
+              messageID={props.partRef.messageID}
+              images={props.images}
+            />
           </Match>
         </Switch>
       )}
@@ -2610,7 +2623,7 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
 
 // Pending messages moved to individual tool pending functions
 
-function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }) {
+function ToolPart(props: { part: SessionMessageAssistantTool; messageID: string; images?: boolean }) {
   const display = createMemo(() => toolDisplay(props.part.name))
 
   const toolprops = {
@@ -2674,6 +2687,9 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
       </Match>
       <Match when={display() === "question"}>
         <Question {...toolprops} />
+      </Match>
+      <Match when={display() === "widget"}>
+        <SessionWidget toolprops={toolprops} messageID={props.messageID} />
       </Match>
       <Match when={display() === "skill"}>
         <Skill {...toolprops} />

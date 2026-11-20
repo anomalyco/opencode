@@ -37,6 +37,19 @@ Use the `question` tool for text-only choices.
 - Give it a short `title`; the transcript uses it.
 - After the widget is shown, end your turn. Don't repeat the options in text.
 - The answer arrives as `User responded to widget "<title>": <JSON>` or `User dismissed widget "<title>"`. Act on it.
+- Messages a widget sends while it stays open arrive as `Widget "<title>" sent: <JSON>`.
+
+## Waiting for the answer
+
+`wait: true` makes the `widget` call block until the user answers and return the answer as its result, like the
+`question` tool; a dismissal comes back as a tool error saying so. You keep working in the same turn.
+
+- Wait when you need the answer to continue right now: a short decision, a confirmation before a step, a small form
+  whose values feed the next tool call.
+- Don't wait for widgets the user may leave open for a while, live widgets that `send` updates (games, dashboards,
+  step-by-step controls), or when the user may want to think or reply in text. Show those without `wait` and end your
+  turn; the answer and any messages arrive as your next input.
+- If the user stops the call while you wait, the widget stays open and its answer arrives later as a message.
 
 ## Built-in templates
 

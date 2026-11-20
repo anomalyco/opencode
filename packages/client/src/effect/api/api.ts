@@ -18,8 +18,8 @@ import type { Money } from "@opencode/schema/money"
 import type { Form } from "@opencode/schema/form"
 import type { DateTime } from "effect"
 import type { Skill } from "@opencode/schema/skill"
-import type { Schema } from "effect"
 import type { InstructionEntry } from "@opencode/schema/instruction-entry"
+import type { Schema } from "effect"
 import type { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
 import type { Workspace } from "@opencode/schema/workspace"
@@ -587,16 +587,6 @@ export type ExperimentalSessionWaitOperation<E = never> = (
   input: ExperimentalSessionWaitInput,
 ) => Effect.Effect<ExperimentalSessionWaitOutput, E>
 
-export type ExperimentalSessionWidgetRespondInput = {
-  readonly sessionID: Session.ID
-  readonly messageID: SessionMessage.ID
-  readonly payload: { readonly value: Schema.Json } | { readonly dismiss: true }
-}
-export type ExperimentalSessionWidgetRespondOutput = void
-export type ExperimentalSessionWidgetRespondOperation<E = never> = (
-  input: ExperimentalSessionWidgetRespondInput,
-) => Effect.Effect<ExperimentalSessionWidgetRespondOutput, E>
-
 export type ExperimentalSessionInstructionsEntryListInput = { readonly sessionID: Session.ID }
 export type ExperimentalSessionInstructionsEntryListOutput = ReadonlyArray<InstructionEntry.Info>
 export type ExperimentalSessionInstructionsEntryListOperation<E = never> = (
@@ -977,40 +967,6 @@ export type ExperimentalSessionLogOutput =
               readonly size: number
               readonly truncated: boolean
             }
-          }
-        }
-      | {
-          readonly id: Event.ID
-          readonly created: number
-          readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.widget.posted"
-          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
-          readonly location?:
-            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
-            | undefined
-          readonly data: {
-            readonly sessionID: Session.ID
-            readonly messageID: SessionMessage.ID
-            readonly title?: string | undefined
-            readonly template: { readonly name: string; readonly version: string }
-            readonly data: Schema.Json
-            readonly tool?: { readonly messageID: SessionMessage.ID; readonly callID: string } | undefined
-          }
-        }
-      | {
-          readonly id: Event.ID
-          readonly created: number
-          readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.widget.responded"
-          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
-          readonly location?:
-            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
-            | undefined
-          readonly data: {
-            readonly sessionID: Session.ID
-            readonly messageID: SessionMessage.ID
-            readonly status: "submitted" | "dismissed"
-            readonly response?: Schema.Json | undefined
           }
         }
       | {
@@ -1490,7 +1446,6 @@ export interface ExperimentalSessionApi<E = never> {
   readonly export: ExperimentalSessionExportOperation<E>
   readonly skill: ExperimentalSessionSkillOperation<E>
   readonly wait: ExperimentalSessionWaitOperation<E>
-  readonly widget: { readonly respond: ExperimentalSessionWidgetRespondOperation<E> }
   readonly instructions: {
     readonly entry: {
       readonly list: ExperimentalSessionInstructionsEntryListOperation<E>
@@ -1515,7 +1470,6 @@ export type MessageListInput = {
     | "system"
     | "skill"
     | "shell"
-    | "widget"
     | "assistant"
     | "compaction"
     | "idle"
@@ -2174,8 +2128,6 @@ export type EventSubscribeInput = {
         | "session.skill.activated"
         | "session.shell.started"
         | "session.shell.ended"
-        | "session.widget.posted"
-        | "session.widget.responded"
         | "session.step.started"
         | "session.step.first-token"
         | "session.step.streamed"
@@ -2609,46 +2561,6 @@ export type ExperimentalJobCancelOperation<E = never> = (
   input: ExperimentalJobCancelInput,
 ) => Effect.Effect<ExperimentalJobCancelOutput, E>
 
-export type ExperimentalWidgetTemplateListOutput = ReadonlyArray<{
-  readonly name: string
-  readonly version: string
-  readonly description: string
-  readonly data: { readonly [x: string]: Schema.Json }
-  readonly builtin: boolean
-}>
-export type ExperimentalWidgetTemplateListOperation<E = never> = () => Effect.Effect<
-  ExperimentalWidgetTemplateListOutput,
-  E
->
-
-export type ExperimentalWidgetTemplateLatestInput = { readonly name: string }
-export type ExperimentalWidgetTemplateLatestOutput = {
-  readonly name: string
-  readonly version: string
-  readonly description: string
-  readonly data: { readonly [x: string]: Schema.Json }
-  readonly builtin: boolean
-  readonly source: string
-  readonly program: string
-}
-export type ExperimentalWidgetTemplateLatestOperation<E = never> = (
-  input: ExperimentalWidgetTemplateLatestInput,
-) => Effect.Effect<ExperimentalWidgetTemplateLatestOutput, E>
-
-export type ExperimentalWidgetTemplateGetInput = { readonly name: string; readonly version: string }
-export type ExperimentalWidgetTemplateGetOutput = {
-  readonly name: string
-  readonly version: string
-  readonly description: string
-  readonly data: { readonly [x: string]: Schema.Json }
-  readonly builtin: boolean
-  readonly source: string
-  readonly program: string
-}
-export type ExperimentalWidgetTemplateGetOperation<E = never> = (
-  input: ExperimentalWidgetTemplateGetInput,
-) => Effect.Effect<ExperimentalWidgetTemplateGetOutput, E>
-
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2679,13 +2591,6 @@ export interface ExperimentalApi<E = never> {
     readonly delete: ExperimentalArtifactsDeleteOperation<E>
   }
   readonly job: { readonly list: ExperimentalJobListOperation<E>; readonly cancel: ExperimentalJobCancelOperation<E> }
-  readonly widget: {
-    readonly template: {
-      readonly list: ExperimentalWidgetTemplateListOperation<E>
-      readonly latest: ExperimentalWidgetTemplateLatestOperation<E>
-      readonly get: ExperimentalWidgetTemplateGetOperation<E>
-    }
-  }
 }
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

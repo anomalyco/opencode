@@ -36,7 +36,6 @@ export { Pty } from "./pty.js"
 export { PersistentPty } from "./persistent-pty.js"
 export { PtyTicket } from "./pty-ticket.js"
 export { Question } from "./question.js"
-export { Widget } from "./widget.js"
 export { Workspace } from "./workspace.js"
 export {
   Prompt,

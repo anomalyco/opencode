@@ -10,7 +10,7 @@ import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
 import { SplitBorder } from "../../ui/border"
 import { errorMessage } from "../../util/error"
-import { useWidgetBackend, WidgetConflict, type WidgetMessageInfo, type WidgetResponse } from "./backend"
+import { useWidgetBackend, WidgetConflict, type WidgetInfo, type WidgetResponse } from "./backend"
 import { WIDGET_MODE, WidgetView } from "./view"
 
 export type WidgetFocus = {
@@ -24,7 +24,9 @@ export type WidgetFocus = {
  * Keyboard ownership for the widgets of one timeline. The newest open widget takes the keyboard when it appears;
  * escape hands it back to the prompt and a click takes it again.
  */
-export function createWidgetFocus(widgets: Accessor<readonly WidgetMessageInfo[]>): WidgetFocus {
+export function createWidgetFocus(
+  widgets: Accessor<readonly { readonly id: string; readonly status: WidgetInfo["status"] }[]>,
+): WidgetFocus {
   const keymap = Keymap.use()
   const dialog = useDialog()
   const [engaged, setEngaged] = createSignal<string>()
@@ -43,10 +45,10 @@ export function createWidgetFocus(widgets: Accessor<readonly WidgetMessageInfo[]
   }
 }
 
-type Status = WidgetMessageInfo["status"]
+type Status = WidgetInfo["status"]
 
 /** A widget message in the timeline: loads its template program, runs steps and sends the response. */
-export function WidgetMessage(props: { message: WidgetMessageInfo; sessionID: string; focus: WidgetFocus }) {
+export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }) {
   const theme = useTheme()
   const backend = useWidgetBackend()
   const keymap = Keymap.use()
@@ -58,6 +60,8 @@ export function WidgetMessage(props: { message: WidgetMessageInfo; sessionID: st
     failure?: string
     error?: string
     sending: boolean
+    /** A live template, which this client does not run. */
+    live?: boolean
     sent?: Status
     response?: unknown
   }>({ sending: false })
@@ -75,21 +79,29 @@ export function WidgetMessage(props: { message: WidgetMessageInfo; sessionID: st
     on(template, () => {
       let current = true
       onCleanup(() => (current = false))
-      setStore({ view: undefined, failure: undefined, error: undefined })
+      setStore({ view: undefined, failure: undefined, error: undefined, live: false })
       setSession(undefined)
       void backend
         .program(props.message.template)
-        .then((program) => WidgetSession.start(program, props.message.data))
-        .then((started) => {
-          if (!current) return
-          setSession(started)
-          setStore("view", started.view)
+        .then((loaded) => {
+          // The TUI does not run live programs yet (widgets-live.md).
+          if (loaded.mode === "live") return void (current && setStore("live", true))
+          return WidgetSession.start(loaded.program, props.message.data).then((started) => {
+            if (!current) return
+            setSession(started)
+            setStore("view", started.view)
+          })
         })
         .catch((error) => {
           if (current) setStore("failure", stepMessage(error))
         })
     }),
   )
+
+  // A widget this client cannot run gives the keyboard back to the prompt.
+  createEffect(() => {
+    if ((store.live || store.failure) && props.focus.engaged() === props.message.id) props.focus.release()
+  })
 
   function dispatch(event: WidgetEvent) {
     const current = session()
@@ -101,19 +113,25 @@ export function WidgetMessage(props: { message: WidgetMessageInfo; sessionID: st
         output.warnings?.forEach((warning) => log.warn(warning, { template: props.message.template.name }))
         setStore({ view: output.view, error: undefined })
         if (output.dismiss) return respond({ dismiss: true })
-        // Programs run on a JSON-only interpreter, so a submitted value is always JSON.
+        // Programs run on a JSON-only interpreter, so a submitted or sent value is always JSON.
         if ("submit" in output) return respond({ value: output.submit as JsonValue })
+        if (output.send) return send(output.send.value as JsonValue, output.send.wake)
       })
       .catch((error) => {
         if (session() === current) setStore("error", stepMessage(error))
       })
   }
 
+  function send(value: JsonValue, wake: boolean) {
+    if (status() !== "open") return
+    return backend.send({ widget: props.message, value, wake }).catch((error) => setStore("error", errorMessage(error)))
+  }
+
   function respond(response: WidgetResponse) {
     if (store.sending || status() !== "open") return
     setStore({ sending: true, error: undefined })
     return backend
-      .respond({ sessionID: props.sessionID, messageID: props.message.id, response })
+      .respond({ widget: props.message, response })
       .then(() =>
         setStore("dismiss" in response ? { sent: "dismissed" } : { sent: "submitted", response: response.value }),
       )
@@ -159,6 +177,11 @@ export function WidgetMessage(props: { message: WidgetMessageInfo; sessionID: st
                 Widget failed to load: {failure()}
               </text>
             )}
+          </Match>
+          <Match when={store.live}>
+            <text fg={theme.text.muted} wrapMode="word">
+              {liveAlt(props.message.data) ?? "Open this widget on desktop or mobile."}
+            </text>
           </Match>
           <Match when={store.view}>
             {(view) => (
@@ -222,6 +245,12 @@ export function WidgetMessage(props: { message: WidgetMessageInfo; sessionID: st
   )
 }
 
+/** A live widget's own description of itself for clients that cannot run it: its data's `alt`, if it has one. */
+function liveAlt(data: unknown) {
+  if (typeof data !== "object" || data === null || !("alt" in data) || typeof data.alt !== "string") return
+  return `${data.alt} · Open this widget on desktop or mobile.`
+}
+
 function stepMessage(error: unknown) {
   if (error instanceof StepError)
     return error.kind === "timeout" ? "The widget took too long to respond" : error.message
@@ -238,4 +267,16 @@ function summary(response: unknown) {
           .join(" · ")
       : JSON.stringify(response)
   return text.length > 200 ? text.slice(0, 199) + "…" : text
+}
+
+/** A widget answer or message in the timeline, as one quiet line. */
+export function WidgetNotice(props: { text: string }) {
+  const theme = useTheme()
+  return (
+    <box paddingLeft={3} flexShrink={0}>
+      <text fg={theme.text.muted} wrapMode="word">
+        ◈ {props.text}
+      </text>
+    </box>
+  )
 }

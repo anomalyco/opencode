@@ -335,7 +335,6 @@ type Writes = Pick<
   | "replaceAssistantParts"
   | "updateShell"
   | "updateCompaction"
-  | "updateWidget"
 >
 
 function run(db: DatabaseService, event: MessageEvent) {
@@ -432,25 +431,6 @@ function run(db: DatabaseService, event: MessageEvent) {
           if (!row) return
           const message = SessionHistory.decodeMessageRowSync(row)
           return message.type === "compaction" ? message : undefined
-        })
-      },
-      getWidget(messageID) {
-        return Effect.gen(function* () {
-          const row = yield* db
-            .select()
-            .from(SessionMessageTable)
-            .where(
-              and(
-                eq(SessionMessageTable.id, messageID),
-                eq(SessionMessageTable.session_id, event.data.sessionID),
-                eq(SessionMessageTable.type, "widget"),
-              ),
-            )
-            .get()
-            .pipe(Effect.orDie)
-          if (!row) return
-          const message = SessionHistory.decodeMessageRowSync(row)
-          return message.type === "widget" ? message : undefined
         })
       },
       appendMessage: (message) => insertMessage(db, event, message),
@@ -601,7 +581,6 @@ function messageWrites(db: DatabaseService, event: MessageEvent): Writes {
     updateAssistant: updateMessage,
     updateShell: updateMessage,
     updateCompaction: updateMessage,
-    updateWidget: updateMessage,
     appendAssistantPart: (messageID, part) =>
       editAssistant(messageID, (draft) => {
         draft.content.push(castDraft(part))
@@ -813,7 +792,6 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
     updateAssistant: updateMessage,
     updateShell: updateMessage,
     updateCompaction: updateMessage,
-    updateWidget: updateMessage,
   }
 }
 
@@ -1103,8 +1081,6 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Skill.Activated, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Widget.Posted, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Widget.Responded, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Started, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)

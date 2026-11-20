@@ -101,12 +101,6 @@ export type SessionInboxCompactionPayload = {}
 
 export type ShellID = string
 
-export type WidgetName = string
-
-export type WidgetVersion = string
-
-export type WidgetStatus = "open" | "submitted" | "dismissed"
-
 export type SessionMessageNative = { [x: string]: JsonValue }
 
 export type SessionMessageToolStateStreaming = { status: "streaming"; input: string }
@@ -361,8 +355,6 @@ export type ArtifactID = string
 
 export type ArtifactTime = { created: number; updated: number }
 
-export type WidgetDataSchema = { [x: string]: JsonValue }
-
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
 export type VcsBranch = { current?: string; default?: string }
@@ -574,8 +566,6 @@ export type ShellInfo1 = {
   metadata: { [x: string]: JsonValue }
   time: { started: number; completed?: number }
 }
-
-export type WidgetRef = { name: WidgetName; version: WidgetVersion }
 
 export type SessionMessageAssistantText = { type: "text"; text: string; native?: SessionMessageNative }
 
@@ -1027,24 +1017,6 @@ export type ArtifactInfo = {
   time: ArtifactTime
 }
 
-export type WidgetSummary = {
-  name: WidgetName
-  version: WidgetVersion
-  description: string
-  data: WidgetDataSchema
-  builtin: boolean
-}
-
-export type WidgetProgram = {
-  name: WidgetName
-  version: WidgetVersion
-  description: string
-  data: WidgetDataSchema
-  builtin: boolean
-  source: string
-  program: string
-}
-
 export type VcsInfo = { provider?: string; branch: VcsBranch }
 
 export type WebSearchProvider = { id: WebSearchID; name: string }
@@ -1209,19 +1181,6 @@ export type SessionInboxUserPayload1 = {
   agents?: Array<PromptAgentAttachment>
   skills?: Array<PromptSkillAttachment>
   metadata?: { [x: string]: any }
-}
-
-export type SessionMessageWidget = {
-  id: SessionMessageID
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number; responded?: number }
-  type: "widget"
-  title?: string
-  template: WidgetRef
-  data: JsonValue
-  tool?: { messageID: SessionMessageID; callID: string }
-  status: WidgetStatus
-  response?: JsonValue
 }
 
 export type SessionMessageToolStateCompleted = {
@@ -1482,33 +1441,6 @@ export type SessionShellEnded = {
     shell: ShellInfo
     output: { output: string; cursor: number; size: number; truncated: boolean }
   }
-}
-
-export type SessionWidgetPosted = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.widget.posted"
-  durable: { aggregateID: string; seq: EventSeq; version: 1 }
-  location?: LocationRef
-  data: {
-    sessionID: SessionID
-    messageID: SessionMessageID
-    title?: string
-    template: WidgetRef
-    data: JsonValue
-    tool?: { messageID: SessionMessageID; callID: string }
-  }
-}
-
-export type SessionWidgetResponded = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.widget.responded"
-  durable: { aggregateID: string; seq: EventSeq; version: 1 }
-  location?: LocationRef
-  data: { sessionID: SessionID; messageID: SessionMessageID; status: "submitted" | "dismissed"; response?: JsonValue }
 }
 
 export type SessionStepStarted = {
@@ -2929,7 +2861,6 @@ export type SessionMessageInfo =
   | SessionMessageSystem
   | SessionMessageSkill
   | SessionMessageShell
-  | SessionMessageWidget
   | SessionMessageAssistant
   | SessionMessageCompaction
   | SessionMessageIdle
@@ -3001,8 +2932,6 @@ export type SessionEventDurable =
   | SessionSkillActivated
   | SessionShellStarted
   | SessionShellEnded
-  | SessionWidgetPosted
-  | SessionWidgetResponded
   | SessionStepStarted
   | SessionStepFirstToken
   | SessionStepStreamed
@@ -3062,8 +2991,6 @@ export type V2Event =
   | SessionSkillActivated
   | SessionShellStarted
   | SessionShellEnded
-  | SessionWidgetPosted
-  | SessionWidgetResponded
   | SessionStepStarted
   | SessionStepFirstToken
   | SessionStepStreamed
@@ -3268,16 +3195,6 @@ export type SkillNotFoundError = {
 export const isSkillNotFoundError = (value: unknown): value is SkillNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillNotFoundError"
 
-export type WidgetAlreadyRespondedError = {
-  readonly _tag: "WidgetAlreadyRespondedError"
-  readonly sessionID: string
-  readonly messageID: string
-  readonly status: "submitted" | "dismissed"
-  readonly message: string
-}
-export const isWidgetAlreadyRespondedError = (value: unknown): value is WidgetAlreadyRespondedError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "WidgetAlreadyRespondedError"
-
 export type InstructionEntryValueTooLargeError = {
   readonly _tag: "InstructionEntryValueTooLargeError"
   readonly actualBytes: number
@@ -3455,15 +3372,6 @@ export type ArtifactNotFoundError = {
 }
 export const isArtifactNotFoundError = (value: unknown): value is ArtifactNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ArtifactNotFoundError"
-
-export type WidgetTemplateNotFoundError = {
-  readonly _tag: "WidgetTemplateNotFoundError"
-  readonly template: string
-  readonly version?: string | undefined
-  readonly message: string
-}
-export const isWidgetTemplateNotFoundError = (value: unknown): value is WidgetTemplateNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "WidgetTemplateNotFoundError"
 
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
@@ -4095,14 +4003,6 @@ export type ExperimentalSessionWaitInput = { readonly sessionID: string }
 
 export type ExperimentalSessionWaitOutput = void
 
-export type ExperimentalSessionWidgetRespondInput = {
-  readonly sessionID: string
-  readonly messageID: string
-  readonly payload: { readonly value: JsonValue } | { readonly dismiss: true }
-}
-
-export type ExperimentalSessionWidgetRespondOutput = void
-
 export type ExperimentalSessionInstructionsEntryListInput = { readonly sessionID: string }
 
 export type ExperimentalSessionInstructionsEntryListOutput = { data: Array<InstructionEntryInfo> }["data"]
@@ -4141,7 +4041,6 @@ export type MessageListInput = {
     | "system"
     | "skill"
     | "shell"
-    | "widget"
     | "assistant"
     | "compaction"
     | "idle"
@@ -4628,8 +4527,6 @@ export type EventSubscribeInput = {
         | "session.skill.activated"
         | "session.shell.started"
         | "session.shell.ended"
-        | "session.widget.posted"
-        | "session.widget.responded"
         | "session.step.started"
         | "session.step.first-token"
         | "session.step.streamed"
@@ -4930,16 +4827,6 @@ export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
 export type ExperimentalJobCancelInput = { readonly id: string }
 
 export type ExperimentalJobCancelOutput = void
-
-export type ExperimentalWidgetTemplateListOutput = { data: Array<WidgetSummary> }["data"]
-
-export type ExperimentalWidgetTemplateLatestInput = { readonly name: string }
-
-export type ExperimentalWidgetTemplateLatestOutput = { data: WidgetProgram }["data"]
-
-export type ExperimentalWidgetTemplateGetInput = { readonly name: string; readonly version: string }
-
-export type ExperimentalWidgetTemplateGetOutput = { data: WidgetProgram }["data"]
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
