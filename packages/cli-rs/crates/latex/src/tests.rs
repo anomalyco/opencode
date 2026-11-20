@@ -139,21 +139,21 @@ fn markdown(app: &TestApp, theme: &Theme, streaming: bool) -> Markdown {
 }
 
 /// The radical and matrix layouts have known differences, and TS draws two blank rows above a formula after a block
-/// (`parity/deviations/F16-plugin-fence-margin.md`). `invalid` has no formula after a block; its fences fall back to
-/// plain code, which Rust draws in the `default` scope's color (`parity/deviations/OT-plain-fence-fg.md`).
+/// (`parity/deviations/F16-plugin-fence-margin.md`); `invalid` has no formula after a block and matches cell for cell.
 #[test]
 fn transcript_fences_match_typescript() {
     let corpus: Value = serde_json::from_str(include_str!("../../../parity/fixtures/P.2/corpus.json")).unwrap();
-    for (name, width, height, differ) in [
-        ("structures", 60, 30, 145),
-        ("adapter", 60, 36, ADAPTER_DIFFERS),
-        ("wide", 30, 8, 52),
-        ("invalid", 60, 20, 24),
-    ] {
+    for (name, width, height, differ) in
+        [("structures", 60, 30, 145), ("adapter", 60, 36, ADAPTER_DIFFERS), ("wide", 30, 8, 52), ("invalid", 60, 20, 0)]
+    {
         let (app, theme) = app(width, height);
         let text = markdown(&app, &theme, false).set_markdown(corpus[name].as_str().unwrap().trim());
         app.root().add(&View::new(&app).padding_edge(Edge::Left, 3).shrink(0.0).child(&text));
         let capture = app.render();
+        if differ == 0 {
+            opencode_parity::assert_fixture(&capture, &format!("P.2/{name}"));
+            continue;
+        }
         let path = opencode_parity::fixtures_dir().join(format!("P.2/{name}.json"));
         let expected = opencode_parity::Fixture::load(path).unwrap();
         let comparison = opencode_parity::compare(&expected, &opencode_parity::Fixture::from_capture(&capture));
