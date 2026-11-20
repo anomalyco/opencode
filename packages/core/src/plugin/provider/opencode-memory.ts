@@ -276,9 +276,7 @@ type Tracked = {
   readonly about: Map<string, string>
   task?: string
   /** An injection started at a task's start, waiting for the model request that follows it. */
-  pending?: Fiber.Fiber<
-    { readonly entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>; readonly moment: Prompted } | undefined
-  >
+  pending?: Fiber.Fiber<(Delivery & { readonly moment: Prompted }) | undefined>
   /**
    * The repository's instruction files as the session's first request in this process carries them, "" when it has
    * none: an entry they already state isn't delivered. Later edits to them aren't followed.
@@ -288,6 +286,11 @@ type Tracked = {
   readonly acted: Set<"commit" | "pr">
 }
 type Prompted = Extract<OpencodeMemoryPolicy.Moment, { readonly type: "prompt" }>
+/** What a moment delivers: entries for the task, failure or action at hand, and at a task's start the repo's rules. */
+type Delivery = {
+  readonly entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>
+  readonly rules: ReadonlyArray<OpencodeMemoryPolicy.Injected>
+}
 
 /**
  * The workspace's shared memory for one Location: while `sync` is given a Console, the `memory` tools, and the hooks
@@ -455,6 +458,13 @@ export const make = Effect.fnUntraced(function* (
   }).pipe(Effect.catchCause(() => Effect.succeed({})))
   // Moments and searches only need which repository and branch; reading them once per Location keeps Git off them.
   const repository = yield* Effect.cached(checkout)
+  // The repository as entries and decisions name it: `host/owner/name`, or the directory's name outside one.
+  const label = repository.pipe(
+    Effect.map(
+      (source) =>
+        ("repo" in source && source.repo ? repoName(source.repo) : undefined) ?? path.basename(ctx.location.directory),
+    ),
+  )
   const discovered = yield* Effect.cached(git.repo.discover(AbsolutePath.make(ctx.location.directory)))
   // Where this machine's paths start, to make what a write says about them shareable.
   const roots = discovered.pipe(
@@ -764,11 +774,7 @@ export const make = Effect.fnUntraced(function* (
           // A lesson the work showed goes out only when it's judged durable, not a note about this one task (a decision
           // that fails is a no); a rule the user confirmed is the user's to keep.
           if (backing === "observed") {
-            const durable = yield* decide.durable(
-              candidate,
-              ("repo" in source && source.repo ? repoName(source.repo) : undefined) ??
-                path.basename(ctx.location.directory),
-            )
+            const durable = yield* decide.durable(candidate, yield* label)
             if ((durable ?? 0) < OpencodeMemoryDecide.DURABLE)
               return yield* Effect.logDebug("memory candidate dropped: task-specific", { title: candidate.title })
           }
@@ -1071,7 +1077,9 @@ export const make = Effect.fnUntraced(function* (
             answer.entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision),
           ),
           Effect.flatMap((entries) =>
-            gated ? select(state, moment, task, entries) : Effect.succeed(entries.slice(0, MAX_DELIVERED)),
+            gated
+              ? select(state, moment, task, entries)
+              : Effect.succeed<Delivery>({ entries: entries.slice(0, MAX_DELIVERED), rules: [] }),
           ),
           Effect.timeout(policy.timeout),
         )
@@ -1090,9 +1098,7 @@ export const make = Effect.fnUntraced(function* (
       Effect.gen(function* () {
         // At a task's start each candidate is asked whether it's a rule for all the repository's work, and a ranked one
         // whether it applies to the task too; elsewhere only whether it applies.
-        const source = yield* repository
-        const name =
-          ("repo" in source && source.repo ? repoName(source.repo) : undefined) ?? path.basename(ctx.location.directory)
+        const name = yield* label
         const judged = yield* Effect.forEach(
           entries,
           (entry) =>
@@ -1117,7 +1123,7 @@ export const make = Effect.fnUntraced(function* (
         const applying = judged
           .filter((item) => !rules.includes(item) && (item.applies ?? 0) >= OpencodeMemoryDecide.APPLIES)
           .toSorted((a, b) => (b.applies ?? 0) - (a.applies ?? 0))
-        if (rules.length === 0 && applying.length === 0) return []
+        if (rules.length === 0 && applying.length === 0) return { entries: [], rules: [] } satisfies Delivery
         const instructions = yield* Deferred.await(state.instructions)
         const [fitting, kept] = yield* Effect.all(
           [
@@ -1134,7 +1140,7 @@ export const make = Effect.fnUntraced(function* (
           ],
           { concurrency: 2 },
         )
-        return [...fitting, ...kept]
+        return { entries: fitting, rules: kept } satisfies Delivery
       })
     /**
      * Up to `budget` of `entries`, in order, that the instruction files don't already state, asking only as many at a
@@ -1180,7 +1186,7 @@ export const make = Effect.fnUntraced(function* (
         const state = tracked(sessionID)
         if (state.pending) return
         state.pending = yield* ask(sessionID, moment).pipe(
-          Effect.map((entries) => (entries === undefined ? undefined : { entries, moment })),
+          Effect.map((delivery) => (delivery === undefined ? undefined : { ...delivery, moment })),
           Effect.forkIn(lease, { startImmediately: true }),
         )
       })
@@ -1274,7 +1280,7 @@ export const make = Effect.fnUntraced(function* (
         if (action !== undefined && !state.acted.has(action) && (yield* decide.available)) {
           state.acted.add(action)
           const moment = { type: "action" as const, action, command }
-          const entries = yield* ask(event.sessionID, moment)
+          const entries = (yield* ask(event.sessionID, moment))?.entries
           if (entries !== undefined && entries.length > 0) {
             deliver(state, entries)
             yield* report(event.sessionID, entries)
@@ -1351,7 +1357,7 @@ export const make = Effect.fnUntraced(function* (
         const moment = { type: "failure" as const, command, output: shell.value.output.output, exitCode }
         // Appended to the failing command's own result, where the agent reads the failure, so it's in the next request
         // without a message of its own. The command's result waits for Console at most the policy's timeout.
-        const entries = yield* ask(event.sessionID, moment)
+        const entries = (yield* ask(event.sessionID, moment))?.entries
         if (entries === undefined || entries.length === 0) return
         yield* report(event.sessionID, entries)
         const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
@@ -1421,23 +1427,49 @@ export const make = Effect.fnUntraced(function* (
         state.pending = undefined
         const delivery = yield* Fiber.join(pending)
         // A failure's delivery may have given an entry since Console answered.
-        const entries =
-          delivery?.entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision) ?? []
-        if (!delivery || entries.length === 0) return
-        yield* report(event.sessionID, entries)
-        const text = policy.render(entries, delivery.moment)
-        const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
-        yield* ctx.session.synthetic({
-          sessionID: event.sessionID,
-          id: messageID(event.sessionID, ids.join(",")),
-          text,
-          description: `${ids.length === 1 ? "1 memory entry" : `${ids.length} memory entries`} for this task`,
-          metadata: { source: "console.memory", moment: delivery.moment.type, entries: ids },
-          resume: false,
+        const fresh = (entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>) =>
+          entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision)
+        const rules = fresh(delivery?.rules ?? [])
+        const entries = fresh(delivery?.entries ?? [])
+        if (!delivery || rules.length + entries.length === 0) return
+        yield* report(event.sessionID, [...rules, ...entries])
+        // The repository's rules first, in an instruction file's form, then the entries for the task in memory's own.
+        const messages = [
+          ...(rules.length === 0
+            ? []
+            : [
+                {
+                  delivered: rules,
+                  text: policy.conventions(rules, yield* label),
+                  description: `${rules.length === 1 ? "1 repository convention" : `${rules.length} repository conventions`}`,
+                  form: "instructions",
+                },
+              ]),
+          ...(entries.length === 0
+            ? []
+            : [
+                {
+                  delivered: entries,
+                  text: policy.render(entries, delivery.moment),
+                  description: `${entries.length === 1 ? "1 memory entry" : `${entries.length} memory entries`} for this task`,
+                  form: "entries",
+                },
+              ]),
+        ]
+        yield* Effect.forEach(messages, (message) => {
+          const ids = message.delivered.map((entry) => `${entry.id}@${entry.revision}`)
+          event.messages.push(Message.user(message.text))
+          return ctx.session.synthetic({
+            sessionID: event.sessionID,
+            id: messageID(event.sessionID, ids.join(",")),
+            text: message.text,
+            description: message.description,
+            metadata: { source: "console.memory", moment: delivery.moment.type, form: message.form, entries: ids },
+            resume: false,
+          })
         })
-        event.messages.push(Message.user(text))
         state.injected[delivery.moment.type]++
-        deliver(state, entries)
+        deliver(state, [...rules, ...entries])
       }).pipe(Effect.catch((cause) => Effect.logWarning("failed to deliver memory entries", { cause }))),
     )
   })

@@ -114,6 +114,11 @@ export interface Policy {
   readonly timeout: Duration.Input
   /** The message that delivers `entries` to the session at `moment`. */
   readonly render: (entries: ReadonlyArray<Injected>, moment: Moment) => string
+  /**
+   * The repository's rules for all its work as a task starts, as OpenCode renders an instruction file: one message of
+   * their own, apart from the entries for the task.
+   */
+  readonly conventions: (entries: ReadonlyArray<Injected>, repo: string) => string
   /** Why an action was held: the repository's rules for it, and to run it again following them. */
   readonly held: (entries: ReadonlyArray<Injected>, moment: Extract<Moment, { type: "action" }>) => string
   /** The reminder the request after a user's message that corrects a given entry gets. */
@@ -189,6 +194,12 @@ export const initial: Policy = {
         (entry) => `## ${line(entry.id)} r${entry.revision} ${entry.kind}: ${line(entry.title)}\n${entry.body.trim()}`,
       ),
       "</workspace-memory>",
+    ].join("\n"),
+  // AGENTS.md's form: a house rule an agent read there was followed in 20 of 20 runs, from the system prompt in 13.
+  conventions: (entries, repo) =>
+    [
+      `Instructions from: Engram (conventions for ${line(repo)})`,
+      ...entries.map((entry) => `## ${line(entry.title)}\n${entry.body.trim()}`),
     ].join("\n"),
   held: (entries, moment) =>
     [

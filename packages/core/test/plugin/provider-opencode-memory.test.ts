@@ -2095,19 +2095,48 @@ describe("OpencodePlugin memory conventions", () => {
             asked.questions.repo_wide
               ? { repo_wide: rank(asked.state, ["rule_a", "rule_b", "rule_c", "rule_d"], 0.3, 0.07) }
               : { applies: rank(asked.state, ["task_a", "task_b", "task_c", "task_d", "fix"], 0.9, 0.1) }
-          const { host } = yield* start(console)
+          const { host, synthetic } = yield* start(console)
           const hooks = yield* PluginHooks.Service
           const session = yield* host.session.create({})
           yield* prompt(session.id, "Fix the date parsing")
           const first = request(session.id, "Fix the date parsing")
           yield* hooks.trigger("session", "context", first)
-          expect(texts(first)[1]).toBe(
-            OpencodeMemoryPolicy.initial.render([...tasks.slice(0, 3), ...rules.slice(0, 3)], {
-              type: "prompt",
-              text: "Fix the date parsing",
-              files: [],
-            }),
-          )
+          // The rules come as an instruction file does, a message of their own, before the entries for the task.
+          const conventions = [
+            "Instructions from: Engram (conventions for github.com/Acme/App)",
+            "## Entry rule_a\nBody of rule_a\nMore",
+            "## Entry rule_b\nBody of rule_b\nMore",
+            "## Entry rule_c\nBody of rule_c\nMore",
+          ].join("\n")
+          const topical = OpencodeMemoryPolicy.initial.render(tasks.slice(0, 3), {
+            type: "prompt",
+            text: "Fix the date parsing",
+            files: [],
+          })
+          expect(texts(first)).toEqual(["Fix the date parsing", conventions, topical])
+          expect(first.system.map((part) => part.text)).toEqual(["Agent prompt"])
+          expect(synthetic.map((item) => [item.text, item.description, item.metadata])).toEqual([
+            [
+              conventions,
+              "3 repository conventions",
+              {
+                source: "console.memory",
+                moment: "prompt",
+                form: "instructions",
+                entries: ["rule_a@1", "rule_b@1", "rule_c@1"],
+              },
+            ],
+            [
+              topical,
+              "3 memory entries for this task",
+              {
+                source: "console.memory",
+                moment: "prompt",
+                form: "entries",
+                entries: ["task_a@1", "task_b@1", "task_c@1"],
+              },
+            ],
+          ])
           // The repository's entries are asked only whether they're rules for all its work, framed as notes about it.
           const applies = judge.asked.filter((item) => item.questions.applies)
           expect(applies).toHaveLength(5)
@@ -2165,13 +2194,10 @@ describe("OpencodePlugin memory conventions", () => {
         yield* prompt(session.id, "Fix the date parsing")
         const first = instructed(session.id, "Fix the date parsing", files)
         yield* hooks.trigger("session", "context", first)
-        expect(texts(first)[1]).toBe(
-          OpencodeMemoryPolicy.initial.render([rules[2], rules[4]], {
-            type: "prompt",
-            text: "Fix the date parsing",
-            files: [],
-          }),
-        )
+        expect(texts(first)).toEqual([
+          "Fix the date parsing",
+          OpencodeMemoryPolicy.initial.conventions([rules[2], rules[4]], "github.com/Acme/App"),
+        ])
         // The verbatim duplicate wasn't asked about; the others were shown the instruction files only.
         const stated = judge.asked.filter((item) => item.questions.already_stated)
         expect(stated).toHaveLength(4)
@@ -2184,13 +2210,10 @@ describe("OpencodePlugin memory conventions", () => {
         yield* prompt(plain.id, "Fix the date parsing")
         const event = request(plain.id, "Fix the date parsing")
         yield* hooks.trigger("session", "context", event)
-        expect(texts(event)[1]).toBe(
-          OpencodeMemoryPolicy.initial.render(rules.slice(0, 3), {
-            type: "prompt",
-            text: "Fix the date parsing",
-            files: [],
-          }),
-        )
+        expect(texts(event)).toEqual([
+          "Fix the date parsing",
+          OpencodeMemoryPolicy.initial.conventions(rules.slice(0, 3), "github.com/Acme/App"),
+        ])
         expect(judge.asked.slice(asked).some((item) => item.questions.already_stated)).toBe(false)
       }),
     ),
