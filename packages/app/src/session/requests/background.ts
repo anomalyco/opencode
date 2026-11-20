@@ -267,3 +267,44 @@ export function mergeJobList<T extends Pick<JobInfo, "id"> & { status: string }>
 
   return jobs
 }
+
+// Running jobs kept from a list plus job.updated events. Each load replaces the state, so a reload after a reconnect
+// drops jobs whose settled event was missed; events seen while a load is in flight win over its response.
+export function createJobList<T extends Pick<JobInfo, "id"> & { status: string }>(
+  set: (jobs: ReadonlyMap<string, T>) => void,
+) {
+  let jobs: ReadonlyMap<string, T> = new Map()
+  let updates: Map<string, T> | undefined
+
+  const commit = (next: ReadonlyMap<string, T>) => {
+    jobs = next
+    set(next)
+  }
+
+  return {
+    update(info: T) {
+      updates?.set(info.id, info)
+
+      if (info.status === "running") return commit(new Map(jobs).set(info.id, info))
+
+      if (!jobs.has(info.id)) return
+
+      const next = new Map(jobs)
+      next.delete(info.id)
+      commit(next)
+    },
+    load(list: () => Promise<readonly T[]>, current: () => boolean = () => true) {
+      const pending = new Map<string, T>()
+      updates = pending
+
+      return list()
+        .then((listed) => {
+          if (updates === pending && current()) commit(mergeJobList(listed, pending))
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (updates === pending) updates = undefined
+        })
+    },
+  }
+}

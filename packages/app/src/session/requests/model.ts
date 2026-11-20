@@ -14,7 +14,7 @@ import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { createWebSearchRequest } from "./websearch"
-import { createSessionBackground, mergeJobList } from "@/session/requests/background"
+import { createJobList, createSessionBackground } from "@/session/requests/background"
 import { createSteerBackground } from "@/session/requests/steer-background"
 import { useData, useServer } from "@/runtime/server/current"
 import { needsUser } from "./auto-approve-machine"
@@ -163,47 +163,36 @@ export function createSessionRequestModel() {
     return !!id && !data.session.get(id)?.parentID
   }
 
-  // Running jobs in the session's tree: listed once when the session opens or the connection returns, then kept by
-  // job.updated events.
+  // Running jobs in the session's tree: listed when the session opens, the connection returns or the event stream
+  // reconnects, then kept by job.updated events.
   const [jobs, setJobs] = createSignal<ReadonlyMap<string, JobInfo>>(new Map())
   const runningJobs = createMemo(() => [...jobs().values()])
-  // Events seen while the latest list request is in flight, applied over its response.
-  let jobUpdates: Map<string, JobInfo> | undefined
+  const jobList = createJobList<JobInfo>(setJobs)
 
-  const stopJobs = serverSDK.event.on("experimental.job.updated", (event) => {
-    const info = event.data.info
+  const loadJobs = (sessionID: string) =>
+    jobList.load(
+      () => serverSDK.api.experimental.job.list({ sessionID, descendants: true, status: "running" }),
+      () => params.id === sessionID,
+    )
 
-    jobUpdates?.set(info.id, info)
+  const stopJobs = serverSDK.event.on("experimental.job.updated", (event) => jobList.update(event.data.info))
 
-    setJobs((previous) => {
-      if (info.status === "running") return new Map(previous).set(info.id, info)
+  const stopJobsResync = serverSDK.event.on("server.connected", () => {
+    const sessionID = untrack(() => params.id)
 
-      if (!previous.has(info.id)) return previous
-
-      const next = new Map(previous)
-      next.delete(info.id)
-
-      return next
-    })
+    if (sessionID) void loadJobs(sessionID)
   })
 
-  onCleanup(stopJobs)
+  onCleanup(() => {
+    stopJobs()
+    stopJobsResync()
+  })
 
   createEffect(() => {
     const sessionID = params.id
 
     if (!sessionID || serverSDK.connection.status() !== "connected") return
-    const updates = new Map<string, JobInfo>()
-    jobUpdates = updates
-    void serverSDK.api.experimental.job
-      .list({ sessionID, descendants: true, status: "running" })
-      .then((list) => {
-        if (jobUpdates === updates && params.id === sessionID) setJobs(mergeJobList(list, updates))
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (jobUpdates === updates) jobUpdates = undefined
-      })
+    void loadJobs(sessionID)
   })
 
   const running = createSessionBackground({
