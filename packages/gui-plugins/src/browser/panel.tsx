@@ -43,18 +43,20 @@ import { hostDisplay } from "./host-display"
 import { FileSource } from "../file/contract"
 import { remotePath, workspacePrefix } from "./remote-address"
 import {
-  ADDRESS_HINT_MAX_LENGTH,
-  addressSuggestions,
+  addressRows,
   addressView,
   initialAddressState,
   nextAddressEpoch,
   transitionAddress,
   type AddressEpoch,
   type AddressEvent,
+  type AddressRow,
 } from "./address-machine"
 import { commentNote, pageNote } from "./comment"
 import { Glyph } from "./choices"
-import { bare, highlight, type Visit } from "./history"
+import type { HistoryPage } from "./history/ipc"
+import { markMatches, parseQuery, type Query } from "./history/match"
+import { bare } from "./history/page"
 import { SignInOffer } from "./import-prompt"
 import { SiteChooserDialog } from "./site-chooser"
 import type definition from "./index"
@@ -223,20 +225,85 @@ export default function SessionBrowserPane(props: {
     }),
   )
 
-  // Suggestions follow what the user typed; a focused address is not a query.
-  const suggestions = createMemo(() => addressSuggestions(addressState(), props.model.visits()))
-  const addressBar = createMemo(() => addressView(addressState(), epoch(), suggestions()))
+  // The list follows what the user typed; a focused address is not a query.
+  const rows = createMemo(() => addressRows(addressState(), props.model.visits()))
+  const addressBar = createMemo(() => addressView(addressState(), epoch(), rows()))
+  // The typed words, whose matches each page of the list draws.
+  const query = createMemo(() => parseQuery(addressBar().query))
+
+  // Ends the questions to main's history that are still out when the pane goes.
+  const asking = new AbortController()
+  onCleanup(() => asking.abort())
 
   const dispatchAddress = (event: AddressEvent, domEvent?: Event) => {
     const next = transitionAddress(untrack(addressState), event)
     setAddressState(next.state)
+    // The field's text is the machine's. After a key the input holds only what was typed, while the machine may show
+    // a completed address after it, or a row's text; the same text as before is not written by the binding.
+    const field = untrack(addressBar).field
+
+    if (input && input.value !== field) input.value = field
     next.effects.forEach((effect) => {
       if (effect.type === "select-input") return input?.select()
+
+      // The caret stays after the typed text, as Chrome's does, so the next key replaces the completed part.
+      if (effect.type === "select-completion") return input?.setSelectionRange(effect.start, input.value.length, "backward")
 
       if (effect.type === "blur-input") return input?.blur()
 
       if (effect.type === "prevent-default") return domEvent?.preventDefault()
+
+      if (effect.type === "forget") return props.model.forgetPage(effect.url)
+
+      if (effect.type === "prepare") return props.model.prepareHistory()
+
+      if (effect.type === "ask") {
+        // The field already shows what was typed and what the window knows; main's pages join when they come. A
+        // question main cannot answer, as on the web, is answered with none.
+        const answer = (pages: readonly HistoryPage[]) => {
+          if (!asking.signal.aborted) dispatchAddress({ type: "answered", attempt: effect.attempt, pages, visits: props.model.visits() })
+        }
+
+        return void props.model.searchHistory(effect.query, asking.signal).then(answer, () => answer([]))
+      }
+
       command({ type: "navigate", tabID: effect.tabID, url: effect.url })
+    })
+  }
+
+  // Editing shows the icon of what Enter would open: the chosen page's once the person typed, else the page's own.
+  const fieldIcon = () => {
+    const bar = addressBar()
+
+    if (!bar.editing || !bar.field) return undefined
+
+    if (!bar.typed) return page()?.icon
+
+    return bar.chosen?.type === "page" ? bar.chosen.page.icon : undefined
+  }
+
+  // After a row's title: a page's address, what a search row searches with, or the typed address itself.
+  const rowDetail = (row: AddressRow) => {
+    if (row.type === "search") return plugin.t("address.search.web")
+
+    return row.type === "page" ? bare(row.url) : row.text
+  }
+
+  // A caret or a selection that leaves the end of the text ends completing, as in Chrome: the completed address
+  // becomes part of the text, and no later answer completes text the person is working inside.
+  const caretMoved = () => {
+    const bar = untrack(addressBar)
+
+    if (!input || !bar.completing) return
+    const end = input.value.length
+
+    if (input.selectionStart === bar.field.length - bar.completion.length && input.selectionEnd === end) return
+
+    dispatchAddress({
+      type: "input.changed",
+      value: input.value,
+      completing: input.selectionStart === end && input.selectionEnd === end,
+      visits: props.model.visits(),
     })
   }
 
@@ -918,21 +985,10 @@ export default function SessionBrowserPane(props: {
               dispatchAddress({ type: "submitted", epoch: epoch(), visits: props.model.visits(), failed: failed() })
             }}
           >
-            {/* Editing shows the icon of the page Enter would open: the page's own, or the chosen suggestion's. */}
+            {/* Editing shows the icon of what Enter would open: the page's own, or the chosen row's. */}
             <Show
               when={site()}
-              fallback={
-                <PageIcon
-                  icon={
-                    addressBar().editing && addressBar().field
-                      ? addressBar().typed
-                        ? addressBar().chosen?.icon
-                        : page()?.icon
-                      : undefined
-                  }
-                  class="text-v2-icon-icon-muted"
-                />
-              }
+              fallback={<RowIcon search={addressBar().chosen?.type === "search"} icon={fieldIcon()} />}
             >
               {/* Site information describes one page: another tab or URL closes it, and opening it reads anew. */}
               <Show when={`${props.session.key}\n${state()?.id}\n${address()}`} keyed>
@@ -962,7 +1018,7 @@ export default function SessionBrowserPane(props: {
                 ref={input}
                 data-slot="browser-address-input"
                 role="combobox"
-                aria-autocomplete="list"
+                aria-autocomplete="both"
                 aria-expanded={addressBar().listed}
                 aria-controls={addressBar().listed ? "browser-suggestions" : undefined}
                 aria-activedescendant={addressBar().chosen ? `browser-suggestion-${addressBar().active}` : undefined}
@@ -985,18 +1041,33 @@ export default function SessionBrowserPane(props: {
                   dispatchAddress({
                     type: "input.changed",
                     value: event.currentTarget.value,
-                    deleting: event.inputType.startsWith("delete"),
+                    // Only text typed at the end completes an address: not a deletion, a paste or a drop, and not
+                    // text an IME is still composing, which a changed value would break.
+                    completing:
+                      (event.inputType === "insertText" || event.inputType === "insertCompositionText") &&
+                      !event.isComposing &&
+                      event.currentTarget.selectionStart === event.currentTarget.value.length,
                     visits: props.model.visits(),
                   })
                 }
                 onKeyDown={(event) => {
-                  // Keys during IME composition pick and cancel candidates, not suggestions. Safari can report the
+                  // Keys during IME composition pick and cancel candidates, not rows. Safari can report the
                   // composition-confirming keydown with isComposing false but keyCode 229.
                   if (event.isComposing || event.keyCode === 229) return
+                  const modified = event.ctrlKey || event.altKey || event.metaKey
 
-                  if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Escape")
-                    dispatchAddress({ type: "key.pressed", key: event.key, visits: props.model.visits() }, event)
+                  // Shift with an arrow selects text, and a modified Tab is a shortcut of the app's.
+                  if (((event.key === "ArrowDown" || event.key === "ArrowUp") && !event.shiftKey && !modified) || event.key === "Escape")
+                    dispatchAddress({ type: "key.pressed", key: event.key, epoch: epoch(), visits: props.model.visits() }, event)
+
+                  if (event.key === "Tab" && !modified)
+                    dispatchAddress({ type: "key.pressed", key: event.shiftKey ? "Shift+Tab" : "Tab", epoch: epoch(), visits: props.model.visits() }, event)
+
+                  // Shift+Delete forgets the chosen row's page, as in other browsers; on any other row it is the field's.
+                  if (event.key === "Delete" && event.shiftKey) dispatchAddress({ type: "forget.pressed", visits: props.model.visits() }, event)
                 }}
+                onKeyUp={caretMoved}
+                onPointerUp={caretMoved}
               />
               {/* At rest, draw the whole URL over the input's hidden text with its host emphasized. While editing, the
                   input shows its own text so selection and the caret need no mirror. */}
@@ -1008,20 +1079,6 @@ export default function SessionBrowserPane(props: {
                     <span data-slot="browser-address-rest">{parts().rest}</span>
                   </span>
                 </div>
-              </Show>
-              {/* The suggestion Enter opens, after the typed text. Long text scrolls the input, which a mirror cannot
-                  follow, so only a short query shows it. */}
-              <Show
-                when={
-                  addressBar().editing && addressBar().query.length <= ADDRESS_HINT_MAX_LENGTH && addressBar().chosen
-                }
-              >
-                {(visit) => (
-                  <div aria-hidden="true" data-slot="browser-address-hint">
-                    <span class="invisible shrink-0">{addressBar().query}</span>
-                    <span class="ms-1.5 min-w-0 truncate">{`- ${bare(visit().url)}`}</span>
-                  </div>
-                )}
               </Show>
             </div>
             {/* Any zoom but 100% stays in sight, as the system browser shows it; a click resets it. */}
@@ -1046,13 +1103,17 @@ export default function SessionBrowserPane(props: {
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
               <div id="browser-suggestions" role="listbox" aria-label={plugin.t("address.suggestions")}>
-                <For each={suggestions()}>
-                  {(visit, index) => (
+                <For each={rows()}>
+                  {(row, index) => (
                     <PageRow
-                      visit={visit}
-                      query={addressBar().query}
+                      search={row.type === "search"}
+                      icon={row.type === "page" ? row.page.icon : undefined}
+                      title={rowTitle(row)}
+                      detail={rowDetail(row)}
+                      // Only a page draws the typed words: the other rows are the typed text itself.
+                      query={row.type === "page" ? query() : undefined}
                       option={{ id: `browser-suggestion-${index()}`, selected: index() === addressBar().active }}
-                      onClick={() => go(visit.url)}
+                      onClick={() => go(row.url)}
                     />
                   )}
                 </For>
@@ -1240,7 +1301,15 @@ export default function SessionBrowserPane(props: {
                         >
                           {plugin.t("menu.hardReload")}
                         </Menu.Item>
-                        <Menu.Item disabled={props.model.visits().length === 0} onSelect={() => props.model.clearHistory()}>
+                        <Menu.Item
+                          disabled={!props.model.historyClearable()}
+                          // The list empties at once; a history main could not clear is said, and the item stays to try again.
+                          onSelect={() =>
+                            void props.model.clearHistory().then((cleared) => {
+                              if (!cleared) plugin.toast.show({ variant: "error", title: plugin.t("history.clear.failed") })
+                            })
+                          }
+                        >
                           {plugin.t("history.clear")}
                         </Menu.Item>
                       </Menu.SubContent>
@@ -1403,7 +1472,9 @@ export default function SessionBrowserPane(props: {
                     {plugin.t("home.recent")}
                   </div>
                   <div class="flex flex-col gap-2">
-                    <For each={recent()}>{(visit) => <PageRow visit={visit} onClick={() => go(visit.url)} />}</For>
+                    <For each={recent()}>
+                      {(visit) => <PageRow icon={visit.icon} title={visit.title} detail={bare(visit.url)} onClick={() => go(visit.url)} />}
+                    </For>
                   </div>
                 </div>
               </Show>
@@ -1594,26 +1665,48 @@ export default function SessionBrowserPane(props: {
   )
 }
 
-/** A page in the suggestions or the new tab page: its icon, title and address, with the query's matches drawn. */
+/** The title of a row of the address field's list: a page's own, or the text a search row searches for. */
+function rowTitle(row: AddressRow) {
+  if (row.type === "page") return row.page.title
+
+  return row.type === "search" ? row.text : ""
+}
+
+/** The icon of a row of the address field's list, and of the field while that row is chosen: the search glyph, or a page's own. */
+function RowIcon(props: { search: boolean; icon: string | undefined }) {
+  return (
+    <Show when={props.search} fallback={<PageIcon icon={props.icon} class="text-v2-icon-icon-muted" />}>
+      <Icon name="magnifying-glass" class="pointer-events-none size-4 shrink-0 text-v2-icon-icon-muted" />
+    </Show>
+  )
+}
+
+/**
+ * A row of the address field's list or of the new tab page: an icon, a title and, after it, a page's address or what
+ * a search row searches with. A page draws the query's matches.
+ */
 function PageRow(props: {
-  visit: Visit
-  query?: string
-  /** Set for a suggestion: an option of the address field's list, which keeps keyboard focus in the field. */
+  search?: boolean
+  icon: string | undefined
+  title: string
+  detail: string
+  query?: Query
+  /** Set for a row of the address field's list: an option, which keeps keyboard focus in the field. */
   option?: { id: string; selected: boolean }
   onClick: () => void
 }) {
   const body = () => (
     <>
-      <PageIcon icon={props.visit.icon} class="text-v2-icon-icon-muted" />
+      <RowIcon search={!!props.search} icon={props.icon} />
       <span data-slot="browser-page-row-text">
-        <Show when={props.visit.title}>
+        <Show when={props.title}>
           <span data-slot="browser-page-row-title">
-            <Marked text={props.visit.title} query={props.query ?? ""} />
+            <Marked text={props.title} query={props.query} />
           </span>
           <span>-</span>
         </Show>
         <span data-slot="browser-page-row-url">
-          <Marked text={bare(props.visit.url)} query={props.query ?? ""} />
+          <Marked text={props.detail} query={props.query} />
         </span>
       </span>
     </>
@@ -1646,9 +1739,9 @@ function PageRow(props: {
   )
 }
 
-function Marked(props: { text: string; query: string }) {
+function Marked(props: { text: string; query: Query | undefined }) {
   return (
-    <For each={highlight(props.text, props.query)}>
+    <For each={markMatches(props.text, props.query)}>
       {(part) => (
         <Show when={part.match} fallback={part.text}>
           <mark>{part.text}</mark>

@@ -488,11 +488,11 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           title: ctx.t("settings.remote.title"),
           keywords: "remote server sign in cookies share",
         },
-        { id: "settings-browser-cookies", title: ctx.t("settings.cookies.title"), keywords: "cookies sign out" },
+        { id: "settings-browser-cookies", title: ctx.t("settings.cookies.title"), keywords: "cookies sign out history clear" },
         {
           id: "settings-browser-import",
           title: ctx.t("settings.import.title"),
-          keywords: "import cookies chrome edge firefox safari helium arc brave sign in",
+          keywords: "import cookies history chrome edge firefox safari helium arc brave sign in",
         },
         { id: "settings-browser-extensions", title: ctx.t("settings.extensions.title"), keywords: "extensions" },
         {

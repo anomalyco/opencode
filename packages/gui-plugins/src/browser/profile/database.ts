@@ -6,8 +6,9 @@ import { DatabaseSync } from "node:sqlite"
 const PREFIX = "opencode-browser-import-"
 
 /**
- * Where copies of another browser's databases live while they are read: a directory of the app's own data, which only
- * the user can read, and the copies being read now. `log` hears a copy that could not be deleted.
+ * Where copies of another browser's databases, its cookies and its history, live while they are read: a directory of
+ * the app's own data, which only the user can read, and the copies being read now. `log` hears a copy that could not
+ * be deleted.
  */
 export type SnapshotScratch = {
   readonly directory: string
@@ -92,7 +93,7 @@ async function remove(directory: string, scratch: SnapshotScratch) {
     () => false,
   )
 
-  if (!removed) scratch.log("a copy of another browser's cookie database could not be deleted", { directory })
+  if (!removed) scratch.log("a copy of another browser's database could not be deleted", { directory })
 }
 
 // A link among the entries is deleted itself, never what it points to, and a directory among them is left, so the
@@ -111,5 +112,5 @@ async function removeFlat(directory: string, scratch: SnapshotScratch) {
     () => false,
   )
 
-  if (!removed) scratch.log("a copy of another browser's cookie database could not be deleted", { directory })
+  if (!removed) scratch.log("a copy of another browser's database could not be deleted", { directory })
 }
