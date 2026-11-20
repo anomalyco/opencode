@@ -25,7 +25,9 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       "bash",
       "cd src && cd .. && git status",
       {},
-      { commands: [{ resource: "git status", save: "git status *" }], directories: ["src", ".."] },
+      // The second cd runs with the shell already in src, so .. lands back on the invocation
+      // directory instead of its parent.
+      { commands: [{ resource: "git status", save: "git status *" }], directories: ["src", "."] },
     ],
     ["zsh", "git status", {}, { commands: [{ resource: "git status", save: "git status *" }], directories: [] }],
     ["fish", "git status", {}, { commands: [{ resource: "git status", save: "git status *" }], directories: [] }],
@@ -83,7 +85,8 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       {},
       { commands: [{ resource: "git status", save: "git status *" }], directories: ["src dir"] },
     ],
-    ["bash", 'cd "src dir"; cd escaped\\ space', {}, { commands: [], directories: ["src dir", "escaped space"] }],
+    // The second cd runs with the shell already inside "src dir", so it names a child of it.
+    ["bash", 'cd "src dir"; cd escaped\\ space', {}, { commands: [], directories: ["src dir", "src dir/escaped space"] }],
     [
       "bash",
       "cd '$HOME'; cd '~/outside'",

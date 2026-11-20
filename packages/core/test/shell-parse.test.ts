@@ -138,7 +138,15 @@ describe("ShellParse", () => {
         "/workspace",
       ),
     )
-    expect(escaped.directories).toEqual(["../outside", "escaped space", "../$literal", "../$literal2", "beforeafter"])
+    expect(escaped.directories).toEqual([
+      "../outside",
+      // Every later cd runs with the shell already in ../outside, so each entry is rebased
+      // against it (the running directory), not the invocation directory.
+      "../outside/escaped space",
+      "../outside/$literal",
+      "../outside/$literal2",
+      "../outside/$literal2/beforeafter",
+    ])
 
     const dashArgs = await Effect.runPromise(
       ShellParse.scan("cd -P /first && cd -- -/../../../etc && cd -", "/bin/bash", "/workspace"),
@@ -161,9 +169,11 @@ describe("ShellParse", () => {
       const rootHome = await Effect.runPromise(
         ShellParse.scan("cd ~root/secret && cd '~root'", "/bin/bash", "/workspace"),
       )
+      // The quoted tilde is a literal directory name, and it runs with the shell already inside
+      // ~root/secret, so it is rebased against that running directory.
       expect(rootHome.directories).toEqual([
         process.platform === "darwin" ? "/var/root/secret" : "/root/secret",
-        "~root",
+        `${process.platform === "darwin" ? "../var/root/secret" : "../root/secret"}/~root`,
       ])
 
       const tildeForms = await Effect.runPromise(
