@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { storyTool } from "../storybook/current-session-scenarios"
-import { categoryOf, factsOf, summarize } from "./facts"
+import { factsOf, summarize } from "./facts"
+import { categoryOf } from "./place"
 
 describe("timeline facts", () => {
   test("names facts by stable ids", () => {

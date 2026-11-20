@@ -1,8 +1,13 @@
 import type { SessionMessageAssistant } from "@opencode/client/promise"
 import { getFilename } from "@opencode/util/path"
 import { Option, Predicate, Schema } from "effect"
-import { currentToolFailed, currentToolInput, currentToolMetadata } from "../message/current-tool-state"
-import type { TimelineDetail } from "./detail"
+import {
+  currentToolFailed,
+  currentToolHasLoadedFiles,
+  currentToolInput,
+  currentToolMetadata,
+  readImagePath,
+} from "../message/current-tool-state"
 import { isInterruptedError } from "./turn-phase-machine"
 
 /**
@@ -23,12 +28,15 @@ export type FactOutcome = { kind: "shell" | "subagent"; verb: FactVerb; failed: 
 
 /** What facts are read from: a message part, a user's shell command, or what background work reported. */
 export type FactPart =
-  | (Content & { id?: string; messageID?: string })
+  | (Tool & { id?: string; messageID?: string })
+  | { type: "text"; id?: string; messageID?: string; text?: string }
+  | { type: "reasoning"; id?: string; messageID?: string; text?: string }
   | { type: "shell"; id: string; messageID?: string }
   | { type: "notice"; id: string; messageID?: string }
   | { type: "outcome"; id: string; messageID?: string; outcome: FactOutcome }
 
-export type CallFact = {
+/** What placing a call reads: where it shows, which group it joins and whether it starts open. */
+export type PlaceFact = {
   kind: "call"
   id: string
   /** The tool's current name; `tool` keeps the name the call used. */
@@ -37,8 +45,17 @@ export type CallFact = {
   mode: FactMode
   status: Tool["state"]["status"] | "user"
   failed: boolean
+  /** The user stopped it, by stopping the turn or cancelling its command. */
+  stopped: boolean
+  /** The model finished writing what to call it with. */
+  called: boolean
+  /** A plain file read, which reads well beside the reads around it. */
+  groupedRead: boolean
   /** Runs on after the call returns, reporting back as an outcome. */
   background: boolean
+}
+
+export type CallFact = PlaceFact & {
   path?: string
   provider?: string
   /** How a call that launches background work ended, or undefined while it is still written. */
@@ -116,15 +133,23 @@ function partFacts(part: FactPart): Fact[] {
 
   if (part.type === "shell")
     return [
-      { kind: "call", id, name: "shell", tool: "shell", mode: "run", status: "user", failed: false, background: false },
+      {
+        kind: "call",
+        id,
+        name: "shell",
+        tool: "shell",
+        mode: "run",
+        status: "user",
+        failed: false,
+        stopped: false,
+        called: true,
+        groupedRead: false,
+        background: false,
+      },
     ]
 
   return toolFacts(part, id)
 }
-
-const decodeInput = Schema.decodeUnknownOption(
-  Schema.Struct({ path: Schema.optional(Schema.String), background: Schema.optional(Schema.Unknown) }),
-)
 
 const decodeFile = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -138,37 +163,71 @@ const decodeFiles = Schema.decodeUnknownOption(Schema.Array(Schema.Unknown))
 
 const decodeText = Schema.decodeUnknownOption(Schema.NonEmptyString)
 
-function toolFacts(tool: Tool, id: string): Fact[] {
+type Reads = { input: () => Schema.JsonObject; metadata: () => Schema.JsonObject }
+
+// Input changes with every streamed delta and metadata with every progress report, so each is read only where it is
+// needed, and once.
+function reads(tool: Tool): Reads {
+  let input: Schema.JsonObject | undefined
+  let metadata: Schema.JsonObject | undefined
+
+  return {
+    input: () => (input ??= currentToolInput(tool)),
+    metadata: () => (metadata ??= currentToolMetadata(tool)),
+  }
+}
+
+/** What placing a call reads of it. Reads input and metadata only where they can move the call or open it. */
+export function placeFactOf(tool: Tool, id = tool.id): PlaceFact {
+  return placeFact(tool, id, reads(tool))
+}
+
+function placeFact(tool: Tool, id: string, read: Reads): PlaceFact {
   const name = toolName(tool.name)
-
-  const input = Option.getOrElse(decodeInput(currentToolInput(tool)), () => ({
-    path: undefined,
-    background: undefined,
-  }))
-
-  const metadata = currentToolMetadata(tool)
   const state = tool.state
-  const background = name === "subagent" || (name === "shell" && input.background === true)
-  const path = input.path || undefined
-  const mode = modes.get(name) ?? "tool"
+  const stopped = toolStopped(tool)
 
-  const call: CallFact = {
+  return {
     kind: "call",
     id,
     name,
     tool: tool.name,
-    mode,
+    mode: modes.get(name) ?? "tool",
     status: state.status,
-    failed: !stopped(tool) && currentToolFailed({ ...tool, name }),
-    background,
+    failed: !stopped && currentToolFailed({ ...tool, name }),
+    stopped,
+    called: state.status !== "streaming" && (state.status !== "error" || Object.keys(read.input()).length > 0),
+    groupedRead:
+      tool.name === "read" &&
+      state.status !== "error" &&
+      !readImagePath(read.input()) &&
+      !currentToolHasLoadedFiles(tool),
+    background: name === "subagent" || (name === "shell" && read.input().background === true),
   }
+}
+
+/** How a call that launches background work ended, or undefined for any other call or while it is still written. */
+export function launchOf(tool: Tool) {
+  const read = reads(tool)
+
+  return placeFact(tool, tool.id, read).background ? launch(tool, toolName(tool.name), read) : undefined
+}
+
+function toolFacts(tool: Tool, id: string): Fact[] {
+  const read = reads(tool)
+  const fact = placeFact(tool, id, read)
+  const raw = read.input().path
+  const path = Predicate.isString(raw) && raw ? raw : undefined
+  const metadata = read.metadata()
+  const state = tool.state
+  const call: CallFact = { ...fact }
 
   if (path) call.path = path
 
   // Each field is read on its own, so one of the wrong type leaves the others.
   if (Predicate.isString(metadata.provider) && metadata.provider) call.provider = metadata.provider
 
-  if (background) call.launch = launch(tool, name)
+  if (fact.background) call.launch = launch(tool, fact.name, read)
 
   if ("time" in state && state.time) call.time = state.time
 
@@ -177,7 +236,7 @@ function toolFacts(tool: Tool, id: string): Fact[] {
 
   if (Predicate.isNumber(metadata.matches)) call.matches = metadata.matches
 
-  if (mode !== "edit") return [call]
+  if (fact.mode !== "edit") return [call]
 
   const changed = Option.getOrElse(decodeFiles(metadata.files), () => []).flatMap((file) =>
     Option.toArray(decodeFile(file)),
@@ -207,13 +266,13 @@ function toolFacts(tool: Tool, id: string): Fact[] {
 }
 
 // How a call that launches background work ended. Older sessions marked a foreground subagent's result as completed.
-function launch(tool: Tool, name: string): FactOutcome | undefined {
+function launch(tool: Tool, name: string, read: Reads): FactOutcome | undefined {
   const kind = name === "shell" ? "shell" : "subagent"
   const state = tool.state
 
   if (state.status === "streaming") return undefined
-  const input = currentToolInput(tool)
-  const metadata = currentToolMetadata(tool)
+  const input = read.input()
+  const metadata = read.metadata()
   const followUp = kind === "subagent" ? Option.getOrUndefined(decodeText(input.sessionID)) : undefined
 
   const id =
@@ -239,7 +298,11 @@ function launch(tool: Tool, name: string): FactOutcome | undefined {
   return { kind, key, verb: background ? "started" : "ran", failed: false }
 }
 
-function stopped(tool: Tool) {
+/**
+ * Whether the user stopped a call, by stopping the turn or cancelling its command. The shell reports a cancelled
+ * command as its own error, "Command cancelled".
+ */
+export function toolStopped(tool: Tool) {
   if (tool.state.status !== "error") return false
 
   return isInterruptedError(tool.state.error) || tool.state.error.message === "Command cancelled"
@@ -342,23 +405,4 @@ function shells(facts: readonly Fact[]) {
     verbs: Array.from(counts, ([verb, count]) => ({ verb, count })),
     failed: list.filter((outcome) => outcome.failed).length,
   }
-}
-
-/** The detail setting that shows or hides a fact. */
-export function categoryOf(fact: Fact): keyof TimelineDetail | undefined {
-  if (fact.kind === "thought") return "thinking"
-
-  if (fact.kind === "file") return "edit"
-
-  if (fact.kind === "outcome") return "notices"
-
-  if (fact.kind !== "call") return
-
-  if (fact.name === "shell" || fact.name === "execute") return "shell"
-
-  if (fact.mode === "edit") return "edit"
-
-  if (fact.name === "subagent") return "subagents"
-
-  return "tools"
 }
