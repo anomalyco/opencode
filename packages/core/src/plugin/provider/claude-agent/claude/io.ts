@@ -50,7 +50,7 @@ export const real: Interface = {
     configDir ? inFolder(configDir, "remove", [sessionID]) : helpers.remove(sessionID),
 }
 
-export class WorkerUnavailableError extends Error {}
+class WorkerUnavailableError extends Error {}
 
 // The SDK's session helpers read CLAUDE_CONFIG_DIR from process.env and take no folder option.
 export const helpers = {

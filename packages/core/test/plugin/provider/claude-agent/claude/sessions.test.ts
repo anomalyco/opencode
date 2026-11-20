@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import path from "node:path"
 import { Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
 import { ClaudeSessions } from "@opencode/core/plugin/provider/claude-agent/claude/sessions"
@@ -101,7 +102,8 @@ describe("Claude sessions", () => {
         FakeClaude.expectInterrupt(),
       ])
       const test = yield* TestSessions.start(claude)
-      const work = yield* TestSessions.model(test.sessions, { configDir: "/home/dan/.claude-work" })
+      const folder = path.resolve("/claude-work")
+      const work = yield* TestSessions.model(test.sessions, { configDir: folder })
       yield* TestSessions.reply(test.model, first)
       const id = claude.runs[0]!.args.find((arg) => arg.startsWith("--session-id="))!.split("=")[1]
       const prompt = TestSessions.followup()
@@ -114,10 +116,10 @@ describe("Claude sessions", () => {
       const user = (run: number) =>
         JSON.stringify(claude.runs[run]!.received.find((message) => message.type === "user").message.content)
       // The other folder cannot resume this login's transcript, so it starts its own from the whole history.
-      expect(claude.runs[1]!.env.CLAUDE_CONFIG_DIR).toBe("/home/dan/.claude-work")
+      expect(claude.runs[1]!.env.CLAUDE_CONFIG_DIR).toBe(folder)
       expect(claude.runs[1]!.args.some((arg) => arg.startsWith("--resume="))).toBe(false)
       expect(user(1)).toContain("Remember the marker COPPER-OTTER")
-      const other = (yield* SessionRecord.make(test.storage).get("session-a", "/home/dan/.claude-work"))!
+      const other = (yield* SessionRecord.make(test.storage).get("session-a", folder))!
       expect(other.claudeSessionID).not.toBe(id)
       expect(claude.runs[2]!.args).toContain(`--resume=${id}`)
       expect(user(2)).toContain("What was the marker?")

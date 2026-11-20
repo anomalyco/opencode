@@ -10,7 +10,11 @@ import { FakeClaude } from "../lib/fake-claude"
 import { TestSessions } from "../lib/sessions"
 
 const first = TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker.")
-const pool = { configDir: ["/accounts/a", "/accounts/b", "/accounts/c"] }
+// configDir is resolved to the platform's path form, so the tests name their folders the same way.
+const a = path.resolve("/accounts/a")
+const b = path.resolve("/accounts/b")
+const c = path.resolve("/accounts/c")
+const pool = { configDir: [a, b, c] }
 const resetsAt = 1792800000
 
 // A recorded failed turn, rewritten into the messages Claude Code sends when a subscription limit refuses it.
@@ -58,7 +62,10 @@ describe("Claude accounts", () => {
   test("configDir takes one folder or a list, expanding ~, and the login check uses the first", () => {
     const home = path.join(os.homedir(), ".claude-1")
     expect(ClaudeQueryOptions.configDirs("~/.claude-1")).toEqual([home])
-    expect(ClaudeQueryOptions.configDirs(["~/.claude-1", "/tmp/claude-2"])).toEqual([home, "/tmp/claude-2"])
+    expect(ClaudeQueryOptions.configDirs(["~/.claude-1", "/tmp/claude-2"])).toEqual([
+      home,
+      path.resolve("/tmp/claude-2"),
+    ])
     expect(ClaudeQueryOptions.configDirs(undefined)).toEqual([])
     const env = ClaudeQueryOptions.connectionEnv({ settings: { configDir: ["~/.claude-1", "/tmp/claude-2"] } })
     expect(env).toEqual({ CLAUDE_CONFIG_DIR: home })
@@ -81,8 +88,8 @@ describe("Claude accounts", () => {
       expect(one.some((part) => part.type === "error")).toBe(false)
       const two = yield* TestSessions.reply(test.model, TestSessions.followup())
       expect(TestSessions.text(two)).toBe("COPPER-OTTER")
-      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/b"])
-      expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/b")
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a, b])
+      expect(test.storage.data.get("accounts/session-a")).toBe(b)
       yield* test.registry.close()
       claude.check()
     }),
@@ -104,14 +111,14 @@ describe("Claude accounts", () => {
       const saved = TestSessions.storage()
       const old = yield* TestSessions.start(claude, saved, pool)
       yield* TestSessions.reply(old.model, first)
-      expect(saved.data.get("last-account")).toBe("/accounts/b")
+      expect(saved.data.get("last-account")).toBe(b)
       // After a restart, a new chat skips the refused account.
       yield* old.registry.close()
       const test = yield* TestSessions.start(claude, saved, pool)
       const parts = yield* TestSessions.reply(test.model, first, "session-b")
       expect(TestSessions.text(parts)).toBe("COPPER-OTTER")
-      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/b", "/accounts/b"])
-      expect(saved.data.get("accounts/session-b")).toBe("/accounts/b")
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a, b, b])
+      expect(saved.data.get("accounts/session-b")).toBe(b)
       yield* test.registry.close()
       claude.check()
     }),
@@ -139,10 +146,10 @@ describe("Claude accounts", () => {
         "compaction",
       )
       expect(summary.some((part) => part.type === "error")).toBe(false)
-      expect(claude.forks.map((fork) => fork.configDir)).toEqual(["/accounts/a"])
-      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/a", "/accounts/b"])
-      expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/a")
-      expect(test.storage.data.get("last-account")).toBe("/accounts/b")
+      expect(claude.forks.map((fork) => fork.configDir)).toEqual([a])
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a, a, b])
+      expect(test.storage.data.get("accounts/session-a")).toBe(a)
+      expect(test.storage.data.get("last-account")).toBe(b)
       yield* test.registry.close()
       claude.check()
     }),
@@ -167,8 +174,8 @@ describe("Claude accounts", () => {
       // The next turn tries the first account again, which refuses unseen, then moves on.
       const two = yield* TestSessions.reply(test.model, TestSessions.followup())
       expect(two.some((part) => part.type === "error")).toBe(false)
-      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/b"])
-      expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/b")
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a, b])
+      expect(test.storage.data.get("accounts/session-a")).toBe(b)
       yield* test.registry.close()
       claude.check()
     }),
@@ -189,7 +196,7 @@ describe("Claude accounts", () => {
         FakeClaude.expectInterrupt(),
       ])
       const test = yield* TestSessions.start(claude, TestSessions.storage(), {
-        configDir: ["/accounts/a", "/accounts/b"],
+        configDir: [a, b],
       })
       yield* TestSessions.reply(test.model, first)
       // Like a model whose own limit is used up on every account.
@@ -197,12 +204,12 @@ describe("Claude accounts", () => {
       const errors = refused.filter((part) => part.type === "error")
       expect(errors).toHaveLength(1)
       expect(String(errors[0]?.error)).toContain(new Date(resetsAt * 1000).toISOString())
-      expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/a")
-      expect(test.storage.data.get("last-account")).toBe("/accounts/a")
+      expect(test.storage.data.get("accounts/session-a")).toBe(a)
+      expect(test.storage.data.get("last-account")).toBe(a)
       // Like switching to a model that still has room: it starts on the chat's own account and works.
       const two = yield* TestSessions.reply(test.model, TestSessions.followup())
       expect(TestSessions.text(two)).toBe("COPPER-OTTER")
-      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/b", "/accounts/a"])
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a, b, a])
       yield* test.registry.close()
       claude.check()
     }),
@@ -221,7 +228,7 @@ describe("Claude accounts", () => {
       const test = yield* TestSessions.start(claude, TestSessions.storage(), pool)
       const parts = yield* TestSessions.reply(test.model, first)
       expect(String(parts.find((part) => part.type === "error")?.error)).toContain("claude-does-not-exist")
-      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/b"])
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a, b])
       expect(test.storage.data.has("accounts/session-a")).toBe(false)
       expect(test.storage.data.has("last-account")).toBe(false)
       yield* test.registry.close()
@@ -237,8 +244,8 @@ describe("Claude accounts", () => {
       ])
       const test = yield* TestSessions.start(claude, TestSessions.storage(), pool)
       const error = yield* TestSessions.reply(test.model, first).pipe(Effect.flip)
-      expect(String(error.cause)).toContain('CLAUDE_CONFIG_DIR="/accounts/a" claude auth login')
-      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a"])
+      expect(String(error.cause)).toContain(`CLAUDE_CONFIG_DIR="${a}" claude auth login`)
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a])
       expect(test.storage.data.has("accounts/session-a")).toBe(false)
       yield* test.registry.close()
       claude.check()
@@ -249,10 +256,11 @@ describe("Claude accounts", () => {
     Effect.gen(function* () {
       const claude = FakeClaude.make([FakeClaude.expectStartup(), limitTurn(), FakeClaude.expectInterrupt()])
       const test = yield* TestSessions.start(claude, TestSessions.storage(), pool)
-      const work = yield* TestSessions.rotating(test.accounts, { configDir: "/accounts/work" })
+      const folder = path.resolve("/accounts/work")
+      const work = yield* TestSessions.rotating(test.accounts, { configDir: folder })
       const parts = yield* TestSessions.reply(work, first)
       expect(String(parts.find((part) => part.type === "error")?.error)).toContain("Resets at")
-      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/work"])
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([folder])
       expect(test.storage.data.has("accounts/session-a")).toBe(false)
       yield* test.registry.close()
       claude.check()
@@ -266,7 +274,7 @@ describe("Claude accounts", () => {
       const keyed = yield* TestSessions.rotating(test.accounts, { ...pool, apiKey: "sk-test" })
       const parts = yield* TestSessions.reply(keyed, first, "session-key")
       expect(parts.some((part) => part.type === "error")).toBe(true)
-      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a"])
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a])
       expect(test.storage.data.has("accounts/session-key")).toBe(false)
       yield* test.registry.close()
       claude.check()
@@ -289,9 +297,9 @@ describe("Claude accounts", () => {
       const saved = TestSessions.storage()
       const old = yield* TestSessions.start(claude, saved, pool)
       yield* TestSessions.reply(old.model, first)
-      expect(saved.data.get("accounts/session-a")).toBe("/accounts/b")
+      expect(saved.data.get("accounts/session-a")).toBe(b)
       // Move the newest account away, so only the parent's saved account can steer the fork there.
-      saved.data.set("last-account", "/accounts/c")
+      saved.data.set("last-account", c)
       yield* old.registry.close()
       const test = yield* TestSessions.start(claude, saved, pool)
       const result = yield* Effect.promise(() =>
@@ -306,9 +314,9 @@ describe("Claude accounts", () => {
       )
       yield* Effect.promise(() => TestSessions.collect(result.stream))
       expect(claude.forks).toHaveLength(1)
-      expect(claude.forks[0]!.configDir).toBe("/accounts/b")
-      expect(claude.runs.at(-1)!.env.CLAUDE_CONFIG_DIR).toBe("/accounts/b")
-      expect(test.storage.data.get("accounts/child-a")).toBe("/accounts/b")
+      expect(claude.forks[0]!.configDir).toBe(b)
+      expect(claude.runs.at(-1)!.env.CLAUDE_CONFIG_DIR).toBe(b)
+      expect(test.storage.data.get("accounts/child-a")).toBe(b)
       yield* test.registry.close()
       claude.check()
     }),

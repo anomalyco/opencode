@@ -77,8 +77,6 @@ const toError = (error: unknown) => (error instanceof Error ? error : new Error(
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: toError })
 const attemptSync = <A>(run: () => A) => Effect.try({ try: run, catch: toError })
 
-export type Registry = ReturnType<typeof registry>
-
 export function registry() {
   const entries = new Map<string, Entry>()
   // Side calls share startup/draining with chat, but are tracked only until their request ends.
