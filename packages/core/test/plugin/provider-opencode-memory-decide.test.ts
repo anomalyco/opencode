@@ -65,8 +65,7 @@ describe("OpencodeMemoryDecide", () => {
               ],
             },
           ])
-        if (question.name === "durable")
-          return Effect.succeed([predicate("durable", 0.8), predicate("fix_record", 0.25)])
+        if (question.name === "durable") return Effect.succeed([predicate("durable", 0.8)])
         return Effect.succeed([predicate("applies", 0.66)])
       })
       const decide = OpencodeMemoryDecide.make({
@@ -112,11 +111,11 @@ describe("OpencodeMemoryDecide", () => {
         'The message says or implies that note mem_b ("Tests") is wrong, outdated or has changed.',
       )
 
-      // Durable, and not mainly a record of one fix.
+      // Durable: one question, its probability as it is.
       expect(
         yield* decide.durable({ kind: "gotcha", title: "Dates are UTC", body: "Claim: x" }, "github.com/acme/app"),
-      ).toBeCloseTo(0.6, 10)
-      expect(fake.asked[2]?.questions.map((question) => question.name)).toEqual(["durable", "fix_record"])
+      ).toBe(0.8)
+      expect(fake.asked[2]?.questions.map((question) => question.name)).toEqual(["durable"])
 
       // At a failure, the command and the end of what it printed come with the task.
       const output = `${"x".repeat(2500)}\nError: wrangler not found`

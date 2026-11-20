@@ -25,8 +25,9 @@ export const LASTING = 0.7
 export const CORRECTS = 0.5
 /** D6: the message asks to forget the given entry with the highest probability. A placeholder, as D2's, until labelled. */
 export const FORGETS = 0.5
-/** D3.t2: a distilled candidate is a durable lesson, not a note about one task. */
-export const DURABLE = 0.574
+/** D3.r3 (round 3, 2026-11-20): a distilled candidate is a durable lesson; one predicate, raw-probability cut chosen on
+ * train by cost (FP:FN 1:1). Held-out F1 0.889 vs 0.814 for D3.t2 at 0.574. */
+export const DURABLE = 0.21
 /** D4.t3: an entry applies to the task, or the failure, at hand. */
 export const APPLIES = 0.64
 /**
@@ -53,20 +54,12 @@ const D1 = predicate(
   "Everything in the message is about the current task only: a request for this change (even with words like always, never, must or don't describing the requested behaviour), a temporary constraint, a correction of the agent's current work, a preference for this conversation, a question, or a rule someone else stated that the user asks to check.",
 )
 
-const D3 = [
-  predicate(
-    "durable",
-    "Would an agent working on a different, later task in this repository need this note, or does it only record this one task?",
-    "Durable: a team rule, decision or convention (including one the user stated or reversed); how to run, build, lint or test this repository and its environment requirements; a known flaky or broken test and what to do about it; a pitfall or behaviour of existing code that other changes to that area would hit.",
-    "Task-specific: the requirements or intended behaviour of the function or feature this task changed, how this one fix works or why it was needed, what the change did or its status, measurements or profiling of this task, or something only true today, even when written as a general rule.",
-  ),
-  predicate(
-    "fix_record",
-    "Is this note mainly a record of one specific fix or feature: the bug it fixed, the behaviour it made a function have, or how the change was implemented?",
-    "The note's core is the behaviour or implementation of a particular change to particular code (what was wrong in a function and what it does now, or what was built), so it mostly restates the task.",
-    "The note's core is a rule, procedure, environment fact, test-suite fact or pitfall that holds independently of any one change.",
-  ),
-]
+const D3 = predicate(
+  "durable",
+  "Decide whether the candidate is reusable repository knowledge for a later, different task. Ask: would it still help someone who is not touching this feature and has no context for this change? If its value depends on what this task changed, expected, fixed, or discovered, mark false. If it tells the team how to work in this repo, or warns about a lasting hazard unrelated to this change, mark true.",
+  "Durable notes are team rules or conventions; build/run/lint/test commands and environment requirements; known flaky or broken tests and workarounds; general hazards in existing code that any future change to that area should avoid. The note must be reusable outside the feature or fix that produced it. A specific commit, regression test, or observed current behavior is not enough. If the lesson is really this repo works this way and future unrelated work must follow it, choose true. Example: run tests with X profile, or test Y is flaky and should be retried, is true.",
+  "Task-specific notes describe the requirements or intended behavior of the function or feature this task changed; how this fix works or why it was needed; the change's status, measurements, or profiling; or a specific code behavior, edge case, regression test, or commit that matters mainly to this change. Also false when written as a general rule but really pins this task's chosen behavior, today's implementation detail, or a bug fix's cause. Example: a newly specified edge case for the function you just changed is false, even if it looks like a convention.",
+)
 
 const D4 = predicate(
   "applies",
@@ -236,12 +229,10 @@ export const make = (input: {
       Effect.gen(function* () {
         const result = yield* ask(
           `Candidate lesson for a team's shared memory, written after an AI coding agent's task in the ${repo} repository:\n\nKind: ${candidate.kind}\nTitle: ${candidate.title}\n\n${candidate.body}`,
-          D3,
+          [D3],
         )
-        const durable = probability(result.answers, "durable")
-        const fix = probability(result.answers, "fix_record")
-        const p = durable === undefined || fix === undefined ? undefined : durable * (1 - fix)
-        yield* logged("D3.t2", result.ms, p)
+        const p = probability(result.answers, "durable")
+        yield* logged("D3.r3", result.ms, p)
         return p
       }),
     /** D4: the probability an entry applies to the task at hand, or to the failure just seen. */

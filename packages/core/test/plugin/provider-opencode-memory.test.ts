@@ -57,7 +57,6 @@ const stand = (asked: Asked): Record<string, number | Record<string, number>> =>
   corrects: { none: 1 },
   forgets: { none: 1 },
   durable: 0.9,
-  fix_record: 0.05,
   applies: 1,
 })
 /** A decision request, its evidence as one text and its questions by name. */
@@ -2764,10 +2763,10 @@ describe("OpencodePlugin memory capture", () => {
           judge.answer = (asked) =>
             asked.questions.durable
               ? asked.state.includes("Title: How this fix parses dates")
-                ? { durable: yes(0.9), fix_record: yes(0.9) }
+                ? { durable: yes(0.1) }
                 : asked.state.includes("Title: Dates need a locale")
                   ? 503
-                  : { durable: yes(0.95), fix_record: yes(0.05) }
+                  : { durable: yes(0.95) }
               : 503
           const { host } = yield* start(console)
           const session = yield* host.session.create({})
