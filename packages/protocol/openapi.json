@@ -13794,6 +13794,49 @@
         "summary": "Cancel background job"
       }
     },
+    "/api/experimental/machine/link": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.machine.link",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Upgrade to a WebSocket that carries a machine's link to this server: binary messages only, each at most 65,535 bytes. It takes no server password. The link's own handshake, which starts with the machine's first message, is the only way in: it admits a key this server has paired or a valid join string, and closes the socket on anything else without saying why. Behind the machines flag; without it the route does not exist. Experimental: may change without compatibility guarantees.",
+        "summary": "Connect a machine",
+        "x-websocket": true
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
