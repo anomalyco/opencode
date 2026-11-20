@@ -85,7 +85,15 @@ later. An undeclared capability is unavailable: the call rejects with `Capabilit
 GET, POST, PUT, PATCH, DELETE, HEAD; no cookies, no credentials, no client certificates, no access to localhost,
 private or link-local addresses; request body ≤ 256 KB, response body ≤ 2 MB (text; binary is base64 in `body64`),
 timeout 15 s, at most 4 in flight and 10 per second per widget. Responses cross as JSON
-`{ status, headers, body | body64 }`. Errors reject with `{ kind: "CapabilityDenied" | "Network" | "Timeout" |
+`{ status, headers, body | body64 }`. **Local network in dev mode.** By default `fetch` refuses `http:` and any destination that resolves to a loopback,
+private or link-local address. A host may offer a **dev-mode setting** at its fetch boundary (off by default, never on
+in release builds unless the user turns it on; e.g. a debug-settings toggle or an environment variable such as
+`OPENCODE_WIDGETS_DEV_NETWORK=1`) that additionally allows those destinations and plain `http:` to them, still only for
+hosts the template declares (a declared `localhost`, `127.0.0.1` or `*.local` entry; ports are allowed in dev mode, e.g.
+`localhost:4097`). Every host checks the destination against the address it actually connects to (resolve once, check,
+connect to that address), so DNS rebinding can't reach the local network when dev mode is off.
+
+Errors reject with `{ kind: "CapabilityDenied" | "Network" | "Timeout" |
 "TooLarge" | "RateLimited", message }`. Mobile hosts get `fetch` from `psychoscript-mobile`, which enforces these rules
 and hands the actual transfer to the app (URLSession / OkHttp), so system TLS and proxies apply.
 
