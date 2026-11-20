@@ -475,8 +475,23 @@ impl Transcript {
         let mut output = Output::default();
         let local = std::mem::take(&mut self.local);
         output.extend(self.list(messages, active));
+        // A shell row has no message: the list printed its rows unless they belong to a shell it does not show.
+        let listed = (self.shell_started.clone(), self.shell_ended.clone());
         let mut restored = Vec::new();
         for commit in &local {
+            if let Some(shell) = commit.part_id.as_deref().and_then(|part| part.strip_prefix("shell:"))
+                && commit.tool.as_deref() == Some("shell")
+            {
+                let (listed, printed) = match commit.phase {
+                    Phase::Start => (&listed.0, &mut self.shell_started),
+                    _ => (&listed.1, &mut self.shell_ended),
+                };
+                if !listed.contains(shell) {
+                    printed.insert(shell.to_owned());
+                    restored.push(commit.clone());
+                }
+                continue;
+            }
             if let Some(commit) = self.restore(commit) {
                 restored.push(commit);
             }
@@ -509,6 +524,10 @@ impl Transcript {
             let prefix = if commit.kind == EntryKind::Reasoning { "Thinking: " } else { "" };
             let text = commit.text.strip_prefix(prefix).unwrap_or(&commit.text);
             let fragment = Fragment { message_id: message.clone(), part_id: part.clone() };
+            // The list shows this message without the part, as it shows an aborted compaction.
+            if self.message_ids.contains(message) && self.fragments.value(&fragment).is_none() {
+                return None;
+            }
             match self.fragments.restore(&fragment, text) {
                 Restore::Covered => return None,
                 Restore::Append(suffix) if suffix.is_empty() => return None,
@@ -787,6 +806,8 @@ impl Transcript {
                     self.promote_wait(false, None);
                 }
                 let fresh = self.skill_messages.insert(id.to_owned());
+                // A listed skill counts as shown, so a resize replay does not restore its live row as well.
+                self.message_ids.insert(id.to_owned());
                 if !render || !self.tools || !fresh {
                     return Output::default();
                 }
@@ -852,6 +873,7 @@ impl Transcript {
             if !render || failed.error.r#type == "aborted" {
                 return Output::default();
             }
+            self.errors.insert(id.to_owned());
             let error = Commit::error(&failed.error.message).message(id).part_id("compaction:error");
             return Output::commits(vec![header(), error]);
         }
