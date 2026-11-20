@@ -19,4 +19,4 @@ keeps the difference in view: style only, the answer's prose cells.
 `/home/simon/src/wt/ot-backport-20261120-00`: `text: scope("default", Style::new()).patch(fallback.text)`, with the
 test `prose_takes_the_text_color_over_the_default_scope`) in a release the client pins. Then drop this file, the
 scenario's budget, and the `opencode-classic` pins (those files, `crates/ui/tests/all/content.rs`,
-`crates/latex/src/tests.rs`, `crates/mermaid/tests/markdown.rs`).
+`crates/latex/src/tests.rs`, `crates/mermaid/tests/all/markdown.rs`).

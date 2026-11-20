@@ -1,7 +1,7 @@
 //! Compares store state and outgoing reads with the recorded event folds. A listed difference must still differ, so
 //! stale exceptions fail.
 
-mod common;
+use crate::common;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -10,7 +10,7 @@ use opencode_api::generated::{SessionID, V2Event};
 use opencode_store::{Catalog, Data, Location, Options, Shell, State};
 use serde_json::{Map, Value, json};
 
-const FIXTURE: &str = include_str!("../../../parity/fixtures/F.7/folds.json");
+const FIXTURE: &str = include_str!("../../../../parity/fixtures/F.7/folds.json");
 const DEVIATIONS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../parity/deviations");
 const SESSIONS: [&str; 2] = ["ses_a", "ses_b"];
 const DIRECTORY: &str = "/project";

@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP for P.3: `TextPart`'s <markdown> (routes/session/message-parts.tsx) with the `opencode.merman` plugin's
 // code-block renderer, as the TUI registers it, over a message with a flowchart and a sequence diagram fence.
-// crates/mermaid/tests/markdown.rs compares opencode_ui::markdown with the Mermaid plugin's renderer against it.
+// crates/mermaid/tests/all/markdown.rs compares opencode_ui::markdown with the Mermaid plugin's renderer against it.
 import { createMarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { useTheme, useThemes } from "../../../tui/src/context/theme"

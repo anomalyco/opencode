@@ -1,4 +1,4 @@
-// P-ORACLE and P-FILE helper for F.5, driven by crates/local/tests/config_interop.rs. Run it from
+// P-ORACLE and P-FILE helper for F.5, driven by crates/local/tests/all/config_interop.rs. Run it from
 // <ts-root>/packages/cli (`bun --cwd`), so the TUI sources it imports get their JSX settings.
 //
 //   bun F.5-config.ts <ts-root> jsonc            stdin: [{text, path, value?}]; modify + applyEdits, or parse when no path

@@ -21,5 +21,5 @@ in Rust the code's glyphs keep the box's background. About 44 cells differ in co
 margin, not a design: once the built-in renderers drop `marginTop: 1`, `P.2/fence-margin` is equal again. Drives:
 `P.2/fence-margin` (two formulas and a diagram after blocks, about 175 cells), `P.2/inline-math` (the fence pushes the
 transcript up a row), the P-COMP tests `crates/latex/src/tests.rs` (`transcript_fences_match_typescript`) and
-`crates/mermaid/tests/markdown.rs`. A fence that opens a message differs as `F13-latex-leading-row.md` and
+`crates/mermaid/tests/all/markdown.rs`. A fence that opens a message differs as `F13-latex-leading-row.md` and
 `F12-mermaid-leading-row.md` say.

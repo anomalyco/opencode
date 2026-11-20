@@ -3,7 +3,7 @@ use opencode_plugin::node::Reader;
 use opencode_plugin_abi::Rgba;
 use opencode_ui::theme::{Catalog, ThemeMode};
 
-const CORPUS: &str = include_str!("../../../parity/fixtures/P.3/corpus.json");
+const CORPUS: &str = include_str!("../../../../parity/fixtures/P.3/corpus.json");
 
 fn hex(color: Option<Rgba>) -> String {
     color.map_or("-".to_string(), |c| format!("{:02x}{:02x}{:02x}{:02x}", c.r, c.g, c.b, c.a))

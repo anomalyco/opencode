@@ -5,6 +5,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+# One integration-test binary (`tests/all`); a new `tests/<file>.rs` is a module of it, not a binary of its own.
+autotests = false
 
 [lints]
 workspace = true
@@ -23,3 +25,7 @@ opencode-ui.workspace = true
 opentui.workspace = true
 opencode-parity.workspace = true
 serde_json.workspace = true
+
+[[test]]
+name = "all"
+path = "tests/all/main.rs"

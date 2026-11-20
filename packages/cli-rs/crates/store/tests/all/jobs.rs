@@ -1,6 +1,6 @@
 //! The running-job store (`packages/client/test/solid-job.test.ts`).
 
-mod common;
+use crate::common;
 
 use common::*;
 use opencode_api::generated::*;

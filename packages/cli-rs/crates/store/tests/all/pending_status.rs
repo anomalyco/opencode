@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

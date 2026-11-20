@@ -13,7 +13,7 @@ use opencode_local::{jsonl, pins};
 use serde_json::{Value, json};
 use support::available;
 
-mod support;
+use crate::support;
 
 const WRITES: usize = 20;
 
