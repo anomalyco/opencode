@@ -244,7 +244,7 @@ describe("Claude accounts", () => {
       ])
       const test = yield* TestSessions.start(claude, TestSessions.storage(), pool)
       const error = yield* TestSessions.reply(test.model, first).pipe(Effect.flip)
-      expect(String(error.cause)).toContain(`not logged in for ${a}`)
+      expect(String(error.cause)).toContain(`"${a}"`)
       expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a])
       expect(test.storage.data.has("accounts/session-a")).toBe(false)
       yield* test.registry.close()
