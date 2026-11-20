@@ -4,6 +4,7 @@ import electron from "electron"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds } from "@opencode/plugin/gui/main"
 import type { RefusalNotice } from "./ipc"
+import type { BindingEvent } from "./pane-machine"
 import type { TabActivity } from "./policy"
 
 // The Electron main process of `electron-links.test.ts`, bundled and run by the pinned Electron. It opens one pane page
@@ -33,6 +34,7 @@ const links = `<!doctype html><title>Links</title>
 <a href="/to-mail" style="top:350px">Mail redirect</a>
 <a href="/to-refused" style="top:400px">Refused redirect</a>
 <a href="/then-download" style="top:450px">Page then download</a>
+<a href="/slow" style="top:500px">Slow link</a>
 <script>
 window.presses = 0
 window.moves = 0
@@ -108,6 +110,7 @@ void electron.app.whenReady().then(async () => {
   const { Browser } = await import("@opencode/plugin-browser/rpc")
   const { createBrowserPage } = await import("./chromium")
   const { createHandlePath } = await import("./disk")
+  const { createPaneState, selectBinding, transitionPane } = await import("./pane-machine")
   const { activityOwner } = await import("./policy")
   const { createSitePermissions } = await import("./site-permissions")
   const { createSystemMedia } = await import("./system-media")
@@ -123,6 +126,14 @@ void electron.app.whenReady().then(async () => {
 
       return void held.add(response)
     }
+
+    // A server that is slow to answer, and a document whose title comes later still, as a real site's does.
+    if (request.url === "/slow")
+      return void setTimeout(() => {
+        response.writeHead(200, { "content-type": "text/html" })
+        response.write("<!doctype html><meta charset=utf-8>")
+        setTimeout(() => response.end("<title>Slow</title><p>slow</p>"), 300)
+      }, 300)
 
     if (request.url === "/to-mail") return void response.writeHead(302, { location: "mailto:someone@example.test" }).end()
 
@@ -210,11 +221,66 @@ void electron.app.whenReady().then(async () => {
   const made = { count: 0 }
 
   // What the page asked the pane for: each tab with whether it stays behind the current one, and each notice.
-  type Opened = { readonly background: boolean; readonly owner: string; closed: boolean; readonly notices: RefusalNotice[] }
+  type Opened = {
+    readonly background: boolean
+    readonly owner: string
+    closed: boolean
+    readonly notices: RefusalNotice[]
+    /** Its page in the pane's machine, once it is listed there. */
+    attempt?: number
+    /**
+     * What the pane told the window about this tab, in order, each time it changed: whether the strip keeps its new-tab
+     * label, its title, whether it loads, its address, and with the report that first lists it, where it stands.
+     */
+    readonly reports: string[]
+  }
 
   const opened: Opened[] = []
   const tabs = new Map<Opened, Page>()
   const notices: RefusalNotice[] = []
+  const listed = new Map<string, Opened>()
+
+  // The pane's own machine, which decides what the window's strip is told about each tab from what its page publishes.
+  const pane = {
+    state: transitionPane(
+      transitionPane(createPaneState(), { type: "registered", binding: "links", window: win.id, storageKey: "links", restore: undefined, saved: { tabs: [], focusedTabID: null } }).state,
+      { type: "binding", binding: "links", event: { type: "server.attached", fileRoots: [] } },
+    ).state,
+  }
+
+  const dispatch = (event: BindingEvent) => {
+    const next = transitionPane(pane.state, { type: "binding", binding: "links", event })
+    pane.state = next.state
+
+    for (const effect of next.effects) {
+      if (effect.type !== "report" || effect.event.type !== "state") continue
+      const told = effect.event
+
+      told.state?.tabs.forEach((tab) => {
+        const report = [
+          told.unnamed?.includes(tab.id) ? "new-tab label," : "page's title,",
+          tab.title.replace(`127.0.0.1:${port}`, "") || "untitled",
+          tab.loading ? "loading" : "loaded",
+          tab.url.replace(origin, ""),
+          ...(told.placed?.tabID === tab.id ? [told.placed.after === tabID ? "after the pressed tab" : "after another tab"] : []),
+        ].join(" ")
+
+        const reports = listed.get(tab.id)?.reports
+
+        if (reports && reports.at(-1) !== report) reports.push(report)
+      })
+    }
+  }
+
+  type Opening = Extract<BindingEvent, { readonly type: "tab.opened" }>
+
+  // Lists a new page as the pane does (`create` in pane.ts), and says which page of its tab it is.
+  const list = (tab: Opening["tab"], beside?: Opening["beside"]) => {
+    const attempt = selectBinding(pane.state, "links")?.nextAttempt ?? 0
+    dispatch({ type: "tab.opened", tabID: tab.id, attempt, tab, beside })
+
+    return attempt
+  }
 
   // A page as the pane makes it (`create` in pane.ts). One a link or script opened adopts Chromium's new contents, says
   // its own notices, and can close itself or hand an address back to the tab that opened it.
@@ -237,14 +303,21 @@ void electron.app.whenReady().then(async () => {
         },
         refused: popup.refused,
       },
-      publish: () => undefined,
+      publish: () => {
+        const tab = popup && tabs.get(popup.tab)?.state()
+
+        if (tab && popup.tab.attempt !== undefined) dispatch({ type: "tab.published", tabID: tab.id, attempt: popup.tab.attempt, tab })
+      },
       refused: (notice) => (popup ? popup.tab.notices : notices).push(notice),
       fail: () => undefined,
       popup: (options, background, child, refused) => {
-        const tab: Opened = { background, owner: activityOwner(child), closed: false, notices: [] }
+        const tab: Opened = { background, owner: activityOwner(child), closed: false, notices: [], reports: [] }
         const page = make(child, { options, tab, refused })
         opened.push(tab)
         tabs.set(tab, page)
+        listed.set(page.state().id, tab)
+        // The person's tab stands beside the one it came from; the agent's goes to the end.
+        tab.attempt = list(page.state(), tab.owner === "agent" ? undefined : { tabID: created.state().id, front: !background })
 
         return page.contents
       },
@@ -269,6 +342,7 @@ void electron.app.whenReady().then(async () => {
   const activity: TabActivity = { agentRuns: 0 }
   const page = make(activity)
   const tabID = page.state().id
+  list(page.state())
   await page.ready
 
   const turn = () => new Promise<void>((resolve) => setTimeout(resolve, 20))
@@ -425,6 +499,9 @@ void electron.app.whenReady().then(async () => {
     return (await count("moves")) > 0
   })
   const modifier = process.platform === "darwin" ? "meta" : "control"
+  // First, while the pressed tab is the only other one: a link to a slow page, middle-clicked.
+  const slow = await press(10, "middle")
+  const reports = opened[0]?.reports
   const middle = await press(0, "middle")
   const modified = await press(0, "left", [modifier])
   const modifiedShift = await press(0, "left", [modifier, "shift"])
@@ -463,7 +540,7 @@ void electron.app.whenReady().then(async () => {
       for (const delay of [50, 500, 2000]) afterwards.push(await pressThenWait(row, kind, delay))
 
   process.stdout.write(
-    `${JSON.stringify({ platform: process.platform, middle, modified, modifiedShift, middleShift, shift, blank, blankMiddle, mail, mailMiddle, nothing, opener, openerMiddle, key, download, blankDownload, mailRedirect, refusedRedirect, thenDownload: thenDownloaded, agent, agentDownload, reclaimed, synthetic: synthesized, timer, afterPress: afterwards })}\n`,
+    `${JSON.stringify({ platform: process.platform, slow, reports, middle, modified, modifiedShift, middleShift, shift, blank, blankMiddle, mail, mailMiddle, nothing, opener, openerMiddle, key, download, blankDownload, mailRedirect, refusedRedirect, thenDownload: thenDownloaded, agent, agentDownload, reclaimed, synthetic: synthesized, timer, afterPress: afterwards })}\n`,
   )
   await page.dispose()
   server.closeAllConnections()
