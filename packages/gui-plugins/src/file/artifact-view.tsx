@@ -80,8 +80,8 @@ export default function ArtifactView(props: {
   content: FileContent
   cacheKey?: string
   source: JSX.Element
-  /** The open find bar's query, so a table preview renders the rows it matches. */
-  findQuery?: string
+  /** The open find bar's query and active match, so a table preview renders the rows find moves to. */
+  find?: { query: string; index: number }
 }) {
   const ctx = usePlugin()
   const locale = ctx.locale
@@ -226,7 +226,7 @@ export default function ArtifactView(props: {
             <ArtifactFont path={props.path} content={props.content} />
           </Match>
           {/* Not keyed, so a reread (the watcher while an agent still writes the file) keeps the table, its scroll and its revealed rows. */}
-          <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} findQuery={props.findQuery} />}</Match>
+          <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} find={props.find} />}</Match>
           <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
           {/* Keyed, so another viewer for the file mounts with bytes of its own. */}
           <Match when={viewer()} keyed>
@@ -854,7 +854,7 @@ const INITIAL_TABLE_ROWS = 100
 
 const TABLE_ROW_STEP = 200
 
-function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited>; findQuery?: string }) {
+function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited>; find?: { query: string; index: number } }) {
   const ctx = usePlugin()
   const controller = new AbortController()
   onCleanup(() => controller.abort())
@@ -869,18 +869,34 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited>; findQ
   const header = createMemo(() => columns().map((index) => props.parsed.rows[0]?.[index] ?? ""))
   const body = createMemo(() => props.parsed.rows.slice(1))
 
-  // Find searches only the rows on screen, so a query renders the parsed rows up to its last match, as find matches
-  // within one cell.
-  const matched = createMemo(() => {
-    const query = props.findQuery?.toLowerCase()
+  // Find searches the rendered cells in document order, each cell on its own, so a match's index is its place among
+  // the cells' matches. Rendering up to the match after the active one lets Next move on, without rendering every row
+  // a broad query matches.
+  const reached = createMemo(() => {
+    const query = props.find?.query.toLowerCase()
 
     if (!query) return 0
+    const target = (props.find?.index ?? 0) + 1
+    let seen = 0
+    let last = 0
 
-    return body().findLastIndex((row) => row.some((cell) => cell.toLowerCase().includes(query))) + 1
+    for (const [row, cells] of props.parsed.rows.entries()) {
+      for (const cell of cells) {
+        const text = cell.toLowerCase()
+
+        for (let at = text.indexOf(query); at !== -1; at = text.indexOf(query, at + query.length)) {
+          if (seen++ === target) return row
+          last = row
+        }
+      }
+    }
+
+    // Row 0 is the header, so a match's row is the number of body rows that show it.
+    return last
   })
 
   // Rows once shown stay, so a narrower query or a reread never collapses the table under the reader.
-  const shown = createMemo((previous: number) => Math.max(previous, requested(), matched()), INITIAL_TABLE_ROWS)
+  const shown = createMemo((previous: number) => Math.max(previous, requested(), reached()), INITIAL_TABLE_ROWS)
   const visibleBody = createMemo(() => body().slice(0, shown()))
   const hasMore = () => visibleBody().length < body().length
 

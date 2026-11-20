@@ -2381,9 +2381,16 @@ test("a large CSV previews from a bounded byte range, finds past its first rows,
   await expect(rows).toHaveCount(100)
   expect(requests).toEqual(read)
 
-  // Find searches the rendered rows, so a query renders the rows up to its match, and they stay once it closes.
+  // Find searches the rendered rows: a query renders rows up to the match after the active one, so a broad query
+  // stays on the rows shown, a narrow one reaches its match further down, and they stay once find closes.
   await page.keyboard.press("ControlOrMeta+f")
-  await page.getByPlaceholder("Find", { exact: true }).fill("before-250")
+  const find = page.getByPlaceholder("Find", { exact: true })
+  await find.fill("before")
+  await expect(page.getByText("1/100", { exact: true })).toBeVisible()
+  await find.press("Enter")
+  await expect(page.getByText("2/100", { exact: true })).toBeVisible()
+  await expect(rows).toHaveCount(100)
+  await find.fill("before-250")
   await expect(page.getByText("1/1", { exact: true })).toBeVisible()
   await expect(rows).toHaveCount(251)
   await expect(panel.getByText("before-250", { exact: true })).toBeInViewport()
