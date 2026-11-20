@@ -31,6 +31,7 @@ import { OpencodeMemoryAccess } from "./opencode-memory-access.js"
 import { OpencodeMemoryCapture } from "./opencode-memory-capture.js"
 import { OpencodeMemoryDecide } from "./opencode-memory-decide.js"
 import { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
+import { OpencodeMemoryRecipe } from "./opencode-memory-recipe.js"
 import { OpencodeMemoryVerify } from "./opencode-memory-verify.js"
 import { OpencodeWatches } from "./opencode-watches.js"
 
@@ -85,6 +86,8 @@ const DELIVERIES = "/api/memory/deliveries"
 const MAX_DELIVERED = 3
 /** And at a task's start, the most of the repository's rules for all its work, besides. */
 const MAX_RULES = 3
+/** And the most of its test recipes, which go first and aren't judged: a working command is a rule by what it is. */
+const MAX_RECIPES = 2
 /** The most deliveries one call records, as Console takes them. */
 const MAX_RECORDED = 20
 /** The instructions source that holds the instruction files: AGENTS.md (or CLAUDE.md) and configured ones. */
@@ -910,6 +913,33 @@ export const make = Effect.fnUntraced(function* (
         agent.hidden = true
       }),
     )
+    // A test recipe a session just showed (opencode-memory-recipe.ts) goes to Console as a procedure, backed by the
+    // passing run at HEAD unless the session took in outside input. A duplicate refusal means Console already holds it.
+    const recipes = new WeakMap<Tracked, OpencodeMemoryRecipe.State>()
+    const learn = (sessionID: Session.ID, command: string, output: string, failed: boolean) =>
+      Effect.gen(function* () {
+        if (!capturing) return
+        const state = tracked(sessionID)
+        const seen = recipes.get(state) ?? OpencodeMemoryRecipe.make()
+        recipes.set(state, seen)
+        const found = OpencodeMemoryRecipe.observe(seen, { command, output, failed })
+        if (found === undefined) return
+        const source = yield* checkout
+        const outside = yield* tainted(sessionID)
+        const written = yield* call(Written, "POST", "/api/memory/entries", {
+          ...OpencodeMemoryRecipe.entry(found, yield* label),
+          tags: ["recipe"],
+          source: { ...source, sessionID },
+          ...(outside ? { tainted: true } : {}),
+          idempotencyKey: `${sessionID}:recipe:${Hash.sha256(found.recipe).slice(0, 16)}`,
+        })
+        const sha = yield* head
+        if (outside || sha === undefined || written.id === undefined) return
+        yield* call(Schema.Unknown, "POST", `/api/memory/entries/${encodeURIComponent(written.id)}/evidence`, {
+          evidence: [{ kind: VERIFIED, ref: sha }],
+          source: { ...source, sessionID },
+        })
+      }).pipe(Effect.catchCause((cause) => Effect.logDebug("memory recipe not sent", { cause })))
     /**
      * Adds `event` to the session's segment and, when it closes a work boundary, distils the segment in the background.
      * Kept in memory only: a restart loses the open segment, never anything published.
@@ -1088,8 +1118,10 @@ export const make = Effect.fnUntraced(function* (
         // At a task's start each candidate is asked whether it's a rule for all the repository's work, and a ranked one
         // whether it applies to the task too; elsewhere only whether it applies.
         const name = yield* label
+        const recipes =
+          moment.type === "prompt" ? entries.filter(OpencodeMemoryRecipe.isRecipe).slice(0, MAX_RECIPES) : []
         const judged = yield* Effect.forEach(
-          entries,
+          entries.filter((entry) => !recipes.includes(entry)),
           (entry) =>
             Effect.all(
               {
@@ -1112,7 +1144,7 @@ export const make = Effect.fnUntraced(function* (
         const applying = judged
           .filter((item) => !rules.includes(item) && (item.applies ?? 0) >= OpencodeMemoryDecide.APPLIES)
           .toSorted((a, b) => (b.applies ?? 0) - (a.applies ?? 0))
-        if (rules.length === 0 && applying.length === 0) return { entries: [], rules: [] } satisfies Delivery
+        if (rules.length === 0 && applying.length === 0) return { entries: [], rules: recipes } satisfies Delivery
         const instructions = yield* Deferred.await(state.instructions)
         const [fitting, kept] = yield* Effect.all(
           [
@@ -1129,7 +1161,7 @@ export const make = Effect.fnUntraced(function* (
           ],
           { concurrency: 2 },
         )
-        return { entries: fitting, rules: kept } satisfies Delivery
+        return { entries: fitting, rules: [...recipes, ...kept] } satisfies Delivery
       })
     /**
      * Up to `budget` of `entries`, in order, that the instruction files don't already state, asking only as many at a
@@ -1329,6 +1361,9 @@ export const make = Effect.fnUntraced(function* (
           test: policy.test(command),
           tail: shell.value.output.output.slice(-MAX_TAIL),
         })
+        yield* learn(event.sessionID, command, shell.value.output.output.slice(-MAX_TAIL), failed).pipe(
+          Effect.forkIn(lease, { startImmediately: true }),
+        )
         // A commit the session made, when `git commit` moved HEAD, is a boundary of its own with its hash as evidence.
         const sha = committing && exitCode === 0 ? yield* head : undefined
         if (sha !== undefined && sha !== before) {
