@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "node:path"
-import { Effect, Fiber } from "effect"
+import { Effect, Fiber, SubscriptionRef } from "effect"
 import { TestClock } from "effect/testing"
 import { ClaudeSessions } from "@opencode/core/plugin/provider/claude-agent/claude/sessions"
 import { ClaudeAgentLanguageModel } from "@opencode/core/plugin/provider/claude-agent/language-model/claude-agent-language-model"
@@ -130,7 +130,7 @@ describe("Claude sessions", () => {
     }),
   )
 
-  it.effect("a logged-out config folder fails with the command to log in to it", () =>
+  it.effect("a logged-out model folder fails with the command to log in to it, and leaves the provider's status", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([
         FakeClaude.expectStartup({ account: { tokenSource: "none", apiProvider: "firstParty" } }),
@@ -141,6 +141,7 @@ describe("Claude sessions", () => {
       const work = yield* TestSessions.model(test.sessions, { configDir: folder })
       const error = yield* TestSessions.reply(work, first).pipe(Effect.flip)
       expect(String(error.cause)).toContain(`"${folder}"`)
+      expect((yield* SubscriptionRef.get(test.input.status.state)).type).toBe("checking")
       yield* test.registry.close()
       claude.check()
     }),

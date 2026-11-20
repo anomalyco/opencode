@@ -49,7 +49,14 @@ export const make = Effect.fn("ClaudeStatus.make")(function* (
     yield* SubscriptionRef.set(state, next)
   }, lock.withPermit)
 
-  const report = (next: State) => SubscriptionRef.set(state, next)
+  // A model with its own configDir runs another account, which must not replace the provider's login, prices and models.
+  const report = Effect.fn("ClaudeStatus.report")(function* (next: State) {
+    if (next.type === "ready") {
+      const own = ClaudeQueryOptions.withoutDefaultFolder(yield* connection(), io).CLAUDE_CONFIG_DIR
+      if (next.configDir !== own) return
+    }
+    yield* SubscriptionRef.set(state, next)
+  })
 
   return { state, refresh, report } satisfies Interface
 })
