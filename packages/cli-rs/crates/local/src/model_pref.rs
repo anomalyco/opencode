@@ -189,7 +189,10 @@ impl ModelPreferences {
         lock::with_lock(&self.locks, &self.file.to_string_lossy(), &self.lock, || {
             let mut document = self.read();
             let (patch, (recent, favorite, variant)) = change(&preference(&document));
-            put(&mut document, &patch, recent, favorite, variant);
+            // As TS `patch()`: an empty ID or variant is dropped rather than written.
+            let mut staged = Map::new();
+            put(&mut staged, &patch, true, true, true);
+            put(&mut document, &preference(&staged), recent, favorite, variant);
             write_json_atomic(&self.file, &Value::Object(document))
         })?
         .map_err(lock::Error::Io)
@@ -208,5 +211,14 @@ mod tests {
         assert_eq!(cycle_variant(Some("high"), &variants), None);
         assert_eq!(cycle_variant(Some("gone"), &variants), None);
         assert_eq!(cycle_variant(None, &["default"]), None);
+    }
+
+    #[test]
+    fn an_empty_variant_is_dropped_as_typescript_drops_it() {
+        let state = opencode_util::temp::tempdir().unwrap();
+        let prefs = ModelPreferences::new(state.path());
+        prefs.save_variant(&Model::new("p", "a"), Some("high")).unwrap();
+        prefs.save_variant(&Model::new("p", "a"), Some("")).unwrap();
+        assert_eq!(std::fs::read_to_string(prefs.path()).unwrap(), r#"{"recent":[],"favorite":[],"variant":{}}"#);
     }
 }
