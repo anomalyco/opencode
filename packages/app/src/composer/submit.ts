@@ -30,19 +30,10 @@ import {
   type SubmitSnapshot,
 } from "./machine"
 import { retryFingerprint } from "./retry"
-import {
-  SERVER_PROMPT_STATUS,
-  transitionPromptStatus,
-  type PromptStatusEvent,
-  type PromptStatusState,
-} from "./prompt-status-machine"
+import { admitPrompt, type PromptAdmission } from "./admission"
 
 // The model each session was last switched to from this client, by session ID.
 const switched = new Map<string, string>()
-
-// The optimistic busy status of each session, by session ID. Module-wide, because a new session's first prompt and
-// the follow-ups sent from its own composer go through different submit machines. A session left out is `server`.
-const statuses = new Map<string, PromptStatusState>()
 
 type ComposerSubmitInput = {
   adapter: ComposerAdapter
@@ -550,21 +541,16 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
 
   const background = value.delivery === "steer" && working ? session.background?.() : undefined
 
-  updateStatus(session, { type: "dispatched", id: value.id, working })
-
-  const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
+  const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit, working).then(
     () => ({ ok: true as const }),
     (error) => ({ ok: false as const, error }),
   )
 
   // Settled here rather than when the composer settles, which an aborted promotion never reaches.
   void sending.then((result) => {
-    const admitted = result.ok || session.admitted(value.id)
-    updateStatus(session, admitted ? { type: "admitted" } : { type: "failed", id: value.id })
-
     if (value.delivery !== "steer") return
 
-    if (admitted) return session.handoff.settle(value.id)
+    if (result.ok) return session.handoff.settle(value.id)
     session.handoff.clear(value.id)
   })
 
@@ -584,15 +570,6 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
         return true
       }),
   }
-}
-
-function updateStatus(session: ComposerSession, event: PromptStatusEvent) {
-  const result = transitionPromptStatus(statuses.get(session.id) ?? SERVER_PROMPT_STATUS, event)
-
-  if (result.state.type === "server") statuses.delete(session.id)
-
-  if (result.state.type === "optimistic") statuses.set(session.id, result.state)
-  result.effects.forEach((effect) => session.data.session.setStatus(session.id, effect.status))
 }
 
 /**
@@ -780,7 +757,22 @@ async function sendPrompt(
   session: ComposerSession,
   value: ComposerSubmission,
   track: ModelSelection["trackSessionCommit"] | undefined,
+  working: boolean,
 ) {
+  await admitPrompt({
+    session,
+    id: value.id,
+    working,
+    admission: preparePrompt(session, value, track),
+  })
+}
+
+// The prompt's selection brackets the admission itself, so the model switch lands before the server commits it.
+async function preparePrompt(
+  session: ComposerSession,
+  value: ComposerSubmission,
+  track: ModelSelection["trackSessionCommit"] | undefined,
+): Promise<PromptAdmission> {
   const request = await buildSubmissionRequest(session, value)
 
   // Switching agent or model reconfigures the session immediately, and with it
@@ -805,7 +797,7 @@ async function sendPrompt(
   // A retried admission reuses the first commit rather than switching again.
   let committed: Promise<void> | undefined
 
-  const admission = {
+  return {
     id: value.id,
     sessionID: session.id,
     delivery: value.delivery,
@@ -827,9 +819,6 @@ async function sendPrompt(
     },
     prepare: staged ? undefined : () => (committed ??= commit()),
   }
-
-  await session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
-  session.data.session.acceptSend(session.id)
 }
 
 async function buildSubmissionRequest(session: ComposerSession, value: ComposerSubmission) {

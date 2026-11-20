@@ -218,9 +218,7 @@ describe("Composer submission", () => {
     const accepted = Promise.withResolvers<void>()
     const state = createMemoryComposerState({ prompt: "Hello" }).capture()
 
-    await submitInput(active(state, session({ calls, accept: () => accepted.resolve() }))).submit(
-      new Event("submit"),
-    )
+    await submitInput(active(state, session({ calls, accept: () => accepted.resolve() }))).submit(new Event("submit"))
     await accepted.promise
 
     expect(calls.filter((call) => call === "accept-send")).toHaveLength(1)
@@ -1048,9 +1046,10 @@ describe("Composer submission", () => {
     const state = createMemoryComposerState({ prompt: "admitted prompt" }).capture()
     const checked = Promise.withResolvers<void>()
     const attempts: string[] = []
+    const calls: string[] = []
 
     const target = session({
-      calls: [],
+      calls,
       admitted: () => {
         checked.resolve()
 
@@ -1068,6 +1067,41 @@ describe("Composer submission", () => {
     expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
     expect(attempts).toHaveLength(2)
     expect(new Set(attempts).size).toBe(1)
+    // The row the lost response left behind floors the Session's recency, as an admitted send does.
+    expect(calls.filter((call) => call === "accept-send")).toHaveLength(1)
+  })
+
+  test("returns the Session to idle when preparing the prompt fails", async () => {
+    const state = createMemoryComposerState({ prompt: "ship it" }).capture()
+    const statuses: ("idle" | "running")[] = []
+    const failed = Promise.withResolvers<void>()
+
+    // A staged revert settles before admission, so its switch request is the last thing that can reject unprepared.
+    const target = session({
+      calls: [],
+      statuses,
+      current: () => ({
+        agent: "plan",
+        model: { id: "old", providerID: "old" },
+        revert: { messageID: "msg_reverted" },
+      }),
+      switchModel: async () => {
+        throw new Error("offline")
+      },
+    })
+
+    await submitInput(
+      { ...active(state, target), working: () => statuses.at(-1) === "running" },
+      {
+        missingSelection() {},
+        unqueueable() {},
+        failed: () => failed.resolve(),
+      },
+    ).submit(new Event("submit"))
+    await failed.promise
+
+    expect(statuses).toEqual(["running", "idle"])
+    expect(text(state)).toBe("ship it")
   })
 
   describe("steering while foreground work runs", () => {
