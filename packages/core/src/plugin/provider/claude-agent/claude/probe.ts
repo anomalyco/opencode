@@ -114,7 +114,7 @@ export function isLoggedIn(account: AccountInfo) {
 
 export function loginMessage(configDir: string | undefined) {
   if (!configDir) return "Claude Code is not logged in. Run `claude auth login` in a terminal."
-  return `Claude Code is not logged in for ${configDir}. Run \`CLAUDE_CONFIG_DIR="${configDir}" claude auth login\` in a terminal.`
+  return `Claude Code is not logged in for ${configDir}. Set \`CLAUDE_CONFIG_DIR\` to that folder and run \`claude auth login\` in a terminal.`
 }
 
 async function* waitFor(done: Promise<void>): AsyncGenerator<never> {

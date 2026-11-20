@@ -39,7 +39,6 @@ export function followup(text = "What was the marker? Reply only with it."): Lan
   ]
 }
 
-// `settings` are the provider settings from opencode.json, such as `configDir`.
 export const model = Effect.fn(function* (sessions: ClaudeSessions.Interface, settings?: Record<string, unknown>) {
   const context = yield* Effect.context<never>()
   return new ClaudeAgentLanguageModel.Model(

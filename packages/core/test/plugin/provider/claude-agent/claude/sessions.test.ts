@@ -130,7 +130,7 @@ describe("Claude sessions", () => {
     }),
   )
 
-  it.effect("a logged-out config folder fails with the command to log in to it", () =>
+  it.effect("a logged-out config folder fails naming the folder to log in to", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([
         FakeClaude.expectStartup({ account: { tokenSource: "none", apiProvider: "firstParty" } }),
@@ -140,7 +140,7 @@ describe("Claude sessions", () => {
       const folder = path.resolve("/claude-work")
       const work = yield* TestSessions.model(test.sessions, { configDir: folder })
       const error = yield* TestSessions.reply(work, first).pipe(Effect.flip)
-      expect(String(error.cause)).toContain(`CLAUDE_CONFIG_DIR="${folder}" claude auth login`)
+      expect(String(error.cause)).toContain(`not logged in for ${folder}. Set \`CLAUDE_CONFIG_DIR\` to that folder`)
       yield* test.registry.close()
       claude.check()
     }),

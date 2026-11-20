@@ -93,6 +93,12 @@ Sign in to the second account in its own folder. Your usual login stays unchange
 CLAUDE_CONFIG_DIR="$HOME/.claude-2" claude auth login
 ```
 
+In PowerShell:
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-2"; claude auth login
+```
+
 Then add models that use that folder:
 
 ```jsonc title="opencode.jsonc"
@@ -129,5 +135,5 @@ instead.
 | Error or symptom | Check |
 | --- | --- |
 | `Claude Code is not installed` | Install Claude Code, or set `OPENCODE_CLAUDE_PATH` to its path. |
-| `Claude Code is not logged in` | Run `claude auth login`, then connect Claude Agent again. With `configDir`, run the command the error shows for that folder. |
+| `Claude Code is not logged in` | Run `claude auth login`, then connect Claude Agent again. With `configDir`, sign in to the folder the error names, as in [Use a second Claude account](#use-a-second-claude-account). |
 | `Claude Code ... is too old` | Run `claude update`. |

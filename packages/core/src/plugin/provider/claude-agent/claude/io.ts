@@ -76,8 +76,8 @@ async function inFolder<Name extends keyof typeof helpers>(
   })
   return new Promise<HelperResult<Name>>((resolve, reject) => {
     worker.once("message", (reply) => {
-      if ("error" in reply) reject(reply.error)
-      else resolve(reply.value)
+      if ("error" in reply) return reject(reply.error)
+      resolve(reply.value)
     })
     // The worker reports helper failures as messages, so an error here means it could not start.
     worker.once("error", (cause) =>
