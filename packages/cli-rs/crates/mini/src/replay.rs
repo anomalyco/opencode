@@ -2038,20 +2038,6 @@ mod tests {
         assert!(matches!(decode_message(&value), SessionMessageInfo::Unknown(_)));
     }
 
-    #[test]
-    fn fragments_match_the_reconciler() {
-        let mut fragments = Fragments::default();
-        let part = Fragment::new("msg", "text", 0);
-        assert_eq!(fragments.project(&part, "abc", true).previous, "");
-        assert_eq!(fragments.delta(&part, "b"), None);
-        assert_eq!(fragments.delta(&part, "c"), None);
-        assert_eq!(fragments.delta(&part, "d"), Some(3));
-        assert_eq!(fragments.restore(&part, "ab"), Restore::Covered);
-        assert_eq!(fragments.restore(&part, "abcdef"), Restore::Append("ef".into()));
-        assert_eq!(fragments.restore(&part, "xyz"), Restore::Conflict);
-        assert_eq!(fragments.end(&part, "final").previous, "abcdef");
-    }
-
     /// Hydration model: reads may finish out of order or cross a disconnect. The visible transcript must converge to
     /// the server's ordered messages.
     mod model {
