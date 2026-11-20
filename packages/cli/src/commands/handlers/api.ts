@@ -67,11 +67,10 @@ export function rawRequest(input: readonly string[]) {
 export function resolveRequest(endpoint: Endpoint, input: readonly string[], params: Record<string, string>) {
   const raw = rawRequest(input)
   if (raw) {
-    try {
-      return Effect.succeed({ ...raw, path: interpolate(raw.path, params) })
-    } catch (error) {
-      return Effect.fail(error instanceof Error ? error : new Error(String(error)))
-    }
+    return Effect.try({
+      try: () => ({ ...raw, path: interpolate(raw.path, params) }),
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    })
   }
   if (input.length !== 1) return Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
   return Effect.tryPromise(async () => {
