@@ -362,15 +362,15 @@ const glob = (host: Host, given: string, cwd: string, dot: boolean) =>
     const segments = pattern.split("/")
     const wild = segments.findIndex((segment) => /[*?[\]{}()!+@]/.test(segment))
     // The fixed part of the pattern is where listing starts. An absolute pattern keeps its root and gives absolute
-    // paths. Like the glob tool, a scan asks glob permission for the pattern, and external-directory approval for
-    // where it lists outside the project.
+    // paths. Bun scans are filesystem reads, independent of the glob tool's permission. Ask read permission for
+    // the listing root, and external-directory approval where it lists outside the project.
     const fixed = (wild < 0 ? segments : segments.slice(0, wild)).join("/") || (path.isAbsolute(pattern) ? "/" : ".")
     const base = path.isAbsolute(pattern) ? fixed : path.join(cwd, fixed)
     const target = yield* host.access.resolve({ path: base, kind: "directory" })
     yield* host.access.authorizeExternal([target], host.context)
     yield* host.permission.assert({
-      action: "glob",
-      resources: [given],
+      action: "read",
+      resources: [target.resource],
       save: ["*"],
       metadata: { root: cwd },
       ...Permission.invocation(host.context),

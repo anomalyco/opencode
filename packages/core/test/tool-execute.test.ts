@@ -334,7 +334,7 @@ describe("Bun", () => {
       ["edit", ["notes.txt"]],
       ["external_directory", [path.posix.join(path.posix.dirname(resource), "*")]],
       ["read", [resource]],
-      ["glob", ["*.txt"]],
+      ["read", ["."]],
     ])
     expect(asked[1]?.metadata?.files).toMatchObject([{ file: "notes.txt", status: "modified", additions: 1 }])
   })
@@ -348,8 +348,9 @@ describe("Bun", () => {
     expect(await denied("read", `${failure}\nreturn [await failure(() => Bun.file("keep.txt"))]`)).toEqual([
       "Permission denied: read",
     ])
-    expect(await denied("glob", `${failure}\nreturn [await failure(() => new Bun.Glob("*").scanSync())]`)).toEqual([
-      "Permission denied: glob",
+    expect(await denied("glob", 'return new Bun.Glob("*").scanSync()')).toEqual(["keep.txt"])
+    expect(await denied("read", `${failure}\nreturn [await failure(() => new Bun.Glob("*").scanSync())]`)).toEqual([
+      "Permission denied: read",
     ])
     expect(
       await denied(
