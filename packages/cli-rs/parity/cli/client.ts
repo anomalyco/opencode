@@ -35,12 +35,16 @@ export function command(side: Side, args: string[]) {
 // OPENCODE_RS_BIN names a binary.
 export async function buildRust(sides: Side[]) {
   if (!sides.includes("rs") || process.env.OPENCODE_RS_BIN) return
-  // The package script `cargo` runs first: OpenTUI's native library for the pin, when it is missing.
-  const proc = Bun.spawn(["bun", "run", "--silent", "cargo", "build", "--quiet", "-p", "opencode-cli", "--bins"], {
-    cwd: rs,
-    stdout: "inherit",
-    stderr: "inherit",
-  })
+  // The package script `cargo` runs first: OpenTUI's native library for the pin, when it is missing. Native plugins
+  // are off by default, and the parity suites cover their carrier end to end (P.0b, P4c).
+  const proc = Bun.spawn(
+    ["bun", "run", "--silent", "cargo", "build", "--quiet", "-p", "opencode-cli", "--bins", "--features", "native"],
+    {
+      cwd: rs,
+      stdout: "inherit",
+      stderr: "inherit",
+    },
+  )
   if ((await proc.exited) !== 0) throw new Error("cargo build -p opencode-cli failed")
 }
 
