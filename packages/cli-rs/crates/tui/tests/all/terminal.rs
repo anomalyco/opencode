@@ -228,6 +228,26 @@ fn a_server_without_terminals_lists_none_and_ignores_the_commands() {
     assert!(harness.remotes.lock().unwrap().is_empty());
 }
 
+// Expected: TS fires `close` after `error`, so a failed socket reads as a disconnect unless the terminal exited.
+#[test]
+fn a_failed_socket_reads_as_a_disconnect_unless_the_terminal_exited() {
+    for (exited, text) in [(false, "Terminal disconnected"), (true, "Terminal connection failed")] {
+        let harness = mount(true, None);
+        let listed =
+            |harness: &Terminal| !harness.requests("GET", "/api/experimental/session/ses_a/terminal").is_empty();
+        assert!(harness.wait(listed));
+        harness.run("terminal.toggle");
+        harness.attach();
+        let deliver = harness.remotes.lock().unwrap()[0].deliver.clone();
+        if exited {
+            deliver.try_send(Incoming::Text(r#"{"type":"exited","exitCode":0}"#.into())).unwrap();
+        }
+        deliver.try_send(Incoming::Failed("reset".into())).unwrap();
+        let shown = |harness: &Terminal| harness.app.render().text().contains(text);
+        assert!(harness.wait(shown), "{}", harness.app.text());
+    }
+}
+
 #[test]
 fn the_wheel_scrolls_the_terminal_history_across_output() {
     let harness = mount(true, None);

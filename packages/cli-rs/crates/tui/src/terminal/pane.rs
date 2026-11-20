@@ -384,8 +384,10 @@ impl Pane {
                 self.disconnect((!exited).then_some("Terminal disconnected"));
                 return false;
             }
+            // TS fires `close` after `error`, and that replaces the failure unless the terminal exited.
             Incoming::Failed(_) => {
-                self.disconnect(Some("Terminal connection failed"));
+                let exited = self.state.borrow().exited;
+                self.disconnect(Some(if exited { "Terminal connection failed" } else { "Terminal disconnected" }));
                 return false;
             }
         };
