@@ -7,7 +7,8 @@ this. Clients only; the server knows nothing about it.
 ## Keyboard focus
 
 - Clicking or tapping inside an open widget (or tabbing to it) gives it **keyboard focus**; the client shows a focus
-  ring and a small "Esc to release" hint. Clicking outside it, or Esc, takes focus away.
+  ring and a tiny hint: a keyboard icon plus "Esc" (a cursor icon plus "Esc" while the pointer is captured). Touch
+  devices show no hint unless a hardware keyboard is attached (then the keyboard icon only). Clicking outside it, or Esc, takes focus away.
 - While focused, key presses go to the widget instead of the app, except app/OS chords that use the platform's command
   modifier (Cmd on macOS, Ctrl elsewhere), which still reach the app. Text input nodes keep working as before.
 - The program receives `{ id: "", type: "key", value: { kind: "down" | "up", key, code, repeat, shift, alt, ctrl, meta } }`
@@ -23,7 +24,9 @@ this. Clients only; the server knows nothing about it.
   plus `down`/`up` with `button`. `widget.releasePointer()` (or dropping the root prop) gives it back. When capture is
   granted the program gets `{ id: "", type: "capture", value: true }`; when it ends for any reason,
   `{ id: "", type: "capture", value: false }`.
-- Without capture, pointer events are as before (absolute `x`, `y` on canvas/shader nodes with an `id`).
+- Without capture, pointer events are as before (absolute `x`, `y` on canvas/shader nodes with a pointer handler).
+  On desktop and web they also include **hover moves**: `{ kind: "move", x, y, down: false, width, height }` while the
+  pointer is over the node with no button held, at most once per frame. Touch devices have no hover.
 
 ## Esc always releases
 
