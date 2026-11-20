@@ -744,11 +744,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           tabs.select(tab)
                           el?.scrollIntoView({ behavior: "instant", block: "nearest" })
                         }}
-                        onClose={(tab) => {
-                          const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-
-                          if (index !== -1) tabsStoreActions.closeTab(index)
-                        }}
+                        onClose={tabGroups.closeTab}
                         onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
                         onReorder={(keys) => tabsStoreActions.reorder(keys)}
                       />
