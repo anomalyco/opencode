@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { DateTime, Effect, Layer, LayerMap, Stream } from "effect"
+import { DateTime, Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { Shell } from "@opencode/schema/shell"
@@ -12,7 +12,6 @@ import { and, asc, eq } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Hash } from "@opencode/util/hash"
 import { Bus } from "@opencode/core/bus"
 import { EventTable } from "@opencode/core/event/sql"
@@ -37,8 +36,6 @@ import { Workspace } from "@opencode/core/workspace"
 import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
-import type { LocationServices } from "@opencode/core/location-services"
-import type { FileSystem } from "@opencode/core/filesystem"
 import { initGit } from "./fixture/git"
 import { countingSpawner } from "./fixture/spawn"
 import { offlineModels } from "./fixture/models"
@@ -111,44 +108,6 @@ const projectIt = testEffect(
     ],
   ),
 )
-// Locations whose agents have loaded, with build as the default.
-const agentIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]), [
-    Bus.node.replace(Bus.configured({ persist: true })),
-    Project.node.replace(globalProjectNode),
-    LocationServiceMap.node.replace(
-      makeGlobalNode({
-        service: LocationServiceMap.Service,
-        layer: Layer.effect(
-          LocationServiceMap.Service,
-          Effect.gen(function* () {
-            const bus = yield* Bus.Service
-            return yield* LayerMap.make(
-              (_ref: Location.Ref) =>
-                Layer.effectDiscard(
-                  Effect.gen(function* () {
-                    const agents = yield* Agent.Service
-                    yield* agents.transform((editor) => {
-                      editor.update(Agent.defaultID, () => {})
-                      editor.update(Agent.ID.make("plan"), () => {})
-                    })
-                  }),
-                ).pipe(
-                  Layer.provideMerge(
-                    LayerNode.compile(Agent.node, {
-                      replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
-                    }),
-                  ),
-                ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
-            )
-          }),
-        ),
-        deps: [Bus.node],
-      }),
-    ),
-    SessionExecution.node.replace(SessionExecution.noopLayer),
-  ]),
-)
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = Session.ID.create()
 
@@ -157,6 +116,26 @@ const logEvents = (session: Session.Interface, sessionID: Session.ID, follow?: b
   session
     .log({ sessionID, follow })
     .pipe(Stream.filter((item): item is SessionEvent.DurableEvent => !Bus.isSynced(item)))
+
+/** Records one completed step, the way the runner does, so the Session's history shows which agent ran. */
+const completeStep = Effect.fn(function* (sessionID: Session.ID, agent: Agent.ID) {
+  const bus = yield* Bus.Service
+  const assistantMessageID = SessionMessage.ID.create()
+  yield* bus.publish(SessionEvent.Step.Started, {
+    sessionID,
+    assistantMessageID,
+    agent,
+    model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+    started: 0,
+  })
+  yield* bus.publish(SessionEvent.Step.Ended, {
+    sessionID,
+    assistantMessageID,
+    finish: "stop",
+    cost: Money.USD.zero,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  })
+})
 
 const assertCreateInputTypes = (session: Session.Interface) => {
   // @ts-expect-error location or parentID is required.
@@ -1278,31 +1257,36 @@ describe("Session.create", () => {
   )
 
   for (const input of [
-    { name: "the default agent for a Session without one", agent: undefined, selected: Agent.defaultID },
-    { name: "the Session's current agent", agent: Agent.ID.make("plan"), selected: Agent.ID.make("plan") },
+    { name: "its stored agent", agent: Agent.ID.make("plan"), ran: Agent.ID.make("plan") },
+    { name: "the default agent it ran as without a stored one", agent: undefined, ran: Agent.ID.make("build") },
   ])
-    agentIt.effect(`does not record selecting ${input.name}`, () =>
+    it.effect(`does not record re-selecting ${input.name}`, () =>
       Effect.gen(function* () {
         const session = yield* Session.Service
         const created = yield* session.create({ location, agent: input.agent })
+        yield* completeStep(created.id, input.ran)
 
-        yield* session.switchAgent({ sessionID: created.id, agent: input.selected })
+        yield* session.switchAgent({ sessionID: created.id, agent: input.ran })
 
         expect((yield* session.get(created.id)).agent).toBe(input.agent)
-        expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toEqual([])
+        expect(
+          (yield* session.messages({ sessionID: created.id, order: "asc" })).map((message) => message.type),
+        ).toEqual(["assistant"])
       }),
     )
 
-  agentIt.effect("records selecting another agent for a Session without one", () =>
+  it.effect("records selecting another agent for a Session without a stored one", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const created = yield* session.create({ location })
+      yield* completeStep(created.id, Agent.ID.make("build"))
 
       yield* session.switchAgent({ sessionID: created.id, agent: Agent.ID.make("plan") })
 
-      expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toMatchObject([
-        { type: "agent-switched", agent: "plan" },
-      ])
+      expect((yield* session.messages({ sessionID: created.id, order: "asc" })).at(-1)).toMatchObject({
+        type: "agent-switched",
+        agent: "plan",
+      })
     }),
   )
 
