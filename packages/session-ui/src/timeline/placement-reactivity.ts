@@ -4,8 +4,8 @@ import { createStore, produce } from "solid-js/store"
 import { storyTool } from "../storybook/current-session-scenarios"
 import type { TimelineRow } from "./timeline-row"
 
-// Counts how often a projection rebuilds its rows while calls stream input and report progress, and once after a call
-// moves. Streaming input and progress metadata change many times a second without moving a call.
+// Counts how often a projection rebuilds its rows while calls stream input and report progress, as a running script
+// reports changes, and once after a call moves. Streaming input and progress metadata change many times a second without moving a call.
 
 type Tool = Extract<Extract<SessionMessageInfo, { type: "assistant" }>["content"][number], { type: "tool" }>
 
@@ -85,7 +85,35 @@ export function projectionRuns(
     )
     rows()
     const moved = count
-    // A script that finishes with the files it changed places them, once.
+
+    // A running script places each change as it arrives, once, and a report that adds none moves nothing.
+    const changes = [
+      { file: "/repo/a.ts", status: "modified", additions: 1, deletions: 0, patch: "@@ -1 +1,2 @@\n a\n+b\n" },
+      { file: "/repo/b.ts", status: "added", additions: 1, deletions: 0, patch: "@@ -0,0 +1 @@\n+b\n" },
+    ]
+
+    const report = (files: number, calls: number) =>
+      edit(5, (tool) => {
+        if (tool.state.status !== "running") return
+        tool.state.metadata = {
+          toolCalls: Array.from({ length: calls }, () => ({ tool: "edit", status: "completed" })),
+          files: changes.slice(0, files),
+        }
+      })
+
+    const changed: number[] = []
+
+    for (let files = 1; files <= changes.length; files++) {
+      const at = count
+      report(files, files + 5)
+      rows()
+      report(files, files + 6)
+      rows()
+      changed.push(count - at)
+    }
+
+    const live = count
+    // Finishing with the same changes settles its status, once.
     edit(
       5,
       (tool) =>
@@ -93,18 +121,13 @@ export function projectionRuns(
           status: "completed",
           input: { code: "await edit()" },
           content: [{ type: "text", text: "" }],
-          metadata: {
-            toolCalls: [],
-            files: [
-              { file: "/repo/a.ts", status: "modified", additions: 1, deletions: 0, patch: "@@ -1 +1,2 @@\n a\n+b\n" },
-            ],
-          },
+          metadata: { toolCalls: [], files: changes },
         }),
     )
     rows()
     const scripted = count
     dispose()
 
-    return { streamed: streamed - before, moved: moved - streamed, scripted: scripted - moved }
+    return { streamed: streamed - before, moved: moved - streamed, changed, scripted: scripted - live }
   })
 }

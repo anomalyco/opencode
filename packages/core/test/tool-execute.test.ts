@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { CodeModeDiffs } from "@opencode/core/codemode/diffs"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
@@ -403,6 +404,39 @@ describe("Bun", () => {
       ),
     )
     expect(result.metadata?.files).toBeUndefined()
+  })
+
+  test("progress carries the changes made so far, capped, and a failed script keeps them", async () => {
+    await using tmp = await tmpdir()
+    const pause: Info = {
+      name: "pause",
+      description: "Pause",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.sleep("150 millis").pipe(Effect.as({ output: "ok" })),
+    }
+    const progress: Array<Tool.Metadata> = []
+    const result = await Effect.runPromise(
+      createCodeMode(new Map([["pause", pause]]), allowAll, codeModeServices(tmp.path)).execute(
+        {
+          code: `await Bun.write("a.txt", "x\\n")
+          await tools.pause({})
+          for (let i = 0; i < ${CodeModeDiffs.MAX_FILES + 5}; i++) await Bun.write(\`f\${i}.txt\`, "x\\n")
+          await tools.pause({})
+          throw new Error("boom")`,
+        },
+        { ...context, progress: (update) => Effect.sync(() => progress.push(update)) },
+      ),
+    )
+    const counts = progress.map((update) => (Array.isArray(update.files) ? update.files.length : 0))
+    expect(counts).toContain(1)
+    expect(counts.toSorted((left, right) => left - right)).toEqual(counts)
+    expect(counts.at(-1)).toBe(CodeModeDiffs.MAX_FILES)
+    expect(progress.find((update) => update.files)?.files).toMatchObject([
+      { file: "a.txt", status: "added", additions: 1 },
+    ])
+    expect(result.metadata?.error).toBe(true)
+    expect(result.metadata?.files).toHaveLength(CodeModeDiffs.MAX_FILES)
   })
 
   test("a denied permission reaches the program and changes nothing", async () => {

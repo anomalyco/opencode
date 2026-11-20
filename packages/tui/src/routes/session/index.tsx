@@ -3750,6 +3750,7 @@ function formatSessionTranscript(
 
 // Files a patch, or a Code Mode script, changed: one block per change with its diff, or its counts when the diff is
 // missing (a deleted file, or a script's change past the size cap). A change without counts shows only its path.
+// Blocks are kept by position, so a running script's stay put as its changes arrive.
 function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; part: ToolProps["part"] }) {
   const ctx = use()
   const theme = useTheme()
@@ -3763,19 +3764,19 @@ function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; par
 
   return (
     <box flexDirection="column" gap={1}>
-      <For each={props.files}>
+      <Index each={props.files}>
         {(file) => (
           <BlockTool
             path={{
-              label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
-              value: pathFormatter.format(file.relativePath),
+              label: file().type === "add" ? "# Created" : file().type === "delete" ? "# Deleted" : "← Patched",
+              value: pathFormatter.format(file().relativePath),
             }}
             part={props.part}
           >
             <Show
-              when={file.type !== "delete" && file.patch.includes("@@")}
+              when={file().type !== "delete" && file().patch.includes("@@")}
               fallback={
-                <Show when={changeCounts(file)}>
+                <Show when={changeCounts(file())}>
                   {(counts) => (
                     <text>
                       <Show when={counts().additions}>
@@ -3793,10 +3794,10 @@ function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; par
             >
               <box paddingLeft={1} paddingRight={1}>
                 <PatchDiff
-                  diff={file.patch}
+                  diff={file().patch}
                   hunkFg={theme.diff.text.hunkHeader}
                   view={view()}
-                  filetype={filetype(file.relativePath)}
+                  filetype={filetype(file().relativePath)}
                   syntaxStyle={syntax()}
                   showLineNumbers={true}
                   width="100%"
@@ -3816,7 +3817,7 @@ function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; par
             </Show>
           </BlockTool>
         )}
-      </For>
+      </Index>
     </box>
   )
 }

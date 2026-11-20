@@ -123,8 +123,6 @@ export const create = (
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
         const lock = Semaphore.makeUnsafe(1)
-        // The files the program changes, shown under the call when it finishes in the foreground.
-        const diffs = CodeModeDiffs.make()
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
         const scope = yield* Effect.scope
@@ -133,7 +131,11 @@ export const create = (
         const publish = Effect.gen(function* () {
           yield* Ref.set(trailing, false)
           yield* Ref.set(publishedAt, yield* Clock.currentTimeMillis)
-          yield* context.progress({ toolCalls: yield* Ref.get(calls) })
+          const changed = diffs.files()
+          yield* context.progress({
+            toolCalls: yield* Ref.get(calls),
+            ...(changed.length > 0 ? { files: changed } : {}),
+          })
         })
         const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
           lock.withPermit(
@@ -146,6 +148,9 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
+        // The files the program changes, shown under the call as it runs and when it ends in the foreground. A failed
+        // or stopped one keeps them too, since they really changed.
+        const diffs = CodeModeDiffs.make(record((items) => items))
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
             extensions: services
