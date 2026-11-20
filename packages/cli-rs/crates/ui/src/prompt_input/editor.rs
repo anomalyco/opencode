@@ -132,6 +132,11 @@ pub fn realign_mentions(
     let mut groups: Vec<(String, Vec<(usize, &Mention)>)> = Vec::new();
     for (index, mention) in mentions.iter().enumerate() {
         let Some(mention) = mention else { continue };
+        // An empty text occurs everywhere; such a mention stays as it is.
+        if mention.text.is_empty() {
+            aligned[index] = Some(mention.clone());
+            continue;
+        }
         match groups.iter_mut().find(|(text, _)| *text == mention.text) {
             Some((_, items)) => items.push((index, mention)),
             None => groups.push((mention.text.clone(), vec![(index, mention)])),
@@ -217,6 +222,14 @@ mod tests {
         assert_eq!(normalize("a\nb\n"), "a\nb\n");
         assert_eq!(normalize("a\r\nb\r\n"), "a\r\nb\r\n");
         assert_eq!(normalize("plain"), "plain");
+    }
+
+    #[test]
+    fn a_mention_without_text_stays() {
+        let empty = Mention { start: 3, end: 3, text: String::new() };
+        let moved = Mention { start: 0, end: 2, text: "@a".to_owned() };
+        let aligned = realign_mentions("x @a", &[Some(empty.clone()), Some(moved), None], |index| index as u32);
+        assert_eq!(aligned, [Some(empty), Some(Mention { start: 2, end: 4, text: "@a".to_owned() }), None]);
     }
 
     #[test]
