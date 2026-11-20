@@ -69,6 +69,13 @@ describe("the image of an .ico file that is kept", () => {
     ["else the smallest larger one", sizes([16, 32, 1], [64, 32, 2], [48, 32, 3]), [48, 3]],
     ["else the largest", sizes([16, 32, 1], [24, 32, 2], [20, 32, 3]), [24, 2]],
     ["of two the same size, the one with more colors", sizes([32, 4, 1], [32, 32, 2]), [32, 2]],
+    ["a single small one", sizes([16, 32, 1]), [16, 1]],
+    ["a size no icon usually has", sizes([150, 32, 1]), [150, 1]],
+    [
+      "a bitmap nearer the kept size than the PNG beside it",
+      icoSample([{ size: 16, bits: 32, paint: solid(1, 0, 0) }, { size: 64, bits: 32, paint: solid(2, 0, 0) }, { size: 256, png: pngSample(256, solid(3, 0, 0)) }]),
+      [64, 2],
+    ],
   ])("%s", (_name, file, expected) => {
     expect(kept(file)).toEqual(expected)
   })
@@ -87,6 +94,7 @@ describe("the image of an .ico file that is kept", () => {
   })
 })
 
+// Whatever a server calls the file: a PNG named favicon.ico is common.
 test("a PNG or a JPEG is its own image", () => {
   const png = pngSample(180, solid(4, 5, 6))
   const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46])

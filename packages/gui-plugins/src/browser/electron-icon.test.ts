@@ -1,68 +1,44 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { runElectronFixture } from "./electron-run"
+import { svgSample } from "./icon-samples"
 
 type Reported = {
   /** The page's icons as Chromium listed them. */
   readonly listed: readonly string[]
-  /** The icon the tab reported, as the strip draws it. */
-  readonly icon: { readonly type: string; readonly length: number; readonly width?: number; readonly height?: number; readonly color?: string } | null
-  /** Whether the tab reported what loading the same list again gives. */
-  readonly same: boolean
+  /** The icon the pane makes of that list, as the strip draws it. */
+  readonly icon: { readonly type: string; readonly length?: number } | null
 }
 
-const png = (color: string, size = 32) => ({ type: "image/png", width: size, height: size, length: expect.any(Number), color })
-
-const svg = { type: "image/svg+xml", length: expect.any(Number) }
+const png = (color: string) => ({ type: "image/png", width: 32, height: 32, length: expect.any(Number), color })
 
 // A tab's icon rests on three things Electron decides: which icons Chromium lists for a page, what a request for one
 // returns, and which files `nativeImage` decodes, which is PNG and JPEG only. Most sites serve an `.ico` file, and
-// those tabs drew the globe. This opens one tab for each kind of site in the pinned Electron, so an upgrade that
-// changes any of the three fails here.
+// those tabs drew the globe. This loads a few kinds of site in the pinned Electron, so an upgrade that changes any of
+// the three fails here. `icon-image.test.ts` covers what an `.ico` file can hold, and `page-machine.test.ts` how a
+// tab takes the list and reports the icon.
 test(
-  "a tab reports its page's icon as a small PNG, or the site's SVG as it is, and none for what is not a picture",
+  "a page's icon is a small PNG, or the site's SVG as it is, and none for what is not a picture",
   async () => {
     const result: Record<string, Reported> = JSON.parse(await runElectronFixture({ fixture: path.join(import.meta.dir, "electron-icon.fixture.ts") }))
-    const icons = Object.fromEntries(Object.entries(result).map(([site, reported]) => [site, reported.icon]))
 
-    expect(icons).toEqual({
-      // .ico files: the 32px image of each, or the one nearest above it reduced, whatever its colors.
-      small: png("#e65000", 16),
+    expect(Object.fromEntries(Object.entries(result).map(([site, reported]) => [site, reported.icon]))).toEqual({
+      // The file's 32px bitmap, and a 180px PNG reduced.
       ico: png("#0ac83c"),
-      colors16: png("#c8780a"),
-      colors256: png("#1478c8"),
-      icoPng: png("#9628dc"),
-      pngAsIco: png("#1e1e1e"),
-      // Larger files are reduced: a 180px PNG, and the 32px one no encoder can shrink.
-      touch: png("#f05a1e"),
-      noise: png(expect.any(String)),
-      jpeg: png(expect.any(String)),
-      // A site's SVG stays as it is, which the window draws as an image; one too long to report gives way to the next.
-      svg,
-      longSvg: png("#b4003c"),
-      svgThenPng: svg,
-      inline: png("#783c00", 16),
-      inlineSvg: svg,
-      // No <link>, a redirect and another origin.
-      unlisted: png("#009696"),
-      redirect: png("#f05a1e"),
-      elsewhere: png("#5a1ea0"),
-      // Bytes that are no picture, a page in the icon's place, a missing file and one past the size limit.
-      junk: null,
-      html: null,
-      missing: null,
-      huge: null,
+      png: png("#f05a1e"),
+      // The window draws a site's SVG as an image; one too long to report gives way to the next.
+      svg: { type: "image/svg+xml", text: svgSample },
+      unlisted: png(expect.any(String)),
+      // A JPEG on another origin, behind a redirect.
+      moved: png(expect.any(String)),
+      refused: null,
     })
-    // Chromium asks for /favicon.ico when the page lists no icon, and lists a page's own icons by address.
+    // Chromium lists a page's icons by address, and asks for /favicon.ico when the page lists none.
+    expect(result.svg?.listed).toEqual(["/svg/a.svg", "/svg/b.svg"])
     expect(result.unlisted?.listed).toEqual(["/favicon.ico"])
-    expect(result.svgThenPng?.listed).toEqual(["/svgThenPng/a.svg", "/svgThenPng/b.png"])
-    expect(result.elsewhere?.listed).toEqual(["//elsewhere/site.ico"])
-    // Every PNG fits the history's and the saved tabs' limit of 6,000 characters, the incompressible one included.
-    const lengths = Object.values(result).flatMap((reported) => (reported.icon?.type === "image/png" ? [reported.icon.length] : []))
-    expect(Math.max(...lengths)).toBeLessThanOrEqual(6_000)
-    expect(result.noise?.icon?.length).toBeGreaterThan(4_000)
-    // Agent-opened or not, the tab reported what its list gives, and nothing else.
-    expect(Object.values(result).map((reported) => reported.same)).toEqual(Object.keys(result).map(() => true))
+    // That one is 32px no encoder can shrink: the longest PNG fits the 6,000 characters the history and saved tabs keep.
+    expect(result.unlisted?.icon?.length).toBeGreaterThan(4_000)
+    expect(result.unlisted?.icon?.length).toBeLessThanOrEqual(6_000)
   },
   // Starting Electron takes seconds on a loaded runner.
   60_000,
