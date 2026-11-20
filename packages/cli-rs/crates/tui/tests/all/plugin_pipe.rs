@@ -3627,3 +3627,31 @@ fn a_v2_plugin_reads_a_sessions_pending_inbox() {
     });
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "[\"msg_3\"]\n");
 }
+
+#[test]
+fn a_tree_past_the_frame_cap_fails_its_plugin_alone() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    // Nine texts within a node's text bound, past a tree frame's together.
+    let big = "{ type: \"box\", children: Array.from({ length: 9 }, () => ({ type: \"text\", spans: [{ text: \"x\".repeat(1e6) }] })) }";
+    for (name, view) in [("big", big), ("calm", "{ type: \"text\", spans: [{ text: \"calm route\" }] }")] {
+        let dir = root.path().join("config/plugins").join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        let module = format!(
+            "export default {{ id: \"example.{name}\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.surface(\"{name}\", {{ type: \"route\", name: \"{name}\" }}, () => ({view}))\n}} }}\n"
+        );
+        std::fs::write(dir.join("tui.ts"), module).unwrap();
+    }
+    let pipe = mount_server(root, config, support::empty());
+    pipe.active("example.big");
+    pipe.active("example.calm");
+    let pid = pipe.scripts().pid();
+    let h = &pipe.harness;
+    h.tui.navigate(Route::Plugin { id: "example.big".into(), name: "big".into() });
+    pipe.until("the big plugin failed", || failed(&pipe, "example.big").is_some());
+    let error = failed(&pipe, "example.big").unwrap();
+    assert!(error.starts_with("its tree of 9000"), "{error}");
+    assert_eq!(pipe.scripts().pid(), pid, "the JS host started again");
+    h.tui.navigate(Route::Plugin { id: "example.calm".into(), name: "calm".into() });
+    h.wait_for("calm route");
+}
