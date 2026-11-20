@@ -1,5 +1,6 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { uuid } from "@opencode/util/uuid"
+import { Schema } from "effect"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import {
@@ -749,6 +750,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         },
         // Already welcomed: the pane's offer to import sign-ins needs main's profile, which this fixture has none of.
         preferences: { value: { links: true, welcomed: true }, set() {} },
+        // The pane fixture has no strip to draw saved tabs in.
+        tabs: { value: { sessions: [] }, set() {} },
       },
       system: {
         copy: async () => undefined,
@@ -1298,6 +1301,8 @@ type RegionFixtureState = {
   registrations: { binding: string; session: string; restore: number }[]
   /** The pane's Ipc is gone, as while its main plugin reloads or is not active. */
   away: boolean
+  /** The browser plugin is not running, as between quitting the app and opening it again. */
+  quit: boolean
   /** Whether the fixture's shell session was closed by its fallback shortcut. */
   closed: boolean
   /** How many times the review side panel toggled from a shortcut. */
@@ -1344,6 +1349,7 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       registrations: [],
       away: false,
+      quit: false,
       closed: false,
       reviews: 0,
       opened: true,
@@ -1492,9 +1498,19 @@ export function mountBrowserRegion(input: RegionHost) {
       }
     }
 
+    // What each store holds, as JSON: it outlives the plugin's instance, as storage outlives a quit.
+    const kept = new Map<string, () => string>()
+
     // Loaded at once.
     const storage = (plugin: string): Storage => ({
-      store: (key, options) => keep(`${plugin}:${key}`, options.initial).store,
+      store(key, options) {
+        const name = `${plugin}:${key}`
+        const saved = kept.get(name)
+        const opened = keep(name, saved ? Schema.decodeUnknownSync(options.schema)(JSON.parse(saved())) : options.initial).store
+        kept.set(name, () => JSON.stringify(opened.value))
+
+        return opened
+      },
       memory: (key, options) => keep(`${plugin}:${key}`, options.initial).memory,
       remove() {},
     })
@@ -1648,6 +1664,18 @@ export function mountBrowserRegion(input: RegionHost) {
       )
     }
 
+    // What main sends Beta's latest registration, as the JSON a test wrote, read by the Ipc's own event schema.
+    const [mainEvent, setMainEvent] = createSignal<HTMLTextAreaElement>()
+
+    const sendMainEvent = () => {
+      const binding = latest()?.binding
+      const field = mainEvent()
+
+      if (!binding || !field) return
+      const sent = Schema.decodeUnknownSync(BrowserPane.spec.events.event)({ binding, event: JSON.parse(field.value) })
+      listeners.forEach((listener) => listener(sent))
+    }
+
     // As main reports a page's prompt on Beta's tab.
     const ask = (prompt: PromptView | null) => {
       const binding = latest()?.binding
@@ -1797,7 +1825,7 @@ export function mountBrowserRegion(input: RegionHost) {
         <input.Shell>
           <input.PluginHostProvider
               definitions={() => [...input.definitions, consumer]}
-            disabled={() => new Set<string>()}
+            disabled={() => new Set(store.quit ? ["browser"] : [])}
             apis={apis}
             whenMounted={(run) => {
               run()
@@ -1861,6 +1889,20 @@ export function mountBrowserRegion(input: RegionHost) {
               >
                 Blank page
               </button>
+              {/* Off screen, like the agent's request above, so the strip keeps its place: a test dispatches each click. */}
+              <div style={{ position: "absolute", left: "-9999px" }}>
+                {/* The plugin's instance ends and a new one starts over the same storage and strip, as the app does. */}
+                <button
+                  onClick={() => {
+                    setStore("quit", true)
+                    queueMicrotask(() => setStore("quit", false))
+                  }}
+                >
+                  Quit and reopen
+                </button>
+                <textarea aria-label="Main event" ref={setMainEvent} />
+                <button onClick={sendMainEvent}>Send main event</button>
+              </div>
               <button onClick={() => setStore("away", true)}>Pane away</button>
               <button onClick={() => setStore("away", false)}>Pane back</button>
               <button

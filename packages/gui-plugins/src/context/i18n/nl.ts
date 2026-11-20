@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Gebruik",
   "usage.cost": "Kosten",
   "usage.view": "Bekijk contextgebruik",
-  "systemPrompt.title": "Systeemprompt",
   "rawMessages.title": "Ruwe berichten",
   "export.session": "Sessie exporteren",
   "stats.session": "Sessie",

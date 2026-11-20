@@ -5,7 +5,6 @@ export default {
   "usage.usage": "භාවිතය",
   "usage.cost": "පිරිවැය",
   "usage.view": "සන්දර්භය භාවිතය බලන්න",
-  "systemPrompt.title": "පද්ධති ප්‍රොම්ප්ට්",
   "rawMessages.title": "අමු පණිවිඩ",
   "export.session": "අපනයන සැසිය",
   "stats.session": "සැසිය",

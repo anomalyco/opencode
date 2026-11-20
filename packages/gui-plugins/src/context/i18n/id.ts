@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Penggunaan",
   "usage.cost": "Biaya",
   "usage.view": "Lihat penggunaan konteks",
-  "systemPrompt.title": "Prompt Sistem",
   "rawMessages.title": "Pesan mentah",
   "export.session": "Ekspor sesi",
   "stats.session": "Sesi",

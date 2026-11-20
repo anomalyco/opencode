@@ -4,6 +4,7 @@ import {
   addressFocusTab,
   createInitialState,
   HELD_REQUEST_TTL_MS,
+  PENDING_RETRIES,
   REGISTER_TIMEOUT_MS,
   sessionSupported,
   sessionError,
@@ -13,6 +14,8 @@ import {
   sessionSettled,
   revealGuard,
   sessionSuspended,
+  sessionTabs,
+  sessionUnavailable,
   transition,
   type Attachment,
   type Event,
@@ -557,6 +560,153 @@ describe("browser pane machine", () => {
 
     const back = transition(gone, { type: "ipc.changed", ipc: active })
     expect(types(back.effects)).toEqual(["open-registration", "schedule-register-timeout"])
+  })
+
+  // After a restart the strip draws the tabs it stored before the desktop has reported any. They left the strip, and
+  // came back as new tabs, whenever the binding was not registering: in backoff, or while the server had no browser yet.
+  test("the stored tabs stay listed until an inventory names the desktop's, whatever the binding does meanwhile", () => {
+    const stored = [tabA, tabB]
+    const start = replay(attach()).state
+    const backoff = transition(start, { type: "register.timed-out", sessionKey: key, attempt: attempt(start) }).state
+    const unsupported = transition(start, paneState(start, null, "browser.pane.unsupported")).state
+    const paused = replay(attach(), createInitialState({ status: "inactive" })).state
+
+    for (const state of [createInitialState(active), start, backoff, unsupported, paused])
+      expect(sessionTabs(state, target, stored)).toEqual(stored)
+
+    // The inventory decides, and prunes the stored tabs it lacks.
+    expect(sessionTabs(ready(start), target, stored)).toEqual([tabA])
+
+    // Another window's session, one the server lacks, and one that will not attach have no tabs here.
+    for (const error of ["browser.pane.replaced", "browser.pane.missing"])
+      expect(sessionTabs(transition(start, paneState(start, null, error)).state, target, stored)).toEqual([])
+    expect(
+      sessionTabs(createInitialState(active), { ...target, server: { id: server, compatible: false } }, stored),
+    ).toEqual([])
+  })
+
+  // A tab drawn before the first inventory shows a loader for its content. That wait must end: in the pane, or in
+  // the pane saying that the browser could not open, with a way to try again.
+  test("a pane with no inventory waits only while one is on its way, then says the browser could not open", () => {
+    const start = replay(attach()).state
+
+    const fail = (state: State): State =>
+      transition(state, { type: "register.timed-out", sessionKey: key, attempt: attempt(state) }).state
+
+    const retry = (state: State): State =>
+      transition(state, { type: "retry.due", sessionKey: key, attempt: attempt(state) }).state
+
+    // Each failure in a row, in backoff: the first PENDING_RETRIES still wait, the next does not.
+    const failures = Array.from({ length: PENDING_RETRIES + 1 }).reduce<State[]>(
+      (states) => [...states, fail(states.length ? retry(states[states.length - 1]!) : start)],
+      [],
+    )
+
+    const unsupported = transition(start, paneState(start, null, "browser.pane.unsupported")).state
+    const paused = replay(attach(), createInitialState({ status: "inactive" })).state
+    const view = (state: State) => [sessionPending(state, target), sessionUnavailable(state, key)]
+
+    expect(view(start)).toEqual([true, false])
+    expect(failures.map(view)).toEqual([...Array.from({ length: PENDING_RETRIES }, () => [true, false]), [false, true]])
+    // The timer's next registration changes nothing the person sees; their own retry of it waits again, without a
+    // second registration.
+    const again = retry(failures[failures.length - 1]!)
+    const asked = transition(again, { type: "session.retry", sessionKey: key })
+    expect(view(again)).toEqual([false, true])
+    expect([view(asked.state), asked.effects]).toEqual([[true, false], []])
+    expect(view(unsupported)).toEqual([false, true])
+    // A paused pane says so itself, and one with an inventory shows its tabs.
+    expect(view(paused)).toEqual([false, false])
+    expect(view(ready(start))).toEqual([false, false])
+
+    // The person's retry registers at once, in place of the timer, and waits again.
+    for (const state of [failures[failures.length - 1]!, unsupported]) {
+      const retried = transition(state, { type: "session.retry", sessionKey: key })
+      expect(phase(retried.state)).toMatchObject({ status: "registering", attempts: 0 })
+      expect(types(retried.effects).filter((type) => type !== "cancel-retry")).toEqual(["open-registration", "schedule-register-timeout"])
+      expect(view(retried.state)).toEqual([true, false])
+    }
+
+    expect(types(transition(failures[0]!, { type: "session.retry", sessionKey: key }).effects)).toContain("cancel-retry")
+    // Nothing to try again where the pane is on its first way, open, or another window's.
+    const replaced = transition(start, paneState(start, null, "browser.pane.replaced")).state
+
+    for (const state of [start, ready(start), replaced, paused])
+      expect(transition(state, { type: "session.retry", sessionKey: key }).state).toBe(state)
+  })
+
+  // A tab drawn from the saved state can be closed or selected before the desktop reports it. With no inventory there
+  // was no command to send, so the first inventory put a closed tab back in the strip.
+  test("a saved tab closed or selected before the first inventory is closed or focused on the desktop once it arrives", () => {
+    const start = replay(attach()).state
+    const registering = attempt(start)
+
+    const early = replay(
+      [
+        { type: "strip.tab.selected", sessionKey: key, tabID: tabB },
+        { type: "strip.tab.closed", sessionKey: key, tabID: tabA },
+        { type: "strip.tab.closed", sessionKey: key, tabID: tabA },
+      ],
+      start,
+    )
+
+    expect(early.effects).toEqual([])
+
+    const arrived = transition(
+      early.state,
+      paneState(early.state, { tabs: [tab(tabA), tab(tabB), tab(tabC)], focusedTabID: tabA }),
+    )
+
+    expect(arrived.effects).toEqual([
+      { type: "cancel-register-timeout", sessionKey: key },
+      { type: "record-history", sessionKey: key },
+      // The strip takes the tabs it lacks, and not the one the person closed.
+      { type: "sync-strip", sessionKey: key, keep: [tabA, tabB, tabC], open: [tabB, tabC] },
+      { type: "send-command", sessionKey: key, attempt: registering, request: registering + 1, action: { type: "tabs.close", tabID: tabA } },
+      { type: "send-command", sessionKey: key, attempt: registering, request: registering + 2, action: { type: "tabs.focus", tabID: tabB } },
+    ])
+
+    // Once: the next inventory sends nothing, and with an inventory a close or a selection is the model's command.
+    const next = transition(arrived.state, paneState(arrived.state, inventory(tab(tabC), tab(tabB))))
+    expect(types(next.effects)).toEqual(["record-history", "sync-strip"])
+    expect(replay(
+      [
+        { type: "strip.tab.closed", sessionKey: key, tabID: tabC },
+        { type: "strip.tab.selected", sessionKey: key, tabID: tabC },
+      ],
+      next.state,
+    ).state).toBe(next.state)
+
+    // The tab the desktop already has in front needs no command, and a closed tab the desktop lacks none either.
+    const front = replay(
+      [
+        { type: "strip.tab.selected", sessionKey: key, tabID: tabA },
+        { type: "strip.tab.closed", sessionKey: key, tabID: tabB },
+      ],
+      start,
+    ).state
+
+    expect(types(transition(front, paneState(front, inventory(tab(tabA)))).effects)).not.toContain("send-command")
+  })
+
+  test("a saved tab closed while the strip cannot be written is not mirrored back once it can", () => {
+    const start = replay(attach(key, false)).state
+    const closed = transition(start, { type: "strip.tab.closed", sessionKey: key, tabID: tabA }).state
+
+    const located = replay(
+      [
+        paneState(closed, inventory(tab(tabA), tab(tabB))),
+        { type: "session.located", sessionKey: key, located: true },
+      ],
+      closed,
+    )
+
+    expect(located.effects.filter((effect) => effect.type === "sync-strip")).toEqual([
+      { type: "sync-strip", sessionKey: key, keep: [tabA, tabB], open: [tabB] },
+    ])
+    expect(located.effects).toContainEqual(
+      expect.objectContaining({ type: "send-command", action: { type: "tabs.close", tabID: tabA } }),
+    )
   })
 
   test("a registration whose companion closed-state event never arrives times out into backoff", () => {
