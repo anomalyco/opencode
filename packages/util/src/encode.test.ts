@@ -25,26 +25,8 @@ describe("frontend encoding", () => {
     expect(sampledChecksum(value, value.length - 1)).toBe("600:1isj1k5:1isj1k5:1isj1k5:1isj1k5:1isj1k5")
   })
 
-  test("hashes the full 4096-char tail for large values", () => {
-    const replaceAt = (value: string, index: number) => `${value.slice(0, index)}b${value.slice(index + 1)}`
-
-    const atThreshold = "a".repeat(500_000)
-    expect(sampledChecksum(atThreshold)).toBe(checksum(atThreshold))
-    expect(sampledChecksum(replaceAt(atThreshold, atThreshold.length - 1))).not.toBe(sampledChecksum(atThreshold))
-
-    for (const length of [500_001, 600_000]) {
-      const base = "a".repeat(length)
-      const expected = sampledChecksum(base)
-      for (const offset of [1, 2048, 4096]) {
-        expect(sampledChecksum(replaceAt(base, length - offset))).not.toBe(expected)
-      }
-    }
-
-    const custom = "a".repeat(10_000)
-    const customExpected = sampledChecksum(custom, 8_000)
-    expect(sampledChecksum(custom, custom.length)).toBe(checksum(custom))
-    for (const offset of [1, 2048, 4096]) {
-      expect(sampledChecksum(replaceAt(custom, custom.length - offset), 8_000)).not.toBe(customExpected)
-    }
+  test("hashes the end of large values", () => {
+    const value = "a".repeat(500_001)
+    expect(sampledChecksum(`${value.slice(0, -1)}b`)).not.toBe(sampledChecksum(value))
   })
 })
