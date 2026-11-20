@@ -401,7 +401,7 @@ export function createTimelineQuote(input: {
 
 export type TimelineQuoteController = ReturnType<typeof createTimelineQuote>
 
-export function TimelineQuote(props: { controller: TimelineQuoteController }) {
+export function TimelineQuote(props: { controller: Pick<TimelineQuoteController, "toolbar" | "setElement" | "add"> }) {
   const language = useLanguage()
   const quote = props.controller
   // Touch screens show their own menu over the selection.

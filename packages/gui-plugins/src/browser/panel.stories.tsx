@@ -5,14 +5,27 @@ import { browserPaneFixture, type BrowserScenario } from "./panel.fixture"
 import barStyles from "./bar.css?inline"
 import commentStyles from "./comment.css?inline"
 
-function BrowserStory(props: { scenario: BrowserScenario }) {
+type Delivery = "Send" | "Steer" | "Queue" | "Unavailable"
+
+type BrowserArgs = { scenario: BrowserScenario; delivery: Delivery }
+
+function composerDelivery(value: Delivery) {
+  if (value === "Send") return "send"
+
+  if (value === "Steer") return "steer"
+
+  if (value === "Queue") return "queue"
+}
+
+function BrowserStory(props: BrowserArgs) {
   const language = usePlugin()
 
   return (
-    <Show when={props.scenario} keyed>
-      {(scenario) => {
+    <Show when={`${props.scenario}:${props.delivery}`} keyed>
+      {() => {
         const Fixture = browserPaneFixture({
-          scenario,
+          scenario: props.scenario,
+          delivery: composerDelivery(props.delivery),
           useLanguage: () => language,
           Page: (page) => {
             const [saved, setSaved] = createSignal(false)
@@ -74,7 +87,7 @@ function BrowserStory(props: { scenario: BrowserScenario }) {
               <For each={frame.comments}>
                 {(note) => (
                   <p class="text-12-regular">
-                    Attached: {note.label} {note.comment}
+                    {frame.sent.includes(note.commentID) ? "Sent" : "Attached"}: {note.label} {note.comment}
                   </p>
                 )}
               </For>
@@ -91,14 +104,15 @@ function BrowserStory(props: { scenario: BrowserScenario }) {
 export default {
   title: "App/Plugins/Browser",
   id: "plugins-browser",
-  args: { scenario: "Page" },
+  args: { scenario: "Page", delivery: "Steer" },
   argTypes: {
+    delivery: { control: "select", options: ["Send", "Steer", "Queue", "Unavailable"] satisfies Delivery[] },
     scenario: {
       control: "select",
       options: ["Page", "Empty", "Recent", "History", "Loading", "Failed", "Suspended"] satisfies BrowserScenario[],
     },
   },
-  render: (props: { scenario: BrowserScenario }) => <BrowserStory {...props} />,
+  render: (props: BrowserArgs) => <BrowserStory {...props} />,
 }
 
 export const Page = { args: { scenario: "Page" } }
@@ -115,3 +129,19 @@ export const Loading = { args: { scenario: "Loading" } }
 export const LoadFailed = { args: { scenario: "Failed" } }
 
 export const Suspended = { args: { scenario: "Suspended" } }
+
+// Comments: open Browser options › More tools › Comment on part of the page, pick Save changes, type, then hover the
+// check button. Enter attaches the comment; Mod+Enter attaches and sends it, labelled by how the session takes it now.
+// "Add page to session" in the same menu opens the page note editor, with the same two actions.
+
+/** The session is idle: Mod+Enter reads "Send comment". */
+export const CommentSend = { args: { scenario: "Page", delivery: "Send" } }
+
+/** The session works and the follow-up behavior steers: "Steer comment". */
+export const CommentSteer = { args: { scenario: "Page", delivery: "Steer" } }
+
+/** The session works and the follow-up behavior queues: "Queue comment". */
+export const CommentQueue = { args: { scenario: "Page", delivery: "Queue" } }
+
+/** Nothing can be sent now, e.g. in a subagent's session or while another send is in flight: the action is disabled. */
+export const CommentSendUnavailable = { args: { scenario: "Page", delivery: "Unavailable" } }
