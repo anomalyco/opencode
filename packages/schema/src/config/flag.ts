@@ -9,6 +9,10 @@ export const wildcard = "all"
  */
 export const registry = {
   todo: "Enable the experimental todowrite tool. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=todo or experimental.todo: true.",
+  tasks:
+    "Give the agent the task_list, task_add, task_update and task_remove tools for the project's persistent task list. The /task command and the task panels work without it.",
+  diligence:
+    "Add a system prompt against stopping early, and watch for lazy behavior: nudge the agent back to work when it stops with unfinished tasks or defers work, and reject placeholder code written to files.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   automations:
     "Run a prompt or Code Mode action on a timer, or on a connected MCP server's push event when mcp_events is enabled.",
