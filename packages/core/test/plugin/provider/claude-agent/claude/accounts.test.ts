@@ -19,7 +19,7 @@ const resetsAt = 1792800000
 
 // A recorded failed turn, rewritten into the messages Claude Code sends when a subscription limit refuses it.
 function limitTurn() {
-  const turn = FakeClaude.expectTurn({ recording: "billing-error" })
+  const turn = FakeClaude.expectTurn({ recording: "api-error" })
   const replies: SDKMessage[] = []
   for (const message of turn.replies as SDKMessage[]) {
     if (message.type === "assistant" && message.error) {
@@ -222,12 +222,12 @@ describe("Claude accounts", () => {
         limitTurn(),
         FakeClaude.expectInterrupt(),
         FakeClaude.expectStartup(),
-        FakeClaude.expectTurn({ recording: "billing-error" }),
+        FakeClaude.expectTurn({ recording: "api-error" }),
         FakeClaude.expectInterrupt(),
       ])
       const test = yield* TestSessions.start(claude, TestSessions.storage(), pool)
       const parts = yield* TestSessions.reply(test.model, first)
-      expect(String(parts.find((part) => part.type === "error")?.error)).toContain("extra usage")
+      expect(String(parts.find((part) => part.type === "error")?.error)).toContain("claude-does-not-exist")
       expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([a, b])
       expect(test.storage.data.has("accounts/session-a")).toBe(false)
       expect(test.storage.data.has("last-account")).toBe(false)
