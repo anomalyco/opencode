@@ -362,7 +362,7 @@ export function fromPromise(plugin: Plugin) {
             activate: adaptApiMethod(CredentialEndpoints["credential.activate"], host.credential.activate),
           },
           event: {
-            subscribe: <Type extends Exclude<OpenCodeEvent["type"], "server.connected">>(
+            subscribe: <Type extends Exclude<OpenCodeEvent["type"], "server.connected" | `experimental.kv.${string}`>>(
               options?: SubscribeOptions<Type>,
             ) =>
               streams(

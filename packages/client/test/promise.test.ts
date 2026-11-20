@@ -65,6 +65,7 @@ test("exposes every standard HTTP API group", () => {
     "automation",
     "artifacts",
     "job",
+    "kv",
     "migration",
     "usage",
     "config",

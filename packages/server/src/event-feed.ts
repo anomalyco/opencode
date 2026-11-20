@@ -1,9 +1,11 @@
 export * as EventFeed from "./event-feed"
 
 import { Bus } from "@opencode/core/bus"
+import { Space } from "@opencode/schema/space"
 import { Event } from "@opencode/schema/event"
 import { isOpenCodeEvent, type OpenCodeEvent } from "@opencode/protocol/groups/event"
-import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
+import { Cause, Clock, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
+import { SpaceStore } from "./space-store"
 
 export const SubscriberCapacity = 4_096
 
@@ -21,7 +23,24 @@ export class EncodingError extends Schema.TaggedError<EncodingError>()("EventFee
 export type Error = SubscriberOverflowError | EncodingError
 
 export interface Interface {
-  readonly subscribe: (types?: ReadonlyArray<string>) => Effect.Effect<Stream.Stream<string, Error>, never, Scope.Scope>
+  /**
+   * With `spaces`, the stream starts with each space's snapshot or delta, then carries its later changes whatever
+   * `types` says.
+   */
+  readonly subscribe: (
+    types?: ReadonlyArray<string>,
+    spaces?: ReadonlyArray<SpaceStore.Request>,
+  ) => Effect.Effect<Stream.Stream<string, Error>, never, Scope.Scope>
+}
+
+interface Filter {
+  readonly types?: ReadonlySet<string>
+  readonly spaces?: ReadonlyMap<Space.Name, number>
+}
+
+interface Frame {
+  readonly text: string
+  readonly change?: SpaceStore.Change["data"]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/server/EventFeed") {}
@@ -32,11 +51,15 @@ export function frame(event: OpenCodeEvent) {
 
 export const make = Effect.fn("EventFeed.make")(function* (
   observe: (subscriber: Bus.Subscriber) => Effect.Effect<Bus.Unsubscribe>,
-  options?: { readonly capacity?: number; readonly encode?: (event: OpenCodeEvent) => string },
+  options?: {
+    readonly capacity?: number
+    readonly encode?: (event: OpenCodeEvent) => string
+    readonly spaces?: SpaceStore.Interface
+  },
 ) {
   const capacity = options?.capacity ?? SubscriberCapacity
   const render = options?.encode ?? frame
-  const subscribers = new Map<Queue.Queue<string, Error>, ReadonlySet<string> | undefined>()
+  const subscribers = new Map<Queue.Queue<Frame, Error>, Filter>()
 
   const fail = (error: Error) =>
     Effect.sync(() => {
@@ -45,13 +68,16 @@ export const make = Effect.fn("EventFeed.make")(function* (
       for (const subscriber of current) Queue.failCauseUnsafe(subscriber, Cause.fail(error))
     })
 
-  const publish = Effect.fnUntraced(function* (event: Event.Payload) {
-    if (!isOpenCodeEvent(event)) return
-    let encoded: string | undefined
-    for (const [subscriber, types] of subscribers) {
-      if (types && !types.has(event.type)) continue
+  const send = Effect.fnUntraced(function* (
+    event: OpenCodeEvent,
+    accepts: (filter: Filter) => boolean,
+    change?: SpaceStore.Change["data"],
+  ) {
+    let encoded: Frame | undefined
+    for (const [subscriber, filter] of subscribers) {
+      if (!accepts(filter)) continue
       encoded ??= yield* Effect.try({
-        try: () => render(event),
+        try: () => ({ text: render(event), change }),
         catch: (cause) => new EncodingError({ eventID: event.id, eventType: event.type, cause }),
       }).pipe(
         Effect.catch((error) =>
@@ -69,18 +95,55 @@ export const make = Effect.fn("EventFeed.make")(function* (
     }
   })
 
-  const unsubscribe = yield* observe(publish)
+  const unsubscribe = yield* observe((event) =>
+    isOpenCodeEvent(event) ? send(event, (filter) => !filter.types || filter.types.has(event.type)) : Effect.void,
+  )
   yield* Effect.addFinalizer(() => unsubscribe)
+  if (options?.spaces) {
+    const unlisten = yield* options.spaces.listen((change) =>
+      send(change, (filter) => filter.spaces?.has(change.data.space) === true, change.data),
+    )
+    yield* Effect.addFinalizer(() => unlisten)
+  }
 
   return Service.of({
-    subscribe: (types) =>
-      Effect.acquireRelease(
-        Queue.dropping<string, Error>(capacity).pipe(
-          Effect.tap((queue) => Effect.sync(() => subscribers.set(queue, types?.length ? new Set(types) : undefined))),
-        ),
-        (queue) =>
-          Effect.sync(() => subscribers.delete(queue)).pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid),
-      ).pipe(Effect.map(Stream.fromQueue)),
+    subscribe: (types, requests) =>
+      Effect.gen(function* () {
+        // The revision each subscribed space's initial state covers; changes at or below it are skipped when read.
+        const revisions = new Map(requests?.map((request) => [request.space, 0]))
+        const queue = yield* Effect.acquireRelease(
+          Queue.dropping<Frame, Error>(capacity).pipe(
+            Effect.tap((queue) =>
+              Effect.sync(() =>
+                subscribers.set(queue, {
+                  types: types?.length ? new Set(types) : undefined,
+                  spaces: revisions.size ? revisions : undefined,
+                }),
+              ),
+            ),
+          ),
+          (queue) =>
+            Effect.sync(() => subscribers.delete(queue)).pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid),
+        )
+        const live = Stream.fromQueue(queue).pipe(
+          Stream.filter((frame) => !frame.change || frame.change.revision > (revisions.get(frame.change.space) ?? 0)),
+          Stream.map((frame) => frame.text),
+        )
+        const spaces = options?.spaces
+        if (!spaces || !requests?.length) return live
+        // Read only after registering: a change committed meanwhile is then in the initial state, the queue or both,
+        // and never missed. Writers do not wait for this.
+        const initial = yield* Stream.fromIterable(requests).pipe(
+          Stream.flatMap((request) => spaces.read(request)),
+          Stream.runCollect,
+        )
+        for (const item of initial) revisions.set(item.data.space, item.data.revision)
+        const created = yield* Clock.currentTimeMillis
+        return Stream.fromIterable(initial).pipe(
+          Stream.map((item) => render({ id: Event.ID.create(), created, ...item })),
+          Stream.concat(live),
+        )
+      }),
   })
 })
 
@@ -88,6 +151,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    return yield* make(bus.listen)
+    const spaces = yield* SpaceStore.Service
+    return yield* make(bus.listen, { spaces })
   }),
 )

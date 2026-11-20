@@ -11,11 +11,13 @@ import {
   PTY_CONNECT_TOKEN_HEADER,
   PTY_CONNECT_TOKEN_HEADER_VALUE,
 } from "@opencode/protocol/groups/persistent-pty"
+import { Space } from "@opencode/schema/space"
 import { Effect, Queue } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
+import { SpaceStore } from "../space-store"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { makeArtifact } from "./artifact"
 import { makeBlobGet } from "./blob"
@@ -31,6 +33,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const pty = yield* PersistentPty.Service
     const artifact = yield* makeArtifact
     const job = yield* makeJob
+    const kv = yield* SpaceStore.Service
     const mediaGet = yield* makeMediaGet
     const blobGet = yield* makeBlobGet
     const automation = yield* makeAutomation
@@ -40,6 +43,14 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handleRaw("blob.get", (ctx) => blobGet(ctx.params.id, ctx.request))
       .handle("job.list", (ctx) => job.list(ctx.query))
       .handle("job.cancel", (ctx) => job.cancel(ctx.params.id))
+      .handle("kv.set", (ctx) =>
+        new TextEncoder().encode(JSON.stringify(ctx.payload.value)).length > Space.MaxValueBytes
+          ? Effect.fail(new InvalidRequestError({ message: "Value exceeds 1 MiB of JSON", field: "value" }))
+          : kv.set(ctx.params.space, ctx.params.key, ctx.payload.value).pipe(Effect.as(HttpApiSchema.NoContent.make())),
+      )
+      .handle("kv.delete", (ctx) =>
+        kv.remove(ctx.params.space, ctx.params.key).pipe(Effect.as(HttpApiSchema.NoContent.make())),
+      )
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
       .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))
       .handle("artifacts.create", (ctx) => artifact.create(ctx.query, ctx.payload, ctx.request))

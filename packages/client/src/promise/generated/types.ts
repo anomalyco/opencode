@@ -329,6 +329,16 @@ export type SessionStatus =
     }
   | { type: "busy" }
 
+export type SpaceName = string
+
+export type SpaceEpoch = string
+
+export type SpaceRevision = number
+
+export type SpaceKey = string
+
+export type SpaceValue = string | number | boolean | Array<JsonValue> | { [x: string]: JsonValue }
+
 export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
 
 export type AutomationID = string
@@ -1002,6 +1012,8 @@ export type FormMultiselectField1 = {
 }
 
 export type FormAnswer1 = { [x: string]: FormValue1 }
+
+export type SpaceEntry = { key: SpaceKey; value: SpaceValue }
 
 export type AutomationTriggerEvery = { type: "every"; every: AutomationDuration; tz?: string }
 
@@ -2177,6 +2189,24 @@ export type ExperimentalMcpEvent = {
   }
 }
 
+export type ExperimentalKvUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.kv.updated"
+  location?: LocationRef
+  data: { space: SpaceName; key: SpaceKey; value: SpaceValue; revision: SpaceRevision }
+}
+
+export type ExperimentalKvDeleted = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.kv.deleted"
+  location?: LocationRef
+  data: { space: SpaceName; key: SpaceKey; revision: SpaceRevision }
+}
+
 export type SessionToolSuccess = {
   id: EventID
   created: number
@@ -2307,6 +2337,30 @@ export type FormReplied = {
   type: "form.replied"
   location?: LocationRef
   data: { id: FormID; sessionID: string; answer: FormAnswer1 }
+}
+
+export type ExperimentalKvSnapshot = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.kv.snapshot"
+  location?: LocationRef
+  data: { space: SpaceName; epoch: SpaceEpoch; revision: SpaceRevision; entries: Array<SpaceEntry> }
+}
+
+export type ExperimentalKvDelta = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.kv.delta"
+  location?: LocationRef
+  data: {
+    space: SpaceName
+    epoch: SpaceEpoch
+    revision: SpaceRevision
+    entries: Array<SpaceEntry>
+    deleted: Array<SpaceKey>
+  }
 }
 
 export type AutomationTrigger =
@@ -3055,6 +3109,10 @@ export type V2Event =
   | McpStatusChanged
   | McpResourcesChanged
   | ExperimentalMcpEvent
+  | ExperimentalKvSnapshot
+  | ExperimentalKvDelta
+  | ExperimentalKvUpdated
+  | ExperimentalKvDeleted
   | V2EventRpc
   | V2EventServerConnected
 
@@ -4594,6 +4652,7 @@ export type EventSubscribeInput = {
         | `${"rpc."}${string}`
       >
     | undefined
+  readonly "experimental.kv"?: ReadonlyArray<string> | undefined
 }
 
 export type EventSubscribeOutput = V2Event
@@ -4826,6 +4885,18 @@ export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
 export type ExperimentalJobCancelInput = { readonly id: string }
 
 export type ExperimentalJobCancelOutput = void
+
+export type ExperimentalKvSetInput = {
+  readonly space: string
+  readonly key: string
+  readonly value: string | number | boolean | ReadonlyArray<JsonValue> | { readonly [x: string]: JsonValue }
+}
+
+export type ExperimentalKvSetOutput = void
+
+export type ExperimentalKvDeleteInput = { readonly space: string; readonly key: string }
+
+export type ExperimentalKvDeleteOutput = void
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
