@@ -1,6 +1,6 @@
 import type { SessionMessageAssistant } from "@opencode/client/promise"
 import { getFilename } from "@opencode/util/path"
-import { Option, Schema } from "effect"
+import { Option, Predicate, Schema } from "effect"
 import { currentToolFailed, currentToolInput, currentToolMetadata } from "../message/current-tool-state"
 import type { TimelineDetail } from "./detail"
 import { isInterruptedError } from "./turn-phase-machine"
@@ -126,14 +126,6 @@ const decodeInput = Schema.decodeUnknownOption(
   Schema.Struct({ path: Schema.optional(Schema.String), background: Schema.optional(Schema.Unknown) }),
 )
 
-const decodeMetadata = Schema.decodeUnknownOption(
-  Schema.Struct({
-    provider: Schema.optional(Schema.String),
-    toolCalls: Schema.optional(Schema.Number),
-    matches: Schema.optional(Schema.Number),
-  }),
-)
-
 const decodeFile = Schema.decodeUnknownOption(
   Schema.Struct({
     file: Schema.String,
@@ -155,7 +147,6 @@ function toolFacts(tool: Tool, id: string): Fact[] {
   }))
 
   const metadata = currentToolMetadata(tool)
-  const details = Option.getOrUndefined(decodeMetadata(metadata))
   const state = tool.state
   const background = name === "subagent" || (name === "shell" && input.background === true)
   const path = input.path || undefined
@@ -174,15 +165,17 @@ function toolFacts(tool: Tool, id: string): Fact[] {
 
   if (path) call.path = path
 
-  if (details?.provider) call.provider = details.provider
+  // Each field is read on its own, so one of the wrong type leaves the others.
+  if (Predicate.isString(metadata.provider) && metadata.provider) call.provider = metadata.provider
 
   if (background) call.launch = launch(tool, name)
 
   if ("time" in state && state.time) call.time = state.time
 
-  if (details?.toolCalls !== undefined) call.toolCalls = details.toolCalls
+  // A script lists the calls it made; their count is how many it made.
+  if (Array.isArray(metadata.toolCalls)) call.toolCalls = metadata.toolCalls.length
 
-  if (details?.matches !== undefined) call.matches = details.matches
+  if (Predicate.isNumber(metadata.matches)) call.matches = metadata.matches
 
   if (mode !== "edit") return [call]
 

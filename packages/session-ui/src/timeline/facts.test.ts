@@ -61,4 +61,27 @@ describe("timeline facts", () => {
     expect(before.failed).toBe(0)
     expect(summarize(factsOf([part])).failed).toBe(1)
   })
+
+  test("reads a script's calls, a search's matches and a provider each on its own", () => {
+    const [script] = factsOf([
+      storyTool(
+        "x1",
+        "execute",
+        "completed",
+        { code: "1" },
+        {
+          metadata: {
+            toolCalls: [
+              { tool: "read", status: "completed" },
+              { tool: "edit", status: "completed" },
+            ],
+            provider: "exa",
+            matches: 3,
+          },
+        },
+      ),
+    ])
+
+    expect(script).toMatchObject({ kind: "call", toolCalls: 2, provider: "exa", matches: 3 })
+  })
 })
