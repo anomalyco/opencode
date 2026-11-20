@@ -14,7 +14,10 @@ function view(state, data) {
             : ui.carousel(
                 {},
                 option.images.map((src, page) =>
-                  ui.image(src, { alt: option.label + " (" + (page + 1) + "/" + option.images.length + ")", aspect: 4 / 3 }),
+                  ui.image(src, {
+                    alt: option.label + " (" + (page + 1) + "/" + option.images.length + ")",
+                    aspect: 4 / 3,
+                  }),
                 ),
               ),
           ui.row({ gap: 1, align: "center", wrap: true }, [

@@ -29,7 +29,11 @@ function input(field, value) {
   if (field.type === "boolean") return ui.checkbox(id, field.label, value)
   if (field.type === "select")
     return ui.select(id, field.options, { label: field.label, value, multiple: field.multiple === true })
-  return ui.input(id, value, { label: field.label, placeholder: field.placeholder, multiline: field.multiline === true })
+  return ui.input(id, value, {
+    label: field.label,
+    placeholder: field.placeholder,
+    multiline: field.multiline === true,
+  })
 }
 
 function update(state, event, data) {

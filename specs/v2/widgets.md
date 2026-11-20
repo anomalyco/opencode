@@ -28,8 +28,10 @@ PsychoScript itself (`anomalyco/psychoscript`) does not change: its repo holds o
 ```ts
 type Template = {
   name: string          // /^[a-z][a-z0-9-]{0,47}$/, unique per server
-  version: string       // first 16 hex chars of sha256(source + "\n" + JSON.stringify(data)); content address
-                        // (`version()` in @opencode/widget, synchronous)
+  version: string       // first 16 hex chars of sha256(program + "\n" + JSON.stringify(data)), where
+                        // program = prelude + "\n" + source; a content address that covers the prelude, since
+                        // clients cache the served program by name@version forever (`version(source, data)` in
+                        // @opencode/widget, synchronous)
   description: string   // one line, shown to the model when listing templates
   data: JSONSchema      // JSON Schema (draft 2020-12 subset) for the data the template takes
   source: string        // the template's PsychoScript source (see "Template source")

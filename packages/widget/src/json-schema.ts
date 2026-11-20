@@ -31,7 +31,8 @@ export function validateData(schema: JSONSchema, data: unknown): string[] {
 
 function check(schema: JSONSchema, value: unknown, path: string): string[] {
   const at = path || "/"
-  if (schema.const !== undefined && !equal(schema.const, value)) return [`${at}: must be ${JSON.stringify(schema.const)}`]
+  if (schema.const !== undefined && !equal(schema.const, value))
+    return [`${at}: must be ${JSON.stringify(schema.const)}`]
   if (schema.enum && !schema.enum.some((item) => equal(item, value)))
     return [`${at}: must be one of ${schema.enum.map((item) => JSON.stringify(item)).join(", ")}`]
   const types = schema.type === undefined ? undefined : [schema.type].flat()
@@ -65,7 +66,8 @@ function closest(results: string[][]) {
 }
 
 function size(schema: JSONSchema, value: unknown) {
-  if (typeof value === "number") return { measure: value, min: schema.minimum, max: schema.maximum, unit: "", verb: "be" }
+  if (typeof value === "number")
+    return { measure: value, min: schema.minimum, max: schema.maximum, unit: "", verb: "be" }
   if (typeof value === "string")
     return { measure: value.length, min: schema.minLength, max: schema.maxLength, unit: " characters", verb: "have" }
   if (Array.isArray(value))

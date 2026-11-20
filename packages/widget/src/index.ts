@@ -21,6 +21,6 @@ export {
   type Tone,
   type WidgetEvent,
 } from "./node.js"
-export { prelude, program, sha256, version } from "./program.js"
+export { prelude, program, version } from "./program.js"
 export { StepError, type StepOptions, TIMEOUT_MS, WidgetSession, step } from "./session.js"
 export { builtins, NAME, type Template } from "./template.js"
