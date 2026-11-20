@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} ще не встановлено.",
   "onboarding.openDistroOnce": "Відкрийте {{distro}} один раз, щоб завершити налаштування.",
   "onboarding.updatingOpencode": "Оновлення OpenCode…",
-  "onboarding.updateOpencode": "Оновити OpenCode",
   "onboarding.installOpencode": "Встановити OpenCode",
   "onboarding.installedDistros": "Встановлені дистрибутиви",
   "onboarding.checkAgain": "Перевірити ще раз",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode не встановлено в цьому дистрибутиві",
   "error.opencodeCannotRun": "opencode встановлено, але його не вдалося запустити",
   "error.opencodeNotInstalled": "OpenCode не встановлено в {{distro}}",
-  "error.updateVersion":
-    "Оновлення OpenCode завершено, але {{distro}} усе ще повідомляє про версію {{installed}}; очікувалася {{expected}}",
-  "error.noVersion": "версію не вказано",
   "error.serverExited": "Сервер WSL завершив роботу після запуску (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "Сервер WSL завершив роботу, не досягнувши працездатного стану (code={{code}} signal={{signal}}){{output}}",

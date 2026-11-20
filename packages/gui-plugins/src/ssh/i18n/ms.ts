@@ -13,15 +13,12 @@ export default {
   "session.reconnect": "Sambung semula",
   trust: "Percaya dan sambung",
   continue: "Teruskan",
-  update: "Kemas kini dan sambung semula",
   project: "Buka projek di {{host}}",
-  "stage.incompatible": "Kemas kini pelayan diperlukan",
   "error.input":
     "Masukkan hos atau perintah sambungan SSH. Perintah jauh dan pilihan SSH yang tidak disokong tidak dibenarkan.",
   "error.connection": "Tidak dapat mewujudkan sambungan SSH. Semak rangkaian dan konfigurasi SSH anda.",
   "error.platform":
     "Platform jauh ini tidak disokong. Penetapan automatik kini memerlukan Linux atau macOS pada x64 atau arm64.",
-  "error.version": "Perkhidmatan jauh mesti sepadan dengan versi Desktop ini sebelum menyambung.",
   "error.install": "Gagal memasang pelayan jauh. Semak sambungan, ruang cakera, dan pastikan tar dipasang.",
   "error.unpublished":
     "Versi Desktop ini tidak mempunyai pelayan jauh yang diterbitkan. Untuk binaan pembangunan, pasang dan mulakan V2 pada hos, kemudian cuba lagi.",

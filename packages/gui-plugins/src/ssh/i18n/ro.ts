@@ -14,16 +14,12 @@ export default {
   "session.reconnect": "Reconectați",
   trust: "Aveți încredere și conectați-vă",
   continue: "Continuă",
-  update: "Actualizați și reconectați",
   project: "Deschideți proiectul pe {{host}}",
-  "stage.incompatible": "Este necesară actualizarea serverului",
   "error.input":
     "Introduceți o comandă de conexiune gazdă sau SSH. Comenzile de la distanță și opțiunile SSH neacceptate nu sunt permise.",
   "error.connection": "Nu s-a putut stabili conexiunea SSH. Verificați rețeaua și configurația SSH.",
   "error.platform":
     "Această platformă la distanță nu este acceptată. În prezent, configurarea automată necesită Linux sau macOS pe x64 sau arm64.",
-  "error.version":
-    "Serviciul de la distanță trebuie să se potrivească cu această versiune de desktop înainte de a se conecta.",
   "error.install":
     "Nu s-a putut instala serverul la distanță. Verificați conectivitatea, spațiul pe disc și dacă tar este instalat.",
   "error.unpublished":

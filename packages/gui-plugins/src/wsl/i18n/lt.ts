@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} dar neįdiegtas.",
   "onboarding.openDistroOnce": "Atidarykite {{distro}} vieną kartą, kad užbaigtumėte sąranką.",
   "onboarding.updatingOpencode": "Atnaujinamas OpenCode…",
-  "onboarding.updateOpencode": "Atnaujinkite OpenCode",
   "onboarding.installOpencode": "Įdiekite OpenCode",
   "onboarding.installedDistros": "Įdiegtos distribucijos",
   "onboarding.checkAgain": "Patikrinkite dar kartą",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode šiame distributyve neįdiegtas",
   "error.opencodeCannotRun": "opencode įdiegtas, bet jo paleisti nepavyko",
   "error.opencodeNotInstalled": "OpenCode neįdiegtas distributyve {{distro}}",
-  "error.updateVersion":
-    "OpenCode naujinimas baigtas, bet {{distro}} vis dar praneša {{installed}}; tikėtasi {{expected}}",
-  "error.noVersion": "versijos nėra",
   "error.serverExited": "WSL serveris užsidarė po paleidimo (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL serveris užsidarė prieš pradėdamas tinkamai veikti (code={{code}} signal={{signal}}){{output}}",

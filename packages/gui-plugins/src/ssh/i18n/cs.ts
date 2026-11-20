@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Znovu připojit",
   trust: "Důvěřovat a připojit",
   continue: "Pokračovat",
-  update: "Aktualizovat a znovu připojit",
   project: "Otevřít projekt na hostiteli {{host}}",
-  "stage.incompatible": "Je vyžadována aktualizace serveru",
   "error.input":
     "Zadejte hostitele nebo příkaz pro připojení SSH. Vzdálené příkazy a nepodporované volby SSH nejsou povoleny.",
   "error.connection": "Připojení SSH se nepodařilo navázat. Zkontrolujte síť a konfiguraci SSH.",
   "error.platform":
     "Tato vzdálená platforma není podporována. Automatické nastavení nyní vyžaduje Linux nebo macOS na architektuře x64 či arm64.",
-  "error.version": "Vzdálená služba musí před připojením odpovídat této verzi aplikace Desktop.",
   "error.install":
     "Vzdálený server se nepodařilo nainstalovat. Zkontrolujte připojení, místo na disku a instalaci programu tar.",
   "error.unpublished":

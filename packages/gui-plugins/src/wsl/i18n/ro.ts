@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} nu este instalat încă.",
   "onboarding.openDistroOnce": "Deschide {{distro}} o dată pentru a finaliza configurarea.",
   "onboarding.updatingOpencode": "Se actualizează OpenCode…",
-  "onboarding.updateOpencode": "Actualizează OpenCode",
   "onboarding.installOpencode": "Instalează OpenCode",
   "onboarding.installedDistros": "Distribuții instalate",
   "onboarding.checkAgain": "Verifică din nou",
@@ -42,9 +41,6 @@ export default {
   "error.opencodeMissing": "opencode nu este instalat în această distribuție",
   "error.opencodeCannotRun": "opencode este instalat, dar nu a putut fi pornit",
   "error.opencodeNotInstalled": "OpenCode nu este instalat în {{distro}}",
-  "error.updateVersion":
-    "Actualizarea OpenCode s-a terminat, dar {{distro}} raportează tot {{installed}}; era așteptat {{expected}}",
-  "error.noVersion": "nicio versiune",
   "error.serverExited": "Serverul WSL s-a oprit după pornire (cod={{code}} semnal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "Serverul WSL s-a oprit înainte să fie funcțional (cod={{code}} semnal={{signal}}){{output}}",

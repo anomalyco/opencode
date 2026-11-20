@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} अभी तक इंस्टॉल नहीं है।",
   "onboarding.openDistroOnce": "सेटअप पूरा करने के लिए एक बार {{distro}} खोलें।",
   "onboarding.updatingOpencode": "OpenCode अपडेट हो रहा है…",
-  "onboarding.updateOpencode": "OpenCode को अपडेट करें",
   "onboarding.installOpencode": "OpenCode स्थापित करें",
   "onboarding.installedDistros": "स्थापित डिस्ट्रोस",
   "onboarding.checkAgain": "फिर से जाँचें",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "इस डिस्ट्रो में opencode इंस्टॉल नहीं है",
   "error.opencodeCannotRun": "opencode इंस्टॉल है, लेकिन चल नहीं सका",
   "error.opencodeNotInstalled": "{{distro}} में OpenCode इंस्टॉल नहीं है",
-  "error.updateVersion":
-    "OpenCode अपडेट पूरा हो गया, लेकिन {{distro}} अब भी {{installed}} रिपोर्ट कर रहा है; अपेक्षित संस्करण {{expected}} है",
-  "error.noVersion": "कोई संस्करण नहीं",
   "error.serverExited": "WSL सर्वर स्टार्टअप के बाद बंद हो गया (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL सर्वर के सुचारु होने से पहले बंद हो गया (code={{code}} signal={{signal}}){{output}}",

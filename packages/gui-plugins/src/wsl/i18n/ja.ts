@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}}はまだインストールされていません。",
   "onboarding.openDistroOnce": "セットアップを完了するには、{{distro}}を一度開いてください。",
   "onboarding.updatingOpencode": "OpenCodeを更新中…",
-  "onboarding.updateOpencode": "OpenCodeを更新",
   "onboarding.installOpencode": "OpenCodeをインストール",
   "onboarding.installedDistros": "インストール済みのディストリビューション",
   "onboarding.checkAgain": "再確認",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "このディストリビューションにはopencodeがインストールされていません",
   "error.opencodeCannotRun": "opencodeはインストールされていますが、実行できませんでした",
   "error.opencodeNotInstalled": "{{distro}}にはOpenCodeがインストールされていません",
-  "error.updateVersion":
-    "OpenCodeのアップデートは完了しましたが、{{distro}}から報告されたバージョンはまだ{{installed}}です。想定されるバージョンは{{expected}}です",
-  "error.noVersion": "バージョンなし",
   "error.serverExited": "WSLサーバーが起動後に終了しました (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSLサーバーが正常に稼働する前に終了しました (code={{code}} signal={{signal}}){{output}}",

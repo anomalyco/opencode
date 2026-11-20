@@ -65,7 +65,7 @@ export function DialogSsh(props: {
   }
 
   const run = (effect: SshDialogEffect) => {
-    if (effect.type === "connect") return ssh.connect(effect.config, { dialog: true, replace: effect.replace })
+    if (effect.type === "connect") return ssh.connect(effect.config, { dialog: true })
 
     if (effect.type === "respond") return ssh.respond(id, effect.prompt, effect.value)
 
@@ -159,12 +159,6 @@ export function DialogSsh(props: {
                 onInput={(event) => dispatch({ type: "name.changed", value: event.currentTarget.value })}
                 onKeyDown={keyDown}
               />
-            </div>
-          </Show>
-          <Show when={view().incompatible}>
-            <div class="flex w-full min-w-0 flex-col gap-2" role="status" aria-live="polite">
-              <span class="text-14-medium text-v2-text-text-base">{plugin.t("stage.incompatible")}</span>
-              <span class="text-13-regular text-v2-text-text-muted">{plugin.t("error.version")}</span>
             </div>
           </Show>
           <Show when={prompt()} keyed>

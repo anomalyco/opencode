@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} មិនទាន់ដំឡើងនៅឡើយទេ។",
   "onboarding.openDistroOnce": "បើក {{distro}} ម្តង ដើម្បីបញ្ចប់ការដំឡើង។",
   "onboarding.updatingOpencode": "កំពុងអាប់ដេត OpenCode…",
-  "onboarding.updateOpencode": "ធ្វើបច្ចុប្បន្នភាព OpenCode",
   "onboarding.installOpencode": "ដំឡើង OpenCode",
   "onboarding.installedDistros": "បានដំឡើងការចែកចាយ",
   "onboarding.checkAgain": "ពិនិត្យម្តងទៀត",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode មិនត្រូវបានដំឡើងនៅក្នុង distro នេះទេ។",
   "error.opencodeCannotRun": "opencode ត្រូវបានដំឡើង ប៉ុន្តែមិនអាចដំណើរការបានទេ។",
   "error.opencodeNotInstalled": "OpenCode មិនត្រូវបានដំឡើងនៅក្នុង {{distro}} ទេ។",
-  "error.updateVersion":
-    "ការធ្វើបច្ចុប្បន្នភាព OpenCode បានបញ្ចប់ ប៉ុន្តែ {{distro}} នៅតែរាយការណ៍ {{installed}}; {{expected}} រំពឹងទុក",
-  "error.noVersion": "គ្មានកំណែ",
   "error.serverExited": "ម៉ាស៊ីនមេ WSL បានចាកចេញបន្ទាប់ពីការចាប់ផ្ដើម (កូដ={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "ម៉ាស៊ីនមេ WSL បានចេញមុនពេលមានសុខភាពល្អ (កូដ={{code}} signal={{signal}}){{output}}",

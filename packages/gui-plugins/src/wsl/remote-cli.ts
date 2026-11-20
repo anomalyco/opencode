@@ -44,6 +44,6 @@ export function installScript(input: { version: string; binary?: string }) {
 
   return `set -eu
 curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s -- ${input.binary ? `--binary ${input.binary}` : `--version ${quote(version)}`}
-test "$("$HOME/.opencode/bin/opencode" --version | awk '{print $NF}' | sed 's/^v//')" = ${quote(version)}
+"$HOME/.opencode/bin/opencode" --version >/dev/null
 `
 }

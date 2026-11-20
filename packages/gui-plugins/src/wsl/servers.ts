@@ -126,7 +126,7 @@ export function createWslServersController(options: WslServersControllerOptions)
     const resolved = await runtime.resolveCli(distro)
     const version = resolved ? await runtime.readCliVersion(resolved, distro) : null
 
-    return cliCheck(t, distro, resolved, version, options.cli.version)
+    return cliCheck(t, distro, resolved, version)
   }
 
   const listDistros = async () => {
@@ -167,18 +167,10 @@ export function createWslServersController(options: WslServersControllerOptions)
     await options.installCli(distro, options.cli)
     const check = await inspectCli(distro)
 
-    if (check.version === options.cli.version) return { type: "cli.installed", distro, attempt, check }
+    // Any OpenCode that runs is usable, whatever its version.
+    if (!check.error) return { type: "cli.installed", distro, attempt, check }
 
-    const expected = options.cli.version
-    const installed = check.version ?? t("error.noVersion")
-
-    return {
-      type: "job.failed",
-      distro,
-      attempt,
-      check,
-      message: t("error.updateVersion", { distro, installed, expected }),
-    }
+    return { type: "job.failed", distro, attempt, check, message: check.error }
   }
 
   const spawn = (distro: string, attempt: string) => {
@@ -291,15 +283,12 @@ function cliCheck(
   distro: string,
   resolvedPath: string | null,
   version: string | null,
-  expectedVersion: string,
 ): WslOpencodeCheck {
   if (!resolvedPath) {
     return {
       distro,
       resolvedPath: null,
       version: null,
-      expectedVersion,
-      matchesDesktop: null,
       error: t("error.opencodeMissing"),
     }
   }
@@ -309,8 +298,6 @@ function cliCheck(
       distro,
       resolvedPath,
       version: null,
-      expectedVersion,
-      matchesDesktop: null,
       error: t("error.opencodeCannotRun"),
     }
   }
@@ -319,8 +306,6 @@ function cliCheck(
     distro,
     resolvedPath,
     version,
-    expectedVersion,
-    matchesDesktop: version === expectedVersion,
     error: null,
   }
 }

@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} er ikki installerað enn.",
   "onboarding.openDistroOnce": "Opna {{distro}} einaferð fyri at klára uppsetingina.",
   "onboarding.updatingOpencode": "Dagføring OpenCode…",
-  "onboarding.updateOpencode": "Dagfør OpenCode",
   "onboarding.installOpencode": "Set upp OpenCode",
   "onboarding.installedDistros": "Innsettar distros",
   "onboarding.checkAgain": "Kanna aftur",
@@ -43,8 +42,6 @@ export default {
   "error.opencodeMissing": "opencode er ikki sett upp í hesi distro",
   "error.opencodeCannotRun": "opencode er sett upp men kundi ikki koyra",
   "error.opencodeNotInstalled": "OpenCode er ikki sett upp í {{distro}}",
-  "error.updateVersion": "OpenCode dagføring liðug men {{distro}} greiðir enn frá {{installed}}; væntað {{expected}}.",
-  "error.noVersion": "eingin útgáva",
   "error.serverExited": "WSL-ambætarin steðgaði eftir uppstart (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL-ambætarin steðgaði, áðrenn hann var klárur (code={{code}} signal={{signal}}){{output}}",

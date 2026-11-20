@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} hələ quraşdırılmayıb.",
   "onboarding.openDistroOnce": "Quraşdırmanı bitirmək üçün {{distro}}-ni bir dəfə açın.",
   "onboarding.updatingOpencode": "OpenCode yenilənir…",
-  "onboarding.updateOpencode": "OpenCode-u yeniləyin",
   "onboarding.installOpencode": "OpenCode quraşdırın",
   "onboarding.installedDistros": "Quraşdırılmış distribütivlər",
   "onboarding.checkAgain": "Yenidən yoxlayın",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "Bu distribütivdə opencode quraşdırılmayıb",
   "error.opencodeCannotRun": "opencode quraşdırılıb, lakin onu işə salmaq mümkün olmadı",
   "error.opencodeNotInstalled": "OpenCode {{distro}} distribütivində quraşdırılmayıb",
-  "error.updateVersion":
-    "OpenCode yeniləməsi tamamlandı, lakin {{distro}} hələ də {{installed}} versiyasını bildirir; gözlənilən versiya: {{expected}}",
-  "error.noVersion": "versiya yoxdur",
   "error.serverExited": "WSL serveri başladıqdan sonra dayandı (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL serveri işlək vəziyyətə gəlməzdən əvvəl dayandı (code={{code}} signal={{signal}}){{output}}",

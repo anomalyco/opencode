@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "⁨{{distro}}⁩ އަދި އިންސްޓޯލްކޮށްފައެއް ނުވެއެވެ.",
   "onboarding.openDistroOnce": "ސެޓަޕް ނިންމާލުމަށްޓަކައި ⁨{{distro}}⁩ އެއްފަހަރު ހުޅުވާލާށެވެ.",
   "onboarding.updatingOpencode": "އަޕްޑޭޓް ކުރަމުންދަނީ OpenCode…",
-  "onboarding.updateOpencode": "OpenCode އަޕްޑޭޓް ކުރާށެވެ",
   "onboarding.installOpencode": "OpenCode އިންސްޓޯލް ކުރާށެވެ",
   "onboarding.installedDistros": "އިންސްޓޯލް ކޮށްފައިވާ ޑިސްޓްރޯސް",
   "onboarding.checkAgain": "އަނެއްކާވެސް ޗެކް ކުރާށެވެ",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "މި ޑިސްޓްރޯގައި opencode އިންސްޓޯލްކޮށްފައެއް ނުވެއެވެ",
   "error.opencodeCannotRun": "opencode އިންސްޓޯލް ކޮށްފައި އޮތް ނަމަވެސް ހިންގޭ ގޮތެއް ނުވިއެވެ",
   "error.opencodeNotInstalled": "OpenCode އަކީ ⁨{{distro}}⁩ ގައި އިންސްޓޯލް ކުރެވިފައިވާ އެއްޗެއް ނޫނެވެ",
-  "error.updateVersion":
-    "OpenCode އަޕްޑޭޓް ނިމުނު ނަމަވެސް ⁨{{distro}}⁩ އަދިވެސް ރިޕޯޓް ކުރަނީ ⁨{{installed}}⁩؛ ލަފާކުރެވޭ ގޮތުގައި ⁨{{expected}}⁩",
-  "error.noVersion": "އެއްވެސް ވަރޝަނެއް ނެތެވެ",
   "error.serverExited": "ސްޓާޓްއަޕް ކުރުމަށްފަހު WSL ސަރވަރ އިން ނުކުމެއްޖެ (code=⁨{{code}}⁩ signal=⁨{{signal}}⁩)",
   "error.serverExitedBeforeHealthy":
     "WSL ސަރވަރ އިން ނުކުތީ ދުޅަހެޔޮ ސިއްހަތެއްގައި ހުރުމުގެ ކުރިން (code=⁨{{code}}⁩ signal=⁨{{signal}}⁩)⁨{{output}}⁩",

@@ -14,16 +14,13 @@ export default {
   "session.reconnect": "Wieder verbinden",
   trust: "Vertrauen und verbinden",
   continue: "Weiter",
-  update: "Aktualisieren und erneut verbinden",
   project: "Projekt auf {{host}} öffnen",
-  "stage.incompatible": "Server-Update erforderlich",
   "error.input":
     "Geben Sie einen Host- oder SSH-Verbindungsbefehl ein. Fernbefehle und nicht unterstützte SSH-Optionen sind nicht zulässig.",
   "error.connection":
     "Die SSH-Verbindung konnte nicht hergestellt werden. Überprüfen Sie Ihr Netzwerk und die SSH-Konfiguration.",
   "error.platform":
     "Diese Remote-Plattform wird nicht unterstützt. Für die automatische Einrichtung ist derzeit Linux oder macOS auf x64 oder arm64 erforderlich.",
-  "error.version": "Der Remote-Dienst muss vor der Verbindung mit dieser Desktop-Version übereinstimmen.",
   "error.install":
     "Der Remote-Server konnte nicht installiert werden. Überprüfen Sie die Konnektivität, den Speicherplatz und ob tar installiert ist.",
   "error.unpublished":

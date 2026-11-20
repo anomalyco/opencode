@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Atkārtoti savienot",
   trust: "Uzticieties un izveidojiet savienojumu",
   continue: "Turpināt",
-  update: "Atjauniniet un atkārtoti izveidojiet savienojumu",
   project: "Atvērt projektu uz {{host}}",
-  "stage.incompatible": "Nepieciešams servera atjauninājums",
   "error.input":
     "Ievadiet resursdatora vai SSH savienojuma komandu. Tālvadības komandas un neatbalstītas SSH opcijas nav atļautas.",
   "error.connection": "Nevarēja izveidot savienojumu SSH. Pārbaudiet savu tīklu un SSH konfigurāciju.",
   "error.platform":
     "Šī attālā platforma netiek atbalstīta. Automātiskajai iestatīšanai pašlaik ir nepieciešams Linux vai macOS uz x64 vai arm64.",
-  "error.version": "Pirms savienojuma izveides attālajam pakalpojumam ir jāatbilst šai darbvirsmas versijai.",
   "error.install": "Nevarēja instalēt attālo serveri. Pārbaudiet savienojumu, diska vietu un to, vai ir instalēta tar.",
   "error.unpublished":
     "Šai darbvirsmas versijai nav publicēta attālā servera. Izstrādes būvējumiem instalējiet un startējiet V2 resursdatorā, pēc tam mēģiniet vēlreiz.",

@@ -18,8 +18,6 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
         const indicator = () => {
           if (item().stage === "ready") return props.row.health() ?? { healthy: true }
 
-          if (item().stage === "incompatible") return { healthy: false, incompatible: true }
-
           if (item().stage === "failed") return { healthy: false }
 
           return undefined

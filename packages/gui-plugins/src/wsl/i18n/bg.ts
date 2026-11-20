@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} все още не е инсталиран.",
   "onboarding.openDistroOnce": "Отворете {{distro}} веднъж, за да завършите настройката.",
   "onboarding.updatingOpencode": "Актуализиране на OpenCode…",
-  "onboarding.updateOpencode": "Актуализация OpenCode",
   "onboarding.installOpencode": "Инсталирайте OpenCode",
   "onboarding.installedDistros": "Инсталирани дистрибуции",
   "onboarding.checkAgain": "Проверете отново",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode не е инсталиран в тази дистрибуция",
   "error.opencodeCannotRun": "opencode е инсталиран, но не може да стартира",
   "error.opencodeNotInstalled": "OpenCode не е инсталиран в {{distro}}",
-  "error.updateVersion":
-    "OpenCode актуализацията приключи, но {{distro}} все още съобщава {{installed}}; очаквано {{expected}}",
-  "error.noVersion": "няма версия",
   "error.serverExited": "WSL сървърът излезе след стартиране (код={{code}} сигнал={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL сървърът излезе, преди да стане здрав (код={{code}} сигнал={{signal}}){{output}}",

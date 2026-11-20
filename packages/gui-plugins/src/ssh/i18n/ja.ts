@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "再接続",
   trust: "信頼して接続",
   continue: "続行",
-  update: "更新して再接続",
   project: "{{host}}でプロジェクトを開く",
-  "stage.incompatible": "サーバーの更新が必要です",
   "error.input":
     "ホストまたはSSH接続コマンドを入力してください。リモートコマンドおよびサポートされていないSSHオプションは許可されていません。",
   "error.connection": "SSH接続を確立できませんでした。ネットワークとSSHの設定を確認してください。",
   "error.platform":
     "このリモートプラットフォームはサポートされていません。自動セットアップには現在、x64 または arm64 の Linux か macOS が必要です。",
-  "error.version": "接続する前に、リモートサービスがこのデスクトップバージョンと一致している必要があります。",
   "error.install":
     "リモートサーバーをインストールできませんでした。接続状況、ディスク容量、tar がインストールされているかを確認してください。",
   "error.unpublished":

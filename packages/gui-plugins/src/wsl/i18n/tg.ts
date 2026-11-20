@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} хануз насб карда нашудааст.",
   "onboarding.openDistroOnce": "Барои анҷом додани танзим {{distro}} -ро як маротиба кушоед.",
   "onboarding.updatingOpencode": "Навсозӣ OpenCode…",
-  "onboarding.updateOpencode": "Навсозӣ OpenCode",
   "onboarding.installOpencode": "Насб кунед OpenCode",
   "onboarding.installedDistros": "Дистроҳои насбшуда",
   "onboarding.checkAgain": "Боз санҷед",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode дар ин паҳнкунӣ насб нашудааст",
   "error.opencodeCannotRun": "opencode насб шудааст, аммо иҷро карда натавонист",
   "error.opencodeNotInstalled": "OpenCode дар {{distro}} насб нашудааст",
-  "error.updateVersion":
-    "OpenCode навсозӣ анҷом ёфт, аммо {{distro}} то ҳол гузориш медиҳад {{installed}}; интизорӣ {{expected}}",
-  "error.noVersion": "версия нест",
   "error.serverExited": "WSL сервер пас аз оғозшавӣ хориҷ шуд (рамз = {{code}} сигнал = {{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL сервер пеш аз солим шудан хориҷ шуд (рамз={{code}} сигнал ={{signal}}){{output}}",

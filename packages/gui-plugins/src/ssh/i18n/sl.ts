@@ -14,14 +14,11 @@ export default {
   "session.reconnect": "Poveži znova",
   trust: "Zaupaj in poveži",
   continue: "Nadaljuj",
-  update: "Posodobi in se poveži znova",
   project: "Odpri projekt na {{host}}",
-  "stage.incompatible": "Zahteva se posodobitev strežnika",
   "error.input": "Vnesite gostitelja ali SSH ukaz. Oddaljeni ukazi in nepodprte SSH opcije niso dovoljene.",
   "error.connection": "Povezave SSH ni bilo mogoče vzpostaviti. Preverite omrežje in SSH nastavitve.",
   "error.platform":
     "Ta oddaljena platforma ni podprta. Samodejna nastavitev trenutno zahteva Linux ali macOS na x64 ali arm64.",
-  "error.version": "Oddaljena storitev se mora ujemati s to namizno različico pred povezavo.",
   "error.install":
     "Namestitev oddaljenega strežnika ni uspela. Preverite povezljivost, prostor na disku in ali je tar nameščen.",
   "error.unpublished":

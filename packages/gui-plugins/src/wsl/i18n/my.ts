@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} ကို မထည့်သွင်းရသေးပါ။",
   "onboarding.openDistroOnce": "စနစ်ထည့်သွင်းမှုကို အပြီးသတ်ရန် {{distro}} တစ်ကြိမ်ဖွင့်ပါ။",
   "onboarding.updatingOpencode": "OpenCode ကို အပ်ဒိတ်လုပ်နေသည်…",
-  "onboarding.updateOpencode": "OpenCode ကို အပ်ဒိတ်လုပ်ပါ။",
   "onboarding.installOpencode": "OpenCode ကို ထည့်သွင်းပါ။",
   "onboarding.installedDistros": "ကွဲပြားမှုများကို ထည့်သွင်းထားသည်။",
   "onboarding.checkAgain": "ထပ်မံစစ်ဆေးပါ။",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode ကို ဤ distro တွင် ထည့်သွင်းမထားပါ။",
   "error.opencodeCannotRun": "opencode ကို ထည့်သွင်းထားသော်လည်း မလည်ပတ်နိုင်ပါ။",
   "error.opencodeNotInstalled": "OpenCode ကို {{distro}} တွင် ထည့်သွင်းမထားပါ။",
-  "error.updateVersion":
-    "OpenCode အပ်ဒိတ် ပြီးဆုံးသွားသော်လည်း {{distro}} သည် {{installed}} မှ ဆက်လက်တင်ပြနေပါသည်။ {{expected}} မျှော်လင့်ထားသည်။",
-  "error.noVersion": "ဗားရှင်းမရှိပါ။",
   "error.serverExited": "စတင်ပြီးနောက် WSL ဆာဗာမှ ထွက်ခဲ့သည် (ကုဒ်={{code}} အချက်ပြ={{signal}})",
   "error.serverExitedBeforeHealthy":
     "ကျန်းမာရေးမကောင်းမီ WSL ဆာဗာမှ ထွက်ခဲ့သည် (code={{code}} signal={{signal}}){{output}}",

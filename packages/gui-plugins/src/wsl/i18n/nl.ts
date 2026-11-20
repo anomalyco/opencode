@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} is nog niet geïnstalleerd.",
   "onboarding.openDistroOnce": "Open {{distro}} één keer om de installatie te voltooien.",
   "onboarding.updatingOpencode": "OpenCode bijwerken…",
-  "onboarding.updateOpencode": "OpenCode bijwerken",
   "onboarding.installOpencode": "Installeer OpenCode",
   "onboarding.installedDistros": "Geïnstalleerde distributies",
   "onboarding.checkAgain": "Controleer opnieuw",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode is niet geïnstalleerd in deze distributie",
   "error.opencodeCannotRun": "opencode is geïnstalleerd, maar kan niet worden uitgevoerd",
   "error.opencodeNotInstalled": "OpenCode is niet geïnstalleerd in {{distro}}",
-  "error.updateVersion":
-    "De OpenCode-update is voltooid, maar {{distro}} meldt nog steeds {{installed}}; verwacht: {{expected}}",
-  "error.noVersion": "geen versie",
   "error.serverExited": "WSL-server is na het opstarten afgesloten (code={{code}} signaal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL-server is afgesloten voordat deze gereed was (code={{code}} signaal={{signal}}){{output}}",

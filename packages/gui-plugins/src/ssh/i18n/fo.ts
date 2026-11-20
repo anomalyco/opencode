@@ -14,15 +14,12 @@ export default {
   "session.reconnect": "Samband aftur",
   trust: "Lít á og knýta samband",
   continue: "Halt fram",
-  update: "Dagfør og set samband aftur",
   project: "Opið verkætlan á {{host}}",
-  "stage.incompatible": "Ambætaradagføring krevst",
   "error.input":
     "Skriva eina verts- ella SSH sambandsskipan. Fjarskipanir og óstuðlaðir SSH møguleikar eru ikki loyvdir.",
   "error.connection": "Kundi ikki fáa SSH sambandið upp. Kanna títt net og SSH uppseting.",
   "error.platform":
     "Hesin fjarskiftispallurin er ikki stuðlaður. Sjálvvirkandi uppseting krevur í løtuni Linux ella macOS á x64 ella arm64.",
-  "error.version": "Fjartænastan skal passa til hesa skriviborðsútgávuna áðrenn tú setur samband.",
   "error.install": "Kundi ikki seta fjar-ambætaran upp. Kanna samband, diskpláss, og at tar er sett upp.",
   "error.unpublished":
     "Hendan skriviborðsútgávan hevur ongan útgivnan fjarskiftis-ambætara. Til menningarbyggingar, installera og byrja V2 á vertinum, royn síðani aftur.",

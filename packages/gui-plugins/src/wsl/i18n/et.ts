@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} pole veel installitud.",
   "onboarding.openDistroOnce": "Seadistamise lõpetamiseks avage üks kord {{distro}}.",
   "onboarding.updatingOpencode": "OpenCode värskendamine…",
-  "onboarding.updateOpencode": "Värskenda OpenCode",
   "onboarding.installOpencode": "Installige OpenCode",
   "onboarding.installedDistros": "Installitud distrood",
   "onboarding.checkAgain": "Kontrollige uuesti",
@@ -42,9 +41,6 @@ export default {
   "error.opencodeMissing": "opencode pole sellesse distrosse installitud",
   "error.opencodeCannotRun": "opencode on installitud, kuid seda ei saa käivitada",
   "error.opencodeNotInstalled": "OpenCode pole installitud asukohta {{distro}}",
-  "error.updateVersion":
-    "OpenCode värskendus on lõpetatud, kuid {{distro}} teatab endiselt {{installed}}; oodata {{expected}}",
-  "error.noVersion": "versiooni pole",
   "error.serverExited": "WSL-server sulgus pärast käivitamist (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy": "WSL server väljus enne tervenemist (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "{{distro}} tervisekontrolli külgkorv aegus {{timeout}} ms pärast",

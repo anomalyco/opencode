@@ -67,7 +67,7 @@ describe("ssh window attempt", () => {
     ])
 
     expect(result.effects).toEqual([
-      { type: "rpc.start", id: config.id, attempt: 1, config, replace: false },
+      { type: "rpc.start", id: config.id, attempt: 1, config },
       { type: "waiters.notify", waiters: [signIn], ready: false },
       { type: "rpc.cancel", id: config.id, forget: false },
     ])
@@ -133,7 +133,7 @@ describe("ssh window attempt", () => {
     expect(selectSshError(failed.state, config.id)).toBe(true)
 
     const again = transitionSshWindow(failed.state, connect())
-    expect(again.effects).toEqual([{ type: "rpc.start", id: config.id, attempt: 2, config, replace: false }])
+    expect(again.effects).toEqual([{ type: "rpc.start", id: config.id, attempt: 2, config }])
   })
 
   test("a cancelled attempt's late call results do not settle the next attempt", () => {
@@ -248,8 +248,8 @@ describe("ssh cover offer", () => {
     const result = replay(createSshWindowState(), [{ type: "visit.changed", path: visit }, offer(first), offer(second)])
 
     expect(result.effects).toEqual([
-      { type: "rpc.start", id: config.id, attempt: 1, config, replace: false },
-      { type: "rpc.start", id: other.id, attempt: 2, config: other, replace: false },
+      { type: "rpc.start", id: config.id, attempt: 1, config },
+      { type: "rpc.start", id: other.id, attempt: 2, config: other },
     ])
   })
 
@@ -271,7 +271,7 @@ describe("ssh cover offer", () => {
       offer(item),
     ])
 
-    expect(back.effects).toEqual([{ type: "rpc.start", id: config.id, attempt: 2, config, replace: false }])
+    expect(back.effects).toEqual([{ type: "rpc.start", id: config.id, attempt: 2, config }])
   })
 
   test("an offer that cannot start is not spent", () => {
@@ -294,7 +294,7 @@ describe("ssh cover offer", () => {
 
     // Main came back on the same visit: the offer starts the attempt now, without the toast an inactive main gave.
     expect(transitionSshWindow(state, offer(item)).effects).toEqual([
-      { type: "rpc.start", id: config.id, attempt: 1, config, replace: false },
+      { type: "rpc.start", id: config.id, attempt: 1, config },
     ])
   })
 
@@ -330,7 +330,6 @@ describe("ssh resolve", () => {
       ["unknown server", true, undefined, false],
       ["disconnected", true, server({ stage: "disconnected" }), false],
       ["signing in here", true, server({ stage: "authentication" }), false],
-      ["incompatible", true, server({ stage: "incompatible", error: "version" }), false],
       ["failed for good", true, server({ stage: "failed", error: "connection" }), false],
       ["ready", true, server({ stage: "ready", http: { url: "u", password: "p" } }), true],
       ["connecting", true, server({ stage: "connecting" }), true],

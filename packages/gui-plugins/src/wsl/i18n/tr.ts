@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} henüz kurulu değil.",
   "onboarding.openDistroOnce": "Kurulumu tamamlamak için {{distro}} dağıtımını bir kez açın.",
   "onboarding.updatingOpencode": "OpenCode güncelleniyor…",
-  "onboarding.updateOpencode": "OpenCode'u güncelle",
   "onboarding.installOpencode": "OpenCode'u kur",
   "onboarding.installedDistros": "Kurulu dağıtımlar",
   "onboarding.checkAgain": "Tekrar kontrol et",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode bu dağıtımda kurulu değil",
   "error.opencodeCannotRun": "opencode kurulu ancak çalıştırılamadı",
   "error.opencodeNotInstalled": "OpenCode, {{distro}} içinde kurulu değil",
-  "error.updateVersion":
-    "OpenCode güncellemesi tamamlandı ancak {{distro}} hâlâ {{installed}} sürümünü bildiriyor; beklenen sürüm: {{expected}}",
-  "error.noVersion": "sürüm yok",
   "error.serverExited": "WSL sunucusu başlatıldıktan sonra kapandı (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL sunucusu kullanıma hazır duruma gelmeden kapandı (code={{code}} signal={{signal}}){{output}}",

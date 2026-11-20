@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "⁨{{distro}}⁩ اجے تک انسٹال نئیں ہویا۔",
   "onboarding.openDistroOnce": "سیٹ اپ ختم کرن لئی ⁨{{distro}}⁩ نوں اک واری کھولو۔",
   "onboarding.updatingOpencode": "OpenCode نو اپ ڈیٹ کر رئے آں…",
-  "onboarding.updateOpencode": "OpenCode اپ ڈیٹ کرو",
   "onboarding.installOpencode": "OpenCode انسٹال کرو",
   "onboarding.installedDistros": "ڈسٹرو انسٹال کیتے گئے",
   "onboarding.checkAgain": "دوبارہ چیک کرو",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "اس ڈسٹرو وچ opencode انسٹال نئیں اے",
   "error.opencodeCannotRun": "opencode انسٹال اے پر چل نئیں سکیا",
   "error.opencodeNotInstalled": "⁨{{distro}}⁩ وچ OpenCode انسٹال نئیں اے",
-  "error.updateVersion":
-    "OpenCode دی اپ ڈیٹ پوری ہو گئی پر ⁨{{distro}}⁩ ہلے وی ⁨{{installed}}⁩ دس رہیا اے؛ ⁨{{expected}}⁩ چاہیدا سی",
-  "error.noVersion": "کوئی ورژن نئیں",
   "error.serverExited": "WSL سرور شروع ہون پچھوں بند ہو گیا (code=⁨{{code}}⁩ signal=⁨{{signal}}⁩)",
   "error.serverExitedBeforeHealthy":
     "WSL سرور ٹھیک حالت وچ آون توں پہلاں بند ہو گیا (code=⁨{{code}}⁩ signal=⁨{{signal}}⁩)⁨{{output}}⁩",

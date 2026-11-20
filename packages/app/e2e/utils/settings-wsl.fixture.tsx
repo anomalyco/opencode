@@ -114,29 +114,12 @@ export function mount(input: {
             )[input.mode],
           },
         ],
-        opencodeChecks: {
-          ...Object.fromEntries(
-            distros.map((name) => [
-              name,
-              {
-                distro: name,
-                resolvedPath: null,
-                version: null,
-                expectedVersion: "current",
-                matchesDesktop: null,
-                error: null,
-              },
-            ]),
-          ),
-          Ubuntu: {
-            distro: "Ubuntu",
-            resolvedPath: "/usr/bin/opencode",
-            version: "old",
-            expectedVersion: "current",
-            matchesDesktop: false,
-            error: null,
-          },
-        },
+        opencodeChecks: Object.fromEntries(
+          [...distros, "Ubuntu"].map((name) => [
+            name,
+            { distro: name, resolvedPath: null, version: null, error: null },
+          ]),
+        ),
       },
     })
 
@@ -170,7 +153,7 @@ export function mount(input: {
         setStore("state", (state) => ({
           opencodeChecks: {
             ...state.opencodeChecks,
-            [name]: { ...state.opencodeChecks[name]!, version: "current", matchesDesktop: true },
+            [name]: { ...state.opencodeChecks[name]!, resolvedPath: "/usr/bin/opencode", version: "current" },
           },
         }))
         endpoint.url = input.restart ?? endpoint.url
@@ -390,15 +373,15 @@ export function mount(input: {
               >
                 Require SSH sign-in
               </button>
-              {/* The remote server answering with a version this app does not support. */}
+              {/* The SSH connection failing after the session route mounted. */}
               <button
                 type="button"
                 onClick={() => {
-                  setSsh({ stage: "incompatible" })
+                  setSsh({ stage: "failed", error: "connection" })
                   publish("ssh")
                 }}
               >
-                Report incompatible SSH server
+                Fail SSH connection
               </button>
               <output aria-label="SSH connects">{store.connects}</output>
             </Show>

@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} er ikke installert ennå.",
   "onboarding.openDistroOnce": "Åpne {{distro}} én gang for å fullføre oppsettet.",
   "onboarding.updatingOpencode": "Oppdaterer OpenCode…",
-  "onboarding.updateOpencode": "Oppdater OpenCode",
   "onboarding.installOpencode": "Installer OpenCode",
   "onboarding.installedDistros": "Installerte distribusjoner",
   "onboarding.checkAgain": "Sjekk på nytt",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode er ikke installert i denne distribusjonen",
   "error.opencodeCannotRun": "opencode er installert, men kunne ikke kjøres",
   "error.opencodeNotInstalled": "OpenCode er ikke installert i {{distro}}",
-  "error.updateVersion":
-    "Oppdateringen av OpenCode er fullført, men {{distro}} rapporterer fortsatt {{installed}}; forventet {{expected}}",
-  "error.noVersion": "ingen versjon",
   "error.serverExited": "WSL-serveren ble avsluttet etter oppstart (code={{code}} signal={{signal}})",
   "error.serverExitedBeforeHealthy":
     "WSL-serveren ble avsluttet før den var klar (code={{code}} signal={{signal}}){{output}}",

@@ -8,7 +8,6 @@ export default {
   "onboarding.distroNotInstalled": "{{distro}} ჯერ არ არის დაინსტალირებული.",
   "onboarding.openDistroOnce": "გახსენით {{distro}} ერთხელ დაყენების დასასრულებლად.",
   "onboarding.updatingOpencode": "განახლება OpenCode…",
-  "onboarding.updateOpencode": "განახლება OpenCode",
   "onboarding.installOpencode": "დააინსტალირეთ OpenCode",
   "onboarding.installedDistros": "დაინსტალირებული დისტროები",
   "onboarding.checkAgain": "გადაამოწმეთ",
@@ -43,9 +42,6 @@ export default {
   "error.opencodeMissing": "opencode არ არის დაინსტალირებული ამ დისტროში",
   "error.opencodeCannotRun": "opencode დაინსტალირებულია, მაგრამ ვერ გაშვება",
   "error.opencodeNotInstalled": "OpenCode არ არის დაინსტალირებული {{distro}}",
-  "error.updateVersion":
-    "OpenCode განახლება დასრულდა, მაგრამ {{distro}} კვლავ იუწყება {{installed}}; მოსალოდნელია {{expected}}",
-  "error.noVersion": "ვერსიის გარეშე",
   "error.serverExited": "WSL სერვერი გავიდა გაშვების შემდეგ (კოდი={{code}} სიგნალი={{signal}})",
   "error.serverExitedBeforeHealthy": "WSL სერვერი გავიდა გაჯანსაღებამდე (code={{code}} signal={{signal}}){{output}}",
   "error.healthTimeout": "Sidecar for {{distro}} ჯანმრთელობის შემოწმების დრო ამოიწურა {{timeout}}ms",

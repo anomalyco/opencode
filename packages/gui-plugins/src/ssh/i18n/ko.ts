@@ -14,14 +14,11 @@ export default {
   "session.reconnect": "다시 연결",
   trust: "신뢰하고 연결",
   continue: "계속",
-  update: "업데이트 후 다시 연결",
   project: "{{host}}에서 프로젝트 열기",
-  "stage.incompatible": "서버 업데이트 필요",
   "error.input": "호스트 또는 SSH 연결 명령어를 입력하세요. 원격 명령어 및 지원되지 않는 SSH 옵션은 허용되지 않습니다.",
   "error.connection": "SSH 연결을 설정할 수 없습니다. 네트워크와 SSH 설정을 확인하세요.",
   "error.platform":
     "이 원격 플랫폼은 지원되지 않습니다. 자동 설정은 현재 x64 또는 arm64의 Linux 또는 macOS에서만 가능합니다.",
-  "error.version": "연결하기 전에 원격 서비스가 이 데스크톱 버전과 일치해야 합니다.",
   "error.install": "원격 서버를 설치할 수 없습니다. 연결 상태, 디스크 공간 및 tar 설치 여부를 확인하세요.",
   "error.unpublished":
     "이 데스크톱 버전에는 게시된 원격 서버가 없습니다. 개발 빌드의 경우, 호스트에서 V2를 설치하고 시작한 후 다시 시도하세요.",
