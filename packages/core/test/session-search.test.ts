@@ -265,6 +265,31 @@ describe("SessionSearch", () => {
     }),
   )
 
+  it.effect("limits results to one project unless sessionID is set", () =>
+    Effect.gen(function* () {
+      const { db, search, addSession, buildIndex } = yield* setup
+      const other = Project.ID.make("prj_other")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: other, worktree: AbsolutePath.make("/other"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* addSession({ id: "here", title: "Narwhal here" })
+      yield* addSession({ id: "there", title: "Narwhal there", directory: "/other" })
+      yield* db.update(SessionTable).set({ project_id: other }).where(eq(SessionTable.id, ses("there"))).run().pipe(Effect.orDie)
+      yield* buildIndex
+
+      const scoped = yield* search.search({ query: "narwhal", projectID: Project.ID.global })
+      expect(scoped.results?.map((r) => r.sessionID)).toEqual([ses("here")])
+      const listed = yield* search.search({ projectID: Project.ID.global })
+      expect(listed.sessions?.map((s) => s.sessionID)).toEqual([ses("here")])
+      const all = yield* search.search({ query: "narwhal" })
+      expect(all.results?.map((r) => r.sessionID).toSorted()).toEqual([ses("here"), ses("there")])
+      const direct = yield* search.search({ query: "narwhal", projectID: Project.ID.global, sessionID: ses("there") })
+      expect(direct.results?.map((r) => r.sessionID)).toEqual([ses("there")])
+    }),
+  )
+
   it.effect("reports partial indexStatus while building and still returns already-indexed hits", () =>
     Effect.gen(function* () {
       const { db, search, addSession, addMessages } = yield* setup

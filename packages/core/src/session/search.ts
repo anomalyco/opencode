@@ -4,6 +4,7 @@ import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sql, type SQL } from 
 import { Clock, Context, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { optional } from "@opencode/schema/schema"
+import { Project } from "@opencode/schema/project"
 import { Session } from "@opencode/schema/session"
 import type { Tool } from "@opencode/schema/tool"
 import { Database } from "../database/database.js"
@@ -143,6 +144,8 @@ export type ReadOutput = typeof ReadOutput.Type
 
 export interface SearchInput {
   readonly query?: string
+  /** Only sessions in this project. Ignored when `sessionID` is set. */
+  readonly projectID?: Project.ID
   readonly sessionID?: Session.ID
   readonly directory?: string
   readonly after?: string
@@ -204,6 +207,7 @@ const listSessions = Effect.fnUntraced(function* (
   const offset = Math.max(0, input.offset ?? 0)
   const conditions = sessionConditions({
     sessionID: input.sessionID,
+    projectID: input.sessionID ? undefined : input.projectID,
     directory: input.directory,
     after: input.after,
     before: input.before,
@@ -249,6 +253,7 @@ const searchSessions = Effect.fnUntraced(function* (
   const hitLimit = Math.min(400, Math.max(100, limit * 20))
   const filters = ftsFilters({
     sessionID: input.sessionID,
+    projectID: input.sessionID ? undefined : input.projectID,
     directory: input.directory,
     after: input.after,
     before: input.before,
@@ -616,6 +621,7 @@ function parseTime(value: string, now: number): Effect.Effect<number, InvalidTim
 
 function sessionConditions(input: {
   readonly sessionID?: Session.ID
+  readonly projectID?: Project.ID
   readonly directory?: string
   readonly after?: number
   readonly before?: number
@@ -623,6 +629,7 @@ function sessionConditions(input: {
 }) {
   const conditions: SQL[] = []
   if (input.sessionID) conditions.push(eq(SessionTable.id, input.sessionID))
+  if (input.projectID) conditions.push(eq(SessionTable.project_id, input.projectID))
   if (input.directory) {
     const dir = normalizeDir(input.directory)
     const prefix = dir === "/" ? "/%" : `${escapeLike(dir)}/%`
@@ -636,6 +643,7 @@ function sessionConditions(input: {
 
 function ftsFilters(input: {
   readonly sessionID?: Session.ID
+  readonly projectID?: Project.ID
   readonly directory?: string
   readonly after?: number
   readonly before?: number
@@ -643,6 +651,7 @@ function ftsFilters(input: {
 }) {
   const parts: SQL[] = []
   if (input.sessionID) parts.push(sql`AND s.id = ${input.sessionID}`)
+  if (input.projectID) parts.push(sql`AND s.project_id = ${input.projectID}`)
   if (input.directory) {
     const dir = normalizeDir(input.directory)
     const prefix = dir === "/" ? "/%" : `${escapeLike(dir)}/%`

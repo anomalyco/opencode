@@ -15,8 +15,11 @@ export const SearchInput = Schema.Struct({
   query: Schema.optionalKey(Schema.String).annotate({
     description: "Distinctive keywords, names, numbers or phrases. Omit to list sessions.",
   }),
+  scope: Schema.optionalKey(Schema.Literals(["project", "all"])).annotate({
+    description: 'Which sessions to cover: "project" (default) for this project, "all" for every project.',
+  }),
   sessionID: Schema.optionalKey(Session.ID).annotate({
-    description: "Search only inside this session.",
+    description: "Search only inside this session, in any project.",
   }),
   directory: Schema.optionalKey(Schema.String).annotate({
     description: "Only sessions in this directory or below it.",
@@ -81,7 +84,7 @@ export const Plugin = {
         editor.add({
           name: "search",
           description:
-            'Find the user\'s past sessions. With query: full-text search over session titles, user and assistant messages, and compaction summaries. Matches any query word, ranked so messages with more and rarer words come first; supports "exact phrase", prefix*, AND, OR, NOT. Returns the best-matching sessions with up to 3 snippets and messageIDs each. Without query: lists sessions, most recently updated first. Filter either way by directory or time. Follow up with opencode.session.read({ sessionID, messageID }).',
+            'Find the user\'s past sessions, in this project unless scope is "all". With query: full-text search over session titles, user and assistant messages, and compaction summaries. Matches any query word, ranked so messages with more and rarer words come first; supports "exact phrase", prefix*, AND, OR, NOT. Returns the best-matching sessions with up to 3 snippets and messageIDs each. Without query: lists sessions, most recently updated first. Filter either way by directory or time. Follow up with opencode.session.read({ sessionID, messageID }).',
           input: SearchInput,
           output: SessionSearch.SearchOutput,
           options: { namespace: "opencode.session", codemode: true },
@@ -94,7 +97,12 @@ export const Plugin = {
                 save: ["*"],
                 ...Permission.invocation(context),
               })
-              return { output: yield* search.search(input) }
+              return {
+                output: yield* search.search({
+                  ...input,
+                  projectID: input.scope === "all" ? undefined : ctx.location.project.id,
+                }),
+              }
             }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : failure(error)))),
         })
         editor.add({

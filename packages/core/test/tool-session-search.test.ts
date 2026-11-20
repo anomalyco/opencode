@@ -3,6 +3,7 @@ import { Cause, DateTime, Effect, Exit, Layer, Schema } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
+import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -103,18 +104,38 @@ describe("SessionSearchTools", () => {
       const config = yield* Config.Test
       const plugins = yield* Plugin.Service
       const tools = yield* Tool.Service
+      const location = yield* Location.Service
       const asserted: string[] = []
 
+      const elsewhere = Project.ID.make("prj_elsewhere")
       yield* db
         .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .values([
+          { id: location.project.id, worktree: AbsolutePath.make(location.directory), sandboxes: [] },
+          { id: elsewhere, worktree: AbsolutePath.make("/elsewhere"), sandboxes: [] },
+        ])
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: Session.ID.make("ses_elsewhere"),
+          project_id: elsewhere,
+          slug: "elsewhere",
+          directory: "/elsewhere",
+          title: "Walrus elsewhere",
+          version: "test",
+          time_created: 1_700_000_000_000,
+          time_updated: 1_700_000_000_000,
+        })
         .run()
         .pipe(Effect.orDie)
       yield* db
         .insert(SessionTable)
         .values({
           id: targetSession,
-          project_id: Project.ID.global,
+          project_id: location.project.id,
           slug: "target",
           directory: "/project",
           title: "Walrus notes",
@@ -159,11 +180,14 @@ describe("SessionSearchTools", () => {
         ),
       )
 
+      // Defaults to the caller's project; scope: "all" widens it.
       const searched = yield* runCode(tools, `return await tools.opencode.session.search({ query: "walrus" })`)
       expect(searched.status).toBe("completed")
-      expect(JSON.parse(searched.content?.[0]?.type === "text" ? searched.content[0].text : "")).toMatchObject({
-        results: [{ sessionID: targetSession, title: "Walrus notes" }],
-      })
+      const scoped = JSON.parse(searched.content?.[0]?.type === "text" ? searched.content[0].text : "")
+      expect(scoped.results.map((r: { sessionID: string }) => r.sessionID)).toEqual([targetSession])
+      const everywhere = yield* runCode(tools, `return await tools.opencode.session.search({ query: "walrus", scope: "all" })`)
+      const all = JSON.parse(everywhere.content?.[0]?.type === "text" ? everywhere.content[0].text : "")
+      expect(all.results.map((r: { sessionID: string }) => r.sessionID).toSorted()).toEqual(["ses_elsewhere", targetSession].toSorted())
 
       const read = yield* runCode(
         tools,
@@ -174,7 +198,7 @@ describe("SessionSearchTools", () => {
         session: { sessionID: targetSession },
         messages: [{ messageID: targetMessage, text: "We decided on compact walrus layout" }],
       })
-      expect(asserted).toEqual(["opencode_session_search", "opencode_session_read"])
+      expect(asserted).toEqual(["opencode_session_search", "opencode_session_search", "opencode_session_read"])
 
       // Turning the flag off after registration stops execution cleanly.
       yield* config.setEntries(documents(false))
