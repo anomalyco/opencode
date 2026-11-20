@@ -600,7 +600,11 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
   })
 
   const directory = createMemo(
-    () => props.session?.location.directory ?? pending()?.draft.directory ?? info()?.directory,
+    () =>
+      props.session?.location.directory ??
+      pending()?.view().directory ??
+      pending()?.draft.directory ??
+      info()?.directory,
   )
 
   const title = createMemo(() =>

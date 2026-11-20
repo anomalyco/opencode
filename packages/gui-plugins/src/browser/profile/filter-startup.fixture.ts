@@ -1,4 +1,4 @@
-import { app, session, type WebContents, WebContentsView } from "electron"
+import { app, session, type Extension, type WebContents, WebContentsView } from "electron"
 import assert from "node:assert/strict"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -18,7 +18,23 @@ void app.whenReady().then(async () => {
       : "")
     await writeFile(path.join(folder, "rules.json"), "[]")
 
-    return profile.extensions.loadExtension(folder)
+    // loadExtension can resolve before Chromium is ready to serve the extension's URLs.
+    const ready = Promise.withResolvers<void>()
+
+    const onReady = (_: Electron.Event, extension: Extension) => {
+      if (extension.name === name) ready.resolve()
+    }
+
+    profile.extensions.on("extension-ready", onReady)
+
+    try {
+      const extension = await profile.extensions.loadExtension(folder)
+      await ready.promise
+
+      return extension
+    } finally {
+      profile.extensions.off("extension-ready", onReady)
+    }
   }
 
   const worker = await install("Worker", { background: { service_worker: "worker.js" }, permissions: ["webRequest"] })
