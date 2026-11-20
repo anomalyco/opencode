@@ -1063,11 +1063,12 @@ export const make = Effect.fnUntraced(function* (
         )
       }).pipe(
         Effect.catch((cause) => Effect.logDebug("memory injection failed", { cause }).pipe(Effect.as(undefined))),
-        // At a task's start, one warning with what its decisions came to, so ones that fail show.
+        // At a task's start, one warning with what its decisions came to when any failed, ran out of time or met a
+        // rate limit, so those show; none when all answered.
         (effect) =>
           moment.type === "prompt"
             ? decide.counted(effect, (tally) =>
-                tally.asked === 0
+                tally.failed + tally.rateLimited === 0
                   ? Effect.void
                   : Effect.logWarning("memory decisions at task start", { sessionID, ...tally }),
               )

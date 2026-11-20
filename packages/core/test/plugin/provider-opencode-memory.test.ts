@@ -1223,6 +1223,38 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
+  it.effect("warns about a task start's decisions only when one failed or met a rate limit", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const logged = new Array<string>()
+        const logger = Logger.map(Logger.formatJson, (line) => {
+          logged.push(line)
+        })
+        const warned = () => logged.filter((line) => line.includes("memory decisions at task start"))
+        yield* Effect.gen(function* () {
+          const { host } = yield* start(console)
+          const hooks = yield* PluginHooks.Service
+          console.state.injected = [injected("mem_a", 0.9), injected("mem_b", 0.5)]
+          const task = (text: string) =>
+            Effect.gen(function* () {
+              const session = yield* host.session.create({})
+              yield* prompt(session.id, text)
+              yield* hooks.trigger("session", "context", request(session.id, text))
+            })
+          // Every decision answered: nothing to warn about.
+          judge.answer = () => ({ applies: 0.9, repo_wide: 0.01 })
+          yield* task("Fix the deploy")
+          expect(warned()).toEqual([])
+          // One failed, taken as no: the task start says so, once.
+          judge.answer = (asked) => (asked.state.includes("Entry mem_b") ? 503 : { applies: 0.9, repo_wide: 0.01 })
+          yield* task("Fix the build")
+          expect(warned()).toHaveLength(1)
+          expect(warned()[0]).toContain('"failed":')
+        }).pipe(Effect.provide(Logger.layer([logger])), Effect.provideService(References.MinimumLogLevel, "All"))
+      }),
+    ),
+  )
+
   it.effect("restates injected entries in the session's instructions after a compaction, never as a message", () =>
     withConsole((console) =>
       Effect.gen(function* () {
