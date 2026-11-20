@@ -40,7 +40,7 @@ Run cargo this way. `bun run cargo` first installs OpenTUI's native library, and
 only inside `packages/cli-rs`.
 
 The client pins `packages/rust` of [`anomalyco/opentui`](https://github.com/anomalyco/opentui) to a release, as the
-crates.io packages `anomalyco-opentui` and `anomalyco-opentui-sys` (library names `opentui` and `opentui_sys`) at
+crates.io crates `opentui` and `opentui-sys` at
 an exact `version` in `Cargo.toml`; the release tag is `v<version>`. The crate has no native library, and the
 bindings accept only the `opentui.h` they were generated from. `script/opentui-native.ts` (`bun run opentui:native`) installs the release's
 `opentui-native-<tag>-<platform>.zip` into `.opentui/<tag>/host`, checked against the script's sha256 table and the
@@ -69,7 +69,7 @@ On Linux and macOS the library links statically with its own libc++, so neither 
 LTO for a smaller, faster binary in `target/dist/`; its link takes about 10 minutes.
 
 **Editor.** rust-analyzer finds no project when you open the repository root. Open `packages/cli-rs`, or in VS Code
-set `{ "rust-analyzer.linkedProjects": ["packages/cli-rs/Cargo.toml"] }`. Its `cargo check` fails in `anomalyco-opentui-sys`
+set `{ "rust-analyzer.linkedProjects": ["packages/cli-rs/Cargo.toml"] }`. Its `cargo check` fails in `opentui-sys`
 until you run `bun run --cwd packages/cli-rs opentui:native` once.
 
 ## Run

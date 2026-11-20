@@ -12,7 +12,7 @@ const ROOT: &str = "opencode-cli";
 const SECTIONS: [&str; 2] = ["[tests]", "[optional]"];
 
 /// OpenTUI's packages, first-party when they come from where the workspace takes OpenTUI.
-const OPENTUI: [&str; 2] = ["anomalyco-opentui", "anomalyco-opentui-sys"];
+const OPENTUI: [&str; 2] = ["opentui", "opentui-sys"];
 
 type Graph = BTreeMap<String, BTreeSet<&'static str>>;
 

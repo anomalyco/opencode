@@ -12,30 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anomalyco-opentui"
-version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26aec5e42095863a2e946e56315128a50f0b33cb404417e0c58e3303ae1c9bc0"
-dependencies = [
- "anomalyco-opentui-sys",
- "libc",
- "tokio",
- "tree-sitter",
- "tree-sitter-javascript",
- "tree-sitter-md",
- "tree-sitter-rust",
- "tree-sitter-typescript",
- "tree-sitter-zig",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "anomalyco-opentui-sys"
-version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3ef90bed7c50913c53a57f8f558cb0ed1847fa0e3b49ff51375b8ba84c5c031"
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -789,7 +765,6 @@ dependencies = [
 name = "opencode-cli"
 version = "0.1.0"
 dependencies = [
- "anomalyco-opentui",
  "base64",
  "futures-util",
  "indexmap",
@@ -807,6 +782,7 @@ dependencies = [
  "opencode-tui",
  "opencode-ui",
  "opencode-util",
+ "opentui",
  "regex",
  "reqwest",
  "rustix",
@@ -821,10 +797,10 @@ dependencies = [
 name = "opencode-drive"
 version = "0.1.0"
 dependencies = [
- "anomalyco-opentui",
  "log",
  "opencode-api-types",
  "opencode-util",
+ "opentui",
  "serde",
  "serde_json",
  "tokio-tungstenite",
@@ -834,11 +810,11 @@ dependencies = [
 name = "opencode-latex"
 version = "0.1.0"
 dependencies = [
- "anomalyco-opentui",
  "opencode-parity",
  "opencode-plugin",
  "opencode-plugin-abi",
  "opencode-ui",
+ "opentui",
  "serde_json",
  "unicode-segmentation",
  "unicode-width",
@@ -866,12 +842,12 @@ dependencies = [
 name = "opencode-mermaid"
 version = "0.1.0"
 dependencies = [
- "anomalyco-opentui",
  "indexmap",
  "opencode-parity",
  "opencode-plugin",
  "opencode-plugin-abi",
  "opencode-ui",
+ "opentui",
  "regex",
  "serde_json",
  "unicode-segmentation",
@@ -882,7 +858,6 @@ dependencies = [
 name = "opencode-mini"
 version = "0.1.0"
 dependencies = [
- "anomalyco-opentui",
  "futures-util",
  "indexmap",
  "log",
@@ -891,6 +866,7 @@ dependencies = [
  "opencode-store",
  "opencode-ui",
  "opencode-util",
+ "opentui",
  "rustix",
  "serde",
  "serde_json",
@@ -902,7 +878,7 @@ dependencies = [
 name = "opencode-parity"
 version = "0.1.0"
 dependencies = [
- "anomalyco-opentui",
+ "opentui",
  "regex",
  "serde",
  "serde_json",
@@ -912,7 +888,6 @@ dependencies = [
 name = "opencode-plugin"
 version = "0.1.0"
 dependencies = [
- "anomalyco-opentui",
  "libc",
  "log",
  "mlua",
@@ -922,6 +897,7 @@ dependencies = [
  "opencode-plugin-abi",
  "opencode-ui",
  "opencode-util",
+ "opentui",
  "ring",
  "serde",
  "serde_json",
@@ -981,7 +957,6 @@ dependencies = [
 name = "opencode-tui"
 version = "0.1.0"
 dependencies = [
- "anomalyco-opentui",
  "base64",
  "bytes",
  "futures-util",
@@ -998,6 +973,7 @@ dependencies = [
  "opencode-store",
  "opencode-ui",
  "opencode-util",
+ "opentui",
  "rand",
  "regex",
  "ring",
@@ -1013,13 +989,13 @@ dependencies = [
 name = "opencode-ui"
 version = "0.1.0"
 dependencies = [
- "anomalyco-opentui",
  "base64",
  "indexmap",
  "log",
  "opencode-api-types",
  "opencode-parity",
  "opencode-util",
+ "opentui",
  "regex",
  "serde",
  "serde_json",
@@ -1076,6 +1052,30 @@ name = "openssl-probe"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
+
+[[package]]
+name = "opentui"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbbc070dc56f8f079297052f5898cf79fa9e9caec76800f34246463e2fe39193"
+dependencies = [
+ "libc",
+ "opentui-sys",
+ "tokio",
+ "tree-sitter",
+ "tree-sitter-javascript",
+ "tree-sitter-md",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
+ "tree-sitter-zig",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "opentui-sys"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d63128a92aa130d472adb4ed760b435ecffa51a2c5e79366d2abfc01bf6aaef5"
 
 [[package]]
 name = "parking_lot"

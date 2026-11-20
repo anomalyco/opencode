@@ -1,6 +1,6 @@
 # Third-party crates in the shipped graph of opencode-cli for x86_64-unknown-linux-gnu (normal and build edges,
 # not dev, default features), one name per line (all versions of a crate share it), sorted. Third-party is every
-# crate but the workspace members and OpenTUI's anomalyco-opentui and anomalyco-opentui-sys. Marks: `build` (has a
+# crate but the workspace members and OpenTUI's opentui and opentui-sys. Marks: `build` (has a
 # build script), `cc` (the build script compiles C with `cc`), `proc-macro`, and a source other than crates.io:
 # `git`, `path` (vendored), `registry`. crates/cli/tests/deps.rs fails unless this file equals the graph. The [tests] section
 # lists what only tests and other workspace members add, and [optional] what non-default features add; a crate
