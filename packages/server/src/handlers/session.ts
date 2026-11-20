@@ -29,7 +29,6 @@ import {
 import { AbsolutePath } from "@opencode/core/schema"
 import { locationErrors } from "../location"
 import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
-import { makeWidget } from "./widget"
 
 function missingForm(id: Form.ID) {
   return new FormNotFoundError({ id, message: `Form not found: ${id}` })
@@ -41,7 +40,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
     const transfer = yield* SessionTransfer.Service
     const instructions = yield* InstructionEntry.Service
     const instances = yield* Instance.Service
-    const widget = yield* makeWidget
     const requireSession = (sessionID: Session.ID) =>
       session.get(sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
     const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
@@ -442,9 +440,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           yield* session.wait(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
-      )
-      .handle("session.widget.respond", (ctx) =>
-        widget.respond(ctx.params.sessionID, ctx.params.messageID, ctx.payload),
       )
       .handle(
         "session.revert.stage",

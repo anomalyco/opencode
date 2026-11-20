@@ -246,8 +246,6 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
   switch (message.type) {
     case "agent-switched":
     case "idle":
-    // The posting tool result tells the model the widget is shown; the response arrives as a synthetic prompt.
-    case "widget":
       return []
     case "model-switched":
       return modelSwitched(message, model)

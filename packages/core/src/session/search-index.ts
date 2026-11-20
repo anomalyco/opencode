@@ -35,7 +35,6 @@ export const MessageTypes = {
   system: false,
   skill: false,
   shell: false,
-  widget: false,
   idle: false,
 } satisfies Record<SessionMessage.Type, boolean>
 

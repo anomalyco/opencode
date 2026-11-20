@@ -11,7 +11,6 @@ export interface Adapter {
   readonly getAssistant: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Assistant | undefined>
   readonly getShell: (shellID: SessionMessage.Shell["shellID"]) => Effect.Effect<SessionMessage.Shell | undefined>
   readonly getCompaction: () => Effect.Effect<SessionMessage.Compaction | undefined>
-  readonly getWidget: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Widget | undefined>
   readonly updateAssistant: (assistant: SessionMessage.Assistant) => Effect.Effect<void>
   readonly appendAssistantPart: (
     messageID: SessionMessage.ID,
@@ -32,7 +31,6 @@ export interface Adapter {
   ) => Effect.Effect<void>
   readonly updateShell: (shell: SessionMessage.Shell) => Effect.Effect<void>
   readonly updateCompaction: (compaction: SessionMessage.Compaction) => Effect.Effect<void>
-  readonly updateWidget: (widget: SessionMessage.Widget) => Effect.Effect<void>
   readonly appendMessage: (message: SessionMessage.Info) => Effect.Effect<void>
 }
 
@@ -218,31 +216,6 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               }),
             )
           }
-        }),
-      "session.widget.posted": (event) =>
-        adapter.appendMessage(
-          SessionMessage.Widget.make({
-            id: event.data.messageID,
-            type: "widget",
-            metadata: event.metadata,
-            title: event.data.title,
-            template: event.data.template,
-            data: event.data.data,
-            tool: event.data.tool,
-            status: "open",
-            time: { created },
-          }),
-        ),
-      "session.widget.responded": (event) =>
-        Effect.gen(function* () {
-          const widget = yield* adapter.getWidget(event.data.messageID)
-          if (widget?.status !== "open") return
-          yield* adapter.updateWidget({
-            ...widget,
-            status: event.data.status,
-            response: event.data.response,
-            time: { ...widget.time, responded: created },
-          })
         }),
       "session.step.started": (event) =>
         Effect.gen(function* () {

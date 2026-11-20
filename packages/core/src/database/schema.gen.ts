@@ -297,19 +297,6 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`widget_template\` (
-          \`name\` text NOT NULL,
-          \`version\` text NOT NULL,
-          \`description\` text NOT NULL,
-          \`data\` text NOT NULL,
-          \`source\` text NOT NULL,
-          \`builtin\` integer NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          CONSTRAINT \`widget_template_pk\` PRIMARY KEY(\`name\`, \`version\`)
-        );
-      `)
-      yield* tx.run(`
         CREATE TABLE \`workspace\` (
           \`id\` text PRIMARY KEY,
           \`provider\` text NOT NULL,
@@ -369,7 +356,6 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(
         `CREATE INDEX \`session_v2_time_suspended_idx\` ON \`session_v2\` (\`time_suspended\`) WHERE "session_v2"."time_suspended" is not null;`,
       )
-      yield* tx.run(`CREATE INDEX \`widget_template_latest_idx\` ON \`widget_template\` (\`name\`,\`time_updated\`);`)
     })
   },
 }
