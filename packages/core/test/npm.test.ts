@@ -165,6 +165,43 @@ describe("Npm.cacheKey", () => {
   })
 })
 
+describe("Npm.follows", () => {
+  test("follows only @latest, ranges and Git branches", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path)
+    await Bun.$`git -C ${fixture.repository} tag fixture-tag`
+    const repository = `git+${pathToFileURL(fixture.repository).href}`
+    const commit = "0123456789abcdef0123456789abcdef01234567"
+    const specs = {
+      plugin: false,
+      "plugin@latest": true,
+      "@acme/plugin@latest": true,
+      "plugin@next": false,
+      "plugin@^1.2.0": true,
+      "plugin@~1.2.0": true,
+      "plugin@1.x": true,
+      "plugin@>=1.2.0 <2": true,
+      "plugin@1.2.0": false,
+      "github:acme/plugin": false,
+      "github:acme/plugins#::path:packages/plugin": false,
+      [`github:acme/plugin#${commit}`]: false,
+      "github:acme/plugin#semver:^1.2.0": true,
+      [`${repository}#fixture-branch`]: true,
+      [`${repository}#fixture-branch::path:packages/subdirectory-plugin`]: true,
+      [`${repository}#fixture-tag`]: false,
+      [`${repository}#${fixture.commit.slice(0, 7)}`]: false,
+      "./plugin": false,
+    }
+    const followed = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* Effect.forEach(Object.keys(specs), (spec) =>
+        npm.follows(spec).pipe(Effect.map((value) => [spec, value])),
+      )
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+    expect(Object.fromEntries(followed)).toEqual(specs)
+  })
+})
+
 describe("Npm.add", () => {
   test("locates cached scoped package specs without reifying", async () => {
     await using tmp = await tmpdir()

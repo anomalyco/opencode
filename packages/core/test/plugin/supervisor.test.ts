@@ -51,8 +51,9 @@ const sourceLayer = Layer.succeed(
   }),
 )
 
-// Package checks report `available` after `delay`; updates are recorded instead of installed.
-const packages = { available: false, delay: Duration.zero, checks: 0, updated: [] as string[] }
+// Package checks report `available` after `delay`, and packages in `stays` don't follow updates; updates are recorded
+// instead of installed.
+const packages = { available: false, delay: Duration.zero, checks: 0, stays: [] as string[], updated: [] as string[] }
 
 const instances = Layer.effect(
   LocationServiceMap.Service,
@@ -97,6 +98,7 @@ const instances = Layer.effect(
                       cause: new Error(`Unexpected Npm.update(${pkg})`),
                     }),
                   ),
+            follows: (pkg) => Effect.succeed(!packages.stays.includes(pkg)),
             reject: () => Effect.succeed(false),
             which: () => Effect.undefined,
           }),
@@ -206,20 +208,15 @@ describe("PluginSupervisor", () => {
     }),
   )
 
-  it.effect("updates every package with a newer version, once per check interval", () =>
+  it.effect("updates only packages that follow updates, once per check interval", () =>
     Effect.gen(function* () {
-      // Exact versions and full commit hashes never report a newer version (see Npm.check), so they aren't listed.
-      const follows = [
-        "latest-plugin@latest",
-        "plain-plugin",
-        "next-plugin@next",
-        "ranged-plugin@^1.0.0",
-        "github:acme/default-plugin",
-        "git+ssh://git@github.com/acme%2Fbranch-plugin.git#dev",
-        "github:acme/plugins#dev::path:packages/subdirectory-plugin",
-        "github:acme/ranged-plugin#semver:^1.0.0",
-      ]
-      source.operations = follows.map((target) => ({ type: "add" as const, target, options: {} }))
+      const follows = ["latest-plugin@latest", "ranged-plugin@^1.0.0", "github:acme/branch-plugin#dev"]
+      packages.stays = ["plain-plugin", "next-plugin@next", "github:acme/default-plugin"]
+      source.operations = [...follows, ...packages.stays].map((target) => ({
+        type: "add" as const,
+        target,
+        options: {},
+      }))
       packages.available = true
       packages.updated = []
       const directory = yield* tmpdirScoped()
@@ -241,6 +238,7 @@ describe("PluginSupervisor", () => {
           Effect.sync(() => {
             source.operations = []
             packages.available = false
+            packages.stays = []
           }),
         ),
       )
