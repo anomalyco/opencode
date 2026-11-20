@@ -21,6 +21,7 @@ import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
+import { PositiveInt } from "../schema.js"
 import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeDiffs } from "./diffs.js"
@@ -118,7 +119,24 @@ const description = (full: boolean) =>
     'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
     "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
     "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+    ...(full
+      ? [
+          "Scripts still running after their timeout move to the background and keep running. Background scripts return a job ID immediately, and you will be notified when they complete; do not poll for them.",
+        ]
+      : []),
   ].join("\n")
+
+// Mirrors the shell tool's `timeout` and `background`; only with `full_codemode`, where every script runs as a job.
+export const FullInput = Schema.Struct({
+  ...CodeMode.Input.fields,
+  timeout: Schema.optionalKey(PositiveInt).annotate({
+    description: `Optional time in milliseconds to wait for the script before moving it to the background (default ${2 * 60 * 1_000}). The script keeps running in the background after that; it is never stopped. With \`background: true\` the call returns immediately instead.`,
+  }),
+  background: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Run the script in the background and return immediately with its job ID (useful for long-running work). You will be notified when it completes. DO NOT poll for completion.",
+  }),
+})
 
 export const create = (
   inventory: Inventory,
@@ -130,7 +148,7 @@ export const create = (
   return {
     name: "execute",
     description: description(services !== undefined),
-    input: CodeMode.Input,
+    input: services ? FullInput : CodeMode.Input,
     freeform: { type: "text" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
