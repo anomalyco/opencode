@@ -1,7 +1,7 @@
 export * as SessionStats from "./stats.js"
 
 import { DateTime, Effect, Option, Schema, type Types } from "effect"
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm"
+import { and, eq, gte, lt, sql } from "drizzle-orm"
 import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
 import { Project } from "@opencode/schema/project"
@@ -11,7 +11,6 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { ToolMode } from "@opencode/schema/session-stats"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import { Database } from "../database/database.js"
-import { DatabaseBatch } from "../database/batch.js"
 import { EventTable } from "../event/sql.js"
 import { SessionMessageTable, SessionPartTable, SessionTable } from "./sql.js"
 
@@ -306,38 +305,24 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
       { concurrency: 1, discard: true },
     )
 
-  const ids = yield* db
-    .select({ id: SessionTable.id })
+  const events = yield* db
+    .select({ data: EventTable.data })
     .from(SessionTable)
-    .where(input.projectID === undefined ? undefined : eq(SessionTable.project_id, input.projectID))
+    .innerJoin(EventTable, eq(EventTable.aggregate_id, SessionTable.id))
+    .where(
+      and(
+        input.projectID === undefined ? undefined : eq(SessionTable.project_id, input.projectID),
+        eq(
+          EventTable.type,
+          Event.versionedType(SessionEvent.UsageRecorded.type, SessionEvent.UsageRecorded.durable.version),
+        ),
+        sql`json_extract(${EventTable.data}, '$.source') = 'compaction'`,
+        gte(EventTable.created, from),
+        lt(EventTable.created, to),
+      ),
+    )
     .all()
     .pipe(Effect.orDie)
-  const events = (yield* Effect.forEach(
-    DatabaseBatch.batches(
-      ids.map((row) => row.id),
-      1,
-      3,
-    ),
-    (batch) =>
-      db
-        .select({ data: EventTable.data })
-        .from(EventTable)
-        .where(
-          and(
-            inArray(EventTable.aggregate_id, batch),
-            eq(
-              EventTable.type,
-              Event.versionedType(SessionEvent.UsageRecorded.type, SessionEvent.UsageRecorded.durable.version),
-            ),
-            sql`json_extract(${EventTable.data}, '$.source') = 'compaction'`,
-            gte(EventTable.created, from),
-            lt(EventTable.created, to),
-          ),
-        )
-        .all()
-        .pipe(Effect.orDie),
-    { concurrency: 4 },
-  )).flat()
   events.forEach((row) => {
     const decoded = decodeUsage(row.data)
     if (Option.isNone(decoded)) return
