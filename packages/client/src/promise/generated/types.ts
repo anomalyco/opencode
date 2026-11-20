@@ -329,13 +329,13 @@ export type SessionStatus =
     }
   | { type: "busy" }
 
-export type ClientKVSpace = string
+export type SpaceName = string
 
-export type ClientKVRevision = number
+export type SpaceRevision = number
 
-export type ClientKVKey = string
+export type SpaceKey = string
 
-export type ClientKVValue = string | number | boolean | Array<JsonValue> | { [x: string]: JsonValue }
+export type SpaceValue = string | number | boolean | Array<JsonValue> | { [x: string]: JsonValue }
 
 export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
 
@@ -1011,7 +1011,7 @@ export type FormMultiselectField1 = {
 
 export type FormAnswer1 = { [x: string]: FormValue1 }
 
-export type ClientKVEntry = { key: ClientKVKey; value: ClientKVValue }
+export type SpaceEntry = { key: SpaceKey; value: SpaceValue }
 
 export type AutomationTriggerEvery = { type: "every"; every: AutomationDuration; tz?: string }
 
@@ -2193,7 +2193,7 @@ export type ExperimentalKvUpdated = {
   metadata?: { [x: string]: any }
   type: "experimental.kv.updated"
   location?: LocationRef
-  data: { space: ClientKVSpace; key: ClientKVKey; value: ClientKVValue; revision: ClientKVRevision }
+  data: { space: SpaceName; key: SpaceKey; value: SpaceValue; revision: SpaceRevision }
 }
 
 export type ExperimentalKvDeleted = {
@@ -2202,7 +2202,7 @@ export type ExperimentalKvDeleted = {
   metadata?: { [x: string]: any }
   type: "experimental.kv.deleted"
   location?: LocationRef
-  data: { space: ClientKVSpace; key: ClientKVKey; revision: ClientKVRevision }
+  data: { space: SpaceName; key: SpaceKey; revision: SpaceRevision }
 }
 
 export type SessionToolSuccess = {
@@ -2343,7 +2343,7 @@ export type ExperimentalKvSnapshot = {
   metadata?: { [x: string]: any }
   type: "experimental.kv.snapshot"
   location?: LocationRef
-  data: { space: ClientKVSpace; revision: ClientKVRevision; entries: Array<ClientKVEntry> }
+  data: { space: SpaceName; revision: SpaceRevision; entries: Array<SpaceEntry> }
 }
 
 export type ExperimentalKvDelta = {
@@ -2352,7 +2352,7 @@ export type ExperimentalKvDelta = {
   metadata?: { [x: string]: any }
   type: "experimental.kv.delta"
   location?: LocationRef
-  data: { space: ClientKVSpace; revision: ClientKVRevision; entries: Array<ClientKVEntry>; deleted: Array<ClientKVKey> }
+  data: { space: SpaceName; revision: SpaceRevision; entries: Array<SpaceEntry>; deleted: Array<SpaceKey> }
 }
 
 export type AutomationTrigger =

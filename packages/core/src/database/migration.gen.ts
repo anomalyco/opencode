@@ -63,7 +63,7 @@ import m60 from "./migration/20261116181958_automation_event_position.js"
 import m61 from "./migration/20261116213417_automation_active_index.js"
 import m62 from "./migration/20261119211416_machine.js"
 import m63 from "./migration/20261120004954_machine-key.js"
-import m64 from "./migration/20261120171253_client_space.js"
+import m64 from "./migration/20261120173240_space.js"
 
 export const migrations = [
   m00,

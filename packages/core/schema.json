@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "7d04fac1-2f4d-4b59-a388-4b9ddd995fca",
+  "id": "d632501c-e69e-41b7-ac7e-6574b6aac0b6",
   "prevIds": ["6fdb1fc8-74cd-4f15-8faa-e109d3030da9"],
   "ddl": [
     {
@@ -18,10 +18,6 @@
     },
     {
       "name": "automation",
-      "entityType": "tables"
-    },
-    {
-      "name": "client_space",
       "entityType": "tables"
     },
     {
@@ -94,6 +90,10 @@
     },
     {
       "name": "session_v2",
+      "entityType": "tables"
+    },
+    {
+      "name": "space",
       "entityType": "tables"
     },
     {
@@ -513,46 +513,6 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "automation"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "space",
-      "entityType": "columns",
-      "table": "client_space"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "key",
-      "entityType": "columns",
-      "table": "client_space"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "value",
-      "entityType": "columns",
-      "table": "client_space"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "revision",
-      "entityType": "columns",
-      "table": "client_space"
     },
     {
       "type": "text",
@@ -2006,6 +1966,46 @@
     },
     {
       "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "space",
+      "entityType": "columns",
+      "table": "space"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "space"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "value",
+      "entityType": "columns",
+      "table": "space"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revision",
+      "entityType": "columns",
+      "table": "space"
+    },
+    {
+      "type": "text",
       "notNull": false,
       "autoincrement": false,
       "default": null,
@@ -2256,13 +2256,6 @@
       "table": "control_account"
     },
     {
-      "columns": ["space", "key"],
-      "nameExplicit": false,
-      "name": "client_space_pk",
-      "entityType": "pks",
-      "table": "client_space"
-    },
-    {
       "columns": ["project_id", "directory"],
       "nameExplicit": false,
       "name": "project_directory_pk",
@@ -2289,6 +2282,13 @@
       "name": "session_part_pk",
       "entityType": "pks",
       "table": "session_part"
+    },
+    {
+      "columns": ["space", "key"],
+      "nameExplicit": false,
+      "name": "space_pk",
+      "entityType": "pks",
+      "table": "space"
     },
     {
       "columns": ["project_id", "directory"],
@@ -2464,24 +2464,6 @@
       "name": "automation_active_idx",
       "entityType": "indexes",
       "table": "automation"
-    },
-    {
-      "columns": [
-        {
-          "value": "space",
-          "isExpression": false
-        },
-        {
-          "value": "revision",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "origin": "manual",
-      "name": "client_space_revision_idx",
-      "entityType": "indexes",
-      "table": "client_space"
     },
     {
       "columns": [
@@ -2826,6 +2808,24 @@
       "name": "session_v2_time_suspended_idx",
       "entityType": "indexes",
       "table": "session_v2"
+    },
+    {
+      "columns": [
+        {
+          "value": "space",
+          "isExpression": false
+        },
+        {
+          "value": "revision",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "space_revision_idx",
+      "entityType": "indexes",
+      "table": "space"
     }
   ],
   "renames": []

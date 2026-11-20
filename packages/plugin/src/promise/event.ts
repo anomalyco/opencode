@@ -1,7 +1,7 @@
 import type { OpenCodeEvent } from "@opencode/client"
 import type { SelectedEvent, SubscribeOptions } from "@opencode/client/promise/api"
 
-// Client space events go only to event stream subscribers of their space, never to plugins.
+// Space events go only to event stream subscribers of their space, never to plugins.
 type EventType = Exclude<OpenCodeEvent["type"], "server.connected" | `experimental.kv.${string}`>
 
 export interface EventDomain {

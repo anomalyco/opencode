@@ -16,7 +16,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
-import { ClientSpaceStore } from "../client-space-store"
+import { SpaceStore } from "../space-store"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { makeArtifact } from "./artifact"
 import { makeBlobGet } from "./blob"
@@ -32,7 +32,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const pty = yield* PersistentPty.Service
     const artifact = yield* makeArtifact
     const job = yield* makeJob
-    const kv = yield* ClientSpaceStore.Service
+    const kv = yield* SpaceStore.Service
     const mediaGet = yield* makeMediaGet
     const blobGet = yield* makeBlobGet
     const automation = yield* makeAutomation

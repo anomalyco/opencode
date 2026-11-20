@@ -1,11 +1,11 @@
 export * as EventFeed from "./event-feed"
 
 import { Bus } from "@opencode/core/bus"
-import { ClientKV } from "@opencode/schema/client-kv"
+import { Space } from "@opencode/schema/space"
 import { Event } from "@opencode/schema/event"
 import { isOpenCodeEvent, type OpenCodeEvent } from "@opencode/protocol/groups/event"
 import { Cause, Clock, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
-import { ClientSpaceStore } from "./client-space-store"
+import { SpaceStore } from "./space-store"
 
 export const SubscriberCapacity = 4_096
 
@@ -29,18 +29,18 @@ export interface Interface {
    */
   readonly subscribe: (
     types?: ReadonlyArray<string>,
-    spaces?: ReadonlyArray<ClientSpaceStore.Request>,
+    spaces?: ReadonlyArray<SpaceStore.Request>,
   ) => Effect.Effect<Stream.Stream<string, Error>, never, Scope.Scope>
 }
 
 interface Filter {
   readonly types?: ReadonlySet<string>
-  readonly spaces?: ReadonlyMap<ClientKV.Space, number>
+  readonly spaces?: ReadonlyMap<Space.Name, number>
 }
 
 interface Frame {
   readonly text: string
-  readonly change?: ClientSpaceStore.Change["data"]
+  readonly change?: SpaceStore.Change["data"]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/server/EventFeed") {}
@@ -54,7 +54,7 @@ export const make = Effect.fn("EventFeed.make")(function* (
   options?: {
     readonly capacity?: number
     readonly encode?: (event: OpenCodeEvent) => string
-    readonly spaces?: ClientSpaceStore.Interface
+    readonly spaces?: SpaceStore.Interface
   },
 ) {
   const capacity = options?.capacity ?? SubscriberCapacity
@@ -71,7 +71,7 @@ export const make = Effect.fn("EventFeed.make")(function* (
   const send = Effect.fnUntraced(function* (
     event: OpenCodeEvent,
     accepts: (filter: Filter) => boolean,
-    change?: ClientSpaceStore.Change["data"],
+    change?: SpaceStore.Change["data"],
   ) {
     let encoded: Frame | undefined
     for (const [subscriber, filter] of subscribers) {
@@ -147,7 +147,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const spaces = yield* ClientSpaceStore.Service
+    const spaces = yield* SpaceStore.Service
     return yield* make(bus.listen, { spaces })
   }),
 )

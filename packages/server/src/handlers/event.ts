@@ -3,7 +3,7 @@ import { Effect, Stream } from "effect"
 import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
-import { ClientSpaceStore } from "../client-space-store"
+import { SpaceStore } from "../space-store"
 import { EventFeed } from "../event-feed"
 
 export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers) =>
@@ -46,7 +46,7 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
 )
 
 // `space:revision`; a revision that is not a plain non-negative integer is unusable, so the space gets a snapshot.
-function parse(item: string): ClientSpaceStore.Request {
+function parse(item: string): SpaceStore.Request {
   const index = item.indexOf(":")
   if (index < 0) return { space: item }
   const space = item.slice(0, index)

@@ -1,8 +1,8 @@
-import { ClientKV } from "@opencode/schema/client-kv"
+import { Space } from "@opencode/schema/space"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
 
-const params = { space: ClientKV.Space, key: ClientKV.Key }
+const params = { space: Space.Name, key: Space.Key }
 const annotations = (identifier: string, summary: string, description: string) =>
   OpenApi.annotations({
     identifier: `experimental.kv.${identifier}`,
@@ -16,7 +16,7 @@ const annotations = (identifier: string, summary: string, description: string) =
 export const KVEndpoints = [
   HttpApiEndpoint.put("kv.set", "/api/experimental/kv/:space/:key", {
     params,
-    payload: Schema.Struct({ value: ClientKV.Value }),
+    payload: Schema.Struct({ value: Space.Value }),
     success: HttpApiSchema.NoContent,
   }).annotateMerge(
     annotations(

@@ -10505,12 +10505,12 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/ClientKV.Subscription"
+                  "$ref": "#/components/schemas/Space.Subscription"
                 },
                 {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ClientKV.Subscription"
+                    "$ref": "#/components/schemas/Space.Subscription"
                   }
                 }
               ],
@@ -13822,7 +13822,7 @@
             "name": "space",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/ClientKV.Space"
+              "$ref": "#/components/schemas/Space.Name"
             },
             "required": true
           },
@@ -13830,7 +13830,7 @@
             "name": "key",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/ClientKV.Key"
+              "$ref": "#/components/schemas/Space.Key"
             },
             "required": true
           }
@@ -13870,7 +13870,7 @@
                 "type": "object",
                 "properties": {
                   "value": {
-                    "$ref": "#/components/schemas/ClientKV.Value"
+                    "$ref": "#/components/schemas/Space.Value"
                   }
                 },
                 "required": ["value"],
@@ -13889,7 +13889,7 @@
             "name": "space",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/ClientKV.Space"
+              "$ref": "#/components/schemas/Space.Name"
             },
             "required": true
           },
@@ -13897,7 +13897,7 @@
             "name": "key",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/ClientKV.Key"
+              "$ref": "#/components/schemas/Space.Key"
             },
             "required": true
           }
@@ -16930,57 +16930,6 @@
         },
         "required": ["_tag", "blobID", "message"],
         "additionalProperties": false
-      },
-      "ClientKV.Entry": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "$ref": "#/components/schemas/ClientKV.Key"
-          },
-          "value": {
-            "$ref": "#/components/schemas/ClientKV.Value"
-          }
-        },
-        "required": ["key", "value"],
-        "additionalProperties": false
-      },
-      "ClientKV.Key": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 1024
-      },
-      "ClientKV.Revision": {
-        "type": "integer",
-        "minimum": 0,
-        "maximum": 9007199254740991
-      },
-      "ClientKV.Space": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._-]{1,128}$",
-        "description": "Client-chosen namespace: 1-128 letters, digits, '.', '_' or '-'."
-      },
-      "ClientKV.Subscription": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._-]{1,128}(:.*)?$"
-      },
-      "ClientKV.Value": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "number"
-          },
-          {
-            "type": "boolean"
-          },
-          {
-            "type": "array"
-          },
-          {
-            "type": "object"
-          }
-        ]
       },
       "Command.Info": {
         "type": "object",
@@ -25849,6 +25798,57 @@
       "Snapshot.ID": {
         "type": "string"
       },
+      "Space.Entry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/Space.Key"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Space.Value"
+          }
+        },
+        "required": ["key", "value"],
+        "additionalProperties": false
+      },
+      "Space.Key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "Space.Name": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]{1,128}$",
+        "description": "Client-chosen namespace: 1-128 letters, digits, '.', '_' or '-'."
+      },
+      "Space.Revision": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "Space.Subscription": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]{1,128}(:.*)?$"
+      },
+      "Space.Value": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array"
+          },
+          {
+            "type": "object"
+          }
+        ]
+      },
       "TokenUsage.Info": {
         "type": "object",
         "properties": {
@@ -27241,13 +27241,13 @@
             "type": "object",
             "properties": {
               "space": {
-                "$ref": "#/components/schemas/ClientKV.Space"
+                "$ref": "#/components/schemas/Space.Name"
               },
               "key": {
-                "$ref": "#/components/schemas/ClientKV.Key"
+                "$ref": "#/components/schemas/Space.Key"
               },
               "revision": {
-                "$ref": "#/components/schemas/ClientKV.Revision"
+                "$ref": "#/components/schemas/Space.Revision"
               }
             },
             "required": ["space", "key", "revision"],
@@ -27280,21 +27280,21 @@
             "type": "object",
             "properties": {
               "space": {
-                "$ref": "#/components/schemas/ClientKV.Space"
+                "$ref": "#/components/schemas/Space.Name"
               },
               "revision": {
-                "$ref": "#/components/schemas/ClientKV.Revision"
+                "$ref": "#/components/schemas/Space.Revision"
               },
               "entries": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/ClientKV.Entry"
+                  "$ref": "#/components/schemas/Space.Entry"
                 }
               },
               "deleted": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/ClientKV.Key"
+                  "$ref": "#/components/schemas/Space.Key"
                 }
               }
             },
@@ -27328,15 +27328,15 @@
             "type": "object",
             "properties": {
               "space": {
-                "$ref": "#/components/schemas/ClientKV.Space"
+                "$ref": "#/components/schemas/Space.Name"
               },
               "revision": {
-                "$ref": "#/components/schemas/ClientKV.Revision"
+                "$ref": "#/components/schemas/Space.Revision"
               },
               "entries": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/ClientKV.Entry"
+                  "$ref": "#/components/schemas/Space.Entry"
                 }
               }
             },
@@ -27370,16 +27370,16 @@
             "type": "object",
             "properties": {
               "space": {
-                "$ref": "#/components/schemas/ClientKV.Space"
+                "$ref": "#/components/schemas/Space.Name"
               },
               "key": {
-                "$ref": "#/components/schemas/ClientKV.Key"
+                "$ref": "#/components/schemas/Space.Key"
               },
               "value": {
-                "$ref": "#/components/schemas/ClientKV.Value"
+                "$ref": "#/components/schemas/Space.Value"
               },
               "revision": {
-                "$ref": "#/components/schemas/ClientKV.Revision"
+                "$ref": "#/components/schemas/Space.Revision"
               }
             },
             "required": ["space", "key", "value", "revision"],

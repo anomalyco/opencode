@@ -5,7 +5,7 @@ import { Database } from "@opencode/core/database/database"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Context, Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { it } from "../../core/test/lib/effect"
-import { ClientSpaceStore } from "../src/client-space-store"
+import { SpaceStore } from "../src/space-store"
 import { EventFeed } from "../src/event-feed"
 
 // One in-memory database shared by every `boot()`, each a fresh store, bus and feed as after a process restart.
@@ -15,11 +15,11 @@ const setup = Effect.gen(function* () {
   const database = Context.get(yield* Layer.build(LayerNode.compile(Database.node)), Database.Service)
   const shared = Database.node.replace(Layer.succeed(Database.Service, database))
   const gates = new Map<number, { reached: Deferred.Deferred<void>; release: Deferred.Deferred<void> }>()
-  const boot = Effect.fnUntraced(function* (wrap?: (store: ClientSpaceStore.Interface) => ClientSpaceStore.Interface) {
+  const boot = Effect.fnUntraced(function* (wrap?: (store: SpaceStore.Interface) => SpaceStore.Interface) {
     const bus = Context.get(yield* Layer.build(LayerNode.compile(Bus.node, { replacements: [shared] })), Bus.Service)
     const store = Context.get(
-      yield* Layer.build(LayerNode.compile(ClientSpaceStore.node, { replacements: [shared] })),
-      ClientSpaceStore.Service,
+      yield* Layer.build(LayerNode.compile(SpaceStore.node, { replacements: [shared] })),
+      SpaceStore.Service,
     )
     // Registered before the feed, so it runs first.
     yield* store.listen((change) =>
