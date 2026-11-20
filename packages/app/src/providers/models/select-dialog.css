@@ -177,6 +177,8 @@
     font-weight: 440;
     line-height: var(--line-height-base);
     letter-spacing: -0.04px;
+    /* A catalog can list thousands of models; rows out of view skip layout and paint until they scroll in. */
+    content-visibility: auto;
   }
 
   [data-slot="model-dialog-check"] {
