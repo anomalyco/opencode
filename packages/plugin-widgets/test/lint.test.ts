@@ -30,6 +30,24 @@ test("reports shape problems with their positions, without running anything", ()
       column: 1,
     },
     { message: "`submit` is defined by the widget prelude; use another name", line: 5, column: 1 },
+    {
+      message: expect.stringContaining("`update(state, event)` is gone: attach handlers to nodes"),
+      line: 6,
+      column: 1,
+    },
+  ])
+})
+
+test("the removed event API is reported with what replaces it", () => {
+  const source = [
+    "async function main() {",
+    "  const event = await widget.event()",
+    "  const next = await widget.next({ frame: true })",
+    "}",
+  ].join("\n")
+  expect(WidgetLint.lint(source, "live")).toEqual([
+    { message: expect.stringContaining("`widget.event()` is gone"), line: 2, column: 23 },
+    { message: expect.stringContaining("`widget.next()` is gone: await `widget.frame()`"), line: 3, column: 22 },
   ])
 })
 

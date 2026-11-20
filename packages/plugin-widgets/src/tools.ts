@@ -20,7 +20,7 @@ export const templateDescription = `List, read and save widget templates for the
 - "list": every template with its description and data schema. "get": one template with its source (built-ins are real examples to copy).
 - "save": name, description, data (JSON Schema), source, example (checked against data), mode "live" for a long-running main. Saving a name again makes a new version; built-in names can't be overwritten. The source is parsed and linted, never run: errors in running it come back from clients as messages.
 
-Load the "widgets" skill for the step ABI, the live API, nodes, drawing and shaders.`
+Load the "widgets" skill for handlers, the step ABI, the live API, nodes, drawing and shaders.`
 
 export const skillDescription =
   "Use when showing the user an interactive widget with the widget tool or writing a widget template: what widgets can do (choices, forms, charts and diagrams, canvas, GPU shaders, live programs and games, full screen), the built-ins, and the template contracts."
@@ -49,7 +49,7 @@ export const TemplateInput = Schema.Struct({
   source: Schema.String.pipe(optional).annotate({ description: "The template source, for save" }),
   mode: Widget.Mode.pipe(optional).annotate({
     description:
-      'For save: "step" (default) for init/view/update templates, "live" for a long-running async main(data) (games, timers, animations)',
+      'For save: "step" (default) for init/view templates with handlers on nodes, "live" for a long-running async main(data) (games, timers, animations)',
   }),
   capabilities: Widget.Capabilities.pipe(optional).annotate({
     description:
