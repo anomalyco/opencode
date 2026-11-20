@@ -899,6 +899,34 @@ async fn connect_restarts_nothing_else() {
     assert_eq!(spawned(&spawns), 0);
 }
 
+// A restart through the binary the service already runs starts the same version again, so every launch would restart
+// it. Whatever its `--version` does (here it hangs), the service is used as it is.
+#[tokio::test(flavor = "multi_thread")]
+async fn connect_never_restarts_through_the_binary_the_service_runs() {
+    needs_bun!();
+    let mut channel = Channel::new();
+    let root = channel.fixture.dir.path().to_owned();
+    let wrapper = root.join("opencode.ts");
+    let script = format!(
+        "if (process.argv[2] === \"--version\") await new Promise(() => {{}})\nawait import({:?})\n",
+        fixture_script()
+    );
+    std::fs::write(&wrapper, script).unwrap();
+    let binary = root.join("opencode-ts");
+    let mut build = Command::new("bun");
+    build.arg("build").arg("--compile").arg(&wrapper).arg("--outfile").arg(&binary).stdout(Stdio::null());
+    assert!(build.status().unwrap().success());
+    let registration = channel.fixture.registration.clone();
+    let old = channel.fixture.start(Command::new(&binary).arg(&registration).arg("incompatible"));
+    channel.fixture.wait_for_file(&registration).await;
+    let env =
+        Env { ts_bin: Some(binary.to_string_lossy().into_owned()), channel: Some("oc-x".to_owned()), ..Env::default() };
+    let connection = resolve_replacing(&channel, &env).await.unwrap();
+    assert_eq!(connection.version, "1.9.0");
+    assert_eq!(channel.fixture.pid(), old);
+    assert!(channel.fixture.running(old));
+}
+
 // TS's `local` build registers in channel `local` and never restarts the shared service. A `local` build here uses the
 // shared service of another version, whatever the binary's version, and restarts as TS's does in channel `local`.
 #[tokio::test(flavor = "multi_thread")]

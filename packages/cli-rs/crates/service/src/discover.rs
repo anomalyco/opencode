@@ -114,6 +114,13 @@ impl Owner {
     }
 }
 
+/// Whether process `pid` runs the executable `command` starts. `false` when either is unknown, or when `command` passes
+/// leading arguments to an interpreter, which runs other programs too.
+pub fn runs(command: &TsCommand, pid: u32) -> bool {
+    command.args.is_empty()
+        && resolve(&command.program).is_some_and(|executable| process_executable(pid) == Some(executable))
+}
+
 /// The version `<binary> --version` prints: `opencode v1.2.3` gives `1.2.3`, as Desktop's `parseCliVersion` reads it,
 /// and a bare version stays. `None` when it does not run or print within the probe timeout.
 pub async fn binary_version(ts: &TsCommand) -> Option<String> {
