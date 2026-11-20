@@ -37,6 +37,19 @@ Use the `question` tool for text-only choices.
 - Give it a short `title`; the transcript uses it.
 - After the widget is shown, end your turn. Don't repeat the options in text.
 - The answer arrives as `User responded to widget "<title>": <JSON>` or `User dismissed widget "<title>"`. Act on it.
+- Messages a widget sends while it stays open arrive as `Widget "<title>" sent: <JSON>`.
+
+## Waiting for the answer
+
+`wait: true` makes the `widget` call block until the user answers and return the answer as its result, like the
+`question` tool; a dismissal comes back as a tool error saying so. You keep working in the same turn.
+
+- Wait when you need the answer to continue right now: a short decision, a confirmation before a step, a small form
+  whose values feed the next tool call.
+- Don't wait for widgets the user may leave open for a while, live widgets that `send` updates (games, dashboards,
+  step-by-step controls), or when the user may want to think or reply in text. Show those without `wait` and end your
+  turn; the answer and any messages arrive as your next input.
+- If the user stops the call while you wait, the widget stays open and its answer arrives later as a message.
 
 ## Built-in templates
 
@@ -150,6 +163,17 @@ ui.shader(wgsl, { id, height, width, values, fps, alt, poster })   a WGSL fragme
 ```
 
 Children may contain `null` or `false` (for `cond && node`) and nested arrays.
+
+## Live templates and capabilities
+
+Save a template with `mode: "live"` for games, timers, animations and live dashboards: it defines
+`async function main(data)` instead of `init`/`view`/`update`, and runs until it calls `widget.submit` or
+`widget.dismiss` (see the spec's `widgets-live.md`). The server only checks that it compiles.
+
+A live template that calls `widget.fetch` declares the hosts it needs, as narrowly as it can:
+`capabilities: { https: { hosts: ["api.github.com"] } }` (exact hosts, `*.example.com`, or `["*"]` only if it truly
+needs any host). Step templates can't declare capabilities. Fetching from the widget is for live dashboards that must
+refresh while open; for anything else, fetch the data yourself and pass it in `data`.
 
 ## Canvas and shader
 

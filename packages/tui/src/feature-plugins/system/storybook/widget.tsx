@@ -5,7 +5,7 @@ import {
   cached,
   WidgetBackendProvider,
   type WidgetBackend,
-  type WidgetMessageInfo,
+  type WidgetInfo,
 } from "../../../component/widget/backend"
 import { createWidgetFocus, WidgetMessage } from "../../../component/widget/message"
 import { StoryFooter } from "./footer"
@@ -13,7 +13,7 @@ import type { Story } from "./index"
 import { widgetFixtureMessage, widgetFixtures, type WidgetFixtureName } from "./widget.fixtures"
 
 const templates = Object.keys(widgetFixtures) as WidgetFixtureName[]
-const statuses: WidgetMessageInfo["status"][] = ["open", "submitted", "dismissed"]
+const statuses: WidgetInfo["status"][] = ["open", "submitted", "dismissed"]
 
 function WidgetStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
@@ -26,13 +26,13 @@ function WidgetStory(props: { context: Plugin.Context }) {
   const focus = createWidgetFocus(() => [message()])
   const width = () => (narrow() ? Math.min(48, dimensions().width) : dimensions().width)
 
-  const show = (name: WidgetFixtureName, status: WidgetMessageInfo["status"]) => {
+  const show = (name: WidgetFixtureName, status: WidgetInfo["status"]) => {
     setTemplate(name)
     setRun((value) => value + 1)
     setMessage(widgetFixtureMessage(name, status, `msg_widget_${name}_${run()}`))
   }
 
-  // Responses stay in the story: they flip the fixture message the way the server's responded event would.
+  // Responses stay in the story: they flip the fixture message the way the widgets plugin's changed event would.
   const backend: WidgetBackend = {
     program: (input) => cached(input, () => Promise.reject(new Error(`${input.name} is not a built-in template`))),
     async respond(input) {
@@ -40,10 +40,12 @@ function WidgetStory(props: { context: Plugin.Context }) {
       setLast("dismiss" in response ? "dismissed" : JSON.stringify(response.value))
       setMessage((current) => ({
         ...current,
-        time: { ...current.time, responded: Date.now() },
         status: "dismiss" in response ? "dismissed" : "submitted",
         ...("value" in response ? { response: response.value } : {}),
       }))
+    },
+    async send(input) {
+      setLast(`sent ${JSON.stringify(input.value)}${input.wake ? "" : " (no wake)"}`)
     },
   }
 
@@ -87,7 +89,7 @@ function WidgetStory(props: { context: Plugin.Context }) {
         <box width={width() - 4}>
           <WidgetBackendProvider backend={backend}>
             <Show when={message().id} keyed>
-              {(_) => <WidgetMessage message={message()} sessionID="ses_story" focus={focus} />}
+              {(_) => <WidgetMessage message={message()} focus={focus} />}
             </Show>
           </WidgetBackendProvider>
         </box>
