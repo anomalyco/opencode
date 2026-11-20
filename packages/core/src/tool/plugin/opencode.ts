@@ -264,9 +264,10 @@ export const Plugin = {
                     left.providerID.localeCompare(right.providerID) ||
                     right.time.released - left.time.released,
                 )
-                // Hide older versions only: a family's same-day siblings, like free and paid offerings, all stay listed.
+                // When browsing, hide older versions only: a family's same-day siblings, like free and paid offerings,
+                // stay listed. A search lists every match, so a version the user names is never hidden.
                 .filter((model, _, sorted) => {
-                  if (input.all || model.family === undefined) return true
+                  if (input.all || terms.length > 0 || model.family === undefined) return true
                   const newest = sorted.find(
                     (other) => other.providerID === model.providerID && other.family === model.family,
                   )

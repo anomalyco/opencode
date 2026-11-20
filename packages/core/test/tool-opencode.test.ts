@@ -134,15 +134,18 @@ it.effect("groups available models by provider with paging", () =>
 
     // Every word of the query must appear somewhere in the reference or display name, ignoring case.
     expect(yield* run({ query: "GAMMA" })).toEqual({
-      providers: [{ id: "other", name: "Other Provider", models: [gamma, gammaFree] }],
-      total: 2,
+      providers: [{ id: "other", name: "Other Provider", models: [gamma, gammaFree, gammaOld] }],
+      total: 3,
       next: null,
     })
     expect(yield* run({ query: "test/" })).toMatchObject({ total: 1, providers: [{ id: "test" }] })
-    expect(yield* run({ query: "other flash" })).toMatchObject({ total: 2, providers: [{ models: [gamma, gammaFree] }] })
+    expect(yield* run({ query: "other flash" })).toMatchObject({
+      total: 3,
+      providers: [{ models: [gamma, gammaFree, gammaOld] }],
+    })
     expect(yield* run({ query: "gamma beta" })).toEqual({ providers: [], total: 0, next: null })
 
-    // Older versions of a family are hidden unless `all` is set; same-day siblings stay. The query is applied first.
+    // Browsing hides older versions of a family unless `all` is set; same-day siblings stay. Searches list every match.
     expect(yield* run({ all: true })).toMatchObject({
       total: 5,
       providers: [{ id: "test" }, { id: "other", models: [beta, gamma, gammaFree, gammaOld] }],
