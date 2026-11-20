@@ -43,6 +43,7 @@ const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
 const ATTACHED_EXECUTION_TIMEOUT = 10 * 60 * 1_000 // 10 minutes
 const TERMINATE_TIMEOUT = 1_000
+const PROBE_TIMEOUT = 5_000
 // SEP-2243 HeaderMismatch; the SDK does not export the constant.
 const HEADER_MISMATCH = -32020
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
@@ -308,7 +309,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const timeout: (typeof ConfigMCP.Server.Type)["timeout"] =
     config.type === "attached" ? { execution: ATTACHED_EXECUTION_TIMEOUT } : config.timeout
   // Attached clients run ordinary SDK servers over the initialize handshake.
-  const protocol = config.type === "attached" ? "legacy" : config.protocol
+  const protocol = config.type === "attached" ? "legacy" : (config.protocol ?? "auto")
   const changed = { tools: () => {}, prompts: () => {}, resources: () => {} }
   const listChanged = (key: keyof typeof changed) => ({
     autoRefresh: false,
@@ -347,7 +348,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       ),
     )
 
-  const initialize = Effect.fnUntraced(function* (transport: Transport) {
+  const initialize = Effect.fnUntraced(function* (transport: Transport, protocol: ConfigMCP.Protocol) {
     // SDK callbacks run outside any fiber. They must run with this context so events they publish keep
     // the server's Location; clients drop unlocated `form.created` events and elicitations then hang.
     const context = yield* Effect.context()
@@ -361,7 +362,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         ...(options.roots === false ? {} : { roots: {} }),
         ...(options.events ? { extensions: { [EVENTS]: {} } } : {}),
       },
-      versionNegotiation: negotiation(protocol),
+      versionNegotiation: negotiation(protocol, timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT),
       listChanged: {
         tools: listChanged("tools"),
         prompts: listChanged("prompts"),
@@ -460,20 +461,30 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   }
 
   const exit = yield* Effect.gen(function* () {
-    if (config.type === "attached") return yield* initialize(config.transport)
+    if (config.type === "attached") return yield* initialize(config.transport, protocol)
     if (config.type === "local") {
       const [command, ...args] = config.command
-      const transport = yield* McpStdio.make({
-        server,
-        command,
-        args,
-        cwd: McpStdio.resolveCwd(options.directory, config.cwd),
-        environment: {
-          ...(command === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-          ...config.environment,
-        },
-      })
-      return yield* initialize(transport)
+      const spawn = (protocol: ConfigMCP.Protocol) =>
+        McpStdio.make({
+          server,
+          command,
+          args,
+          cwd: McpStdio.resolveCwd(options.directory, config.cwd),
+          environment: {
+            ...(command === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+            ...config.environment,
+          },
+        }).pipe(Effect.flatMap((transport) => initialize(transport, protocol)))
+      // Some legacy servers exit on the auto probe's unknown request (Python SDK 1.3 does), so respawn for initialize.
+      return yield* spawn(protocol).pipe(
+        Effect.catchIf(
+          (error) =>
+            protocol === "auto" &&
+            error instanceof SdkError &&
+            (error.code === SdkErrorCode.ConnectionClosed || error.code === SdkErrorCode.EraNegotiationFailed),
+          () => spawn("legacy"),
+        ),
+      )
     }
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
     const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory })
@@ -482,25 +493,33 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     const url = new URL(config.url)
     const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode") && !rejectsUnknownQuery(url)
     if (addedCodemode) url.searchParams.set("codemode", "false")
-    const open = Effect.fnUntraced(function* (url: URL) {
+    const open = Effect.fnUntraced(function* (url: URL, protocol: ConfigMCP.Protocol) {
       session.transport = new StreamableHTTPClientTransport(url, {
         requestInit: config.headers ? { headers: config.headers } : undefined,
         authProvider: options.authProvider,
         fetch,
       })
-      return yield* initialize(session.transport)
+      return yield* initialize(session.transport, protocol)
     })
+    // Over HTTP the SDK treats an unanswered auto probe as an outage, but slow legacy servers may still initialize.
+    const negotiate = (url: URL) =>
+      open(url, protocol).pipe(
+        Effect.catchIf(
+          (error) => protocol === "auto" && error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout,
+          () => open(url, "legacy"),
+        ),
+      )
 
     // Every attempt opens a fresh transport; no retry starts once the startup timeout has passed.
     const deadline = (yield* Clock.currentTimeMillis) + (timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
     return yield* retrying(
       "MCP connect",
-      open(url).pipe(
+      negotiate(url).pipe(
         Effect.catch((error) => {
           if (!addedCodemode || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
             return Effect.fail(error)
           // Servers that reject unknown query params get one retry at the configured URL.
-          return open(new URL(config.url))
+          return negotiate(new URL(config.url))
         }),
       ),
       deadline,
@@ -805,10 +824,11 @@ function rejectsUnknownQuery(url: URL) {
   return url.hostname === "localhost" || url.hostname === "[::1]" || /^127(\.\d+){3}$/.test(url.hostname)
 }
 
-// Absent config is legacy: the SDK sends the plain initialize handshake with no discover probe.
-function negotiation(protocol: ConfigMCP.Protocol | undefined): VersionNegotiationOptions | undefined {
-  if (protocol === undefined || protocol === "legacy") return undefined
-  if (protocol === "auto") return { mode: "auto" }
+// Legacy sends the plain initialize handshake with no discover probe.
+function negotiation(protocol: ConfigMCP.Protocol, startup: number): VersionNegotiationOptions | undefined {
+  if (protocol === "legacy") return undefined
+  // Fail fast on servers that never answer the probe; stdio then falls back in place, HTTP through `negotiate`.
+  if (protocol === "auto") return { mode: "auto", probe: { timeoutMs: Math.min(PROBE_TIMEOUT, startup) } }
   return { mode: { pin: protocol } }
 }
 
