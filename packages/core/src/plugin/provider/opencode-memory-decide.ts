@@ -4,7 +4,8 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { DecisionQuestion, DecisionResult } from "@opencode/schema/generate"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
-import { Clock, Effect, Schedule, Semaphore } from "effect"
+import { Cause, Clock, Effect, Schedule, Semaphore } from "effect"
+import { Reference } from "effect/Context"
 import { ProviderRequestError } from "../../generate.js"
 import type { OpencodeMemoryCapture } from "./opencode-memory-capture.js"
 import type { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
@@ -86,6 +87,15 @@ const D5b = predicate(
 const slots = Semaphore.makeUnsafe(4)
 
 /**
+ * What the decisions asked within `counted` came to: those asked (a cached answer or the verbatim check asks none),
+ * those with no answer, taken as no (the deadline's included), those past the deadline, and every 429 met on the way.
+ */
+export type Tally = { asked: number; failed: number; timedOut: number; rateLimited: number; ms: number }
+const Counting = Reference<Tally | undefined>("@opencode/OpencodeMemoryDecide/Counting", {
+  defaultValue: () => undefined,
+})
+
+/**
  * The plugin's judgements, asked of a decision model through OpenCode's own decision generation, with the user's
  * credentials for its provider: `model` names it, or undefined when there's none, and then the judgements are off
  * (`available` says which). Each answers undefined when it can't be had (a refusal, a rate limit that outlasts the
@@ -98,10 +108,17 @@ export const make = (input: {
   const ask = (state: string, questions: ReadonlyArray<DecisionQuestion>) =>
     Effect.gen(function* () {
       const started = yield* Clock.currentTimeMillis
+      const tally = yield* Counting
+      if (tally) tally.asked++
       const answers = yield* Effect.gen(function* () {
         const model = yield* input.model
         if (model === undefined) return undefined
         const result = yield* input.decisions({ model, input: [{ type: "text", text: state }], questions }).pipe(
+          Effect.tapError((cause) =>
+            Effect.sync(() => {
+              if (tally && cause instanceof ProviderRequestError && cause.status === 429) tally.rateLimited++
+            }),
+          ),
           // A provider's rate limit clears within moments: wait, then ask again, within the deadline.
           Effect.retry({
             while: (cause) => cause instanceof ProviderRequestError && cause.status === 429,
@@ -112,6 +129,11 @@ export const make = (input: {
       }).pipe(
         slots.withPermit,
         Effect.timeout(DEADLINE),
+        Effect.tapError((cause) =>
+          Effect.sync(() => {
+            if (tally && Cause.isTimeoutError(cause)) tally.timedOut++
+          }),
+        ),
         Effect.catchCause(() => Effect.succeed(undefined)),
       )
       const ms = (yield* Clock.currentTimeMillis) - started
@@ -142,7 +164,11 @@ export const make = (input: {
     extra: Record<string, unknown> = {},
   ) =>
     probability === undefined
-      ? Effect.logDebug("memory decision failed, taken as no", { question, ms, ...extra })
+      ? Effect.gen(function* () {
+          const tally = yield* Counting
+          if (tally) tally.failed++
+          yield* Effect.logDebug("memory decision failed, taken as no", { question, ms, ...extra })
+        })
       : Effect.logDebug("memory decision", { question, probability, ms, ...extra })
 
   const repoWide = new Map<string, number>()
@@ -150,6 +176,21 @@ export const make = (input: {
   return {
     /** Whether a decision model resolves, so the judgements that need one are on. */
     available: input.model.pipe(Effect.map((model) => model !== undefined)),
+    /** Runs `effect` counting the decisions it asks, and hands `done` the tally when it ends, however it ends. */
+    counted: <A, E, R>(effect: Effect.Effect<A, E, R>, done: (tally: Tally) => Effect.Effect<void>) =>
+      Effect.gen(function* () {
+        const tally: Tally = { asked: 0, failed: 0, timedOut: 0, rateLimited: 0, ms: 0 }
+        const started = yield* Clock.currentTimeMillis
+        return yield* effect.pipe(
+          Effect.provideService(Counting, tally),
+          Effect.ensuring(
+            Effect.gen(function* () {
+              tally.ms = (yield* Clock.currentTimeMillis) - started
+              yield* done(tally)
+            }),
+          ),
+        )
+      }),
     /** D1: the probability that a user's message states a lasting team rule, decision or correction. */
     lasting: (message: string) =>
       Effect.gen(function* () {

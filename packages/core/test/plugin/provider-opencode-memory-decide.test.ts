@@ -369,6 +369,54 @@ describe("OpencodeMemoryDecide", () => {
     }),
   )
 
+  it.effect("tallies the decisions asked within counted: those that failed, ran out of time, and the 429s met", () =>
+    Effect.gen(function* () {
+      let limits = 0
+      const fake = generation((request) => {
+        const text = request.input[0]?.type === "text" ? request.input[0].text : ""
+        if (text.includes("slow")) return Effect.never
+        if (text.includes("down"))
+          return Effect.fail(
+            new ProviderRequestError({ providerID: "opencode", reason: "provider", message: "down", status: 503 }),
+          )
+        if (text.includes("limited") && limits++ < 2) return Effect.fail(limited)
+        return Effect.succeed([predicate("lasting", 0.91)])
+      })
+      const decide = OpencodeMemoryDecide.make({
+        decisions: fake.decisions,
+        model: Effect.succeed(OpencodeMemoryDecide.MODEL),
+      })
+      const tallies = new Array<OpencodeMemoryDecide.Tally>()
+      const pending = yield* decide
+        .counted(
+          Effect.all(["limited", "down", "slow", "fine"].map(decide.lasting), { concurrency: "unbounded" }),
+          (tally) => Effect.sync(() => tallies.push({ ...tally })),
+        )
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      yield* eventually(
+        Effect.sync(() => fake.asked.length),
+        (count) => count === 4,
+      )
+      yield* TestClock.adjust("200 millis")
+      yield* eventually(
+        Effect.sync(() => fake.asked.length),
+        (count) => count === 5,
+      )
+      yield* TestClock.adjust("400 millis")
+      yield* eventually(
+        Effect.sync(() => fake.asked.length),
+        (count) => count === 6,
+      )
+      yield* TestClock.adjust("4400 millis")
+      // The answers are what they'd be uncounted.
+      expect(yield* Fiber.join(pending)).toEqual([0.91, undefined, undefined, 0.91])
+      expect(tallies).toEqual([{ asked: 4, failed: 2, timedOut: 1, rateLimited: 2, ms: 5000 }])
+      // Outside it nothing is tallied.
+      yield* decide.lasting("down")
+      expect(tallies).toHaveLength(1)
+    }),
+  )
+
   it.live("keeps at most four decisions in flight", () =>
     Effect.gen(function* () {
       const release = yield* Deferred.make<void>()

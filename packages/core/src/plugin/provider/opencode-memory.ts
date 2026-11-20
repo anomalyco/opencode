@@ -1061,7 +1061,18 @@ export const make = Effect.fnUntraced(function* (
           ),
           Effect.timeout(policy.timeout),
         )
-      }).pipe(Effect.catch((cause) => Effect.logDebug("memory injection failed", { cause }).pipe(Effect.as(undefined))))
+      }).pipe(
+        Effect.catch((cause) => Effect.logDebug("memory injection failed", { cause }).pipe(Effect.as(undefined))),
+        // At a task's start, one warning with what its decisions came to, so ones that fail show.
+        (effect) =>
+          moment.type === "prompt"
+            ? decide.counted(effect, (tally) =>
+                tally.asked === 0
+                  ? Effect.void
+                  : Effect.logWarning("memory decisions at task start", { sessionID, ...tally }),
+              )
+            : effect,
+      )
     /**
      * The judged candidates a moment delivers, best first: those that apply to the task, failure or action at hand, and
      * at a task's start the repository's rules for all its work besides, each within its own budget. Of those, the ones
