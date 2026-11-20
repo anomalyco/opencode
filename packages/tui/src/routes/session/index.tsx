@@ -92,6 +92,8 @@ import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
 import { FormPrompt } from "./form"
+import { widgetMessage, type WidgetMessageInfo } from "../../component/widget/backend"
+import { createWidgetFocus, WidgetMessage } from "../../component/widget/message"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
 import { useConfig, useNewDesigns } from "../../config"
@@ -221,6 +223,14 @@ export function Session(props: {
       .flatMap((sessionID) => data.session.form.list(sessionID) ?? [])
       .concat(global)
   })
+  const widgetFocus = createWidgetFocus(
+    createMemo(() =>
+      data.session.message.list(route.sessionID).flatMap((message) => {
+        const widget = widgetMessage(message)
+        return widget ? [widget] : []
+      }),
+    ),
+  )
   const pendingUsers = createMemo(() =>
     data.session.pending.list(route.sessionID).flatMap((item) => (item.type === "user" ? [item] : [])),
   )
@@ -1519,6 +1529,7 @@ export function Session(props: {
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
+        widgetFocus,
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1657,6 +1668,7 @@ export function Session(props: {
                 <Match when={!disabled()}>
                   <Prompt
                     visible={true}
+                    inactive={widgetFocus.engaged() !== undefined}
                     ref={bind}
                     muted={props.promptMuted}
                     onSubmit={() => {
@@ -1942,6 +1954,7 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
 function SessionMessageView(props: { message: SessionMessageInfo }) {
   return (
     <Switch>
+      <Match when={widgetMessage(props.message)}>{(widget) => <SessionWidget message={widget()} />}</Match>
       <Match when={props.message.type === "user"}>
         <UserMessage message={props.message as SessionMessageUser} />
       </Match>
@@ -1971,6 +1984,15 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
         {(error) => <ExecutionError error={error()} />}
       </Match>
     </Switch>
+  )
+}
+
+function SessionWidget(props: { message: WidgetMessageInfo }) {
+  const ctx = use()
+  return (
+    <Show when={ctx.widgetFocus}>
+      {(focus) => <WidgetMessage message={props.message} sessionID={ctx.sessionID} focus={focus()} />}
+    </Show>
   )
 }
 
