@@ -159,6 +159,7 @@ export type Destination = Route | Omit<Extract<Route, { readonly type: "plugin" 
 export type LinkTarget =
   | { readonly type: "url"; readonly url: string }
   | { readonly type: "session"; readonly sessionID: string }
+  | { readonly type: "path"; readonly path: string }
 
 export interface Page {
   readonly name: string
@@ -509,7 +510,7 @@ export interface UI {
   }
   readonly links: {
     /**
-     * Runs before OpenCode opens a URL or a session link for the user. Return true to open the link yourself, so
+     * Runs before OpenCode opens a URL, a session link, or a local folder for the user. Return true to open the link yourself, so
      * OpenCode skips its own action. Handlers run in registration order until one returns true. The handler is removed
      * when the returned function is called or the plugin deactivates.
      */

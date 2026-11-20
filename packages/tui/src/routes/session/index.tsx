@@ -16,6 +16,7 @@ import path from "node:path"
 import { EOL, tmpdir } from "node:os"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
+import { useOpenSession } from "../../context/link"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
@@ -2115,7 +2116,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const ctx = use()
   const theme = useTheme()
   const renderer = useRenderer()
-  const { navigate } = useRoute()
+  const openSession = useOpenSession()
   const [hover, setHover] = createSignal(false)
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
@@ -2165,7 +2166,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
         onMouseUp={() => {
           if (renderer.getSelection()?.getSelectedText()) return
           const id = childID()
-          if (id) navigate({ type: "session", sessionID: id })
+          if (id) openSession(id)
         }}
       >
         <text wrapMode="none">
@@ -3321,7 +3322,7 @@ function WebSearch(props: ToolProps) {
 }
 
 function Subagent(props: ToolProps) {
-  const { navigate } = useRoute()
+  const openSession = useOpenSession()
   const data = useData()
   const sessionID = createMemo(
     () =>
@@ -3348,7 +3349,7 @@ function Subagent(props: ToolProps) {
       part={props.part}
       onClick={() => {
         const id = sessionID()
-        if (id) navigate({ type: "session", sessionID: id })
+        if (id) openSession(id)
       }}
     >
       {`${continuation() ? "Continue subagent" : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent`} — ${description() ?? "Subagent"}${model() ? ` · ${model()}` : ""}`}

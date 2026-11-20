@@ -482,7 +482,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     if (!current) return
     setStore("error", "")
     void links
-      .open(current.url)
+      .openUrl(current.url)
       .then(() => setStore("externalReady", { ...store.externalReady, [current.key]: true }))
       .catch(() => setStore("error", "Could not open the browser. Copy the URL and continue manually."))
   }

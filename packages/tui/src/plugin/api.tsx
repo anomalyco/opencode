@@ -249,9 +249,14 @@ export function createPluginContext(input: {
       },
       links: {
         register(handler) {
+          const active = cleanups
+          if (!active) return () => {}
           const unregister = host.links.register(handler)
-          input.owned.push(async () => unregister())
-          return unregister
+          active.add(unregister)
+          return () => {
+            active.delete(unregister)
+            unregister()
+          }
         },
       },
       panel: {

@@ -3,7 +3,8 @@ import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import type { SessionInfo } from "@opencode/client"
-import { useRoute, useRouteData } from "../../../context/route"
+import { useRouteData } from "../../../context/route"
+import { useOpenSession } from "../../../context/link"
 import { useData } from "../../../context/data"
 import { useClient } from "../../../context/client"
 import { useTheme } from "../../../context/theme"
@@ -31,7 +32,7 @@ export function SubagentsTab(props: { sessionID: string }) {
   const data = useData()
   const client = useClient()
   const theme = useTheme()
-  const navigate = useRoute().navigate
+  const openSession = useOpenSession()
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
 
@@ -172,7 +173,7 @@ export function SubagentsTab(props: { sessionID: string }) {
         group: "Composer",
         run() {
           const entry = entries()[store.selected]
-          if (entry) navigate({ type: "session", sessionID: entry.sessionID })
+          if (entry) openSession(entry.sessionID)
         },
       },
       {
@@ -229,7 +230,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                   onMouseMove={() => setStore("selected", index())}
                   onMouseUp={() => {
                     setStore("selected", index())
-                    navigate({ type: "session", sessionID: entry.sessionID })
+                    openSession(entry.sessionID)
                   }}
                 >
                   <box flexGrow={1} minWidth={0} flexDirection="row">

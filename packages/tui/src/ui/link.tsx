@@ -26,7 +26,7 @@ export function Link(props: LinkProps) {
       width={props.width}
       wrapMode={props.wrapMode}
       onMouseUp={() => {
-        links.open(props.href).catch(() => {})
+        links.openUrl(props.href).catch(() => {})
       }}
     >
       <a href={props.href}>{displayText}</a>

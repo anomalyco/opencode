@@ -1189,7 +1189,7 @@ function App() {
         name: "docs.open",
         title: "Open docs",
         run: () => {
-          links.open("https://opencode.ai/docs").catch(() => {})
+          links.openUrl("https://opencode.ai/docs").catch(() => {})
           dialog.clear()
         },
         category: "System",
@@ -1437,7 +1437,7 @@ function App() {
       }}
       onMouseUp={(event) => {
         const url = clickedLink(renderer, event)
-        if (url) return void links.open(url).catch(toast.error)
+        if (url) return void links.openUrl(url).catch(toast.error)
         if (copyOnSelectEnabled()) Selection.copyOnSelectRelease(event, renderer, toast, clipboard)
       }}
     >
