@@ -297,10 +297,10 @@ The retired `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, an
 | `prompt.paste`                  | `{"key":"ctrl+v","preventDefault":false}` (`ctrl+v`; `preventDefault: false`) | Paste from clipboard                    |
 | `input.submit`                  | `return`                                                                      | Submit input                            |
 | `input.newline`                 | `shift+return,ctrl+return,alt+return,ctrl+j`                                  | Insert newline in input                 |
-| `input.move.left`               | `left,ctrl+b`                                                                 | Move cursor left in input               |
-| `input.move.right`              | `right,ctrl+f`                                                                | Move cursor right in input              |
-| `input.move.up`                 | `up`                                                                          | Move cursor up in input                 |
-| `input.move.down`               | `down`                                                                        | Move cursor down in input               |
+| `input.move.left`               | `left,ctrl+b,kpleft`                                                          | Move cursor left in input               |
+| `input.move.right`              | `right,ctrl+f,kpright`                                                        | Move cursor right in input              |
+| `input.move.up`                 | `up,kpup`                                                                     | Move cursor up in input                 |
+| `input.move.down`               | `down,kpdown`                                                                 | Move cursor down in input               |
 | `input.select.left`             | `shift+left`                                                                  | Select left in input                    |
 | `input.select.right`            | `shift+right`                                                                 | Select right in input                   |
 | `input.select.up`               | `shift+up`                                                                    | Select up in input                      |
@@ -324,15 +324,15 @@ The retired `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, an
 | `input.delete`                  | `ctrl+d,delete,shift+delete`                                                  | Delete character in input               |
 | `input.undo`                    | `ctrl+-,super+z`                                                              | Undo in input                           |
 | `input.redo`                    | `ctrl+.,super+shift+z`                                                        | Redo in input                           |
-| `input.word.forward`            | `alt+f,alt+right,ctrl+right`                                                  | Move word forward in input              |
-| `input.word.backward`           | `alt+b,alt+left,ctrl+left`                                                    | Move word backward in input             |
+| `input.word.forward`            | `alt+f,alt+right,ctrl+right,alt+kpright,ctrl+kpright`                         | Move word forward in input              |
+| `input.word.backward`           | `alt+b,alt+left,ctrl+left,alt+kpleft,ctrl+kpleft`                             | Move word backward in input             |
 | `input.select.word.forward`     | `alt+shift+f,alt+shift+right`                                                 | Select word forward in input            |
 | `input.select.word.backward`    | `alt+shift+b,alt+shift+left`                                                  | Select word backward in input           |
 | `input.delete.word.forward`     | `alt+d,alt+delete,ctrl+delete`                                                | Delete word forward in input            |
 | `input.delete.word.backward`    | `ctrl+w,ctrl+backspace,alt+backspace`                                         | Delete word backward in input           |
 | `input.select.all`              | `super+a`                                                                     | Select all in input                     |
-| `prompt.history.previous`       | `up`                                                                          | Previous history item                   |
-| `prompt.history.next`           | `down`                                                                        | Next history item                       |
+| `prompt.history.previous`       | `up,kpup`                                                                     | Previous history item                   |
+| `prompt.history.next`           | `down,kpdown`                                                                 | Next history item                       |
 
 ## Composer
 
