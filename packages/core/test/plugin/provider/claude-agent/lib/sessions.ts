@@ -40,7 +40,6 @@ export function followup(text = "What was the marker? Reply only with it."): Lan
   ]
 }
 
-// `settings` are the provider settings from opencode.json, such as `configDir`.
 export const model = (sessions: ClaudeSessions.Interface, settings?: Record<string, unknown>) =>
   build((request) => sessions.run(request), settings)
 
