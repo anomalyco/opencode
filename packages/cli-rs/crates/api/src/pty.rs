@@ -180,12 +180,15 @@ pub async fn connect(client: &Client, connector: &dyn Connector, input: &Connect
     Ok((url, socket))
 }
 
-/// The socket URL, with the query in the TypeScript client's order.
+/// The socket URL, with the query in the TypeScript client's order. The base URL's own query is dropped, as
+/// `new URL(path, base)` drops it.
 pub fn url(base: &Url, input: &ConnectInput, ticket: &str) -> Result<Url, Error> {
     let path = format!("api/experimental/persistent-pty/{}/connect", crate::client::path_param(&input.pty_id)?);
     let cursor = input.cursor.to_string();
+    let mut base = base.clone();
+    base.set_query(None);
     Ok(ws::ticket_url(
-        base,
+        &base,
         &path,
         ticket,
         &[
@@ -347,7 +350,7 @@ mod tests {
     fn the_socket_url_matches_the_typescript_client() {
         let input =
             ConnectInput { pty_id: PtyID("pty_1/x".into()), cursor: 128, attachment_id: "att".into(), takeover: true };
-        let base = crate::js::parse_url("https://host/prefix").unwrap();
+        let base = crate::js::parse_url("https://host/prefix?ticket=old&x=1").unwrap();
         assert_eq!(
             url(&base, &input, "tk").unwrap().as_str(),
             "wss://host/prefix/api/experimental/persistent-pty/pty_1%2Fx/connect?ticket=tk&cursor=128&attachment_id=att&takeover=true&input_protocol=1"
