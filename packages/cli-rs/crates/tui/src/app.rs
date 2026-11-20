@@ -611,6 +611,8 @@ pub fn options() -> AppOptions {
         capture_stderr: true,
         // A click moves focus only when its handler requests it.
         focus_on_click: false,
+        // Tab moves focus only where a binding says so, as in Core: moving it would leave an open dialog.
+        tab_focus: false,
         ..AppOptions::default()
     }
 }
