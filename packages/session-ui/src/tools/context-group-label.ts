@@ -52,22 +52,48 @@ function toolTitle(tool: Summary["toolNames"][number], i18n: UiI18n) {
   }
 }
 
-/** A context group's parts as facts. A user's shell command counts as a call; notices and text count nothing. */
+/**
+ * A context group's parts as facts. A user's shell command counts as a call; notices and text count nothing. A script's
+ * files count where they are placed, so only those in the group.
+ */
 export function contextGroupFacts(parts: readonly ContextGroupPart[]) {
-  return factsOf(
-    parts.flatMap((part): FactPart[] => {
-      if (part.type === "tool" || part.type === "reasoning") return [part]
+  return parts.flatMap((part) => {
+    if (part.type === "file") return [part.file]
 
-      return part.type === "shell" ? [{ type: "shell", id: part.id }] : []
-    }),
-  )
+    const own: FactPart[] =
+      part.type === "tool" || part.type === "reasoning"
+        ? [part]
+        : part.type === "shell"
+          ? [{ type: "shell", id: part.id }]
+          : []
+
+    return factsOf(own).filter((fact) => fact.kind !== "file" || fact.via !== "script")
+  })
 }
 
 /** The closed label of a group of calls and thoughts: "Used 3 Read, Grep". */
 export function contextGroupLabel(parts: readonly ContextGroupPart[], i18n: UiI18n) {
-  const summary = summarize(contextGroupFacts(parts))
+  const facts = contextGroupFacts(parts)
+  const summary = summarize(facts)
   const thoughts = summary.thoughts
-  const names = i18n.list([...new Set(summary.toolNames.map((tool) => toolTitle(tool, i18n)))])
+  // Rows pass calls by their part id and a script's changes by message and part id, so a change names its script by either.
+  const calls = new Set(facts.flatMap((fact) => (fact.kind === "call" ? [fact.id] : [])))
+  const shown = (by: string) => calls.has(by) || calls.has(by.slice(by.indexOf(":") + 1))
+
+  // A hidden script's changes read as the patch a direct edit shows as, one call per script, in the order they came.
+  const scripts = new Set(
+    facts.flatMap((fact) => (fact.kind === "file" && fact.via === "script" && !shown(fact.by) ? [fact.by] : [])),
+  )
+
+  const names = i18n.list([
+    ...new Set(
+      facts.flatMap((fact) => {
+        if (fact.kind === "call") return [toolTitle({ tool: fact.tool, provider: fact.provider }, i18n)]
+
+        return fact.kind === "file" && scripts.has(fact.by) ? [toolTitle({ tool: "patch" }, i18n)] : []
+      }),
+    ),
+  ])
 
   if (!names && !thoughts) {
     const text = i18n.t("ui.messagePart.context.updates")
@@ -76,7 +102,7 @@ export function contextGroupLabel(parts: readonly ContextGroupPart[], i18n: UiI1
   }
 
   const title = names || i18n.plural("ui.messagePart.context.thought", thoughts)
-  const count = summary.calls || thoughts
+  const count = summary.calls + scripts.size || thoughts
   const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
   const index = text.indexOf(title)
   const before = text.slice(0, index).trim()
