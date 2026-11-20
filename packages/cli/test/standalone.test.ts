@@ -37,6 +37,47 @@ test("standalone server exits when its owner is killed", async () => {
   }
 })
 
+test("standalone reconnect reuses live children, replaces exited children, and honors explicit restart", async () => {
+  await using root = await tmpdir("opencode-cli-standalone-recovery-")
+  const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "fixture/standalone-recovery-owner.ts")], {
+    cwd: path.join(import.meta.dir, ".."),
+    env: isolatedEnv(root.path),
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const line = await Promise.race([
+    readLine(owner.stdout, "STANDALONE_RECOVERED "),
+    Bun.sleep(30_000).then(() => undefined),
+  ])
+  const [, previous, live, replacement, reused, restarted, status] = line?.split(" ") ?? []
+  const oldPID = Number(previous)
+  const nextPID = Number(replacement)
+  const pid = Number(restarted)
+
+  try {
+    expect(oldPID).toBeGreaterThan(0)
+    expect(Number(live)).toBe(oldPID)
+    expect(nextPID).toBeGreaterThan(0)
+    expect(nextPID).not.toBe(oldPID)
+    expect(Number(reused)).toBe(nextPID)
+    expect(pid).toBeGreaterThan(0)
+    expect(pid).not.toBe(nextPID)
+    expect(status).toBe("200")
+    expect(running(oldPID)).toBe(false)
+    expect(running(nextPID)).toBe(false)
+    expect(running(pid)).toBe(true)
+
+    owner.kill("SIGKILL")
+    await owner.exited
+    expect(await waitForExit(pid)).toBe(true)
+  } finally {
+    owner.kill("SIGKILL")
+    await owner.exited
+    if (running(pid)) process.kill(pid, "SIGKILL")
+  }
+})
+
 async function readLine(stream: ReadableStream<Uint8Array>, prefix: string) {
   const reader = stream.getReader()
   const decoder = new TextDecoder()

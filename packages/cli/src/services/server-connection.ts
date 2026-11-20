@@ -49,14 +49,14 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     return { endpoint } satisfies Resolved
   }
   if (standalone || (yield* ServiceConfig.read()).disabled === true) {
-    return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
+    return yield* resolveStandalone()
   }
 
   const mismatch = args.mismatch ?? "ignore"
   const options = yield* ServiceConfig.options({ checkVersion: mismatch !== "ignore" })
   if (args.autostart === false) {
     const endpoint = yield* Service.discover({ ...options, version: undefined })
-    if (!endpoint) return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
+    if (!endpoint) return yield* resolveStandalone()
     return { endpoint, service: managedService(options) } satisfies Resolved
   }
   return {
@@ -64,6 +64,16 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     service: managedService(options),
   } satisfies Resolved
 })
+
+function resolveStandalone() {
+  return Standalone.recoverable().pipe(
+    Effect.map(({ endpoint, reconnect, restart }) => ({
+      endpoint,
+      service: { reconnect, restart },
+      standalone: true as const,
+    })),
+  )
+}
 
 function managedService(options: EnsureOptions) {
   const reconnectOptions = { ...options, version: undefined }

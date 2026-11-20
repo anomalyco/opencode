@@ -1,6 +1,6 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Deferred, Effect, Schema, Stream } from "effect"
+import { Deferred, Effect, Exit, Schema, Scope, Semaphore, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { randomBytes } from "node:crypto"
 import { selfCommand } from "../util/process"
@@ -61,5 +61,39 @@ const makeEndpoint = Effect.fn("cli.standalone.endpoint")(
 export function start(options: Options = {}) {
   return makeEndpoint(options)
 }
+
+export const recoverable = Effect.fn("cli.standalone.recoverable")(function* (options: Options = {}) {
+  const owner = yield* Effect.scope
+  const lock = yield* Semaphore.make(1)
+  let scope = yield* Scope.fork(owner)
+  const launch = (child: Scope.Closeable) =>
+    start(options).pipe(
+      Scope.provide(child),
+      Effect.onError((cause) => Scope.close(child, Exit.failCause(cause))),
+    )
+  let endpoint = yield* launch(scope)
+  let lastLaunch = Date.now()
+  const replace = Effect.gen(function* () {
+    // A crashing child must not cause an unbounded restart loop.
+    const delay = 1_000 - (Date.now() - lastLaunch)
+    if (delay > 0) yield* Effect.sleep(delay)
+    // A replacement must not overlap the old server: both use the same local data.
+    yield* Scope.close(scope, Exit.void)
+    scope = yield* Scope.fork(owner)
+    endpoint = yield* launch(scope)
+    lastLaunch = Date.now()
+    return endpoint
+  })
+  const reconnect = () =>
+    lock.withPermits(1)(
+      Effect.gen(function* () {
+        // Stream disconnects also occur while the server is healthy (idle timeout, resync).
+        const exited = yield* endpoint.exited.pipe(Effect.exit, Effect.timeoutOption("20 millis"))
+        if (exited._tag === "None") return endpoint
+        return yield* replace
+      }),
+    )
+  return { endpoint, reconnect, restart: () => lock.withPermits(1)(replace.pipe(Effect.asVoid)) }
+})
 
 export * as Standalone from "./standalone"
