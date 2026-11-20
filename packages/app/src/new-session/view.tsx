@@ -387,7 +387,7 @@ function NewSessionLocation(props: {
             class={`${TRIGGER} min-w-0`}
             onClick={() => props.extensions.open("mcp")}
           >
-            <Icon name="cube" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
+            <Icon name="mcp" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
             <span class="min-w-0 truncate">
               {language.plural("session.new.extensions.mcps", props.extensions.counts().mcps)}
             </span>
