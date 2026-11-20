@@ -692,13 +692,13 @@ story("selects side tabs with ⌘1–9 and ⇧⌘[ ] inside the side panel and s
   await expect(selected).toHaveText(/^browser:/)
 })
 
-story("keeps a restored browser tab selected and undrawn until the desktop's first inventory", async ({ page }) => {
+story("keeps a restored browser tab with no saved page selected and undrawn until the desktop's first inventory", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const tabs = root.getByRole("tab")
   await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
   await expect(tabs).toHaveText(["alpha.ts"])
 
-  // Beta was left on its browser tab, which the desktop has not reported yet.
+  // Beta was left on its browser tab, which the desktop has not reported yet and no earlier run saved a title for.
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
   await expect(root.getByTestId("selected")).toHaveText(/^browser:tab_/)
@@ -707,6 +707,48 @@ story("keeps a restored browser tab selected and undrawn until the desktop's fir
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   await expect(tabs).toHaveText(["beta.ts", "Preview"])
   await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+})
+
+// After a restart the strip showed no browser tab until the desktop had attached and reported them, and then drew
+// them by address: the stored tabs were listed hidden, with no title to draw.
+story("draws the saved browser tabs when the app reopens and keeps them in place once the desktop reports them", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const tabs = root.getByRole("tab")
+  const preview = root.getByRole("tab", { name: "Preview", exact: true })
+  const docs = root.getByRole("tab", { name: "Docs", exact: true })
+  const loading = root.getByRole("status", { name: "Loading", exact: true })
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Two tabs", exact: true }).dispatchEvent("click")
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
+
+  // The app quits and opens again. The desktop has registered the session and reported no tab yet.
+  await root.getByRole("button", { name: "Quit and reopen", exact: true }).dispatchEvent("click")
+  await expect(root.getByText("Registrations: 3", { exact: true })).toBeVisible()
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
+  await expect(preview).toHaveAttribute("aria-selected", "true")
+  await expect(loading).toBeVisible()
+
+  // A saved tab can be selected meanwhile, and its content waits like the other's.
+  await docs.click()
+  await expect(docs).toHaveAttribute("aria-selected", "true")
+  await expect(loading).toBeVisible()
+  const drawn = await tabs.elementHandles()
+
+  // The desktop restored both tabs with Preview in front. Neither page is loaded, so neither reports a title.
+  await root.getByRole("button", { name: "Restored inventory", exact: true }).dispatchEvent("click")
+  await expect(root.getByRole("combobox", { name: "Browser address", exact: true })).toHaveValue("https://example.com/docs")
+  await expect(loading).toHaveCount(0)
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
+  await expect(docs).toHaveAttribute("aria-selected", "true")
+
+  // The same elements as before the inventory: no tab was removed and drawn again.
+  const kept = await page.evaluate(
+    ([before, after]) => before.length === after.length && before.every((node, index) => node === after[index]),
+    [drawn, await tabs.elementHandles()],
+  )
+
+  expect(kept).toBe(true)
 })
 
 // An agent's tabs.open or tabs.focus shows its tab: it comes to the front over the file the person had selected.
