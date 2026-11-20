@@ -165,6 +165,79 @@ test("keeps the previous model in a live variant notice until the projected mess
   }
 })
 
+test("never regresses a settled tool on a re-delivered tool.called", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => Response.json({ data: [], cursor: {} }),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  try {
+    let seq = 0
+    const publish = (type: string, data: object) => {
+      seq += 1
+      listeners.forEach((listener) =>
+        listener({
+          name: type,
+          details: {
+            id: `evt_${seq}`,
+            created: seq,
+            type,
+            durable: { aggregateID: "ses_tools", seq, version: 1 },
+            data,
+          } as OpenCodeEvent,
+        }),
+      )
+    }
+    const base = { sessionID: "ses_tools", assistantMessageID: "msg_assistant" }
+    const model = { providerID: "provider", id: "model" }
+    publish("session.step.started", { ...base, agent: "build", model, started: 1 })
+    publish("session.tool.input.started", { ...base, id: "call_read", name: "read" })
+    publish("session.tool.called", { ...base, id: "call_read", input: { path: "/tmp/shot.png" }, executed: false })
+
+    const settled = () => {
+      const part = setup.data.session.message.get("ses_tools", "msg_assistant")?.content.at(-1)
+      return part?.type === "tool" ? part : undefined
+    }
+    await wait(() => settled()?.state.status === "running")
+
+    publish("session.tool.success", {
+      ...base,
+      id: "call_read",
+      content: [
+        { type: "text", text: "Image read successfully" },
+        { type: "file", uri: "data:image/png;base64,iVBOR", mime: "image/png", name: "shot.png" },
+      ],
+      executed: false,
+    })
+    await wait(() => settled()?.state.status === "completed")
+    expect(settled()?.state).toMatchObject({ status: "completed" })
+
+    // A `called` re-delivered after the success must not overwrite the settled
+    // state, which would drop the result content and flip the row to running.
+    publish("session.tool.called", { ...base, id: "call_read", input: { path: "/tmp/shot.png" }, executed: false })
+    expect(settled()?.state).toMatchObject({ status: "completed" })
+    if (settled()?.state.status === "completed") {
+      expect(settled()?.state.content).toHaveLength(2)
+    }
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("reconciles a stale running tool when execution settles", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   let completed = false
