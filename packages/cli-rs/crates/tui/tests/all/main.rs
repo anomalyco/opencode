@@ -93,6 +93,7 @@ mod tabs;
 mod terminal;
 mod tools;
 mod transcript;
+mod transcript_model;
 mod tui_drop;
 mod user_keys;
 mod worktrees;
