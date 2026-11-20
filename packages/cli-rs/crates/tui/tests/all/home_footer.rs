@@ -78,12 +78,14 @@ fn a_status_claim_updates_while_the_footer_keeps_its_node() {
     });
 }
 
+#[cfg(feature = "native")]
 fn footer(h: &Harness) -> Vec<opentui::testing::Cell> {
     let frame = h.app.render();
     frame.cells[((frame.height - 3) * frame.width) as usize..].to_vec()
 }
 
 /// The home footer's own source built as a `cdylib` (`crates/plugin/examples/home-footer`), once per test run.
+#[cfg(feature = "native")]
 fn library() -> Vec<u8> {
     static BUILT: std::sync::Mutex<Option<Vec<u8>>> = std::sync::Mutex::new(None);
     let mut built = BUILT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -107,6 +109,7 @@ fn library() -> Vec<u8> {
 }
 
 #[derive(Clone, Copy, Debug)]
+#[cfg(feature = "native")]
 enum Run {
     Linked,
     /// Through the byte shims of the C ABI (`Loopback`), in process.
@@ -116,6 +119,7 @@ enum Run {
 
 /// The footer rows with the status claim, as mounted, after a status change and after a resize, the footer run as
 /// `run` says.
+#[cfg(feature = "native")]
 fn footer_frames(run: Run) -> Vec<Vec<opentui::testing::Cell>> {
     let plugins: &[&str] = if matches!(run, Run::Linked) { &[] } else { &["-opencode.home.footer"] };
     let h = mount(100, plugins, vec![abi::Plugin { id: "test.status", setup: status }.into()]);
@@ -134,9 +138,12 @@ fn footer_frames(run: Run) -> Vec<Vec<opentui::testing::Cell>> {
         root
     });
     if matches!(run, Run::Loopback) {
-        let (definition, _) = opencode_plugin::loader::native::loopback(
+        let (definition, _) = crate::support::loopback(
             &opencode_tui::plugins::host::host(&h.tui),
-            abi::export_plugin!(@loopback "loopback.home.footer", opencode_tui::plugins::home_footer::plugin().setup),
+            crate::support::loopback_entries!(
+                "loopback.home.footer",
+                opencode_tui::plugins::home_footer::plugin().setup
+            ),
         )
         .unwrap();
         opencode_tui::plugins::host::add(&h.tui, definition);
@@ -154,6 +161,7 @@ fn footer_frames(run: Run) -> Vec<Vec<opentui::testing::Cell>> {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn the_home_footer_draws_the_same_through_the_c_abi_loopback() {
     let linked = footer_frames(Run::Linked);
     assert_eq!(footer_frames(Run::Loopback), linked);

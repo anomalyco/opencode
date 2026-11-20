@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use opencode_api::client::Auth;
+#[cfg(feature = "native")]
 use opencode_api::generated::SessionID;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_plugin::abi;
@@ -129,13 +130,14 @@ fn mount(server: &Server, plugins: &[&str]) -> Harness {
 
 /// The poster's cells as `/stats` opens it from the session, twice, going back with escape in between. With
 /// `loopback`, stats runs through the byte shims of the C ABI.
+#[cfg(feature = "native")]
 fn stats_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
     let server = Server::new(true);
     let h = mount(&server, if loopback { &["-opencode.stats"] } else { &[] });
     if loopback {
-        let (definition, _) = opencode_plugin::loader::native::loopback(
+        let (definition, _) = crate::support::loopback(
             &opencode_tui::plugins::host::host(&h.tui),
-            abi::export_plugin!(@loopback "loopback.stats", opencode_tui::plugins::stats::plugin().setup),
+            crate::support::loopback_entries!("loopback.stats", opencode_tui::plugins::stats::plugin().setup),
         )
         .unwrap();
         opencode_tui::plugins::host::add(&h.tui, definition);
@@ -156,6 +158,7 @@ fn stats_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn stats_goes_back_with_escape_and_fetches_afresh_the_same_through_the_c_abi_loopback() {
     let direct = stats_frames(false);
     assert_eq!(direct[0], direct[1]);
@@ -331,7 +334,7 @@ fn an_error_status_reaches_the_plugin_with_its_status_and_body() {
     .into_iter()
     .map(|error| Err(error.to_owned()))
     .collect();
-    for loopback in [false, true] {
+    for loopback in crate::support::LOOPBACK {
         PROBED.with_borrow_mut(Vec::clear);
         let server = Server::new(true);
         let h = mount(&server, &[]);
@@ -339,12 +342,9 @@ fn an_error_status_reaches_the_plugin_with_its_status_and_body() {
             false => abi::Plugin { id: "probe", setup: probe_setup }.into(),
             true => {
                 let host = opencode_tui::plugins::host::host(&h.tui);
-                opencode_plugin::loader::native::loopback(
-                    &host,
-                    abi::export_plugin!(@loopback "loopback.probe", probe_setup),
-                )
-                .unwrap()
-                .0
+                crate::support::loopback(&host, crate::support::loopback_entries!("loopback.probe", probe_setup))
+                    .unwrap()
+                    .0
             }
         };
         opencode_tui::plugins::host::add(&h.tui, definition);

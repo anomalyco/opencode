@@ -336,6 +336,7 @@ fn a_catalog_read_inside_the_messages_visitor_loads_after_the_render() {
 
 /// The frames of the sidebar's context and limit sections while a session's replies end. With `loopback`, the
 /// sections are wired through the byte shims of the C ABI (`Loopback`) instead of running in process.
+#[cfg(feature = "native")]
 fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     let others = ["-opencode.sidebar.mcp", "-opencode.sidebar.todo"];
     let plugins: Vec<&str> = if loopback {
@@ -346,17 +347,16 @@ fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     let h = mount_at(170, "ses_a", json!({ "animations": false, "plugins": plugins }));
     if loopback {
         for create in [
-            abi::export_plugin!(
-                @loopback "loopback.sidebar.context",
+            crate::support::loopback_entries!(
+                "loopback.sidebar.context",
                 opencode_tui::plugins::sidebar_context::plugin().setup
             ) as _,
-            abi::export_plugin!(
-                @loopback "loopback.sidebar.limit",
+            crate::support::loopback_entries!(
+                "loopback.sidebar.limit",
                 opencode_tui::plugins::sidebar_limit::plugin().setup
             ) as _,
         ] {
-            let (definition, _) =
-                opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), create).unwrap();
+            let (definition, _) = crate::support::loopback(&opencode_tui::plugins::host::host(&h.tui), create).unwrap();
             opencode_tui::plugins::host::add(&h.tui, definition);
         }
     }
@@ -383,6 +383,7 @@ fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn the_sidebar_sections_draw_the_same_through_the_c_abi_loopback() {
     assert_eq!(sidebar_frames(true), sidebar_frames(false));
 }

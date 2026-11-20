@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_plugin::abi;
 use opencode_tui::Deps;
 use serde_json::{Value, json};
 
@@ -93,10 +92,10 @@ fn mount(server: &Gated, width: u16, loopback: bool, events: bool) -> Harness {
     let h = support::mount(width, 30, deps);
     h.wait_for("Fix the parser");
     if loopback {
-        let (definition, _) = opencode_plugin::loader::native::loopback(
+        let (definition, _) = crate::support::loopback(
             &opencode_tui::plugins::host::host(&h.tui),
-            abi::export_plugin!(
-                @loopback "loopback.prompt.footer",
+            crate::support::loopback_entries!(
+                "loopback.prompt.footer",
                 opencode_tui::plugins::prompt_footer::plugin().setup
             ),
         )
@@ -149,6 +148,7 @@ fn the_busy_footer_shrinks_on_a_narrow_terminal() {
 }
 
 /// The cells of the footer with the goal, of its panel, and of the panel after `p`, and the commands sent.
+#[cfg(feature = "native")]
 fn goal_frames(loopback: bool) -> (Vec<Vec<opentui::testing::Cell>>, Vec<Option<Value>>) {
     let server = Gated::new(true);
     let h = mount(&server, 100, loopback, true);
@@ -172,6 +172,7 @@ fn goal_frames(loopback: bool) -> (Vec<Vec<opentui::testing::Cell>>, Vec<Option<
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn the_goal_panel_acts_the_same_through_the_c_abi_loopback() {
     let direct = goal_frames(false);
     let texts: Vec<_> = direct.1.iter().map(|body| body.as_ref().unwrap()["text"].clone()).collect();

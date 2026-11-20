@@ -10,7 +10,7 @@ use opentui::prelude::*;
 use super::*;
 use crate::loader::approval::{self, Approvals};
 use crate::loader::tests::{TestHost, dynamic, entry, host};
-use crate::loader::{Backend, Configured, Loader};
+use crate::loader::{Configured, Loader};
 use crate::{Host, Registry, SlotInput, Status, abi, slot};
 
 /// The Luau examples, `crates/plugin/examples/luau`.
@@ -65,8 +65,7 @@ fn keymap(host: &TestHost) -> &DialogKeymap {
 
 /// A loader with Luau on, of the global config directory `config` and the working directory `cwd`.
 fn loader(config: &Path, cwd: &Path) -> Loader {
-    let native = Rc::new(crate::loader::native::Native) as Rc<dyn Backend>;
-    Loader::new(native, config.to_path_buf(), cwd.to_path_buf(), Vec::<Configured>::new()).with_luau(|| {})
+    Loader::new(config.to_path_buf(), cwd.to_path_buf(), Vec::<Configured>::new()).with_luau(|| {})
 }
 
 /// Reconciles until a reconcile after a finished walk changes nothing and leaves no compiled build waiting, as the host
@@ -152,12 +151,7 @@ fn the_luau_quick_start_loads_from_a_plugins_directory_and_runs() {
     host.app.render();
     assert!(host.app.text().contains("hello"), "{}", host.app.text());
     // Without the flag's loader the same directory is a TypeScript target, skipped as one.
-    let plain = Loader::new(
-        Rc::new(crate::loader::native::Native) as Rc<dyn Backend>,
-        config.clone(),
-        temp.path().to_path_buf(),
-        Vec::new(),
-    );
+    let plain = Loader::new(config.clone(), temp.path().to_path_buf(), Vec::new());
     let other = Registry::define(Vec::new(), []);
     plain.reconcile(&dynamic(&host), &other);
     assert!(matches!(entry(&other.entries(), &dir.to_string_lossy()).status, Status::Skipped(_)));

@@ -18,6 +18,7 @@ thread_local! {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Carrier {
     Linked,
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     CAbi,
     #[cfg(luau)]
     Luau,
@@ -26,6 +27,7 @@ enum Carrier {
 fn carriers() -> Vec<Carrier> {
     vec![
         Carrier::Linked,
+        #[cfg(feature = "native")]
         Carrier::CAbi,
         #[cfg(luau)]
         Carrier::Luau,
@@ -71,8 +73,8 @@ fn open(carrier: Carrier) -> Harness {
     let definition = match carrier {
         Carrier::Linked => abi::Plugin { id: ID, setup: probe }.into(),
         Carrier::CAbi => {
-            let entries = abi::export_plugin!(@loopback "test.focus", probe);
-            opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+            let entries = crate::support::loopback_entries!("test.focus", probe);
+            crate::support::loopback(&host, entries).unwrap().0
         }
         #[cfg(luau)]
         Carrier::Luau => {

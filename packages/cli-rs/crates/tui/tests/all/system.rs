@@ -260,7 +260,7 @@ fn active(tui: &Tui, id: &str) -> bool {
 
 #[test]
 fn plugin_manager_matches_typescript() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         plugin_manager_matches_typescript_on(abi);
     }
 }
@@ -303,7 +303,7 @@ fn plugin_manager_matches_typescript_on(abi: bool) {
 
 #[test]
 fn plugin_manager_follows_plugin_updated_under_its_error_view() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         plugin_manager_follows_plugin_updated_under_its_error_view_on(abi);
     }
 }
@@ -354,7 +354,7 @@ fn plugin_manager_follows_plugin_updated_under_its_error_view_on(abi: bool) {
 
 #[test]
 fn plugin_manager_reads_the_active_location() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let app = TestApp::new(100, 30);
         let (mounted, _) = plugin_manager_on(&app, json!({}), abi);
         plugin_manager_reads_the_active_location_on(&app, &mounted);
@@ -399,7 +399,7 @@ fn the_host_entries_list_and_toggle_like_plugins() {
 
 #[test]
 fn plugin_manager_toggles_checks_and_updates() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         plugin_manager_toggles_checks_and_updates_on(abi);
     }
 }
@@ -864,7 +864,7 @@ fn without_an_updater_there_is_no_update_command_or_notice() {
 
 #[test]
 fn the_prompt_takes_typing_after_a_plugin_manager_toggle() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let h = support::mount(100, 30, carried(abi));
         h.wait_for("Fix the parser");
         toggle_a_plugin(&h);
@@ -894,7 +894,7 @@ pub(crate) fn toggle_a_plugin(h: &support::Harness) {
 
 #[test]
 fn the_plugin_manager_search_finds_built_ins_once_they_show() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let h = support::mount(100, 30, carried(abi));
         h.wait_for("Fix the parser");
         h.tui.keymap.dispatch("plugins.list", None);

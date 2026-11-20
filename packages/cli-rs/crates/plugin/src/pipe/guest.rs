@@ -18,7 +18,7 @@ use super::{Call, Scripts, Waiting, count};
 use crate::activation::{Activation, Wake};
 use crate::interact::{Deliver, Owner};
 use crate::limits;
-use crate::loader::native::{Answers, Ctx, To, apply, handle};
+use crate::loader::requests::{Answers, Ctx, To, apply, handle};
 use crate::mailbox::Mailbox;
 use crate::surface::{self, Viewed, Viewing};
 use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, keyed_command, route};
@@ -1085,7 +1085,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
         // A route's commands are bound to the mount they run for, as in process: what they ask for is that mount's.
         let commands: surface::Commands = match &at {
             v2::Place::Route(name) => {
-                let routed = crate::loader::native::routed(manifest, name);
+                let routed = crate::loader::requests::routed(manifest, name);
                 let guest = guest.clone();
                 Rc::new(move |alive: &Weak<()>| {
                     routed.iter().map(|command| js_command(&guest, command, Some(alive.clone()))).collect()
@@ -1401,7 +1401,7 @@ impl surface::Viewer for Viewer {
             let node = match node {
                 // A memo table holds a value for each subtree it built or kept by key, and for each memo a keep holds
                 // again, as a library's does.
-                Ok(node) if tree.memo > crate::loader::native::keyed(&node, viewing.kept) => {
+                Ok(node) if tree.memo > crate::loader::requests::keyed(&node, viewing.kept) => {
                     Err(format!("a memo table of {} values for a tree of fewer keyed nodes", tree.memo))
                 }
                 Ok(node) => Ok(node),

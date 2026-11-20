@@ -717,7 +717,7 @@ impl Tree {
     /// The ids of the boxes and the fields that can take the focus, in the mounted items of lists too: none in a
     /// hidden box, which OpenTUI focuses not.
     pub fn focusable(&self) -> Vec<String> {
-        let field = crate::loader::native::serves(abi::FOCUS_INPUT);
+        let field = crate::loader::requests::serves(abi::FOCUS_INPUT);
         fn walk(nodes: &[Mounted], field: bool, out: &mut Vec<String>) {
             for node in nodes.iter().filter(|node| !node.node.is_hidden()) {
                 // A box that asks for it, and a field or a scroll with an id, which takes the focus as a click gives it

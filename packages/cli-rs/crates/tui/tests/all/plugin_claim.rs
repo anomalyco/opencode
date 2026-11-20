@@ -658,6 +658,7 @@ struct Step {
     /// The model says `claim.a` draws a part.
     a_draws: bool,
     witness: Vec<(String, Vec<String>)>,
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     views: Views,
 }
 
@@ -875,8 +876,10 @@ fn claimed_parts_stream_into_what_a_fresh_mount_draws() {
 }
 
 /// Compare frame cells, fault reports, and view delivery for one trace on both native carriers.
+#[cfg(feature = "native")]
 pub struct ClaimCarriers;
 
+#[cfg(feature = "native")]
 impl Model for ClaimCarriers {
     type Command = Command;
 
@@ -924,6 +927,7 @@ impl Model for ClaimCarriers {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_claim_is_equal_linked_and_through_the_c_abi() {
     model::check(&ClaimCarriers, 3, 40);
 }
@@ -1051,6 +1055,7 @@ fn a_streaming_fence_keeps_its_mount() {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn leaving_the_session_frees_every_claimed_part() {
     for carrier in CARRIERS {
         let world = World::open(carrier);
@@ -1107,17 +1112,20 @@ fn probe(plugin: char) -> impl Fn(&mut v2::View<'_>, &Part) -> Option<v2::Node> 
     }
 }
 
+#[cfg(feature = "native")]
 fn shell_first(setup: &mut abi::Setup) -> Result<(), String> {
     setup.claim(Claim::tool("shell", probe('f')));
     Ok(())
 }
 
+#[cfg(feature = "native")]
 fn shell_last(setup: &mut abi::Setup) -> Result<(), String> {
     setup.claim(Claim::tool("shell", probe('l')));
     Ok(())
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width() {
     for carrier in CARRIERS {
         SEEN.with_borrow_mut(Vec::clear);
@@ -1251,6 +1259,7 @@ impl World {
     }
 
     /// Clicks the first cell of the first `text` on screen, a second after the last click so none is a double click.
+    #[cfg(feature = "native")]
     fn click(&self, text: &str) {
         let app = &self.harness.app;
         app.advance(Duration::from_secs(1));
@@ -1302,6 +1311,7 @@ fn grouped() -> Session {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_claimed_call_in_a_group_draws_while_the_group_is_open() {
     for carrier in CARRIERS {
         let world = World::rules(carrier, grouped(), false);
@@ -1701,6 +1711,7 @@ thread_local! {
 }
 
 /// Claims `label` calls with a one-line label of the call's state, and logs what each view saw of the result.
+#[cfg(feature = "native")]
 fn plugin_label(setup: &mut abi::Setup) -> Result<(), String> {
     setup.claim(Claim::tool("label", |_, part| {
         let Part::Tool(tool) = part else { return None };
@@ -1718,6 +1729,7 @@ fn plugin_label(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_claimed_call_sends_its_view_no_result() {
     let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
     let line = format!("{}\n", "word ".repeat(16));

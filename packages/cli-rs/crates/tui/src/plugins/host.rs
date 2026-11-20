@@ -13,6 +13,7 @@ use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_plugin::abi;
 use opencode_plugin::loader::approval::{self, Approvals, Artifact, Decision};
+#[cfg(feature = "native")]
 use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Configured, Loader, ServerPart};
 use opencode_plugin::node::{abi_mode, assign, refill, theme_color};
@@ -1181,8 +1182,12 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
 
 /// Register built-ins in palette order, including the renderers supplied through [`crate::Deps::builtins`].
 fn builtins(external: Vec<Builtin>, abi: bool) -> Vec<Builtin> {
-    // On the other carrier each plugin's calls cross the C ABI's byte shims ([`Builtin::Abi`]).
+    // On the other carrier each plugin's calls cross the C ABI's byte shims ([`Builtin::Abi`]), which a build without
+    // the `native` feature does not have.
+    #[cfg(not(feature = "native"))]
+    let _ = abi;
     let carried = |builtin: Builtin| match builtin {
+        #[cfg(feature = "native")]
         Builtin::Plugin(plugin) if abi => Builtin::Abi(plugin),
         builtin => builtin,
     };
@@ -1353,7 +1358,8 @@ fn set_server_parts(tui: &Rc<Tui>, plugins: &[PluginInfo]) {
     }
 }
 
-/// Report each skipped TypeScript plugin once per run, grouped by reason.
+/// Report each skipped plugin once per run, grouped by reason: TypeScript plugins, unless a library or a Luau plugin is
+/// among them, which a build without its carrier skips.
 fn tell_skipped(tui: &Tui) {
     if !tui.plugins.heard_server.get() || tui.plugins.loader.borrow().is_none() {
         return;
@@ -1379,9 +1385,14 @@ fn tell_skipped(tui: &Tui) {
         return;
     }
     let lines: Vec<String> = reasons.iter().map(|(reason, names)| format!("{}: {reason}.", names.join(", "))).collect();
+    let other = [opencode_plugin::SKIPPED_NATIVE, opencode_plugin::SKIPPED_NO_LUAU];
+    let kind = match reasons.iter().any(|(reason, _)| other.contains(&reason.as_str())) {
+        true => "",
+        false => "TypeScript ",
+    };
     let title = match count {
-        1 => "1 TypeScript plugin not loaded".to_owned(),
-        count => format!("{count} TypeScript plugins not loaded"),
+        1 => format!("1 {kind}plugin not loaded"),
+        count => format!("{count} {kind}plugins not loaded"),
     };
     let options = ToastOptions::new(Variant::Warning, format!("{}\nRun /plugins to view details.", lines.join("\n")))
         .title(title)
@@ -1517,7 +1528,12 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
     }
     let entries = configured(tui, tui.plugins.skipped());
     let project = opencode_plugin::loader::project_root(&external.cwd);
-    let loader = Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries);
+    let loader = Loader::new(external.config_dir, external.cwd, entries);
+    #[cfg(feature = "native")]
+    let loader = match opencode_plugin::native_enabled() {
+        true => loader.with_native(Rc::new(Native)),
+        false => loader,
+    };
     #[cfg(luau)]
     let loader = match opencode_plugin::luau::enabled() {
         true => {

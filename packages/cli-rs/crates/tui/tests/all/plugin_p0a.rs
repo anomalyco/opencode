@@ -15,18 +15,23 @@ pub(crate) mod probe;
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Carrier {
     Linked,
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     Loopback,
 }
 
+/// The C ABI's loopback only in a build with the `native` feature, which has it.
+#[cfg(feature = "native")]
 const CARRIERS: [Carrier; 2] = [Carrier::Linked, Carrier::Loopback];
+#[cfg(not(feature = "native"))]
+const CARRIERS: [Carrier; 1] = [Carrier::Linked];
 
 fn add(h: &Harness, carrier: Carrier) {
     let definition = match carrier {
         Carrier::Linked => abi::Plugin { id: "p0a", setup: probe::setup }.into(),
         Carrier::Loopback => {
-            opencode_plugin::loader::native::loopback(
+            crate::support::loopback(
                 &opencode_tui::plugins::host::host(&h.tui),
-                abi::export_plugin!(@loopback "p0a", probe::setup),
+                crate::support::loopback_entries!("p0a", probe::setup),
             )
             .unwrap()
             .0
@@ -99,7 +104,7 @@ fn a_confirm_answers_true_false_or_nothing_on_both_carriers() {
             }
         }
     }
-    assert!(drawn[0] == drawn[1], "the loopback draws the confirm otherwise");
+    assert!(drawn.iter().all(|other| *other == drawn[0]), "the loopback draws the confirm otherwise");
 }
 
 #[test]
@@ -124,7 +129,7 @@ fn an_alert_runs_its_action_once_however_it_closes() {
             assert_eq!(h.tui.dialogs.is_open(), close == "replace", "{carrier:?} {close}");
         }
     }
-    assert!(drawn[0] == drawn[1], "the loopback draws the alert otherwise");
+    assert!(drawn.iter().all(|other| *other == drawn[0]), "the loopback draws the alert otherwise");
 }
 
 /// The probe on `ses_a` with its catalogs loaded, so a submit sends.
@@ -573,10 +578,11 @@ fn a_styled_box_draws_the_same_on_both_carriers() {
         ],
         "{screen}"
     );
-    assert!(drawn[0].0 == drawn[1].0, "the loopback draws the box otherwise");
+    assert!(drawn.iter().all(|other| other.0 == drawn[0].0), "the loopback draws the box otherwise");
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn the_sample_library_confirms_and_edits_the_composer() {
     let h = crate::plugins::open(Route::Home, "", &crate::plugins::build("p0a"));
     h.wait_for("sample plugin v1: home.footer");

@@ -78,6 +78,7 @@ fn stream(harness: &Harness, count: u64) {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_streamed_delta_does_no_work_in_the_built_ins() {
     stream(&session(&[], Vec::new()), 20);
     let crossed = stream_crossed(&history(0, true), 20);
@@ -85,6 +86,7 @@ fn a_streamed_delta_does_no_work_in_the_built_ins() {
 }
 
 /// `ses_a` with `turns` question and answer pairs before, each answer with its tokens, on the C ABI carrier when `abi`.
+#[cfg(feature = "native")]
 fn history(turns: u64, abi: bool) -> Harness {
     let messages: Vec<Value> = (1..=turns)
         .rev()
@@ -122,6 +124,7 @@ fn history(turns: u64, abi: bool) -> Harness {
 }
 
 #[test]
+#[cfg(feature = "native")]
 fn a_streamed_delta_crosses_the_same_bytes_at_any_history() {
     let per_delta = |turns| {
         let harness = history(turns, true);
@@ -137,6 +140,7 @@ fn a_streamed_delta_crosses_the_same_bytes_at_any_history() {
 }
 
 /// What crossed the C ABI while `count` deltas streamed into a reply of `ses_a`.
+#[cfg(feature = "native")]
 fn stream_crossed(harness: &Harness, count: u64) -> opencode_plugin::loader::native::Crossed {
     let id = "msg_live";
     let started = json!({ "sessionID": "ses_a", "assistantMessageID": id, "agent": "build",
@@ -461,14 +465,14 @@ fn mounts_and_first_views() -> Vec<String> {
 
 #[test]
 fn a_surface_hears_its_mounts_begin_and_end_in_order() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         mounts_in_order(abi);
     }
 }
 
 fn mounts_in_order(abi: bool) {
     let plugin = abi::Plugin { id: "test.probe", setup: probe };
-    let builtin = if abi { opencode_plugin::Builtin::Abi(plugin) } else { opencode_plugin::Builtin::Plugin(plugin) };
+    let builtin = if abi { crate::support::abi_builtin(plugin) } else { opencode_plugin::Builtin::Plugin(plugin) };
     let harness = session(&[], vec![builtin]);
     let first = mounts_and_first_views();
     let opened = first.first().map(|line| line.split(' ').nth(2).unwrap().parse::<u64>().unwrap()).unwrap();
@@ -637,7 +641,7 @@ fn keeper(setup: &mut abi::Setup) -> Result<(), String> {
 
 fn carried(plugin: abi::Plugin, abi: bool) -> opencode_plugin::Builtin {
     match abi {
-        true => opencode_plugin::Builtin::Abi(plugin),
+        true => crate::support::abi_builtin(plugin),
         false => opencode_plugin::Builtin::Plugin(plugin),
     }
 }
@@ -655,7 +659,7 @@ fn keeper_session(abi: bool) -> Harness {
 
 #[test]
 fn a_kept_root_keeps_what_the_mount_holds() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let harness = keeper_session(abi);
         assert_eq!(surface::ledger_of("test.keeper").memo_entries, 3, "abi {abi}");
         assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
@@ -681,6 +685,9 @@ fn a_kept_root_keeps_what_the_mount_holds() {
 #[test]
 fn a_kept_root_takes_a_new_theme() {
     for (abi, hide) in [(false, false), (true, false), (false, true)] {
+        if abi && !cfg!(feature = "native") {
+            continue;
+        }
         HIDE.set(hide);
         let ready = move |screen: &str| screen.contains("K2=3") != hide && screen.contains("Getting started");
         support::assert_restyles_in_place(|| Box::new(keeper_session(abi)), |_| {}, ready);
@@ -712,7 +719,7 @@ fn mounter(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn what_a_mount_notice_opens_ends_with_the_plugin() {
-    for abi in [false, true] {
+    for abi in crate::support::LOOPBACK {
         let harness = session(&[], vec![carried(abi::Plugin { id: "test.mounter", setup: mounter }, abi)]);
         let overlays = opencode_plugin::interact::ledger(&*harness.tui).overlays;
         VIEWS.set(0);

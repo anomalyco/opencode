@@ -1,11 +1,22 @@
 //! Discovers plugin targets and reconciles them with the registry. A failed rebuild leaves the running plugin
 //! active. Project plugins require approval before loading.
 
+// A build with no carrier of external plugins (no `ts`, `luau` or `native`) lists every target as skipped: what loads
+// one goes unused.
+#![cfg_attr(
+    not(any(feature = "native", feature = "ts", feature = "luau")),
+    allow(dead_code, unused_imports, unused_variables)
+)]
+
 pub mod approval;
+#[cfg(feature = "native")]
 pub mod deps;
+#[cfg(feature = "native")]
 pub mod native;
 pub mod npm;
+#[cfg(feature = "native")]
 pub mod quarantine;
+pub(crate) mod requests;
 
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -25,9 +36,11 @@ pub fn entry_file() -> String {
 }
 
 /// A build to open: its digest, its bytes and its raw quarantine, read through one descriptor.
+#[cfg(feature = "native")]
 type Build = (u64, Vec<u8>, Option<Vec<u8>>);
 
 /// Loads native builds.
+#[cfg(feature = "native")]
 pub trait Backend {
     /// Loads the build `library`, read from the file `source`, against `host`, returning the definition, not yet
     /// active, and its failure while it runs. Setup runs with `options` (JSON text) on each activation, not here. An
@@ -141,7 +154,9 @@ struct Seen {
 }
 
 pub struct Loader {
-    backend: Rc<dyn Backend>,
+    /// What opens native builds ([`Loader::with_native`]): without it a library is skipped.
+    #[cfg(feature = "native")]
+    backend: Option<Rc<dyn Backend>>,
     /// The global config directory, whose `plugins` directory is always searched and which relative
     /// `plugins` paths start from (TS `path.dirname(config.path)`).
     config_dir: PathBuf,
@@ -218,9 +233,10 @@ fn package_name(dir: &Path) -> Option<String> {
 pub const STARTING: &str = "starting on the JS host";
 
 impl Loader {
-    pub fn new(backend: Rc<dyn Backend>, config_dir: PathBuf, cwd: PathBuf, configured: Vec<Configured>) -> Self {
+    pub fn new(config_dir: PathBuf, cwd: PathBuf, configured: Vec<Configured>) -> Self {
         Self {
-            backend,
+            #[cfg(feature = "native")]
+            backend: None,
             config_dir,
             cwd,
             configured: RefCell::new(configured),
@@ -241,6 +257,12 @@ impl Loader {
             #[cfg(luau)]
             luau_builds: None,
         }
+    }
+
+    /// Opens the native builds with `backend`.
+    #[cfg(feature = "native")]
+    pub fn with_native(self, backend: Rc<dyn Backend>) -> Self {
+        Self { backend: Some(backend), ..self }
     }
 
     /// Runs the directories with a `plugin.toml` and no native build as Luau plugins. `walked` runs on a walk's thread
@@ -674,7 +696,28 @@ impl Loader {
                 _ => SKIPPED.to_owned(),
             });
         };
-        let (digest, bytes, quarantine) = match self.admit(host, registry, target, &file, &listed) {
+        // A build without the `native` feature, or one `OPENCODE_PLUGIN_NATIVE` turned off, opens no library.
+        #[cfg(feature = "native")]
+        if let Some(backend) = self.backend.clone() {
+            return self.library(host, registry, target, &*backend, &file, listed);
+        }
+        let _ = file;
+        skip(crate::SKIPPED_NATIVE)
+    }
+
+    /// Loads the native build `file` of `target` with `backend`, once it is admitted.
+    #[cfg(feature = "native")]
+    fn library(
+        &self,
+        host: &Rc<dyn Host>,
+        registry: &Registry,
+        target: &Target,
+        backend: &dyn Backend,
+        file: &Path,
+        listed: Option<Status>,
+    ) -> bool {
+        let name = target.target.as_str();
+        let (digest, bytes, quarantine) = match self.admit(host, registry, target, file, &listed) {
             Ok(build) => build,
             Err(changed) => return changed,
         };
@@ -694,9 +737,8 @@ impl Loader {
             )),
         });
         let (loaded, _) = registry.monitor().call(slot, "load", || {
-            checked.and_then(|()| {
-                self.backend.load_read(host, &bytes, quarantine.as_deref(), &file, target.options.as_deref())
-            })
+            checked
+                .and_then(|()| backend.load_read(host, &bytes, quarantine.as_deref(), file, target.options.as_deref()))
         });
         let loaded = loaded.and_then(|loaded| {
             if !registry.id_taken(&loaded.0.id, name) {
@@ -1020,13 +1062,17 @@ impl Loader {
             return Some(Found::Tree(dir.clone()));
         }
         let identified = known.library().ok_or_else(|| format!("{}: no build", known.target)).and_then(|file| {
-            Artifact::open(known.local.as_deref().unwrap_or(&file), &file).map(|(artifact, _)| artifact)
+            #[cfg(not(feature = "native"))]
+            return Err(format!("{}: {}", file.display(), crate::SKIPPED_NATIVE));
+            #[cfg(feature = "native")]
+            return Artifact::open(known.local.as_deref().unwrap_or(&file), &file).map(|(artifact, _)| artifact);
         });
         Some(Found::Build(identified))
     }
 
     /// Checks approval and crash policy before loading a native build. Returns the digest, bytes and quarantine from
     /// one descriptor; a held or unchanged build is not opened.
+    #[cfg(feature = "native")]
     fn admit(
         &self,
         host: &Rc<dyn Host>,
@@ -1247,7 +1293,7 @@ pub fn has_native_build(config_dir: &Path, cwd: &Path, configured: &[&str]) -> b
         {
             return true;
         }
-        target.library().is_some()
+        crate::native_enabled() && target.library().is_some()
     })
 }
 
