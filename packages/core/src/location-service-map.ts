@@ -36,13 +36,20 @@ export const reload = Effect.fn("LocationServiceMap.reload")(function* () {
 })
 
 /** Normalize equivalent placements before they become resource-cache keys. */
-export function canonical(ref: Location.Ref) {
+export function canonical(ref: Location.Ref, platform: NodeJS.Platform = process.platform) {
   // Workspace refs can hold remote POSIX paths even on a Windows host.
-  const flavor = process.platform === "win32" && !ref.directory.startsWith("/") ? path.win32 : path.posix
+  const windows = platform === "win32" && !ref.directory.startsWith("/")
+  const flavor = windows ? path.win32 : path.posix
   const normalized = flavor.normalize(ref.directory)
-  const trailing = normalized.endsWith(flavor.sep) && normalized.length > flavor.parse(normalized).root.length
+  const trimmed =
+    normalized.endsWith(flavor.sep) && normalized.length > flavor.parse(normalized).root.length
+      ? normalized.slice(0, -1)
+      : normalized
+  const directory = windows
+    ? trimmed.replace(/^(\\\\\?\\)?([a-z]):/, (_, prefix = "", drive: string) => `${prefix}${drive.toUpperCase()}:`)
+    : trimmed
   return Location.Ref.make({
-    directory: AbsolutePath.make(trailing ? normalized.slice(0, -1) : normalized),
+    directory: AbsolutePath.make(directory),
     workspaceID: ref.workspaceID,
   })
 }

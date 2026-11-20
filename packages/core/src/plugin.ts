@@ -186,9 +186,15 @@ const layer = Layer.effect(
                       "plugin.id": definition.id,
                     })
                   }
-
-                  inventory = snapshot()
                 }),
+              ).pipe(
+                // Publish inventory only after batched state notifications (such as MCP reconciliation)
+                // finish, so readers waiting on `Plugin.list()` do not see active plugins ahead of their state.
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    inventory = snapshot()
+                  }),
+                ),
               )
               yield* publish(inventory)
             }),
@@ -211,8 +217,8 @@ const layer = Layer.effect(
               if (closed) return
               // Failure is already recorded on its exact activation, so an old queued item
               // cannot disable a replacement and teardown need not wait for this worker.
-              inventory = snapshot()
               const refreshed = yield* State.batch(item.refresh).pipe(Effect.exit)
+              inventory = snapshot()
               yield* publish(inventory)
               if (Exit.isFailure(refreshed))
                 yield* Effect.logWarning("failed to refresh state after disabling plugin", {
