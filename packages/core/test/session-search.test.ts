@@ -222,7 +222,7 @@ describe("SessionSearch", () => {
     }),
   )
 
-  it.effect("filters by directory prefix, time range, sessionID, and children, and pages listings", () =>
+  it.effect("filters by directory prefix, sessionID and subagents, and pages listings", () =>
     Effect.gen(function* () {
       const { search, addSession, addMessages, buildIndex } = yield* setup
       yield* addSession({ id: "old", title: "Old narwhal", directory: "/work/app", created: NOW - 20 * DAY, updated: NOW - 15 * DAY })
@@ -250,18 +250,9 @@ describe("SessionSearch", () => {
       const noChildren = yield* search.search({ query: "narwhal", directory: "/work/app", subagents: false })
       expect(noChildren.results?.map((r) => r.sessionID).toSorted()).toEqual([ses("old"), ses("sub")])
 
-      // Time filters support relative durations and ISO dates.
-      const recent = yield* search.search({ query: "narwhal", after: "7d", subagents: false })
-      expect(recent.results?.map((r) => r.sessionID).toSorted()).toEqual([ses("other"), ses("sub")])
-      const older = yield* search.search({ query: "narwhal", before: "2026-11-10", subagents: false })
-      expect(older.results?.map((r) => r.sessionID)).toEqual([ses("old")])
-
       // sessionID restricts to one session (even a child).
       const scoped = yield* search.search({ query: "narwhal", sessionID: ses("child") })
       expect(scoped.results?.map((r) => r.sessionID)).toEqual([ses("child")])
-
-      const badTime = yield* search.search({ after: "not-a-date" }).pipe(Effect.flip)
-      expect(badTime._tag).toBe("SessionSearch.InvalidTimeError")
     }),
   )
 

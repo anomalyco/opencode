@@ -1,7 +1,7 @@
 export * as SessionSearch from "./search.js"
 
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sql, type SQL } from "drizzle-orm"
-import { Clock, Context, DateTime, Effect, Layer, Option, Schema } from "effect"
+import { and, asc, desc, eq, gt, inArray, isNull, lt, sql, type SQL } from "drizzle-orm"
+import { Context, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { optional } from "@opencode/schema/schema"
 import { Project } from "@opencode/schema/project"
@@ -27,14 +27,6 @@ const MAX_MATCHES_PER_SESSION = 3
 
 const VISIBLE_TYPES = ["user", "assistant", "compaction", "shell", "synthetic", "skill"] as const
 const VISIBLE_WITH_SYSTEM = [...VISIBLE_TYPES, "system"] as const
-
-export class InvalidTimeError extends Schema.TaggedError<InvalidTimeError>()("SessionSearch.InvalidTimeError", {
-  value: Schema.String,
-}) {
-  override get message() {
-    return `Invalid time: ${this.value}. Use an ISO date like 2026-11-15 or a duration like 7d.`
-  }
-}
 
 export class IndexUnavailableError extends Schema.TaggedError<IndexUnavailableError>()(
   "SessionSearch.IndexUnavailableError",
@@ -70,7 +62,7 @@ export class MessageNotFoundError extends Schema.TaggedError<MessageNotFoundErro
   }
 }
 
-export type Error = InvalidTimeError | IndexUnavailableError | SessionNotFoundError | MessageNotFoundError
+export type Error = IndexUnavailableError | SessionNotFoundError | MessageNotFoundError
 
 export const SessionSummary = Schema.Struct({
   sessionID: Session.ID,
@@ -148,8 +140,6 @@ export interface SearchInput {
   readonly projectID?: Project.ID
   readonly sessionID?: Session.ID
   readonly directory?: string
-  readonly after?: string
-  readonly before?: string
   readonly subagents?: boolean
   readonly limit?: number
   readonly offset?: number
@@ -164,7 +154,7 @@ export interface ReadInput {
 }
 
 export interface Interface {
-  readonly search: (input?: SearchInput) => Effect.Effect<SearchOutput, InvalidTimeError | IndexUnavailableError>
+  readonly search: (input?: SearchInput) => Effect.Effect<SearchOutput, IndexUnavailableError>
   readonly read: (input: ReadInput) => Effect.Effect<ReadOutput, SessionNotFoundError | MessageNotFoundError>
 }
 
@@ -176,12 +166,9 @@ export const layer = Layer.effect(
     const db = (yield* Database.Service).db
 
     const search = Effect.fn("SessionSearch.search")(function* (input: SearchInput = {}) {
-      const now = yield* Clock.currentTimeMillis
-      const after = input.after === undefined ? undefined : yield* parseTime(input.after, now)
-      const before = input.before === undefined ? undefined : yield* parseTime(input.before, now)
       const query = input.query?.trim()
-      if (!query) return yield* listSessions(db, { ...input, after, before })
-      return yield* searchSessions(db, { ...input, query, after, before })
+      if (!query) return yield* listSessions(db, input)
+      return yield* searchSessions(db, { ...input, query })
     })
 
     const read = Effect.fn("SessionSearch.read")(function* (input: ReadInput) {
@@ -200,7 +187,7 @@ export const node = makeGlobalNode({
 
 const listSessions = Effect.fnUntraced(function* (
   db: DatabaseService,
-  input: Omit<SearchInput, "after" | "before"> & { readonly after?: number; readonly before?: number },
+  input: SearchInput,
 ): Effect.fn.Return<SearchOutput> {
   const limit = clamp(input.limit ?? 20, 1, 100)
   const offset = Math.max(0, input.offset ?? 0)
@@ -208,8 +195,6 @@ const listSessions = Effect.fnUntraced(function* (
     sessionID: input.sessionID,
     projectID: input.sessionID ? undefined : input.projectID,
     directory: input.directory,
-    after: input.after,
-    before: input.before,
     subagents: input.sessionID ? true : (input.subagents ?? false),
   })
   const rows = yield* db
@@ -229,11 +214,7 @@ const listSessions = Effect.fnUntraced(function* (
 
 const searchSessions = Effect.fnUntraced(function* (
   db: DatabaseService,
-  input: Omit<SearchInput, "after" | "before"> & {
-    readonly query: string
-    readonly after?: number
-    readonly before?: number
-  },
+  input: SearchInput & { readonly query: string },
 ): Effect.fn.Return<SearchOutput, IndexUnavailableError> {
   const indexState = yield* SessionSearchIndex.state(db)
   if (!indexState)
@@ -254,8 +235,6 @@ const searchSessions = Effect.fnUntraced(function* (
     sessionID: input.sessionID,
     projectID: input.sessionID ? undefined : input.projectID,
     directory: input.directory,
-    after: input.after,
-    before: input.before,
     subagents: input.sessionID ? true : (input.subagents ?? true),
   })
   const runMatch = (expression: string) =>
@@ -612,25 +591,10 @@ function formatTime(ms: number) {
   return DateTime.formatIso(DateTime.makeUnsafe(ms)).slice(0, 16).replace("T", " ")
 }
 
-function parseTime(value: string, now: number): Effect.Effect<number, InvalidTimeError> {
-  const trimmed = value.trim()
-  const rel = /^(\d+)([mhdw])$/.exec(trimmed)
-  if (rel) {
-    const multiplier =
-      rel[2] === "m" ? 60_000 : rel[2] === "h" ? 3_600_000 : rel[2] === "d" ? 86_400_000 : 7 * 86_400_000
-    return Effect.succeed(now - Number(rel[1]) * multiplier)
-  }
-  const parsed = Date.parse(trimmed)
-  if (Number.isNaN(parsed)) return Effect.fail(new InvalidTimeError({ value }))
-  return Effect.succeed(parsed)
-}
-
 function sessionConditions(input: {
   readonly sessionID?: Session.ID
   readonly projectID?: Project.ID
   readonly directory?: string
-  readonly after?: number
-  readonly before?: number
   readonly subagents: boolean
 }) {
   const conditions: SQL[] = []
@@ -641,8 +605,6 @@ function sessionConditions(input: {
     const prefix = dir === "/" ? "/%" : `${escapeLike(dir)}/%`
     conditions.push(sql`(${SessionTable.directory} = ${dir} OR ${SessionTable.directory} LIKE ${prefix} ESCAPE '\\')`)
   }
-  if (input.after !== undefined) conditions.push(gte(SessionTable.time_updated, input.after))
-  if (input.before !== undefined) conditions.push(lt(SessionTable.time_created, input.before))
   if (!input.subagents) conditions.push(isNull(SessionTable.parent_id))
   return conditions
 }
@@ -651,8 +613,6 @@ function ftsFilters(input: {
   readonly sessionID?: Session.ID
   readonly projectID?: Project.ID
   readonly directory?: string
-  readonly after?: number
-  readonly before?: number
   readonly subagents: boolean
 }) {
   const parts: SQL[] = []
@@ -663,8 +623,6 @@ function ftsFilters(input: {
     const prefix = dir === "/" ? "/%" : `${escapeLike(dir)}/%`
     parts.push(sql`AND (s.directory = ${dir} OR s.directory LIKE ${prefix} ESCAPE '\\')`)
   }
-  if (input.after !== undefined) parts.push(sql`AND s.time_updated >= ${input.after}`)
-  if (input.before !== undefined) parts.push(sql`AND s.time_created < ${input.before}`)
   if (!input.subagents) parts.push(sql`AND s.parent_id IS NULL`)
   return parts.length > 0 ? sql.join(parts, sql` `) : sql``
 }

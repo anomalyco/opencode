@@ -24,12 +24,6 @@ export const SearchInput = Schema.Struct({
   directory: Schema.optionalKey(Schema.String).annotate({
     description: "Only sessions in this directory or below it.",
   }),
-  after: Schema.optionalKey(Schema.String).annotate({
-    description: "Only sessions active at or after this time: ISO date (2026-11-15) or duration ago (7d, 24h, 2w).",
-  }),
-  before: Schema.optionalKey(Schema.String).annotate({
-    description: "Only sessions created before this time: ISO date or duration ago.",
-  }),
   subagents: Schema.optionalKey(Schema.Boolean).annotate({
     description: "When listing, include subagent sessions (default false). Searches include them by default.",
   }),
@@ -82,7 +76,7 @@ export const Plugin = {
         editor.add({
           name: "search",
           description:
-            'Find the user\'s past sessions, in this project unless scope is "all". With query: full-text search over session titles, user and assistant messages, and compaction summaries. Matches any query word, ranked so messages with more and rarer words come first; supports "exact phrase", prefix*, AND, OR, NOT. Returns the best-matching sessions with up to 3 snippets and messageIDs each. Without query: lists sessions, most recently updated first. Filter either way by directory or time. Follow up with opencode.session.read({ sessionID, messageID }).',
+            'Find the user\'s past sessions, in this project unless scope is "all". With query: full-text search over session titles, user and assistant messages, and compaction summaries. Matches any query word, ranked so messages with more and rarer words come first; supports "exact phrase", prefix*, AND, OR, NOT. Returns the best-matching sessions with up to 3 snippets and messageIDs each. Without query: lists sessions, most recently updated first. Filter either way by directory. Follow up with opencode.session.read({ sessionID, messageID }).',
           input: SearchInput,
           output: SessionSearch.SearchOutput,
           options: { namespace: "opencode.session", codemode: true },
