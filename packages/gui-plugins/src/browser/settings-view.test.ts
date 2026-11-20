@@ -33,13 +33,13 @@ test.each([
   expect(en[accessSummary(access)]).toBe(sentence)
 })
 
-// The two facts a person needs before adding an extension are in sight whatever the verdict, not behind Details.
+// Developer folders have no store or browser behind them, so the confirmation notes that; store and browser copies don't.
 test.each([
   ["chrome", undefined],
   ["edge", undefined],
-  ["browser", "Copied from another browser. No store checked this copy."],
+  ["browser", undefined],
   ["folder", "From a folder on this computer. No store checked this copy."],
-] as const)("an extension from %s says in sight where it came from only when no store checked it", (source, sentence) => {
+] as const)("an extension from %s notes its source only when loaded from a folder", (source, sentence) => {
   const key = unvettedSource(source)
 
   expect(key ? en[key] : undefined).toBe(sentence)

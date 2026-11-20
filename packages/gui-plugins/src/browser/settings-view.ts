@@ -20,11 +20,11 @@ export function verdict(level: ExtensionCompatibility["level"]) {
 }
 
 /**
- * The sentence for where an extension's package came from when no store published it. The install review shows it in
- * sight, beside the verdict: a person must know it before adding. A store's copy says so behind Details.
+ * The sentence for an extension loaded from a local folder of source files. Store listings and extensions copied from
+ * the user's own browser need no extra warning.
  */
 export function unvettedSource(source: "chrome" | "edge" | "browser" | "folder") {
-  return source === "browser" || source === "folder" ? (`review.source.${source}` as const) : undefined
+  return source === "folder" ? ("review.source.folder" as const) : undefined
 }
 
 /**

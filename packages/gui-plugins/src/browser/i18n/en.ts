@@ -227,6 +227,7 @@ export default {
   "settings.extensions.title": "Extensions",
   "settings.extensions.note": "Some extensions may not work here yet.",
   "settings.extensions.add.title": "Add an extension",
+  "settings.extensions.confirm.title": 'Add "{{name}}"?',
   "settings.extensions.add.description": "From the Chrome Web Store or Edge Add-ons, or one your other browsers already have.",
   "settings.extensions.add.action": "Add extension",
   "settings.extensions.dialog.description": "Extensions run in every page of this browser.",

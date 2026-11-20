@@ -2,13 +2,14 @@ import { createMemo, createSignal, For, getOwner, runWithOwner, Show, untrack, t
 import { createStore } from "solid-js/store"
 import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
 import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
-import { accessSummary, advancedOpen, unvettedSource, verdict } from "./settings-view"
+import { advancedOpen, unvettedSource, verdict } from "./settings-view"
 import { SiteChooser } from "./site-chooser"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
 import type { ExtensionCompatibility, InstallResult, ProfileExtension, ProfileSource } from "./profile/ipc"
 import { displayHost } from "./host-display"
 import { BrowserSites } from "./site-permissions"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { showToast } from "@opencode/ui/toast"
 import type { Job } from "./jobs-machine"
@@ -415,10 +416,14 @@ function ExtensionRow(props: {
   )
 }
 
+type InstallJob = Extract<Job, { type: "install-store" | "install-folder" | "install-browser" }>
+
+type PendingReview = { readonly job: InstallJob; readonly result: Extract<InstallResult, { token: string }> }
+
 /**
  * The Add an extension dialog: a store link, or the extensions another Chromium browser has. Loading one from a folder
  * of its source files is for people who build extensions, so it waits in a closed "For developers" disclosure at the
- * end. The dialog runs its own jobs, so it keeps working whichever page opened it, and stays open to add several.
+ * end. When an install needs confirmation, the dialog switches cleanly into a minimal confirmation step.
  */
 function AddExtension(props: { sources: readonly ProfileSource[]; close: () => void }) {
   const ctx = usePlugin<typeof definition>()
@@ -427,6 +432,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
   // The page that opened it already lists the browsers.
   const jobs = createProfileJobs({ profile: false })
   const [form, setForm] = createStore<{ link: string; profile?: string }>({ link: "" })
+  const [approving, setApproving] = createSignal<PendingReview>()
   const choices = createMemo(() => profileChoices(props.sources.filter((source) => source.engine === "chromium")))
   const selected = createMemo(() => choices().find((choice) => choiceValue(choice) === form.profile) ?? choices()[0])
   const blocked = () => !jobs.available() || jobs.running() !== undefined
@@ -454,7 +460,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
 
   // The install that stopped for the user to confirm: its extension will not work here, or asks for access the user
   // has not seen yet.
-  const confirming = () => {
+  const confirming = (): PendingReview | undefined => {
     const last = jobs.last()
 
     if (last?.outcome.type !== "installed") return undefined
@@ -466,6 +472,23 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
     return job.type === "install-store" || job.type === "install-folder" || job.type === "install-browser"
       ? { job, result }
       : undefined
+  }
+
+  // Keeps the confirmation view steady while the approval token is being installed, then returns to the picker.
+  const runningApproval = (): PendingReview | undefined => {
+    const running = jobs.running()
+    const current = approving()
+
+    return running && "token" in running && running.token && current && running.token === current.result.token
+      ? current
+      : undefined
+  }
+
+  const review = () => confirming() ?? runningApproval()
+
+  const approve = (pending: PendingReview) => {
+    setApproving(pending)
+    jobs.start({ ...pending.job, token: pending.result.token })
   }
 
   const addLink = () => {
@@ -483,178 +506,212 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
   }
 
   return (
-    <ui.Dialog
-      title={ctx.t("settings.extensions.add.title")}
-      description={ctx.t("settings.extensions.dialog.description")}
-      // As tall as what it holds: a review and its details need room, and the list between scrolls when it is long.
-      size="fit"
-      footer={
-        <ui.Button variant="contrast" onClick={props.close}>
-          {ctx.t("settings.extensions.done")}
-        </ui.Button>
-      }
-    >
-      {/* The link and the developers' disclosure keep their place; what is between them scrolls when it is long. */}
-      <div class="flex h-full min-h-0 flex-col gap-4 pb-1">
-        <div class="flex shrink-0 items-center gap-2">
-          <ui.TextInput
-            label={ctx.t("settings.extensions.store.label")}
-            placeholder={ctx.t("settings.extensions.store.placeholder")}
-            type="url"
-            size="large"
-            autofocus
-            value={form.link}
-            onInput={(link) => setForm("link", link)}
-            onSubmit={addLink}
-            class="min-w-0 flex-1"
-          />
-          <ui.Button
-            size="large"
-            disabled={blocked() || !form.link.trim()}
-            busy={jobs.running()?.type === "install-store"}
-            onClick={addLink}
-          >
-            {ctx.t("settings.extensions.add")}
-          </ui.Button>
-        </div>
-        {/* The scroller spans the dialog's own inset, so its thumb lies beside the rows and they keep their edges. */}
-        <MenuScroll class="-mx-4 max-h-[50vh] min-h-0 flex-1" viewportClass="min-h-0 flex-1 px-4">
-        <div class="flex flex-col gap-4">
-        <Show when={jobs.describe(jobs.last())}>
-          {(message) => (
-            <div
-              role={message().error ? "alert" : "status"}
-              class="flex flex-col gap-2 text-[13px] leading-[var(--line-height-base)]"
-            >
-              <Show
-                when={confirming()}
-                fallback={
-                  // An added extension's list of what does not work shows on hover, as in its row, so the list of
-                  // browsers' extensions below keeps its room.
-                  <Show
-                    when={message().compatibility}
-                    fallback={
-                      <p
-                        classList={{
-                          "text-v2-state-fg-danger": message().error,
-                          "text-v2-text-text-muted": !message().error,
-                        }}
-                      >
-                        {message().text}
-                      </p>
-                    }
-                  >
-                    {(compatibility) => (
-                      <ui.Tooltip value={<CompatibilityDetails compatibility={compatibility()} />}>
-                        <p tabIndex={0} class="text-v2-text-text-muted">
-                          {message().text}
-                        </p>
-                      </ui.Tooltip>
-                    )}
-                  </Show>
-                }
-              >
-                {(confirm) => (
-                  <ChoiceRow image={confirm().result.icon} name={confirm().result.name}>
-                    <ui.Button
-                      size="small"
-                      class={ACTION_COLUMN}
-                      disabled={blocked()}
-                      onClick={() => jobs.start({ ...confirm().job, token: confirm().result.token })}
-                    >
-                      {confirm().result.type === "unsupported"
-                        ? ctx.t("settings.extensions.anyway")
-                        : ctx.t("settings.extensions.add")}
-                    </ui.Button>
-                  </ChoiceRow>
-                )}
-              </Show>
-              <Show when={confirming()} keyed>
-                {(confirm) => <InstallReview review={confirm.result} job={confirm.job} />}
-              </Show>
-            </div>
-          )}
-        </Show>
-        <Show when={selected()}>
-          {(choice) => (
-            <div class="flex flex-col gap-1">
-              <div class="flex h-7 items-center justify-between gap-2">
-                <span class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                  {ctx.t("settings.extensions.browser.title")}
+    <Dialog fit size="normal">
+      <DialogHeader>
+        <Show
+          when={review()}
+          fallback={
+            <DialogTitleGroup
+              title={ctx.t("settings.extensions.add.title")}
+              description={ctx.t("settings.extensions.dialog.description")}
+            />
+          }
+        >
+          {(pending) => (
+            <DialogTitleGroup
+              title={
+                <span class="flex items-start gap-2.5">
+                  <Glyph image={pending().result.icon} fallback="puzzle" />
+                  <span class="min-w-0">
+                    {ctx.t("settings.extensions.confirm.title", { name: pending().result.name })}
+                  </span>
                 </span>
-                <Show when={choices().length > 1}>
-                  <ui.Select
-                    label={ctx.t("settings.extensions.browser.select")}
-                    options={choices().map((item) => ({ value: choiceValue(item), label: choiceLabel(item) }))}
-                    value={choiceValue(choice())}
-                    onChange={(profile) => setForm("profile", profile)}
-                  />
-                </Show>
-              </div>
-              <For
-                each={available.latest ?? []}
-                fallback={
-                  <Show when={available.latest}>
-                    <Muted>{ctx.t("settings.extensions.browser.empty")}</Muted>
-                  </Show>
-                }
-              >
-                {(item) => (
-                  <ChoiceRow image={item.icon} name={item.name}>
-                    <CompatibilityNote compatibility={item.compatibility} />
-                    <ui.Button
-                      size="small"
-                      class={ACTION_COLUMN}
-                      variant={item.installed ? "ghost-muted" : "neutral"}
-                      disabled={blocked() || item.installed}
-                      busy={installing(item.id)}
-                      onClick={() =>
-                        jobs.start({
-                          type: "install-browser",
-                          source: choice().source.id,
-                          profile: choice().profile.id,
-                          id: item.id,
-                        })
-                      }
-                    >
-                      {item.installed
-                        ? ctx.t("settings.extensions.added")
-                        : item.compatibility.level === "unsupported"
-                          ? ctx.t("settings.extensions.anyway")
-                          : ctx.t("settings.extensions.add")}
-                    </ui.Button>
-                  </ChoiceRow>
-                )}
-              </For>
-            </div>
+              }
+            />
           )}
         </Show>
+      </DialogHeader>
+      <DialogBody class="min-h-0">
+        <div data-scrollable class="min-h-0 flex-1 overflow-y-auto px-4">
+          <Show
+            when={review()}
+            fallback={
+              /* Top and bottom padding keep borders and focus rings of the URL input and buttons inside the clip. */
+              <div class="flex h-full min-h-0 flex-col gap-4 py-1">
+                <div class="flex shrink-0 items-center gap-2">
+                  <ui.TextInput
+                    label={ctx.t("settings.extensions.store.label")}
+                    placeholder={ctx.t("settings.extensions.store.placeholder")}
+                    type="url"
+                    size="large"
+                    autofocus
+                    value={form.link}
+                    onInput={(link) => setForm("link", link)}
+                    onSubmit={addLink}
+                    class="min-w-0 flex-1"
+                  />
+                  <ui.Button
+                    size="large"
+                    disabled={blocked() || !form.link.trim()}
+                    busy={jobs.running()?.type === "install-store"}
+                    onClick={addLink}
+                  >
+                    {ctx.t("settings.extensions.add")}
+                  </ui.Button>
+                </div>
+                {/* The scroller spans the dialog's inset so its thumb sits beside the rows and focus rings stay unclipped. */}
+                <MenuScroll class="-mx-4 -my-1 max-h-[50vh] min-h-0 flex-1" viewportClass="min-h-0 flex-1 px-4 py-1">
+                  <div class="flex flex-col gap-3">
+                    <Show when={jobs.describe(jobs.last())}>
+                      {(message) => (
+                        <div
+                          role={message().error ? "alert" : "status"}
+                          class="text-[13px] leading-[var(--line-height-base)]"
+                        >
+                          <Show
+                            when={message().compatibility}
+                            fallback={
+                              <p
+                                classList={{
+                                  "text-v2-state-fg-danger": message().error,
+                                  "text-v2-text-text-muted": !message().error,
+                                }}
+                              >
+                                {message().text}
+                              </p>
+                            }
+                          >
+                            {(compatibility) => (
+                              <ui.Tooltip value={<CompatibilityDetails compatibility={compatibility()} />}>
+                                <p tabIndex={0} class="w-fit text-v2-text-text-muted">
+                                  {message().text}
+                                </p>
+                              </ui.Tooltip>
+                            )}
+                          </Show>
+                        </div>
+                      )}
+                    </Show>
+                    <Show when={selected()}>
+                      {(choice) => (
+                        <div class="flex flex-col gap-1">
+                          <div class="flex h-7 items-center justify-between gap-2">
+                            <span class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
+                              {ctx.t("settings.extensions.browser.title")}
+                            </span>
+                            <Show when={choices().length > 1}>
+                              {/* Pulls the inline select's 4px end padding out without shrinking its trigger width. */}
+                              <div class="-me-1 shrink-0">
+                                <ui.Select
+                                  label={ctx.t("settings.extensions.browser.select")}
+                                  options={choices().map((item) => ({ value: choiceValue(item), label: choiceLabel(item) }))}
+                                  value={choiceValue(choice())}
+                                  onChange={(profile) => setForm("profile", profile)}
+                                />
+                              </div>
+                            </Show>
+                          </div>
+                          <For
+                            each={available.latest ?? []}
+                            fallback={
+                              <Show when={available.latest}>
+                                <Muted>{ctx.t("settings.extensions.browser.empty")}</Muted>
+                              </Show>
+                            }
+                          >
+                            {(item) => (
+                              <ChoiceRow
+                                image={item.icon}
+                                name={item.name}
+                                note={<CompatibilityNote compatibility={item.compatibility} stacked />}
+                              >
+                                <ui.Button
+                                  size="small"
+                                  class={ACTION_COLUMN}
+                                  variant={item.installed ? "ghost-muted" : "neutral"}
+                                  disabled={blocked() || item.installed}
+                                  busy={installing(item.id)}
+                                  onClick={() =>
+                                    jobs.start({
+                                      type: "install-browser",
+                                      source: choice().source.id,
+                                      profile: choice().profile.id,
+                                      id: item.id,
+                                    })
+                                  }
+                                >
+                                  {item.installed
+                                    ? ctx.t("settings.extensions.added")
+                                    : item.compatibility.level === "unsupported"
+                                      ? ctx.t("settings.extensions.anyway")
+                                      : ctx.t("settings.extensions.add")}
+                                </ui.Button>
+                              </ChoiceRow>
+                            )}
+                          </For>
+                        </div>
+                      )}
+                    </Show>
+                  </div>
+                </MenuScroll>
+                <details class="group shrink-0 border-t-[0.5px] border-v2-border-border-muted pt-3 text-v2-text-text-muted">
+                  <summary class={DISCLOSURE}>
+                    {ctx.t("settings.developers")}
+                    <span class="flex transition-transform group-open:rotate-180">
+                      <ui.Icon name="outline-chevron-down" />
+                    </span>
+                  </summary>
+                  <div class="mt-2 flex items-center gap-3">
+                    <p class="min-w-0 flex-1 text-[13px] leading-[var(--line-height-base)]">
+                      {ctx.t("settings.extensions.folder.description")}
+                    </p>
+                    <ui.Button
+                      size="small"
+                      variant="neutral"
+                      disabled={blocked() || !desktop}
+                      busy={jobs.running()?.type === "install-folder"}
+                      onClick={() => void pickFolder()}
+                    >
+                      {ctx.t("settings.extensions.folder.action")}
+                    </ui.Button>
+                  </div>
+                </details>
+              </div>
+            }
+          >
+            {(pending) => <InstallReview review={pending().result} job={pending().job} />}
+          </Show>
         </div>
-        </MenuScroll>
-        <details class="group shrink-0 border-t-[0.5px] border-v2-border-border-muted pt-3 text-v2-text-text-muted">
-          <summary class={DISCLOSURE}>
-            {ctx.t("settings.developers")}
-            <span class="flex transition-transform group-open:rotate-180">
-              <ui.Icon name="outline-chevron-down" />
-            </span>
-          </summary>
-          <div class="mt-2 flex items-center gap-3">
-            <p class="min-w-0 flex-1 text-[13px] leading-[var(--line-height-base)]">
-              {ctx.t("settings.extensions.folder.description")}
-            </p>
-            <ui.Button
-              size="small"
-              variant="neutral"
-              disabled={blocked() || !desktop}
-              busy={jobs.running()?.type === "install-folder"}
-              onClick={() => void pickFolder()}
-            >
-              {ctx.t("settings.extensions.folder.action")}
+      </DialogBody>
+      <DialogFooter>
+        <Show
+          when={review()}
+          fallback={
+            <ui.Button variant="contrast" onClick={props.close}>
+              {ctx.t("settings.extensions.done")}
             </ui.Button>
-          </div>
-        </details>
-      </div>
-    </ui.Dialog>
+          }
+        >
+          {(pending) => (
+            <>
+              <ui.Button variant="neutral" disabled={blocked()} onClick={() => jobs.dismiss()}>
+                {ctx.t("common.cancel")}
+              </ui.Button>
+              <ui.Button
+                variant="contrast"
+                disabled={blocked()}
+                busy={runningApproval() !== undefined}
+                onClick={() => approve(pending())}
+              >
+                {pending().result.type === "unsupported"
+                  ? ctx.t("settings.extensions.anyway")
+                  : ctx.t("settings.extensions.add.action")}
+              </ui.Button>
+            </>
+          )}
+        </Show>
+      </DialogFooter>
+    </Dialog>
   )
 }
 
@@ -663,102 +720,94 @@ const DISCLOSURE =
   "flex w-fit cursor-pointer list-none items-center gap-1 text-[13px] leading-[var(--line-height-base)] [&::-webkit-details-marker]:hidden"
 
 /**
- * Buttons beside a verdict share one width whatever they say, so the verdicts' right edges line up in a column.
+ * Row buttons share one width whatever they say, so the right-hand action column stays flush.
  */
-const ACTION_COLUMN = "min-w-24 justify-center"
+const ACTION_COLUMN = "min-w-24 shrink-0 justify-center"
 
-/** The verdict and action stay whole; only the name may truncate. */
-function ChoiceRow(props: { image?: string; name: string; children: JSX.Element }) {
+/** Extension row: icon and name (with optional compatibility note underneath) take full width; action stays on the right. */
+function ChoiceRow(props: { image?: string; name: string; note?: JSX.Element; children: JSX.Element }) {
   return (
-    <div class="flex h-11 items-center gap-3">
+    <div class="flex min-h-11 items-center gap-3 py-1.5">
       <Glyph image={props.image} fallback="puzzle" />
-      <span class="min-w-0 flex-1 truncate text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base" title={props.name}>{props.name}</span>
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span
+          class="truncate text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base"
+          title={props.name}
+        >
+          {props.name}
+        </span>
+        {props.note}
+      </div>
       {props.children}
     </div>
   )
 }
 
-function InstallReview(props: {
-  review: Extract<InstallResult, { token: string }>
-  job: Extract<Job, { type: "install-store" | "install-folder" | "install-browser" }>
-}) {
+function InstallReview(props: { review: PendingReview["result"]; job: InstallJob }) {
   const ctx = usePlugin<typeof definition>()
-  const [expanded, setExpanded] = createSignal(false)
-  const more = () => props.review.sites.length - 3
-  const grants = () => props.review.added ?? props.review
-
-  const origin = () => {
-    if (props.job.type === "install-folder") return props.job.path
-
-    if (props.job.type === "install-browser") return ctx.t("review.profile", { source: props.job.source, profile: props.job.profile })
-  }
-
+  const ui = ctx.ui
   const source = () => props.review.store ?? (props.job.type === "install-browser" ? "browser" : "folder")
+  const unvetted = () => unvettedSource(source())
+  const hasCompatWarning = () => props.review.compatibility.level !== "supported"
 
-  const technical = () => [
-    [ctx.t("review.id"), props.review.id],
-    [ctx.t("review.origin"), origin()],
-    [ctx.t("review.patterns"), props.review.hosts.join("\n")],
-    [ctx.t("review.permissions"), props.review.permissions.join(", ")],
-  ].filter((row) => row[1])
+  const empty = () =>
+    props.review.access.length === 0 &&
+    !props.review.added &&
+    !hasCompatWarning() &&
+    !unvetted() &&
+    !props.review.replaces
 
   return (
-    <div class="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base">
-      <Verdict level={props.review.compatibility.level} />
-      <p class="text-v2-text-text-muted">
-        {ctx.t(accessSummary(props.review.access))}
-        <Show when={props.review.access.length > 1}> {ctx.t("review.summary.more")}</Show>
-      </p>
-      {/* In sight, not behind Details: a copy no store checked is something to know before adding it. */}
-      <Show when={unvettedSource(source())}>{(key) => <p>{ctx.t(key())}</p>}</Show>
-      {/* An update that asks for more stays in sight: the person agreed to less. */}
-      <Show when={props.review.added}>
-        <div>
-          <p class="font-[530] text-v2-state-fg-warning">{ctx.t("review.new")}</p>
-          <ul class="list-disc ps-4">
-            <For each={grants().access}>{(item) => <li>{ctx.t(item === "someSites" || item === "allSites" ? "review.changeSites" : `extensions.access.${item}`)}</li>}</For>
-            <Show when={props.review.added?.hosts.length && !grants().access.some((item) => item === "someSites" || item === "allSites")}><li>{ctx.t("review.moreSites")}</li></Show>
-            <Show when={!grants().access.length && !grants().hosts.length}><li>{ctx.t("review.morePermissions")}</li></Show>
+    <div class="flex min-w-0 flex-col gap-3 py-1 text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base">
+      <Show when={props.review.access.length > 0}>
+        <div class="flex flex-col gap-1">
+          <p class="font-[530]">{ctx.t("extensions.access.title")}</p>
+          <ul class="flex list-disc flex-col gap-0.5 ps-4 text-v2-text-text-muted">
+            <For each={props.review.access}>{(item) => <li>{ctx.t(`extensions.access.${item}`)}</li>}</For>
           </ul>
         </div>
       </Show>
-      <details class="group text-v2-text-text-muted">
-        <summary class={DISCLOSURE}>
-          {ctx.t("review.details")}
-          <span class="flex transition-transform group-open:rotate-180">
-            <ctx.ui.Icon name="outline-chevron-down" />
-          </span>
-        </summary>
-        <div data-scrollable tabIndex={0} role="region" aria-label={ctx.t("review.details")} class="mt-2 flex max-h-56 flex-col gap-2 overflow-y-auto rounded-[6px] bg-v2-background-bg-layer-01 p-3 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)]">
-          <Show when={props.review.access.length}>
-            <div class="text-v2-text-text-base">
-              <p class="font-[530]">{ctx.t("extensions.access.title")}</p>
-              <ul class="list-disc ps-4">
-                <For each={props.review.access}>{(item) => <li>{ctx.t(`extensions.access.${item}`)}</li>}</For>
-              </ul>
-            </div>
-          </Show>
-          <Show when={props.review.compatibility.level !== "supported"}>
-            <div class="text-v2-text-text-base">
-              <CompatibilityDetails compatibility={props.review.compatibility} />
-            </div>
-          </Show>
-          <Show when={!unvettedSource(source())}><p>{ctx.t(`review.source.${source()}`)}</p></Show>
-          <Show when={props.review.replaces}>{(name) => <p>{ctx.t("settings.extensions.replaces", { name: name() })}</p>}</Show>
-          <Show when={props.review.access.includes("allSites")} fallback={
-            <Show when={props.review.sites.length} fallback={<p>{ctx.t(props.review.hosts.length ? "review.otherSites" : "review.noSites")}</p>}>
-              <p class="break-words">{ctx.t("review.sites")} <bdi dir="ltr">{(expanded() ? props.review.sites : props.review.sites.slice(0, 3)).join(", ")}</bdi>{" "}
-                <Show when={more() > 0}><button type="button" aria-expanded={expanded()} class="underline" onClick={() => setExpanded(!expanded())}>
-                  {expanded() ? ctx.t("review.less") : ctx.plural("review.more", more())}
-                </button></Show>
-              </p>
-            </Show>
-          }><p>{ctx.t("review.allSites")}</p></Show>
-          <dl class="grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-[12px]">
-            <For each={technical()}>{(row) => <><dt>{row[0]}</dt><dd dir="ltr" class="whitespace-pre-wrap break-all text-v2-text-text-base" style={{ "font-family": "var(--font-family-mono)" }}>{row[1]}</dd></>}</For>
-          </dl>
-        </div>
-      </details>
+      {/* An update that asks for more stays in sight: the person agreed to less. */}
+      <Show when={props.review.added}>
+        {(added) => (
+          <div class="flex flex-col gap-1">
+            <p class="font-[530] text-v2-state-fg-warning">{ctx.t("review.new")}</p>
+            <ul class="flex list-disc flex-col gap-0.5 ps-4 text-v2-text-text-muted">
+              <For each={added().access}>
+                {(item) => (
+                  <li>
+                    {ctx.t(
+                      item === "someSites" || item === "allSites" ? "review.changeSites" : `extensions.access.${item}`,
+                    )}
+                  </li>
+                )}
+              </For>
+              <Show
+                when={added().hosts.length && !added().access.some((item) => item === "someSites" || item === "allSites")}
+              >
+                <li>{ctx.t("review.moreSites")}</li>
+              </Show>
+              <Show when={!added().access.length && !added().hosts.length}>
+                <li>{ctx.t("review.morePermissions")}</li>
+              </Show>
+            </ul>
+          </div>
+        )}
+      </Show>
+      <Show when={hasCompatWarning()}>
+        <ui.Tooltip value={<CompatibilityDetails compatibility={props.review.compatibility} />}>
+          <div tabIndex={0} class="w-fit">
+            <Verdict level={props.review.compatibility.level} />
+          </div>
+        </ui.Tooltip>
+      </Show>
+      <Show when={unvetted()}>{(key) => <p class="text-v2-text-text-muted">{ctx.t(key())}</p>}</Show>
+      <Show when={props.review.replaces}>
+        {(name) => <p class="text-v2-text-text-muted">{ctx.t("settings.extensions.replaces", { name: name() })}</p>}
+      </Show>
+      <Show when={empty()}>
+        <p class="text-v2-text-text-muted">{ctx.t("review.summary.none")}</p>
+      </Show>
     </div>
   )
 }
@@ -825,7 +874,7 @@ function Identity(props: {
  * A quiet note for an extension that partly works here and a warning for one that will not, with what does not work
  * on hover or focus; nothing for one that works.
  */
-function CompatibilityNote(props: { compatibility: ExtensionCompatibility }) {
+function CompatibilityNote(props: { compatibility: ExtensionCompatibility; stacked?: boolean }) {
   const ctx = usePlugin<typeof definition>()
   const ui = ctx.ui
   const level = () => props.compatibility.level
@@ -834,13 +883,15 @@ function CompatibilityNote(props: { compatibility: ExtensionCompatibility }) {
     <Show when={level() !== "supported" ? level() : undefined}>
       {(shown) => (
         // The tooltip wraps its trigger in an element of its own, so this one keeps the note whole in a row.
-        <span class="flex shrink-0 justify-end">
+        <span class="flex" classList={{ "shrink-0 justify-end": !props.stacked, "w-fit": props.stacked }}>
           <ui.Tooltip value={<CompatibilityDetails compatibility={props.compatibility} />}>
             <span
               data-compatibility={shown()}
               tabIndex={0}
-              class="whitespace-nowrap text-end text-[13px] font-[440] leading-[var(--line-height-base)]"
+              class="whitespace-nowrap font-[440]"
               classList={{
+                "text-start text-[12px] leading-[var(--line-height-compact)]": props.stacked,
+                "text-end text-[13px] leading-[var(--line-height-base)]": !props.stacked,
                 "text-v2-state-fg-warning": shown() === "unsupported",
                 "text-v2-text-text-muted": shown() === "partial",
               }}
