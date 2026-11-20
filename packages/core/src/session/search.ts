@@ -1,14 +1,13 @@
 export * as SessionSearch from "./search.js"
 
 import { and, asc, desc, eq, gt, inArray, isNull, lt, sql, type SQL } from "drizzle-orm"
-import { Context, DateTime, Effect, Layer, Option, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { optional } from "@opencode/schema/schema"
 import { Project } from "@opencode/schema/project"
 import { Session } from "@opencode/schema/session"
 import type { Tool } from "@opencode/schema/tool"
 import { Database } from "../database/database.js"
-import { DatabaseBatch } from "../database/batch.js"
 import { SessionHistory } from "./history.js"
 import { SessionMessage } from "./message.js"
 import { SessionSearchIndex } from "./search-index.js"
@@ -115,11 +114,12 @@ export const ReadMessage = Schema.Struct({
 })
 export type ReadMessage = typeof ReadMessage.Type
 
+// The cursors come before messages, so they survive when a long page is cut at the tool output limit.
 export const ReadOutput = Schema.Struct({
   session: SessionSummary,
-  messages: Schema.Array(ReadMessage),
   older: SessionMessage.ID.pipe(optional),
   newer: SessionMessage.ID.pipe(optional),
+  messages: Schema.Array(ReadMessage),
 })
 export type ReadOutput = typeof ReadOutput.Type
 
@@ -211,7 +211,7 @@ const searchSessions = Effect.fnUntraced(function* (
 
   const limit = clamp(input.limit ?? 5, 1, 20)
   const hitLimit = Math.min(400, Math.max(100, limit * 20))
-  const filters = ftsFilters({
+  const filters = sessionConditions({
     sessionID: input.sessionID,
     projectID: input.sessionID ? undefined : input.projectID,
     directory: input.directory,
@@ -223,9 +223,8 @@ const searchSessions = Effect.fnUntraced(function* (
         bm25(session_search, 3.0, 2.0, 1.5, 1.0) AS score
       FROM session_search
       JOIN session_search_document AS d ON d.id = session_search.rowid
-      JOIN session_v2 AS s ON s.id = d.session_id
-      WHERE session_search MATCH ${expression}
-      ${filters}
+      JOIN session_v2 ON session_v2.id = d.session_id
+      WHERE session_search MATCH ${expression}${filters.length > 0 ? sql` AND ${and(...filters)}` : sql``}
       ORDER BY score
       LIMIT ${hitLimit}
     `)
@@ -260,25 +259,22 @@ const searchSessions = Effect.fnUntraced(function* (
   if (grouped.size === 0) return { results: [] }
 
   const sessionIDs = Array.from(grouped.keys())
-  const sessionMap = new Map<Session.ID, typeof SessionTable.$inferSelect>()
-  for (const batch of DatabaseBatch.batches(sessionIDs, 1)) {
-    const rows = yield* db.select().from(SessionTable).where(inArray(SessionTable.id, batch)).all().pipe(Effect.orDie)
-    for (const row of rows) sessionMap.set(row.id, row)
-  }
+  const sessionMap = new Map(
+    (yield* db.select().from(SessionTable).where(inArray(SessionTable.id, sessionIDs)).all().pipe(Effect.orDie)).map(
+      (row) => [row.id, row] as const,
+    ),
+  )
 
   const messageIDs = Array.from(grouped.entries()).flatMap(([sessionID, sources]) =>
     sources.flatMap((source) => (source === sessionID ? [] : [SessionMessage.ID.make(source)])),
   )
-  const messageMap = new Map<SessionMessage.ID, DecodedRow>()
-  for (const batch of DatabaseBatch.batches(messageIDs, 1)) {
-    const rows = yield* db
-      .select()
-      .from(SessionMessageTable)
-      .where(inArray(SessionMessageTable.id, batch))
-      .all()
-      .pipe(Effect.orDie)
-    for (const decoded of yield* decodeWindowRows(db, rows)) messageMap.set(decoded.row.id, decoded)
-  }
+  const messageRows = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(inArray(SessionMessageTable.id, messageIDs))
+    .all()
+    .pipe(Effect.orDie)
+  const messageMap = new Map((yield* decodeWindowRows(db, messageRows)).map((decoded) => [decoded.row.id, decoded] as const))
 
   const results: SearchResult[] = []
   for (const [sessionID, sources] of grouped) {
@@ -409,21 +405,14 @@ type DecodedRow = {
   readonly message: SessionMessage.MediaInfo
 }
 
-/** Decodes a small window without hydrating media blobs; one corrupt legacy row is skipped instead of failing the page. */
-const decodeWindowRows = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
-): Effect.fn.Return<DecodedRow[]> {
-  if (rows.length === 0) return []
-  const batch = yield* SessionHistory.decodeMessageRowsWithRefs(db, rows).pipe(Effect.option)
-  if (Option.isSome(batch)) return rows.map((row, index) => ({ row, message: batch.value[index]! }))
-  const out: DecodedRow[] = []
-  for (const row of rows) {
-    const one = yield* SessionHistory.decodeMessageRowsWithRefs(db, [row]).pipe(Effect.option)
-    if (Option.isSome(one) && one.value[0]) out.push({ row, message: one.value[0] })
-  }
-  return out
-})
+/** Decodes rows without hydrating media blobs. A row that no longer decodes is skipped instead of failing the page. */
+const decodeWindowRows = (db: DatabaseService, rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>) =>
+  Effect.forEach(rows, (row) =>
+    SessionHistory.decodeMessageRowsWithRefs(db, [row]).pipe(
+      Effect.map(([message]) => (message ? [{ row, message }] : [])),
+      Effect.orElseSucceed(() => []),
+    ),
+  ).pipe(Effect.map((decoded): DecodedRow[] => decoded.flat()))
 
 function formatReadOutput(
   session: typeof SessionTable.$inferSelect,
@@ -432,16 +421,12 @@ function formatReadOutput(
   older: SessionMessage.ID | undefined,
   newer: SessionMessage.ID | undefined,
 ): ReadOutput {
-  const messages = rows.map((entry) => formatMessage(entry.row, entry.message, full))
-  const out: {
-    session: SessionSummary
-    messages: ReadMessage[]
-    older?: SessionMessage.ID
-    newer?: SessionMessage.ID
-  } = { session: toSummary(session), messages }
-  if (older !== undefined) out.older = older
-  if (newer !== undefined) out.newer = newer
-  return out
+  return {
+    session: toSummary(session),
+    ...(older === undefined ? {} : { older }),
+    ...(newer === undefined ? {} : { newer }),
+    messages: rows.map((entry) => formatMessage(entry.row, entry.message, full)),
+  }
 }
 
 function formatMessage(
@@ -589,24 +574,6 @@ function sessionConditions(input: {
   return conditions
 }
 
-function ftsFilters(input: {
-  readonly sessionID?: Session.ID
-  readonly projectID?: Project.ID
-  readonly directory?: string
-  readonly subagents: boolean
-}) {
-  const parts: SQL[] = []
-  if (input.sessionID) parts.push(sql`AND s.id = ${input.sessionID}`)
-  if (input.projectID) parts.push(sql`AND s.project_id = ${input.projectID}`)
-  if (input.directory) {
-    const dir = normalizeDir(input.directory)
-    const prefix = dir === "/" ? "/%" : `${escapeLike(dir)}/%`
-    parts.push(sql`AND (s.directory = ${dir} OR s.directory LIKE ${prefix} ESCAPE '\\')`)
-  }
-  if (!input.subagents) parts.push(sql`AND s.parent_id IS NULL`)
-  return parts.length > 0 ? sql.join(parts, sql` `) : sql``
-}
-
 function normalizeDir(directory: string) {
   const slashed = directory.trim().replaceAll("\\", "/").replace(/\/+$/, "")
   return slashed || "/"
@@ -633,7 +600,8 @@ function plainOrQuery(folded: string) {
 
 /**
  * Normalizes `text` the same way FTS5 + `Folds` index it while keeping a map back to original character offsets,
- * so the returned excerpt centers on accented or stemmed matches while preserving the original spelling.
+ * so the excerpt centers on an accent-folded match while keeping the original spelling. Without a literal match (say a
+ * stemmed one) it starts at the beginning.
  */
 function makeSnippet(text: string, query: string) {
   const { normalized, offsets } = normalizeWithOffsets(text)
@@ -645,27 +613,12 @@ function makeSnippet(text: string, query: string) {
     ),
   ).toSorted((a, b) => b.length - a.length)
 
-  const exact = terms.map((term) => normalized.indexOf(term)).find((at) => at >= 0)
-  const stemmed =
-    exact !== undefined
-      ? exact
-      : terms
-          .map((term) => normalized.indexOf(stemPrefix(term)))
-          .find((at) => at >= 0)
-  const origin = stemmed !== undefined ? (offsets[stemmed] ?? 0) : 0
+  const at = terms.map((term) => normalized.indexOf(term)).find((index) => index >= 0)
+  const origin = at === undefined ? 0 : (offsets[at] ?? 0)
   const start = Math.max(0, origin - SNIPPET_CONTEXT)
   const end = Math.min(text.length, origin + SNIPPET_CONTEXT)
   const body = text.slice(start, end).replace(/\s+/g, " ").trim()
   return `${start > 0 ? "…" : ""}${body}${end < text.length ? "…" : ""}`
-}
-
-/** Strips common English inflection suffixes (including doubled consonants like `running` -> `run`) for snippet centering. */
-function stemPrefix(term: string) {
-  const stripped = term.replace(/(?:ies|ing|ed|es|s|ly|er|est|tion|ment|ness)$/, (suffix) =>
-    term.length - suffix.length >= 3 ? "" : suffix,
-  )
-  const base = stripped.length >= 4 ? stripped.replace(/([bcdfghjklmnpqrstvwxyz])\1$/, "$1") : stripped
-  return base.slice(0, Math.max(3, base.length))
 }
 
 function normalizeText(value: string) {

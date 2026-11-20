@@ -62,12 +62,6 @@ export const Plugin = {
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
     const enabled = () => flags.resolve(loaded.entries).sqlite_fts.enabled
-    const requireEnabled = Effect.gen(function* () {
-      if (yield* flags.enabled("sqlite_fts")) return
-      return yield* new ToolFailure({
-        message: "Session search is disabled. Enable the sqlite_fts flag to use it.",
-      })
-    })
     const failure = (error: { readonly message: string }) => new ToolFailure({ message: error.message, error })
 
     yield* ctx.tool
@@ -82,7 +76,6 @@ export const Plugin = {
           options: { namespace: "opencode.session", codemode: true },
           execute: (input, context) =>
             Effect.gen(function* () {
-              yield* requireEnabled
               yield* permission.assert({
                 action: "opencode_session_search",
                 resources: ["*"],
@@ -95,7 +88,7 @@ export const Plugin = {
                   projectID: input.scope === "all" ? undefined : ctx.location.project.id,
                 }),
               }
-            }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : failure(error)))),
+            }).pipe(Effect.mapError(failure)),
         })
         editor.add({
           name: "read",
@@ -106,7 +99,6 @@ export const Plugin = {
           options: { namespace: "opencode.session", codemode: true },
           execute: (input, context) =>
             Effect.gen(function* () {
-              yield* requireEnabled
               yield* permission.assert({
                 action: "opencode_session_read",
                 resources: ["*"],
@@ -114,7 +106,7 @@ export const Plugin = {
                 ...Permission.invocation(context),
               })
               return { output: yield* search.read(input) }
-            }).pipe(Effect.mapError((error) => (error instanceof ToolFailure ? error : failure(error)))),
+            }).pipe(Effect.mapError(failure)),
         })
       })
       .pipe(Effect.orDie)

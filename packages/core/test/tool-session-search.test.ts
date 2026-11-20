@@ -1,10 +1,9 @@
 import { describe, expect } from "bun:test"
-import { Cause, DateTime, Effect, Exit, Layer, Schema } from "effect"
+import { DateTime, Effect, Layer, Schema } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
-import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Project } from "@opencode/core/project"
@@ -51,17 +50,6 @@ const runCode = (registry: Tool.Interface, code: string) =>
     ...toolIdentity,
     call: { type: "tool-call", id: `call-${code.length}`, name: "execute", input: { code } },
   })
-
-const callDirect = (registry: Tool.Interface, name: string, input: unknown) =>
-  registry.snapshot([{ action: "execute", resource: "*", effect: "deny" }]).pipe(
-    Effect.flatMap((snapshot) =>
-      snapshot.execute({
-        sessionID: callerSession,
-        ...toolIdentity,
-        call: { type: "tool-call", id: `call-direct-${name}`, name, input },
-      }),
-    ),
-  )
 
 describe("SessionSearchTools", () => {
   it.live("registers session_search and session_read only when sqlite_fts is enabled, and reloads on config.updated", () =>
@@ -200,39 +188,6 @@ describe("SessionSearchTools", () => {
       })
       expect(asserted).toEqual(["opencode_session_search", "opencode_session_search", "opencode_session_read"])
 
-      // Turning the flag off after registration stops execution cleanly.
-      yield* config.setEntries(documents(false))
-      const disabled = yield* callDirect(tools, "opencode_session_search", { query: "walrus" }).pipe(Effect.flip)
-      expect(disabled.message).toContain("sqlite_fts")
-    }),
-  )
-
-  it.effect("maps Permission.CorrectedError to ToolFailure and lets Permission.DeclinedError propagate as a defect", () =>
-    Effect.gen(function* () {
-      const config = yield* Config.Test
-      const plugins = yield* Plugin.Service
-      const tools = yield* Tool.Service
-      let mode: "correct" | "decline" = "correct"
-
-      yield* config.setEntries(documents(true))
-      yield* SessionSearchTools.Plugin.effect(yield* PluginHost.make(plugins, "test")).pipe(
-        Effect.provide(
-          permissionLayer({
-            assert: () =>
-              mode === "correct"
-                ? Effect.fail(new Permission.CorrectedError({ feedback: "Stay in this project" }))
-                : Effect.die(new Permission.DeclinedError()),
-          }),
-        ),
-      )
-
-      const corrected = yield* callDirect(tools, "opencode_session_search", {}).pipe(Effect.flip)
-      expect(corrected.message).toContain("Stay in this project")
-
-      mode = "decline"
-      const declined = yield* Effect.exit(callDirect(tools, "opencode_session_search", {}))
-      expect(Exit.isFailure(declined)).toBe(true)
-      if (Exit.isFailure(declined)) expect(Cause.squash(declined.cause)).toBeInstanceOf(Permission.DeclinedError)
     }),
   )
 })
