@@ -116,7 +116,8 @@ export type BindingEvent =
     }
   | { readonly type: "tab.focused"; readonly tabID: Browser.TabID; readonly fromStrip?: boolean }
   | { readonly type: "tab.active"; readonly tabID: Browser.TabID }
-  | { readonly type: "tab.closed"; readonly tabID: Browser.TabID }
+  /** `opener`: the tab that opened it, which takes the pane back when the closed tab was in front. */
+  | { readonly type: "tab.closed"; readonly tabID: Browser.TabID; readonly opener?: Browser.TabID }
 
 export type PaneMachineEvent =
   | {
@@ -404,9 +405,16 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     if (!closed) return { state, effects: [] }
     const tabs = new Map(state.tabs)
     tabs.delete(event.tabID)
-    const focusedTabID = state.focusedTabID === event.tabID ? (tabs.keys().next().value ?? null) : state.focusedTabID
+    const front = state.focusedTabID === event.tabID
+    // As Chrome selects the tab that opened one closed in front of it. The window hears of the selection first, so
+    // its strip never picks a neighbour for the closed tab.
+    const opener = front && event.opener !== undefined && tabs.has(event.opener) ? event.opener : undefined
+    const focusedTabID = front ? (opener ?? tabs.keys().next().value ?? null) : state.focusedTabID
+    const next = withoutTab({ ...state, tabs, focusedTabID, agentTabID: event.tabID === state.agentTabID ? undefined : state.agentTabID }, event.tabID, closed, undefined)
 
-    return withoutTab({ ...state, tabs, focusedTabID, agentTabID: event.tabID === state.agentTabID ? undefined : state.agentTabID }, event.tabID, closed, undefined)
+    if (!opener) return next
+
+    return { state: next.state, effects: [{ type: "emit", binding: state.binding, event: { type: "focus", tabID: opener } }, ...next.effects] }
   }
 
   if (event.type !== "tab.published" && event.type !== "tab.crashed") return { state, effects: [] }

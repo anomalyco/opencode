@@ -426,4 +426,23 @@ describe("focus", () => {
     expect(closed.effects).toContainEqual({ type: "release-pages", binding: "b1", attempts: [1] })
     expect(binding.status === "attached" && Array.from(binding.requests.keys())).toEqual(["on-b"])
   })
+
+  test("a tab that closes itself gives the pane back to the tab that opened it only when it was in front", () => {
+    const tabC = Browser.TabID.make("tab_00000000-0000-0000-0000-00000000000c")
+    const tabs = [tab(tabA, dashboard), tab(tabB, "http://b.test"), tab(tabC, "about:blank")]
+    const focus = { type: "emit", binding: "b1", event: { type: "focus", tabID: tabB } } as const
+    // In front: the opener, not the first tab, and the window hears the selection before the inventory without the tab.
+    const front = transitionPane(attached({ tabs, focusedTabID: tabC }), on({ type: "tab.closed", tabID: tabC, opener: tabB }))
+    expect(entry(front.state).focusedTabID).toBe(tabB)
+    expect(front.effects[0]).toEqual(focus)
+    expect(front.effects.findIndex((effect) => effect.type === "report")).toBeGreaterThan(0)
+    // Behind: the selection stays where it was, and nothing asks the window to select.
+    const behind = transitionPane(attached({ tabs, focusedTabID: tabA }), on({ type: "tab.closed", tabID: tabC, opener: tabB }))
+    expect(entry(behind.state).focusedTabID).toBe(tabA)
+    expect(behind.effects).not.toContainEqual(focus)
+    // An opener that is gone: the first tab, as for any closed tab.
+    const orphan = transitionPane(attached({ tabs, focusedTabID: tabC }), on({ type: "tab.closed", tabID: tabC, opener: missing }))
+    expect(entry(orphan.state).focusedTabID).toBe(tabA)
+    expect(orphan.effects.some((effect) => effect.type === "emit")).toBe(false)
+  })
 })

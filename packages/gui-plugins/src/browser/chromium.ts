@@ -82,7 +82,7 @@ import {
 import type { PaneElement, PaneEvent, PromptView, RefusalNotice, Viewport } from "./ipc"
 import { createViewportWriter } from "./viewport-native"
 import { createDeviceEmulation } from "./mobile-emulation"
-import { navigationNotice, popupActivated } from "./refusal-notice"
+import { navigationNotice } from "./refusal-notice"
 import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { reloadAddress } from "./preview"
@@ -90,6 +90,7 @@ import { pageHandoff } from "./address"
 import { defaultBrowser } from "./default-browser"
 import { FileVerificationError } from "./file-verification"
 import type { workspacePages } from "./workspace-pages"
+import { clickDisposition, closesUnshown, windowOpening, type Press, type Unshown } from "./window-open"
 import { artifactLinks } from "./artifact-links"
 import { createPagePrompts, RESTORE_PROMPT, takeDialogs } from "./page-prompts"
 import type { SitePermissions } from "./site-permissions"
@@ -264,13 +265,21 @@ export function createBrowserPage(
     fail: (end: PageEnd) => void
     /** Writes to the desktop log when the page ends, stalls or fails to load; without it nothing is logged. */
     log?: PageLogWrite
-    /** Adopts a page the document opened; a background one leaves the current tab selected. */
-    popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean, activity: TabActivity) => WebContents
+    /**
+     * Adopts a page the document opened; a background one leaves the current tab selected. `refused` shows this tab
+     * why an address could not open, for a link the new tab was opened for and hands back (`opened`).
+     */
+    popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean, activity: TabActivity, refused: (url: string) => void) => WebContents
     activity: TabActivity
     userInput: () => void
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
+    /**
+     * A page opened this tab (`popup`). While it has shown no document, a first navigation that leaves it none ends it:
+     * `close` closes the tab, and `refused` shows the tab that opened it why the address could not open.
+     */
+    opened?: { readonly close: () => void; readonly refused: (url: string) => void }
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
     /** This binding's isolated origin for workspace previews. */
@@ -366,10 +375,19 @@ export function createBrowserPage(
   let nativeMenu = true
   // Tab focus and browser chrome commands also reclaim the tab for the person. Neither is input to this document.
   let documentInput = false
+  // The person's latest press of a button that opens links, or Enter, until a request for a tab uses it or other input
+  // follows. It stands for a link Chromium routes to a new tab by its click, which has no gesture report
+  // (window-open.ts).
+  let press: Press | undefined
+  // The link under the pointer, as Chromium reports it.
+  let hovered = ""
+  contents.on("update-target-url", (_event, url) => { hovered = url })
   // Presses the agent sent through the debugger that the page has not reported yet.
   let agentPresses = 0
   contents.on("before-mouse-event", (_event, mouse) => {
     if (mouse.type !== "mouseDown") return
+    // Whoever presses now, the press before opens nothing more.
+    press = undefined
 
     // Unlike keyboard events, Electron 44 does not expose the Blink modifiers on mouse events, so a press carries no
     // debugger provenance. Each press the agent sent is counted out here, even one reported after its command ended;
@@ -379,6 +397,8 @@ export function createBrowserPage(
 
     if (activity.agentRuns > 0) return
     documentInput = true
+
+    if (mouse.button === "left" || mouse.button === "middle") press = { type: "mouse", button: mouse.button, at: performance.now() }
     nativeMenu = true
     recordPageInput(activity, "user")
     options.userInput()
@@ -402,6 +422,11 @@ export function createBrowserPage(
     if (!hardware || input.type !== "keyDown") return
 
     documentInput = true
+    // Chromium opens a link for Enter as for a click with the same modifiers; any other key opens none.
+    press =
+      input.key === "Enter"
+        ? { type: "key", disposition: clickDisposition({ ...input, middle: false }, process.platform === "darwin"), at: performance.now() }
+        : undefined
     nativeMenu = true
     recordPageInput(activity, "user")
     options.userInput()
@@ -561,8 +586,21 @@ export function createBrowserPage(
   constructing.defer(notices.clear)
   const registerArtifactLinks = artifactLinks(cdp, () => artifactHost, target => notices.show({reason:"popup",target,action:"tab"}))
   const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner(activity), documentInput))
+
+  // Whether this tab ends with a first navigation that left it nothing to show (window-open.ts).
+  const leaves = (outcome: Unshown) =>
+    closesUnshown(
+      { opened: !!options.opened, committed: documentGeneration(documentState) > 0, owner: activityOwner(activity) },
+      outcome,
+    )
+
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
+  // Chromium's report that a clicked link's navigation goes to a new tab or window, sent just before that request.
+  let linkReport: Protocol.Page.FrameRequestedNavigationEvent | undefined
+  cdp.on("Page.frameRequestedNavigation", (event) => {
+    if (event.reason === "anchorClick" && (event.disposition === "newTab" || event.disposition === "newWindow")) linkReport = event
+  })
   let dialogGate = createDialogGateState()
   // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
   const runs = new Map<number, { controller: AbortController; interrupted: Interrupted; origin: "user" | "agent" }>()
@@ -854,6 +892,8 @@ export function createBrowserPage(
     passkeyPage.noticed = false
     passkeyPage.interrupted = false
     popupReport = undefined
+    linkReport = undefined
+    press = undefined
 
     rendering.committed()
   })
@@ -926,29 +966,56 @@ export function createBrowserPage(
     if (!local && (allowedDestination(event.url, policy) || (!event.isMainFrame && /^(?:blob:|data:|about:srcdoc$)/i.test(event.url)))) return
     event.preventDefault()
     // The same reason a typed address gets, so a blocked link and a blocked address read alike.
-    refused(event.url)
+    const notice = navigationNotice(event.url, policy, activityOwner(activity), documentInput)
+
+    // Another app's link that a new tab was opened for is offered in the tab the person opened it from, as a click on
+    // that link is, and the empty tab goes.
+    if (event.isMainFrame && leaves(notice.reason === "external" ? "app" : "refused")) {
+      options.opened?.refused(event.url)
+
+      return options.opened?.close()
+    }
+
+    notices.show(notice)
   }
 
   contents.on("will-frame-navigate", guard)
   contents.on("will-redirect", guard)
-  // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
+  // A middle-click, Ctrl+click (Cmd on macOS) or Shift+click on a link, a `target="_blank"` link and `window.open` all
+  // arrive here. A link opened with Cmd or Ctrl or the middle button stays behind the current tab, as in Chrome.
   contents.setWindowOpenHandler(({ url, disposition, postBody, referrer }) => {
-    const activated = popupActivated(popupReport, url)
-    popupReport = undefined
+    const opening = windowOpening({
+      artifact: !!artifactHost,
+      openable: url === "about:blank" || !!destinationOrigin(url) || resource(url, referrer.url) || !!preview(url),
+      url,
+      disposition,
+      report: popupReport,
+      link: linkReport,
+      hovered,
+      owner: activityOwner(activity),
+      press,
+      at: performance.now(),
+    })
 
-    if (artifactHost) {
+    // Each report stands for one request, and a press for at most one tab, as Chromium's activation is used up by the
+    // tab it opens.
+    popupReport = undefined
+    linkReport = undefined
+    press = undefined
+
+    if (opening.type === "ask") {
       if (!postBody && destinationOrigin(url) && url.length <= 16384) notices.show({reason:"popup",target:url,action:"tab"})
 
       return { action: "deny" }
     }
 
-    if (url !== "about:blank" && !destinationOrigin(url) && !resource(url, referrer.url) && !preview(url)) {
+    if (opening.type === "refuse") {
       refused(url)
 
       return { action: "deny" }
     }
 
-    if (!activated) {
+    if (opening.type === "block") {
       const target = displayURL(url)
       const replay = !postBody && target.length <= 16384 && (!!destinationOrigin(target) || !!preview(url))
       notices.show(replay ? { reason: "popup", target, action: "tab" } : { reason: "popup", target: target.slice(0, 16384) })
@@ -959,7 +1026,7 @@ export function createBrowserPage(
     const workspace = options.workspace?.display(url)
 
     if (workspace && !postBody) {
-      void options.menu.open(workspace).catch(() => publish("browser.menu.failed"))
+      void options.menu.open(workspace, opening.background).catch(() => publish("browser.menu.failed"))
 
       return { action: "deny" }
     }
@@ -981,7 +1048,7 @@ export function createBrowserPage(
           partition: options.partition,
         },
       },
-      createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab", childActivity(activity)),
+      createWindow: (popupOptions) => options.popup(popupOptions, opening.background, childActivity(activity), refused),
     }
   })
 
@@ -994,7 +1061,23 @@ export function createBrowserPage(
       chain: item.getURLChain(),
     })
 
-    if (owner === "user") return
+    if (owner === "user") {
+      if (!leaves("download")) return
+
+      // A new tab whose first navigation became a download has nothing to show. It closes once the download has its
+      // place: while the person is still choosing in the save dialog, the item has no save path.
+      const placed = () => {
+        if (!leaves(item.getSavePath() || item.getState() !== "progressing" ? "download" : "download.choosing")) return
+        item.off("updated", placed)
+        item.off("done", placed)
+        options.opened?.close()
+      }
+
+      item.on("updated", placed)
+      item.on("done", placed)
+
+      return
+    }
 
     if (owner === "block") return item.cancel()
 
