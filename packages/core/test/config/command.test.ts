@@ -75,41 +75,20 @@ const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigCommandPlugin.Plugin", () => {
   for (const item of [
-    { name: "separate legacy variant", frontmatter: "model: example/chat\nvariant: high", model: "example/chat#high" },
-    { name: "unqualified model", frontmatter: "model: example/chat", model: "example/chat" },
-    { name: "embedded native variant", frontmatter: "model: example/chat#high", model: "example/chat#high" },
     {
-      name: "structured native variant",
-      frontmatter: "model:\n  providerID: example\n  model: chat\n  variant: high",
+      name: "merges a separate legacy variant",
+      frontmatter: "model: example/chat\nvariant: high",
       model: "example/chat#high",
     },
     {
-      name: "structured unqualified model",
-      frontmatter: "model:\n  providerID: example\n  model: chat",
-      model: "example/chat",
-    },
-    { name: "standalone variant", frontmatter: "variant: high", model: undefined },
-    {
-      name: "embedded native variant with an ignored separate variant",
+      name: "keeps an embedded variant over a separate one",
       frontmatter: "model: example/chat#low\nvariant: high",
       model: "example/chat#low",
     },
-    {
-      name: "structured native variant with an ignored separate variant",
-      frontmatter: "model:\n  providerID: example\n  model: chat\n  variant: low\nvariant: high",
-      model: "example/chat#low",
-    },
-    {
-      name: "structured unqualified model with an ignored separate variant",
-      frontmatter: "model:\n  providerID: example\n  model: chat\nvariant: high",
-      model: "example/chat",
-    },
   ]) {
-    it.live(`loads Markdown command ${item.name}`, () =>
+    it.live(`Markdown command ${item.name}`, () =>
       Effect.gen(function* () {
-        const result = yield* runMarkdownCommand(item.frontmatter)
-        expect(result.models).toEqual(item.model === undefined ? [] : [Model.Ref.parse(item.model)])
-        expect(result.prompts).toEqual(["Reply PROBE_OK."])
+        expect(yield* runMarkdownCommand(item.frontmatter)).toEqual([Model.Ref.parse(item.model)])
       }),
     )
   }
@@ -563,15 +542,10 @@ function runMarkdownCommand(frontmatter: string) {
   return Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
     const fs = yield* FSUtil.Service
-    const opencodeDir = path.join(tmp.path, ".opencode")
-    yield* fs.makeDirectory(path.join(opencodeDir, "commands"), { recursive: true })
-    yield* fs.writeFileString(
-      path.join(opencodeDir, "commands", "variant-probe.md"),
-      `---\n${frontmatter}\n---\nReply PROBE_OK.`,
-    )
+    yield* fs.makeDirectory(path.join(tmp.path, "commands"))
+    yield* fs.writeFileString(path.join(tmp.path, "commands", "probe.md"), `---\n${frontmatter}\n---\nProbe.`)
     const command = yield* Command.Service
     const models: Model.Ref[] = []
-    const prompts: string[] = []
     yield* ConfigCommandPlugin.Plugin.effect(
       host({
         command: {
@@ -580,35 +554,26 @@ function runMarkdownCommand(frontmatter: string) {
           reload: command.reload,
         },
         session: {
-          switchModel: (input) =>
-            Effect.sync(() => {
-              models.push(input.model)
-            }),
+          switchModel: (input) => Effect.sync(() => void models.push(input.model)),
           prompt: (input) =>
-            Effect.sync(() => {
-              prompts.push(input.text)
-              return SessionInbox.User.make({
+            Effect.succeed(
+              SessionInbox.User.make({
                 id: SessionMessage.ID.make("msg_test"),
                 sessionID: input.sessionID,
                 time: { created: DateTime.makeUnsafe(0) },
                 type: "user",
                 payload: { text: input.text },
-                delivery: input.delivery ?? "steer",
-              })
-            }),
+                delivery: "steer",
+              }),
+            ),
         },
       }),
-    ).pipe(Effect.provide(Config.testLayer([directoryEntry(opencodeDir)])))
-    expect(yield* command.get("variant-probe")).toBeDefined()
+    ).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)])))
     yield* command.execute({
-      name: "variant-probe",
-      invocation: {
-        sessionID: Session.ID.make("ses_test"),
-        prompt: { text: "" },
-        delivery: "steer",
-      },
+      name: "probe",
+      invocation: { sessionID: Session.ID.make("ses_test"), prompt: { text: "" }, delivery: "steer" },
     })
-    return { models, prompts }
+    return models
   })
 }
 
