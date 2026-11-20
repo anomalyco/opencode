@@ -216,7 +216,7 @@ impl Edit {
             Key::Remote => Edit::Remote(flag("Remote")?),
             Key::Hostname => Edit::Hostname(value.to_string()),
             Key::Port => Edit::Port(
-                js_number(value)
+                opencode_api_types::js::parse_number(value)
                     .filter(|port| port.fract() == 0.0 && (1.0..=65_535.0).contains(port))
                     .ok_or_else(|| invalid("Port must be between 1 and 65535"))? as u16,
             ),
@@ -268,26 +268,6 @@ impl Edit {
 fn is_origin(origin: &str) -> bool {
     opencode_api_types::js::parse_url(origin)
         .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.origin().ascii_serialization() == origin)
-}
-
-// JavaScript `Number(text)` for the forms a port can take: surrounding whitespace, decimal and
-// exponent forms, and `0x`, `0o`, `0b` prefixes. Anything else is NaN, here `None`.
-fn js_number(text: &str) -> Option<f64> {
-    let text = text.trim();
-    if text.is_empty() {
-        return Some(0.0);
-    }
-    let prefixed = |radix| u64::from_str_radix(&text[2..], radix).ok().map(|n| n as f64);
-    match text.get(..2).map(str::to_ascii_lowercase).as_deref() {
-        Some("0x") => return prefixed(16),
-        Some("0o") => return prefixed(8),
-        Some("0b") => return prefixed(2),
-        _ => {}
-    }
-    if text.bytes().any(|b| b.is_ascii_alphabetic() && b != b'e' && b != b'E') {
-        return None;
-    }
-    text.parse().ok()
 }
 
 /// Drops `XDG_STATE_HOME` from the configured service environment: the service keeps the state

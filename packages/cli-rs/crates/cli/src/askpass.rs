@@ -81,15 +81,7 @@ fn remaining(deadline: Instant) -> Option<Duration> {
 /// `Schema.NumberFromString` with an integer in 1..=65535: JavaScript's `Number(text)`, which trims
 /// whitespace and accepts `0x`, `0o`, `0b`, exponents, and fractions that are whole.
 fn parse_port(text: &str) -> Option<u16> {
-    let text = text.trim();
-    let radix = [("0x", 16), ("0X", 16), ("0o", 8), ("0O", 8), ("0b", 2), ("0B", 2)]
-        .into_iter()
-        .find_map(|(prefix, radix)| text.strip_prefix(prefix).map(|digits| (digits, radix)));
-    let number = match radix {
-        Some((digits, radix)) => u32::from_str_radix(digits, radix).ok().map(f64::from)?,
-        // Rust also reads "inf" and "nan", which fail the integer check below like JS's Infinity.
-        None => text.parse::<f64>().ok()?,
-    };
+    let number = opencode_api::js::parse_number(text)?;
     (number.fract() == 0.0 && number > 0.0 && number <= 65535.0).then_some(number as u16)
 }
 
@@ -175,6 +167,7 @@ mod tests {
             ("", None),
             ("abc", None),
             ("inf", None),
+            ("0x+1F", None),
         ];
         for (text, expected) in cases {
             assert_eq!(parse_port(text), expected, "{text:?}");
