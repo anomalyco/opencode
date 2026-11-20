@@ -178,7 +178,7 @@ function DraftLanding(props: DraftArgs & { directory: string; setDirectory: (dir
 
   return (
     <div class="relative flex h-dvh w-full flex-col bg-v2-background-bg-deep p-2">
-      <NewSessionView composer={composer} project={project} workspace={workspace} location={openLocation} />
+      <NewSessionView composer={composer} project={project} workspace={workspace} location={openLocation} extensions={() => undefined} />
       <Show when={state.activity}>
         <output class="absolute inset-x-4 bottom-4 text-center text-12-regular text-text-weak">{state.activity}</output>
       </Show>

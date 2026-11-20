@@ -58,6 +58,7 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
   location: ReturnType<typeof useNewSessionLocationDialog>
+  extensions: () => void
 }) {
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
     Persist.global("workspace-onboarding"),
@@ -123,6 +124,7 @@ export function NewSessionView(props: {
                       onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
                       onProjects={() => location()}
                       onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
+                      onExtensions={props.extensions}
                     />
                   )}
                 </Show>
@@ -201,6 +203,7 @@ function NewSessionLocation(props: {
   onboarding: boolean
   onProjects: () => void
   onWorktree?: () => void
+  onExtensions: () => void
 }) {
   const language = useLanguage()
   const command = useCommand()
@@ -375,6 +378,16 @@ function NewSessionLocation(props: {
               </Show>
             )}
           </Show>
+          <button
+            type="button"
+            data-action="prompt-extensions"
+            aria-haspopup="dialog"
+            class={`${TRIGGER} min-w-0`}
+            onClick={props.onExtensions}
+          >
+            <Icon name="cube" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
+            <span class="min-w-0 truncate">{language.t("session.new.extensions.title")}</span>
+          </button>
         </div>
       </div>
       {/* An open tooltip can outlive this row; keep its path instead of a stale Show accessor. */}
