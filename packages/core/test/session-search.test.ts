@@ -179,7 +179,6 @@ describe("SessionSearch", () => {
       expect(ranked.results?.[0]?.matches.length).toBe(3)
       expect(ranked.results?.[0]?.matches[0]).toMatchObject({ type: "title" })
       expect(ranked.results?.[0]?.matches[0]?.messageID).toBeUndefined()
-      expect(ranked.indexStatus).toBeUndefined()
 
       // Explicit phrase & prefix syntax work.
       const phrase = yield* search.search({ query: '"walrus migration"' })
@@ -278,21 +277,6 @@ describe("SessionSearch", () => {
       expect(all.results?.map((r) => r.sessionID).toSorted()).toEqual([ses("here"), ses("there")])
       const direct = yield* search.search({ query: "narwhal", projectID: Project.ID.global, sessionID: ses("there") })
       expect(direct.results?.map((r) => r.sessionID)).toEqual([ses("there")])
-    }),
-  )
-
-  it.effect("reports partial indexStatus while building and still returns already-indexed hits", () =>
-    Effect.gen(function* () {
-      const { db, search, addSession, addMessages } = yield* setup
-      yield* addSession({ id: "a", title: "Puffin title" })
-      yield* addMessages("a", [user("a1", "gannet message")])
-      yield* SessionSearchIndex.ensure(db)
-      // Run only the titles chunk so messages are not indexed yet.
-      yield* SessionSearchIndex.buildChunk(db)
-
-      const partial = yield* search.search({ query: "puffin" })
-      expect(partial.results?.map((r) => r.sessionID)).toEqual([ses("a")])
-      expect(partial.indexStatus).toMatchObject({ status: "building", total: 2 })
     }),
   )
 

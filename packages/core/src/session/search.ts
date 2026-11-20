@@ -90,18 +90,10 @@ export const SearchResult = Schema.Struct({
 })
 export type SearchResult = typeof SearchResult.Type
 
-export const IndexStatus = Schema.Struct({
-  status: Schema.Literals(["building", "failed"]),
-  processed: Schema.Number,
-  total: Schema.Number,
-})
-export type IndexStatus = typeof IndexStatus.Type
-
 export const SearchOutput = Schema.Struct({
   results: Schema.Array(SearchResult).pipe(optional),
   sessions: Schema.Array(SessionSummary).pipe(optional),
   next: Schema.NullOr(Schema.Number).pipe(optional),
-  indexStatus: IndexStatus.pipe(optional),
 })
 export type SearchOutput = typeof SearchOutput.Type
 
@@ -213,18 +205,9 @@ const searchSessions = Effect.fnUntraced(function* (
   db: DatabaseService,
   input: SearchInput & { readonly query: string },
 ): Effect.fn.Return<SearchOutput, IndexUnavailableError> {
-  const indexState = yield* SessionSearchIndex.state(db)
-  if (!indexState)
-    return yield* new IndexUnavailableError({
-      reason: "Session search index is not ready yet. It builds automatically in the background when sqlite_fts is on.",
-    })
-  const indexStatus: IndexStatus | undefined =
-    SessionSearchIndex.current(indexState) && indexState.status !== "done"
-      ? { status: indexState.status, processed: indexState.processed, total: indexState.total }
-      : undefined
   const folded = SessionSearchIndex.foldText(input.query)
   const fallback = plainOrQuery(folded)
-  if (!fallback) return indexStatus ? { results: [], indexStatus } : { results: [] }
+  if (!fallback) return { results: [] }
 
   const limit = clamp(input.limit ?? 5, 1, 20)
   const hitLimit = Math.min(400, Math.max(100, limit * 20))
@@ -274,7 +257,7 @@ const searchSessions = Effect.fnUntraced(function* (
     if (grouped.size >= limit) continue
     grouped.set(sessionID, [hit.source_id])
   }
-  if (grouped.size === 0) return indexStatus ? { results: [], indexStatus } : { results: [] }
+  if (grouped.size === 0) return { results: [] }
 
   const sessionIDs = Array.from(grouped.keys())
   const sessionMap = new Map<Session.ID, typeof SessionTable.$inferSelect>()
@@ -328,7 +311,7 @@ const searchSessions = Effect.fnUntraced(function* (
     results.push({ ...summary, matches })
   }
 
-  return indexStatus ? { results, indexStatus } : { results }
+  return { results }
 })
 
 /**
