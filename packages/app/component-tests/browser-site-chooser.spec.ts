@@ -11,6 +11,10 @@ type SiteScenario = {
   empty?: boolean
   site?: { name: string; choose: boolean }
   reveal?: boolean
+  pages?: number
+  none?: boolean
+  keychain?: boolean
+  unreadable?: boolean
 }
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
@@ -41,8 +45,11 @@ async function open(page: Page, given: SiteScenario, direction: "ltr" | "rtl" = 
     list: dialog.getByRole("listbox", { name: "Sites" }),
     options: dialog.getByRole("option"),
     search: dialog.getByRole("searchbox", { name: "Search sites" }),
-    // "Import all" until the person changes the choice, then how many sites it brings.
-    importButton: dialog.getByRole("button", { name: /^Import (all|[\d,]+ sites?)$/ }),
+    // "Import" until the person changes which sites come, then how many sites it brings.
+    importButton: dialog.getByRole("button", { name: /^Import( [\d,]+ sites?)?$/ }),
+    // What comes over: two real checkboxes, ticked until the person unticks one.
+    signins: dialog.getByRole("checkbox", { name: "Sign-ins", exact: true }),
+    history: dialog.getByRole("checkbox", { name: "Browsing history", exact: true }),
     selectNone: dialog.getByRole("button", { name: "Select none", exact: true }),
     // The dialog is modal, so the record beside it is hidden from the accessibility tree.
     record: page.getByTestId("site-chooser-imports"),
@@ -61,13 +68,18 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
   await expect(view.options.first()).toHaveAttribute("aria-setsize", "5000")
   // Every site comes over until the person changes that.
   await expect(view.dialog.getByText("5,000 of 5,000 selected")).toBeVisible()
-  await expect(
-    view.dialog.getByText("Copies cookies for all 5,000 sites. The other browser keeps its own."),
-  ).toBeVisible()
   expect(await view.options.count()).toBeLessThan(45)
-  await expect(view.importButton).toHaveText("Import all")
+  await expect(view.importButton).toHaveText("Import")
 
-  // Tab goes from the search, past the profile and the selection's one enabled action, to the list, then out of it.
+  // The two boxes come before the search in reading order. Tab goes from the search, past the profile and the
+  // selection's one enabled action, to the list, then out of it.
+  await expect(view.search).toBeFocused()
+  await page.keyboard.press("Shift+Tab")
+  await expect(view.history).toBeFocused()
+  await page.keyboard.press("Shift+Tab")
+  await expect(view.signins).toBeFocused()
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
   await expect(view.search).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(view.dialog.getByRole("button", { name: /Browser profile/ })).toBeFocused()
@@ -101,7 +113,7 @@ story("lists 5,000 sites in a window of rows, as one keyboard stop with roving f
 
   // Enter imports what is selected; a clean import closes the dialog.
   await page.keyboard.press("Enter")
-  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", sites: ["linear.app", "figma.com"] })])
+  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", sites: ["linear.app", "figma.com"], cookies: true, history: true })])
   await expect(view.record).toHaveAttribute("data-closed", "true")
   await expect(view.record).toHaveAttribute("data-imported", "1")
 })
@@ -170,16 +182,19 @@ story("switches profiles back to every site chosen, at the top, and reads a prof
   await expect(view.record).toHaveAttribute("data-reads", "Default,Profile 1")
 })
 
-story("starts from the site a passkey request came from, and stays open to say why an import left cookies behind", async ({ page }) => {
-  const view = await open(page, { sites: 5, site: { name: "github.com", choose: true }, partial: true })
+story("starts from the site a passkey request came from, brings its sign-in alone, and stays open to say that some stayed behind", async ({ page }) => {
+  const view = await open(page, { sites: 5, site: { name: "github.com", choose: true }, partial: true, pages: 4210 })
 
   await expect(view.options).toHaveCount(1)
   await expect(view.options).toHaveAttribute("data-site", "github.com")
   // The site the page belongs to is chosen already.
   await expect(view.options).toHaveAttribute("aria-selected", "true")
+  // This dialog is about one site's sign-in: it offers no boxes, and asks main for no history.
+  await expect(view.dialog.getByRole("checkbox")).toHaveCount(0)
   await view.importButton.click()
+  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", sites: ["github.com"], cookies: true, history: false })])
   const status = view.dialog.getByRole("status")
-  await expect(status).toHaveText("Imported 2 cookies. Not imported: 1.")
+  await expect(status).toHaveText("Imported from Google Chrome. Some sites will ask you to sign in again.")
   await expect(view.record).toHaveAttribute("data-closed", "false")
 
   // Status sits in the dialog body (not crammed into the footer), with top clearance and 0px edge drift.
@@ -218,8 +233,8 @@ story("opened for a site, moves on to the browser profile that has exactly it, a
   await expect(view.options).toHaveCount(2)
   await expect(view.dialog.locator('[data-site="google.com"]')).toHaveAttribute("aria-selected", "true")
   await expect(view.dialog.locator('[data-site="google.com.au"]')).toHaveAttribute("aria-selected", "false")
-  // Counts are grouped for the app's language.
-  await expect(view.dialog.locator('[data-site="google.com"]')).toContainText("120,000 cookies")
+  // A row is the site's name and nothing else.
+  await expect(view.dialog.locator('[data-site="google.com"]')).toHaveText("google.com")
 })
 
 story("a page's site that only another site contains chooses nothing, and says no sign-in was found", async ({ page }) => {
@@ -288,7 +303,7 @@ story("shows what the list is doing in its place, with a way to try again", asyn
 story("says why a profile has no list, and reads it again on Try again", async ({ page }) => {
   const view = await open(page, { sites: "locked" })
 
-  await expect(view.dialog.getByRole("alert")).toHaveText("Google Chrome keeps its cookies locked while it runs. Quit Google Chrome, then import again.")
+  await expect(view.dialog.getByRole("alert")).toHaveText("Quit Google Chrome and try again.")
   await view.dialog.getByRole("button", { name: "Try again" }).click()
   await expect(view.record).toHaveAttribute("data-reads", "Default,Default")
 })
@@ -300,16 +315,109 @@ story("an empty profile says so", async ({ page }) => {
   await expect(view.importButton).toBeDisabled()
 })
 
-story("opens on one sentence and Import all, which brings every site without the list", async ({ page }) => {
-  const view = await open(page, { sites: 5, reveal: false })
+// Where the two boxes are in the dialog, in CSS pixels: each box's left edge and label against the title's left edge,
+// each 28px row's top from the dialog's top, and how far the first box's focus ring (a 2px outline, 2px off the 16px
+// box) stays inside what clips the body.
+const boxes = (dialog: ReturnType<Page["getByRole"]>) =>
+  dialog.evaluate((node) => {
+    const text = (element: Element | null) => {
+      const range = document.createRange()
 
-  await expect(view.dialog.getByText("Copies cookies for all 5 sites. The other browser keeps its own.")).toBeVisible()
+      if (element) range.selectNodeContents(element)
+
+      return range.getBoundingClientRect()
+    }
+
+    const container = (node.closest('[data-slot="dialog-container"]') ?? node).getBoundingClientRect()
+    const title = text(node.querySelector('[data-slot="dialog-title"]'))
+    const clip = node.querySelector('[data-slot="dialog-body"] [data-scrollable]')?.getBoundingClientRect()
+    const kinds = Array.from(node.querySelectorAll('[data-slot="dialog-body"] [data-slot="checkbox-v2"]:not([aria-hidden])'))
+    const controls = kinds.map((kind) => kind.querySelector('[data-slot="checkbox-v2-control"]')?.getBoundingClientRect())
+    const first = controls[0]
+    const last = controls[controls.length - 1]
+
+    return {
+      left: controls.map((control) => Math.round((control?.left ?? -1) - title.left)),
+      label: kinds.map((kind) => Math.round(text(kind.querySelector('[data-slot="checkbox-v2-label"]')).left - title.left)),
+      top: kinds.map((kind) => Math.round((kind.parentElement?.getBoundingClientRect().top ?? -1) - container.top)),
+      height: kinds.map((kind) => kind.parentElement?.getBoundingClientRect().height),
+      ring: clip && first && last ? [first.left - 4 - clip.left, first.top - 4 - clip.top, clip.bottom - last.bottom - 4].map((value) => Math.round(value)) : [],
+    }
+  })
+
+story("opens on two ticked boxes and Import, which brings everything without the list", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false, pages: 4210 })
+
+  // No sentence: the title, the two boxes and the buttons say it.
+  await expect(view.signins).toBeChecked()
+  await expect(view.history).toBeChecked()
+  await expect(view.dialog.locator('[data-slot="dialog-description"]')).toHaveCount(0)
   await expect(view.list).toHaveCount(0)
   await expect(view.dialog.getByRole("button", { name: "Choose sites" })).toHaveAttribute("aria-expanded", "false")
+  await expect(view.importButton).toHaveText("Import")
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const collapsed = await boxes(view.dialog)
+
+  // Both boxes start on the title's left edge, in 28px rows, with their focus ring inside the body's clip.
+  expect(collapsed).toMatchObject({ left: [0, 0], label: [24, 24], height: [28, 28] })
+  expect(Math.min(...collapsed.ring)).toBeGreaterThanOrEqual(0)
+
+  // "Choose sites" opens the list under the boxes, which stay where they are.
+  await view.dialog.getByRole("button", { name: "Choose sites" }).click()
+  await expect(view.options).toHaveCount(5)
+  const expanded = await boxes(view.dialog)
+  expect(expanded).toMatchObject({ left: [0, 0], label: [24, 24], height: [28, 28], top: collapsed.top })
+  expect(Math.min(...expanded.ring)).toBeGreaterThanOrEqual(0)
+  await view.dialog.getByRole("button", { name: "Choose sites" }).click()
+  await expect(view.list).toHaveCount(0)
+
   await view.importButton.click()
-  // No list of sites: main imports the whole profile.
-  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default" })])
+  // No list of sites: main imports the whole profile, its sign-ins and its history.
+  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", cookies: true, history: true })])
   await expect(view.record).toHaveAttribute("data-closed", "true")
+})
+
+story("a box the person unticks stays behind, Import needs one of them, and Enter on a box imports", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false, pages: 4210 })
+
+  // The dialog opens with the focus on itself. Tab reaches the boxes in reading order, after Close; Space toggles the
+  // one that has the focus.
+  await expect(view.dialog.locator('[data-slot="dialog-content"]').or(view.dialog)).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(view.dialog.getByRole("button", { name: "Close", exact: true })).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(view.signins).toBeFocused()
+  await page.keyboard.press("Space")
+  await expect(view.signins).not.toBeChecked()
+  await page.keyboard.press("Tab")
+  await expect(view.history).toBeFocused()
+  await page.keyboard.press("Space")
+  await expect(view.history).not.toBeChecked()
+  // Nothing is ticked: there is nothing to import, by the button or by Enter.
+  await expect(view.importButton).toBeDisabled()
+  await page.keyboard.press("Enter")
+  await expect(view.record.locator("li")).toHaveCount(0)
+
+  // History alone: no cookie is asked for.
+  await page.keyboard.press("Space")
+  await expect(view.importButton).toBeEnabled()
+  await page.keyboard.press("Enter")
+  await expect(view.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", cookies: false, history: true })])
+  await expect(view.record).toHaveAttribute("data-closed", "true")
+})
+
+story("with Browsing history unticked the import brings sign-ins alone, of the chosen sites", async ({ page }) => {
+  const view = await open(page, { sites: 5 })
+
+  // A click on the label unticks its box.
+  await view.dialog.getByText("Browsing history", { exact: true }).click()
+  await expect(view.history).not.toBeChecked()
+  await view.dialog.locator('[data-site="github.com"]').click()
+  await expect(view.importButton).toHaveText("Import 4 sites")
+  await view.importButton.click()
+  const sent = JSON.parse((await view.record.locator("li").textContent()) ?? "{}")
+  expect(sent).toMatchObject({ cookies: true, history: false })
+  expect(sent.sites).toHaveLength(4)
 })
 
 story("empty fallback uses a compact fit dialog when no browsers are found", async ({ page }) => {
@@ -322,7 +430,7 @@ story("empty fallback uses a compact fit dialog when no browsers are found", asy
     { modules },
   )
 
-  const dialog = page.getByRole("dialog", { name: "Import sign-ins" })
+  const dialog = page.getByRole("dialog", { name: "Import from another browser" })
   await expect(dialog.getByText("No other browser found on this computer")).toBeVisible()
   const box = await page.locator('[data-slot="dialog-container"]').boundingBox()
   expect(box && box.width <= 480 && box.height < 250).toBe(true)
@@ -336,12 +444,12 @@ story("Choose sites shows the list in place, every site ticked, and the button t
   await expect(choose).toHaveAttribute("aria-expanded", "true")
   await expect(view.options).toHaveCount(5)
   await expect(view.dialog.getByText("5 of 5 selected")).toBeVisible()
-  await expect(view.importButton).toHaveText("Import all")
+  await expect(view.importButton).toHaveText("Import")
   await view.dialog.locator('[data-site="github.com"]').click()
   await expect(view.importButton).toHaveText("Import 4 sites")
   // Ticking it again is everything again.
   await view.dialog.locator('[data-site="github.com"]').click()
-  await expect(view.importButton).toHaveText("Import all")
+  await expect(view.importButton).toHaveText("Import")
   await view.dialog.locator('[data-site="github.com"]').click()
   await view.importButton.click()
   const sent = JSON.parse((await view.record.locator("li").textContent()) ?? "{}")
@@ -366,27 +474,117 @@ story("keeps site names left to right in a right-to-left layout, the box at the 
   const row = view.dialog.locator('[data-site="xn--mnchen-3ya.de"]')
   const box = await row.locator('[data-slot="checkbox-v2-control"]').boundingBox()
   const name = await row.locator("bdi").first().boundingBox()
-  const count = await row.getByText("5 cookies").boundingBox()
 
-  expect(box && name && count && box.x > name.x && name.x > count.x).toBe(true)
+  expect(box && name && box.x > name.x).toBe(true)
   const long = view.dialog.locator('[data-site$="example.co.uk"]').first().locator("span[title]")
   expect(await long.evaluate((element) => [getComputedStyle(element).direction, element.scrollWidth > element.clientWidth])).toEqual(["rtl", true])
+})
+
+// The pane's offer, as a bar over a page or a card on the new tab page, with what the faked profile answers an import.
+async function offer(page: Page, scenario: SiteScenario, card = false) {
+  await page.evaluate(
+    async (input) => {
+      const [{ mountSiteChooser }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
+
+      mountSiteChooser({ ui, scenario: input.scenario, offer: true, card: input.card })
+    },
+    { modules, scenario, card },
+  )
+
+  return {
+    importing: page.getByRole("button", { name: "Import", exact: true }),
+    confirmation: page.getByRole("status").filter({ hasText: /^Imported/ }),
+    record: page.getByTestId("site-chooser-imports"),
+  }
+}
+
+story("the sign-in bar names the browser, imports sign-ins and history in one click, and says in words what came", async ({ page }) => {
+  const bar = await offer(page, { sites: 5, pages: 4210 })
+
+  await expect(page.getByText("Bring your sign-ins and history from Google Chrome · Work", { exact: true })).toBeVisible()
+  await bar.importing.click()
+  // No dialog and no boxes here: the one click brings both.
+  await expect(bar.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", cookies: true, history: true })])
+  await expect(bar.confirmation).toHaveText("Imported sign-ins and history from Google Chrome")
+  await expect(bar.record).toHaveAttribute("data-imported", "1")
+})
+
+story("the sign-in bar says that some sites will ask again when sign-ins stayed behind", async ({ page }) => {
+  const bar = await offer(page, { sites: 5, pages: 4210, protected: 3 })
+
+  await bar.importing.click()
+  await expect(bar.confirmation).toHaveText("Imported from Google Chrome. Some sites will ask you to sign in again.")
+})
+
+story("the bar's own dialog brings history alone when Sign-ins is unticked, and the bar says so without loading the page again", async ({ page }) => {
+  const bar = await offer(page, { sites: 5, pages: 4210 })
+
+  await page.getByRole("button", { name: "Import from another browser", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Choose sites to import", exact: true }).click()
+  const dialog = page.getByRole("dialog", { name: /^Import from Google Chrome/ })
+  await dialog.getByText("Sign-ins", { exact: true }).click()
+  await expect(dialog.getByRole("checkbox", { name: "Sign-ins", exact: true })).not.toBeChecked()
+  await dialog.getByRole("button", { name: "Import", exact: true }).click()
+  await expect(bar.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", cookies: false, history: true })])
+  await expect(dialog).toHaveCount(0)
+  await expect(bar.confirmation).toHaveText("Imported history from Google Chrome")
+  // No sign-in came, so the page has nothing new to load with.
+  await expect(bar.record).toHaveAttribute("data-imported", "0")
+})
+
+story("a browser's import never counts cookies: with none brought the bar says nothing was imported, or that the browser locks them", async ({ page }) => {
+  // One sign-in could not be written and none came: no history either, so nothing was imported.
+  const bar = await offer(page, { sites: 5, none: true, partial: true })
+
+  await bar.importing.click()
+  await expect(page.getByRole("alert")).toHaveText("Nothing was imported from Google Chrome.")
+  await expect(bar.confirmation).toHaveCount(0)
+})
+
+story("the import dialog stays open to say that the browser locks its sign-ins from other apps", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false, none: true, protected: 12 })
+
+  await view.importButton.click()
+  await expect(view.dialog.getByRole("alert")).toHaveText("Google Chrome locks its sign-ins from other apps. Sign in here instead.")
+  await expect(view.record).toHaveAttribute("data-closed", "false")
+})
+
+story("a browser whose data cannot be read says so about the browser, with what to do", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false, unreadable: true })
+
+  await view.importButton.click()
+  await expect(view.dialog.getByRole("alert")).toHaveText("Could not read this browser's data. Close it and try again.")
+  await expect(view.record).toHaveAttribute("data-closed", "false")
+})
+
+story("on macOS the dialog says what the Keychain prompt asks while a Chromium import waits, and not to choose Always Allow", async ({ page }) => {
+  const view = await open(page, { sites: 5, reveal: false, keychain: true })
+
+  await view.importButton.click()
+  await expect(view.dialog.getByRole("status")).toHaveText(
+    'macOS asks for your password (shown as "security") to import Google Chrome\'s sign-ins. Choose Allow, not Always Allow, which lets any app read them without asking.',
+  )
+  await page.getByTestId("site-chooser-release").dispatchEvent("click")
+  await expect(view.record).toHaveAttribute("data-closed", "true")
+})
+
+story("the offer card has a title and no paragraph, and its Import brings both", async ({ page }) => {
+  const card = await offer(page, { sites: 5, pages: 4210 }, true)
+  const region = page.getByRole("region", { name: "Bring your sign-ins and history", exact: true })
+
+  await expect(region.getByText("Bring your sign-ins and history", { exact: true })).toBeVisible()
+  await expect(region.getByText(/Copy your sign-ins/)).toHaveCount(0)
+  await region.getByRole("button", { name: "Import", exact: true }).first().click()
+  await expect(card.record.locator("li")).toHaveText([JSON.stringify({ source: "chrome", profile: "Default", cookies: true, history: true })])
+  await expect(card.confirmation).toHaveText("Imported sign-ins and history from Google Chrome")
 })
 
 // The pane's sign-in bar says what an import brought for a few seconds, then goes by itself; Close ends it sooner.
 story("the sign-in bar's import confirmation goes by itself after 5 seconds, and Close ends it sooner", async ({ page }) => {
   await page.clock.install()
-  await page.evaluate(
-    async (input) => {
-      const [{ mountSiteChooser }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
-
-      mountSiteChooser({ ui, scenario: { sites: 5, skipped: 318 }, offer: true })
-    },
-    { modules },
-  )
-  const record = page.getByTestId("site-chooser-imports")
-  const confirmation = page.getByRole("status").filter({ hasText: "Imported 10 cookies from Google Chrome" })
-  const importing = page.getByRole("button", { name: /^Import from Google Chrome/ })
+  // No history in this profile: the line names the sign-ins alone.
+  const { record, confirmation, importing } = await offer(page, { sites: 5, skipped: 318 })
+  await expect(confirmation).toHaveCount(0)
 
   // Close ends it at once, and only once: the timer it no longer needs does not report a second close.
   await importing.click()

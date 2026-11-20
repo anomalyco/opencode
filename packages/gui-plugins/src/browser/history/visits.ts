@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 
-/** A page the browser showed, newest first in the history. */
+/** A page the browser showed, newest first in the window's list of the last pages. */
 export const Visit = Schema.Struct({
   url: Schema.String,
   title: Schema.String,
@@ -16,7 +16,10 @@ export const History = Schema.Struct({ visits: Schema.Array(Visit) })
 
 export type History = typeof History.Type
 
-/** Visits the history keeps; the new tab page shows the first few. */
+/**
+ * Visits the window's list keeps; the new tab page shows the first few, and their icons draw in the address field's
+ * suggestions. The history itself, with every page and the pages imported from other browsers, is main's (`store.ts`).
+ */
 const MAX_VISITS = 30
 
 /** Icons larger than this stay out of the stored history; a 32px PNG is a few kilobytes. */
@@ -53,56 +56,4 @@ export function withIcon(visits: readonly Visit[], url: string, icon: string) {
 
 function storable(icon: string | undefined) {
   return icon && icon.length <= MAX_STORED_ICON ? icon : undefined
-}
-
-/**
- * Visits whose address or title contains the query, case-insensitively. Addresses that begin with the query come
- * first, as the address field completes them; within each group the newest visit leads.
- */
-export function suggest(visits: readonly Visit[], query: string, limit: number) {
-  const needle = query.trim().toLowerCase()
-
-  if (!needle) return []
-
-  const matches = visits.filter(
-    (visit) => bare(visit.url).toLowerCase().includes(needle) || visit.title.toLowerCase().includes(needle),
-  )
-
-  return [
-    ...matches.filter((visit) => completes(visit, needle)),
-    ...matches.filter((visit) => !completes(visit, needle)),
-  ].slice(0, limit)
-}
-
-/** Whether the visit's address begins with what the user typed, so Enter may open it in place of the typed text. */
-export function completes(visit: Visit, query: string) {
-  const needle = query.trim().toLowerCase()
-
-  return !!needle && bare(visit.url).toLowerCase().startsWith(needle)
-}
-
-/** Splits text around case-insensitive matches of the query, for drawing the matched parts. */
-export function highlight(text: string, query: string) {
-  const needle = query.trim().toLowerCase()
-
-  if (!needle) return [{ text, match: false }]
-  const lower = text.toLowerCase()
-
-  const starts = Array.from(lower.matchAll(new RegExp(escape(needle), "g")), (found) => found.index)
-  const bounds = starts.flatMap((start) => [start, start + needle.length])
-
-  return [0, ...bounds, text.length].flatMap((start, index, all) => {
-    const end = all[index + 1]
-
-    return end === undefined || end === start ? [] : [{ text: text.slice(start, end), match: index % 2 === 1 }]
-  })
-}
-
-/** The address without its web scheme or a leading `www.`, as people type it. */
-export function bare(url: string) {
-  return url.replace(/^https?:\/\//i, "").replace(/^www\./i, "")
-}
-
-function escape(text: string) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }

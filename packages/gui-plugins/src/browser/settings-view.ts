@@ -2,7 +2,12 @@
 import type { ExtensionCompatibility, InstallResult } from "./profile/ipc"
 
 /** The search entries whose rows are inside Advanced. */
-export const ADVANCED_ENTRIES = ["settings-browser-remote", "settings-browser-agent-pages", "settings-browser-sites", "settings-browser-cookies"]
+export const ADVANCED_ENTRIES = [
+  "settings-browser-remote",
+  "settings-browser-agent-pages",
+  "settings-browser-sites",
+  "settings-browser-cookies",
+]
 
 /**
  * Whether the Advanced section shows open: the person opened it on this device (`stored`), or a settings search is

@@ -95,7 +95,7 @@ test("leaving the surface aborts the running job, and nothing runs after", () =>
   const result = replay([
     { type: "started", job: { type: "clear" } },
     { type: "disposed" },
-    { type: "finished", attempt: 1, outcome: { type: "cleared" } },
+    { type: "finished", attempt: 1, outcome: { type: "cleared", history: true } },
     { type: "started", job: { type: "clear" } },
   ])
 
