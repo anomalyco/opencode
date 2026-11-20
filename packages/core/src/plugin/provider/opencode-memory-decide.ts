@@ -244,9 +244,8 @@ export const make = (input: {
         return p
       }),
     /**
-     * D5b: whether the repository's instructions already tell the agent what an entry does: its normalised title or the
-     * start of its normalised body is in them, or else the decision finds it at or above the cut. Undefined when that
-     * decision can't be had.
+     * D5b: whether the repository's instructions already tell the agent what an entry does: the start of its normalised
+     * body is in them, or else the decision finds it at or above the cut. Undefined when that decision can't be had.
      */
     stated: (instructions: string, entry: OpencodeMemoryPolicy.Injected) =>
       Effect.gen(function* () {
@@ -262,12 +261,15 @@ export const make = (input: {
   }
 }
 
-/** The verbatim check: an entry's normalised title (12 characters or more) or the first 60 of its body are in them. */
-export function verbatim(instructions: string, entry: { readonly title: string; readonly body: string }) {
-  const text = normal(instructions)
-  const title = normal(entry.title)
+/**
+ * The verbatim check: the first 60 normalised characters of an entry's body (30 or more) are in them. The bench's check
+ * took a matching title too, but an entry that contradicts AGENTS.md often shares a title with the section it
+ * contradicts, and a contradicting entry is never a duplicate: the decision, whose question rules the opposite out,
+ * judges those.
+ */
+export function verbatim(instructions: string, entry: { readonly body: string }) {
   const body = normal(entry.body).slice(0, 60)
-  return (title.length >= 12 && text.includes(title)) || (body.length >= 30 && text.includes(body))
+  return body.length >= 30 && normal(instructions).includes(body)
 }
 
 /** Lower case, every run of other characters than letters and digits one space, trimmed. */

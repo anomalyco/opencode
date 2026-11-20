@@ -2104,6 +2104,7 @@ describe("OpencodePlugin memory conventions", () => {
           // The rules come as an instruction file does, a message of their own, before the entries for the task.
           const conventions = [
             "Instructions from: Engram (conventions for github.com/Acme/App)",
+            "These are the team's current rules: where they differ from AGENTS.md, they take precedence.",
             "## Entry rule_a\nBody of rule_a\nMore",
             "## Entry rule_b\nBody of rule_b\nMore",
             "## Entry rule_c\nBody of rule_c\nMore",
@@ -2169,54 +2170,80 @@ describe("OpencodePlugin memory conventions", () => {
       ),
   )
 
-  it.effect("leaves out what the repository's instruction files already state, and asks nothing without them", () =>
-    withConsole((console) =>
-      Effect.gen(function* () {
-        yield* inRepo
-        const rules = ["rule_v", "rule_a", "rule_b", "rule_c", "rule_d"].map((id) =>
-          entry(id, "convention", "repository"),
-        )
-        console.state.injected = rules
-        // AGENTS.md has rule_v's title word for word and states rule_a in other words; the decision on rule_c fails,
-        // which is a no. rule_d takes a place instead.
-        const files = "# AGENTS.md\nCommit messages follow conventional commits.\nEntry rule_v: always do v."
-        judge.answer = (asked) =>
-          asked.questions.already_stated
-            ? asked.state.includes("Entry rule_a\n")
-              ? { already_stated: 0.95 }
-              : asked.state.includes("Entry rule_c\n")
-                ? 503
-                : { already_stated: 0.5 }
-            : { repo_wide: 0.5 }
-        const { host } = yield* start(console)
-        const hooks = yield* PluginHooks.Service
-        const session = yield* host.session.create({})
-        yield* prompt(session.id, "Fix the date parsing")
-        const first = instructed(session.id, "Fix the date parsing", files)
-        yield* hooks.trigger("session", "context", first)
-        expect(texts(first)).toEqual([
-          "Fix the date parsing",
-          OpencodeMemoryPolicy.initial.conventions([rules[2], rules[4]], "github.com/Acme/App"),
-        ])
-        // The verbatim duplicate wasn't asked about; the others were shown the instruction files only.
-        const stated = judge.asked.filter((item) => item.questions.already_stated)
-        expect(stated).toHaveLength(4)
-        expect(stated.some((item) => item.state.includes("Entry rule_v\n"))).toBe(false)
-        expect(stated.every((item) => item.state.includes(files) && !item.state.includes("Today is Monday"))).toBe(true)
+  it.effect(
+    "leaves out only what the instruction files already state, never what contradicts them, and asks nothing without them",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          yield* inRepo
+          // rule_v contradicts AGENTS.md under the title AGENTS.md gives that rule; rule_w is in it word for word, and it
+          // states rule_a in other words. The decision on rule_c fails, which is a no.
+          const contradicting = {
+            ...entry("rule_v", "convention", "repository"),
+            title: "Commit messages end with a period",
+            body: "Commit messages end with a period, since the changelog is built from them.",
+          }
+          const verbatim = {
+            ...entry("rule_w", "convention", "repository"),
+            body: "Run the tests from the package directory with bun run test, never from the root.",
+          }
+          const rules = [
+            contradicting,
+            verbatim,
+            ...["rule_a", "rule_b", "rule_c", "rule_d"].map((id) => entry(id, "convention", "repository")),
+          ]
+          console.state.injected = rules
+          const files = [
+            "# AGENTS.md",
+            "## Commit messages end with a period?",
+            "No: commit messages never end with a period.",
+            "Run the tests from the package directory with bun run test, never from the root.",
+          ].join("\n")
+          judge.answer = (asked) =>
+            asked.questions.already_stated
+              ? asked.state.includes("Entry rule_a\n")
+                ? { already_stated: 0.95 }
+                : asked.state.includes("Entry rule_c\n")
+                  ? 503
+                  : asked.state.includes("Commit messages end with a period\n")
+                    ? { already_stated: 0.02 }
+                    : { already_stated: 0.5 }
+              : { repo_wide: 0.5 }
+          const { host } = yield* start(console)
+          const hooks = yield* PluginHooks.Service
+          const session = yield* host.session.create({})
+          yield* prompt(session.id, "Fix the date parsing")
+          const first = instructed(session.id, "Fix the date parsing", files)
+          yield* hooks.trigger("session", "context", first)
+          // The contradicting rule is delivered, saying it takes precedence over AGENTS.md; the duplicates aren't.
+          expect(texts(first)).toEqual([
+            "Fix the date parsing",
+            OpencodeMemoryPolicy.initial.conventions([contradicting, rules[3], rules[5]], "github.com/Acme/App"),
+          ])
+          expect(texts(first)[1]).toStartWith(
+            "Instructions from: Engram (conventions for github.com/Acme/App)\nThese are the team's current rules: where they differ from AGENTS.md, they take precedence.\n## Commit messages end with a period\n",
+          )
+          // The verbatim duplicate wasn't asked about; the others were shown the instruction files only.
+          const stated = judge.asked.filter((item) => item.questions.already_stated)
+          expect(stated).toHaveLength(5)
+          expect(stated.some((item) => item.state.includes("Entry rule_w\n"))).toBe(false)
+          expect(stated.every((item) => item.state.includes(files) && !item.state.includes("Today is Monday"))).toBe(
+            true,
+          )
 
-        // A session without instruction files asks nothing of the kind.
-        const asked = judge.asked.length
-        const plain = yield* host.session.create({})
-        yield* prompt(plain.id, "Fix the date parsing")
-        const event = request(plain.id, "Fix the date parsing")
-        yield* hooks.trigger("session", "context", event)
-        expect(texts(event)).toEqual([
-          "Fix the date parsing",
-          OpencodeMemoryPolicy.initial.conventions(rules.slice(0, 3), "github.com/Acme/App"),
-        ])
-        expect(judge.asked.slice(asked).some((item) => item.questions.already_stated)).toBe(false)
-      }),
-    ),
+          // A session without instruction files asks nothing of the kind.
+          const asked = judge.asked.length
+          const plain = yield* host.session.create({})
+          yield* prompt(plain.id, "Fix the date parsing")
+          const event = request(plain.id, "Fix the date parsing")
+          yield* hooks.trigger("session", "context", event)
+          expect(texts(event)).toEqual([
+            "Fix the date parsing",
+            OpencodeMemoryPolicy.initial.conventions(rules.slice(0, 3), "github.com/Acme/App"),
+          ])
+          expect(judge.asked.slice(asked).some((item) => item.questions.already_stated)).toBe(false)
+        }),
+      ),
   )
 
   it.effect("holds a session's first commit and first pull request once to show the repository's rules for them", () =>
@@ -3087,6 +3114,19 @@ describe("OpencodeMemoryPolicy.initial", () => {
     ...overrides,
   })
   const task = (text: string, files: string[] = []) => ({ type: "prompt" as const, text, files })
+
+  test("says the team's rules take precedence over AGENTS.md at a task's start and before an action, not at a failure", () => {
+    const precedence = "These are the team's current rules: where they differ from AGENTS.md, they take precedence."
+    const entries = [injected("mem_a", 0.9)]
+    const commit = { type: "action" as const, action: "commit" as const, command: "git commit -m x" }
+    const lines = (text: string) => text.split("\n")
+    expect(lines(OpencodeMemoryPolicy.initial.render(entries, task("Fix it")))).toContain(precedence)
+    expect(lines(OpencodeMemoryPolicy.initial.held(entries, commit))).toContain(precedence)
+    expect(lines(OpencodeMemoryPolicy.initial.conventions(entries, "github.com/acme/app"))[1]).toBe(precedence)
+    expect(
+      OpencodeMemoryPolicy.initial.render(entries, { type: "failure", command: "bun test", output: "x", exitCode: 1 }),
+    ).not.toContain(precedence)
+  })
 
   test("injects for a new session's first prompt only, with its repository and the files attached to it", () => {
     const inject = OpencodeMemoryPolicy.initial.inject

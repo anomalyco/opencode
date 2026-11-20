@@ -207,7 +207,12 @@ describe("OpencodeMemoryDecide", () => {
           return Effect.fail(
             new ProviderRequestError({ providerID: "opencode", reason: "provider", message: "down", status: 503 }),
           )
-        return Effect.succeed([predicate("already_stated", text.includes("Paraphrased") ? 0.95 : 0.93)])
+        return Effect.succeed([
+          predicate(
+            "already_stated",
+            text.includes("Paraphrased") ? 0.95 : text.includes("Contradicting") ? 0.02 : 0.93,
+          ),
+        ])
       })
       const decide = OpencodeMemoryDecide.make({
         decisions: fake.decisions,
@@ -215,10 +220,7 @@ describe("OpencodeMemoryDecide", () => {
       })
       const instructions =
         "# AGENTS.md\n\n## Commit messages, written as follows\nRun the tests with: TZ=UTC bun run test --bail from the package!"
-      // Its title, normalised, is in them; or the start of its body is.
-      expect(yield* decide.stated(instructions, { ...entry, title: "Commit Messages -- written as follows" })).toBe(
-        true,
-      )
+      // The start of its body, normalised, is in them.
       expect(
         yield* decide.stated(instructions, {
           ...entry,
@@ -227,19 +229,27 @@ describe("OpencodeMemoryDecide", () => {
         }),
       ).toBe(true)
       expect(fake.asked).toHaveLength(0)
-      // A title under 12 characters doesn't count, nor does a body under 30.
-      expect(OpencodeMemoryDecide.verbatim("tests and more", { title: "Tests", body: "tests and more" })).toBe(false)
+      // A body under 30 characters doesn't count.
+      expect(OpencodeMemoryDecide.verbatim("tests and more", { body: "tests and more" })).toBe(false)
+      // A title alone isn't enough: an entry contradicting the section it shares a title with is the decision's.
+      const contradicting = {
+        ...entry,
+        title: "Commit Messages -- written as follows",
+        body: "Contradicting: commit messages end with a period.",
+      }
+      expect(yield* decide.stated(instructions, contradicting)).toBe(false)
+      expect(fake.asked).toHaveLength(1)
 
       // Otherwise the decision, at 0.94 or above, framed as the bench framed it with the end of the instructions cut.
       const long = `${instructions}\n${"y".repeat(13_000)}`
       expect(yield* decide.stated(long, { ...entry, title: "Paraphrased rule" })).toBe(true)
-      expect(fake.asked[0]?.input).toEqual([
+      expect(fake.asked[1]?.input).toEqual([
         {
           type: "text",
           text: `Repository instructions (AGENTS.md):\n\n${long.slice(0, 12_000)}\n\nNote from the team's shared memory:\nParaphrased rule\nRun wrangler deploy.`,
         },
       ])
-      expect(fake.asked[0]?.questions).toEqual([
+      expect(fake.asked[1]?.questions).toEqual([
         {
           type: "predicate",
           name: "already_stated",

@@ -455,7 +455,8 @@ Rules for all of a repository's work, such as how commits are written or which
 command runs the tests, reach every task in it, so memory works without an
 `AGENTS.md`. They arrive as their own message, the way an `AGENTS.md` is shown,
 titled `Instructions from: Engram (conventions for <repo>)`. When the repository has one, or another instruction file is loaded,
-an entry that file already states isn't delivered.
+an entry that file already states isn't delivered. An entry that disagrees with
+it is delivered, and says it takes precedence; you aren't asked.
 
 Before a session's first `git commit` and first `gh pr create`, memory looks for
 the repository's rules for that action. When some apply, the command fails once
