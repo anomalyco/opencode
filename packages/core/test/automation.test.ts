@@ -102,6 +102,7 @@ const toggled = Layer.succeed(
 const folders = { missingNow: false }
 const slack = { replies: 0, reads: 0, posts: [] as string[], failing: false, messageIDs: [] as SessionMessage.ID[] }
 let agentRules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
+let ruleDenies: Array<{ action: string; resource: string }> = []
 let activationGate: Effect.Effect<void> = Effect.void
 let helperGone = false
 
@@ -110,6 +111,15 @@ const configureAgent = Layer.effectDiscard(
     const agents = yield* Agent.Service
     const tools = yield* Tool.Service
     const permission = yield* Permission.Service
+    const hooks = yield* PluginHooks.Service
+    if (ruleDenies.length > 0) {
+      const denies = [...ruleDenies]
+      yield* hooks.register("permission", "experimental.rules", (event) =>
+        Effect.sync(() => {
+          for (const deny of denies) event.deny(deny)
+        }),
+      )
+    }
     yield* agents.transform((editor) => {
       editor.update(Agent.defaultID, (agent) => {
         agent.permissions = [...agentRules]
@@ -298,6 +308,7 @@ const setup = (directory = enabledDirectory) =>
     slack.posts = []
     slack.failing = false
     agentRules = [{ action: "*", resource: "*", effect: "allow" }]
+    ruleDenies = []
     activationGate = Effect.void
     helperGone = false
     return yield* Automation.Service
@@ -1813,6 +1824,50 @@ describe("Automation", () => {
           runCount: 0,
           lastOutput: "Timed out after 30000ms",
         })
+      }),
+    )
+
+    it.effect("honours experimental.rules denies during authorization and unattended runs", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const map = yield* LocationServiceMap.Service
+        const loc = Location.Ref.make({ directory: AbsolutePath.make(enabledDirectory) })
+
+        const automation = yield* automations.create({
+          sessionID,
+          name: "post",
+          trigger: every("1 minute"),
+          action: code(`await tools.slack.post({ text: "hello", channel: "ops" }); return`),
+        })
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(slack.posts).toEqual(["hello"])
+
+        // A resource-scoped deny added after creation blocks the unattended call.
+        ruleDenies = [{ action: "slack_post", resource: "ops" }]
+        yield* map.invalidate(loc)
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(slack.posts).toEqual(["hello"])
+        expect(yield* automations.get(automation.id)).toMatchObject({ runCount: 1, lastOutcome: "failed" })
+
+        // A whole-tool deny blocks both unattended runs and new automation creation.
+        ruleDenies = [{ action: "slack_post", resource: "*" }]
+        yield* map.invalidate(loc)
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(slack.posts).toEqual(["hello"])
+        expect(yield* automations.get(automation.id)).toMatchObject({ runCount: 1, lastOutcome: "failed" })
+        expect(
+          yield* Effect.flip(
+            automations.create({
+              sessionID,
+              name: "blocked",
+              trigger: every("1 minute"),
+              action: code(`await tools.slack.post({ text: "nope", channel: "general" }); return`),
+            }),
+          ),
+        ).toMatchObject({ _tag: "Permission.BlockedError" })
       }),
     )
   })

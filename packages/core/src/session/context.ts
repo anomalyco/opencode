@@ -20,6 +20,7 @@ import { Location } from "../location.js"
 import { MachineInstructions } from "../machine/instructions.js"
 import { McpInstructions } from "../mcp/instructions.js"
 import { McpTool } from "../tool/mcp.js"
+import { PluginHooks } from "../plugin/hooks.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
@@ -90,6 +91,7 @@ const layer = Layer.effect(
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
     const flags = yield* Flag.Service
+    const hooks = yield* PluginHooks.Service
     const location = yield* Location.Service
     const machineInstructions = yield* MachineInstructions.Service
     const mcpInstructions = yield* McpInstructions.Service
@@ -154,8 +156,8 @@ const layer = Layer.effect(
       yield* mcpTools.flush
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
-      // Session permissions narrow discovery the same way they narrow the tool snapshot.
-      const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
+      // The rules this agent's calls are evaluated against also decide which tools, skills, and MCP servers it lists.
+      const permissions = yield* Permission.rules(hooks, { session, agent })
       const [selected, hasWebSearch, fullCodeMode] = yield* Effect.all(
         [
           models.select(session, model.available).pipe(Effect.orElseSucceed(() => undefined)),
@@ -262,6 +264,7 @@ export const node = makeLocationNode({
     MachineInstructions.node,
     McpInstructions.node,
     McpTool.node,
+    PluginHooks.node,
     ReferenceInstructions.node,
     SessionRunnerModel.node,
     SessionModelRequest.node,
