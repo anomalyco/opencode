@@ -22,6 +22,7 @@ export interface Invocation {
 export interface Definition {
   readonly name: string
   readonly description?: string
+  readonly source?: Info["source"]
   readonly execute: (input: Invocation) => Effect.Effect<void, unknown>
 }
 
@@ -58,6 +59,7 @@ export const layer = Layer.effect(
       Info.make({
         name: definition.name,
         description: definition.description,
+        source: definition.source,
       })
     const state = State.create<Map<string, Definition>, Editor>({
       name: "command",

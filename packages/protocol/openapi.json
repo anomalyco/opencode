@@ -16764,6 +16764,10 @@
           },
           "description": {
             "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["builtin"]
           }
         },
         "required": ["name"],

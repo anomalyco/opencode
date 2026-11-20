@@ -260,7 +260,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
     command: {
       list: () => response(commands.list()),
       reload: commands.reload,
-      transform: commands.transform,
+      transform: (callback) =>
+        commands.transform((editor) =>
+          callback({
+            add: (definition) =>
+              editor.add({ name: definition.name, description: definition.description, execute: definition.execute }),
+          }),
+        ),
     },
     credential: {
       activate: (input) => integration.connection.activate(input.credentialID),
