@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber } from "effect"
+import path from "node:path"
+import { Effect } from "effect"
 import { SessionRecord } from "@opencode/core/plugin/provider/claude-agent/sync/record"
 import { RequestKind } from "@opencode/core/plugin/provider/claude-agent/language-model/request-kind"
 import { it } from "../../../../lib/effect"
@@ -15,11 +16,9 @@ describe("Claude history branches", () => {
       const claude = FakeClaude.make([
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn(),
-        FakeClaude.expectInterrupt(),
         FakeClaude.expectStartup(),
-        FakeClaude.expectTurn({ recording: "billing-error" }),
+        FakeClaude.expectTurn({ recording: "api-error" }),
         FakeClaude.expectInterrupt(),
-        FakeClaude.expectStartup(),
         FakeClaude.expectTurn({ index: 1 }),
         FakeClaude.expectInterrupt(),
       ])
@@ -28,13 +27,37 @@ describe("Claude history branches", () => {
       const before = yield* SessionRecord.make(test.storage).get("session-a")
       const reply = yield* TestSessions.reply(test.model, TestSessions.followup("Summarize"), "session-a", "compaction")
       const error = reply.find((part) => part.type === "error")
-      expect(String(error?.error)).toContain("extra usage")
+      expect(String(error?.error)).toContain("claude-does-not-exist")
       expect(claude.removed).toEqual([claude.forks[0]!.sessionID])
       expect(yield* SessionRecord.make(test.storage).get("session-a")).toEqual(before)
       expect(TestSessions.text(yield* TestSessions.reply(test.model, TestSessions.followup())).trim()).toBe(
         "COPPER-OTTER",
       )
-      expect(claude.runs[2]!.args).toContain(`--resume=${before!.claudeSessionID}`)
+      expect(claude.runs).toHaveLength(2)
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
+  it.effect("a branch is forked and deleted in the chat's own Claude config folder", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn({ recording: "api-error" }),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude)
+      const folder = path.resolve("/claude-work")
+      const work = yield* TestSessions.model(test.sessions, { configDir: folder })
+      yield* TestSessions.reply(work, first)
+      yield* TestSessions.reply(work, TestSessions.followup("Summarize"), "session-a", "compaction")
+      expect(claude.forks).toHaveLength(1)
+      expect(claude.forks[0]!.configDir).toBe(folder)
+      // The fake reports a removal from a different folder as an error in check().
+      expect(claude.removed).toEqual([claude.forks[0]!.sessionID])
       yield* test.registry.close()
       claude.check()
     }),
@@ -235,42 +258,33 @@ describe("Claude history branches", () => {
       }),
   )
 
-  it.effect("compaction drains a parked tool turn and the next primary request starts from the summary alone", () =>
+  it.effect("compaction leaves a parked tool turn running and the next primary request starts from the summary", () =>
     Effect.gen(function* () {
-      const cancel = FakeClaude.replay("tools-waiting-cancel")
-      const nextUser = cancel.findIndex((step, i) => i > 1 && step.type === "exchange" && step.input.type === "user")
-      const steps = cancel.slice(0, nextUser)
-      const terminal = steps.findIndex(
-        (step) => step.type === "exchange" && step.replies.some((message) => message.type === "result"),
+      const tools = FakeClaude.replay("tools")
+      // The first tool result is the first input after the step that parks.
+      const parked = tools.findIndex(
+        (step) => step.type === "exchange" && step.input.response?.response?.mcp_response !== undefined,
       )
-      const ending = steps[terminal]!
-      if (ending.type !== "exchange") throw new Error("Missing recorded terminal result")
-      const drain = Promise.withResolvers<void>()
-      steps[terminal] = { ...ending, beforeResult: drain.promise }
       const claude = FakeClaude.make([
-        ...steps,
+        ...tools.slice(0, parked),
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn({ recording: "utility" }),
         FakeClaude.expectInterrupt(),
+        ...tools.slice(parked),
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn(),
         FakeClaude.expectInterrupt(),
       ])
       const test = yield* TestSessions.start(claude)
-      yield* Effect.addFinalizer(() => Effect.sync(() => drain.resolve()))
       const prompt = TestTools.prompt()
-      TestTools.append(prompt, yield* TestTools.step(test.model, prompt), () => ({
-        type: "execution-denied",
-        reason: "Compacted",
-      }))
-      const summary = yield* TestSessions.reply(test.model, prompt, "session-a", "compaction").pipe(Effect.forkChild)
-      yield* Effect.promise(() => claude.started(steps[terminal]!))
-      expect(claude.forks).toHaveLength(0)
-      expect(claude.runs).toHaveLength(1)
-      drain.resolve()
-      yield* Fiber.join(summary)
+      TestTools.append(prompt, yield* TestTools.step(test.model, prompt), TestTools.output)
+      yield* TestSessions.reply(test.model, [...prompt], "session-a", "compaction")
       expect(claude.forks).toHaveLength(1)
       expect(claude.removed).toEqual([claude.forks[0]!.sessionID])
+      TestTools.append(prompt, yield* TestTools.step(test.model, prompt), TestTools.output)
+      expect(TestSessions.text(yield* TestTools.step(test.model, prompt))).toBe("COPPER-OTTER")
+      expect(claude.runs).toHaveLength(2)
+      expect(claude.runs[0]!.received.some((message) => message.request?.subtype === "interrupt")).toBe(false)
       const compacted = TestSessions.prompt(
         "<conversation-checkpoint>Only SUMMARY-HERON remains.</conversation-checkpoint>",
       )

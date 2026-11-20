@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "./lib/index.js"
+import { CodeMode, Tool } from "../src/index.js"
 
 // `new` is supported syntax; only the callee decides whether construction succeeds. A callee without
 // construction support is a TypeError naming it, like JS, rather than an unsupported-syntax diagnostic
@@ -51,10 +51,10 @@ describe("new on a non-constructible callee", () => {
   test("user-defined functions explain the documented gap", async () => {
     const failure = await error(`function Point(x) { return { x } }; return new Point(1)`)
     expect(failure.message).toStartWith(
-      "TypeError: Point cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.",
+      "TypeError: Point is not a constructor: only classes can be constructed with new. Use a class, or call it as a function that returns an object.",
     )
     expect((await error(`const make = () => ({}); return new make()`)).message).toStartWith(
-      "TypeError: make cannot be constructed",
+      "TypeError: make is not a constructor",
     )
   })
 
@@ -71,12 +71,10 @@ describe("new on a non-constructible callee", () => {
     expect((await error(`return new Function("return 1")`)).message).not.toContain("not a constructor")
   })
 
-  test("classes remain unsupported syntax", async () => {
-    const failure = await error(`class A {}; return new A()`)
-    expect(failure.kind).toBe("UnsupportedSyntax")
+  test("extending a built-in other than errors is refused", async () => {
+    const failure = await error(`class A extends Object {}; return new A()`)
     expect(failure.message).toStartWith(
-      "SyntaxError: Syntax 'ClassDeclaration' is not supported. This is a restricted JavaScript-like language. Supported: ",
+      "TypeError: Extending the built-in Object is not supported. Only classes and Error types can be extended.",
     )
-    expect(failure.message).toContain("Unsupported: classes, getters/setters, BigInt, and custom Symbols.")
   })
 })

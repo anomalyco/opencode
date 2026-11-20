@@ -11,13 +11,14 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail};
 use crossbeam_channel::{Receiver, Sender, bounded};
+#[cfg(unix)]
+use crossbeam_utils::sync::WaitGroup;
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
 
 use crate::ghostty::{Format, Terminal, TerminalOptions};
 use crate::protocol::AttachmentRole;
 
-#[cfg(unix)]
 mod pipe;
 #[cfg(windows)]
 mod windows;
@@ -285,6 +286,9 @@ pub struct CreatePipe {
 
 pub struct TerminalService {
     terminals: Mutex<HashMap<TerminalId, Arc<TerminalHandle>>>,
+    /// Failed-command escalation outlives record deletion. Shutdown waits for it.
+    #[cfg(unix)]
+    escalations: WaitGroup,
     created: AtomicU64,
     replay_capacity: usize,
 }
@@ -299,6 +303,8 @@ impl TerminalService {
     pub fn new(replay_capacity: usize) -> Self {
         Self {
             terminals: Mutex::new(HashMap::new()),
+            #[cfg(unix)]
+            escalations: WaitGroup::new(),
             created: AtomicU64::new(0),
             replay_capacity,
         }
@@ -311,7 +317,7 @@ impl TerminalService {
         self.insert(|id, order| TerminalHandle::spawn_pty(id, order, request, replay_capacity))
     }
 
-    /// Starts a pipe process. Unix only.
+    /// Starts a pipe process.
     pub fn create_pipe(&self, request: CreatePipe) -> Result<ProcessInfo> {
         // Everything is checked before the output file is opened, so a
         // rejected request never creates or truncates it.
@@ -323,10 +329,15 @@ impl TerminalService {
             bail!("output_path must be absolute");
         }
         validate_metadata(&request.metadata)?;
-        #[cfg(unix)]
-        return self.insert(|id, order| TerminalHandle::spawn_pipe(id, order, request));
-        #[cfg(not(unix))]
-        bail!("pipe processes are not supported on this platform");
+        self.insert(|id, order| {
+            TerminalHandle::spawn_pipe(
+                id,
+                order,
+                request,
+                #[cfg(unix)]
+                self.escalations.clone(),
+            )
+        })
     }
 
     fn insert(
@@ -397,20 +408,13 @@ impl TerminalService {
     }
 
     /// Signals a pipe process and its process group. The process stays
-    /// listed; signalling one that already exited is allowed.
+    /// listed; signalling one that already exited is a no-op.
     pub fn signal(&self, id: TerminalId, signal: ProcessSignal) -> Result<()> {
-        let process = self.pipe(id)?;
-        #[cfg(unix)]
-        return process
+        self.pipe(id)?
             .process
             .as_ref()
             .ok_or_else(|| anyhow!("process {id} cannot be signalled"))?
-            .signal(signal);
-        #[cfg(not(unix))]
-        {
-            let _ = (process, signal);
-            bail!("pipe processes are not supported on this platform");
-        }
+            .signal(signal)
     }
 
     /// Replaces a pipe process's metadata.
@@ -626,6 +630,8 @@ impl TerminalService {
 impl Drop for TerminalService {
     fn drop(&mut self) {
         self.shutdown();
+        #[cfg(unix)]
+        std::mem::take(&mut self.escalations).wait();
     }
 }
 
@@ -641,10 +647,7 @@ struct TerminalHandle {
     /// Dropped at shutdown, before the joins, to cancel a pipe reader that a
     /// surviving descendant would otherwise keep blocked.
     cancel: Mutex<Option<Box<dyn Send>>>,
-    /// Runs after the joins; reaps a pipe process kept as a zombie until now.
-    reap: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     /// Pipe only: the child, for `signal`.
-    #[cfg(unix)]
     process: Option<Arc<pipe::Process>>,
     info: Arc<RwLock<ProcessInfo>>,
     joins: Mutex<Option<Vec<JoinHandle<()>>>>,
@@ -789,7 +792,7 @@ impl TerminalHandle {
             ActorMaster {
                 pty: Some(pair.master),
                 #[cfg(windows)]
-                close_tx,
+                close_tx: Some(close_tx),
             },
             writer_tx,
             &info,
@@ -879,8 +882,6 @@ impl TerminalHandle {
             shutdown_tx: Mutex::new(Some(actor.shutdown_tx)),
             killer: Mutex::new(killer),
             cancel: Mutex::new(None),
-            reap: Mutex::new(None),
-            #[cfg(unix)]
             process: None,
             info,
             joins: Mutex::new(Some(vec![
@@ -941,14 +942,6 @@ impl TerminalHandle {
             .take();
         for join in handles {
             let _ = join.join();
-        }
-        if let Some(reap) = self
-            .reap
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .take()
-        {
-            reap();
         }
         Ok(())
     }
@@ -1017,10 +1010,8 @@ enum ActorMessage {
     WriterFailed(String),
     ChildExited(Result<Option<u32>, String>),
     /// A pipe process ended by a signal; the value is the signal's name.
-    #[cfg(unix)]
     ChildKilled(String),
     /// Writing the `output_path` file failed; it stops at this point.
-    #[cfg(unix)]
     OutputFileFailed(String),
     #[cfg(not(windows))]
     RefreshForegroundProcess {
@@ -1111,10 +1102,19 @@ enum WriterMessage {
 struct ActorMaster {
     pty: Option<Box<dyn MasterPty + Send>>,
     #[cfg(windows)]
-    close_tx: Sender<Box<dyn MasterPty + Send>>,
+    close_tx: Option<Sender<Box<dyn MasterPty + Send>>>,
 }
 
 impl ActorMaster {
+    /// A master for a process with no terminal.
+    fn pipe() -> Self {
+        Self {
+            pty: None,
+            #[cfg(windows)]
+            close_tx: None,
+        }
+    }
+
     fn get(&self) -> Result<&(dyn MasterPty + Send)> {
         self.pty
             .as_deref()
@@ -1123,15 +1123,20 @@ impl ActorMaster {
 
     #[cfg(windows)]
     fn close(&mut self) -> Result<()> {
-        if let Some(master) = self.pty.take() {
-            // A capacity-one channel receives this unique master exactly once;
-            // handoff cannot wait on ClosePseudoConsole or PTY output drainage.
-            if let Err(error) = self.close_tx.send(master) {
-                // Keep ownership on failure. The actor stops receiving before
-                // dropping this fallback master, so its reader can still drain.
-                self.pty = Some(error.0);
-                bail!("terminal close worker stopped");
-            }
+        let Some(master) = self.pty.take() else {
+            return Ok(());
+        };
+        let Some(close_tx) = &self.close_tx else {
+            // Only PTYs have a close worker; a pipe process has no master.
+            return Ok(());
+        };
+        // A capacity-one channel receives this unique master exactly once;
+        // handoff cannot wait on ClosePseudoConsole or PTY output drainage.
+        if let Err(error) = close_tx.send(master) {
+            // Keep ownership on failure. The actor stops receiving before
+            // dropping this fallback master, so its reader can still drain.
+            self.pty = Some(error.0);
+            bail!("terminal close worker stopped");
         }
         Ok(())
     }
@@ -1544,7 +1549,6 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                 }
                 None => waiters.push(reply),
             },
-            #[cfg(unix)]
             Ok(ActorMessage::OutputFileFailed(message)) => {
                 if let Ok(mut value) = info.write()
                     && let Some(pipe) = value.pipe.as_mut()
@@ -1552,7 +1556,6 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                     pipe.output_error = Some(message);
                 }
             }
-            #[cfg(unix)]
             Ok(ActorMessage::ChildKilled(signal)) => {
                 child_exit = Some(Ok((None, Some(signal))));
             }
@@ -2250,7 +2253,7 @@ mod tests {
                         .is_pty()
                         .then(|| Box::new(TestMaster) as Box<dyn MasterPty + Send>),
                     #[cfg(windows)]
-                    close_tx,
+                    close_tx: mode.is_pty().then_some(close_tx),
                 },
                 messages,
                 writes,
@@ -2273,8 +2276,6 @@ mod tests {
                 shutdown_tx: Mutex::new(Some(shutdown_tx)),
                 killer: Mutex::new(Box::new(TestKiller)),
                 cancel: Mutex::new(None),
-                reap: Mutex::new(None),
-                #[cfg(unix)]
                 process: None,
                 info,
                 joins: Mutex::new(Some(vec![
@@ -2428,17 +2429,13 @@ mod tests {
         for message in [
             ActorMessage::Wait { reply },
             ActorMessage::ChildExited(Ok(Some(0))),
-            #[cfg(unix)]
             ActorMessage::OutputFileFailed("disk full".into()),
             ActorMessage::ReaderFailed("boom".into()),
         ] {
             actor.actor_tx.send(message).unwrap();
         }
         let exit = wait.recv_timeout(Duration::from_secs(5)).unwrap();
-        #[cfg(unix)]
         assert_eq!(exit.output_error.as_deref(), Some("disk full"));
-        #[cfg(not(unix))]
-        assert!(exit.output_error.is_some());
         actor.shutdown().unwrap();
     }
 
@@ -2507,7 +2504,7 @@ mod tests {
         drop(close_rx);
         let mut master = ActorMaster {
             pty: Some(Box::new(TestMaster)),
-            close_tx,
+            close_tx: Some(close_tx),
         };
         assert!(master.close().is_err());
         assert!(master.get().is_ok());

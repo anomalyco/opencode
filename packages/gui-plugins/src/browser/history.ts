@@ -4,6 +4,8 @@ import { Schema } from "effect"
 export const Visit = Schema.Struct({
   url: Schema.String,
   title: Schema.String,
+  /** Artifact addresses resolve only in the session in which the user opened them. */
+  session: Schema.optionalKey(Schema.String),
   /** The page's icon as a data URL, when it was small enough to keep. */
   icon: Schema.optionalKey(Schema.String),
 })
@@ -22,22 +24,22 @@ const MAX_STORED_ICON = 6_000
 
 /** The pages the history records: web pages and workspace files, not blank or internal ones. */
 export function recordable(url: string) {
-  return /^(?:https?|file):\/\//i.test(url)
+  return /^(?:https?|file|workspace|artifact):\/\//i.test(url)
 }
 
 /**
  * Puts a visit first, replacing an earlier visit of the same URL, and drops the oldest past the limit. A visit without
  * a title or icon yet keeps the earlier visit's.
  */
-export function remember(visits: readonly Visit[], visit: Pick<Visit, "url" | "title">, icon?: string): Visit[] {
-  const earlier = visits.find((item) => item.url === visit.url)
+export function remember(visits: readonly Visit[], visit: Visit, icon?: string): Visit[] {
+  const earlier = visits.find((item) => item.url === visit.url && item.session === visit.session)
   const kept = storable(icon) ?? earlier?.icon
   const title = visit.title || earlier?.title || ""
 
-  const next: Visit = kept ? { url: visit.url, title, icon: kept } : { url: visit.url, title }
+  const next: Visit = kept ? { ...visit, title, icon: kept } : { ...visit, title }
 
   // Copies, so a store that reconciles the new list in place never sees its own records at moved positions.
-  return [next, ...visits.flatMap((item) => (item.url === visit.url ? [] : [{ ...item }]))].slice(0, MAX_VISITS)
+  return [next, ...visits.flatMap((item) => (item.url === visit.url && item.session === visit.session ? [] : [{ ...item }]))].slice(0, MAX_VISITS)
 }
 
 /** The visits with a newly loaded icon on the visit of `url`, or undefined when nothing would change. */

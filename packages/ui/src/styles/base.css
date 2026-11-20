@@ -186,6 +186,24 @@ table {
 }
 
 /*
+  The shared focus ring for anything without its own (links, plain buttons, focusable regions), in place of the
+  browser's, which follows the system accent colour. Components that draw their own ring, or none by decision, override
+  it from the components layer. Keyboard and screen reader focus only.
+*/
+:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
+}
+
+/*
+  Text links have no corners of their own, so their ring takes the 4px radius the other rings have. A component's own
+  radius wins. Focusable regions keep theirs, since rounding a scroll container would clip its content.
+*/
+a:focus-visible {
+  border-radius: 4px;
+}
+
+/*
   Add the correct vertical alignment in Chrome and Firefox.
 */
 

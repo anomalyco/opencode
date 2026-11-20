@@ -20,4 +20,6 @@ export default {
   offline: "Can't reach this server",
   "settings.wrapLines.title": "Wrap lines",
   "settings.wrapLines.description": "Wrap long lines in mobile diffs instead of scrolling horizontally",
+  "sidebar.noChanges": "No changed files. Use Open file to browse the workspace.",
+  "sidebar.unavailable": "The file list is unavailable.",
 }

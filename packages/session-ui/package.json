@@ -1,6 +1,6 @@
 {
   "name": "@opencode/session-ui",
-  "version": "2.2.5",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -12,6 +12,7 @@
     "./timeline/detail": "./src/timeline/detail.ts",
     "./timeline/row": "./src/timeline/session-timeline-row.tsx",
     "./timeline": "./src/timeline/session-timeline.tsx",
+    "./timeline-next": "./src/timeline-next/index.ts",
     "./basic-tool": "./src/components/basic-tool.tsx",
     "./copy": "./src/components/copy.ts",
     "./dock-prompt": "./src/components/dock-prompt.tsx",

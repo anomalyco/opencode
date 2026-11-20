@@ -83,6 +83,21 @@ test("wraps a partial selection in its semantic ancestors", () => {
   expect(markdownClipboardHtml(root, codeRange)).toBe("<pre><code>let</code></pre>")
 })
 
+test("writes session references as the IDs they stand for", () => {
+  const root = markdownRoot(
+    [
+      '<p>See <button type="button" class="markdown-session-link" data-session-id="ses_a"',
+      ' data-session-reference="ses_a">@Auth middleware</button></p>',
+    ].join(""),
+  )
+
+  expect(markdownClipboardHtml(root, rangeOver(root))).toBe("<p>See <code>ses_a</code></p>")
+  const range = document.createRange()
+
+  range.selectNodeContents(root.querySelector("button")!)
+  expect(markdownClipboardHtml(root, range)).toBe("<p><code>ses_a</code></p>")
+})
+
 test("keeps web links and drops local paths, scripts, and decorative icons", () => {
   const root = markdownRoot(
     [

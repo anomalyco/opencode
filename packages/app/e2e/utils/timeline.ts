@@ -1120,20 +1120,21 @@ function provider() {
 
 /** Hovers a user message, opens the chevron menu its bubble (or, without text, its footer) shows, and picks an action. */
 export async function chooseUserMessageAction(page: Page, row: Locator, name: string) {
-  const bubble = row.locator('[data-slot="user-message-text"]')
-
-  if ((await bubble.count()) > 0) await bubble.hover()
-  else await row.locator('[data-component="user-message"]').hover()
-  await row.getByRole("button", { name: "More actions", exact: true }).click()
+  await openUserMessageMenu(page, row)
   await page.getByRole("menuitem", { name, exact: true }).click()
 }
 
 /** Hovers a user message, opens its chevron menu, and returns the open menu. */
 export async function openUserMessageMenu(page: Page, row: Locator) {
-  const bubble = row.locator('[data-slot="user-message-text"]')
+  const message = row.locator('[data-component="user-message"]')
+  const bubble = message.locator('[data-slot="user-message-text"]')
+
+  // The bubble renders with its message. Counted before the row mounts, it reads 0, and hovering the whole message
+  // misses the bubble, the only place that reveals a text message's chevron.
+  await expect(message).toBeVisible()
 
   if ((await bubble.count()) > 0) await bubble.hover()
-  else await row.locator('[data-component="user-message"]').hover()
+  else await message.hover()
   await row.getByRole("button", { name: "More actions", exact: true }).click()
 
   return page.getByRole("menu")

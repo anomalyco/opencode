@@ -137,7 +137,12 @@ export function ArcadeChrome(props: { settingsRows?: () => JSX.Element }) {
       <h1 data-slot="title">{i18n.t("site.notFound.title")}</h1>
       <div data-slot="shade" aria-hidden="true" />
       <header data-slot="sidebar">
-        <a href={language.route("/")} data-slot="logo" aria-label={i18n.t("nav.logoAlt")} data-tip={i18n.t("nav.home")}>
+        <a
+          href={language.route("/")}
+          data-slot="logo"
+          aria-label={i18n.t("nav.logoHome")}
+          data-tip={i18n.t("nav.logoHome")}
+        >
           <LogoIcon />
         </a>
         <nav aria-label={i18n.t("site.landmark.primary")}>

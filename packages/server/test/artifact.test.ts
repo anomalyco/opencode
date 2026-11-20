@@ -5,7 +5,7 @@ import { OpenCode } from "@opencode/client"
 import { Effect } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
-import { ServerFetch } from "../src/fetch"
+import { serveRoutes } from "./fixture/routes"
 
 const client = (handler: (request: Request) => Promise<Response>) =>
   OpenCode.make({
@@ -81,14 +81,16 @@ export default {
       )
     })
 
-    const handler = yield* ServerFetch.make({
+    const server = yield* serveRoutes({
       app: { version: "test" },
       database: { path: path.join(dir, "opencode.db") },
       config: { directory: global, project: true, claude: false },
       models: { fetch: false },
       fs: { filewatcher: false },
     })
+    const handler = server.handler
     const api = client(handler)
+    yield* server.pluginsLoaded(enabled)
 
     yield* Effect.promise(async () => {
       // Disabled location returns ForbiddenError
@@ -215,4 +217,8 @@ export default {
       })
     })
   }),
+  // As the suite's first server boot, this test pays the process's cold load of the Location graph (built-in plugins,
+  // the models catalog, lazily imported modules). sdk's first host boot shows that cost: 0.7-4s on Windows CI against
+  // 0.25s on Linux. This test then boots three Locations and a local plugin.
+  30_000,
 )

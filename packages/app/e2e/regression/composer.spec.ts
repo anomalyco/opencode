@@ -5,6 +5,43 @@ import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-serv
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
+test("the composer preserves its ring on dialog return and leaves autofocus and clicks quiet", async ({ page }) => {
+  const view = await openSession(page, { name: "ComposerKeyboardFocus" })
+
+  const frame = page.locator('[data-component="composer"]').filter({ has: view.editor })
+
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+
+  await page.keyboard.press("Shift+Tab")
+  await expect(view.editor).not.toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "solid")
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  const dialog = page.getByRole("dialog")
+
+  await page.keyboard.press(`${modifier}+Shift+p`)
+  await expect(dialog.getByRole("combobox")).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "solid")
+
+  await view.editor.click()
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+  await page.keyboard.type("Still quiet")
+  await expect(frame).toHaveCSS("outline-style", "none")
+  await page.keyboard.press(`${modifier}+Shift+p`)
+  await expect(dialog.getByRole("combobox")).toBeFocused()
+  await page.mouse.click(20, 200)
+  await expect(dialog).toBeHidden()
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+})
+
 test("mention a session by title, send its stable token, and open its own tab", async ({ page }) => {
   const target = "ses_0123456789abcdefghijklmnop"
   const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
@@ -32,11 +69,17 @@ test("mention a session by title, send its stable token, and open its own tab", 
   await view.editor.pressSequentially(" mid")
   await suggestions.getByRole("button", { name: /Auth middleware/ }).click()
   await expect(view.editor.locator('[data-mention="session"]')).toHaveText("@Auth middleware")
+  // The mention's context menu copies the ID it stands for; the rest of the editor keeps the native menu.
+  await view.editor.locator('[data-mention="session"]').click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Copy Session ID", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(target)
+  await expect(page.getByRole("menu")).toHaveCount(0)
+  await view.editor.press("End")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
   expect(prompts[0]?.text).toBe(`Compare with @session:${target} `)
   const message = page.locator('[data-timeline-row="UserMessage"]')
-  const chip = message.getByRole("button", { name: "Auth middleware", exact: true })
+  const chip = message.getByRole("button", { name: "@Auth middleware", exact: true })
   await expect(chip).toBeVisible()
   await chip.click()
   await expect(page).toHaveURL(new RegExp(`${target}$`))
@@ -143,7 +186,7 @@ test("closing the @ menu aborts its session search", async ({ page }) => {
   }
 })
 
-test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
+test("the free usage limit opens the Go dialog once, swaps the composer for the free limit panel, and restores the prompt", async ({
   page,
   context,
 }) => {
@@ -245,7 +288,9 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
   const upsell = page.getByRole("dialog", { name: "Free limit reached" })
   await expect(upsell).toContainText("Your free messages reset at")
   await expect(page.getByText(/^You've used today's free messages\. They reset at /)).toBeVisible()
-  await expect(view.editor).toHaveText("Refactor the parser")
+  // With no paid provider the panel stands in for the composer until Go is connected.
+  await expect(page.locator('[data-component="session-free-limit"]')).toContainText("Free usage resets at")
+  await expect(view.editor).toHaveCount(0)
   await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
 
   // Subscribe -> Go API key -> Continue switches the model in the current session without opening a new draft tab.
@@ -382,6 +427,9 @@ for (const action of ["tray", "picker"] as const) {
     })
 
     await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
+    // Loading the selected model clears the tray, just like switching models does.
+    const modelButton = page.locator('[data-action="composer-model"]')
+    await expect(modelButton).toContainText("GLM-5 Go")
 
     // The refusal OpenCode Console sends a Go subscriber at a limit, as core records it.
     const body = {
@@ -428,13 +476,13 @@ for (const action of ["tray", "picker"] as const) {
     if (action === "tray") await tray.getByRole("button", { name: "Switch to a free model", exact: true }).click()
 
     if (action === "picker") {
-      await page.locator('[data-action="composer-model"]').click()
+      await modelButton.click()
       const picker = page.getByRole("dialog", { name: "Select model", exact: true })
       await picker.getByRole("combobox", { name: "Search models", exact: true }).fill("Big Pickle")
       await picker.getByRole("option", { name: /Big Pickle/ }).click()
     }
 
-    await expect(page.locator('[data-action="composer-model"]')).toContainText("Big Pickle")
+    await expect(modelButton).toContainText("Big Pickle")
     await expect(tray).toHaveCount(0)
     await expect(view.editor).toHaveText("Refactor the parser")
   })
@@ -1353,6 +1401,7 @@ test("lists slash commands in their built-in order", async ({ page }) => {
     "/model",
     "/connect",
     "/reload",
+    "/agent",
     "/btw",
   ])
 })
@@ -1626,9 +1675,11 @@ test("shows thinking on hover or a non-default selection while preserving keyboa
   await expect(control).toHaveText("default")
   await expect(control).toHaveCSS("opacity", "0")
 
-  // The single-agent fixture has only Add and Model before the thinking trigger.
+  // The single-agent fixture has Add, Agent and Model before the thinking trigger.
   await page.keyboard.press("Tab")
   await expect(composer.getByRole("button", { name: "Add images and files" })).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(composer.getByRole("button", { name: "Choose agent" })).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(composer.getByRole("button", { name: "Thinking Model" })).toBeFocused()
   await page.keyboard.press("Tab")

@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test"
+import { compile } from "@mdx-js/mdx"
 import type { Element, ElementContent, Root } from "hast"
 import { toText } from "hast-util-to-text"
 import { VFile } from "vfile"
 import rehypeHeadings from "~/docs/rehype-headings"
 import rehypeShiki from "~/docs/rehype-shiki"
+import remarkStarlight from "~/docs/remark-starlight"
+import remarkDirective from "remark-directive"
 
 // The MDX components rehype-shiki.ts and rehype-headings.ts put in the tree, as MDX compiles them.
 type Jsx = { type: string; name: string; attributes: { name: string; value: string }[]; children: ElementContent[] }
@@ -29,9 +32,10 @@ describe("docs code frames", () => {
     expect(attributes(frame)).toMatchObject({
       variant: "terminal",
       kind: "terminal",
-      label: "Terminal",
       copy: "$ opencode pair\n$ opencode service status",
     })
+    // Named "Terminal" in the page's language (document.tsx).
+    expect(attributes(frame).label).toBeUndefined()
     const pre = frame.children[0] as Element
     expect(toText(pre, { whitespace: "pre" })).toBe("$ opencode pair\nPairing code: 123456\n$ opencode service status")
     const tokens = (pre.children[0] as Element).children.flatMap((node) =>
@@ -62,10 +66,11 @@ describe("docs code frames", () => {
 
   test("a box-drawn tree in a text block is the site's file tree, with nothing to copy", async () => {
     const frame = await fence("text", ".opencode/\n└── plugins/\n    └── concise.ts")
-    expect(attributes(frame)).toEqual({ variant: "fileTree", kind: "tree", label: "Files" })
+    expect(attributes(frame)).toEqual({ variant: "fileTree", kind: "tree" })
     const tree = frame.children[0] as unknown as Jsx
     expect(tree.name).toBe("FileTree")
     expect(attributes(tree).tree).toBe(".opencode/\n└── plugins/\n    └── concise.ts")
+    expect(attributes(await fence("txt", ".opencode/\n└── agents/"))).toMatchObject({ variant: "fileTree" })
   })
 
   test("a diff copies the result, without the removed lines", async () => {
@@ -94,5 +99,32 @@ describe("docs headings", () => {
       { depth: 2, slug: "local-models", text: "Local models" },
       { depth: 4, slug: "ollama", text: "Ollama" },
     ])
+  })
+})
+
+describe("V1 docs' Starlight syntax", () => {
+  const mdx = async (source: string) =>
+    String(await compile(source, { jsx: true, remarkPlugins: [remarkDirective, remarkStarlight] }))
+
+  test("asides are callouts, titled as written or else in the page's language (Callout.tsx)", async () => {
+    expect(await mdx(":::tip[Heads up]\nText\n:::")).toContain('<Callout type="tip" title="Heads up">')
+    expect(await mdx(":::caution\nText\n:::")).toContain('<Callout type="caution">')
+    expect(await mdx(":::consejo\nText\n:::")).toContain('<Callout type="tip">')
+  })
+
+  test("other directives stay the text they were", async () => {
+    expect(await mdx("Use provider:model here")).toContain('{"Use provider"}{":model"}{" here"}')
+  })
+
+  test("tabs carry their labels and code, panels in slots, and steps are the steps list", async () => {
+    const imports = 'import { Tabs, TabItem, Steps } from "@astrojs/starlight/components"\n\n'
+    const code = await mdx(`${imports}<Tabs>\n<TabItem label="npm">\n\`\`\`bash\nnpm i\n\`\`\`\n</TabItem>\n</Tabs>`)
+    expect(code).not.toContain("@astrojs/starlight")
+    expect(code).toContain(
+      '<Tabs id="tabs-1" tabs="[{&quot;label&quot;:&quot;npm&quot;,&quot;code&quot;:&quot;npm i&quot;}]">',
+    )
+    const prose = await mdx(`${imports}<Tabs>\n<TabItem label="macOS">\nRun it.\n</TabItem>\n</Tabs>`)
+    expect(prose).toContain('<Slot name="0">')
+    expect(await mdx(`${imports}<Steps>\n\n1. One\n2. Two\n\n</Steps>`)).toContain('ol data-component="steps"')
   })
 })

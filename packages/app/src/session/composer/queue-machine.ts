@@ -50,6 +50,7 @@ export type QueuedOperation =
   | EditOperation
   | { readonly type: "steer"; readonly id: string }
   | { readonly type: "remove"; readonly id: string }
+  | { readonly type: "first"; readonly id: string }
 
 // Operations that leave the composer free, so a row can be edited while one runs. `cancelling` means the server
 // admitted every replacement, so a later failure must not hand the edit back to the composer.
@@ -140,7 +141,9 @@ export type QueueEvent =
       readonly ids: readonly string[]
     }
   | { readonly type: "reorder.requested"; readonly inboxIDs: readonly string[]; readonly reverted: boolean }
+  | { readonly type: "first.requested"; readonly id: string; readonly reverted: boolean }
   | { readonly type: "steer.requested"; readonly id: string }
+  | { readonly type: "steer-first.requested" }
   | { readonly type: "remove.requested"; readonly id: string }
   | { readonly type: "undo.requested"; readonly id: string; readonly mode: "normal" | "shell" }
   | { readonly type: "mutation.moved"; readonly attempt: number; readonly moved: Readonly<Record<string, string>> }
@@ -232,7 +235,25 @@ export function transitionQueue(state: QueueState, event: QueueEvent): QueueTran
 
   if (event.type === "reorder.requested") return reorder(state, event)
 
+  if (event.type === "first.requested") {
+    if (event.reverted) return changed(state, [{ type: "toast", key: "session.queue.reverted" }])
+
+    const rows = selectQueueRows(state)
+
+    if (!rows.some((row) => row.id === event.id) || rows[0]?.id === event.id) return unchanged(state)
+
+    return enqueue(state, { type: "first", id: event.id })
+  }
+
   if (event.type === "steer.requested") return request(state, { type: "steer", id: event.id })
+
+  if (event.type === "steer-first.requested") {
+    if (state.status !== "idle") return unchanged(state)
+
+    const first = selectQueueRows(state)[0]
+
+    return first && !first.pending ? request(state, { type: "steer", id: first.id }) : unchanged(state)
+  }
 
   if (event.type === "remove.requested") return request(state, { type: "remove", id: event.id })
 
@@ -683,14 +704,20 @@ function advance(state: Mutating, moved: Readonly<Record<string, string>>): Queu
         : { ...base, status: "idle" },
       clear,
     )
-  const active = activate(head, state.seq + 1)
+  const active = activate(head, state.seq + 1, state)
   const next = { ...base, seq: active.attempt, active, pending: rest }
 
   return changed(
-    state.status === "editing-while-mutating"
-      ? { ...next, status: "editing-while-mutating", edit: state.edit }
+    state.status === "editing-while-mutating" && isConcurrent(active)
+      ? { ...next, status: "editing-while-mutating", edit: state.edit, active }
       : { ...next, status: "mutating" },
-    [...clear, ...start(active)],
+    [
+      ...clear,
+      ...(state.status === "editing-while-mutating" && !isConcurrent(active)
+        ? [restore(state.edit, true, state.edit.item)]
+        : []),
+      ...start(active),
+    ],
   )
 }
 
@@ -707,16 +734,37 @@ function bounded(operation: ActiveOperation) {
 function enqueue(state: LiveQueueState, operation: QueuedOperation, effects: QueueEffect[] = []): QueueTransition {
   if (state.status === "mutating" || state.status === "editing-while-mutating")
     return changed({ ...state, pending: [...state.pending, operation] }, effects)
-  const active = activate(operation, state.seq + 1)
+  const active = activate(operation, state.seq + 1, state)
   const base = { seq: active.attempt, items: state.items, gone: state.gone, moved: state.moved, active, pending: [] }
 
-  if (state.status === "editing")
-    return changed({ ...base, status: "editing-while-mutating", edit: state.edit }, [...effects, ...start(active)])
+  if (state.status === "editing" && isConcurrent(active))
+    return changed({ ...base, status: "editing-while-mutating", edit: state.edit, active }, [
+      ...effects,
+      ...start(active),
+    ])
 
-  return changed({ ...base, status: "mutating" }, [...effects, ...start(active)])
+  return changed({ ...base, status: "mutating" }, [
+    ...effects,
+    ...(state.status === "editing" ? [restore(state.edit, true, state.edit.item)] : []),
+    ...start(active),
+  ])
 }
 
-function activate(operation: QueuedOperation, attempt: number): ConcurrentOperation {
+function activate(operation: QueuedOperation, attempt: number, state: LiveQueueState): ActiveOperation {
+  if (operation.type === "first") {
+    const current = queuedPromptRows(
+      state.items,
+      [],
+      state.gone.map((entry) => entry.id),
+    )
+
+    const first = current.find((row) => row.id === operation.id)
+
+    const rows = first ? [first, ...current.filter((row) => row !== first)] : current
+
+    return { type: "reorder", attempt, inboxIDs: rows.map((row) => row.id), rows, moved: {} }
+  }
+
   if (operation.type === "edit") return { ...operation, attempt, phase: "admitting" }
 
   return { ...operation, attempt }

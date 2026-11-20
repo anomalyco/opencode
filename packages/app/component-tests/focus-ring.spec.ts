@@ -6,6 +6,8 @@ story("returns focus to a menu trigger without a ring after a pointer open", asy
 
   await trigger.click()
   await expect(page.getByRole("menuitem", { name: "Save" })).toBeVisible()
+  // The menu takes focus a task after it opens; an Escape before that rings the trigger, which still holds focus.
+  await expect(page.getByRole("menu")).toBeFocused()
   await page.keyboard.press("Escape")
   await expect(trigger).toBeFocused()
   await expect(trigger).toHaveCSS("outline-style", "none")
@@ -45,6 +47,8 @@ story("leaves focus where an outside click put it when a non-modal menu closes",
 
   await trigger.click()
   await expect(page.getByRole("menuitem", { name: "Pin" })).toBeVisible()
+  // Kobalte starts listening for outside presses a task after the menu opens, queued behind the one that focuses it.
+  await expect(page.getByRole("menu")).toBeFocused()
   await page.mouse.click(4, 300)
   await expect(page.getByRole("menuitem", { name: "Pin" })).toHaveCount(0)
   // The close focus restore has run once the story counts it; the click on empty space left focus on the body.

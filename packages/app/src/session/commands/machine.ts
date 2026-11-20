@@ -4,7 +4,7 @@
 export const SESSION_DIALOG_LOAD_TIMEOUT_MS = 15_000
 
 /** The lazily loaded dialogs: the /fork picker, the /open file palette and the /mcp list. */
-export type SessionDialogKind = "fork" | "palette" | "mcp"
+export type SessionDialogKind = "fork" | "jump" | "palette" | "mcp"
 
 /**
  * The session commands stay mounted while tabs switch between sessions, so compactions are keyed by the session they
@@ -133,10 +133,15 @@ export function transitionSessionCommands(
 
 // --- ⌘W after the side panel empties ---
 
+// How long ⌘W must rest after the side panel closes before it closes the session tab.
+export const CLOSE_TAB_GUARD_QUIET_MS = 500
+
 /**
  * ⌘W on the side panel's last tab closes the panel; one press too many would then close the session tab. While armed,
- * ⌘W closes nothing, until the user moves on by clicking, focusing elsewhere, pressing another key, leaving the window,
- * or switching session. `settling` covers the frame after arming, in which closing the panel may still move focus.
+ * ⌘W closes nothing, until ⌘W rests for `CLOSE_TAB_GUARD_QUIET_MS` or the user moves on by clicking, focusing
+ * elsewhere, pressing another key, leaving the window, or switching session. Each swallowed ⌘W restarts the rest, so
+ * mashing or holding it never reaches the session tab. `settling` covers the frame after arming, in which closing the
+ * panel may still move focus.
  */
 export type CloseTabGuardState =
   | { readonly status: "disarmed"; readonly issued: number }
@@ -156,6 +161,7 @@ export type CloseTabGuardEvent =
       readonly sideOpened: boolean
     }
   | { readonly type: "settle.completed"; readonly attempt: number }
+  | { readonly type: "quiet.elapsed"; readonly attempt: number }
   | { readonly type: "pointer.down" }
   | { readonly type: "focus.in" }
   | { readonly type: "window.blur" }
@@ -166,6 +172,8 @@ export type CloseTabGuardEvent =
 export type CloseTabGuardEffect =
   | { readonly type: "settle.schedule"; readonly attempt: number }
   | { readonly type: "settle.cancel" }
+  | { readonly type: "quiet.schedule"; readonly attempt: number; readonly timeoutMs: number }
+  | { readonly type: "quiet.cancel" }
 
 export type CloseTabGuardTransition = {
   readonly state: CloseTabGuardState
@@ -183,7 +191,7 @@ const NO_GUARD_EFFECTS: readonly CloseTabGuardEffect[] = []
 export function transitionCloseTabGuard(state: CloseTabGuardState, event: CloseTabGuardEvent): CloseTabGuardTransition {
   if (state.status === "disposed") return { state, effects: NO_GUARD_EFFECTS }
 
-  if (event.type === "disposed") return { state: { status: "disposed" }, effects: settleCancel(state) }
+  if (event.type === "disposed") return { state: { status: "disposed" }, effects: cancelTimers(state) }
 
   if (event.type === "close.completed") {
     if (event.keybind && !event.sideOpened) {
@@ -191,7 +199,7 @@ export function transitionCloseTabGuard(state: CloseTabGuardState, event: CloseT
 
       return {
         state: { status: "armed", attempt, tabKey: event.tabKey, settling: true },
-        effects: [...settleCancel(state), { type: "settle.schedule", attempt }],
+        effects: [...settleCancel(state), { type: "settle.schedule", attempt }, quietSchedule(attempt)],
       }
     }
 
@@ -210,9 +218,15 @@ export function transitionCloseTabGuard(state: CloseTabGuardState, event: CloseT
   // Focus the panel's own close moves, in this frame, is not the user moving on.
   if (event.type === "focus.in" && state.settling) return { state, effects: NO_GUARD_EFFECTS }
 
-  if (event.type === "key.down" && (MODIFIER_KEYS.has(event.key) || event.matchesClose)) {
-    return { state, effects: NO_GUARD_EFFECTS }
+  if (event.type === "quiet.elapsed") {
+    if (event.attempt !== state.attempt) return { state, effects: NO_GUARD_EFFECTS }
+
+    return disarm(state)
   }
+
+  if (event.type === "key.down" && event.matchesClose) return { state, effects: [quietSchedule(state.attempt)] }
+
+  if (event.type === "key.down" && MODIFIER_KEYS.has(event.key)) return { state, effects: NO_GUARD_EFFECTS }
 
   // The panel closing is what armed the guard; only another session or the panel reopening moves on.
   if (event.type === "layout.synced" && event.tabKey === state.tabKey && !event.sideOpened) {
@@ -230,7 +244,15 @@ export function selectCloseTabSwallowed(state: CloseTabGuardState) {
 function disarm(state: Exclude<CloseTabGuardState, { status: "disposed" }>): CloseTabGuardTransition {
   if (state.status === "disarmed") return { state, effects: NO_GUARD_EFFECTS }
 
-  return { state: { status: "disarmed", issued: state.attempt }, effects: settleCancel(state) }
+  return { state: { status: "disarmed", issued: state.attempt }, effects: cancelTimers(state) }
+}
+
+function quietSchedule(attempt: number): CloseTabGuardEffect {
+  return { type: "quiet.schedule", attempt, timeoutMs: CLOSE_TAB_GUARD_QUIET_MS }
+}
+
+function cancelTimers(state: CloseTabGuardState): CloseTabGuardEffect[] {
+  return state.status === "armed" ? [...settleCancel(state), { type: "quiet.cancel" }] : []
 }
 
 function settleCancel(state: CloseTabGuardState): CloseTabGuardEffect[] {

@@ -9,7 +9,6 @@ const pages = new Set([
   "terminal",
   "mobile",
   "sdk",
-  "ide",
   "mini",
   "extensions",
   "changelog",
@@ -53,13 +52,14 @@ export function surfaceOf(path: string) {
   if (path === "/product/browse") return "www-browse"
   const parts = path.split("/")
   if (path === "/") return "www-home"
-  if (parts[1] === "docs") return "www-docs"
+  if (parts[1] === "docs" || /^\/v1\/docs(\/|$)/.test(path)) return "www-docs"
   if (tools.has(parts[1])) return undefined
   return pages.has(parts[1]) ? `www-${parts[1]}` : "www-other"
 }
 
-/** What a view targets: the docs' section, the extension, the release or the legal document; `""` for the rest. */
+/** What a view targets: the docs' section (`v1` for the V1 docs), the extension, the release or the legal document; `""` for the rest. */
 export function targetOf(path: string) {
+  if (/^\/v1\/docs(\/|$)/.test(path)) return "v1"
   const parts = path.split("/").filter((part) => part !== "")
   const part = parts[0] === "docs" || pages.has(parts[0]) ? parts[1] : undefined
   return (part ?? "").replace(/[^A-Za-z0-9_.:+-]+/g, "-").slice(0, 96)

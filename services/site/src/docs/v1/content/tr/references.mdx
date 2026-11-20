@@ -1,0 +1,157 @@
+---
+title: Referanslar
+description: Yerel dizinleri ve Git depolarını proje referansı olarak ekleyin.
+---
+
+Referanslar, OpenCode'a mevcut projenin dışındaki dizinlere erişim sağlar. Çalışırken belgeleri, paylaşılan kütüphaneleri, örnekleri veya başka bir depoyu kullanılabilir hale getirmek için bunları kullanın.
+
+Referanslar, `opencode.json` veya `opencode.jsonc` içinde bir takma adla yapılandırılır.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and documentation conventions",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "Use for JavaScript SDK implementation details",
+    },
+  },
+}
+```
+
+---
+
+## Yerel dizinler
+
+Yerel bir dizine referans vermek için `path` kullanın.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+Yollar şunlar olabilir:
+
+- Referansı tanımlayan yapılandırma dosyasına göre göreli
+- `/home/user/docs` gibi mutlak
+- `~/docs` gibi ana dizininize göre göreli
+
+Kısa bir dize gösterimi de kullanabilirsiniz:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## Git depoları
+
+Bir Git deposuna referans vermek için `repository` kullanın. OpenCode depoyu yerel depo önbelleğinde oluşturur ve checkout edilen kaynak kodu bir referans dizini olarak kullanılabilir hale getirir.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository`; Git URL'lerini, host/path referanslarını ve GitHub `owner/repo` kısa gösterimini kabul eder. İsteğe bağlı `branch` alanı bir dal veya ref seçer. `branch` belirtilmezse OpenCode deponun varsayılan dalını kullanır.
+
+Dal, açıklama veya başka seçeneklere ihtiyacınız yoksa kısa dize gösterimini kullanabilirsiniz:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+Git referansları eşzamansız olarak yenilenir. Yeni yapılandırılmış bir deponun klonlanması veya güncellenmesi biraz zaman alabilir.
+:::
+
+---
+
+## Kullanımı açıklayın
+
+Bir agent'ın bir referansı ne zaman kullanması gerektiğini açıklamak için `description` ekleyin.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when implementing UI components or design tokens",
+    },
+  },
+}
+```
+
+OpenCode, açıklaması olan referansları agent bağlamına ekler. Açıklamalar, benzer içeriğe sahip referansları ayırt edecek kadar kısa ve belirgin olmalıdır. Açıklaması olmayan referanslar otomatik tamamlama ve doğrudan kullanım yoluyla erişilebilir kalır, ancak agent'lara bildirilmez.
+
+---
+
+## Otomatik tamamlama girdilerini gizleyin
+
+Bir referansı TUI'deki `@` otomatik tamamlamasından çıkarmak için `hidden` değerini `true` olarak ayarlayın.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal implementation details",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` yalnızca otomatik tamamlamayı etkiler. Açıklaması olan gizli bir referans agent bağlamına dahil edilmeye devam eder.
+
+---
+
+## Referansları kullanın
+
+Yapılandırılmış referanslar TUI'deki `@` otomatik tamamlamasında görünür. Referansın kök dizinini eklemek için `@alias`, içindeki dosyaları aramak için `@alias/` yazın.
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+Agent'lar ayrıca açıklaması olan yapılandırılmış referansların çözümlenmiş yollarını ve açıklamalarını sistem bağlamlarında alır. Böylece bir referans ilgili olduğunda, siz elle eklemeden onu inceleyebilirler.
+
+OpenCode, referans dizinlerine harici dizin izin sınırı üzerinden otomatik olarak izin verir. Normal araç izinleri yine geçerlidir; örneğin dosya düzenleyemeyen bir agent, bir dizin referans olarak yapılandırıldı diye düzenleme erişimi kazanmaz.
+
+---
+
+## Alanları yapılandırın
+
+| Alan          | Yerel | Git   | Açıklama                                                  |
+| ------------- | ----- | ----- | --------------------------------------------------------- |
+| `path`        | Evet  | Hayır | Yerel referans dizini                                     |
+| `repository`  | Hayır | Evet  | Git URL'si, host/path veya GitHub `owner/repo` değeri     |
+| `branch`      | Hayır | Evet  | İsteğe bağlı Git dalı veya ref                            |
+| `description` | Evet  | Evet  | Referansın ne zaman kullanılacağını açıklayan yönlendirme |
+| `hidden`      | Evet  | Evet  | Referansı TUI `@` otomatik tamamlamasından gizler         |
+
+Referans takma adları boş olamaz ve `/`, boşluk, ters tırnak veya virgül içeremez.

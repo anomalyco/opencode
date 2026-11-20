@@ -169,7 +169,8 @@ story(
     await page.mouse.move(0, 0)
 
     // Kobalte drops the expanded state a task before it returns focus to the trigger, so record every frame from the
-    // click until well after the menu has gone rather than the settled state.
+    // click until well after the menu has gone rather than the settled state. The first sample is taken now: the click
+    // can land and close the menu before the next frame.
     const frames = await message.evaluateHandle((element) => {
       const slots = ["user-message-copy-wrapper", "user-message-menu"]
       const samples = slots.map((): number[] => [])
@@ -189,7 +190,7 @@ story(
           resolve(samples)
         }
 
-        requestAnimationFrame(tick)
+        tick()
       })
 
       return { done }
@@ -546,8 +547,12 @@ story("a stored image that fails to load shows a failed tile that retries", asyn
   await expect(failed.getByRole("img", { name: "Unable to load image." })).toBeVisible()
   await expect(failed).not.toHaveAttribute("data-placeholder")
 
+  const tileSize = { width: 132, height: 88 }
+  expect(await failed.boundingBox()).toMatchObject(tileSize)
+
   await failed.click()
   await expect(timeline.getByAltText("flaky.svg")).toBeVisible()
+  expect(await failed.boundingBox()).toMatchObject(tileSize)
 })
 
 story("shows note selectors and keeps annotation subtitles with or without comments", async ({ mount, page }) => {

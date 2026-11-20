@@ -21,7 +21,8 @@ class ShimmerTextRenderable extends MaskedTextRenderable {
     this.matrix[11] = this._shimmer.b
     this.matrix[15] = 1
     if (options.shimmer) this.shimmer = options.shimmer
-    this.live = true
+    // The app's frame rate; ticks on the shared clock only while drawn.
+    this.animationFps = 60
   }
 
   set shimmer(value: RGBA) {
@@ -33,9 +34,13 @@ class ShimmerTextRenderable extends MaskedTextRenderable {
     this.requestRender()
   }
 
-  protected override renderSelf(buffer: OptimizedBuffer, deltaTime = 0) {
-    if (!this.visible || this.isDestroyed || !Number.isFinite(this.width) || this.width <= 0 || this.height <= 0) return
+  protected override onAnimationTick(deltaTime: number) {
     this.elapsed = (this.elapsed + deltaTime) % DURATION
+    this.requestRender()
+  }
+
+  protected override renderSelf(buffer: OptimizedBuffer) {
+    if (!this.visible || this.isDestroyed || !Number.isFinite(this.width) || this.width <= 0 || this.height <= 0) return
     this.renderMasked(buffer, 0, (end) => {
       const front = -4 + coast(this.elapsed / DURATION) * (end + 22)
       return (column) => intensityAt(column, front, 4, 18)

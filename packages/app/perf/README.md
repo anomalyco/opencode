@@ -1,6 +1,6 @@
 # Benchmarks
 
-The app's benchmarks run with [strobe](https://github.com/Hona/strobe). Each compares two builds in pairs of fresh
+The app's benchmarks run with [strobe](https://github.com/anomalyco/strobe). Each compares two builds in pairs of fresh
 launches (A B, B A, …) at normal speed, decides one primary metric per case with an interval, and refuses setups it
 cannot defend (a hidden window, a software GPU, a throttled CPU, a busy machine). The web cases run the production
 build on the e2e mock server, so they need no backend.
@@ -16,6 +16,7 @@ build on the e2e mock server, so they need no backend.
 | `diff.bench.ts`       | open a long diff · open a huge diff · return to a long diff                                                                                                                                           | A 1,559-line diff, highlighted; a 15,599-line one, plain.          |
 | `composer.bench.ts`   | type in a large draft · move the cursor in it · recall a prompt from history                                                                                                                          | A 44,000-character saved draft; 100 prompts with screenshots.      |
 | `docks.bench.ts`      | open and close request docks                                                                                                                                                                          | A permission dock and an MCP elicitation over a 20-turn session.   |
+| `send.bench.ts`       | send a prompt                                                                                                                                                                                         | Enter until the prompt request reaches the server, 20 turns.       |
 | `question.bench.ts`   | switch questions                                                                                                                                                                                      | The new question dock with its motion on: five questions.          |
 | `desktop.bench.ts`    | idle                                                                                                                                                                                                  | The packaged desktop app, every process, doing nothing for 5 s.    |
 

@@ -14,10 +14,6 @@
   ],
   "routes": [
     {
-      "pattern": "update.opencode.ai",
-      "custom_domain": true,
-    },
-    {
       "pattern": "opencode.ai/update",
       "zone_name": "opencode.ai",
     },

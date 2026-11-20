@@ -174,7 +174,7 @@
 
   [data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"]:focus-visible {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 1px;
+    outline-offset: -2px;
   }
 
   [data-component="text-input-v2"]:where([data-disabled]) [data-slot="text-input-v2-icon-button"] {

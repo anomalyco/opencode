@@ -214,6 +214,18 @@ story.beforeEach(async ({ mount, page }) => {
   }, modules)
 })
 
+story("routes an exact HTML file to the pane and reports an unavailable pane instead of opening a file preview", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  const open = root.getByRole("button", { name: "Open workspace HTML" })
+  await open.click()
+  await expect(root.getByText("file:///repo/report.html", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Pane away" }).click()
+  await open.click()
+  await expect(root.getByText(/Can't open this workspace file in the browser pane/)).toBeVisible()
+  await expect(root.getByRole("tab", { name: "report.html" })).toHaveCount(0)
+})
+
 story("closes a blank browser tab from its address field without closing the session", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const outside = root.getByRole("button", { name: "Beta", exact: true })
@@ -249,37 +261,37 @@ story("toggles the element picker from the shortcut only inside the browser pane
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
 
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
-  const inspect = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  // The comment tool has no button in the bar; while it waits for a pick, the pane says so in a status line.
+  const picking = root.getByText("Click part of the page to comment on it. Press Escape to cancel.", { exact: true })
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
-  await expect(inspect).toBeDisabled()
   await address.click()
   await address.press("ControlOrMeta+Shift+c")
   await expect(root.getByTestId("browser-inspects")).toHaveText("[]")
 
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
-  await expect(inspect).toBeEnabled()
+  await expect(address).not.toHaveValue("")
 
   await outside.focus()
   await outside.press("ControlOrMeta+Shift+c")
-  await expect(inspect).toHaveAttribute("aria-pressed", "false")
+  await expect(picking).toHaveCount(0)
   await expect(root.getByTestId("browser-inspects")).toHaveText("[]")
 
   await address.click()
   await expect(address).toBeFocused()
   await address.press("ControlOrMeta+Shift+c")
-  await expect(inspect).toHaveAttribute("aria-pressed", "true")
+  await expect(picking).toBeAttached()
   await expect(root.getByTestId("browser-inspects")).toHaveText(
     '[{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":true}]',
   )
 
   await address.press("ControlOrMeta+Shift+c")
-  await expect(inspect).toHaveAttribute("aria-pressed", "false")
+  await expect(picking).toHaveCount(0)
   await expect(root.getByTestId("browser-inspects")).toHaveText(
     '[{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":true},{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":false}]',
   )
 })
 
-story("keeps in-page shortcuts like ⌘K in the page while forwarding ⌘⇧R and ⌘W to the pane", async ({ page }) => {
+story("keeps in-page shortcuts in the editor and forwards toolbar, review and close shortcuts", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const mod = mac ? "Meta" : "Control"
@@ -299,6 +311,23 @@ story("keeps in-page shortcuts like ⌘K in the page while forwarding ⌘⇧R an
   await editor.press(`${mod}+k`)
   await expect(editor).toHaveValue("handled:k")
 
+  const toggle = root.getByRole("button", { name: "Toggle browser toolbar", exact: true })
+  await editor.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(toggle).toBeFocused()
+  await root.getByRole("button", { name: "Device preset", exact: true }).press("ArrowDown")
+  await page.getByRole("menuitem", { name: "More devices", exact: true }).press("ArrowRight")
+  await expect(page.getByRole("menuitemradio", { name: "iPhone SE", exact: true })).toBeFocused()
+  await page.keyboard.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(toggle).toBeFocused()
+  await expect(toggle).toHaveCSS("outline-style", "solid")
+  await toggle.click()
+  await expect(toggle).toBeFocused()
+  await expect(toggle).toHaveCSS("outline-style", "none")
+  await page.keyboard.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveCSS("outline-style", "solid")
+
   // Shell shortcuts like ⌘⇧R and pane-scoped ⌘W are claimed before the page sees them.
   await editor.press(`${mod}+Shift+r`)
   await expect(root.getByTestId("review-toggles")).toHaveText("1")
@@ -306,6 +335,23 @@ story("keeps in-page shortcuts like ⌘K in the page while forwarding ⌘⇧R an
   await expect(editor).toHaveValue("handled:k")
   await expect(root.getByTestId("browser-closes")).toHaveText('["tab_33333333-3333-3333-3333-333333333333"]')
   await expect(root.getByTestId("session-state")).toHaveText("open")
+})
+
+story("the pane's toolbar shortcut works from inside the options menu's More tools", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
+  const toggle = root.getByRole("button", { name: "Toggle browser toolbar", exact: true })
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  // The submenu is a portal of its own, outside the pane: it must still count as the pane for the pane's shortcuts.
+  await root.getByRole("button", { name: "Browser options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "More tools", exact: true }).press("ArrowRight")
+  await expect(page.getByRole("menu", { name: "More tools", exact: true }).getByRole("menuitem").first()).toBeFocused()
+  await page.keyboard.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
 })
 
 story(
@@ -663,6 +709,65 @@ story("keeps a restored browser tab selected and undrawn until the desktop's fir
   await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
+// An agent's tabs.open or tabs.focus shows its tab: it comes to the front over the file the person had selected.
+story("an agent show request selects its tab over the selected file, and a plugin open wakes the suspended binding", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  const file = root.getByRole("tab", { name: "beta.ts" })
+  await file.click()
+  await root.getByRole("button", { name: "Agent show request" }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(file).toHaveAttribute("aria-selected", "false")
+  await root.getByRole("button", { name: "Suspend binding" }).click()
+  await root.getByRole("button", { name: "Plugin open and close" }).click()
+  await expect(root.getByText("Plugin closed: true", { exact: true })).toBeVisible()
+  await expect(root.getByText("Registrations: 3", { exact: true })).toBeVisible()
+})
+
+story("an agent show request opens the closed pane and leaves the keyboard in the composer", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
+  const composer = root.getByRole("textbox", { name: "Composer", exact: true })
+  const side = root.getByTestId("side-state")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await composer.focus()
+  await page.keyboard.press(mac ? "Meta+Shift+r" : "Control+Shift+r")
+  await expect(side).toHaveText("closed")
+  // The agent's request arrives with no input from the person, so nothing but the reveal could move the keyboard.
+  await root.getByRole("button", { name: "Agent show request" }).dispatchEvent("click")
+  await expect(side).toHaveText("open")
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(composer).toBeFocused()
+})
+
+story("?W right after an agent shows another page closes that browser tab, not the session", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  // The request arrives with no input from the person: the keyboard stays in the pane, where ?W is the pane's.
+  await root.getByRole("button", { name: "Agent shows another page", exact: true }).dispatchEvent("click")
+  await expect(root.getByRole("tab", { selected: true })).toHaveCount(1)
+  await expect(root.getByTestId("selected")).toHaveText("browser:tab_55555555-5555-5555-5555-555555555555")
+  await expect(address).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(root.getByTestId("browser-closes")).toHaveText('["tab_55555555-5555-5555-5555-555555555555"]')
+  await expect(root.getByTestId("session-state")).toHaveText("open")
+})
+
+story("a browser tab behind a file tab says that its page waits for the person", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await root.getByRole("tab", { name: "beta.ts" }).click()
+  await root.getByRole("button", { name: "Page prompt" }).click()
+  await expect(root.getByRole("img", { name: "Waiting for you" })).toBeVisible()
+})
+
 story(
   "keeps the browser tabs while the pane's Ipc is away and registers them again when it returns",
   async ({ page }) => {
@@ -684,5 +789,84 @@ story(
     await expect(root.getByText("Registrations: 4", { exact: true })).toBeVisible()
     await expect(root.getByText("Beta restores: 1", { exact: true })).toBeVisible()
     await expect(tabs).toHaveText(["beta.ts", "Preview"])
+  },
+)
+
+story(
+  "runs no shortcut from a page prompt, even after a click on its dimmed page; the permission bar and a drawer keep theirs",
+  async ({ page }) => {
+    const root = page.getByTestId("browser-region-fixture")
+    const reloads = root.getByTestId("browser-reloads")
+    const reviews = root.getByTestId("review-toggles")
+    await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+    await root.getByRole("button", { name: "Beta", exact: true }).click()
+    await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+    await root.getByRole("button", { name: "First inventory", exact: true }).click()
+
+    await root.getByRole("button", { name: "Page prompt", exact: true }).click()
+    const dialog = root.getByRole("alertdialog", { name: "beta.example says" })
+    const field = dialog.getByRole("textbox", { name: "Your answer" })
+    const dimmed = root.locator("[data-browser-prompt]")
+    await expect(field).toBeFocused()
+    // Neither the pane's reload nor the session's review toggle runs from the prompt.
+    await field.press("ControlOrMeta+r")
+    await field.press("ControlOrMeta+Shift+r")
+    // A click on the dimmed page keeps the keyboard in the prompt rather than giving it to the pane behind.
+    await dimmed.click({ position: { x: 4, y: 4 } })
+    await expect(field).toBeFocused()
+    await page.keyboard.press("ControlOrMeta+r")
+    await expect(reloads).toHaveText("0")
+    await expect(reviews).toHaveText("0")
+
+    // F6, Shift+F6 and the address shortcut leave the prompt open for the address field, as in Chrome; Tab comes back.
+    const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+
+    for (const chord of ["F6", "Shift+F6", "ControlOrMeta+l"]) {
+      await field.focus()
+      await page.keyboard.press(chord)
+      await expect(address).toBeFocused()
+      await expect(dialog).toBeVisible()
+    }
+
+    await expect(async () => {
+      await page.keyboard.press("Tab")
+      await expect(field).toBeFocused({ timeout: 100 })
+    }).toPass()
+
+    // The prompt is modal for its tab only: on the address field the pane's shortcuts work and the prompt stays open.
+    await address.click()
+    await address.press("ControlOrMeta+r")
+    await expect(reloads).toHaveText("1")
+    await expect(dialog).toBeVisible()
+    // A click on the dimmed page brings the keyboard back, where Escape is the prompt's cancel.
+    await dimmed.click({ position: { x: 4, y: 4 } })
+    await expect(field).toBeFocused()
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeHidden()
+
+    // The permission bar is not modal: the pane's shortcuts work there, and Escape is its "not now".
+    await root.getByRole("button", { name: "Permission request", exact: true }).click()
+    const bar = root.locator('[data-component="browser-prompt"]')
+    const never = bar.getByRole("button", { name: "Never allow", exact: true })
+    await expect(never).toBeFocused()
+    await never.press("ControlOrMeta+r")
+    await expect(reloads).toHaveText("2")
+    await never.press("Escape")
+    await expect(bar).toBeHidden()
+
+    // Another modal surface, as a mobile drawer, keeps the app's shortcuts; markup alone, as a chat message's, cannot
+    // claim the keyboard.
+    await page.evaluate(() => {
+      const drawer = document.createElement("div")
+      drawer.setAttribute("role", "dialog")
+      drawer.setAttribute("aria-modal", "true")
+      drawer.setAttribute("data-owns-keyboard", "")
+      drawer.append(Object.assign(document.createElement("button"), { textContent: "Drawer action" }))
+      document.body.append(drawer)
+    })
+    const action = page.getByRole("button", { name: "Drawer action", exact: true })
+    await action.focus()
+    await action.press("ControlOrMeta+Shift+r")
+    await expect(reviews).toHaveText("1")
   },
 )

@@ -278,12 +278,23 @@ describe("ModelsDev Service", () => {
                 responses: {
                   base_url: "https://api.acme.test/v1",
                   sdk: { aisdk: "@ai-sdk/openai", opencodeai: "@opencode/ai/providers/openai/responses" },
+                  capabilities: { tools: { freeform: ["text", "future-grammar", "lark"] } },
                 },
-                "chat-completions": { base_url: "https://other.acme.test/v1", sdk: { aisdk: "@ai-sdk/openai" } },
+                "chat-completions": {
+                  base_url: "https://other.acme.test/v1",
+                  sdk: { aisdk: "@ai-sdk/openai" },
+                  capabilities: { tools: { freeform: ["regex"] } },
+                },
               },
             }),
             "acme-fallback": sourceModel("acme-fallback", {
-              api: { messages: { base_url: "https://claude.acme.test/v1", sdk: { aisdk: "@ai-sdk/anthropic" } } },
+              api: {
+                messages: {
+                  base_url: "https://claude.acme.test/v1",
+                  sdk: { aisdk: "@ai-sdk/anthropic" },
+                  capabilities: { tools: { freeform: ["future-grammar"] } },
+                },
+              },
             }),
           },
         },
@@ -316,8 +327,11 @@ describe("ModelsDev Service", () => {
       const acmeModel = (id: string) => acme?.models.find((model) => model.id === id)
       expect(acmeModel("acme-responses")?.package).toBe("@opencode/ai/providers/openai/responses")
       expect(acmeModel("acme-responses")?.settings).toBeUndefined()
+      expect(acmeModel("acme-responses")?.capabilities.freeform).toEqual(["text", "lark"])
+      expect(acmeModel("acme-1")?.capabilities.freeform).toBeUndefined()
       // Without an opencode package, the AI SDK package maps to the native one as before.
       expect(acmeModel("acme-fallback")?.package).toBe("@opencode/ai/providers/anthropic")
+      expect(acmeModel("acme-fallback")?.capabilities.freeform).toEqual([])
       expect(acmeModel("acme-fallback")?.settings).toEqual({ baseURL: "https://claude.acme.test/v1" })
 
       const azureModel = (id: string) => azure?.models.find((model) => model.id === id)
@@ -707,7 +721,7 @@ describe("ModelsDev Service", () => {
       )
       const [beta] = yield* ModelsDev.Service.use((service) => service.get()).pipe(Effect.provide(layer))
       expect(urls).toEqual([
-        "https://mirror.example/experimental/v2.0/api.json?type=chat,decision,image",
+        "https://mirror.example/experimental/v2.0/api.json?type=chat,decision,image,video",
         "https://mirror.example/api.json",
       ])
       expect(beta?.models.map((model) => model.id)).toEqual([Model.ID.make("beta-1")])
@@ -788,7 +802,7 @@ describe("ModelsDev Service", () => {
         Effect.provide(buildLayer(state, cache, { url: "", fetch: true, snapshot: false })),
       )
       expect((yield* Ref.get(state)).calls[0]?.url).toBe(
-        "https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image",
+        "https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video",
       )
     }),
   )

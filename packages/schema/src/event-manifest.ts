@@ -12,6 +12,7 @@ import { FileSystem } from "./filesystem.js"
 import { FileSystemV1 } from "./filesystem-v1.js"
 import { Form } from "./form.js"
 import { InstallationEvent } from "./installation-event.js"
+import { Job } from "./job.js"
 import { Integration } from "./integration.js"
 import { LegacyEventV1 } from "./legacy-event.js"
 import { LspEvent } from "./lsp-event.js"
@@ -64,6 +65,7 @@ const featureDefinitions = Event.inventory(
   ...Pty.Event.Definitions,
   ...PersistentPty.Event.Definitions,
   ...Shell.Event.Definitions,
+  ...Job.Event.Definitions,
   ...Form.Event.Definitions,
   ...WebSearch.Event.Definitions,
   ...Artifact.Event.Definitions,
@@ -79,6 +81,7 @@ export const ServerDefinitions = Event.inventory(
   ...VcsEvent.Definitions,
   McpEvent.StatusChanged,
   McpEvent.ResourcesChanged,
+  McpEvent.ExperimentalEvent,
 )
 export const Server = Event.latest(ServerDefinitions)
 export type ServerEvent = Schema.Schema.Type<(typeof ServerDefinitions)[number]>

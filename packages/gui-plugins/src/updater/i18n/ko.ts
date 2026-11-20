@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "다음",
   "releaseNotes.action.hideFuture": "다시 보지 않기",
   "releaseNotes.media.alt": "릴리스 미리보기",
+  "action.reload": "새로 고쳐서 업데이트",
+  "action.reloading": "새로 고치는 중…",
+  "web.ready.title": "업데이트 준비됨",
+  "web.ready.message": "새 버전의 OpenCode가 준비되었습니다. 열려 있는 모든 창에서 사용하려면 새로 고치세요.",
+  "web.reload": "새로 고침",
+  "web.reset.title": "서버에서 다시 불러오기",
+  "web.reset.description": "저장된 앱 사본을 지우고 서버의 현재 버전을 불러옵니다",
+  "web.reset.action": "서버에서 다시 불러오기",
 }

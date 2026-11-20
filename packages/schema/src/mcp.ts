@@ -95,6 +95,23 @@ export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsA
   Schema.toTaggedUnion("status"),
 )
 
+/**
+ * An MCP Events subscription: `pending` until its server confirms the stream, `active` while it does, and `ended` when
+ * the server terminated or rejected it, or no longer offers events. Pending covers a server that is not connected.
+ * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ */
+export const SubscriptionStatus = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("pending") }),
+  Schema.Struct({ status: Schema.Literal("active") }),
+  Schema.Struct({ status: Schema.Literal("ended"), reason: Schema.Literal("unavailable") }),
+  Schema.Struct({
+    status: Schema.Literal("ended"),
+    reason: Schema.Literals(["terminated", "rejected"]),
+    error: Schema.Struct({ code: Schema.Number, message: Schema.String }),
+  }),
+]).annotate({ identifier: "Mcp.SubscriptionStatus" })
+export type SubscriptionStatus = typeof SubscriptionStatus.Type
+
 export interface Server extends Schema.Schema.Type<typeof Server> {}
 export const Server = Schema.Struct({
   name: Schema.String,

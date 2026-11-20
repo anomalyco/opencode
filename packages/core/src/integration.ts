@@ -79,6 +79,8 @@ export interface OAuthImplementation {
   readonly method: OAuthMethod
   readonly authorize: (answer: Form.Answer) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  /** Signs the credential out remotely before it is removed; a failure is logged and removal continues. */
+  readonly revoke?: (credential: Credential.OAuth) => Effect.Effect<void, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 
@@ -708,25 +710,9 @@ const layer = Layer.effect(
             .get()
             .integrations.get(credential.integrationID)
             ?.implementations.get(credential.value.methodID)?.refresh
-          const expiring = (value: Credential.OAuth) =>
-            Clock.currentTimeMillis.pipe(
-              Effect.map((now) => value.expires <= now + Duration.toMillis(Duration.minutes(5))),
-            )
-          if (!refresh || !(yield* expiring(credential.value))) return credential.value
-          return yield* authorize(
-            credentials.lock(
-              credential.id,
-              Effect.gen(function* () {
-                // Another Location may have refreshed while this caller waited.
-                const current = yield* credentials.get(credential.id)
-                if (!current || current.value.type !== "oauth") return undefined
-                if (!(yield* expiring(current.value))) return current.value
-                const value = yield* refresh(current.value).pipe(Effect.timeout("30 seconds"))
-                yield* credentials.update(current.id, { value })
-                return value
-              }),
-            ),
-          )
+          if (!refresh || !Credential.expiring(credential.value, yield* Clock.currentTimeMillis))
+            return credential.value
+          return yield* authorize(credentials.refresh(credential.id, { stale: Credential.expiring, refresh }))
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
@@ -771,7 +757,24 @@ const layer = Layer.effect(
         update: Effect.fn("Integration.connection.update")((credentialID, updates) =>
           credentials.update(credentialID, updates),
         ),
-        remove: Effect.fn("Integration.connection.remove")((credentialID) => credentials.remove(credentialID)),
+        remove: Effect.fn("Integration.connection.remove")(function* (credentialID) {
+          const credential = yield* credentials.get(credentialID)
+          const value = credential?.value
+          const revoke =
+            credential && value?.type === "oauth"
+              ? state.get().integrations.get(credential.integrationID)?.implementations.get(value.methodID)?.revoke
+              : undefined
+          if (credential && value?.type === "oauth" && revoke)
+            yield* revoke(value).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("remote sign-out was not confirmed; removing the local credential", {
+                  integrationID: credential.integrationID,
+                  cause,
+                }),
+              ),
+            )
+          yield* credentials.remove(credentialID)
+        }),
         status: Effect.fn("Integration.connection.status")(function* (input) {
           const key = statusKey(input.integrationID, input.connection)
           if (Equal.equals(statuses.get(key), input.status)) return

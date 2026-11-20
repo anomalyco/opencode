@@ -45,7 +45,11 @@ const unsafeCSS = `
     rgb(from var(--v2-red-600) r g b / 0.4)
   );
   --diffs-fg-number-override: var(--v2-text-text-faint);
-  --diffs-fg-number-addition-override: light-dark(var(--v2-green-900), var(--v2-green-400));
+  /* A page can set the --opencode-diffs-addition-* variables to show additions plain, as a created file does. */
+  --diffs-fg-number-addition-override: var(
+    --opencode-diffs-addition-number-fg,
+    light-dark(var(--v2-green-900), var(--v2-green-400))
+  );
   --diffs-fg-number-deletion-override: light-dark(var(--v2-red-800), var(--v2-red-500));
   /* The app's code wrapping rules do not reach this shadow tree, and pretty is inherited from the page. */
   text-wrap-style: auto;
@@ -58,9 +62,9 @@ const unsafeCSS = `
     rgb(from var(--v2-red-600) r g b / 0.1)
   );
   --diffs-bg-deletion-number-override: var(--diffs-bg-deletion-override);
-  --diffs-bg-addition-override: light-dark(
-    rgb(from var(--v2-green-600) r g b / 0.05),
-    rgb(from var(--v2-green-800) r g b / 0.1)
+  --diffs-bg-addition-override: var(
+    --opencode-diffs-addition-bg,
+    light-dark(rgb(from var(--v2-green-600) r g b / 0.05), rgb(from var(--v2-green-800) r g b / 0.1))
   );
   --diffs-bg-addition-number-override: var(--diffs-bg-addition-override);
   --diffs-selection-base: var(--v2-background-bg-accent);
@@ -119,10 +123,12 @@ const unsafeCSS = `
 [data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before,
 [data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
   width: 2px;
+  /* A page can quiet the change bars, as the Activity timeline does. */
+  opacity: var(--opencode-diffs-bar-opacity, 1);
 }
 
 [data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before {
-  background-color: light-dark(var(--v2-green-900), var(--v2-green-400));
+  background-color: var(--opencode-diffs-addition-color, light-dark(var(--v2-green-900), var(--v2-green-400)));
 }
 
 [data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {

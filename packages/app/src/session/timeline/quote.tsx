@@ -266,7 +266,11 @@ export function createTimelineQuote(input: {
           event.clientY <= rect.bottom,
       )
 
-    dispatch({ type: "pointer.down", clearRange: onSelection ? undefined : range })
+    dispatch({
+      type: "pointer.down",
+      collapsed: selection?.isCollapsed ?? true,
+      clearRange: onSelection ? undefined : range,
+    })
   })
   makeEventListener(document, "keydown", (event) => {
     if (event.defaultPrevented || event.isComposing) return
@@ -423,6 +427,7 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
               onCleanup(() => quote.setElement(undefined))
             }}
             data-component="timeline-quote"
+            data-floating-overlay
             data-prevent-autofocus
             role="toolbar"
             aria-label={language.t("session.quote.actions")}

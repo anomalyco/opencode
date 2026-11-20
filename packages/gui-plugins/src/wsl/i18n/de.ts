@@ -54,4 +54,6 @@ export default {
   "error.commandTimeout": "Zeitüberschreitung bei {{command}} {{args}} nach {{timeout}} ms",
   "error.failedPort": "Port konnte nicht abgerufen werden",
   "menu.remove": "Entfernen",
+  "error.busy":
+    "{{distro}} ist mit einer anderen Aufgabe beschäftigt. Versuchen Sie es erneut, wenn sie abgeschlossen ist.",
 }

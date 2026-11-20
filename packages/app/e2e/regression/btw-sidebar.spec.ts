@@ -163,6 +163,7 @@ test("keeps many long-titled side tabs usable at a narrow desktop width", async 
 })
 
 test("answers /btw in the side panel without admitting a prompt", async ({ page }) => {
+  await page.clock.install()
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
   const generations: { sessionID: string; prompt: string }[] = []
   const prompts: unknown[] = []
@@ -228,12 +229,27 @@ test("answers /btw in the side panel without admitting a prompt", async ({ page 
   await expect(panel.getByRole("button", { name: "Revert to here", exact: true })).toHaveCount(0)
   await expect(panel.getByRole("button", { name: "Copy answer", exact: true })).toHaveCount(1)
   await expect(panel.locator('[data-slot="text-part-meta"]')).toContainText(/\d+s/)
-  await panel.locator('[data-component="user-message"]').hover()
-  await panel.getByRole("button", { name: "Copy message", exact: true }).click()
-  await expect(panel.getByRole("button", { name: "Copied", exact: true })).toHaveCount(1)
-  await panel.locator('[data-component="text-part"]').hover()
-  await panel.getByRole("button", { name: "Copy answer", exact: true }).click()
-  await expect(panel.getByRole("button", { name: "Copied", exact: true })).toHaveCount(2)
+  const feedback = page.getByRole("tooltip", { name: "Copied", exact: true })
+
+  for (const [component, label] of [
+    ["user-message", "Copy message"],
+    ["text-part", "Copy answer"],
+  ]) {
+    const row = panel.locator(`[data-component="${component}"]`)
+
+    const button = row.getByRole("button", { name: label, exact: true })
+
+    await row.hover()
+    await button.click()
+    await expect(feedback).toBeVisible()
+    await page.clock.fastForward(1_000)
+    await expect(feedback).toHaveCSS("opacity", "1")
+    await expect(row.getByRole("button", { name: "Copied", exact: true })).toBeVisible()
+    await page.clock.fastForward(1_000)
+    await expect(button).toBeVisible()
+    await expect(page.getByRole("tooltip")).toBeHidden()
+  }
+
   expect(generations).toHaveLength(1)
   expect(generations[0]?.sessionID).toBe(main.id)
   expect(generations[0]?.prompt).toContain("how does the retry loop work?")

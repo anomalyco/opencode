@@ -1,5 +1,6 @@
 import type { SessionInfo, SessionsResponse } from "@opencode/client/promise"
 import { pathKey } from "@/workspaces/path-key"
+import { mergeRootSessionIndex } from "@/runtime/server/session-index"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "@/runtime/server/global-sync/types"
 
 // One bounded page of the newest root sessions. Home shows 64 and the sidebar a handful per project, so older history
@@ -37,10 +38,8 @@ export function parseHomeSessionIndex(sessions: SessionInfo[]) {
   return sessions.filter((session) => !session.parentID && session.time.archived === undefined)
 }
 
-export function mergeHomeSessionIndex(fetched: SessionInfo[], known: SessionInfo[]) {
-  return parseHomeSessionIndex([
-    ...new Map([...fetched, ...known].map((session) => [session.id, session] as const)).values(),
-  ])
+export function mergeHomeSessionIndex(fetched: readonly SessionInfo[], known: readonly SessionInfo[]) {
+  return mergeRootSessionIndex(fetched, known).filter((session) => session.time.archived === undefined)
 }
 
 export function retainHomeSessions(sessions: SessionInfo[], limit: number, now: number) {

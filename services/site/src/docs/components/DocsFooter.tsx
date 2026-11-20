@@ -4,13 +4,19 @@ import { siteLinks } from "~/component/site/links"
 import { Wordmark } from "~/component/site/marks"
 import { AgentIcon, Bracket, ThemeCycle } from "~/component/site/site-controls"
 import { useI18n } from "~/context/i18n"
+import type { V1Locale } from "../lib/v1-navigation"
 
 /**
  * The site's footer as its list layout renders by default (site.tsx): the secondary links and the
- * status, the theme switch with the page's Markdown, the copyright and the wordmark. No language
- * picker: the docs are English. client.ts fills in the status and drives the theme switch.
+ * status, the theme switch with the page's Markdown, the copyright and the wordmark. The latest docs
+ * are English; the V1 docs' pages pick their language in a select beside the theme switch. client.ts
+ * fills in the status and drives the theme switch and the select.
  */
-export function DocsFooter(props: { markdown?: string }) {
+export function DocsFooter(props: {
+  markdown?: string
+  languages?: (V1Locale & { href: string })[]
+  current?: V1Locale
+}) {
   const i18n = useI18n()
   // Settings › Footer links "community" (the default): no X, and Discord as "Community".
   const links = siteLinks(i18n.t, (path) => path).secondary.flatMap((item) =>
@@ -52,8 +58,13 @@ export function DocsFooter(props: { markdown?: string }) {
                   <For each={[0, 1, 2, 3, 4, 5]}>{() => <span data-state="unknown" />}</For>
                 </span>
                 <span data-slot="status-label">
-                  <span data-slot="sr-only">{i18n.t("site.status.prefix")}</span>
-                  <span data-slot="status-text">{i18n.t("site.status.unknown")}</span>
+                  <span data-slot="sr-only">
+                    {i18n.t("site.status.prefix")}
+                    {i18n.t("site.status.unknownHeadline")}
+                  </span>
+                  <span data-slot="status-text" aria-hidden="true">
+                    {i18n.t("site.footer.status")}
+                  </span>
                 </span>
                 <ExternalArrow />
                 <NewTab />
@@ -77,6 +88,23 @@ export function DocsFooter(props: { markdown?: string }) {
               )}
             </Show>
           </div>
+          <Show when={props.languages}>
+            {(languages) => (
+              <select data-docs-lang aria-label={i18n.t("nav.language")}>
+                <For each={languages()}>
+                  {(language) => (
+                    <option
+                      value={language.href}
+                      lang={language.lang ?? (language.path || "en")}
+                      selected={language.path === props.current?.path}
+                    >
+                      {language.label}
+                    </option>
+                  )}
+                </For>
+              </select>
+            )}
+          </Show>
         </div>
         <span data-slot="copyright">
           <bdi dir="ltr">

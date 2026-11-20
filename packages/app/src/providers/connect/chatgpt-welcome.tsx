@@ -10,7 +10,7 @@ export function DialogChatGPTPlanWelcome() {
   const language = useLanguage()
 
   return (
-    <Dialog fit containerClass="!w-[min(calc(100vw_-_32px),390px)] !rounded-xl">
+    <Dialog fit containerClass="!rounded-xl">
       <div class="flex w-full flex-col items-center px-8 pb-8 pt-9 text-center [font-family:var(--v2-font-family-sans)]">
         <ProviderIcon id="openai" class="!size-12 text-v2-icon-icon-base" aria-hidden="true" />
         <div class="mt-6 max-w-[270px] text-[20px] font-[530] leading-7 tracking-[-0.3px] text-v2-text-text-base">

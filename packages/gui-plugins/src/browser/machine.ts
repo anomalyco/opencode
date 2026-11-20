@@ -30,8 +30,8 @@ export type Phase =
   | { readonly status: "registering"; readonly attempt: number; readonly attempts: number }
   | { readonly status: "ready"; readonly attempt: number }
   | { readonly status: "backoff"; readonly attempt: number; readonly attempts: number }
-  | { readonly status: "suspended"; readonly reason: "idle" | "ipc" }
-  | { readonly status: "blocked"; readonly reason: "replaced" | "missing" }
+  | { readonly status: "suspended"; readonly reason: "idle" | "ipc" | "unlisted" }
+  | { readonly status: "blocked"; readonly reason: "replaced" | "missing" | "unsupported" }
 
 /** How the session's side-panel strip follows the desktop's tab inventory. */
 export type Strip = {
@@ -60,6 +60,16 @@ export type AddressFocus =
     }
   | { readonly status: "ready"; readonly tabID: Browser.TabID }
 
+/**
+ * Something that did not work: the raw `code`, such as `browser.address.web`, and the command the person attempted,
+ * which is undefined when main reported the error by itself. `id` tells one failure from the next with the same code.
+ */
+export type Failure = {
+  readonly id: number
+  readonly code: string
+  readonly action: Browser.Action | undefined
+}
+
 export type Attachment = {
   readonly serverID: string
   readonly phase: Phase
@@ -67,31 +77,103 @@ export type Attachment = {
   readonly browser: Browser.State | null
   /** Host embed per tab page of the current binding. */
   readonly embeds: Readonly<Record<string, string | undefined>>
-  /** The raw code of the last failed request or reported error, such as `browser.address.web`. */
-  readonly error: string | undefined
+  /**
+   * The last failed command or the last error main reported, until the person's next command, their dismissal or a
+   * newer one. A healthy inventory keeps it: the person may not have read it yet.
+   */
+  readonly failure: Failure | undefined
   readonly strip: Strip
   readonly addressFocus: AddressFocus
+  /**
+   * `dismissed`: the person closed the pane during a run in which it had shown the agent's page (`shown`), so nothing
+   * opens it again until the run ends, their next queued prompt starts, or they open it themselves.
+   */
+  readonly side: "unobserved" | "open" | "closed" | "dismissed"
+  /**
+   * The pane has shown the agent's page in this run: a show request opened or took the pane, or the agent worked in
+   * the tab the open pane showed. Closing a pane that showed none of that says nothing about the agent's pages.
+   */
+  readonly shown: boolean
+  /**
+   * What an agent's activity asked of the pane, kept while it cannot be decided: the strip cannot be written yet, or
+   * the inventory that carries the tab has not arrived. It holds only what was asked. Once both are there, the driver
+   * asks again with what is true then (`present-held`), so it is decided as a request that arrives at that moment is.
+   * A newer request replaces it, and it is dropped, not applied, when the person acts first, the run ends, the tab
+   * closes, the session leaves the screen, its binding is superseded, or `HELD_REQUEST_TTL_MS` passes.
+   */
+  readonly held?: Held
+  readonly unseen: readonly Browser.TabID[]
+  /** The person's prompts that wait in the session's inbox, by inbox ID, with how each will be delivered. */
+  readonly prompts: Readonly<Record<string, "steer" | "queue">>
+  /**
+   * The tab an agent's show request selected: in a closed pane, over another tab, or in a session nobody was looking
+   * at. Its page stays hidden and its pane takes no input until the delay ends, which runs (`timing`) from the moment
+   * the pane shows the tab to the person, so a press already on its way cannot land in it.
+   */
+  readonly reveal?: { readonly tabID: Browser.TabID; readonly token: number; readonly timing: boolean }
+}
+
+/** How long a kept show request may wait for the state it needs before it is dropped. */
+export const HELD_REQUEST_TTL_MS = 5_000
+
+/** A kept show request: the binding it came through, the tab, and what it asked. `token` names its expiry timer. */
+export type Held = {
+  readonly attempt: number
+  readonly tabID: Browser.TabID
+  readonly reveal: "none" | "tab"
+  readonly token: number
 }
 
 /**
  * Every attachment of this window, which belongs to its shell session tab rather than the route. `issued` is the last
- * attempt or request id handed out. `unsupported` lists servers whose plugin lacks the browser RPC.
+ * attempt or request id handed out. A Location whose browser RPC is not available blocks only its session.
  */
 export type State =
   | {
       readonly status: "open"
       readonly ipc: Ipc
       readonly issued: number
-      readonly unsupported: Readonly<Record<string, true | undefined>>
       readonly sessions: Readonly<Record<string, Attachment | undefined>>
     }
   | { readonly status: "disposed" }
 
 export type Event =
+  /** The person's prompt entered the session's inbox. Steers, compactions and synthetic items are not reported. */
+  | { readonly type: "prompt.enqueued"; readonly sessionKey: string; readonly id: string; readonly delivery: "steer" | "queue" }
+  | { readonly type: "inbox.delivery.changed"; readonly sessionKey: string; readonly id: string; readonly delivery: "steer" | "queue" }
+  | { readonly type: "inbox.delivered" | "inbox.cancelled"; readonly sessionKey: string; readonly id: string }
+  | { readonly type: "pane.file"; readonly sessionKey: string; readonly attempt: number; readonly path: string; readonly enabled: boolean; readonly onScreen: boolean; readonly room: boolean; readonly opened: boolean }
+  | { readonly type: "side.changed"; readonly sessionKey: string; readonly open: boolean; readonly running: boolean }
+  | { readonly type: "execution.ended"; readonly sessionKey: string }
+  | { readonly type: "activity.seen"; readonly sessionKey: string; readonly tabID: Browser.TabID }
+  /** The pane now shows the revealed tab to the person: it is the tab on screen, in a window that is not hidden. */
+  | { readonly type: "reveal.drawn"; readonly sessionKey: string; readonly token: number }
+  | { readonly type: "reveal.elapsed"; readonly sessionKey: string; readonly token: number }
+  /** A kept show request waited `HELD_REQUEST_TTL_MS`. */
+  | { readonly type: "held.expired"; readonly sessionKey: string; readonly token: number }
+  /** The person no longer sees the session: another one is routed, or the window is hidden or minimized. */
+  | { readonly type: "screen.left"; readonly sessionKey: string }
+  | {
+      readonly type: "pane.activity"
+      /**
+       * `none`: the tab is only marked. `tab`: the tab is selected, in a closed pane or in an open one that shows
+       * another tab (a preview, or a tab the agent opened or focused to show it).
+       */
+      readonly reveal: "none" | "tab"
+      readonly room: boolean
+      readonly sessionKey: string
+      readonly attempt: number
+      readonly tabID: Browser.TabID
+      readonly enabled: boolean
+      readonly onScreen: boolean
+      readonly opened: boolean
+      readonly visible: boolean
+    }
   | { readonly type: "disposed" }
   | { readonly type: "ipc.changed"; readonly ipc: Ipc }
-  /** An unsupported server reconnected, restarted, or is no longer listed: it may have the browser RPC now. */
-  | { readonly type: "server.changed"; readonly serverID: string }
+  | { readonly type: "session.capability.changed"; readonly sessionKey: string }
+  | { readonly type: "session.presence"; readonly sessionKey: string; readonly listed: boolean }
+  | { readonly type: "session.rebind"; readonly sessionKey: string }
   | {
       readonly type: "session.attached"
       readonly sessionKey: string
@@ -119,10 +201,14 @@ export type Event =
       /** The binding the command went through; undefined when none could take it. */
       readonly attempt: number | undefined
       readonly request: number
+      /** The command that failed, which a notice names and can offer again. */
+      readonly action: Browser.Action
       readonly error: string
       /** The pane's Ipc could not answer. */
       readonly unavailable: boolean
     }
+  /** The person closed the failure's notice, or its time ran out. */
+  | { readonly type: "failure.dismissed"; readonly sessionKey: string; readonly id: number }
   | { readonly type: "address.focused"; readonly sessionKey: string; readonly tabID: Browser.TabID }
   | { readonly type: "register.accepted"; readonly sessionKey: string; readonly attempt: number }
   | {
@@ -158,6 +244,22 @@ export type Event =
     }
 
 export type MachineEffect =
+  | { readonly type: "present-file"; readonly sessionKey: string; readonly path: string; readonly select: boolean }
+  /** Starts the time after which `held.expired` drops the kept show request. */
+  | { readonly type: "expire-held"; readonly sessionKey: string; readonly token: number; readonly delayMs: number }
+  /**
+   * The state a kept show request waited for is there: the driver sends it again as `pane.activity`, with what is true
+   * now for the screen, the pane and the person's setting.
+   */
+  | {
+      readonly type: "present-held"
+      readonly sessionKey: string
+      readonly attempt: number
+      readonly tabID: Browser.TabID
+      readonly reveal: "none" | "tab"
+    }
+  /** Starts the delay after which `reveal.elapsed` shows the revealed page. */
+  | { readonly type: "expire-reveal"; readonly sessionKey: string; readonly token: number }
   | {
       readonly type: "open-registration"
       readonly sessionKey: string
@@ -185,6 +287,7 @@ export type MachineEffect =
       readonly type: "reject-command"
       readonly sessionKey: string
       readonly request: number
+      readonly action: Browser.Action
       readonly error: string
       readonly unavailable: boolean
     }
@@ -203,8 +306,7 @@ export type MachineEffect =
   | { readonly type: "record-history"; readonly sessionKey: string }
   /** The session is no longer attached: drop its per-session resources. */
   | { readonly type: "detach"; readonly sessionKey: string }
-  | { readonly type: "watch-server"; readonly serverID: string }
-  | { readonly type: "unwatch-server"; readonly serverID: string }
+  | { readonly type: "forget-tabs"; readonly sessionKey: string }
 
 export type Transition = { readonly state: State; readonly effects: readonly MachineEffect[] }
 
@@ -221,7 +323,7 @@ type Bound = Extract<Phase, { status: "registering" | "ready" }>
 
 type SessionEvent = Exclude<
   Event,
-  { type: "disposed" | "ipc.changed" | "server.changed" | "session.attached" | "session.removed" | "session.routed" }
+  { type: "disposed" | "ipc.changed" | "session.attached" | "session.removed" | "session.routed" }
 >
 
 // No attachment shares an object with another, not even an empty one: the model reconciles the state into its store,
@@ -229,7 +331,7 @@ type SessionEvent = Exclude<
 const noFocus = (): AddressFocus => ({ status: "none" })
 
 export function createInitialState(ipc: Ipc): State {
-  return { status: "open", ipc, issued: 0, unsupported: {}, sessions: {} }
+  return { status: "open", ipc, issued: 0, sessions: {} }
 }
 
 export function transition(state: State, event: Event): Transition {
@@ -238,8 +340,6 @@ export function transition(state: State, event: Event): Transition {
   if (event.type === "disposed") return dispose(state)
 
   if (event.type === "ipc.changed") return ipcChanged(state, event.ipc)
-
-  if (event.type === "server.changed") return serverChanged(state, event.serverID)
 
   if (event.type === "session.attached") return attached(state, event)
 
@@ -253,8 +353,10 @@ export function transition(state: State, event: Event): Transition {
   return session(state, event.sessionKey, attachment, event)
 }
 
-export function serverSupported(state: State, serverID: string) {
-  return state.status === "open" && !state.unsupported[serverID]
+export function sessionSupported(state: State, key: string) {
+  const phase = attachmentOf(state, key)?.phase
+
+  return state.status === "open" && !(phase?.status === "blocked" && phase.reason === "unsupported")
 }
 
 function attachmentOf(state: State, sessionKey: string) {
@@ -276,9 +378,9 @@ export function sessionPending(state: State, target: Target) {
   if (state.status === "disposed") return false
   const attachment = state.sessions[target.key]
 
-  if (!attachment) return !state.unsupported[target.server.id] && target.server.compatible && !target.pending
+  if (!attachment) return target.server.compatible && !target.pending
 
-  if (attachment.browser || attachment.error) return false
+  if (attachment.browser || attachment.failure) return false
   const phase = attachment.phase
 
   return (
@@ -308,12 +410,52 @@ export function sessionTab(state: State, sessionKey: string, tabID: string) {
   return sessionBrowser(state, sessionKey)?.tabs.find((tab) => tab.id === tabID)
 }
 
+export function unseenActivity(state: State, sessionKey: string, tabID: string) {
+  return attachmentOf(state, sessionKey)?.unseen.some(id => id === tabID) ?? false
+}
+
+export function revealGuard(state: State, sessionKey: string, tabID: string) {
+  const reveal = attachmentOf(state, sessionKey)?.reveal
+
+  return reveal?.tabID === tabID ? reveal.token : undefined
+}
+
+/**
+ * Whether the session's attachment has its answer for now: the desktop took it, or it cannot attach until something
+ * else happens (the pane does not run, another desktop owns the session, the server has no browser, a retry timer
+ * runs). False while a registration, or the pane's Ipc that is still starting, can attach it without anyone acting.
+ * A prompt waits on this, so its first step lists the browser tools.
+ */
+export function sessionSettled(state: State, sessionKey: string) {
+  const phase = attachmentOf(state, sessionKey)?.phase
+
+  if (!phase || state.status !== "open") return true
+
+  if (phase.status === "idle" || phase.status === "registering") return false
+
+  if (phase.status !== "suspended") return true
+
+  return phase.reason === "unlisted" || (phase.reason === "ipc" && state.ipc.status !== "pending")
+}
+
+/**
+ * Whether a prompt to the session waits for its attachment: only while one is in flight and can still succeed, on a
+ * session whose server could answer it (`reachable`, see `attachable`). In every other state the prompt goes at once.
+ */
+export function sessionAttaching(state: State, sessionKey: string, reachable: boolean) {
+  return reachable && !sessionSettled(state, sessionKey)
+}
+
 export function sessionSuspended(state: State, sessionKey: string) {
   return attachmentOf(state, sessionKey)?.phase.status === "suspended"
 }
 
 export function sessionError(state: State, sessionKey: string) {
-  return attachmentOf(state, sessionKey)?.error
+  return attachmentOf(state, sessionKey)?.failure?.code
+}
+
+export function sessionFailure(state: State, sessionKey: string) {
+  return attachmentOf(state, sessionKey)?.failure
 }
 
 export function sessionEmbed(state: State, sessionKey: string, tabID: string) {
@@ -324,7 +466,9 @@ export function sessionEmbed(state: State, sessionKey: string, tabID: string) {
 export function sessionRegistration(state: State, sessionKey: string) {
   const phase = attachmentOf(state, sessionKey)?.phase
 
-  return phase?.status === "registering" || phase?.status === "ready" ? phase.attempt : undefined
+  // Registration effects install the IPC handle *after* publishing the registering state. Only acceptance
+  // can wake the visible tab's loader: reading the Map while registering can consume the attempt too early.
+  return phase?.status === "ready" ? phase.attempt : undefined
 }
 
 /** The blank tab the user just opened, whose pane focuses the address field once it shows it. */
@@ -339,7 +483,6 @@ function dispose(state: Open): Transition {
     state: { status: "disposed" },
     effects: [
       ...listed(state.sessions).flatMap(([key, attachment]) => [...stop(key, attachment.phase), detach(key)]),
-      ...Object.keys(state.unsupported).map((serverID): MachineEffect => ({ type: "unwatch-server", serverID })),
     ],
   }
 }
@@ -374,7 +517,7 @@ function ipcChanged(state: Open, ipc: Ipc): Transition {
       return put(
         result.state,
         key,
-        { ...attachment, phase: { status: "registering", attempt, attempts: 0 }, embeds: {}, error: undefined },
+        { ...attachment, phase: { status: "registering", attempt, attempts: 0 }, embeds: {}, failure: undefined },
         [...result.effects, ...stop(key, phase), ...register(key, attempt, attachment.browser)],
         attempt,
       )
@@ -383,29 +526,21 @@ function ipcChanged(state: Open, ipc: Ipc): Transition {
   )
 }
 
-function serverChanged(state: Open, serverID: string): Transition {
-  if (!state.unsupported[serverID]) return { state, effects: [] }
-
-  return {
-    state: {
-      ...state,
-      unsupported: Object.fromEntries(Object.entries(state.unsupported).filter((entry) => entry[0] !== serverID)),
-    },
-    effects: [{ type: "unwatch-server", serverID }],
-  }
-}
-
 function attached(state: Open, event: Extract<Event, { type: "session.attached" }>): Transition {
-  if (state.unsupported[event.serverID] || state.sessions[event.sessionKey]) return { state, effects: [] }
+  if (state.sessions[event.sessionKey]) return { state, effects: [] }
 
   return put(state, event.sessionKey, {
     serverID: event.serverID,
     phase: { status: "idle" },
     browser: null,
     embeds: {},
-    error: undefined,
+    failure: undefined,
     strip: { located: event.located, mirrored: [], prune: false, focus: undefined },
     addressFocus: noFocus(),
+    side: "unobserved",
+    shown: false,
+    unseen: [],
+    prompts: {},
   })
 }
 
@@ -419,7 +554,7 @@ function removed(state: Open, sessionKeys: readonly string[]): Transition {
       ...state,
       sessions: Object.fromEntries(listed(state.sessions).filter((entry) => !sessionKeys.includes(entry[0]))),
     },
-    effects: gone.flatMap(([key, attachment]) => [...stop(key, attachment.phase), detach(key)]),
+    effects: gone.flatMap(([key, attachment]) => [...stop(key, attachment.phase), {type:"forget-tabs" as const,sessionKey:key}, detach(key)]),
   }
 }
 
@@ -447,14 +582,119 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
   const phase = attachment.phase
 
   switch (event.type) {
+    case "prompt.enqueued":
+      return put(state, key, { ...attachment, prompts: { ...attachment.prompts, [event.id]: event.delivery } })
+    case "inbox.delivery.changed": {
+      if (!(event.id in attachment.prompts) || attachment.prompts[event.id] === event.delivery) return { state, effects: [] }
+
+      return put(state, key, { ...attachment, prompts: { ...attachment.prompts, [event.id]: event.delivery } })
+    }
+
+    case "inbox.delivered":
+    case "inbox.cancelled": {
+      if (!(event.id in attachment.prompts)) return { state, effects: [] }
+      // Only the person's next queued prompt starts over. A steer belongs to the run whose pane they closed.
+      const next = event.type === "inbox.delivered" && attachment.prompts[event.id] === "queue" && attachment.side === "dismissed"
+
+      return put(state, key, {
+        ...attachment,
+        side: next ? "closed" : attachment.side,
+        // Their queued prompt is the next run, which has shown nothing yet.
+        shown: event.type === "inbox.delivered" && attachment.prompts[event.id] === "queue" ? false : attachment.shown,
+        prompts: Object.fromEntries(Object.entries(attachment.prompts).filter(([id]) => id !== event.id)),
+      })
+    }
+
+    case "side.changed": {
+      // Closing a pane that showed nothing of the agent's in this run, such as one the person opened to look at
+      // something else, is not an answer to the agent: its next show request still opens the pane.
+      const dismissed = event.running && (attachment.side === "dismissed" || (attachment.side === "open" && attachment.shown))
+      const side = event.open ? "open" : dismissed ? "dismissed" : "closed"
+
+      if (side === attachment.side) return { state, effects: [] }
+
+      // The person closed the pane: a show request kept from before that does not open it again.
+      const held = attachment.side === "open" && !event.open ? undefined : attachment.held
+
+      return put(state, key, { ...attachment, side, held, reveal: event.open ? attachment.reveal : undefined })
+    }
+
+    case "execution.ended":
+      // A show request kept from the run that ended, or was stopped, does not land after it.
+      if (attachment.side !== "dismissed" && !attachment.shown) return unhold(state, key, attachment)
+
+      return put(state, key, { ...attachment, held: undefined, side: attachment.side === "dismissed" ? "closed" : attachment.side, shown: false })
+    case "held.expired":
+      return attachment.held?.token === event.token ? unhold(state, key, attachment) : { state, effects: [] }
+    case "screen.left":
+      return unhold(state, key, attachment)
+    case "reveal.drawn": {
+      const reveal = attachment.reveal
+
+      if (!reveal || reveal.token !== event.token || reveal.timing) return { state, effects: [] }
+
+      return put(state, key, { ...attachment, reveal: { ...reveal, timing: true } }, [
+        { type: "expire-reveal", sessionKey: key, token: reveal.token },
+      ])
+    }
+
+    case "reveal.elapsed":
+      return attachment.reveal?.token === event.token ? put(state, key, { ...attachment, reveal: undefined }) : { state, effects: [] }
+    case "activity.seen":
+      return attachment.unseen.includes(event.tabID)
+        ? put(state, key, { ...attachment, unseen: attachment.unseen.filter(id => id !== event.tabID) })
+        : { state, effects: [] }
+    case "pane.file": {
+      // Only the routed session has a file panel, which holds its own write until the session's location is known.
+      if (!current(phase, event.attempt) || !event.onScreen) return { state, effects: [] }
+      // A file preview is a show request: it takes the pane even when another tab is selected there.
+      const select = event.room && event.enabled && attachment.side !== "dismissed"
+      const effects: MachineEffect[] = [{ type: "present-file", sessionKey: key, path: event.path, select }]
+
+      return select && !attachment.shown ? put(state, key, { ...attachment, shown: true }, effects) : { state, effects }
+    }
+
+    case "pane.activity":
+      return current(phase, event.attempt) ? present(state, key, attachment, event) : { state, effects: [] }
+
+    case "session.capability.changed":
+      if (phase.status !== "blocked" || phase.reason !== "unsupported") return {state,effects:[]}
+
+      return wake(state,key,suspend(attachment,"idle"),false)
+    case "session.presence":
+      if (event.listed) return phase.status === "suspended" && phase.reason === "unlisted" ? wake(state,key,suspend(attachment,"idle"),false) : {state,effects:[]}
+
+      if (phase.status === "suspended" && phase.reason === "unlisted") return {state,effects:[]}
+
+      return put(state,key,suspend(attachment,"unlisted"),stop(key,phase))
+    case "session.rebind": {
+      if (phase.status === "suspended" && phase.reason === "unlisted") return {state,effects:[]}
+      const next = wake(state,key,suspend(attachment,"idle"),false)
+
+      return {...next,effects:[...stop(key,phase),...next.effects]}
+    }
+
     case "session.located":
       return located(state, key, attachment, event.located)
     case "session.wake":
       return wake(state, key, attachment, false)
     case "session.created":
       return wake(state, key, attachment, true)
-    case "session.command":
-      return command(state, key, attachment, event)
+    case "session.command": {
+      const reveal = attachment.reveal
+
+      // Selecting the revealed tab in the strip answers with tabs.focus for it, which is the reveal itself, not the
+      // person.
+      if (reveal && event.action.type === "tabs.focus" && event.action.tabID === reveal.tabID)
+        return command(state, key, attachment, event)
+
+      // The person's own command ends the guard, so their navigation or tab switch is never held back, and a show
+      // request kept from before it does not take the pane from what they just chose.
+      if (!reveal && !attachment.held) return command(state, key, attachment, event)
+
+      return command(state, key, { ...attachment, reveal: undefined, held: undefined }, event)
+    }
+
     case "command.settled": {
       const focus = attachment.addressFocus
 
@@ -465,6 +705,8 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
 
     case "command.failed":
       return commandFailed(state, key, attachment, event)
+    case "failure.dismissed":
+      return attachment.failure?.id === event.id ? put(state, key, { ...attachment, failure: undefined }) : { state, effects: [] }
     case "address.focused": {
       if (attachment.addressFocus.status !== "ready" || attachment.addressFocus.tabID !== event.tabID)
         return { state, effects: [] }
@@ -510,7 +752,7 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
           ...attachment,
           phase: { status: "registering", attempt, attempts: phase.attempts },
           embeds: {},
-          error: undefined,
+          failure: undefined,
         },
         register(key, attempt, attachment.browser),
         attempt,
@@ -539,6 +781,86 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
   }
 }
 
+// The strip must be writable and the inventory must carry the tab before a show request can be decided.
+function presentable(attachment: Attachment, tabID: Browser.TabID) {
+  return attachment.strip.located && !!attachment.browser?.tabs.some((tab) => tab.id === tabID)
+}
+
+// Decides what an agent's activity does to the pane, from what the event says is true now. A request that arrives
+// before the strip or its tab's inventory is kept as asked, with a bound, and nothing is dropped for arriving first.
+function present(
+  state: Open,
+  key: string,
+  attachment: Attachment,
+  event: Extract<Event, { type: "pane.activity" }>,
+): Transition {
+  if (!presentable(attachment, event.tabID)) {
+    const token = state.issued + 1
+    const held = { attempt: event.attempt, tabID: event.tabID, reveal: event.reveal, token }
+
+    return put(state, key, { ...attachment, held }, [{ type: "expire-held", sessionKey: key, token, delayMs: HELD_REQUEST_TTL_MS }], token)
+  }
+
+  // A newer request replaces a kept one.
+  const settled = attachment.held ? { ...attachment, held: undefined } : attachment
+  const unchanged = settled === attachment ? { state, effects: [] } : put(state, key, settled)
+
+  // Off screen only a preview acts: its tab is selected in the session's strip, so it shows when the person returns.
+  if (!event.onScreen && event.reveal !== "tab") return unchanged
+
+  // The agent worked in the tab the person is looking at. The strip's selected tab is not on show while its pane is
+  // closed.
+  if (event.onScreen && event.opened && event.visible) return settled.shown ? unchanged : put(state, key, { ...settled, shown: true })
+  const marked = settled.unseen.includes(event.tabID) ? settled.unseen : [...settled.unseen, event.tabID]
+
+  const select =
+    event.enabled &&
+    settled.side !== "dismissed" &&
+    (!event.onScreen || (event.room && event.reveal === "tab"))
+
+  if (!select) return marked === settled.unseen ? unchanged : put(state, key, { ...settled, unseen: marked })
+  const focus: MachineEffect = { type: "focus-strip-tab", sessionKey: key, tabID: event.tabID }
+  const token = state.issued + 1
+  const reveal = { token, tabID: event.tabID, timing: false }
+
+  // Nobody is looking: the tab waits selected, with its mark. Its guard waits too, since the person may be back before
+  // the selection lands. The delay starts only when the pane shows them the tab, so it costs nothing until then.
+  if (!event.onScreen) return put(state, key, { ...settled, unseen: marked, reveal }, [focus], token)
+
+  return put(state, key, { ...settled, shown: true, reveal }, [focus], token)
+}
+
+// Drops a kept show request without applying it.
+function unhold(state: Open, key: string, attachment: Attachment): Transition {
+  return attachment.held ? put(state, key, { ...attachment, held: undefined }) : { state, effects: [] }
+}
+
+// The state a kept request waited for may be there now. It is not decided here from what was true when it arrived:
+// the driver sends it again with what is true now. One that came through a binding since superseded is dropped.
+function settle(result: { readonly state: Open; readonly effects: readonly MachineEffect[] }, key: string): Transition {
+  const attachment = result.state.sessions[key]
+  const held = attachment?.held
+
+  if (!attachment || !held) return result
+
+  if (!current(attachment.phase, held.attempt)) {
+    const dropped = unhold(result.state, key, attachment)
+
+    return { state: dropped.state, effects: result.effects }
+  }
+
+  if (!presentable(attachment, held.tabID)) return result
+  const landed = unhold(result.state, key, attachment)
+
+  return {
+    state: landed.state,
+    effects: [
+      ...result.effects,
+      { type: "present-held", sessionKey: key, attempt: held.attempt, tabID: held.tabID, reveal: held.reveal },
+    ],
+  }
+}
+
 // Writes held while the session's location was unknown land once the server reports it. A held focus lands only for
 // a tab the desktop still has.
 function located(state: Open, key: string, attachment: Attachment, value: boolean): Transition {
@@ -550,14 +872,17 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
   const ids = attachment.browser?.tabs.map((tab) => tab.id)
   const focus = strip.focus
 
-  return put(
-    state,
+  return settle(
+    put(
+      state,
+      key,
+      { ...attachment, strip: { located: true, mirrored: ids ?? [], prune: false, focus: undefined } },
+      [
+        ...(ids ? sync(key, ids, strip.mirrored, strip.prune) : []),
+        ...(focus && ids?.includes(focus) ? [{ type: "focus-strip-tab" as const, sessionKey: key, tabID: focus }] : []),
+      ],
+    ),
     key,
-    { ...attachment, strip: { located: true, mirrored: ids ?? [], prune: false, focus: undefined } },
-    [
-      ...(ids ? sync(key, ids, strip.mirrored, strip.prune) : []),
-      ...(focus && ids?.includes(focus) ? [{ type: "focus-strip-tab" as const, sessionKey: key, tabID: focus }] : []),
-    ],
   )
 }
 
@@ -565,6 +890,8 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
 // server creating the session lifts `missing`; nothing lifts `replaced` but the user's next session visit elsewhere.
 function wake(state: Open, key: string, attachment: Attachment, created: boolean): Transition {
   const phase = attachment.phase
+
+  if (phase.status === "suspended" && phase.reason === "unlisted") return {state,effects:[]}
 
   if (phase.status === "registering" || phase.status === "ready" || phase.status === "backoff")
     return { state, effects: [] }
@@ -583,7 +910,7 @@ function wake(state: Open, key: string, attachment: Attachment, created: boolean
   return put(
     state,
     key,
-    { ...attachment, phase: { status: "registering", attempt, attempts: 0 }, embeds: {}, error: undefined },
+    { ...attachment, phase: { status: "registering", attempt, attempts: 0 }, embeds: {}, failure: undefined },
     register(key, attempt, restore),
     attempt,
   )
@@ -608,20 +935,20 @@ function command(
     return put(
       state,
       key,
-      { ...attachment, error: undefined, addressFocus: focus },
+      { ...attachment, failure: undefined, addressFocus: focus },
       [{ type: "send-command", sessionKey: key, attempt: phase.attempt, request, action: event.action }],
       request,
     )
 
-  if (phase.status === "backoff" || phase.status === "blocked") {
+  if (phase.status === "backoff" || phase.status === "blocked" || (phase.status === "suspended" && phase.reason === "unlisted")) {
     const error =
       phase.status === "blocked" && phase.reason === "replaced" ? "browser.pane.replaced" : "browser.pane.unavailable"
 
     return put(
       state,
       key,
-      { ...attachment, error: undefined, addressFocus: noFocus() },
-      [{ type: "reject-command", sessionKey: key, request, error, unavailable: false }],
+      { ...attachment, failure: undefined, addressFocus: noFocus() },
+      [{ type: "reject-command", sessionKey: key, request, action: event.action, error, unavailable: false }],
       request,
     )
   }
@@ -632,7 +959,7 @@ function command(
       state,
       key,
       { ...suspend(attachment, "ipc"), addressFocus: noFocus() },
-      [{ type: "reject-command", sessionKey: key, request, error: "browser.pane.unavailable", unavailable: true }],
+      [{ type: "reject-command", sessionKey: key, request, action: event.action, error: "browser.pane.unavailable", unavailable: true }],
       request,
     )
   const attempt = request + 1
@@ -644,7 +971,7 @@ function command(
       ...attachment,
       phase: { status: "registering", attempt, attempts: 0 },
       embeds: {},
-      error: undefined,
+      failure: undefined,
       addressFocus: focus,
     },
     [
@@ -681,7 +1008,7 @@ function commandFailed(
 
   return put(state, key, {
     ...attachment,
-    error: replaced ? "browser.pane.replaced" : event.error,
+    failure: { id: event.request, code: replaced ? "browser.pane.replaced" : event.error, action: event.action },
     addressFocus: focus,
   })
 }
@@ -696,22 +1023,9 @@ function paneState(
 
   if (!phase) return { state, effects: [] }
 
-  // The server's plugin lacks the browser RPC: every session on it stops until the server changes.
+  // RPC registration belongs to a Location. A cold project says nothing about the other projects on its server.
   if (event.error === "browser.pane.unsupported") {
-    const serverID = attachment.serverID
-    const gone = listed(state.sessions).filter((entry) => entry[1].serverID === serverID)
-
-    return {
-      state: {
-        ...state,
-        unsupported: { ...state.unsupported, [serverID]: true },
-        sessions: Object.fromEntries(listed(state.sessions).filter((entry) => entry[1].serverID !== serverID)),
-      },
-      effects: [
-        ...gone.flatMap(([item, value]) => [...stop(item, value.phase), detach(item)]),
-        { type: "watch-server", serverID },
-      ],
-    }
+    return put(state,key,{...attachment,phase:{status:"blocked",reason:"unsupported"},embeds:{}},stop(key,phase))
   }
 
   if (event.error === "browser.pane.replaced" || event.error === "browser.pane.missing") {
@@ -725,16 +1039,18 @@ function paneState(
         phase: { status: "blocked", reason: replaced ? "replaced" : "missing" },
         browser: null,
         embeds: {},
-        error: replaced ? event.error : undefined,
+        failure: replaced ? { id: state.issued + 1, code: "browser.pane.replaced", action: undefined } : undefined,
         strip: { located: attachment.strip.located, mirrored: [], prune: false, focus: undefined },
         addressFocus: noFocus(),
       },
       stop(key, phase),
+      replaced ? state.issued + 1 : undefined,
     )
   }
 
   // Main closed the binding, or never took it. Keep the tabs and register again with backoff.
-  if (event.error === "browser.pane.registration.closed") return backoff(state, key, attachment, phase)
+  if (event.error === "browser.pane.registration.closed")
+    return backoff(state, key, event.state ? { ...attachment, browser: event.state } : attachment, phase)
 
   // Idle eviction has no retry timer: a user or Session execution wakes it on demand.
   if (event.error === "browser.pane.suspended") {
@@ -748,24 +1064,55 @@ function paneState(
   }
 
   const mirrored = mirror(key, attachment.strip, event.state, true)
+  // An inventory that repeats the error it reported last is the same failure, not a new one to read again.
+  const repeated = attachment.failure?.action === undefined && attachment.failure?.code === event.error
 
-  return put(
-    state,
+  const failure =
+    event.error === undefined || repeated
+      ? moved(attachment, event.state) ? undefined : attachment.failure
+      : { id: state.issued + 1, code: event.error, action: undefined }
+
+  // A tab the desktop had and has no more closed: a show request kept for it has nothing to show.
+  const closed =
+    !!attachment.held &&
+    !!attachment.browser?.tabs.some((tab) => tab.id === attachment.held?.tabID) &&
+    !event.state?.tabs.some((tab) => tab.id === attachment.held?.tabID)
+
+  // The strip gets the inventory's tabs first, so a kept request selects a tab the strip already has.
+  return settle(
+    put(
+      state,
+      key,
+      {
+        ...attachment,
+        held: closed ? undefined : attachment.held,
+        phase: { status: "ready", attempt: phase.attempt },
+        browser: event.state,
+        unseen: attachment.unseen.filter(id => event.state?.tabs.some(tab => tab.id === id)),
+        failure,
+        strip: mirrored.strip,
+        addressFocus: follow(attachment.addressFocus, event.state),
+      },
+      [
+        ...(phase.status === "registering" ? [{ type: "cancel-register-timeout" as const, sessionKey: key }] : []),
+        ...mirrored.effects,
+        ...(event.state ? [{ type: "record-history" as const, sessionKey: key }] : []),
+      ],
+      failure === attachment.failure ? state.issued : state.issued + 1,
+    ),
     key,
-    {
-      ...attachment,
-      phase: { status: "ready", attempt: phase.attempt },
-      browser: event.state,
-      error: event.error,
-      strip: mirrored.strip,
-      addressFocus: follow(attachment.addressFocus, event.state),
-    },
-    [
-      ...(phase.status === "registering" ? [{ type: "cancel-register-timeout" as const, sessionKey: key }] : []),
-      ...mirrored.effects,
-      ...(event.state ? [{ type: "record-history" as const, sessionKey: key }] : []),
-    ],
   )
+}
+
+// A failed command names a tab's page. Once that tab shows another document, or is gone, the failure is about a page
+// the person no longer sees.
+function moved(attachment: Attachment, browser: Browser.State | null) {
+  const action = attachment.failure?.action
+
+  if (!action || !("tabID" in action)) return false
+  const generation = (state: Browser.State | null) => state?.tabs.find((tab) => tab.id === action.tabID)?.generation
+
+  return generation(attachment.browser) !== generation(browser)
 }
 
 function backoff(state: Open, key: string, attachment: Attachment, phase: Bound): Transition {
@@ -779,7 +1126,7 @@ function backoff(state: Open, key: string, attachment: Attachment, phase: Bound)
       ...attachment,
       phase: { status: "backoff", attempt, attempts: prior + 1 },
       embeds: {},
-      error: undefined,
+      failure: undefined,
       addressFocus: noFocus(),
     },
     [
@@ -852,13 +1199,13 @@ function blank(tab: Browser.Tab) {
   return !tab.url || tab.url === "about:blank"
 }
 
-function suspend(attachment: Attachment, reason: "idle" | "ipc", browser = attachment.browser): Attachment {
+function suspend(attachment: Attachment, reason: Extract<Phase,{status:"suspended"}>["reason"], browser = attachment.browser): Attachment {
   return {
     ...attachment,
     phase: { status: "suspended", reason },
     browser,
     embeds: {},
-    error: undefined,
+    failure: undefined,
     addressFocus: noFocus(),
   }
 }

@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Dalej",
   "releaseNotes.action.hideFuture": "Nie pokazuj tego w przyszłości",
   "releaseNotes.media.alt": "Podgląd wydania",
+  "action.reload": "Wczytaj ponownie, aby zaktualizować",
+  "action.reloading": "Ponowne wczytywanie…",
+  "web.ready.title": "Aktualizacja gotowa",
+  "web.ready.message":
+    "Nowa wersja OpenCode jest gotowa. Wczytaj ponownie, aby używać jej we wszystkich otwartych oknach.",
+  "web.reload": "Wczytaj ponownie",
+  "web.reset.title": "Wczytaj ponownie z serwera",
+  "web.reset.description": "Wyczyść zapisaną kopię aplikacji i wczytaj bieżącą wersję z serwera",
+  "web.reset.action": "Wczytaj ponownie z serwera",
 }

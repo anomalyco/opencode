@@ -6,8 +6,9 @@
   }
 
   @media (max-width: 60rem) {
-    /* Two lines that turn into an X. The lines end on the page edge; the button extends past it
-       so the tap target is 44px square. */
+    /* Two 1.5px lines, 16px long (the search glyph's width) and 7px apart, that turn into an X, centred on the
+       menu column (34px in from the screen's edge). The lines sit on half pixels so each is exactly 3 device pixels
+       at 2×. The tap target is 44px square. */
     [data-component="menu-toggle"] {
       position: relative;
       width: 2.75rem;
@@ -16,19 +17,18 @@
 
       [data-slot="line"] {
         position: absolute;
-        inset-inline-start: 0.75rem;
-        inset-inline-end: 0.75rem;
+        inset-inline: 14px;
         top: calc(50% - 0.5px);
-        height: 1px;
+        height: 1.5px;
         background: var(--text-strong);
         transition: transform 200ms var(--ease-out);
 
         &:first-child {
-          transform: translateY(-4.5px);
+          transform: translateY(-3.5px);
         }
 
         &:last-child {
-          transform: translateY(4.5px);
+          transform: translateY(3.5px);
         }
       }
 

@@ -23,6 +23,7 @@
   "dependencies": {
     "@ibm/plex": "6.4.1",
     "@kitlangton/rolling-number": "0.4.1",
+    "@opencode/nav-menus": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
@@ -33,7 +34,6 @@
     "@textjs/react": "1.6.1",
     "fuzzysort": "3.1.0",
     "nitro": "3.0.260903-beta",
-    "number-flow": "0.6.2",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "solid-js": "catalog:",
@@ -66,6 +66,7 @@
     "miniflare": "5.20260930.0-alpha",
     "pagefind": "1.5.2",
     "playwright-core": "1.59.1",
+    "remark-directive": "4.0.0",
     "remark-gfm": "4.0.1",
     "remark-smartypants": "3.0.3",
     "satori": "0.63.2",

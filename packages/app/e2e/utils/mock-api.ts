@@ -235,6 +235,7 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(HttpApiEndpoint.get("websearchProviders", "/api/websearch/provider", { success: Json }))
   .add(HttpApiEndpoint.get("usageLimits", "/api/experimental/usage/limits", { success: Json }))
+  .add(HttpApiEndpoint.get("jobList", "/api/experimental/job", { success: Json }))
   .add(
     HttpApiEndpoint.get("worktreeList", "/api/worktree", {
       query: Schema.Struct({ projectID: Schema.String }),
@@ -388,12 +389,7 @@ const Group = HttpApiGroup.make("mock")
   .add(
     HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
       params: SessionParams,
-      success: NoContent,
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
-      params: SessionParams,
+      payload: Schema.Struct({ idle: Schema.Number }),
       success: NoContent,
     }),
   )

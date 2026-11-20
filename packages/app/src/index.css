@@ -106,6 +106,10 @@
     );
   }
 
+  [data-slot="session-timeline-scroll"] > .scroll-view__viewport:has(> [data-slot="session-header-inset"]) {
+    scroll-padding-block-start: calc(var(--sticky-accordion-top, 0px) + 16px);
+  }
+
   /* The review panel's visible width, which the header fade below tracks while the panel animates. Its fixed-width
      content holds nothing else that reads it. */
   #review-panel,

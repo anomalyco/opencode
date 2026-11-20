@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Schema } from "effect"
-import { CodeMode, Tool, toolError } from "./lib/index.js"
+import { CodeMode, Tool, toolError } from "../src/index.js"
 
 // Wave 5 acceptance suite: first-class promise values. Un-awaited tool calls start eagerly as
 // host work, `await` settles them, Promise.all/allSettled/race/resolve/reject are
@@ -475,7 +475,7 @@ describe("first-class promise values", () => {
 })
 
 describe("promises at data boundaries", () => {
-  test("an un-awaited promise inside a result or tool argument is awaited", async () => {
+  test("an un-awaited promise inside a result or a tool argument is awaited", async () => {
     expect(await value(`return { result: tools.host.echo({ id: 1 }) }`)).toEqual({ result: 1 })
     expect(await value(`return Array.from([Promise.resolve(1)])`)).toEqual([1])
     expect(await value(`return await tools.host.echo({ id: tools.host.echo({ id: 1 }) })`)).toBe(1)
@@ -1561,7 +1561,7 @@ describe("job order matches V8", () => {
 
 describe("a program that can never finish", () => {
   const stalled =
-    "Error: The program is waiting on a promise that can never settle: nothing else is running, so nothing can resolve it. Code Mode has no timers or sleep, so don't wait or poll inside a program."
+    "Error: The program is waiting on a promise that can never settle: nothing else is running, so nothing can resolve it. There are no timers or sleep, so don't wait or poll inside a program."
 
   // Each program stalls at the await on line `line`, column `column`; an outer await only waits on that one.
   test.each([

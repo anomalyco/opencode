@@ -109,8 +109,8 @@ export function ExtensionPage(props: { slug: ExtensionSlug; path?: string }) {
       </Show>
 
       <div data-slot="first-screen">
-        {/* Plain black until the extension has a hero. */}
-        <ProductHero slug={props.slug} media={data().hero ? heroStills(props.slug) : undefined} />
+        {/* Plain black until the extension has a hero. No card grows into it, so it has no slug. */}
+        <ProductHero media={data().hero ? heroStills(props.slug) : undefined} />
 
         <section data-component="product-intro" data-section="intro">
           <div data-slot="copy">
@@ -157,7 +157,12 @@ export function ExtensionPage(props: { slug: ExtensionSlug; path?: string }) {
         </For>
       </ul>
 
-      <ExtensionDownload lead={extension().install} command={command()} commands={data().install.commands} store={data().store} />
+      <ExtensionDownload
+        lead={extension().install}
+        command={command()}
+        commands={data().install.commands}
+        store={data().store}
+      />
 
       <MoreFromAnomaly slot="more-from-anomaly" exclude={props.slug} />
     </Site>

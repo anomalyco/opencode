@@ -16,7 +16,7 @@
   --text-muted: light-dark(hsl(0, 0%, 45%), hsl(0, 0%, 49%));
   --fs-large: 18px;
   --border: light-dark(hsl(0, 0%, 88%), hsl(0, 0%, 18%));
-  --link-dark: #4f8bff;
+  --link-dark: #6b8fff;
   --link: light-dark(#3b5cf6, var(--link-dark));
   --popover-bg: light-dark(hsl(0, 0%, 100%), hsl(0, 0%, 10%));
   --popover-text-weak: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 64%));
@@ -393,7 +393,7 @@ html [data-component="arcade-chrome"] [data-site][data-slot="site-tools"] {
     }
 
     &:focus-visible {
-      outline: 2px solid #4f8bff;
+      outline: 2px solid #6b8fff;
       outline-offset: 2px;
     }
   }

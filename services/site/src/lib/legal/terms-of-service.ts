@@ -4,7 +4,7 @@ export const termsOfService: LegalDocumentContent = {
   path: "/legal/terms-of-service",
   title: "Terms of Use",
   metaTitle: "OpenCode | Terms of Use for the website and hosted services",
-  effective: "Effective date: Aug 15, 2026",
+  effective: "Effective date: Nov 8, 2026",
   description:
     "The rules that govern your use of the OpenCode website, inference product and hosted software, including your account, payments and acceptable use.",
   body: [
@@ -200,7 +200,7 @@ export const termsOfService: LegalDocumentContent = {
     [
       "p",
       {},
-      "We use Content to provide our Services, comply with applicable law, enforce our terms and policies, and keep our Services safe. In addition, if you are using the Services through an unpaid account, we may use Content to further develop and improve our Services.",
+      "We use Content to provide our Services, comply with applicable law, enforce our terms and policies, and keep our Services safe. In addition, if you are using the Services through an unpaid account, we may use Content to further develop and improve our Services, except Content obtained or derived from a Connected Service (as defined in our Privacy Policy), which we never use for that purpose.",
     ],
     [
       "p",

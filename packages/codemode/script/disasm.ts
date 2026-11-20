@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
 // The bytecode disassembler: pcs, ops, constants, handler and finally tables, local names, source lines.
-import { sourceLocation } from "../src/vm/runtime/model.js"
-import type { Code } from "../src/vm/code.js"
-import { compileSource } from "../src/vm/compiler/compile.js"
+import { sourceLocation } from "../src/language/runtime/model.js"
+import type { Code } from "../src/language/code.js"
+import { compileSource } from "../src/language/compiler/compile.js"
 import {
   BinOpSymbols,
   CheckBaseKind,
@@ -13,8 +13,8 @@ import {
   OpNames,
   PutKind,
   UnaryOpSymbols,
-} from "../src/vm/opcodes.js"
-import { parseProgram } from "../src/vm/runtime/execute.js"
+} from "../src/language/opcodes.js"
+import { parseProgram } from "../src/language/runtime/execute.js"
 
 const formatFlags = (flags: number): string => {
   const names: Array<string> = []
@@ -186,6 +186,8 @@ const formatOperand = (c: Code, op: number, a: number, bx: number, sbx: number):
       return JSON.stringify(c.consts[bx])
     case Op.DEFINE_FIELD:
       return a === 0 ? JSON.stringify(c.consts[bx]) : "(computed)"
+    case Op.DEFINE_ACCESSOR:
+      return `${(a & 2) === 0 ? "get" : "set"} ${(a & 1) === 0 ? JSON.stringify(c.consts[bx]) : "(computed)"}`
     case Op.CHECK_BASE:
       return a === CheckBaseKind.READ
         ? ".read"

@@ -80,20 +80,25 @@ describe("run entry body", () => {
       content: "# Title\n\nHello **world**",
     })
 
-    const reasoning = entryBody(
-      commit({
-        kind: "reasoning",
-        text: "Thinking: plan next steps",
-        phase: "progress",
-        source: "reasoning",
-        partID: "reason-1",
-      }),
-    )
-    expect(reasoning).toEqual({
-      type: "code",
-      filetype: "markdown",
-      content: "_Thinking:_ plan next steps",
+    const thought = commit({
+      kind: "reasoning",
+      text: "Thinking: plan next steps",
+      phase: "progress",
+      source: "reasoning",
+      partID: "reason-1",
     })
+    const reasoning = entryBody(thought)
+    // Reasoning follows session.markdown: native Markdown when rendered (the default), highlighted source otherwise.
+    for (const [options, body] of [
+      [undefined, { type: "markdown", content: "_Thinking:_ plan next steps" }],
+      [{ markdown: "rendered" }, { type: "markdown", content: "_Thinking:_ plan next steps" }],
+      [{ markdown: "source" }, { type: "code", filetype: "markdown", content: "_Thinking:_ plan next steps" }],
+      [
+        { markdown: "rendered", mono: true },
+        { type: "text", content: "Thinking: plan next steps" },
+      ],
+    ] as const)
+      expect(entryBody(thought, options)).toEqual(body)
     expect(
       entryCanStream(
         commit({
@@ -234,7 +239,23 @@ describe("run entry body", () => {
     })
   })
 
-  test("promotes subagent results to markdown and falls back to structured summaries", () => {
+  test("renders a task card for a completed background subagent launch", () => {
+    const launch = toolCommit({
+      tool: "subagent",
+      state: {
+        status: "completed",
+        input: { description: "Inspect reducer", agent: "explore" },
+        metadata: { sessionID: "ses-child-1", status: "running" },
+        content: [{ type: "text", text: "The subagent is working in the background (sessionID: ses-child-1)." }],
+      },
+    })
+    expect(entryBody(launch)).toEqual({
+      type: "structured",
+      snapshot: { kind: "task", title: "# Explore Subagent", rows: ["Inspect reducer"], tail: "" },
+    })
+  })
+
+  test("promotes legacy subagent results to markdown and falls back to structured summaries", () => {
     const result = toolCommit({
       tool: "subagent",
       state: {
