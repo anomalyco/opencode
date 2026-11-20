@@ -617,3 +617,29 @@ fn a_hovered_tab_scrolls_its_overflowing_title_and_resets_when_left() {
     h.app.advance(std::time::Duration::from_millis(1000));
     assert!(h.app.render().text().lines().nth(y as usize).unwrap().contains("Trace the"));
 }
+
+#[test]
+fn a_reload_keeps_the_rail_width_a_drag_committed() {
+    let h = mount(120, json!({ "tabs": { "layout": "vertical" } }));
+    h.open("ses_b");
+    h.wait_for("Write the docs");
+    let storage = h.tui.storage().expect("storage");
+    let file = storage.file("layout").expect("layout file");
+    let locks = storage.directory().parent().expect("storage root").join("locks");
+    // Hold the layout file so the drag's write stays queued, as a reload can find it.
+    let lock = opencode_local::lock::acquire(&locks, &file.to_string_lossy(), &Default::default()).expect("lock");
+    h.app.drag((41, 10), (5, 10));
+    assert!(h.app.wait_until(WAIT, || h.tui.frame.rail_width(&h.tui) == 6), "no compact rail");
+    // A reload that reads the layout before the drag's write landed keeps the drag.
+    opencode_tui::frame::reload(&h.tui, &storage);
+    assert_eq!(h.tui.frame.rail_width(&h.tui), 6, "a reload reset the rail a drag committed");
+    lock.release().expect("release");
+    h.wait_file("layout", |layout| layout["verticalTabsWidth"] == 6);
+    // Once that write has landed, another client's width applies, as the TypeScript client's does.
+    storage.update("layout", &json!({}), |value| value["verticalTabsWidth"] = json!(50)).expect("write layout");
+    let applied = h.app.wait_until(WAIT, || {
+        opencode_tui::frame::reload(&h.tui, &storage);
+        h.tui.frame.rail_width(&h.tui) == 50
+    });
+    assert!(applied, "another client's width did not apply: rail {}", h.tui.frame.rail_width(&h.tui));
+}

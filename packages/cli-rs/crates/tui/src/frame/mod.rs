@@ -115,7 +115,7 @@ fn tabs_rules() -> Rules {
         default: Box::new(|_| SESSION_SIDEBAR_WIDTH),
         clamp: Box::new(|tui, width| layout::clamp_tabs_width(width, i64::from(tui.app.size().0))),
         from_mouse: Box::new(|_, x| i64::from(x) + 1),
-        commit: Box::new(|tui, width| save_layout(tui, "verticalTabsWidth", width)),
+        commit: Box::new(|tui, width| save_layout(&tui.frame.tabs_resize, tui, "verticalTabsWidth", width)),
     }
 }
 
@@ -124,15 +124,23 @@ fn pane_rules() -> Rules {
         default: Box::new(|tui| (tui.panels.width() / 2).max(1) as u16),
         clamp: Box::new(|tui, width| layout::clamp_pane_width(width, tui.panels.width())),
         from_mouse: Box::new(|tui, x| i64::from(tui.app.size().0) - i64::from(x) - 1),
-        commit: Box::new(|tui, width| save_layout(tui, "paneWidth", width)),
+        commit: Box::new(|tui, width| save_layout(&tui.frame.pane_resize, tui, "paneWidth", width)),
     }
 }
+
+/// A layout width's write landed: a reload may now take whatever the file holds.
+#[derive(Clone, Copy)]
+struct LayoutWritten(u64);
 
 pub fn install(tui: &Rc<Tui>, shell: &View) {
     shell.insert(0, &tui.frame.body);
     if let Some(storage) = tui.storage() {
         reload(tui, &storage);
     }
+    tui.app.on_message(bind!(tui, |tui, _, written: &LayoutWritten| {
+        tui.frame.tabs_resize.written(written.0);
+        tui.frame.pane_resize.written(written.0);
+    }));
     tui.app.on_resize(bind!(tui, |tui, _, _, _| refresh(&tui)));
     install_commands(tui);
     refresh(tui);
@@ -179,10 +187,13 @@ pub fn reload(tui: &Tui, storage: &Storage) {
     refresh(tui);
 }
 
-/// Writes one `layout` width under the storage lock, on one worker thread so the writes land in order.
-fn save_layout(tui: &Tui, key: &'static str, width: u16) {
+/// Writes one `layout` width under the storage lock, on one worker thread so the writes land in order. The worker
+/// then tells the pane which committed the width that its write completed.
+fn save_layout(resize: &Rc<PaneResize>, tui: &Tui, key: &'static str, width: u16) {
     tui.frame.layout.borrow_mut()[key] = json!(width);
     let Some(storage) = tui.storage() else { return };
+    let commit = resize.writing();
+    let proxy = tui.app.proxy();
     static WRITER: OnceLock<Serial> = OnceLock::new();
     WRITER.get_or_init(|| Serial::new("layout")).run(move || {
         let result = storage.update("layout", &json!({}), |value| {
@@ -192,6 +203,9 @@ fn save_layout(tui: &Tui, key: &'static str, width: u16) {
         });
         if let Err(error) = result {
             log::error!("Failed to persist TUI layout: {error}");
+        }
+        if let Some(commit) = commit {
+            let _ = proxy.send(LayoutWritten(commit));
         }
     });
 }
