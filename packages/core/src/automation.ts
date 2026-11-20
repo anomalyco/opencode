@@ -25,6 +25,7 @@ import {
 } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import {
   Action,
   ActionInput,
@@ -234,6 +235,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const database = yield* Database.Service
     const db = database.db
+    const fs = yield* FSUtil.Service
     const sessions = yield* Session.Service
     const projects = yield* Project.Service
     const locations = yield* LocationServiceMap.Service
@@ -451,11 +453,11 @@ const layer = Layer.effect(
       event?: AutomationEvent.Message,
     ) {
       const run = row.run_count + 1
-      const late = now - (row.next_due_at ?? now) >= LATE_AFTER
       const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
       if (!owner) return yield* pauseWith(row, now, "The session that authorized this command no longer exists")
-      if (owner.projectID !== row.project_id || owner.location.directory !== row.directory)
-        return yield* pauseWith(row, now, "The session that authorized this command moved")
+      const missingDirectory = () => pauseWith(row, now, `Directory no longer exists: ${row.directory}`)
+      // The saved Location may still be cached after its directory is removed.
+      if (!(yield* fs.isDir(row.directory))) return yield* missingDirectory()
 
       const admitted = yield* Deferred.make<void, FileSystem.DirectoryNotFoundError>()
       yield* Effect.gen(function* () {
@@ -485,7 +487,7 @@ const layer = Layer.effect(
         yield* db
           .update(AutomationTable)
           .set({
-            last_outcome: captured?.exit === 0 ? (late ? "late" : "fired") : "failed",
+            last_outcome: captured?.exit === 0 ? "fired" : "failed",
             last_output: AutomationCode.boundedOutput(output),
             time_updated: yield* Clock.currentTimeMillis,
           })
@@ -500,11 +502,13 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
       }).pipe(
         Effect.asVoid,
-        instances.provide(owner),
+        inDirectory(row.directory),
         Effect.onExit((exit) => Deferred.done(admitted, exit)),
         Effect.forkIn(scope),
       )
-      return yield* Deferred.await(admitted)
+      return yield* Deferred.await(admitted).pipe(
+        Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory),
+      )
     })
 
     const runAction = Effect.fnUntraced(
@@ -1224,5 +1228,13 @@ const layer = Layer.effect(
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Database.node, Session.node, SessionExecution.node, Project.node, LocationServiceMap.node, Instance.node],
+  deps: [
+    Database.node,
+    FSUtil.node,
+    Session.node,
+    SessionExecution.node,
+    Project.node,
+    LocationServiceMap.node,
+    Instance.node,
+  ],
 })

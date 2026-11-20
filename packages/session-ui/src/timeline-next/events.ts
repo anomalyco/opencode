@@ -101,17 +101,3 @@ export function workKey(event: TimelineEvent) {
 
   return id ? `${event.kind}:${id}` : undefined
 }
-
-/** Count background shells by verb in the order they happened. Subagents have individual task rows. */
-export function summarizeShells(events: readonly TimelineEvent[]) {
-  const counts = new Map<TimelineEventVerb, number>()
-  const shells = events.filter((event) => event.kind === "shell")
-  shells.forEach(({ verb }) => {
-    if (verb !== "updated") counts.set(verb, (counts.get(verb) ?? 0) + 1)
-  })
-
-  return {
-    verbs: Array.from(counts, ([verb, count]) => ({ verb, count })),
-    failed: shells.filter((event) => event.failed).length,
-  }
-}

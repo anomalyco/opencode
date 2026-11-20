@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { createCipheriv, createHmac, createPrivateKey, createPublicKey, diffieHellman } from "node:crypto"
 import { Noise } from "@opencode/core/machine/noise"
 import { Result } from "effect"
 import vectors from "./fixture/noise-xx-vectors.json"
@@ -165,6 +166,97 @@ describe("Noise", () => {
 
     const truncated = transport()
     expect(truncated.responder.receive.decrypt(new Uint8Array(15))).toEqual(Result.fail("BadMessage"))
+  })
+
+  test("a rekey sets k to REKEY(k) and keeps the nonce, and a receiver that skips it fails", () => {
+    const vector = vectors["cacophony.txt"][0]
+    // Fixed keys make every handshake give the same transport keys, so two receivers can hold the same CipherState.
+    const fixed = () => {
+      const sides = {
+        initiator: ok(
+          Noise.handshake({
+            initiator: true,
+            prologue: hex(vector.init_prologue),
+            static: ok(Noise.keyPair(hex(vector.init_static))),
+            ephemeral: ok(Noise.keyPair(hex(vector.init_ephemeral))),
+          }),
+        ),
+        responder: ok(
+          Noise.handshake({
+            initiator: false,
+            prologue: hex(vector.resp_prologue),
+            static: ok(Noise.keyPair(hex(vector.resp_static))),
+            ephemeral: ok(Noise.keyPair(hex(vector.resp_ephemeral))),
+          }),
+        ),
+      }
+      complete({ ...sides, initiatorStatic: Noise.generateKeyPair(), responderStatic: Noise.generateKeyPair() })
+      return { initiator: ok(sides.initiator.split()), responder: ok(sides.responder.split()) }
+    }
+
+    // The key schedule again, outside noise.ts: in XX the chaining key depends only on ee, es and se.
+    const dh = (privateKey: string, publicKey: string) =>
+      new Uint8Array(
+        diffieHellman({
+          privateKey: createPrivateKey({
+            key: Buffer.concat([Buffer.from("302e020100300506032b656e04220420", "hex"), hex(privateKey)]),
+            format: "der",
+            type: "pkcs8",
+          }),
+          publicKey: createPublicKey({
+            key: Buffer.concat([Buffer.from("302a300506032b656e032100", "hex"), hex(publicKey)]),
+            format: "der",
+            type: "spki",
+          }),
+        }),
+      )
+    const hmac = (key: Uint8Array, data: Uint8Array) => new Uint8Array(createHmac("sha256", key).update(data).digest())
+    const hkdf = (chainingKey: Uint8Array, input: Uint8Array) => {
+      const temp = hmac(chainingKey, input)
+      const first = hmac(temp, Uint8Array.of(1))
+      return [first, hmac(temp, Buffer.concat([first, Uint8Array.of(2)]))]
+    }
+    const publicOf = (privateKey: string) => Buffer.from(ok(Noise.keyPair(hex(privateKey))).publicKey).toString("hex")
+    const name = new Uint8Array(32)
+    name.set(text("Noise_XX_25519_AESGCM_SHA256"))
+    const chainingKey = [
+      dh(vector.init_ephemeral, publicOf(vector.resp_ephemeral)),
+      dh(vector.init_ephemeral, publicOf(vector.resp_static)),
+      dh(vector.init_static, publicOf(vector.resp_ephemeral)),
+    ].reduce((ck, shared) => hkdf(ck, shared)[0], name)
+    const [initiatorKey, responderKey] = hkdf(chainingKey, new Uint8Array(0))
+    const seal = (key: Uint8Array, n: bigint, plaintext: Uint8Array) => {
+      const nonce = Buffer.alloc(12)
+      nonce.writeBigUInt64BE(n, 4)
+      const cipher = createCipheriv("aes-256-gcm", key, nonce)
+      return new Uint8Array(Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]))
+    }
+    const rekey = (key: Uint8Array) => seal(key, 2n ** 64n - 1n, new Uint8Array(32)).slice(0, 32)
+
+    for (const [sender, receiver, key] of [
+      ["initiator", "responder", initiatorKey],
+      ["responder", "initiator", responderKey],
+    ] as const) {
+      const sides = fixed()
+      const skipping = fixed()
+      const sealed = [0, 1, 2].map((n) => {
+        const message = ok(sides[sender].send.encrypt(text(`message ${n}`)))
+        sides[sender].send.rekey()
+        return message
+      })
+      // Message n is sealed under a key rekeyed n times, at nonce n.
+      expect(sealed).toEqual([
+        seal(key, 0n, text("message 0")),
+        seal(rekey(key), 1n, text("message 1")),
+        seal(rekey(rekey(key)), 2n, text("message 2")),
+      ])
+      sealed.forEach((message, n) => {
+        expect(ok(sides[receiver].receive.decrypt(message))).toEqual(text(`message ${n}`))
+        sides[receiver].receive.rekey()
+      })
+      expect(ok(skipping[receiver].receive.decrypt(sealed[0]))).toEqual(text("message 0"))
+      expect(skipping[receiver].receive.decrypt(sealed[1])).toEqual(Result.fail("BadMessage"))
+    }
   })
 
   test("a call out of turn fails and ends the handshake", () => {

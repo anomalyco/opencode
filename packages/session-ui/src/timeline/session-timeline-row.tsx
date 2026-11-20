@@ -49,8 +49,8 @@ import { taskAgentName, ToolRegistry, type ContextGroupPart } from "../tools/too
 import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
-import { timelineCategory, type TimelineDetail } from "./detail"
-import { currentToolFailed } from "../message/current-tool-state"
+import type { TimelineDetail } from "./detail"
+import { diffOpens, placeContent } from "./place"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
 import {
@@ -429,7 +429,7 @@ export function createSessionTimelineRowRenderer(input: {
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
             fileOpen={(path) =>
-              input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
+              input.disclosure.value(`patch:${path}`) ?? (!!input.timelineDetail && diffOpens(input.timelineDetail()))
             }
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
             open={input.disclosure.value(key()) === true}
@@ -501,7 +501,7 @@ export function createSessionTimelineRowRenderer(input: {
 
             if (open !== undefined) return open
 
-            if (input.timelineDetail) return input.timelineDetail().edit.details === "expanded"
+            if (input.timelineDetail) return diffOpens(input.timelineDetail())
 
             if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
 
@@ -600,20 +600,7 @@ export function createSessionTimelineRowRenderer(input: {
   function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
     if (item.type === "tool" && item.name === "execute") return true
 
-    if (input.timelineDetail) {
-      const category = timelineCategory(item)
-
-      if (
-        category &&
-        input.timelineDetail()[category].placement === "hidden" &&
-        item.type === "tool" &&
-        currentToolFailed(item)
-      )
-        return true
-
-      if (category === "shell" || category === "edit" || category === "thinking")
-        return input.timelineDetail()[category].details === "expanded"
-    }
+    if (input.timelineDetail) return placeContent(item, input.timelineDetail(), "current").opens
 
     if (item.type === "reasoning") return input.reasoningMode() === "full"
 

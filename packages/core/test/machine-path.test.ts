@@ -160,7 +160,7 @@ const fixture = (directory: string): Fixture => ({ directory, assertions: [], pr
 const connected = (machines: Machines.Interface, name: string) =>
   Effect.gen(function* () {
     const id = yield* machines.add(name)
-    const worker = yield* makeWorker({ environment: { id }, connect: machines.connect })
+    const worker = yield* makeWorker({ connect: (connection) => machines.connect(id, connection) })
     yield* worker.restore
     return { id, worker }
   })

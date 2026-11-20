@@ -8,16 +8,13 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
-import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
-import {
-  currentContentDefaultOpen,
-  currentToolFailed,
-  currentToolGroupedRead,
-  currentToolHasLoadedFiles,
-} from "../message/current-tool-state"
+import { createComputed, createMemo, createSignal, mapArray, untrack, type Accessor } from "solid-js"
+import { currentContentDefaultOpen, currentToolHasLoadedFiles } from "../message/current-tool-state"
 import { turnCommentary } from "./commentary"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
-import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
+import { timelineNoticeRequired, type TimelineDetail } from "./detail"
+import { placeFactOf, type PlaceFact } from "./facts"
+import { placeContent, placeNotice, placer, type Place, type PlaceFactOf } from "./place"
 import {
   IDLE_TURN_PHASE,
   isInterruptedError,
@@ -48,6 +45,8 @@ type Entry =
   | { type: "diff"; message: SessionMessageIdle; from: string; files: string[] }
 
 type Content = SessionMessageAssistant["content"][number]
+
+type Tool = Extract<Content, { type: "tool" }>
 
 type GroupRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
 
@@ -180,6 +179,7 @@ export function createReactiveTimelineProjection(input: {
   )
 
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
+  const factOf = placeFacts(input.sessionMessages)
 
   const projection = createMemo(() =>
     Timeline.constructSessionMessageRows(
@@ -189,14 +189,15 @@ export function createReactiveTimelineProjection(input: {
       input.pendingInputIDs?.(),
       input.shellToolDefaultOpen?.() ?? false,
       input.editToolDefaultOpen?.() ?? false,
-      (content, showReasoning, detail) =>
+      (content, showReasoning, detail, placeOf) =>
         content.type === "tool"
-          ? renderable(content, showReasoning, detail)
+          ? renderable(content, showReasoning, detail, placeOf)
           : (content.type === "text" || (detail ? detail.thinking.placement !== "hidden" : showReasoning)) &&
             textVisible().get(content)!(),
       input.timelineDetail?.(),
       input.queuedCompactionIDs?.(),
       input.turnDiffs?.(),
+      factOf,
     ),
   )
 
@@ -272,7 +273,13 @@ export namespace Timeline {
     detail?: TimelineDetail,
     queuedCompactionIDs: readonly string[] = [],
     turnDiffs = false,
+    factOf?: PlaceFactOf,
   ) {
+    const placeOf = detail ? placer(detail, "current", factOf) : undefined
+
+    const shows = (content: Content, showReasoning: boolean, detail?: TimelineDetail) =>
+      isRenderable(content, showReasoning, detail, placeOf)
+
     type Turn = {
       id: string
       time: { created: number }
@@ -407,17 +414,17 @@ export namespace Timeline {
               turn.entries.filter((entry) => entry.type === "assistant"),
               openRun,
               viewTurnPhase(phaseOf(turn)).settled,
-              (content) => isRenderable(content, showReasoning, detail),
+              (content) => shows(content, showReasoning, detail),
             ),
           )
         : [],
     )
 
     const visible = (content: Content, showReasoning: boolean, detail?: TimelineDetail) =>
-      !(detail?.commentary.placement === "hidden" && commentary.has(content)) &&
-      isRenderable(content, showReasoning, detail)
+      !(placeOf && commentary.has(content) && placeOf(content, true).placement === "hidden") &&
+      shows(content, showReasoning, detail)
 
-    const visibleNotice = (message: Notice) => !detail || timelineNoticePlacement(message, detail) !== "hidden"
+    const visibleNotice = (message: Notice) => !detail || placeNotice(message, detail, "current") !== "hidden"
 
     const visibleTurns = detail
       ? turns.filter((turn) => {
@@ -469,6 +476,7 @@ export namespace Timeline {
           visible,
           detail,
           commentary,
+          placeOf,
         )
       }),
     ]
@@ -505,7 +513,7 @@ export namespace Timeline {
                 message.type === "compaction" ||
                 message.type === "model-switched" ||
                 message.type === "location-switched" ||
-                (message.type === "synthetic" && timelineNoticePlacement(message, detail) === "separate")
+                (message.type === "synthetic" && placeNotice(message, detail, "current") === "separate")
                   ? [message.id]
                   : [],
               ),
@@ -527,6 +535,7 @@ export namespace Timeline {
     isRenderable = renderable,
     detail?: TimelineDetail,
     commentary: ReadonlySet<Content> = new Set(),
+    placeOf = detail ? placer(detail, "current") : undefined,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -563,7 +572,7 @@ export namespace Timeline {
 
       const appendGroups = (items: typeof refs) => {
         let offset = 0
-        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, commentary, detail).forEach((group) => {
+        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, commentary, detail, placeOf).forEach((group) => {
           const tool = group.type !== "part" || items[offset]?.content.type !== "text"
           offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
@@ -636,7 +645,7 @@ export namespace Timeline {
 
           return
         case "notice":
-          if (detail && timelineNoticePlacement(entry.message, detail) === "hidden") return
+          if (detail && placeNotice(entry.message, detail, "current") === "hidden") return
           appendAssistantSegment(assistantSegment)
           assistantSegment = []
           rows.push(new TimelineRow.Notice({ userMessageID: turnID, messageID: entry.message.id }))
@@ -958,19 +967,22 @@ function groupPartKey(ref: PartRef) {
   return `${ref.messageID}:${ref.partID}`
 }
 
-function renderable(content: Content, showReasoning: boolean, detail?: TimelineDetail) {
+function renderable(
+  content: Content,
+  showReasoning: boolean,
+  detail?: TimelineDetail,
+  placeOf?: (content: Content) => Place,
+) {
   if (content.type === "text") return !!content.text.trim()
 
   if (content.type === "reasoning")
     return (detail ? detail.thinking.placement !== "hidden" : showReasoning) && !!content.text.trim()
 
-  if (detail && currentToolFailed(content)) return true
+  if (detail) return (placeOf?.(content) ?? placeContent(content, detail, "current")).placement !== "hidden"
 
   if (content.name === "todowrite") return false
 
   if (content.name === "question") return content.state.status !== "streaming" && content.state.status !== "running"
-
-  if (detail && detail[timelineCategory(content)!].placement === "hidden") return false
 
   return true
 }
@@ -981,6 +993,7 @@ function groupContent(
   editToolDefaultOpen: boolean,
   commentary: ReadonlySet<Content>,
   detail?: TimelineDetail,
+  placeOf?: (content: Content, commentary?: boolean) => Place,
 ): PartGroup[] {
   const groups: PartGroup[] = []
   let adjacent: { type: "context" | "file" | "read"; refs: PartRef[]; tools: boolean } | undefined
@@ -1011,15 +1024,22 @@ function groupContent(
     adjacent = undefined
   }
 
-  items.forEach((item) => {
-    const type = contentGroupType(
-      item.content,
-      shellToolDefaultOpen,
-      editToolDefaultOpen,
-      adjacent?.type === "context" && adjacent.tools,
-      commentary,
-      detail,
-    )
+  const placed = placeOf ? items.map((item) => placeOf(item.content, commentary.has(item.content))) : undefined
+
+  items.forEach((item, index) => {
+    const group = placed?.[index]?.group
+
+    const type = placed
+      ? group === "context" || group === "read" || group === "file"
+        ? group
+        : undefined
+      : contentGroupType(
+          item.content,
+          shellToolDefaultOpen,
+          editToolDefaultOpen,
+          adjacent?.type === "context" && adjacent.tools,
+          commentary,
+        )
 
     if (type) {
       if (adjacent?.type !== type) flush()
@@ -1042,19 +1062,19 @@ function groupContent(
   return groups
 }
 
+// Without a detail setting, as in stories and embeds, groups follow the older shell and edit toggles.
 function contentGroupType(
   content: Content,
   shellExpanded: boolean,
   editExpanded: boolean,
   hasContextGroup: boolean,
   commentary: ReadonlySet<Content>,
-  detail?: TimelineDetail,
 ) {
-  if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup, detail)
+  if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup)
 
   if (content.type === "text") return commentary.has(content) ? "context" : undefined
 
-  return detail && detail.thinking.placement !== "grouped" ? undefined : "context"
+  return "context"
 }
 
 function toolGroupType(
@@ -1062,23 +1082,7 @@ function toolGroupType(
   shellExpanded: boolean,
   editExpanded: boolean,
   hasContextGroup: boolean,
-  detail?: TimelineDetail,
 ) {
-  if (detail) {
-    if (content.name === "question" && !currentToolFailed(content)) return undefined
-    const category = timelineCategory(content)!
-
-    if (detail[category].placement === "grouped") return "context"
-
-    if (currentToolGroupedRead(content)) return "read"
-
-    if (currentToolFailed(content)) return undefined
-
-    if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
-
-    return undefined
-  }
-
   if (content.name === "question" || currentToolHasLoadedFiles(content)) return undefined
 
   if (content.state.status === "error") {
@@ -1183,4 +1187,51 @@ function isNotice(message: SessionMessageInfo): message is Notice {
   if (message.type !== "synthetic") return true
 
   return !!message.description?.trim() || timelineNoticeRequired(message)
+}
+
+/**
+ * Reads what placing each call needs through a signal per call. Streamed input and progress reports change a call many
+ * times a second without moving it, and a signal notifies the rows only when what they read of it changes.
+ */
+export function placeFacts(messages: Accessor<SessionMessageInfo[]>): PlaceFactOf {
+  const parts = mapArray(
+    () =>
+      messages().flatMap((message) =>
+        message.type === "assistant"
+          ? message.content.filter((content): content is Tool => content.type === "tool")
+          : [],
+      ),
+    (tool) => {
+      const [fact, setFact] = createSignal(
+        untrack(() => placeFactOf(tool)),
+        { equals: samePlaceFact },
+      )
+
+      createComputed(() => setFact(placeFactOf(tool)))
+
+      // The signal only says when the fact changes, one computation after the write that changed it, so the value
+      // comes from the part itself.
+      return [tool, () => (fact(), untrack(() => placeFactOf(tool)))] as const
+    },
+  )
+
+  const byTool = createMemo(() => new Map<Tool, Accessor<PlaceFact>>(parts()))
+
+  return (tool) => byTool().get(tool)?.() ?? placeFactOf(tool)
+}
+
+const placeFactKeys = [
+  "name",
+  "tool",
+  "mode",
+  "status",
+  "failed",
+  "stopped",
+  "called",
+  "groupedRead",
+  "background",
+] as const
+
+function samePlaceFact(previous: PlaceFact, next: PlaceFact) {
+  return placeFactKeys.every((key) => previous[key] === next[key])
 }

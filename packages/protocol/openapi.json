@@ -17475,6 +17475,9 @@
               "home_memory": {
                 "type": "boolean"
               },
+              "project_overlay": {
+                "type": "boolean"
+              },
               "sqlite_fts": {
                 "type": "boolean"
               },
