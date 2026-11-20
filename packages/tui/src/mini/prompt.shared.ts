@@ -83,6 +83,13 @@ export function isCompactCommand(input: string): boolean {
   return input.trim().toLowerCase() === "/compact"
 }
 
+// Handled by the runtime itself instead of being sent to the model.
+const LOCAL_COMMANDS = ["sessions", "rename", "fork", "undo", "redo", "mcp"]
+
+export function isLocalCommand(input: string): boolean {
+  return LOCAL_COMMANDS.includes(/^\/(\S+)/.exec(input.trim().toLowerCase())?.[1] ?? "")
+}
+
 export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {
   const list = (items ?? [])
     .filter((item) => item.text.trim().length > 0 || item.parts.some((part) => part.type === "file"))

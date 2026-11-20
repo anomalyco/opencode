@@ -78,6 +78,48 @@ Press **Ctrl+X**, then **U**, or run `/undo`, to revert the latest user message 
 
 Press **Ctrl+X**, then **R**, or run `/redo`, to restore the reverted work. Sending a new prompt instead accepts the revert and continues from that point.
 
+## Screen reader mode
+
+Screen reader mode replaces the full-screen interface with the minimal interface (`opencode mini`), which appends output to your terminal scrollback instead of redrawing the screen. It is off by default and is never detected automatically.
+
+Turn it on with the flag, or force it off with `--no-screen-reader`.
+
+```bash
+opencode --screen-reader
+```
+
+You can also set the `OPENCODE_SCREEN_READER` environment variable to `true` or `false`, or set `screen_reader` in `cli.json` in your OpenCode config directory. The flag wins over the variable, and the variable wins over the file.
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "screen_reader": true
+}
+```
+
+OpenCode prints `Screen reader mode on.` when it starts. In this mode:
+
+- The splash screen, the persistent footer details, and color are turned off. `NO_COLOR` also turns color off.
+- OpenCode prints `Working...` when it starts working on a prompt.
+- Menus and question lists move the terminal cursor to the selected row, so your screen reader reads it as you move.
+- Pressing a number in a question list selects that option. Press **Enter** to confirm.
+- The bell rings when a response finishes, when a permission or question needs you, and when a tool runs for more than 5 seconds.
+- Output lines are labeled `you:`, `assistant:`, `tool:`, `tool error:`, and `error:`.
+
+The minimal interface also has these commands, in the command palette (**Ctrl+P**) or typed in the prompt:
+
+- `/sessions` switches to another session.
+- `/rename <title>` renames the session.
+- `/fork` continues in a copy of the session.
+- `/undo` and `/redo` revert the previous message, which returns to the prompt for editing, and restore it.
+- `/mcp` connects or disconnects MCP servers.
+
+```text
+/rename Fix login redirect
+```
+
+The full-screen interface has features the minimal interface does not, such as tabs, themes, the sidebar, and the diff viewer. Plain `opencode` hands off to the minimal interface in this mode, and `--auto` carries over.
+
 ## Editor
 
 Set `VISUAL` or `EDITOR`, then press **Ctrl+X**, then **E**, or run `/editor`, to edit the current prompt in that editor. Save and exit to return the text to the composer, then press **Enter** to send it.

@@ -312,6 +312,32 @@ export type FooterPromptRoute =
   | { type: "model" }
   | { type: "variant" }
   | { type: "settings" }
+  | { type: "picker" }
+
+export type RunPickerItem = {
+  id: string
+  display: string
+  description?: string
+  footer?: string
+  current?: boolean
+}
+
+// A list the runtime asks the footer to show, so session actions need no footer code of their own.
+export type RunPicker = {
+  title: string
+  empty: string
+  load: () => Promise<RunPickerItem[]>
+  onSelect: (id: string) => void | Promise<void>
+}
+
+// Entries the runtime adds to the command menu. Choosing one submits the slash command, or
+// starts typing it when it needs an argument.
+export type RunAction = {
+  command: string
+  display: string
+  keywords?: string
+  prefill?: boolean
+}
 
 export type FooterSubagentTab = {
   sessionID: string
@@ -372,6 +398,8 @@ export type FooterEvent =
       model: string
       selection: NonNullable<RunInput["model"]>
     }
+  | { type: "picker"; picker: RunPicker }
+  | { type: "prefill"; prompt: RunPrompt }
   | { type: "turn.send" }
   | { type: "turn.idle" }
   | {
@@ -408,7 +436,7 @@ export type FormCancel = {
 
 export type RunTuiConfig = Pick<
   Config.Resolved,
-  "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor" | "animations"
+  "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor" | "animations" | "screen_reader"
 >
 
 export type MiniSettings = {
@@ -473,6 +501,7 @@ export type LocalReplayRow = {
 export type FooterApi = {
   readonly isClosed: boolean
   onPrompt(fn: (input: RunPrompt) => void): () => void
+  submit(prompt: RunPrompt): void
   onClose(fn: () => void): () => void
   event(next: FooterEvent): void
   append(commit: StreamCommit): void

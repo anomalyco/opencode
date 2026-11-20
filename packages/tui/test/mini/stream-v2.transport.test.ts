@@ -16,6 +16,7 @@ import {
 import { createSessionTransport } from "../../src/mini/stream-v2.transport"
 import { runPromptQueue } from "../../src/mini/runtime.queue"
 import { entryBody } from "../../src/mini/entry.body"
+import { screenReader } from "../../src/mini/screen-reader"
 import type { StreamCommit } from "../../src/mini/types"
 import { createFooterApiFixture } from "./fixture/footer-api"
 import { canonicalToolPart } from "./fixture/tool-part"
@@ -227,6 +228,7 @@ function sdk(input: {
 }
 
 afterEach(() => {
+  screenReader.enabled = false
   mock.restore()
 })
 
@@ -1075,6 +1077,52 @@ describe("V2 mini transport", () => {
     await turn
 
     expect(ui.commits.map((item) => item.text)).toEqual(["hello", "ans", "wer"])
+    await transport.close()
+  })
+
+  test.each([true, false])("announces work after the user row (screen reader=%s)", async (enabled) => {
+    screenReader.enabled = enabled
+    const events = feed()
+    events.push(connected())
+    const settled = defer()
+    const messages: SessionMessages = []
+    const client = sdk({ streams: [events], messages: { ses_1: messages }, wait: () => settled.promise })
+    const ui = footer()
+    const transport = await createSessionTransport({ sdk: client, sessionID: "ses_1", thinking: false, footer: ui.api })
+    let admitted = false
+    spyOn(client.session, "prompt").mockImplementation((request) => {
+      admitted = true
+      return ok(promptAdmission(request)) as never
+    })
+
+    const turn = transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      files: [],
+      includeFiles: true,
+    })
+    while (!admitted) await Bun.sleep(0)
+    events.push({
+      id: "evt_prompted",
+      created: 0,
+      type: "session.inbox.delivered",
+      durable: durable("ses_1"),
+      data: { sessionID: "ses_1", inboxID: "msg_prompt" },
+    })
+    events.push({
+      id: "evt_settled",
+      created: 0,
+      type: "session.execution.succeeded",
+      durable: durable("ses_1"),
+      data: { sessionID: "ses_1" },
+    })
+    messages.push({ id: "msg_prompt", type: "user", text: "hello", time: { created: 2 } })
+    settled.resolve()
+    await turn
+
+    expect(ui.commits.map((item) => item.text)).toEqual(enabled ? ["hello", "Working..."] : ["hello"])
     await transport.close()
   })
 
