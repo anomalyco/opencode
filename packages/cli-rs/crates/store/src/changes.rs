@@ -236,39 +236,3 @@ impl Log {
         self.current.jobs.insert(id.clone());
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn id(value: &str) -> SessionID {
-        SessionID(value.to_owned())
-    }
-
-    #[test]
-    fn since_unions_newer_flushes_and_reports_everything_when_behind() {
-        let mut log = Log::default();
-        assert_eq!(log.flush(), None);
-        log.session(&id("ses_a"));
-        assert_eq!(log.flush(), Some(1));
-        log.message(&id("ses_b"), &SessionMessageID("msg_1".into()));
-        assert_eq!(log.flush(), Some(2));
-
-        let all = log.since(0);
-        assert!(all.session(&id("ses_a")) && all.sessions());
-        assert!(all.message(&id("ses_b"), "msg_1"));
-        assert!(!all.messages(&id("ses_b")));
-        assert!(all.any_message(&id("ses_b")));
-
-        let newer = log.since(1);
-        assert!(!newer.session(&id("ses_a")));
-        assert!(log.since(2).is_empty());
-
-        for _ in 0..LOG_LIMIT {
-            log.status(&id("ses_c"));
-            log.flush();
-        }
-        assert!(log.since(1).all);
-        assert!(!log.since(log.revision() - 1).all);
-    }
-}

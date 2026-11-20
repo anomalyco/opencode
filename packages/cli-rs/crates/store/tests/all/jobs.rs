@@ -76,6 +76,36 @@ async fn lists_a_trees_running_jobs_and_follows_job_events() {
     assert_eq!(ids(&data), ["job_live"]);
 }
 
+/// A subagent job belongs to the session that started it, that session's ancestors, and the child it runs, also while
+/// the child's own info, and so its parent, is not loaded.
+#[tokio::test]
+async fn a_subagent_job_is_owned_up_its_tree_and_by_the_child_it_runs() {
+    let (data, lists) = setup();
+    let child = json!({
+        "id": "ses_child", "parentID": "ses_root", "projectID": "project", "cost": 0,
+        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+        "outcome": "succeeded", "time": { "created": 0, "updated": 0 }, "location": { "directory": "/project" },
+    });
+    data.remember(serde_json::from_value(child).unwrap());
+    let synced = data.job_sync(&root());
+    let subagent = json!({
+        "kind": "subagent", "id": "job_subagent", "sessionID": "ses_child", "childSessionID": "ses_grandchild",
+        "agent": "general", "description": "Nested", "status": "running", "time": { "started": 1 },
+    });
+    request(&lists, 0).await.resolve(json!([job("job_grandchild", "running", "ses_grandchild"), subagent]));
+    synced.await.unwrap();
+    let owned = |session: &str| {
+        data.read(|state| {
+            let jobs = state.jobs(&root());
+            let owned = state.owned_jobs(&jobs, &SessionID(session.into()));
+            owned.iter().map(|job| job.id().to_owned()).collect::<Vec<_>>()
+        })
+    };
+    assert_eq!(owned("ses_child"), ["job_subagent"]);
+    assert_eq!(owned("ses_root"), ["job_subagent"]);
+    assert_eq!(owned("ses_grandchild"), ["job_grandchild", "job_subagent"]);
+}
+
 #[tokio::test]
 async fn applies_job_events_that_arrive_while_the_list_is_in_flight() {
     let (data, lists) = setup();

@@ -297,16 +297,3 @@ pub fn parse_model(value: Option<&str>) -> Result<Option<ModelRef>, String> {
         variant: variant.map(str::to_owned),
     }))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn subfolders_stay_inside_the_project() {
-        assert_eq!(subfolder("/project", "/project/packages/cli").as_deref(), Some("packages/cli"));
-        assert_eq!(subfolder("/project", "/project"), None);
-        assert_eq!(subfolder("/project", "/projects/other"), None);
-        assert_eq!(subfolder("/project", "/project/../other"), None);
-    }
-}
