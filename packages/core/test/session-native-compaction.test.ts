@@ -26,6 +26,7 @@ import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime, Deferred, Effect, Fiber, Schema } from "effect"
 import { testEffect } from "./lib/effect"
+import { makeWebSocketServer } from "./lib/websocket-server"
 
 const decode = (checkpoint: { readonly native: { readonly messages: unknown } }) =>
   Schema.decodeUnknownSync(SessionHistory.NativeWindow)(checkpoint.native.messages)
@@ -423,3 +424,216 @@ test("retained user budget counts attachments and drops whole oldest messages", 
     SessionCompaction.recentUserMessages([user("x".repeat(63_000 * 4)), { ...newest, text: "new" }], model, 64_000),
   ).toHaveLength(1)
 })
+
+const setupWebSocket = Effect.fnUntraced(function* (
+  reject: (attempt: number) => { readonly code: string; readonly message: string } | undefined,
+) {
+  const db = (yield* Database.Service).db
+  const bus = yield* Bus.Service
+  const inbox = yield* SessionInbox.Service
+  const store = yield* SessionStore.Service
+  const compaction = yield* SessionCompaction.Service
+  const requests = yield* SessionModelRequest.Service
+  const hooks = yield* PluginHooks.Service
+  const decodeBody = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))
+  const compactionBodies: Record<string, unknown>[] = []
+  let turns = 0
+
+  const server = yield* makeWebSocketServer({
+    http: () =>
+      Response.json({ error: { message: "unexpected HTTP fallback", type: "server_error" } }, { status: 500 }),
+    message(socket, raw) {
+      const body = decodeBody(typeof raw === "string" ? raw : raw.toString())
+      const input = Array.isArray(body.input) ? body.input : []
+      const last = input.at(-1)
+      const isTrigger =
+        typeof last === "object" && last !== null && "type" in last && last.type === "compaction_trigger"
+      const send = (event: unknown) => socket.send(JSON.stringify(event))
+      if (!isTrigger) {
+        turns++
+        const id = `resp_${turns}`
+        send({ type: "response.created", response: { id } })
+        send({
+          type: "response.completed",
+          response: {
+            id,
+            status: "completed",
+            output: [],
+            usage: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+          },
+        })
+        return
+      }
+
+      compactionBodies.push(body)
+      const error = reject(compactionBodies.length)
+      if (error) {
+        send({ type: "error", error })
+        return
+      }
+
+      const id = `resp_cmp_${compactionBodies.length}`
+      const checkpoint = {
+        type: "compaction",
+        id: `cmp_${compactionBodies.length}`,
+        encrypted_content: `encrypted_${compactionBodies.length}`,
+      }
+      send({ type: "response.created", response: { id } })
+      send({ type: "response.output_item.done", output_index: 0, item: checkpoint })
+      send({
+        type: "response.completed",
+        response: {
+          id,
+          status: "completed",
+          output: [checkpoint],
+          usage: { input_tokens: 20, output_tokens: 4, total_tokens: 24 },
+        },
+      })
+    },
+  })
+
+  const model = SessionRunnerModel.resolved(
+    OpenAI.configure({
+      apiKey: "fixture",
+      baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),
+    }).responses("gpt-5.4-mini"),
+    {
+      capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+      cost: [],
+      limit: { context: 200_000, output: 16_000 },
+      compaction: { type: "native" },
+      transport: "websocket",
+    },
+  )
+  const sessionID = SessionSchema.ID.create()
+  yield* db
+    .insert(ProjectTable)
+    .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+    .onConflictDoNothing()
+    .run()
+  yield* bus.publish(SessionEvent.Created, {
+    sessionID,
+    projectID: Project.ID.global,
+    location: { directory: AbsolutePath.make("/project") },
+    slug: "native-compaction-ws",
+    version: "test",
+  })
+  const session = yield* store.get(sessionID)
+  if (!session) return yield* Effect.die("Missing fixture session")
+  const instructions = Instructions.make({
+    key: Instructions.Key.make("test/native"),
+    codec: Schema.toCodecJson(Schema.String),
+    read: Effect.succeed("Current instructions"),
+    render: { initial: String, changed: (_previous, value) => value, removed: () => "removed" },
+  })
+  yield* InstructionState.prepare(db, bus, instructions, sessionID)
+
+  const userID = SessionMessage.ID.create()
+  yield* inbox.admit({
+    id: userID,
+    sessionID,
+    item: { type: "user", payload: { text: "First real user request" }, delivery: "steer" },
+  })
+  yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID: userID })
+
+  const load = Effect.gen(function* () {
+    const history = yield* SessionHistory.preview(db, sessionID, instructions, model.ref)
+    return {
+      session,
+      model,
+      initial: history.initial,
+      messages: history.messages,
+      agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
+      tools: {
+        definitions: [
+          ToolDefinition.make({ name: "read", description: "Read a file", inputSchema: { type: "object" } }),
+        ],
+        execute: () => Effect.die("Compaction must never dispatch tools"),
+      },
+    }
+  })
+
+  const initial = yield* load
+  const prepared = yield* requests.primary({
+    session: initial.session,
+    agent: initial.agent.id,
+    model: initial.model,
+    tools: initial.tools,
+    webSocket: "session",
+    ...SessionModelRequest.baseTranscript({ ...initial, agent: initial.agent.info }),
+  })
+  const client = yield* LLMClient.Service
+  yield* client.generate(prepared.request, prepared.options)
+
+  const compact = Effect.gen(function* () {
+    const inputID = SessionMessage.ID.create()
+    yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", inputID })
+    return yield* compaction.compact({ reason: "manual", context: yield* load, inputID })
+  })
+  const checkpoint = Effect.gen(function* () {
+    const messages = (yield* load).messages
+    const last = messages.findLast((message) => message.type === "compaction" && message.status === "completed")
+    if (!last || !SessionHistory.isNativeCompaction(last)) return yield* Effect.die("Missing native checkpoint")
+    return last
+  })
+
+  return {
+    compact,
+    checkpoint,
+    hooks,
+    compactionBodies,
+    opens: () => server.state.opens,
+  }
+})
+
+for (const code of ["websocket_connection_limit_reached", "previous_response_not_found"] as const) {
+  it.live(`recovers once when WebSocket native compaction is rejected with ${code}`, () =>
+    Effect.gen(function* () {
+      const fixture = yield* setupWebSocket((attempt) =>
+        attempt === 1 ? { code, message: `Rejected continuation: ${code}` } : undefined,
+      )
+      const retries: PluginHooks.Domains["session"]["retry"][] = []
+      yield* fixture.hooks.register("session", "retry", (event) =>
+        Effect.sync(() => {
+          retries.push(event)
+        }),
+      )
+
+      expect(yield* fixture.compact).toEqual({ status: "completed" })
+      expect(fixture.compactionBodies).toHaveLength(2)
+      expect(fixture.compactionBodies[0]).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [{ type: "compaction_trigger" }],
+      })
+      expect(fixture.compactionBodies[1]).not.toHaveProperty("previous_response_id")
+      const fullInput = JSON.stringify(fixture.compactionBodies[1]?.input)
+      expect(fullInput).toContain("First real user request")
+      expect(fullInput).toContain("compaction_trigger")
+      if (code === "websocket_connection_limit_reached") expect(fixture.opens()).toBe(2)
+
+      const saved = yield* fixture.checkpoint
+      expect(JSON.stringify(saved.native.messages)).toContain("encrypted_2")
+      expect(
+        decode(saved)
+          .filter((message) => message.role === "user")
+          .map((message) => message.content),
+      ).toEqual([[Message.text("First real user request")]])
+      expect(retries).toEqual([])
+    }),
+  )
+}
+
+it.live("bounds WebSocket continuation recovery to one retry during native compaction", () =>
+  Effect.gen(function* () {
+    const fixture = yield* setupWebSocket(() => ({
+      code: "websocket_connection_limit_reached",
+      message: "Responses websocket connection limit reached (60 minutes).",
+    }))
+
+    expect(yield* fixture.compact).toMatchObject({ status: "failed" })
+    expect(fixture.compactionBodies).toHaveLength(2)
+    expect(fixture.compactionBodies[0]).toHaveProperty("previous_response_id", "resp_1")
+    expect(fixture.compactionBodies[1]).not.toHaveProperty("previous_response_id")
+    expect(fixture.opens()).toBe(2)
+  }),
+)
