@@ -231,13 +231,21 @@ Earlier work
     ])
   })
 
-  test("lists a checkpoint's subagents after its summary, and after a native window", () => {
-    const metadata = { subagents: [{ id: "ses_child", agent: "explore", title: "Search", status: "running" }] }
+  test("lists a checkpoint's subagents and background jobs after its summary, and after a native window", () => {
+    const metadata = {
+      subagents: [{ id: "ses_child", agent: "explore", title: "Search", status: "running" }],
+      background: [{ kind: "shell", sessionID: "ses_parent", shellID: "sh_dev", command: "bun dev" }],
+    }
     const block = [
       "<subagents>",
       "Direct subagent sessions of this session, with their status when this checkpoint was written:",
       "- ses_child (explore, running): Search",
       "</subagents>",
+      "",
+      "<background-work>",
+      "Background jobs this session had running when this checkpoint was written. Each sends a <background-result> when it finishes:",
+      "- shell (sh_dev): bun dev",
+      "</background-work>",
     ].join("\n")
     const checkpoint = (native?: SessionMessage.Native) =>
       SessionMessage.Compaction.make({

@@ -233,11 +233,11 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
           // Split parents' envelopes carry no content, so only unsplit parents' inline media moves here.
           data: media ? yield* SessionBlob.externalizeRow(db, row.data) : row.data,
         }
-        // A fork cannot continue the original session's subagents, and a summary references
-        // the first message it kept, which the fork copied under a new ID.
+        // A fork owns neither the original session's subagents nor its background jobs, and a summary
+        // references the first message it kept, which the fork copied under a new ID.
         if (row.type !== "compaction" || !row.data.metadata) return copy
-        const hasSubagents = "subagents" in row.data.metadata
-        const { subagents: _, ...rest } = row.data.metadata
+        const hasLists = "subagents" in row.data.metadata || "background" in row.data.metadata
+        const { subagents: _, background: ___, ...rest } = row.data.metadata
         const keepID = rest.keepID
         const kept = Schema.is(SessionMessage.ID)(keepID)
           ? yield* db
@@ -247,7 +247,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
               .get()
               .pipe(Effect.orDie)
           : undefined
-        if (!kept && !hasSubagents) return copy
+        if (!kept && !hasLists) return copy
         const metadata = kept ? { ...rest, keepID: forkedID(kept.seq) } : rest
         const { metadata: __, ...data } = copy.data
         return {

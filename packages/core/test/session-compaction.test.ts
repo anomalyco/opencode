@@ -1708,6 +1708,21 @@ const subagentsOf = (sessionID: Session.ID) =>
     Effect.map(([checkpoint]) => checkpoint?.metadata?.subagents),
   )
 
+/** Keeps a background shell job running in `sessionID` until the test ends. */
+const runningShell = (sessionID: Session.ID, shellID: string) =>
+  Effect.gen(function* () {
+    const jobs = yield* Job.Service
+    const release = yield* Deferred.make<void>()
+    yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+    yield* jobs.start({
+      id: shellID,
+      type: "shell",
+      background: true,
+      recovery: { kind: "shell", sessionID, shellID, command: `run ${shellID}` },
+      run: Deferred.await(release).pipe(Effect.as("")),
+    })
+  })
+
 it.effect("compaction lists no subagents while the compaction_subagents flag is off", () =>
   Effect.gen(function* () {
     const parent = yield* insertSession(Session.ID.make("ses_subagents_off"))
@@ -1744,6 +1759,22 @@ flagged.effect("compaction lists running children first, then the newest idle di
   }),
 )
 
+flagged.effect("compaction lists the session's own running background jobs, not its subagents' jobs", () =>
+  Effect.gen(function* () {
+    const parent = yield* insertSession(Session.ID.make("ses_background"))
+    yield* child(parent.id, "ses_background_child", 100)
+    yield* runningShell(parent.id, "sh_background_parent")
+    yield* runningShell(Session.ID.make("ses_background_child"), "sh_background_child")
+    const messages = [textUser("Question")]
+    yield* storeMessages(parent.id, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+    const [checkpoint] = yield* SessionStore.Service.use((store) => store.context(parent.id))
+    expect(checkpoint?.metadata?.background).toEqual([
+      { kind: "shell", sessionID: parent.id, shellID: "sh_background_parent", command: "run sh_background_parent" },
+    ])
+  }),
+)
+
 flagged.effect("a swapped-in background summary lists subagents started after it was written", () =>
   Effect.gen(function* () {
     requests = []
@@ -1761,15 +1792,17 @@ flagged.effect("a swapped-in background summary lists subagents started after it
   }),
 )
 
-flagged.effect("a fork drops the subagents its parent's checkpoint listed", () =>
+flagged.effect("a fork drops the subagents and background jobs its parent's checkpoint listed", () =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const parent = yield* insertSession(Session.ID.make("ses_subagents_fork_parent"))
     yield* child(parent.id, "ses_sub_fork_child", 100)
+    yield* runningShell(parent.id, "sh_fork_parent")
     const messages = [textUser("Earlier question"), textUser("Kept question")]
     yield* storeMessages(parent.id, messages)
     expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
     const [checkpoint] = yield* SessionStore.Service.use((store) => store.context(parent.id))
+    expect(Object.keys(checkpoint?.metadata ?? {})).toEqual(expect.arrayContaining(["subagents", "background"]))
 
     const forkID = Session.ID.make("ses_subagents_fork")
     yield* bus.publish(SessionEvent.Forked, {
@@ -1777,9 +1810,9 @@ flagged.effect("a fork drops the subagents its parent's checkpoint listed", () =
       parentID: parent.id,
       boundary: { type: "through", messageID: checkpoint.id },
     })
-    expect(yield* subagentsOf(forkID)).toBeUndefined()
-    expect(yield* SessionStore.Service.use((store) => store.context(forkID))).toMatchObject([
-      { type: "compaction", metadata: { recent: "[User]: Kept question" } },
-    ])
+    const [forked] = yield* SessionStore.Service.use((store) => store.context(forkID))
+    expect(forked).toMatchObject({ type: "compaction", metadata: { recent: "[User]: Kept question" } })
+    expect(forked?.metadata).not.toHaveProperty("subagents")
+    expect(forked?.metadata).not.toHaveProperty("background")
   }),
 )
