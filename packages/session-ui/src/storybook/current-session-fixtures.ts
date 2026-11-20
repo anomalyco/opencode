@@ -589,6 +589,59 @@ export const executeCodeDocument = document([
   }),
 ] satisfies SessionMessageInfo[])
 
+const executeWorktreeNames = [
+  "child-permission-sync",
+  "frontmatter-flow-repair",
+  "command-legacy-variant",
+  "service-discovery-validation",
+  "sampled-checksum-tail",
+]
+
+export const executeLongDetailsDocument = document([
+  user("msg_user_execute_long", "Create a worktree for each issue.", 52_100),
+  assistant({
+    id: "msg_assistant_execute_long",
+    offset: 52_200,
+    completed: 52_900,
+    content: [
+      completedTool({
+        id: "tool_execute_worktrees",
+        name: "execute",
+        offset: 52_300,
+        args: {
+          code: [
+            "const names = [",
+            ...executeWorktreeNames.map((name) => `  "${name}",`),
+            "];",
+            "",
+            "const results = await Promise.allSettled(",
+            "  names.map((name) => tools.opencode.worktree_create({ name }))",
+            ");",
+            "",
+            "return names.map((name, i) => ({",
+            "  name,",
+            '  result: results[i].status === "fulfilled" ? results[i].value : String(results[i].reason),',
+            "}));",
+          ].join("\n"),
+        },
+        output: JSON.stringify(
+          executeWorktreeNames.map((name) => ({
+            name,
+            result: { directory: `/Users/dev/.local/share/opencode/worktree/012780/${name}` },
+          })),
+        ),
+        metadata: {
+          toolCalls: executeWorktreeNames.map((name) => ({
+            tool: "opencode.worktree_create",
+            status: "completed",
+            input: { name },
+          })),
+        },
+      }),
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
 export const terminalFailedDocument = document([
   user("msg_user_terminal_failed", "Run the focused Session UI tests.", 53_000),
   assistant({
