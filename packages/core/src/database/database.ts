@@ -9,6 +9,13 @@ import { closeSync, existsSync, openSync } from "node:fs"
 import { chmod } from "node:fs/promises"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration.js"
+import {
+  BOOT_BUSY_TIMEOUT_MS,
+  STEADY_BUSY_TIMEOUT_MS,
+  bootBusyTimeout,
+  bootLockRetrySchedule,
+  isTransientSqliteLockError,
+} from "./boot-lock.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
@@ -32,24 +39,42 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/st
 // cross-object I/O.
 // Only a database file the user opens imports their legacy auth.json; in-memory and injected databases belong to
 // embedders and tests, which must not pick up the user's credentials.
-const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentials = false) =>
+const databaseLayer = (
+  lock: Effect.Effect<Semaphore.Semaphore>,
+  options: { readonly legacyCredentials?: boolean; readonly ensureWal?: boolean } = {},
+) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const db = yield* makeDatabase
       // An injected Durable Object client may run under a non-workerd module condition in tests.
       const durableObject = EffectDrizzleSqlite.managesTransactionsNatively(db.$client)
-
-      if (supportsTuningPragmas && !durableObject) {
-        yield* db.run("PRAGMA journal_mode = WAL")
-        yield* db.run("PRAGMA synchronous = NORMAL")
-        yield* db.run("PRAGMA busy_timeout = 5000")
-        yield* db.run("PRAGMA cache_size = -64000")
-      }
-      // Durable Object SQLite always enforces foreign keys and rejects the pragma.
-      if (supportsForeignKeyToggle && !durableObject) yield* db.run("PRAGMA foreign_keys = ON")
       const semaphore = yield* lock
-      yield* semaphore.withPermit(DatabaseMigration.apply(db, { legacyCredentials }))
+      const setup = Effect.gen(function* () {
+        if (supportsTuningPragmas && !durableObject) {
+          yield* db.run(`PRAGMA busy_timeout = ${BOOT_BUSY_TIMEOUT_MS}`)
+          if (options.ensureWal) yield* db.run("PRAGMA journal_mode = WAL")
+          yield* db.run("PRAGMA synchronous = NORMAL")
+          yield* db.run("PRAGMA cache_size = -64000")
+        }
+        // Durable Object SQLite always enforces foreign keys and rejects the pragma.
+        if (supportsForeignKeyToggle && !durableObject) yield* db.run("PRAGMA foreign_keys = ON")
+        yield* semaphore.withPermit(
+          DatabaseMigration.apply(db, { legacyCredentials: options.legacyCredentials ?? false }),
+        )
+        if (supportsTuningPragmas && !durableObject) yield* db.run(`PRAGMA busy_timeout = ${STEADY_BUSY_TIMEOUT_MS}`)
+      })
+      yield* setup.pipe(
+        Effect.tapError((error) =>
+          isTransientSqliteLockError(error)
+            ? Effect.logWarning("database boot hit transient sqlite lock; retrying", { error })
+            : Effect.void,
+        ),
+        Effect.retry({
+          while: isTransientSqliteLockError,
+          schedule: bootLockRetrySchedule,
+        }),
+      )
 
       return { db }
     }).pipe(Effect.orDie),
@@ -73,8 +98,14 @@ export function layer(options: Options = { path: ":memory:" }) {
       const provide = (filename: string) =>
         (filename === ":memory:"
           ? databaseLayer(Semaphore.make(1))
-          : databaseLayer(Effect.succeed(lockFor(filename)), true)
-        ).pipe(Layer.provide(sqliteLayer({ filename })))
+          : databaseLayer(Effect.succeed(lockFor(filename)), { legacyCredentials: true })
+        ).pipe(
+          Layer.provide(
+            filename === ":memory:"
+              ? sqliteLayer({ filename })
+              : sqliteLayer({ filename, busyTimeout: bootBusyTimeout }),
+          ),
+        )
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:") return provide(filename)
       const file = isAbsolute(filename) ? filename : join((yield* Global.Service).data, filename)
@@ -108,6 +139,7 @@ async function restrictToOwner(filename: string) {
 // because every Durable Object builds this layer over its own storage.
 export const layerFromClient: Layer.Layer<Service, never, SqlClient.SqlClient | Global.Service> = databaseLayer(
   Semaphore.make(1),
+  { ensureWal: true },
 )
 
 export function configured(options?: Options) {

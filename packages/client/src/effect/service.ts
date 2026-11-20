@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, probeResult, processExited, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -50,6 +50,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
   let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let stopping: Info | undefined
   let announced = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
@@ -69,6 +70,11 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     })
   })
   const found = yield* Effect.gen(function* () {
+    if (stopping !== undefined && processExited(stopping.pid)) {
+      yield* removeRegistration(stopping, options.file)
+      pool.evict(stopping.pid)
+      stopping = undefined
+    }
     const registration = yield* registered(options.file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
@@ -99,8 +105,30 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* announce("version-mismatch", service.version)
         if (service.state !== "ready")
           yield* Effect.logWarning("Background service is not ready; replacement cannot preserve persistent terminals")
-        yield* stop({ file: options.file, pty: decision.pty }).pipe(Effect.ignore)
-        pool.evict(service.info.pid)
+        const exited = yield* replace(service.info, options, decision.pty, timing)
+        if (exited) {
+          stopping = undefined
+          pool.evict(service.info.pid)
+        }
+        if (!exited) stopping = service.info
+      }
+      return Option.none()
+    }
+
+    if (stopping !== undefined) {
+      if (!processExited(stopping.pid)) {
+        yield* signal(stopping.pid, "SIGKILL")
+        return Option.none()
+      }
+      const exited = stopping
+      yield* removeRegistration(exited, options.file)
+      pool.evict(exited.pid)
+      stopping = undefined
+      const failed = pool.reap()
+      if (failed !== undefined) return yield* Effect.fail(failed)
+      if (pool.shouldRecruit(info !== undefined && !same(info, exited))) {
+        yield* announce("missing")
+        pool.add(yield* spawnContender)
       }
       return Option.none()
     }
@@ -122,19 +150,19 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     Effect.ensuring(Effect.sync(() => pool.releaseAll())),
   )
   if (Option.isNone(found))
-    return yield* Effect.fail(pool.failure() ?? new Error("Timed out waiting for the background service to start"))
+    return yield* Effect.fail(
+      pool.failure() ??
+        (stopping !== undefined
+          ? new Error(`Server process ${stopping.pid} is still running`)
+          : new Error("Timed out waiting for the background service to start")),
+    )
   return found.value.endpoint
 })
 
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
   const info = yield* read(options.file)
-  // Terminal handoff is best-effort; it must never keep the old service running.
-  yield* Effect.tryPromise(() =>
-    options.pty === "handoff" && info !== undefined
-      ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
-      : PtyHandoff.clear(options.file ?? fallback()),
-  ).pipe(Effect.catch((cause) => Effect.logWarning("Failed to prepare persistent terminals for replacement", cause)))
+  yield* prepareHandoff(options.file, options.pty, info)
   if (info !== undefined) yield* terminate(info, options, ensureTiming(options))
 })
 
@@ -172,28 +200,59 @@ const signal = (pid: number, name: NodeJS.Signals) =>
   Effect.try({ try: () => process.kill(pid, name), catch: (cause) => cause }).pipe(Effect.ignore)
 
 const stopped = Effect.fnUntraced(function* (pid: number) {
-  const running = yield* Effect.try({ try: () => process.kill(pid, 0), catch: () => false }).pipe(
-    Effect.orElseSucceed(() => false),
-  )
-  if (!running) return true
+  if (processExited(pid)) return true
   return yield* Effect.fail(new Error(`Server process ${pid} is still running`))
+})
+
+// Terminal handoff is best-effort; it must never keep the old service running.
+const prepareHandoff = (file: string | undefined, pty: StopOptions["pty"], info: Info | undefined) =>
+  Effect.tryPromise(() =>
+    pty === "handoff" && info !== undefined
+      ? PtyHandoff.prepare(file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
+      : PtyHandoff.clear(file ?? fallback()),
+  ).pipe(Effect.catch((cause) => Effect.logWarning("Failed to prepare persistent terminals for replacement", cause)))
+
+const removeRegistration = Effect.fnUntraced(function* (info: Info, file?: string) {
+  const latest = yield* read(file)
+  if (latest === undefined || !same(latest, info)) return
+  const fs = yield* FileSystem.FileSystem
+  yield* fs.remove(file ?? fallback()).pipe(Effect.ignore)
+})
+
+const waitUntilStopped = Effect.fnUntraced(function* (pid: number, timing: EnsureTiming) {
+  const done = yield* stopped(pid).pipe(Effect.retry(poll(timing)), Effect.option)
+  if (Option.isSome(done)) return
+  yield* signal(pid, "SIGKILL")
+  yield* stopped(pid).pipe(Effect.retry(poll(timing)))
 })
 
 const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = yield* read(options.file)
   if (current === undefined || !same(current, info)) return
   yield* signal(info.pid, "SIGTERM")
-  const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
   // The registration can disappear or change hands before this process exits. Only the PID we
   // signalled can tell us whether it has stopped, so escalate based on that process.
-  if (Option.isNone(done)) {
-    yield* signal(info.pid, "SIGKILL")
-    yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
+  yield* waitUntilStopped(info.pid, timing)
+  yield* removeRegistration(info, options.file)
+})
+
+const replace = Effect.fnUntraced(function* (
+  info: Info,
+  options: { readonly file?: string },
+  pty: StopOptions["pty"],
+  timing: EnsureTiming,
+) {
+  const current = yield* read(options.file)
+  if (current !== undefined && !same(current, info)) return true
+  if (current !== undefined) {
+    yield* prepareHandoff(options.file, pty, info)
+    yield* terminate(info, options, timing).pipe(Effect.ignore)
+    return processExited(info.pid)
   }
-  const latest = yield* read(options.file)
-  if (latest === undefined || !same(latest, info)) return
-  const fs = yield* FileSystem.FileSystem
-  yield* fs.remove(options.file ?? fallback()).pipe(Effect.ignore)
+  // The old process unregistered itself before we could signal it; wait for it to finish exiting
+  // before recruiting a contender so the replacement does not race its shutdown locks.
+  yield* waitUntilStopped(info.pid, timing).pipe(Effect.ignore)
+  return processExited(info.pid)
 })
 
 /** Effect-based local service lifecycle operations. */

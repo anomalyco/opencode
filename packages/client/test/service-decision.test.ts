@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { decide, type LocalService } from "../src/service-probe"
+import { decide, processExited, type LocalService } from "../src/service-probe"
 
 const protocolError =
   "Background service uses an incompatible health protocol. Update this client or explicitly restart the service."
@@ -51,4 +51,24 @@ test("a version mismatch replaces the service, handing off terminals only when i
     _tag: "replace",
     pty: "clear",
   })
+})
+
+test("processExited only treats ESRCH as exited and keeps EPERM as running", () => {
+  expect(processExited(process.pid)).toBe(false)
+  expect(processExited(4242, () => undefined)).toBe(false)
+  expect(
+    processExited(4242, () => {
+      throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" })
+    }),
+  ).toBe(true)
+  expect(
+    processExited(4242, () => {
+      throw Object.assign(new Error("kill EPERM"), { code: "EPERM" })
+    }),
+  ).toBe(false)
+  expect(
+    processExited(4242, () => {
+      throw new Error("unexpected failure")
+    }),
+  ).toBe(false)
 })
