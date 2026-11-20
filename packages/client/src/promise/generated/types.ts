@@ -2643,6 +2643,7 @@ export type ConfigEntry =
           recommended_api?: boolean
           full_codemode?: boolean
           machines?: boolean
+          home_memory?: boolean
           schedules?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
