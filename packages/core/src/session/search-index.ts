@@ -3,7 +3,7 @@ export * as SessionSearchIndex from "./search-index.js"
 import { eq, sql } from "drizzle-orm"
 import { Cause, Effect, Option, Predicate, Schema } from "effect"
 import { isSqlError } from "effect/sql/SqlError"
-import { Database } from "../database/database.js"
+import type { Database } from "../database/database.js"
 import { KVTable } from "../kv/sql.js"
 import { SessionMessage } from "./message.js"
 
@@ -19,7 +19,7 @@ import { SessionMessage } from "./message.js"
 type DatabaseService = Database.Interface["db"]
 
 /** Bump when the columns, tokenizer, triggers or extracted text change, so {@link ensure} rebuilds. */
-export const Version = 2
+export const Version = 3
 
 export type Layout = "compact" | "text"
 
@@ -60,57 +60,62 @@ export const State = Schema.Struct({
 export type State = typeof State.Type
 
 export type Ensured =
-  | { readonly status: "absent" }
   | { readonly status: "newer" }
   | { readonly status: "unsupported"; readonly reason: string }
   | { readonly status: "ready"; readonly state: State }
 
 /**
- * Runs after migrations, before anything writes, so it must stay cheap when there is no index: one sqlite_master read.
- * If search triggers exist but this SQLite can't run them (a database moved to an older SQLite), they would fail every
- * session write, so they are dropped and search stays off here. A view or trigger that {@link detach} dropped, or that
- * went with a rebuilt source table, is recreated, and the build walks every source again, since rows may have changed
- * unseen meanwhile; existing entries are replaced as it goes, so search keeps working. An older version's index is left
- * to {@link ensure}.
- */
-export const check = Effect.fn("SessionSearchIndex.check")(function* (db: DatabaseService) {
-  const result = yield* prepare(db, false)
-  if (result.status === "unsupported" && result.dropped)
-    yield* Effect.logWarning("session search turned off: this SQLite can't maintain the index", {
-      reason: result.reason,
-    })
-  return result
-})
-
-/**
- * Migrations rebuild a table by creating a copy, dropping the original and renaming the copy. Since SQLite 3.26 that
- * rename fails while any view or trigger refers to the dropped table (macOS's SQLite turns legacy_alter_table on, which
- * skips the check), and OpenCode would not start. So before pending migrations run, the view and every search trigger
- * are dropped, and {@link check} recreates them afterwards and walks every source again.
- */
-export const detach = Effect.fn("SessionSearchIndex.detach")(function* (db: DatabaseService) {
-  const objects = yield* db
-    .all<{
-      name: string
-    }>(sql`SELECT name FROM sqlite_master WHERE name GLOB 'session_search*' AND type IN ('view', 'trigger')`)
-    .pipe(Effect.orDie)
-  if (objects.length === 0) return
-  yield* immediate(db, unlink(db))
-})
-
-Database.onMigrate({
-  before: (db) => detach(db).pipe(Effect.ignoreCause({ log: "Error", message: "session search detach failed" })),
-  after: (db) => check(db).pipe(Effect.ignoreCause({ log: "Error", message: "session search check failed" })),
-})
-
-/**
  * Creates the index and its triggers, or recreates them when the version is older or an object is gone, and starts a
  * build. An index from a newer version is left alone so two versions sharing a database don't keep rebuilding it.
  */
-export const ensure = Effect.fn("SessionSearchIndex.ensure")(function* (db: DatabaseService) {
-  const result = yield* prepare(db, true)
-  if (result.status === "unsupported") return { status: "unsupported", reason: result.reason } satisfies Ensured
-  return result
+export const ensure = Effect.fn("SessionSearchIndex.ensure")(function* (
+  db: DatabaseService,
+): Effect.fn.Return<Ensured> {
+  const objects = yield* db
+    .all<{
+      name: string
+    }>(
+      sql`SELECT name FROM sqlite_master WHERE name GLOB 'session_search*' AND type IN ('table', 'view', 'trigger')`,
+    )
+    .pipe(Effect.orDie)
+  const names = new Set(objects.map((object) => object.name))
+  const unsupported = yield* probe(db, names.has("session_search"))
+  if (unsupported) return { status: "unsupported", reason: unsupported }
+  const before = yield* readState(db).pipe(Effect.orDie)
+  if (before && before.version > Version) return { status: "newer" }
+  if (current(before) && expected(before.layout).every((name) => names.has(name)))
+    return { status: "ready", state: before }
+  // An index this version built keeps its layout while this SQLite can still create it.
+  const kept = current(before) && (yield* creatable(db, before.layout)) === undefined ? before.layout : undefined
+  const layout = kept ?? (yield* pick(db))
+  if (typeof layout !== "string") return { status: "unsupported", reason: layout.reason }
+  return yield* immediate(
+    db,
+    Effect.gen(function* () {
+      // Another server may have rebuilt it meanwhile.
+      const state = yield* readState(db)
+      if (state && state.version > Version) return { status: "newer" } as const
+      const present = new Set(
+        (yield* db.all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE name GLOB 'session_search*'`)).map(
+          (row) => row.name,
+        ),
+      )
+      if (state && current(state) && state.layout === layout && expected(layout).every((name) => present.has(name)))
+        return { status: "ready", state } as const
+      yield* reset(db, layout)
+      const next: State = {
+        version: Version,
+        layout,
+        status: "building",
+        phase: "titles",
+        processed: 0,
+        total: yield* total(db),
+        skipped: 0,
+      }
+      yield* writeState(db, next)
+      return { status: "ready", state: next } as const
+    }),
+  )
 })
 
 /**
@@ -281,8 +286,9 @@ const SourceTriggers = {
   session_search_message_delete: `AFTER DELETE ON session_message WHEN OLD.type IN (${Indexed}) BEGIN ${queue("OLD.id")} END`,
   session_search_part_insert: `AFTER INSERT ON session_part WHEN NEW.type = 'text' AND ${parentFinished("NEW")} BEGIN ${queue("NEW.message_id")} END`,
   session_search_part_update: `AFTER UPDATE OF type, data, ordinal ON session_part WHEN (NEW.type = 'text' OR OLD.type = 'text') AND ${parentFinished("NEW")} BEGIN ${queue("NEW.message_id")} END`,
-  // In a cascade the message is already gone, so this is skipped and the message's own trigger reindexes.
-  session_search_part_delete: `AFTER DELETE ON session_part WHEN OLD.type = 'text' AND ${parentFinished("OLD")} BEGIN ${queue("OLD.message_id")} END`,
+  // In a cascade from session_message or session_v2, the parent row is already gone, so this is skipped and the
+  // message's own trigger removes the entry.
+  session_search_part_delete: `AFTER DELETE ON session_part WHEN OLD.type = 'text' AND EXISTS (SELECT 1 FROM session_v2 AS s WHERE s.id = OLD.session_id) AND ${parentFinished("OLD")} BEGIN ${queue("OLD.message_id")} END`,
   session_search_session_insert: `AFTER INSERT ON session_v2 WHEN trim(coalesce(NEW.title, '')) <> '' BEGIN ${queue("NEW.id")} END`,
   session_search_session_update: `AFTER UPDATE OF title ON session_v2 WHEN NEW.title IS NOT OLD.title BEGIN ${queue("NEW.id")} END`,
   session_search_session_delete: `AFTER DELETE ON session_v2 BEGIN ${queue("OLD.id")} END`,
@@ -345,91 +351,6 @@ const expected = (layout: Layout) => [
   ...Object.keys(SourceTriggers),
   ...Object.keys(Layouts[layout].triggers),
 ]
-
-const prepare = Effect.fnUntraced(function* (db: DatabaseService, create: boolean) {
-  const objects = yield* db
-    .all<{
-      name: string
-      type: string
-    }>(
-      sql`SELECT name, type FROM sqlite_master WHERE name GLOB 'session_search*' AND type IN ('table', 'view', 'trigger')`,
-    )
-    .pipe(Effect.orDie)
-  if (!create && objects.length === 0) return { status: "absent" } as const
-  const triggers = objects.filter((object) => object.type === "trigger").map((object) => object.name)
-  const unsupported = yield* probe(
-    db,
-    objects.some((object) => object.name === "session_search"),
-  )
-  if (unsupported) {
-    for (const name of triggers) yield* db.run(`DROP TRIGGER IF EXISTS ${name}`).pipe(Effect.orDie)
-    return { status: "unsupported", reason: unsupported, dropped: triggers.length > 0 } as const
-  }
-  const before = yield* readState(db).pipe(Effect.orDie)
-  if (before && before.version > Version) return { status: "newer" } as const
-  const names = new Set(objects.map((object) => object.name))
-  if (current(before) && expected(before.layout).every((name) => names.has(name)))
-    return { status: "ready", state: before } as const
-  if (!create && !current(before)) return { status: "absent" } as const
-  if (current(before) && Tables.every((name) => names.has(name))) return yield* restore(db, before.layout)
-  // An index this version built keeps its layout while this SQLite can still create it.
-  const kept = current(before) && (yield* creatable(db, before.layout)) === undefined ? before.layout : undefined
-  const layout = kept ?? (yield* pick(db))
-  if (typeof layout !== "string") return { status: "unsupported", reason: layout.reason, dropped: false } as const
-  return yield* immediate(
-    db,
-    Effect.gen(function* () {
-      // Another server may have rebuilt it meanwhile.
-      const state = yield* readState(db)
-      if (state && state.version > Version) return { status: "newer" } as const
-      const present = new Set(
-        (yield* db.all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE name GLOB 'session_search*'`)).map(
-          (row) => row.name,
-        ),
-      )
-      if (state && current(state) && state.layout === layout && expected(layout).every((name) => present.has(name)))
-        return { status: "ready", state } as const
-      yield* reset(db, layout)
-      const next: State = {
-        version: Version,
-        layout,
-        status: "building",
-        phase: "titles",
-        processed: 0,
-        total: yield* total(db),
-        skipped: 0,
-      }
-      yield* writeState(db, next)
-      return { status: "ready", state: next } as const
-    }),
-  )
-})
-
-/** The tables survived but the view or triggers are gone: recreates them, keeps the entries, and walks every source. */
-const restore = (db: DatabaseService, layout: Layout) =>
-  immediate(
-    db,
-    Effect.gen(function* () {
-      // Another server may have restored or rebuilt it meanwhile.
-      const state = yield* readState(db)
-      if (state && state.version > Version) return { status: "newer" } as const
-      if (!current(state) || state.layout !== layout) return { status: "absent" } as const
-      yield* unlink(db)
-      yield* link(db, layout)
-      const next: State = {
-        ...state,
-        status: "building",
-        phase: "titles",
-        after: undefined,
-        processed: 0,
-        total: yield* total(db),
-        skipped: 0,
-        error: undefined,
-      }
-      yield* writeState(db, next)
-      return { status: "ready", state: next } as const
-    }),
-  )
 
 const reset = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout) {
   yield* unlink(db)

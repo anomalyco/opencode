@@ -1,6 +1,7 @@
+import path from "path"
 import { describe, expect } from "bun:test"
 import { sql } from "drizzle-orm"
-import { Effect } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -12,9 +13,12 @@ import { Session } from "@opencode/core/session"
 import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { SessionSearchIndex } from "@opencode/core/session/search-index"
 import { SessionTable } from "@opencode/core/session/sql"
+import { Global } from "@opencode/util/global"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, SessionSearchBuild.node])))
+const standalone = testEffect(Layer.empty)
 
 const directory = AbsolutePath.make("/project")
 
@@ -156,6 +160,55 @@ describe("SessionSearchBuild", () => {
       yield* build.start
       yield* elapse
       expect(yield* objects(db)).toBe(0)
+    }),
+  )
+
+  standalone.effect("waits out SQLITE_BUSY during ensure and finishes once the lock clears", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const file = path.join(tmp.path, "busy.db")
+      const sqlite = yield* Effect.promise(() => import("bun:sqlite"))
+      const dbLayer = Database.layer({ path: file }).pipe(
+        Layer.provide(Layer.succeed(Global.Service, Global.make({ data: tmp.path }))),
+      )
+      const ctx = yield* Layer.build(Layer.provideMerge(SessionSearchBuild.layer, dbLayer))
+      const db = Context.get(ctx, Database.Service).db
+      const build = Context.get(ctx, SessionSearchBuild.Service)
+      yield* db.run("PRAGMA busy_timeout = 1")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: directory, sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: Session.ID.make("ses_a"),
+          project_id: Project.ID.global,
+          slug: "ses_a",
+          directory,
+          title: "Locked walrus",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const locker = yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const conn = new sqlite.Database(file)
+          conn.run("BEGIN IMMEDIATE")
+          return conn
+        }),
+        (conn) => Effect.sync(() => conn.close()),
+      )
+
+      yield* build.run.pipe(Effect.forkScoped)
+      yield* build.start
+      // bun:sqlite runs BEGIN IMMEDIATE synchronously, so a brief pause hits SQLITE_BUSY and parks on TestClock.
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 10)))
+      locker.run("ROLLBACK")
+      yield* settled(db, "done")
+      expect(yield* titles(db, "walrus")).toEqual(["ses_a"])
     }),
   )
 })

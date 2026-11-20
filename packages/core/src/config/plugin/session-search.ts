@@ -14,10 +14,8 @@ export const Plugin = define({
     const config = yield* Config.Service
     const build = yield* SessionSearchBuild.Service
     const flags = yield* Flag.Service
-    const apply = Effect.suspend(
-      (): Effect.Effect<void> => (flags.resolve(loaded.entries).sqlite_fts.enabled ? build.start : Effect.void),
-    )
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, apply)
+    const apply = flags.enabled("sqlite_fts").pipe(Effect.flatMap((on) => (on ? build.start : Effect.void)))
+    yield* ConfigEntryObserver.observe(config, ctx.event, apply)
     yield* apply
   }),
 })

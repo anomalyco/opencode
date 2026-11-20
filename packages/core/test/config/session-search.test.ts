@@ -35,8 +35,27 @@ describe("ConfigSessionSearchPlugin.Plugin", () => {
 
       yield* config.setEntries(documents(true))
       yield* bus.publish(Event.Updated, {})
-      for (let attempt = 0; attempt < 200 && starts.count === 0; attempt++) yield* Effect.sleep("10 millis")
+      const deadline = Date.now() + 10_000
+      while (starts.count === 0 && Date.now() < deadline) yield* Effect.sleep("10 millis")
       expect(starts.count).toBeGreaterThan(0)
+    }).pipe(Effect.scoped, Effect.provide(build), Effect.provide(PluginTestLayer))
+  })
+
+  it.live("starts the build immediately when sqlite_fts is already on at load", () => {
+    const starts = { count: 0 }
+    const build = Layer.succeed(
+      SessionSearchBuild.Service,
+      SessionSearchBuild.Service.of({
+        start: Effect.sync(() => starts.count++),
+        run: Effect.void,
+      }),
+    )
+    return Effect.gen(function* () {
+      const config = yield* Config.Test
+      const plugins = yield* Plugin.Service
+      yield* config.setEntries(documents(true))
+      yield* ConfigSessionSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins, "test"))
+      expect(starts.count).toBe(1)
     }).pipe(Effect.scoped, Effect.provide(build), Effect.provide(PluginTestLayer))
   })
 })

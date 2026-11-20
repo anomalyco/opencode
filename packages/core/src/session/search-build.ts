@@ -24,29 +24,43 @@ const BUSY = "1 second"
 /** Rows in a row that fail on their own before the failure is taken to be the database's, not the rows'. */
 const MAX_FAILURES = 3
 
+const whenFree = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  effect.pipe(
+    Effect.catchCause((cause) =>
+      SessionSearchIndex.isBusy(cause)
+        ? Effect.sleep(BUSY).pipe(Effect.andThen(() => whenFree(effect)))
+        : Effect.failCause(cause),
+    ),
+  )
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const started = yield* Latch.make()
+    const chunk = (options?: { readonly limit?: number; readonly skip?: boolean }) =>
+      whenFree(
+        Effect.gen(function* () {
+          const now = yield* Clock.currentTimeMillis
+          const result = yield* SessionSearchIndex.buildChunk(db, options)
+          return { ...result, ms: (yield* Clock.currentTimeMillis) - now }
+        }),
+      )
 
     const build = Effect.gen(function* () {
       const started = yield* Clock.currentTimeMillis
       const stats = { chunks: 0, slowest: 0, single: 0, failures: 0 }
       yield* Effect.logInfo("session search build started")
       while (true) {
-        const now = yield* Clock.currentTimeMillis
         // A row that fails on its own is retried alone, so one bad row only skips itself.
-        const exit = yield* SessionSearchIndex.buildChunk(db, { limit: stats.single > 0 ? 1 : undefined }).pipe(
-          Effect.exit,
-        )
+        const exit = yield* chunk({ limit: stats.single > 0 ? 1 : undefined }).pipe(Effect.exit)
         if (Exit.isSuccess(exit)) {
           stats.chunks++
-          stats.slowest = Math.max(stats.slowest, (yield* Clock.currentTimeMillis) - now)
+          stats.slowest = Math.max(stats.slowest, exit.value.ms)
           stats.single = Math.max(0, stats.single - 1)
           stats.failures = 0
           if (exit.value.done) {
-            const state = yield* SessionSearchIndex.state(db)
+            const state = yield* whenFree(SessionSearchIndex.state(db))
             yield* Effect.logInfo("session search build finished", {
               ms: (yield* Clock.currentTimeMillis) - started,
               chunks: stats.chunks,
@@ -59,34 +73,30 @@ export const layer = Layer.effect(
           continue
         }
         if (Cause.hasInterrupts(exit.cause)) return yield* Effect.failCause(exit.cause)
-        if (SessionSearchIndex.isBusy(exit.cause)) {
-          yield* Effect.sleep(BUSY)
-          continue
-        }
         if (stats.single === 0) {
           stats.single = SessionSearchIndex.ChunkLimit
           continue
         }
         stats.failures++
         if (stats.failures >= MAX_FAILURES) {
-          yield* SessionSearchIndex.fail(db, Cause.pretty(exit.cause))
+          yield* whenFree(SessionSearchIndex.fail(db, Cause.pretty(exit.cause)))
           yield* Effect.logError("session search build failed", { cause: exit.cause })
           return "failed" as const
         }
         yield* Effect.logWarning("session search skipped a row it could not index", { cause: exit.cause })
-        yield* SessionSearchIndex.buildChunk(db, { limit: 1, skip: true })
+        yield* chunk({ limit: 1, skip: true })
       }
     })
 
     const run = Effect.gen(function* () {
       yield* started.await
-      const ensured = yield* SessionSearchIndex.ensure(db)
+      const ensured = yield* whenFree(SessionSearchIndex.ensure(db))
       if (ensured.status === "unsupported") {
         yield* Effect.logWarning("session search is not supported by this SQLite", { reason: ensured.reason })
         return
       }
       if (ensured.status !== "ready" || ensured.state.status === "done") return
-      if (ensured.state.status === "failed") yield* SessionSearchIndex.retry(db)
+      if (ensured.state.status === "failed") yield* whenFree(SessionSearchIndex.retry(db))
       yield* build
     }).pipe(
       Effect.catchCauseIf(

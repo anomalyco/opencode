@@ -3,7 +3,6 @@ import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { DateTime, Effect, Exit, Layer, Schema, SchemaAST } from "effect"
 import { and, eq, sql } from "drizzle-orm"
 import { Agent } from "@opencode/core/agent"
-import { Database } from "@opencode/core/database/database"
 import { DatabaseMigration } from "@opencode/core/database/migration"
 import { migrations } from "@opencode/core/database/migration.gen"
 import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
@@ -217,9 +216,9 @@ describe("SessionSearchIndex", () => {
         compact: yield* hash("compact"),
         text: yield* hash("text"),
       }).toEqual({
-        version: 2,
-        compact: "d305fe820628fd497f46601583077f9b7427ab6b7a1319ca39c7fe2460827547",
-        text: "99c6cdec16d9340ac006abcfe74e3dfcac93b23d7b13c9c7575321cffc7d6b42",
+        version: 3,
+        compact: "b1c48849f77f650749dd222fb340426cc0b9e8849f604f68d9e9afc3509c24bf",
+        text: "4c23344aacfacef37a00d3048607c8a77bb5889aefbd264529bef761e8ff0671",
       })
     }),
   )
@@ -323,7 +322,13 @@ describe("SessionSearchIndex", () => {
           .run()
         expect(yield* find(db, "rewritten editedpart second")).toEqual([id("a1")])
 
+        // Deleting a session skips per-part reindexing and only queues the session and its messages once.
+        yield* addMessages(db, sessionA, [assistant("a4", [])], 2)
+        yield* addParts(db, id("a4"), [text("cascade1"), text("cascade2"), text("cascade3")])
+        yield* db.run("CREATE TABLE _queued (n INTEGER)")
+        yield* db.run("CREATE TRIGGER _count_queue BEFORE INSERT ON session_search_queue BEGIN INSERT INTO _queued VALUES (1); END")
         yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionA)).run()
+        expect((yield* db.all(sql`SELECT * FROM _queued`)).length).toBe(3)
         expect(yield* documents(db)).toEqual([id("b1"), sessionB])
 
         // Deleting a project cascades through its sessions and their messages.
@@ -426,7 +431,7 @@ describe("SessionSearchIndex", () => {
     }),
   )
 
-  it.effect("rebuilds an index from an older version and leaves a newer version's alone", () =>
+  it.effect("rebuilds an index from an older version or missing trigger and leaves a newer version's alone", () =>
     Effect.gen(function* () {
       const db = yield* database()
       yield* addSession(db, sessionA, null)
@@ -434,71 +439,32 @@ describe("SessionSearchIndex", () => {
       yield* index(db)
 
       yield* writeState(db, { version: SessionSearchIndex.Version - 1 })
-      expect(yield* SessionSearchIndex.check(db)).toEqual({ status: "absent" })
       expect(yield* SessionSearchIndex.ensure(db)).toMatchObject({ status: "ready", state: { status: "building" } })
       expect(yield* documents(db)).toEqual([])
+      yield* build(db)
+      expect(yield* find(db, "kept")).toEqual([id("1")])
+
+      yield* db.run("DROP TRIGGER session_search_message_insert")
+      expect(yield* SessionSearchIndex.ensure(db)).toMatchObject({ status: "ready", state: { status: "building" } })
       yield* build(db)
       expect(yield* find(db, "kept")).toEqual([id("1")])
 
       yield* writeState(db, { version: SessionSearchIndex.Version + 1 })
       yield* db.run("DROP TRIGGER session_search_message_insert")
       expect(yield* SessionSearchIndex.ensure(db)).toEqual({ status: "newer" })
-      expect(yield* SessionSearchIndex.check(db)).toEqual({ status: "newer" })
       expect(yield* SessionSearchIndex.buildChunk(db)).toEqual({ done: true })
       expect(yield* find(db, "kept")).toEqual([id("1")])
     }),
   )
 
-  it.effect("drops the triggers on an SQLite that can't run them, so writes keep working, and rebuilds later", () =>
-    Effect.gen(function* () {
-      const db = yield* database()
-      yield* addSession(db, sessionA, null)
-      yield* addMessages(db, sessionA, [user("1", "before the move")])
-      yield* index(db)
-      // Stands in for an FTS table this SQLite can't open (no FTS5, or compact on SQLite before 3.43). Legacy renames
-      // leave the triggers pointing at it.
-      yield* db.run("PRAGMA legacy_alter_table = ON")
-      yield* db.run("ALTER TABLE session_search RENAME TO session_search_moved")
-      yield* db.run(`CREATE VIEW session_search AS SELECT json_extract('not json', '$') AS rowid`)
-      expect(Exit.isFailure(yield* addMessages(db, sessionA, [user("2", "fails")], 2).pipe(Effect.exit))).toBe(true)
-
-      // Opening the database runs the registered check after migrations.
-      yield* Database.Service.pipe(Effect.provide(Database.layerFromClient))
-      expect(yield* triggers(db)).toBe(0)
-      yield* addMessages(db, sessionA, [user("2", "written while off")], 2)
-      expect(yield* SessionSearchIndex.check(db)).toMatchObject({ status: "unsupported", dropped: false })
-
-      // Back on a capable SQLite, the missed writes are covered by a rebuild.
-      yield* db.run("DROP VIEW session_search")
-      yield* db.run("ALTER TABLE session_search_moved RENAME TO session_search")
-      yield* db.run("PRAGMA legacy_alter_table = OFF")
-      expect(yield* SessionSearchIndex.check(db)).toMatchObject({ status: "ready", state: { status: "building" } })
-      yield* build(db)
-      expect(yield* find(db, "before written")).toEqual([id("1"), id("2")])
-    }),
-  )
-
-  it.effect("opening the database detaches the index before pending migrations and restores it after", () =>
-    Effect.gen(function* () {
-      const db = yield* database((db) => DatabaseMigration.applyOnly(db, migrations.slice(0, -1)))
-      yield* index(db)
-      expect(yield* SessionSearchIndex.state(db)).toMatchObject({ status: "done" })
-
-      // The Database layer runs the newest migration, with the hooks search-index registers around it.
-      yield* Database.Service.pipe(Effect.provide(Database.layerFromClient))
-      expect(yield* triggers(db)).toBeGreaterThan(0)
-      expect(yield* SessionSearchIndex.state(db)).toMatchObject({ status: "building" })
-    }),
-  )
-
-  it.effect("survives every migration since the index exists, including ones that rebuild a source table", () =>
+  it.effect("keeps the index and triggers live across every migration since session_part", () =>
     Effect.gen(function* () {
       // The index needs session_part, so it can exist from that migration on; every later one runs over it.
+      // A future migration that rebuilds a source table fails here under legacy_alter_table = OFF unless it drops
+      // the search objects and clears kv['session.search'].
       const first = migrations.findIndex((migration) => migration.id.endsWith("_session_part")) + 1
       const db = yield* database((db) => DatabaseMigration.applyOnly(db, migrations.slice(0, first)))
-      // macOS's SQLite turns this on. Elsewhere, renaming a table rechecks every view and trigger.
       yield* db.run("PRAGMA legacy_alter_table = OFF")
-      // Columns as of that migration.
       yield* db.run(sql`
         INSERT INTO session_v2 (id, project_id, slug, directory, title, version, time_created, time_updated)
         VALUES (${sessionA}, ${Project.ID.global}, 's', '/project', 'migrated title', 'test', 1, 1)
@@ -508,47 +474,11 @@ describe("SessionSearchIndex", () => {
         VALUES (${id("1")}, ${sessionA}, 'user', 1, 1, 1, ${JSON.stringify({ text: "migrated prompt", time: { created: 1 } })})
       `)
       yield* index(db)
-      const migrate = (input: DatabaseMigration.Migration[]) =>
-        DatabaseMigration.applyOnly(db, input, { beforePending: SessionSearchIndex.detach(db) })
-      yield* migrate(migrations)
-      expect(yield* SessionSearchIndex.check(db)).toMatchObject({ status: "ready" })
-      yield* build(db)
-      expect(yield* find(db, "migrated")).toEqual([id("1"), sessionA])
-
-      // Rebuilt the way Drizzle does it: copy, drop, rename. The rename fails while the index refers to the table.
-      const rebuild: DatabaseMigration.Migration = {
-        id: "29990101000000_rebuild_session_message",
-        foreignKeys: false,
-        up: (tx) =>
-          Effect.gen(function* () {
-            const table = yield* tx.get<{ sql: string }>(
-              "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'session_message'",
-            )
-            yield* tx.run((table?.sql ?? "").replace(/"?session_message"?/, "__new_session_message"))
-            yield* tx.run("INSERT INTO __new_session_message SELECT * FROM session_message")
-            yield* tx.run("DROP TABLE session_message")
-            yield* tx.run("ALTER TABLE __new_session_message RENAME TO session_message")
-          }),
-      }
-      expect(Exit.isFailure(yield* Effect.exit(DatabaseMigration.applyOnly(db, [rebuild])))).toBe(true)
-      yield* migrate([rebuild])
-      // Before the check: no triggers, so nothing queues this.
-      yield* addMessages(db, sessionA, [user("2", "unqueued prompt")], 2)
-      expect(yield* SessionSearchIndex.check(db)).toMatchObject({ status: "ready", state: { status: "building" } })
-      // The entries are kept while the build walks every source again.
-      expect(yield* find(db, "migrated")).toEqual([id("1"), sessionA])
-      yield* build(db)
-      yield* addMessages(db, sessionA, [user("3", "queued prompt")], 3)
-      expect(yield* find(db, "migrated unqueued queued")).toEqual([id("1"), id("2"), id("3"), sessionA])
-
-      // Any migration walks the sources again: a data-only one changes rows without the triggers seeing it.
-      yield* migrate([
-        { id: "29990102000000_unrelated", up: (tx) => tx.run("CREATE TABLE unrelated (id TEXT)").pipe(Effect.asVoid) },
-      ])
-      expect(yield* SessionSearchIndex.check(db)).toMatchObject({ status: "ready", state: { status: "building" } })
-      yield* build(db)
-      yield* addMessages(db, sessionA, [user("4", "restored prompt")], 4)
-      expect(yield* find(db, "restored")).toEqual([id("4")])
+      yield* DatabaseMigration.applyOnly(db, migrations)
+      expect(yield* triggers(db)).toBeGreaterThan(0)
+      expect(yield* SessionSearchIndex.state(db)).toMatchObject({ status: "done" })
+      yield* addMessages(db, sessionA, [user("2", "live prompt")], 2)
+      expect(yield* find(db, "migrated live")).toEqual([id("1"), id("2"), sessionA])
     }),
   )
 
