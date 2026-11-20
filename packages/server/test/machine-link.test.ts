@@ -11,8 +11,10 @@ import { MACHINE_LINK_PATH } from "@opencode/protocol/groups/machine"
 import { Global } from "@opencode/util/global"
 import {
   Cause,
+  Clock,
   Context,
   Deferred,
+  Duration,
   Effect,
   Exit,
   Fiber,
@@ -42,8 +44,16 @@ import { createEmbeddedRoutes, createRoutes } from "../src/routes"
 
 // The endpoint a machine's link lands on, over real sockets: the fake worker from core's tests dials it with
 // `Link.connect` over a WebSocket, and the home is the server's own routes with the real Machines, Identity and
-// database layers. The server runs on the test clock, so the link's deadline, its pings and every other wait of the
-// endpoint pass when a test says so.
+// database layers.
+//
+// A test that moves time (`it.effect`) runs the server on the test clock, where a wait of the endpoint ends only when
+// the test moves the clock past it. A wait begins some turns after what set it off, and one the clock was moved before
+// would be left behind, never to end. So a test moves the clock only once it has what the home sent or did on its way
+// into the wait, in the same run of the same fiber: the ping before each interval, the close before the time to answer
+// it. Where the home does nothing a test can see, `waits` counts the wait itself. Every other wait a test can reach is
+// a limit on something real that the test waits for instead, and never has to end.
+//
+// A test that moves no time runs on the real clock (`it.live`).
 
 const authorization = `Basic ${btoa("opencode:secret")}`
 /** The close every connection the home ends carries. */
@@ -53,6 +63,8 @@ const TOO_BIG = { code: 1009, reason: "" }
 const MAX_HANDSHAKES = 32
 /** A path no route has, next to the link's. */
 const OTHER = "/api/experimental/machine/other"
+/** A path that is another route's, though a URL parser reads it as the link's: that route's to guard. */
+const BORROWED = `/api/fs/read/../..${MACHINE_LINK_PATH.slice("/api".length)}`
 
 const options = (directory: string, machines: boolean) => ({
   password: "secret",
@@ -66,8 +78,12 @@ const options = (directory: string, machines: boolean) => ({
 /**
  * The server's routes on a port of their own, with the home's key and everything else it writes in a fresh directory.
  * As in ServerProcess, the routes are built once the server is serving, so they stop before it does. `sockets` is the
- * endpoint's own `ws` server once it has made one, whose clients are the connections it holds. Without `password` the routes are the ones
- * an embedding host serves, which ask for none, and without `upgrades` the server hands every request over as HTTP.
+ * endpoint's own `ws` server once it has made one, whose clients are the connections it holds. Without `password` the
+ * routes are the ones an embedding host serves, which ask for none, and without `upgrades` the server hands every
+ * request over as HTTP.
+ *
+ * The routes run on the test's clock, through one that also counts the waits begun on it: `waits` is how many of a
+ * length have begun in a span of a name, which is how a wait of the link is told from the server's own.
  */
 const home = Effect.fnUntraced(function* (
   input: { readonly machines?: boolean; readonly password?: boolean; readonly upgrades?: boolean } = {},
@@ -96,6 +112,15 @@ const home = Effect.fnUntraced(function* (
       }),
     ),
   ]
+  const begun: Array<{ readonly span: string | undefined; readonly millis: number }> = []
+  const real = yield* Clock.Clock
+  const clock: Clock.Clock = Object.assign(Object.create(real), {
+    sleep: (duration: Duration.Duration) =>
+      Effect.flatMap(Effect.option(Effect.currentSpan), (span) => {
+        begun.push({ span: Option.getOrUndefined(span)?.name, millis: Duration.toMillis(duration) })
+        return real.sleep(duration)
+      }),
+  })
   const watched: Array<NodeWS.WebSocketServer> = []
   const most = { sockets: 0 }
   const context = yield* Layer.build(
@@ -104,6 +129,7 @@ const home = Effect.fnUntraced(function* (
       : createRoutes(options(directory, input.machines ?? true), () => [], overrides)
     ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
   ).pipe(
+    Effect.provideService(Clock.Clock, clock),
     Effect.provideService(Watch, (sockets) => {
       watched.push(sockets)
       sockets.on("headers", () => {
@@ -124,6 +150,9 @@ const home = Effect.fnUntraced(function* (
     },
     /** The most sockets the endpoint has held, counted each time one is about to be added. */
     most: () => most.sockets,
+    waits: (span: string, length: Duration.Input) =>
+      begun.filter((wait) => wait.span === span && wait.millis === Duration.toMillis(Duration.fromInputUnsafe(length)))
+        .length,
   }
 })
 
@@ -169,9 +198,12 @@ const dial = Effect.fnUntraced(function* (url: URL, open: () => Socket.WebSocket
 /** Lets the sockets move: one turn of the event loop, which no clock counts. */
 const turn = Effect.promise(() => new Promise((resolve) => setImmediate(resolve)))
 
-/** Waits for the home to act on what a socket brought it, since nothing it does then is sent back. */
+/**
+ * Waits for the home to act on what a socket brought it, since nothing it does then is sent back. The bound is only
+ * there to end a loop whose test has already failed, and is far more than a loaded machine needs.
+ */
 const until = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  const deadline = performance.now() + 4_000
+  const deadline = performance.now() + 30_000
   while (!(yield* condition)) {
     if (performance.now() > deadline) return yield* Effect.die(new Error("the home never got there"))
     yield* turn
@@ -231,9 +263,17 @@ const handshakes = Effect.fnUntraced(function* (url: URL) {
   return admitted
 })
 
-/** How many handshakes the home has room for, found by filling it. Each is then refused, which frees its place. */
+/**
+ * How many handshakes the home has room for, found by filling it with peers that only connect. Each is then refused,
+ * which frees its place before the peer can see that it was.
+ */
 const room = Effect.fnUntraced(function* (url: URL) {
-  const admitted = yield* handshakes(url)
+  const admitted: Array<Effect.Success<ReturnType<typeof dial>>> = []
+  while (admitted.length <= MAX_HANDSHAKES) {
+    const peer = yield* dial(url)
+    if (!peer.opened) break
+    admitted.push(peer)
+  }
   yield* Effect.forEach(admitted, (peer) => Effect.andThen(peer.send(randomBytes(100)), peer.closed), {
     concurrency: "unbounded",
   })
@@ -336,7 +376,7 @@ const pair = Effect.fnUntraced(function* () {
   return { client, transport }
 })
 
-it.effect("runs a command and reads a file on a machine that joined over a WebSocket", () =>
+it.live("runs a command and reads a file on a machine that joined over a WebSocket", () =>
   Effect.gen(function* () {
     const server = yield* home()
     const id = yield* server.machines.add("gpu")
@@ -366,7 +406,7 @@ it.effect("runs a command and reads a file on a machine that joined over a WebSo
   }),
 )
 
-it.effect("serves a key that reconnects as the same machine, with no secret", () =>
+it.live("serves a key that reconnects as the same machine, with no secret", () =>
   Effect.gen(function* () {
     const server = yield* home()
     const id = yield* server.machines.add("gpu")
@@ -394,7 +434,7 @@ it.effect("serves a key that reconnects as the same machine, with no secret", ()
   }),
 )
 
-it.effect("closes a stranger's handshake the same way whatever it lacks, and connects no machine", () =>
+it.live("closes a stranger's handshake the same way whatever it lacks, and connects no machine", () =>
   Effect.gen(function* () {
     const server = yield* home()
     const id = yield* server.machines.add("gpu")
@@ -432,7 +472,7 @@ const impostors: ReadonlyArray<{
   { path: (route) => route.replace(/\/([^/]+)$/, "/x/../$1"), headers: websocket },
 ]
 
-it.effect("takes no server password for a GET WebSocket upgrade to exactly its path, and for nothing else", () =>
+it.live("takes no server password for a GET WebSocket upgrade to exactly its path, and for nothing else", () =>
   Effect.gen(function* () {
     const directory = (yield* tmpdirScoped("opencode-machine-link-")).path
     const started = yield* ServerProcess.start<never, never>({
@@ -462,6 +502,7 @@ it.effect("takes no server password for a GET WebSocket upgrade to exactly its p
     expect(yield* status(MACHINE_LINK_PATH, {})).toBe("HTTP/1.1 401 Unauthorized")
     expect(yield* status(`${MACHINE_LINK_PATH}/`, websocket)).toBe("HTTP/1.1 401 Unauthorized")
     expect(yield* status(MACHINE_LINK_PATH, { authorization })).toBe("HTTP/1.1 404 Not Found")
+    expect(yield* status(BORROWED, websocket)).toBe("HTTP/1.1 401 Unauthorized")
     // Turned away where an unknown route is, before the routes see it: the status, the challenge and the body.
     expect(yield* exchange(base, MACHINE_LINK_PATH, {})).toBe(yield* exchange(base, OTHER, {}))
     for (const request of impostors) {
@@ -472,8 +513,12 @@ it.effect("takes no server password for a GET WebSocket upgrade to exactly its p
       ])
       expect(yield* exchange(base, request.path(MACHINE_LINK_PATH), request.headers, request.method)).toBe(unknown)
     }
+  }),
+)
 
-    // The routes alone, as an embedding host serves them, make the same exception and no wider one.
+it.live("makes the same exception, and no wider one, where the routes are served alone", () =>
+  Effect.gen(function* () {
+    // As an embedding host serves them, with the server's password.
     const routes = yield* home()
     const routed = (headers: Record<string, string>) =>
       Effect.map(exchange(routes.base, MACHINE_LINK_PATH, headers), (response) => response.split("\r\n")[0])
@@ -486,11 +531,9 @@ it.effect("takes no server password for a GET WebSocket upgrade to exactly its p
     expect(yield* routed({ authorization })).toBe("HTTP/1.1 404 Not Found")
     // With the password, a request that is not the upgrade finds no route here.
     expect(yield* routed({ Upgrade: "websocket", authorization })).toBe("HTTP/1.1 404 Not Found")
-    // A path that is another route's, though a URL parser reads it as the link's, is that route's to guard.
-    const borrowed = `/api/fs/read/../..${MACHINE_LINK_PATH.slice("/api".length)}`
-    expect(new URL(borrowed, routes.base).pathname).toBe(MACHINE_LINK_PATH)
-    expect((yield* exchange(routes.base, borrowed, websocket)).split("\r\n")[0]).toBe("HTTP/1.1 401 Unauthorized")
-    expect(yield* status(borrowed, websocket)).toBe("HTTP/1.1 401 Unauthorized")
+    expect(new URL(BORROWED, routes.base).pathname).toBe(MACHINE_LINK_PATH)
+    expect((yield* exchange(routes.base, BORROWED, websocket)).split("\r\n")[0]).toBe("HTTP/1.1 401 Unauthorized")
+
     // A server that upgrades nothing hands the upgrade over as any other request, and the endpoint leaves it one.
     const plain = yield* home({ upgrades: false })
     const kept = yield* exchange(plain.base, MACHINE_LINK_PATH, { ...websocket, Connection: "Upgrade, close" })
@@ -509,7 +552,7 @@ it.effect("takes no server password for a GET WebSocket upgrade to exactly its p
   }),
 )
 
-it.effect("logs no response for a request that became a WebSocket, and still logs one it turned away", () =>
+it.live("logs no response for a request that became a WebSocket, and still logs one it turned away", () =>
   Effect.gen(function* () {
     // The status of each line the server's own response log writes for the link's path.
     const logged: Array<unknown> = []
@@ -546,7 +589,7 @@ it.effect("logs no response for a request that became a WebSocket, and still log
   }),
 )
 
-it.effect("makes its WebSocket server for the first link, not with the routes", () =>
+it.live("makes its WebSocket server for the first link, not with the routes", () =>
   Effect.gen(function* () {
     // The routes are also built where there is no Node and no such server to make, and where nothing is a link.
     const server = yield* home()
@@ -559,7 +602,7 @@ it.effect("makes its WebSocket server for the first link, not with the routes", 
   }),
 )
 
-it.effect("answers as an unknown route does while machines are off", () =>
+it.live("answers as an unknown route does while machines are off", () =>
   Effect.gen(function* () {
     const directory = (yield* tmpdirScoped("opencode-machine-link-")).path
     const started = yield* ServerProcess.start<never, never>({
@@ -581,8 +624,12 @@ it.effect("answers as an unknown route does while machines are off", () =>
       )
       expect(yield* exchange(base, MACHINE_LINK_PATH, headers)).toBe(unknown)
     }
+  }),
+)
 
-    // The routes alone, as an embedding host serves them, with a password and without one.
+it.live("answers as an unknown route does while machines are off, where the routes are served alone", () =>
+  Effect.gen(function* () {
+    // As an embedding host serves them, with a password and without one.
     const server = yield* home({ machines: false })
     expect(yield* exchange(server.base, MACHINE_LINK_PATH, { ...websocket, authorization })).toBe(
       yield* exchange(server.base, OTHER, { ...websocket, authorization }),
@@ -593,7 +640,7 @@ it.effect("answers as an unknown route does while machines are off", () =>
   }),
 )
 
-it.effect("closes a peer that sends what no link sends, leaving no handshake behind", () =>
+it.live("closes a peer that sends what no link sends, leaving no handshake behind", () =>
   Effect.gen(function* () {
     const server = yield* home()
     const bad: ReadonlyArray<ReadonlyArray<Uint8Array | string>> = [
@@ -612,7 +659,6 @@ it.effect("closes a peer that sends what no link sends, leaving no handshake beh
       const socket = yield* dial(server.url)
       yield* Effect.forEach(messages, socket.send, { discard: true })
       expect(yield* socket.closed).toEqual(CLOSED)
-      yield* idle(server)
     }
     // One byte more than the WebSocket layer lets in: it closes the socket itself, and the home drops a stranger
     // without waiting for what it was still sending, so the close may not be what the stranger sees last.
@@ -620,6 +666,7 @@ it.effect("closes a peer that sends what no link sends, leaving no handshake beh
     yield* oversized.send(new Uint8Array(65_536))
     const seen = (yield* oversized.closed).code
     expect(seen === TOO_BIG.code || seen === 1006).toBe(true)
+    // A place any of them had kept would be missing here.
     yield* idle(server)
 
     // The same after the handshake: a paired worker whose link carries garbage is cut off and its machine goes offline.
@@ -641,9 +688,10 @@ it.effect("closes a peer that sends what no link sends, leaving no handshake beh
       yield* socket.send(sent.message)
       expect(yield* socket.closed).toEqual(sent.closed)
       yield* until(Effect.map(online(server.machines), (ids) => ids.length === 0))
-      yield* idle(server)
+      yield* until(Effect.sync(() => server.sockets.clients.size === 0))
       yield* gpu.reconnect
     }
+    yield* idle(server, 1)
   }),
 )
 
@@ -652,9 +700,12 @@ it.effect("closes a peer that says nothing ten seconds after it connected", () =
     const server = yield* home()
     const silent = yield* dial(server.url)
     expect(silent.opened).toBe(true)
-    // It holds one of the places, so its deadline is running.
-    expect(yield* room(server.url)).toBe(MAX_HANDSHAKES - 1)
+    // Nothing tells a peer that its ten seconds have begun.
+    yield* until(Effect.sync(() => server.waits("Link.serve", "10 seconds") === 1))
+    const [held] = [...server.sockets.clients]
     yield* TestClock.adjust("9999 millis")
+    // It still holds one of the places.
+    expect(held.readyState).toBe(held.OPEN)
     expect(yield* room(server.url)).toBe(MAX_HANDSHAKES - 1)
     yield* TestClock.adjust("1 millis")
     expect(yield* silent.closed).toEqual(CLOSED)
@@ -676,10 +727,10 @@ it.effect("makes no more strangers WebSockets than it has places for, and answer
     )
     expect(server.sockets.clients.size).toBe(MAX_HANDSHAKES)
 
-    // Places change hands: the ones holding them are refused while four times as many ask for one.
+    // Places change hands: the ones holding them are refused while twice as many ask for one.
     const asking = yield* Effect.forkChild(
       Effect.forEach(
-        Array.from({ length: 4 * MAX_HANDSHAKES }),
+        Array.from({ length: 2 * MAX_HANDSHAKES }),
         () =>
           Effect.scoped(
             Effect.gen(function* () {
@@ -700,10 +751,10 @@ it.effect("makes no more strangers WebSockets than it has places for, and answer
     expect((yield* Fiber.join(asking)).filter((opened) => opened).length).toBeGreaterThan(0)
     // Counted as each was about to be added, when the endpoint's sockets were the most they had been.
     expect(server.most()).toBe(MAX_HANDSHAKES)
-    yield* idle(server)
 
-    // The same for handshakes begun: the one past the last place is turned away with the clock where it was, and the
-    // ones that never finish give their places back when their time is up.
+    // The same for handshakes begun, which find every place free again: the one past the last is turned away with the
+    // clock where it was, and the ones that never finish give their places back when their time is up. Each has the
+    // home's answer to its first message, which the home sends with that time already running.
     const begun = yield* handshakes(server.url)
     expect(begun.length).toBe(MAX_HANDSHAKES)
     yield* TestClock.adjust("10 seconds")
@@ -712,7 +763,7 @@ it.effect("makes no more strangers WebSockets than it has places for, and answer
   }),
 )
 
-it.effect("closes the socket of a machine removed while it is connected", () =>
+it.live("closes the socket of a machine removed while it is connected", () =>
   Effect.gen(function* () {
     const server = yield* home()
     const id = yield* server.machines.add("gpu")
@@ -731,7 +782,7 @@ it.effect("closes the socket of a machine removed while it is connected", () =>
   }),
 )
 
-it.effect("serves a machine's second connection in place of its first", () =>
+it.live("serves a machine's second connection in place of its first", () =>
   Effect.gen(function* () {
     const server = yield* home()
     const id = yield* server.machines.add("gpu")
@@ -768,16 +819,18 @@ it.effect("serves a machine's second connection in place of its first", () =>
   }),
 )
 
-it.effect("leaves no socket and no handshake behind, whichever side ends a connection and when", () =>
+it.live("leaves no socket and no handshake behind, whichever side ends a connection and when", () =>
   Effect.gen(function* () {
     const server = yield* home()
+    const gone = until(Effect.sync(() => server.sockets.clients.size === 0))
     // Before the handshake: a stranger that closes, one that vanishes, and one whose WebSocket handshake is refused.
     yield* Effect.scoped(Effect.asVoid(dial(server.url)))
-    yield* idle(server)
+    yield* gone
     yield* Effect.scoped(Effect.map(mute(server.url), (stranger) => stranger.destroy()))
-    yield* idle(server)
+    yield* gone
     const refused = yield* exchange(server.base, MACHINE_LINK_PATH, { Connection: "Upgrade", Upgrade: "websocket" })
     expect(refused.split("\r\n")[0]).toBe("HTTP/1.1 400 Bad Request")
+    // A place any of the three had kept would be missing here.
     yield* idle(server)
 
     // After it: a machine that closes, and one that vanishes.
@@ -786,10 +839,9 @@ it.effect("leaves no socket and no handshake behind, whichever side ends a conne
     const identity = Identity.fromSeed(randomBytes(32))
     const offline = until(Effect.map(online(server.machines), (ids) => ids.length === 0))
     const closing = yield* worker(server.url, server.machines, { home: printed.home, identity, secret: printed.secret })
-    yield* idle(server, 1)
     yield* closing.fake.cut
     yield* offline
-    yield* idle(server)
+    yield* gone
     const vanishing = new NodeWS.WebSocket(server.url)
     yield* worker(server.url, server.machines, { home: printed.home, identity }, () => vanishing)
     vanishing.terminate()
@@ -802,8 +854,7 @@ it.effect("gives a machine five seconds to answer the close, and a stranger none
   Effect.gen(function* () {
     const server = yield* home()
     const stranger = yield* mute(server.url)
-    // It holds one of the places, so its deadline is running.
-    expect(yield* room(server.url)).toBe(MAX_HANDSHAKES - 1)
+    yield* until(Effect.sync(() => server.waits("Link.serve", "10 seconds") === 1))
     const received: Array<Buffer> = []
     stranger.on("data", (chunk) => received.push(chunk))
     const dropped = once(stranger, "close")
@@ -828,8 +879,8 @@ it.effect("gives a machine five seconds to answer the close, and a stranger none
     const [linked] = [...server.sockets.clients]
     client.pause()
     yield* server.machines.remove(id)
+    // Closing, which the home's socket is from the moment the home sends the close and begins to wait for the answer.
     yield* until(Effect.sync(() => linked.readyState === linked.CLOSING))
-    yield* turn
     yield* TestClock.adjust("4999 millis")
     expect([linked.readyState, server.sockets.clients.size]).toEqual([linked.CLOSING, 1])
     yield* TestClock.adjust("1 millis")
@@ -1013,7 +1064,7 @@ it.effect("on a real socket, returns from a send when the peer has taken it and 
   }),
 )
 
-it.effect("on a real socket, drops a peer on the first frame shorter than a frame can be", () =>
+it.live("on a real socket, drops a peer on the first frame shorter than a frame can be", () =>
   Effect.gen(function* () {
     // What the reader would be handed, heard after the endpoint's own listener as the reader hears it.
     const flooded = yield* pair()
@@ -1083,7 +1134,7 @@ const controlled = Effect.fnUntraced(function* () {
   }
 })
 
-it.effect("hands over binary messages in order and ends on a text message or a flood", () =>
+it.live("hands over binary messages in order and ends on a text message or a flood", () =>
   Effect.gen(function* () {
     const socket = yield* controlled()
     const largest = new Uint8Array(65_535).fill(7)
