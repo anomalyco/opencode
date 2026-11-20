@@ -54,7 +54,10 @@ Each rule requires three string fields:
 | `deny`  | Block the operation                 |
 | `ask`   | Wait for a decision from the client |
 
-If no rule matches, OpenCode uses `ask`.
+Every agent starts with a universal `allow` base rule, so actions without a more
+specific rule are allowed (see [Defaults](#defaults)). Add an explicit `ask` rule
+such as `{ "action": "*", "resource": "*", "effect": "ask" }` when you want
+OpenCode to prompt instead.
 
 ## Matching
 
