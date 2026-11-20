@@ -22,7 +22,7 @@
   {"keys":["down","ctrl+d"]},
   {"checkpoint":"marked","until":"again to confirm","fixture":"E.11b/worktrees/marked"},
   {"keys":["down","ctrl+a"]},
-  {"checkpoint":"name","until":"Name worktree","fixture":"E.11b/worktrees/name"},
+  {"checkpoint":"name","until":"Name worktree","masks":[{"x":16,"y":16,"width":74,"height":1,"reason":"random placeholder example"}],"fixture":"E.11b/worktrees/name"},
   {"type":"My Spike"},
   {"keys":["enter"]},
   {"checkpoint":"staged","until":"(new worktree)","masks":[{"x":16,"y":16,"width":74,"height":1,"reason":"random placeholder example"}],"fixture":"E.11b/worktrees/staged"}
