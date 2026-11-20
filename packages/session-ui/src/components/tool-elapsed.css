@@ -1,0 +1,15 @@
+/* Elapsed time shares the 13px compact row metric so its line box matches
+   titles and subtitles in every host (tool trigger, error card, file
+   actions, loaded rows). Without this the span inherits the surrounding
+   line-height and sits a few pixels off its siblings. Spacing comes from
+   the parent gap; no margin here. */
+[data-slot="tool-elapsed"] {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-family: var(--v2-font-family-sans);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+  font-variant-numeric: tabular-nums;
+}
