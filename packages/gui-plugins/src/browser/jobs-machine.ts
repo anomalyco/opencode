@@ -2,8 +2,19 @@ import type { ImportResult, InstallResult } from "./profile/ipc"
 
 /** One thing a surface asks main to do with the browser profile: the settings page, or the pane's import prompt. */
 export type Job =
-  /** Every cookie of a browser profile, or with `sites` only those of the sites the user chose. */
-  | { readonly type: "import-browser"; readonly source: string; readonly profile: string; readonly sites?: readonly string[] }
+  /**
+   * A browser profile's sign-ins and browsing history, or with `sites` only those of the sites the user chose. Both
+   * come unless the person unticked one in the import dialog: `signins` false leaves the cookies behind, `history`
+   * false the history.
+   */
+  | {
+      readonly type: "import-browser"
+      readonly source: string
+      readonly profile: string
+      readonly sites?: readonly string[]
+      readonly signins?: boolean
+      readonly history?: boolean
+    }
   | { readonly type: "import-file"; readonly path: string }
   | { readonly type: "install-store"; readonly url: string; readonly token?: string }
   | { readonly type: "install-folder"; readonly path: string; readonly token?: string }
@@ -22,7 +33,8 @@ export type Job =
 export type Outcome =
   | { readonly type: "imported"; readonly result: ImportResult }
   | { readonly type: "installed"; readonly result: InstallResult }
-  | { readonly type: "cleared" }
+  /** Signed out everywhere; `history` is whether the browsing history went too. */
+  | { readonly type: "cleared"; readonly history: boolean }
   /** An extension was removed, or turned on or off; the list shows it, so there is nothing to say. */
   | { readonly type: "changed" }
   /** The call rejected or timed out: main is gone, or the job did not answer in time. */

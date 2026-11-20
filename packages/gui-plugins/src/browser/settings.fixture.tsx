@@ -76,8 +76,9 @@ const sampleExtensionEntries: readonly (readonly [string, readonly SampleExtensi
 // Component-test fixture: the real Settings > Browser page with main's browser profile and site decisions faked at
 // their Ipcs, and the stored preferences shown beside the page. `target` is the entry a settings search is revealing,
 // which stays set for the whole visit, as the host leaves it. With `extensions`, Chromium browsers and their extensions
-// are populated so the real Add an extension dialog can be driven end to end.
-export function mountBrowserSettings(input: { ui: Ui; target?: string; extensions?: boolean; installed?: boolean }) {
+// are populated so the real Add an extension dialog can be driven end to end. `historyKept` is a sign-out that left
+// main's history behind: its file could not be removed.
+export function mountBrowserSettings(input: { ui: Ui; target?: string; extensions?: boolean; installed?: boolean; historyKept?: boolean }) {
   const host = document.createElement("main")
   host.dataset.testid = "browser-settings-fixture"
   document.body.appendChild(host)
@@ -94,6 +95,11 @@ export function mountBrowserSettings(input: { ui: Ui; target?: string; extension
   const [preferences, setPreferences] = createStore<{ links: boolean; welcomed: boolean; advanced?: boolean; agentPages?: boolean }>({
     links: true,
     welcomed: true,
+  })
+
+  // The window's list of the last pages, which a sign-out empties.
+  const [history, setHistory] = createStore<{ visits: readonly { url: string; title: string }[] }>({
+    visits: [{ url: "https://alpha.example/", title: "Alpha" }],
   })
 
   const sampleExtensions = new Map(sampleExtensionEntries)
@@ -120,6 +126,7 @@ export function mountBrowserSettings(input: { ui: Ui; target?: string; extension
     on: () => () => undefined,
     sources: async () => (input.extensions ? [...sampleSources] : []),
     summary: async () => ({ cookies: 0, persistent: true }),
+    clear: async () => ({ history: !input.historyKept }),
     browserExtensions: async (request: { source: string; profile: string }) =>
       input.extensions
         ? (sampleExtensions.get(request.source) ?? []).map((item) => ({
@@ -214,6 +221,7 @@ export function mountBrowserSettings(input: { ui: Ui; target?: string; extension
           update: (mutate: (draft: typeof preferences) => void) => setPreferences(produce(mutate)),
           set: (next: typeof preferences) => setPreferences(next),
         },
+        history: { value: history, ready: () => true, set: (next: typeof history) => setHistory(next) },
       },
     }
 
@@ -225,6 +233,7 @@ export function mountBrowserSettings(input: { ui: Ui; target?: string; extension
       <PluginContext.Provider value={plugin}>
         <BrowserSettings target={input.target} />
         <output data-testid="browser-settings-stored">{JSON.stringify(preferences)}</output>
+        <output data-testid="browser-settings-visits">{history.visits.length}</output>
       </PluginContext.Provider>
     )
   }

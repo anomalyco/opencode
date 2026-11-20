@@ -40,6 +40,7 @@ import {
   listSources,
   profileExtensions,
   readSource,
+  readSourceHistory,
   readSourceHosts,
   windowsIcons,
 } from "./sources"
@@ -485,6 +486,19 @@ export async function createBrowserProfile(input: {
       if ("failure" in read) return { type: "failed", reason: read.failure }
 
       return importCookies(read, !!sites)
+    },
+    /**
+     * The pages of a browser profile's history for an import, or with `sites` only the chosen sites'. None when the
+     * history cannot be read, as Safari's without Full Disk Access: the log says why, without any address.
+     */
+    async readHistory(source: string, profile: string, sites?: readonly string[]) {
+      const keep = sites ? (await import("./sites")).siteFilter(sites) : undefined
+      const read = await readSourceHistory(source, profile, scratch, keep)
+
+      if (!("failure" in read)) return read
+      input.log.write("warn", "another browser's history could not be read", { source, reason: read.failure })
+
+      return []
     },
     async importFile(file: string): Promise<ImportResult> {
       // A cookie export is a few megabytes at most; anything far larger is not one.

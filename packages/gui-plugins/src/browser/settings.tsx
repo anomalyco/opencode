@@ -15,10 +15,10 @@ import { showToast } from "@opencode/ui/toast"
 import type { Job } from "./jobs-machine"
 
 /**
- * Settings › Browser: importing sign-ins, the extensions the profile runs and whether links open in the pane; then,
- * under Advanced, sharing with remote servers, the agent's pages, the cookie-file import, site permissions and stored
- * data. Every action goes through the jobs machine, so one runs at a time and each says how it ended beside
- * the control that started it.
+ * Settings › Browser: importing from another browser, the extensions the profile runs and whether links open in the
+ * pane; then, under Advanced, sharing with remote servers, the agent's pages, the cookie-file import, site permissions
+ * and stored data. Every action goes through the jobs machine, so one runs at a time and
+ * each says how it ended beside the control that started it.
  */
 export default function BrowserSettings(props: { target?: string }) {
   const ctx = usePlugin<typeof definition>()
@@ -85,7 +85,7 @@ export default function BrowserSettings(props: { target?: string }) {
   // one closed "Advanced" section.
   return (
     <ui.SettingsLayout title={ctx.t("settings.title")}>
-      <ui.SettingsSection title={ctx.t("settings.import.title")} footer={<Note>{ctx.t("settings.import.note")}</Note>}>
+      <ui.SettingsSection title={ctx.t("settings.import.title")}>
         <Show when={jobs.unsaved()}>
           {(message) => (
             <ui.SettingsRow
