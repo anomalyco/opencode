@@ -1,5 +1,6 @@
 //! Drag handling for pane resize.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
@@ -7,6 +8,10 @@ use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
 use crate::prelude::*;
 
 const DOUBLE_CLICK: Duration = Duration::from_millis(300);
+
+/// Names the commit whose write is outstanding, across panes and TUIs, so an older write's completion clears only
+/// its own.
+static COMMITS: AtomicU64 = AtomicU64::new(0);
 
 type Size = Box<dyn Fn(&Tui) -> u16>;
 type Clamp = Box<dyn Fn(&Tui, i64) -> u16>;
@@ -28,6 +33,9 @@ pub struct PaneResize {
     resizing: Cell<bool>,
     moved: Cell<bool>,
     last_click: Cell<Option<Instant>>,
+    /// The commit whose write is outstanding, and the size it holds: a reload that reads the layout file before
+    /// that write lands must not undo the drag, while one after it takes whatever the file holds.
+    committed: Cell<Option<(u64, u16)>>,
 }
 
 impl PaneResize {
@@ -39,14 +47,35 @@ impl PaneResize {
             resizing: Cell::new(false),
             moved: Cell::new(false),
             last_click: Cell::new(None),
+            committed: Cell::new(None),
         })
     }
 
-    /// The stored size changed; it applies unless a resize is under way.
+    /// The stored size changed; it applies unless a resize is under way. A write from anywhere else can reload the
+    /// layout before this TUI's own write lands, so a reload that does not hold the size being written keeps it.
     pub fn set_value(&self, value: Option<u16>) {
-        if !self.resizing.get() {
-            self.requested.set(value);
-            self.preferred.set(value);
+        if self.resizing.get() {
+            return;
+        }
+        if let Some((_, committed)) = self.committed.get() {
+            if value != Some(committed) {
+                return;
+            }
+            self.committed.set(None);
+        }
+        self.requested.set(value);
+        self.preferred.set(value);
+    }
+
+    /// The commit whose write has not completed, if any.
+    pub fn writing(&self) -> Option<u64> {
+        self.committed.get().map(|(commit, _)| commit)
+    }
+
+    /// The write of `commit` completed: a reload now takes whatever the file holds, including another client's size.
+    pub fn written(&self, commit: u64) {
+        if self.committed.get().is_some_and(|(outstanding, _)| outstanding == commit) {
+            self.committed.set(None);
         }
     }
 
@@ -66,6 +95,7 @@ impl PaneResize {
             return;
         }
         self.requested.set(Some(next));
+        self.committed.set(Some((COMMITS.fetch_add(1, Ordering::Relaxed) + 1, next)));
         (self.rules.commit)(tui, next);
     }
 
