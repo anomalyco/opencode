@@ -214,76 +214,14 @@ it.live("rejects a shell action that changes to a denied external directory", ()
   }),
 )
 
-// Run the scheduled action without waiting for the one-hour interval.
-const tickCode = (id: Automation.ID) =>
-  Effect.gen(function* () {
-    const database = yield* Database.Service
-    yield* database.db
-      .update(AutomationTable)
-      .set({ next_due_at: yield* Clock.currentTimeMillis })
-      .where(eq(AutomationTable.id, id))
-      .run()
-    const automations = yield* Automation.Service
-    yield* automations.tick
-    return yield* automations.get(id)
-  })
-
-const approveCodePermission = (action: string, tools: string[], session: Session.Info) =>
-  Instance.Service.use((instances) =>
-    Effect.gen(function* () {
-      const permission = yield* Permission.Service
-      const asks = yield* permission
-        .forSession(session.id)
-        .pipe(
-          Effect.repeat({ until: (asks) => asks.length > 0, schedule: Schedule.spaced("10 millis") }),
-          Effect.timeout("10 seconds"),
-        )
-      expect(asks).toMatchObject([
-        { action, resources: expect.arrayContaining(["*"]), metadata: { unattended: true, tools } },
-      ])
-      expect(asks[0]?.save).toBeUndefined()
-      for (const ask of asks) yield* permission.reply({ requestID: ask.id, reply: "once" })
-    }).pipe(instances.provide(session)),
-  )
-
-it.live("scheduled code can fetch after webfetch approval with full Code Mode off", () =>
+it.live("scheduled code uses session capabilities after one-time approval", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
       Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("ready") })),
       (server) => Effect.promise(() => server.stop(true)),
     )
-    const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
-    yield* Effect.promise(() =>
-      Bun.write(
-        path.join(directory, "opencode.json"),
-        JSON.stringify({
-          experimental: { automations: true, full_codemode: false },
-          permission: { execute: "allow", webfetch: "ask" },
-        }),
-      ),
-    )
     const sessions = yield* Session.Service
-    const session = yield* sessions.create({ location: { directory } })
     const automations = yield* Automation.Service
-    const creating = yield* automations
-      .create({
-        sessionID: session.id,
-        name: "fetch",
-        trigger,
-        action: {
-          type: "code",
-          code: `const res = await fetch(${JSON.stringify(server.url.href)}); return { state: await res.text(), done: true }`,
-        },
-      })
-      .pipe(Effect.forkChild)
-    yield* approveCodePermission("webfetch", [], session)
-    const created = yield* Fiber.join(creating)
-    expect(yield* tickCode(created.id)).toMatchObject({ status: "done", lastOutcome: "fired", state: "ready" })
-  }),
-)
-
-it.live("scheduled code uses the session files and runs shell after one approval in full Code Mode", () =>
-  Effect.gen(function* () {
     const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
     yield* Effect.promise(() =>
       Bun.write(
@@ -292,97 +230,69 @@ it.live("scheduled code uses the session files and runs shell after one approval
           experimental: { automations: true, full_codemode: true },
           permission: {
             execute: "allow",
+            shell: "ask",
+            webfetch: "ask",
             read: "ask",
             edit: "ask",
-            glob: "ask",
             external_directory: "ask",
-            shell: "ask",
+            glob: "ask",
           },
         }),
       ),
     )
     yield* Effect.promise(() => Bun.write(path.join(directory, "fixture.txt"), "fixture contents"))
-    const sessions = yield* Session.Service
     const session = yield* sessions.create({ location: { directory } })
-    const automations = yield* Automation.Service
     const creating = yield* automations
       .create({
-        name: "code shell",
+        name: "check capabilities",
         sessionID: session.id,
         trigger,
         action: {
           type: "code",
+          args: server.url.href,
           code: `
-          const file = Bun.file(path.resolve("fixture.txt"))
-          const shell = await tools.shell({ command: "echo automation-output", description: "Print a test line" })
-          return { state: { file: await file.text(), output: shell.output.trim(), exitCode: shell.exitCode }, done: true }
-        `,
+              const file = Bun.file(path.resolve("fixture.txt"))
+              const files = await new Bun.Glob("*.txt").scan()
+              await Bun.write("result.txt", await file.text())
+              const shell = await tools.shell({ command: "echo automation-output", description: "Print a test line" })
+              const text = await (await fetch(args)).text()
+              return { state: { files, output: shell.output.trim(), exitCode: shell.exitCode, text }, done: true }
+            `,
         },
       })
       .pipe(Effect.forkChild)
-
-    yield* approveCodePermission("shell", ["shell"], session)
-    yield* approveCodePermission("read", ["shell"], session)
-    yield* approveCodePermission("external_directory", ["shell"], session)
-
+    const instances = yield* Instance.Service
+    yield* Effect.gen(function* () {
+      const permission = yield* Permission.Service
+      for (const action of ["shell", "webfetch", "read", "external_directory", "edit"]) {
+        const asks = yield* permission
+          .forSession(session.id)
+          .pipe(
+            Effect.repeat({ until: (asks) => asks.length > 0, schedule: Schedule.spaced("10 millis") }),
+            Effect.timeout("10 seconds"),
+          )
+        expect(asks).toMatchObject([
+          { action, resources: expect.arrayContaining(["*"]), metadata: { unattended: true, tools: ["shell"] } },
+        ])
+        expect(asks[0]?.save).toBeUndefined()
+        for (const ask of asks) yield* permission.reply({ requestID: ask.id, reply: "once" })
+      }
+    }).pipe(instances.provide(session))
+    // An unexpected extra request would keep creation waiting for approval.
     const created = yield* Fiber.join(creating).pipe(Effect.timeout("10 seconds"))
-    expect(yield* tickCode(created.id)).toMatchObject({
+    // Run now instead of waiting for the one-hour interval.
+    const database = yield* Database.Service
+    yield* database.db
+      .update(AutomationTable)
+      .set({ next_due_at: yield* Clock.currentTimeMillis })
+      .where(eq(AutomationTable.id, created.id))
+      .run()
+    yield* automations.tick
+    expect(yield* automations.get(created.id)).toMatchObject({
       status: "done",
       lastOutcome: "fired",
-      state: { file: "fixture contents", output: "automation-output", exitCode: 0 },
+      state: { files: ["fixture.txt"], output: "automation-output", exitCode: 0, text: "ready" },
     })
-
-    const creatingGlob = yield* automations
-      .create({
-        name: "scan for fixtures",
-        sessionID: session.id,
-        trigger,
-        action: {
-          type: "code",
-          code: 'return { state: await new Bun.Glob("*.txt").scan(), done: true }',
-        },
-      })
-      .pipe(Effect.forkChild)
-    yield* approveCodePermission("read", [], session)
-    yield* approveCodePermission("external_directory", [], session)
-
-    const glob = yield* Fiber.join(creatingGlob).pipe(Effect.timeout("10 seconds"))
-    expect(yield* tickCode(glob.id)).toMatchObject({
-      status: "done",
-      lastOutcome: "fired",
-      state: ["fixture.txt"],
-    })
-  }),
-)
-
-it.live("scheduled Bun.write asks for edit and external directory, not read or glob", () =>
-  Effect.gen(function* () {
-    const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
-    yield* Effect.promise(() =>
-      Bun.write(
-        path.join(directory, "opencode.json"),
-        JSON.stringify({
-          experimental: { automations: true, full_codemode: true },
-          permission: { execute: "allow", edit: "ask", read: "ask", glob: "ask", external_directory: "ask" },
-        }),
-      ),
-    )
-    const sessions = yield* Session.Service
-    const session = yield* sessions.create({ location: { directory } })
-    const automations = yield* Automation.Service
-    const creating = yield* automations
-      .create({
-        name: "write a fixture",
-        sessionID: session.id,
-        trigger,
-        action: { type: "code", code: 'await Bun.write("fixture.txt", "written"); return { done: true }' },
-      })
-      .pipe(Effect.forkChild)
-    yield* approveCodePermission("edit", [], session)
-    yield* approveCodePermission("external_directory", [], session)
-
-    const created = yield* Fiber.join(creating).pipe(Effect.timeout("10 seconds"))
-    expect(yield* tickCode(created.id)).toMatchObject({ status: "done", lastOutcome: "fired" })
-    expect(yield* Effect.promise(() => Bun.file(path.join(directory, "fixture.txt")).text())).toBe("written")
+    expect(yield* Effect.promise(() => Bun.file(path.join(directory, "result.txt")).text())).toBe("fixture contents")
   }),
 )

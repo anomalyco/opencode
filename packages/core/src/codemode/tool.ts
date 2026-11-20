@@ -90,7 +90,20 @@ export type Inventory = {
 }
 
 const extensions = [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension] as const
-const runExtensions = (full: boolean) => (full ? extensions : [CodeModeFetch.extension])
+const fetchOnly = [CodeModeFetch.extension] as const
+const runExtensions = (full: boolean) => (full ? extensions : fetchOnly)
+
+const executionServices = (
+  context: ToolContext,
+  permission: Permission.Interface,
+  services?: Context.Context<Services>,
+) =>
+  Effect.map(Effect.abortSignal, (signal) =>
+    (services ?? Context.empty()).pipe(
+      Context.add(CodeModeExecution.Service, { ...context, signal }),
+      Context.add(Permission.Service, permission),
+    ),
+  )
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions. With `full_codemode`,
 // the runtime also has Bun's file APIs.
@@ -189,10 +202,8 @@ export const create = (
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
-            Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
-            Effect.provideService(Permission.Service, permission),
+            Effect.provide(yield* executionServices(context, permission, services)),
             Effect.provideService(CodeModeDiffs.Service, diffs),
-            (program) => (services ? Effect.provideContext(program, services) : program),
           )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -322,9 +333,7 @@ const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution
 function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
   if (cached) return cached
-  const tools = inventoryTools(inventory)
-  // Every extension a run may get; `create` picks each run's.
-  const created = CodeMode.make({ tools, extensions, hooks: runHooks })
+  const created = CodeMode.make({ tools: inventoryTools(inventory), extensions, hooks: runHooks })
   runtimes.set(inventory, created)
   return created
 }
@@ -356,12 +365,10 @@ export const check = (
         executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
         hooks: {},
       }),
-      Effect.provideServiceEffect(
-        CodeModeExecution.Service,
-        Effect.map(Effect.abortSignal, (signal) => ({ ...input.context, signal })),
-      ),
-      Effect.provideService(Permission.Service, input.permission),
-      (program) => (input.services ? Effect.provideContext(program, input.services) : program),
+      (program) =>
+        Effect.flatMap(executionServices(input.context, input.permission, input.services), (services) =>
+          Effect.provide(program, services),
+        ),
       Effect.scoped,
     )
 

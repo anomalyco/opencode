@@ -14,17 +14,21 @@ export function scanTools(code: string): Result.Result<ReadonlyArray<string>, Di
 interface ProgramScan {
   readonly tools: ReadonlyArray<string>
   readonly globals: ReadonlyMap<string, ReadonlyArray<GlobalUse>>
-  readonly modules: ReadonlyArray<string>
+  readonly modules: ReadonlySet<string>
 }
 
 interface GlobalUse {
   readonly member?: string
-  // Property chains used on the result of an immediate member call. An empty chain is an unresolved use.
-  readonly resultMembers: ReadonlyArray<ReadonlyArray<string>>
+  // First non-forwarding member used on a call's result. Undefined means the value escaped or was used dynamically.
+  readonly resultMembers: Iterable<string | undefined>
 }
 
 /** Scans static tool calls, references to the given globals, and literal module loads. */
-export function scanProgram(code: string, globals: ReadonlyArray<string>): Result.Result<ProgramScan, Diagnostic> {
+export function scanProgram(
+  code: string,
+  globals: ReadonlyArray<string>,
+  forwardingMembers: ReadonlyArray<string> = [],
+): Result.Result<ProgramScan, Diagnostic> {
   if (code.trim().length === 0) {
     return Result.fail({ kind: "ParseError", message: "Code cannot be empty." })
   }
@@ -33,13 +37,20 @@ export function scanProgram(code: string, globals: ReadonlyArray<string>): Resul
   if (!parsed.ok) return Result.fail(parsed.error as Diagnostic)
 
   const tools = new Set<string>()
-  const referenced = new Map<string, Array<() => GlobalUse>>()
-  const localUses = new Map<Set<string>, Map<string, Array<ReadonlyArray<string>>>>()
+  const referenced = new Map<string, GlobalUse[]>()
+  const localUses = new Map<Set<string>, Map<string, Set<string | undefined>>>()
   const modules = new Set<string>()
   const scopes: Array<Set<string>> = [collectScope(parsed.program, true)]
   const ancestors: Array<AnyNode> = []
 
-  const isShadowed = (name: string) => scopes.some((scope) => scope.has(name))
+  // A binding may be referenced in a closure before its initializer appears in the walk.
+  const bindingUses = (scope: Set<string>, name: string) => {
+    const locals = localUses.get(scope) ?? new Map<string, Set<string | undefined>>()
+    localUses.set(scope, locals)
+    const uses = locals.get(name) ?? new Set<string | undefined>()
+    locals.set(name, uses)
+    return uses
+  }
 
   const fail = (node: AnyNode, message: string): Diagnostic => {
     const loc = node.loc?.start ? { line: node.loc.start.line, column: node.loc.start.column + 1 } : undefined
@@ -55,57 +66,49 @@ export function scanProgram(code: string, globals: ReadonlyArray<string>): Resul
 
     if (
       node.type === "Identifier" &&
-      (node.name === "tools" || globals.includes(node.name)) &&
-      !isShadowed(node.name) &&
+      (globals.length > 0 || node.name === "tools") &&
       isReferencePosition(node, ancestors.at(-1))
     ) {
-      if (node.name !== "tools") {
-        const uses = referenced.get(node.name) ?? []
-        referenced.set(node.name, uses)
-        const member = ancestors.at(-1)
-        if (member?.type !== "MemberExpression" || member.object !== node) {
-          uses.push(() => ({ resultMembers: [] }))
-          return undefined
-        }
-        const name = memberName(member)
-        const result = ancestors.at(-2)
-        if (result?.type !== "CallExpression" || result.callee !== member) {
-          uses.push(() => ({ member: name, resultMembers: [[]] }))
-          return undefined
-        }
-        const parents = ancestors.slice(0, -2)
-        const consumed = valueUse(result, parents)
-        const binding = consumed.parent
-        if (
-          binding?.type === "VariableDeclarator" &&
-          binding.init === consumed.value &&
-          binding.id.type === "Identifier"
-        ) {
-          const key = binding.id.name
-          const scope = scopes.findLast((scope) => scope.has(key))
-          uses.push(() => ({ member: name, resultMembers: scope ? (localUses.get(scope)?.get(key) ?? []) : [[]] }))
-          return undefined
-        }
-        uses.push(() => ({
-          member: name,
-          resultMembers: consumed.parent?.type === "ExpressionStatement" ? [] : [memberChain(result, parents)],
-        }))
+      const scope = scopes.findLast((scope) => scope.has(node.name))
+      if (scope && globals.length > 0)
+        bindingUses(scope, node.name).add(resultMember(node, ancestors, ancestors.length - 1, forwardingMembers))
+
+      if (!scope && node.name === "tools") {
+        const chain = readStaticToolCall(node, ancestors)
+        if (!chain.ok) return fail(chain.node, chain.reason)
+        tools.add(chain.path)
         return undefined
       }
-      const chain = readStaticToolCall(node, ancestors)
-      if (!chain.ok) return fail(chain.node, chain.reason)
-      tools.add(chain.path)
-      return undefined
-    }
 
-    if (globals.length > 0 && node.type === "Identifier" && isReferencePosition(node, ancestors.at(-1))) {
-      const scope = scopes.findLast((scope) => scope.has(node.name))
-      if (scope) {
-        const locals = localUses.get(scope) ?? new Map<string, Array<ReadonlyArray<string>>>()
-        localUses.set(scope, locals)
-        const uses = locals.get(node.name) ?? []
-        locals.set(node.name, uses)
-        uses.push(memberChain(node, ancestors))
+      if (!scope && globals.includes(node.name)) {
+        const uses = referenced.get(node.name) ?? []
+        referenced.set(node.name, uses)
+        const property = ancestors.at(-1)
+        const member =
+          property?.type === "MemberExpression" && property.object === node ? memberName(property) : undefined
+        const call = ancestors.at(-2)
+        if (member === undefined || call?.type !== "CallExpression" || call.callee !== property) {
+          uses.push({ member, resultMembers: [undefined] })
+          return undefined
+        }
+        const result = valueUse(call, ancestors, ancestors.length - 3)
+        if (result.parent?.type === "ExpressionStatement") {
+          uses.push({ member, resultMembers: [] })
+          return undefined
+        }
+        if (
+          result.parent?.type === "VariableDeclarator" &&
+          result.parent.init === result.value &&
+          result.parent.id.type === "Identifier"
+        ) {
+          const name = result.parent.id.name
+          const binding = scopes.findLast((scope) => scope.has(name))
+          if (binding) {
+            uses.push({ member, resultMembers: bindingUses(binding, name) })
+            return undefined
+          }
+        }
+        uses.push({ member, resultMembers: [resultMember(result.value, ancestors, result.index, forwardingMembers)] })
       }
     }
 
@@ -131,11 +134,7 @@ export function scanProgram(code: string, globals: ReadonlyArray<string>): Resul
 
   const diagnostic = visit(parsed.program)
   if (diagnostic) return Result.fail(diagnostic)
-  return Result.succeed({
-    tools: [...tools],
-    globals: new Map([...referenced].map(([name, uses]) => [name, uses.map((use) => use())])),
-    modules: [...modules],
-  })
+  return Result.succeed({ tools: [...tools], globals: referenced, modules })
 }
 
 function memberName(node: Extract<AnyNode, { type: "MemberExpression" }>) {
@@ -145,8 +144,7 @@ function memberName(node: Extract<AnyNode, { type: "MemberExpression" }>) {
 }
 
 /** Skip wrappers that leave the wrapped value available for another access. */
-function valueUse(value: AnyNode, ancestors: ReadonlyArray<AnyNode>) {
-  let index = ancestors.length - 1
+function valueUse(value: AnyNode, ancestors: ReadonlyArray<AnyNode>, index: number) {
   for (; index >= 0; index--) {
     const parent = ancestors[index]
     if (
@@ -161,18 +159,19 @@ function valueUse(value: AnyNode, ancestors: ReadonlyArray<AnyNode>) {
   return { value, parent: undefined, index }
 }
 
-function memberChain(value: AnyNode, ancestors: ReadonlyArray<AnyNode>): ReadonlyArray<string> {
-  const use = valueUse(value, ancestors)
-  if (use.parent?.type !== "MemberExpression" || use.parent.object !== use.value) return []
+function resultMember(
+  value: AnyNode,
+  ancestors: ReadonlyArray<AnyNode>,
+  index: number,
+  forwardingMembers: ReadonlyArray<string>,
+): string | undefined {
+  const use = valueUse(value, ancestors, index)
+  if (use.parent?.type !== "MemberExpression" || use.parent.object !== use.value) return
   const name = memberName(use.parent)
-  if (name === undefined) return []
+  if (name === undefined || !forwardingMembers.includes(name)) return name
   const call = ancestors[use.index - 1]
-  return [
-    name,
-    ...(call?.type === "CallExpression" && call.callee === use.parent
-      ? memberChain(call, ancestors.slice(0, use.index - 1))
-      : []),
-  ]
+  if (call?.type === "CallExpression" && call.callee === use.parent)
+    return resultMember(call, ancestors, use.index - 2, forwardingMembers)
 }
 
 /** The module an `import` or `require(...)` loads, `null` when it is computed, or `undefined` for other nodes. */
@@ -217,7 +216,9 @@ function isReferencePosition(node: AnyNode, parent: AnyNode | undefined): boolea
 function readStaticToolCall(
   root: AnyNode,
   ancestors: ReadonlyArray<AnyNode>,
-): { readonly ok: true; readonly path: string } | { readonly ok: false; readonly node: AnyNode; readonly reason: string } {
+):
+  | { readonly ok: true; readonly path: string }
+  | { readonly ok: false; readonly node: AnyNode; readonly reason: string } {
   const segments: Array<string> = []
   let current = root
   let index = ancestors.length - 1
@@ -230,23 +231,18 @@ function readStaticToolCall(
       continue
     }
     if (parent.type !== "MemberExpression" || parent.object !== current) break
-    if (!parent.computed && parent.property.type === "Identifier") {
-      segments.push(parent.property.name)
-      current = parent
-      index -= 1
-      continue
+    const member = memberName(parent)
+    if (member === undefined) {
+      return {
+        ok: false,
+        node: parent.property,
+        reason:
+          "Automation code must reference tools statically (e.g. tools.slack.read_thread), not with dynamic bracket expressions.",
+      }
     }
-    if (parent.computed && parent.property.type === "Literal" && typeof parent.property.value === "string") {
-      segments.push(parent.property.value)
-      current = parent
-      index -= 1
-      continue
-    }
-    return {
-      ok: false,
-      node: parent.property,
-      reason: "Automation code must reference tools statically (e.g. tools.slack.read_thread), not with dynamic bracket expressions.",
-    }
+    segments.push(member)
+    current = parent
+    index -= 1
   }
 
   const callParent = index >= 0 ? ancestors[index] : undefined

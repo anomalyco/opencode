@@ -11,7 +11,6 @@ import type { SessionMessage } from "../session/message.js"
 import type { SessionSchema } from "../session/schema.js"
 import { Tool } from "../tool.js"
 import { McpTool } from "../tool/mcp.js"
-import { defaultCodeMode } from "../tool/runtime.js"
 import { Wildcard } from "../util/wildcard.js"
 import { type Invocation, matchesAuthor } from "./author.js"
 import type { AutomationEvent } from "./event.js"
@@ -61,15 +60,26 @@ export type Outcome =
       readonly invalid?: boolean
     }
 
-type ProgramScan = Result.Result.Success<ReturnType<typeof CodeMode.scanProgram>>
+type ProgramScan = { readonly tools: ReadonlyArray<string>; readonly actions: ReadonlySet<string> }
 
-/** The tools and extension references in the program. */
-function scan(code: string): Result.Result<ProgramScan, string> {
-  const scanned = CodeMode.scanProgram(code, ["fetch", "Bun"])
+// Script text is immutable. Only cache the static scan, never tool registrations or permission decisions.
+const scans = new Map<string, Result.Result<ProgramScan, string>>()
+
+function scan(code: string) {
+  const cached = scans.get(code)
+  if (cached) return cached
+  const scanned = scanProgram(code)
+  if (scans.size === 16) for (const oldest of scans.keys().take(1)) scans.delete(oldest)
+  scans.set(code, scanned)
+  return scanned
+}
+
+function scanProgram(code: string): Result.Result<ProgramScan, string> {
+  const scanned = CodeMode.scanProgram(code, ["fetch", "Bun"], ["slice"])
   if (Result.isFailure(scanned)) return Result.fail(scanned.failure.message)
   const forbidden = scanned.success.tools.find((path) => FORBIDDEN_TOOLS.has(path))
   if (forbidden !== undefined) return Result.fail(`Tool ${forbidden} cannot be used inside an automation`)
-  return Result.succeed(scanned.success)
+  return Result.succeed({ tools: scanned.success.tools, actions: extensionActions(scanned.success) })
 }
 
 /**
@@ -142,39 +152,39 @@ const resolveCapabilities = Effect.fnUntraced(function* (scanned: ProgramScan) {
   if (scanned.tools.length > 0) {
     const mcp = yield* McpTool.Service
     yield* mcp.flush
-    const registered = yield* tools.list()
+    const selected = yield* tools.codeModeTools(scanned.tools)
     for (const path of scanned.tools) {
-      const found = registered.find((item) => defaultCodeMode(item) && CodeModeTool.qualifiedName(item) === path)
-      if (!found) return yield* Effect.fail(`Unknown Code Mode tool: ${path}`)
-      actions.add(found.options?.permission ?? found.id)
+      const tool = selected.get(path)
+      if (!tool) return yield* Effect.fail(`Unknown Code Mode tool: ${path}`)
+      actions.add(tool.options?.permission ?? tool.id)
     }
   }
+  for (const action of scanned.actions) actions.add(action)
+  return { tools, actions: [...actions] }
+})
+
+function extensionActions(scanned: Result.Result.Success<ReturnType<typeof CodeMode.scanProgram>>) {
+  const actions = new Set<string>()
   if (scanned.globals.has("fetch")) actions.add("webfetch")
   // Approve referenced file access even if the flag is off, so enabling it later doesn't grant it unattended.
   const bun = scanned.globals.get("Bun") ?? []
-  if (scanned.modules.includes("bun") || bun.some((use) => use.member === undefined)) {
+  if (scanned.modules.has("bun") || bun.some((use) => use.member === undefined)) {
     actions.add("read")
     actions.add("edit")
     actions.add("external_directory")
   }
   for (const use of bun) {
-    if (use.member === "file") {
-      actions.add("read")
-      if (use.resultMembers.some((chain) => !bunFileReadMembers.has(chain.find((name) => name !== "slice") ?? "")))
-        actions.add("edit")
-      actions.add("external_directory")
-    }
-    if (use.member === "Glob") {
-      actions.add("read")
-      actions.add("external_directory")
-    }
-    if (use.member === "write") {
+    if (use.member === "file" || use.member === "Glob") actions.add("read")
+    if (
+      use.member === "write" ||
+      (use.member === "file" &&
+        Iterator.from(use.resultMembers).some((member) => !bunFileReadMembers.has(member ?? "")))
+    )
       actions.add("edit")
-      actions.add("external_directory")
-    }
+    if (use.member === "file" || use.member === "Glob" || use.member === "write") actions.add("external_directory")
   }
-  return { tools, actions: [...actions] }
-})
+  return actions
+}
 
 /** Runs the program once under the permissions authorized at creation. Plugin activation counts toward the time cap. */
 export const run = Effect.fnUntraced(
