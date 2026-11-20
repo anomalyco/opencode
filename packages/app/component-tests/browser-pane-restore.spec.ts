@@ -908,6 +908,25 @@ story("an agent show request opens the closed pane and leaves the keyboard in th
   await expect(composer).toBeFocused()
 })
 
+story("a link opened with the middle button joins the strip behind the selected tab, and with Shift as well in front", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const tabs = root.getByRole("tab")
+  const link = page.frameLocator('iframe[title="Browser page"]').getByRole("link", { name: "Docs", exact: true })
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(tabs).toHaveText(["beta.ts", "Preview"])
+  await link.click({ button: "middle" })
+  // The strip gains the tab, the selection stays, and no notice says a pop-up was blocked.
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs"])
+  await expect(root.getByRole("tab", { selected: true })).toHaveText("Preview")
+  await expect(root.getByTestId("selected")).toHaveText("browser:tab_33333333-3333-3333-3333-333333333333")
+  await expect(root.getByText("Pop-up blocked")).toHaveCount(0)
+  await link.click({ modifiers: ["ControlOrMeta", "Shift"] })
+  await expect(tabs).toHaveText(["beta.ts", "Preview", "Docs", "Docs"])
+  await expect(root.getByTestId("selected")).toHaveText("browser:tab_66666666-6666-6666-6666-000000000002")
+  await expect(root.getByText("Pop-up blocked")).toHaveCount(0)
+})
+
 story("?W right after an agent shows another page closes that browser tab, not the session", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   await root.getByRole("button", { name: "Beta", exact: true }).click()

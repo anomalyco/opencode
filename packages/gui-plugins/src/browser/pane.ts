@@ -828,7 +828,7 @@ export function createBrowserPane(input: {
 
           if (current()) await execute(binding, { action, files: [] }, handle.abort.signal, "user")
         },
-        open: async (url) => { if (current()) await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user", "new", childActivity(activity)) },
+        open: async (url, background) => { if (current()) await execute(binding, { action: { type: "tabs.open", url, ...(background && { focus: false }) }, files: [] }, handle.abort.signal, "user", "new", childActivity(activity)) },
         verifier: input.verifier,
       },
       embeds: input.embeds,

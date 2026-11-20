@@ -81,7 +81,7 @@ import {
 import type { PaneElement, PaneEvent, PromptView, RefusalNotice, Viewport } from "./ipc"
 import { createViewportWriter } from "./viewport-native"
 import { createDeviceEmulation } from "./mobile-emulation"
-import { navigationNotice, popupActivated } from "./refusal-notice"
+import { navigationNotice } from "./refusal-notice"
 import { noticeActions } from "./notice-actions"
 import { attachPageMenu, type PageMenuHost } from "./native-page-menu"
 import { reloadAddress } from "./preview"
@@ -89,6 +89,7 @@ import { pageHandoff } from "./address"
 import { defaultBrowser } from "./default-browser"
 import { FileVerificationError } from "./file-verification"
 import type { workspacePages } from "./workspace-pages"
+import { windowOpening } from "./window-open"
 import { artifactLinks } from "./artifact-links"
 import { createPagePrompts, RESTORE_PROMPT, takeDialogs } from "./page-prompts"
 import type { SitePermissions } from "./site-permissions"
@@ -362,6 +363,9 @@ export function createBrowserPage(
   let nativeMenu = true
   // Tab focus and browser chrome commands also reclaim the tab for the person. Neither is input to this document.
   let documentInput = false
+  // When the person last pressed a button or key in this document, until a tab opens for that press. It is the user
+  // gesture of a link Chromium routes to a new tab by its click, which carries no gesture report (window-open.ts).
+  let pressedAt: number | undefined
   // Presses the agent sent through the debugger that the page has not reported yet.
   let agentPresses = 0
   contents.on("before-mouse-event", (_event, mouse) => {
@@ -375,6 +379,7 @@ export function createBrowserPage(
 
     if (activity.agentRuns > 0) return
     documentInput = true
+    pressedAt = performance.now()
     nativeMenu = true
     recordPageInput(activity, "user")
     options.userInput()
@@ -398,6 +403,7 @@ export function createBrowserPage(
     if (!hardware || input.type !== "keyDown") return
 
     documentInput = true
+    pressedAt = performance.now()
     nativeMenu = true
     recordPageInput(activity, "user")
     options.userInput()
@@ -817,6 +823,7 @@ export function createBrowserPage(
     passkeyPage.noticed = false
     passkeyPage.interrupted = false
     popupReport = undefined
+    pressedAt = undefined
 
     rendering.committed()
   })
@@ -886,24 +893,35 @@ export function createBrowserPage(
 
   contents.on("will-frame-navigate", guard)
   contents.on("will-redirect", guard)
-  // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
+  // A middle-click, Ctrl+click (Cmd on macOS) or Shift+click on a link, a `target="_blank"` link and `window.open` all
+  // arrive here. A link opened with Cmd or Ctrl or the middle button stays behind the current tab, as in Chrome.
   contents.setWindowOpenHandler(({ url, disposition, postBody, referrer }) => {
-    const activated = popupActivated(popupReport, url)
+    const opening = windowOpening({
+      artifact: !!artifactHost,
+      openable: url === "about:blank" || !!destinationOrigin(url) || resource(url, referrer.url) || !!preview(url),
+      url,
+      disposition,
+      report: popupReport,
+      owner: activityOwner(activity),
+      pressedAt,
+      at: performance.now(),
+    })
+
     popupReport = undefined
 
-    if (artifactHost) {
+    if (opening.type === "ask") {
       if (!postBody && destinationOrigin(url) && url.length <= 16384) notices.show({reason:"popup",target:url,action:"tab"})
 
       return { action: "deny" }
     }
 
-    if (url !== "about:blank" && !destinationOrigin(url) && !resource(url, referrer.url) && !preview(url)) {
+    if (opening.type === "refuse") {
       refused(url)
 
       return { action: "deny" }
     }
 
-    if (!activated) {
+    if (opening.type === "block") {
       const target = displayURL(url)
       const replay = !postBody && target.length <= 16384 && (!!destinationOrigin(target) || !!preview(url))
       notices.show(replay ? { reason: "popup", target, action: "tab" } : { reason: "popup", target: target.slice(0, 16384) })
@@ -911,10 +929,12 @@ export function createBrowserPage(
       return { action: "deny" }
     }
 
+    // One press opens one tab, as Chromium's activation is used up by the tab it opens.
+    pressedAt = undefined
     const workspace = options.workspace?.display(url)
 
     if (workspace && !postBody) {
-      void options.menu.open(workspace).catch(() => publish("browser.menu.failed"))
+      void options.menu.open(workspace, opening.background).catch(() => publish("browser.menu.failed"))
 
       return { action: "deny" }
     }
@@ -936,7 +956,7 @@ export function createBrowserPage(
           partition: options.partition,
         },
       },
-      createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab", childActivity(activity)),
+      createWindow: (popupOptions) => options.popup(popupOptions, opening.background, childActivity(activity)),
     }
   })
 
