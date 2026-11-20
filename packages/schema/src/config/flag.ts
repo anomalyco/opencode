@@ -20,6 +20,8 @@ export const registry = {
     "Give agents the OpenCode Console workspace's shared memory: tools to search, read, publish and update its entries, and relevant entries delivered when a task starts.",
   memory_capture:
     "Follow every coding session's turns, distil candidate memory entries at work boundaries (a new task, a commit, a test that starts passing, a correction, a finished subtask, compaction) out of band with the memory-writer agent's model, and send them to OpenCode Console as pending until outside evidence backs them.",
+  memory_action_rules:
+    "Hold a session's first git commit and first gh pr create once, when the decision model finds rules in the workspace's memory for that action, and show the agent those rules before it runs the command again.",
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
   full_codemode:

@@ -11,10 +11,11 @@ import type { Document } from "@opencode/schema/config"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { Session } from "@opencode/schema/session"
+import { Tool } from "@opencode/schema/tool"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
 import { AppProcess } from "@opencode/util/process"
-import { Clock, Effect, Exit, Fiber, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { Clock, Deferred, Effect, Exit, Fiber, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
 import { Config } from "../../config.js"
@@ -72,12 +73,26 @@ const WRITER = Agent.ID.make("memory-writer")
  */
 const CONSOLE_MCP = "opencode_console"
 /**
- * What a task-start or failure-time injection asks Console for, to judge each candidate itself: Console's top
- * candidates, whatever their score, and the most a token budget Console takes allows.
+ * What an injection asks Console for, to judge each candidate itself: Console's top candidates, whatever their score,
+ * within the most a token budget Console takes allows, without recording them as delivered; the plugin records what it
+ * delivers (`DELIVERIES`). Console that doesn't know `record` records them all, as it did.
  */
-const CANDIDATES = { limit: 10, minScore: 0, maxTokens: 20_000 }
-/** The most entries one injection delivers, as Console does. */
+const CANDIDATES = { limit: 10, minScore: 0, maxTokens: 20_000, record: false }
+/** Asks Console to add the repository's live conventions and procedures to the candidates, however they rank. */
+const RULES = { conventions: true }
+/** Where the plugin records the entries it delivered to a session, each at its revision, once. */
+const DELIVERIES = "/api/memory/deliveries"
+/** The most entries one injection delivers that apply to the task, failure or action at hand, as Console does. */
 const MAX_DELIVERED = 3
+/** And at a task's start, the most of the repository's rules for all its work, besides. */
+const MAX_RULES = 3
+/** The instructions source that holds the instruction files: AGENTS.md (or CLAUDE.md) and configured ones. */
+const INSTRUCTION_FILES = "core/instructions"
+const InstructionsMetadata = Schema.Struct({
+  experimental: Schema.Struct({
+    instructions: Schema.Array(Schema.Struct({ key: Schema.String, text: Schema.String })),
+  }),
+})
 /** The evidence a fix the plugin re-ran itself carries, with the commit's hash. */
 const VERIFIED = "verified-fix"
 /** The session instruction entries memory keeps: entries again after a compaction, and a correction reminder. */
@@ -206,6 +221,7 @@ const SubagentMetadata = Schema.Struct({ sessionID: Schema.String })
 const ResourceInput = Schema.Struct({ server: Schema.String })
 /** `git commit`, after any global options, as its own command. */
 const COMMIT = /(?:^|[;&|(]\s*)git(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+commit\b/m
+const PULL_REQUEST = /(?:^|[;&|(]\s*)gh\s+pr\s+create\b/m
 const KindInput = Kind.annotate({
   description:
     "bug: symptom, cause, fix. convention: how this code does it. procedure: build, test, CI, release. gotcha: an API or tool pitfall. decision: what and why, with commits. failed-approach: what didn't work and why",
@@ -253,12 +269,19 @@ type Tracked = {
   /** The repository (`host/owner/name`) of each entry the session read, unless it holds anywhere (tagged general). */
   readonly about: Map<string, string>
   task?: string
-  /** An injection started at a moment, waiting for the model request that follows it. */
+  /** An injection started at a task's start, waiting for the model request that follows it. */
   pending?: Fiber.Fiber<
-    | { readonly entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>; readonly moment: OpencodeMemoryPolicy.Moment }
-    | undefined
+    { readonly entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>; readonly moment: Prompted } | undefined
   >
+  /**
+   * The repository's instruction files as the session's first request in this process carries them, "" when it has
+   * none: an entry they already state isn't delivered. Later edits to them aren't followed.
+   */
+  readonly instructions: Deferred.Deferred<string>
+  /** The actions held once for the repository's rules for them. */
+  readonly acted: Set<"commit" | "pr">
 }
+type Prompted = Extract<OpencodeMemoryPolicy.Moment, { readonly type: "prompt" }>
 
 /**
  * The workspace's shared memory for one Location: while `sync` is given a Console, the `memory` tools, and the hooks
@@ -322,6 +345,8 @@ export const make = Effect.fnUntraced(function* (
       wrote: new Set(),
       turn: { commits: [], tests: [], pending: [] },
       about: new Map(),
+      instructions: Deferred.makeUnsafe<string>(),
+      acted: new Set(),
     }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
@@ -879,6 +904,7 @@ export const make = Effect.fnUntraced(function* (
   const start = Effect.fnUntraced(function* () {
     const lease = yield* Scope.Scope
     const capturing = yield* flags.enabled("memory_capture")
+    const holding = yield* flags.enabled("memory_action_rules")
     // The agent whose model distillation runs on, which config may set.
     yield* ctx.agent.transform((editor) =>
       editor.update(WRITER, (agent) => {
@@ -1022,46 +1048,111 @@ export const make = Effect.fnUntraced(function* (
           session,
         )
         if (!inject) return undefined
-        // With a decision model, Console's candidates, each delivered only when judged to apply to this task or failure
-        // (a decision that fails is a no); without one, what Console's own scoring hands out.
+        // With a decision model, Console's candidates, each judged (a decision that fails is a no); without one, what
+        // Console's own scoring hands out. A revision the agent already has isn't delivered again.
         const gated = yield* decide.available
         const task = moment.type === "prompt" ? moment.text : (state.task ?? moment.command)
-        const delivered = yield* reader.pipe(
+        return yield* reader.pipe(
           Effect.flatMap((set) =>
             call(Schema.Struct({ entries: Schema.Array(Injected) }), "POST", "/api/memory/inject", {
               sessionID,
               moment: moment.type,
               ...inject,
-              ...(gated ? CANDIDATES : {}),
+              ...(gated ? { ...CANDIDATES, ...(moment.type === "failure" ? {} : RULES) } : {}),
               ...set,
             }),
           ),
-          Effect.flatMap((answer) =>
-            gated
-              ? Effect.forEach(
-                  answer.entries,
-                  (entry) =>
-                    decide.applies(moment, task, entry).pipe(Effect.map((probability) => ({ entry, probability }))),
-                  { concurrency: 4 },
-                ).pipe(
-                  Effect.map((judged) =>
-                    judged
-                      .filter((item) => (item.probability ?? 0) >= OpencodeMemoryDecide.APPLIES)
-                      .toSorted((a, b) => (b.probability ?? 0) - (a.probability ?? 0))
-                      .map((item) => item.entry),
-                  ),
-                )
-              : Effect.succeed(answer.entries),
+          Effect.map((answer) =>
+            answer.entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision),
+          ),
+          Effect.flatMap((entries) =>
+            gated ? select(state, moment, task, entries) : Effect.succeed(entries.slice(0, MAX_DELIVERED)),
           ),
           Effect.timeout(policy.timeout),
         )
-        // Console injects a revision once per session; a revision the agent already has isn't injected either.
-        return delivered
-          .filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision)
-          .slice(0, MAX_DELIVERED)
       }).pipe(Effect.catch((cause) => Effect.logDebug("memory injection failed", { cause }).pipe(Effect.as(undefined))))
+    /**
+     * The judged candidates a moment delivers, best first: those that apply to the task, failure or action at hand, and
+     * at a task's start the repository's rules for all its work besides, each within its own budget. Of those, the ones
+     * the repository's instruction files already state are left out.
+     */
+    const select = (
+      state: Tracked,
+      moment: OpencodeMemoryPolicy.Moment,
+      task: string,
+      entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>,
+    ) =>
+      Effect.gen(function* () {
+        const judged = yield* Effect.forEach(
+          entries,
+          (entry) => decide.applies(moment, task, entry).pipe(Effect.map((p) => ({ entry, ...p }))),
+          { concurrency: 4 },
+        )
+        const rules =
+          moment.type === "prompt"
+            ? judged
+                .filter((item) => (item.repo ?? 0) >= OpencodeMemoryDecide.REPO_WIDE)
+                .toSorted((a, b) => (b.repo ?? 0) - (a.repo ?? 0))
+            : []
+        const applying = judged
+          .filter((item) => !rules.includes(item) && (item.applies ?? 0) >= OpencodeMemoryDecide.APPLIES)
+          .toSorted((a, b) => (b.applies ?? 0) - (a.applies ?? 0))
+        if (rules.length === 0 && applying.length === 0) return []
+        const instructions = yield* Deferred.await(state.instructions)
+        const [fitting, kept] = yield* Effect.all(
+          [
+            unstated(
+              applying.map((item) => item.entry),
+              MAX_DELIVERED,
+              instructions,
+            ),
+            unstated(
+              rules.map((item) => item.entry),
+              MAX_RULES,
+              instructions,
+            ),
+          ],
+          { concurrency: 2 },
+        )
+        return [...fitting, ...kept]
+      })
+    /**
+     * Up to `budget` of `entries`, in order, that the instruction files don't already state, asking only as many at a
+     * time as the budget still has room for (a decision that fails is a no). All of them up to it when there are none.
+     */
+    const unstated = (
+      entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>,
+      budget: number,
+      instructions: string,
+    ): Effect.Effect<ReadonlyArray<OpencodeMemoryPolicy.Injected>> =>
+      instructions === "" || budget <= 0 || entries.length === 0
+        ? Effect.succeed(entries.slice(0, Math.max(0, budget)))
+        : Effect.forEach(
+            entries.slice(0, budget),
+            (entry) => decide.stated(instructions, entry).pipe(Effect.map((p) => ({ entry, p }))),
+            { concurrency: budget },
+          ).pipe(
+            Effect.flatMap((judged) => {
+              const fresh = judged
+                .filter((item) => item.p !== undefined && item.p < OpencodeMemoryDecide.STATED)
+                .map((item) => item.entry)
+              return unstated(entries.slice(budget), budget - fresh.length, instructions).pipe(
+                Effect.map((rest) => [...fresh, ...rest]),
+              )
+            }),
+          )
+    // Console records each delivered revision once, so what its own scoring handed out and already recorded isn't
+    // recorded twice.
+    const report = (sessionID: Session.ID, entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>) =>
+      call(Schema.Unknown, "POST", DELIVERIES, {
+        sessionID,
+        entries: entries.map((entry) => ({ id: entry.id, revision: entry.revision })),
+      }).pipe(
+        Effect.catch((cause) => Effect.logDebug("memory delivery not recorded", { cause })),
+        Effect.forkIn(lease, { startImmediately: true }),
+      )
     // Task start is asked in the background, so the prompt doesn't wait on Console; one at a time per session.
-    const begin = (sessionID: Session.ID, moment: OpencodeMemoryPolicy.Moment) =>
+    const begin = (sessionID: Session.ID, moment: Prompted) =>
       Effect.gen(function* () {
         const state = tracked(sessionID)
         if (state.pending) return
@@ -1147,7 +1238,27 @@ export const make = Effect.fnUntraced(function* (
           event.input = aliased(event.input)
         if (event.tool !== "shell") return
         const shell = Schema.decodeUnknownOption(ShellInput)(event.input)
-        if (Option.isSome(shell) && COMMIT.test(shell.value.command)) heads.set(event.id, yield* head)
+        if (Option.isNone(shell)) return
+        const command = shell.value.command
+        const action = COMMIT.test(command)
+          ? ("commit" as const)
+          : PULL_REQUEST.test(command)
+            ? ("pr" as const)
+            : undefined
+        const state = tracked(event.sessionID)
+        // A session's first commit and first pull request are held once, when the decision model finds rules of the
+        // repository's for them, so the agent reads them before acting: as the call's error, run again after it.
+        if (action !== undefined && holding && !state.acted.has(action) && (yield* decide.available)) {
+          state.acted.add(action)
+          const moment = { type: "action" as const, action, command }
+          const entries = yield* ask(event.sessionID, moment)
+          if (entries !== undefined && entries.length > 0) {
+            deliver(state, entries)
+            yield* report(event.sessionID, entries)
+            return yield* new Tool.Error({ message: policy.held(entries, moment) })
+          }
+        }
+        if (action === "commit") heads.set(event.id, yield* head)
       }),
     )
     yield* ctx.tool.hook("execute.after", (event) =>
@@ -1219,6 +1330,7 @@ export const make = Effect.fnUntraced(function* (
         // without a message of its own. The command's result waits for Console at most the policy's timeout.
         const entries = yield* ask(event.sessionID, moment)
         if (entries === undefined || entries.length === 0) return
+        yield* report(event.sessionID, entries)
         const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
         event.result = {
           ...event.result,
@@ -1267,22 +1379,36 @@ export const make = Effect.fnUntraced(function* (
         // The request after a task's first prompt waits for its injection, at most the policy's timeout. It's persisted
         // so later requests keep it, and lands after this step, so this request gets it at the end, which keeps the
         // cached prefix.
-        const state = sessions.get(event.sessionID)
-        const pending = state?.pending
-        if (!state || !pending) return
+        const state = tracked(event.sessionID)
+        yield* Deferred.succeed(
+          state.instructions,
+          event.system
+            .flatMap((part) =>
+              Option.match(Schema.decodeUnknownOption(InstructionsMetadata)(part.metadata), {
+                onNone: () => [],
+                onSome: (metadata) => metadata.experimental.instructions,
+              }),
+            )
+            .filter((source) => source.key === INSTRUCTION_FILES)
+            .map((source) => source.text)
+            .join("\n\n"),
+        )
+        const pending = state.pending
+        if (!pending) return
         state.pending = undefined
         const delivery = yield* Fiber.join(pending)
         // A failure's delivery may have given an entry since Console answered.
         const entries =
           delivery?.entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision) ?? []
         if (!delivery || entries.length === 0) return
+        yield* report(event.sessionID, entries)
         const text = policy.render(entries, delivery.moment)
         const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
         yield* ctx.session.synthetic({
           sessionID: event.sessionID,
           id: messageID(event.sessionID, ids.join(",")),
           text,
-          description: `${ids.length === 1 ? "1 memory entry" : `${ids.length} memory entries`} for this ${delivery.moment.type === "prompt" ? "task" : "failure"}`,
+          description: `${ids.length === 1 ? "1 memory entry" : `${ids.length} memory entries`} for this task`,
           metadata: { source: "console.memory", moment: delivery.moment.type, entries: ids },
           resume: false,
         })

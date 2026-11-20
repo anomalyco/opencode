@@ -17359,6 +17359,9 @@
               "memory_capture": {
                 "type": "boolean"
               },
+              "memory_action_rules": {
+                "type": "boolean"
+              },
               "mcp_events": {
                 "type": "boolean"
               },

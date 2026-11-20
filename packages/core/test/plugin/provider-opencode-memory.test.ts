@@ -263,6 +263,7 @@ function fakeConsole() {
       if (url.pathname === "/api/memory/search")
         return Response.json({ status: state.hits.length === 0 ? "no_reliable_entry" : "ok", results: state.hits })
       if (url.pathname === "/api/memory/inject") return Response.json({ entries: state.injected })
+      if (url.pathname === "/api/memory/deliveries") return Response.json({})
       if (url.pathname === "/api/memory/entries" && request.method === "POST") {
         const key = String(body?.idempotencyKey)
         const saved = state.published.get(key)
@@ -1192,11 +1193,11 @@ describe("OpencodePlugin memory", () => {
         yield* prompt(session.id, "  Fix the deploy ")
         const first = request(session.id, "Fix the deploy")
         yield* hooks.trigger("session", "context", first)
-        expect(console.state.requests).toEqual([
+        expect(console.state.requests.filter((item) => item.path === "/api/memory/inject")).toEqual([
           {
             method: "POST",
             path: "/api/memory/inject",
-            // Console's candidates, judged here.
+            // Console's candidates, the repository's rules among them, judged here and not recorded as delivered.
             body: {
               sessionID: session.id,
               moment: "prompt",
@@ -1205,10 +1206,24 @@ describe("OpencodePlugin memory", () => {
               limit: 10,
               minScore: 0,
               maxTokens: 20_000,
+              record: false,
+              conventions: true,
             },
             authorization: "Bearer secret",
           },
         ])
+        // What was delivered is recorded with Console.
+        yield* eventually(
+          Effect.sync(() => console.state.requests.filter((item) => item.path === "/api/memory/deliveries")),
+          (recorded) => recorded.length === 1,
+        )
+        expect(console.state.requests.find((item) => item.path === "/api/memory/deliveries")?.body).toEqual({
+          sessionID: session.id,
+          entries: [
+            { id: "mem_a", revision: 1 },
+            { id: "mem_b", revision: 1 },
+          ],
+        })
         const delivered = OpencodeMemoryPolicy.initial.render(console.state.injected, {
           type: "prompt",
           text: "Fix the deploy",
@@ -1533,7 +1548,8 @@ describe("OpencodePlugin memory", () => {
         const failed = yield* ran(session.id, "shell", { command: "bun test 2>&1 | tail -40" }, { exitCode: 0, output })
         const after = request(session.id, "Fix the deploy")
         yield* hooks.trigger("session", "context", after)
-        expect(console.state.requests.at(-1)?.body).toEqual({
+        // No rules of the repository's besides at a failure: only what applies to it.
+        expect(console.state.requests.filter((item) => item.path === "/api/memory/inject").at(-1)?.body).toEqual({
           sessionID: session.id,
           moment: "failure",
           query: "Fix the deploy",
@@ -1545,6 +1561,7 @@ describe("OpencodePlugin memory", () => {
           limit: 10,
           minScore: 0,
           maxTokens: 20_000,
+          record: false,
         })
         // Delivered in the command's own result, after what it printed; no message of its own.
         expect(resultText(failed)).toStartWith(JSON.stringify({ exitCode: 0, output }))
@@ -1564,12 +1581,11 @@ describe("OpencodePlugin memory", () => {
         console.state.injected = [injected("mem_third", 0.9)]
         const third = yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: 3" })
         expect(resultText(third)).not.toContain("workspace-memory")
-        expect(console.state.requests.map((item) => (item.body as { moment: string }).moment)).toEqual([
-          "prompt",
-          "failure",
-          "failure",
-          "failure",
-        ])
+        expect(
+          console.state.requests
+            .filter((item) => item.path === "/api/memory/inject")
+            .map((item) => (item.body as { moment: string }).moment),
+        ).toEqual(["prompt", "failure", "failure", "failure"])
       }),
     ),
   )
@@ -2020,6 +2036,216 @@ describe("OpencodePlugin memory conventions", () => {
           expect(console.state.requests.some((item) => item.path === "/api/memory/standing")).toBe(false)
         }),
       ),
+  )
+
+  const entry = (id: string, kind: "bug" | "convention" = "bug") =>
+    ({ ...injected(id, 0.5), kind }) as unknown as ReturnType<typeof injected>
+  /** A first request carrying the instruction files AGENTS.md gives, and another source that isn't one. */
+  const instructed = (sessionID: Session.ID, text: string, files: string) => {
+    const event = request(sessionID, text)
+    event.system.push({
+      ...SystemPart.make(`Today is Monday\n${files}`),
+      metadata: {
+        experimental: {
+          instructions: [
+            { key: "core/date", text: "Today is Monday" },
+            { key: "core/instructions", text: files },
+          ],
+        },
+      },
+    })
+    return event
+  }
+
+  it.effect(
+    "delivers up to three of the repository's rules besides up to three entries for the task, each best first",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          yield* inRepo
+          // Rules for all the repository's work, which don't apply to the task as such, and entries that do.
+          const rules = ["rule_a", "rule_b", "rule_c", "rule_d"].map((id) => entry(id, "convention"))
+          const tasks = ["task_a", "task_b", "task_c", "task_d"].map((id) => entry(id))
+          console.state.injected = [...rules.toReversed(), ...tasks.toReversed(), entry("noise")]
+          const rank = (state: string, ids: ReadonlyArray<string>) =>
+            ids.reduce((p, id, index) => (state.includes(`Entry ${id}\n`) ? 0.9 - index * 0.05 : p), 0.1)
+          judge.answer = (asked) => ({
+            applies: rank(asked.state, ["task_a", "task_b", "task_c", "task_d", "fix"]),
+            repo_wide: rank(asked.state, ["rule_a", "rule_b", "rule_c", "rule_d", "rule_e"]),
+          })
+          const { host } = yield* start(console)
+          const hooks = yield* PluginHooks.Service
+          const session = yield* host.session.create({})
+          yield* prompt(session.id, "Fix the date parsing")
+          const first = request(session.id, "Fix the date parsing")
+          yield* hooks.trigger("session", "context", first)
+          expect(texts(first)[1]).toBe(
+            OpencodeMemoryPolicy.initial.render([...tasks.slice(0, 3), ...rules.slice(0, 3)], {
+              type: "prompt",
+              text: "Fix the date parsing",
+              files: [],
+            }),
+          )
+
+          // At a failure only what applies to it: a rule for all the repository's work isn't delivered there.
+          console.state.injected = [entry("rule_e", "convention"), entry("fix")]
+          const failed = yield* ran(
+            session.id,
+            "shell",
+            { command: "bun test" },
+            { exitCode: 1, output: "TypeError: x" },
+          )
+          expect(failed.metadata).toEqual({
+            memory: { source: "console.memory", moment: "failure", entries: ["fix@1"] },
+          })
+        }),
+      ),
+  )
+
+  it.effect("leaves out what the repository's instruction files already state, and asks nothing without them", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        yield* inRepo
+        const rules = ["rule_a", "rule_b", "rule_c", "rule_d"].map((id) => entry(id, "convention"))
+        console.state.injected = rules
+        const files = "# AGENTS.md\nCommit messages follow conventional commits."
+        // AGENTS.md states rule_a, and the decision on rule_c fails, which is a no: rule_d takes a place instead.
+        judge.answer = (asked) =>
+          asked.questions.stated
+            ? asked.state.includes("Entry rule_a\n")
+              ? { stated: 0.9 }
+              : asked.state.includes("Entry rule_c\n")
+                ? 503
+                : { stated: 0.1 }
+            : { applies: 0.1, repo_wide: 0.9 }
+        const { host } = yield* start(console)
+        const hooks = yield* PluginHooks.Service
+        const session = yield* host.session.create({})
+        yield* prompt(session.id, "Fix the date parsing")
+        const first = instructed(session.id, "Fix the date parsing", files)
+        yield* hooks.trigger("session", "context", first)
+        expect(texts(first)[1]).toBe(
+          OpencodeMemoryPolicy.initial.render([rules[1], rules[3]], {
+            type: "prompt",
+            text: "Fix the date parsing",
+            files: [],
+          }),
+        )
+        // Shown the instruction files only, not the other instructions.
+        const stated = judge.asked.filter((item) => item.questions.stated)
+        expect(stated).toHaveLength(4)
+        expect(stated.every((item) => item.state.includes(files) && !item.state.includes("Today is Monday"))).toBe(true)
+
+        // A session without instruction files asks nothing of the kind.
+        const asked = judge.asked.length
+        const plain = yield* host.session.create({})
+        yield* prompt(plain.id, "Fix the date parsing")
+        const event = request(plain.id, "Fix the date parsing")
+        yield* hooks.trigger("session", "context", event)
+        expect(texts(event)[1]).toBe(
+          OpencodeMemoryPolicy.initial.render(rules.slice(0, 3), {
+            type: "prompt",
+            text: "Fix the date parsing",
+            files: [],
+          }),
+        )
+        expect(judge.asked.slice(asked).some((item) => item.questions.stated)).toBe(false)
+      }),
+    ),
+  )
+
+  withFlags("console_memory,memory_action_rules").effect(
+    "holds a session's first commit and first pull request once to show the repository's rules for them",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          yield* inRepo
+          const { host } = yield* start(console)
+          const hooks = yield* PluginHooks.Service
+          const session = yield* host.session.create({})
+          yield* prompt(session.id, "Add a feature")
+          yield* hooks.trigger("session", "context", request(session.id, "Add a feature"))
+          const run = (command: string) =>
+            hooks.trigger("tool", "execute.before", {
+              tool: "shell",
+              sessionID: session.id,
+              agent: Agent.ID.make("build"),
+              messageID: SessionMessage.ID.create(),
+              id: Tool.CallID.make(`call_${Math.random().toString(36).slice(2)}`),
+              input: { command },
+            })
+          const commit = entry("commit_rule", "convention")
+          const pull = entry("pr_rule", "convention")
+          console.state.injected = [commit, pull, entry("other")]
+          judge.answer = (asked) => {
+            const action = /about to run `([^`]*)`/.exec(asked.state)?.[1] ?? ""
+            const about = action.includes("git commit")
+              ? "commit_rule"
+              : action.includes("gh pr create")
+                ? "pr_rule"
+                : undefined
+            return {
+              applies: about !== undefined && asked.state.includes(`Entry ${about}\n`) ? 0.9 : 0.1,
+              repo_wide: 0.9,
+            }
+          }
+
+          // Without a decision model, nothing is held.
+          judge.models = []
+          yield* run("git commit -m wip")
+          judge.models = ["opencode/jev-1.13"]
+
+          const held = yield* run("git add -A && git commit -m 'Add a feature'").pipe(Effect.flip)
+          expect(held).toBeInstanceOf(Tool.Error)
+          expect(held.message).toBe(
+            OpencodeMemoryPolicy.initial.held([commit], {
+              type: "action",
+              action: "commit",
+              command: "git add -A && git commit -m 'Add a feature'",
+            }),
+          )
+          expect(held.message).toContain('<workspace-memory for="commit">')
+          expect(
+            console.state.requests.filter((item) => item.path === "/api/memory/inject").at(-1)?.body,
+          ).toMatchObject({
+            moment: "action",
+            query: "Committing changes: git add -A && git commit -m 'Add a feature'",
+            record: false,
+            conventions: true,
+          })
+          // Once: the same commit, run again, goes ahead.
+          const asked = console.state.requests.length
+          yield* run("git add -A && git commit -m 'Add a feature'")
+          expect(console.state.requests.slice(asked).some((item) => item.path === "/api/memory/inject")).toBe(false)
+
+          const opened = yield* run("gh pr create --fill").pipe(Effect.flip)
+          expect(opened.message).toContain("## pr_rule r1 convention: Entry pr_rule")
+          expect(opened.message).not.toContain("commit_rule")
+          yield* run("gh pr create --fill")
+        }),
+      ),
+  )
+
+  it.effect("holds nothing while the flag is off", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        yield* inRepo
+        const { host } = yield* start(console)
+        const hooks = yield* PluginHooks.Service
+        const session = yield* host.session.create({})
+        console.state.injected = [entry("commit_rule", "convention")]
+        judge.answer = () => ({ applies: 0.9, repo_wide: 0.9 })
+        yield* hooks.trigger("tool", "execute.before", {
+          tool: "shell",
+          sessionID: session.id,
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.create(),
+          id: Tool.CallID.make("call_commit"),
+          input: { command: "git commit -m wip" },
+        })
+        expect(console.state.requests.some((item) => item.path === "/api/memory/inject")).toBe(false)
+      }),
+    ),
   )
 
   it.effect("doesn't retire or rewrite an entry about another repository from this one", () =>

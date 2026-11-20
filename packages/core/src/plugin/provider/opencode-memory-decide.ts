@@ -11,6 +11,8 @@ import type { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
 
 /** The decision model the questions and thresholds below were chosen on, unless config names another. */
 export const MODEL = Model.Ref.make({ providerID: Provider.ID.make("opencode"), id: Model.ID.make("jev-1.13") })
+/** How much of the repository's instructions D5 is shown: an AGENTS.md of about 3,000 tokens. */
+const MAX_INSTRUCTIONS = 12_000
 /** The longest a decision may take; past it the caller does what it does without one. */
 const DEADLINE = "5 seconds"
 
@@ -23,6 +25,10 @@ export const CORRECTS = 0.5
 export const DURABLE = 0.574
 /** D4.t3: an entry applies to the task, or the failure, at hand. */
 export const APPLIES = 0.64
+/** D4b: an entry is a rule or procedure for all work in its repository. A placeholder until it's set from labels. */
+export const REPO_WIDE = 0.5
+/** D5: the repository's loaded instructions already state what an entry says. A placeholder until it's set from labels. */
+export const STATED = 0.5
 
 /** A yes-or-no question, scored by the probability of yes. */
 const predicate = (name: string, instructions: string, yes: string, no: string): DecisionQuestion => ({
@@ -59,6 +65,20 @@ const D4 = predicate(
   "Is this note specifically about what this task has to change, or about the failure just seen, so that reading it helps the agent do this task correctly?",
   "The note's own subject is the code, behaviour, rule or error this task deals with: it names the function, module, behaviour or failure the task is about; or it explains the exact error shown in the failure output and how to get past it (a required setting, command or procedure whose error text matches); or it is a team rule every change of this kind must follow (such as how changes are recorded). What it says agrees with what the task asks for.",
   "The note's subject is something else: another function, feature or bug in the same repository or file; general advice on running tests, linting, tooling or the environment that doesn't explain the error shown; or advice that conflicts with the behaviour or results the task explicitly asks for (a note saying to keep behaviour the task asks to change is misleading, not applicable).",
+)
+
+const D4b = predicate(
+  "repo_wide",
+  "Is this note a rule, convention or procedure that holds for all work in this repository, rather than a fact about particular code?",
+  "The note states how all work in this repository is done: how commits, pull requests or changelogs are written, which commands build, lint or run the tests, which tools, package managers or styles to use, or another house rule any change here must follow.",
+  "The note is about particular code: a function, module, feature, bug, error or file, a one-off situation, or general advice not specific to this repository.",
+)
+
+const D5 = predicate(
+  "stated",
+  "Do the repository's instructions already state what this note says?",
+  "Everything the note tells an agent to do or know is already stated in the instructions, in the same or other words, so reading the note adds nothing.",
+  "The note adds something the instructions don't state: a rule, command, fact or detail missing from them, or one that differs from what they say.",
 )
 
 /** Decisions in flight across this process, as Console's rate limit allows. */
@@ -178,19 +198,37 @@ export const make = (input: {
         yield* logged("D3.t2", result.ms, p)
         return p
       }),
-    /** D4: the probability an entry applies to the task at hand, or to the failure just seen. */
+    /**
+     * D4 and D4b, in one call: the probability an entry applies to the task at hand, the failure just seen or the
+     * action about to run, and the probability it's a rule or procedure for all work in the repository.
+     */
     applies: (moment: OpencodeMemoryPolicy.Moment, task: string, entry: OpencodeMemoryPolicy.Injected) =>
       Effect.gen(function* () {
-        const failure =
+        const happening =
           moment.type === "failure"
             ? `\n\nThe agent ran \`${moment.command}\` and it failed with:\n${moment.output.slice(-2000)}`
-            : ""
+            : moment.type === "action"
+              ? `\n\nThe agent is about to run \`${moment.command}\`.`
+              : ""
         const result = yield* ask(
-          `Task given to an AI coding agent:\n${task}${failure}\n\nNote from the team's shared memory (${entry.kind}): ${entry.title}\n${entry.body.slice(0, 3000)}`,
-          [D4],
+          `Task given to an AI coding agent:\n${task}${happening}\n\nNote from the team's shared memory (${entry.kind}): ${entry.title}\n${entry.body.slice(0, 3000)}`,
+          [D4, D4b],
         )
-        const p = probability(result.answers, "applies")
-        yield* logged("D4.t3", result.ms, p, { entry: entry.id })
+        const applies = probability(result.answers, "applies")
+        const repo = probability(result.answers, "repo_wide")
+        yield* logged("D4.t3", result.ms, applies, { entry: entry.id })
+        yield* logged("D4b", result.ms, repo, { entry: entry.id })
+        return { applies, repo }
+      }),
+    /** D5: the probability the repository's loaded instructions already state what an entry says. */
+    stated: (instructions: string, entry: OpencodeMemoryPolicy.Injected) =>
+      Effect.gen(function* () {
+        const result = yield* ask(
+          `Instructions an AI coding agent was given for this repository:\n\n${instructions.slice(0, MAX_INSTRUCTIONS)}\n\nNote from the team's shared memory (${entry.kind}): ${entry.title}\n${entry.body.slice(0, 3000)}`,
+          [D5],
+        )
+        const p = probability(result.answers, "stated")
+        yield* logged("D5", result.ms, p, { entry: entry.id })
         return p
       }),
   }

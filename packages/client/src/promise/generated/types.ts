@@ -2638,6 +2638,7 @@ export type ConfigEntry =
           console_watches?: boolean
           console_memory?: boolean
           memory_capture?: boolean
+          memory_action_rules?: boolean
           mcp_events?: boolean
           full_codemode?: boolean
           schedules?: boolean

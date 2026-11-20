@@ -67,7 +67,8 @@ describe("OpencodeMemoryDecide", () => {
           ])
         if (question.name === "durable")
           return Effect.succeed([predicate("durable", 0.8), predicate("fix_record", 0.25)])
-        return Effect.succeed([predicate("applies", 0.66)])
+        if (question.name === "stated") return Effect.succeed([predicate("stated", 0.2)])
+        return Effect.succeed([predicate("applies", 0.66), predicate("repo_wide", 0.3)])
       })
       const decide = OpencodeMemoryDecide.make({
         decisions: fake.decisions,
@@ -118,7 +119,8 @@ describe("OpencodeMemoryDecide", () => {
       ).toBeCloseTo(0.6, 10)
       expect(fake.asked[2]?.questions.map((question) => question.name)).toEqual(["durable", "fix_record"])
 
-      // At a failure, the command and the end of what it printed come with the task.
+      // At a failure, the command and the end of what it printed come with the task; whether the note applies and
+      // whether it's a rule for all the repository's work are asked in one call.
       const output = `${"x".repeat(2500)}\nError: wrangler not found`
       expect(
         yield* decide.applies(
@@ -126,13 +128,38 @@ describe("OpencodeMemoryDecide", () => {
           "Deploy the worker",
           entry,
         ),
-      ).toBe(0.66)
+      ).toEqual({ applies: 0.66, repo: 0.3 })
       expect(fake.asked[3]?.input).toEqual([
         {
           type: "text",
           text: `Task given to an AI coding agent:\nDeploy the worker\n\nThe agent ran \`bun run deploy\` and it failed with:\n${output.slice(-2000)}\n\nNote from the team's shared memory (procedure): Deploys use wrangler\nRun wrangler deploy.`,
         },
       ])
+      expect(fake.asked[3]?.questions.map((question) => question.name)).toEqual(["applies", "repo_wide"])
+
+      // Before an action, the command about to run comes with the task.
+      yield* decide.applies(
+        { type: "action", action: "commit", command: "git commit -m wip" },
+        "Deploy the worker",
+        entry,
+      )
+      expect(fake.asked[4]?.input).toEqual([
+        {
+          type: "text",
+          text: "Task given to an AI coding agent:\nDeploy the worker\n\nThe agent is about to run `git commit -m wip`.\n\nNote from the team's shared memory (procedure): Deploys use wrangler\nRun wrangler deploy.",
+        },
+      ])
+
+      // Whether the repository's instructions already state the note, shown at most 12,000 characters of them.
+      const instructions = `Use wrangler.\n${"y".repeat(13_000)}`
+      expect(yield* decide.stated(instructions, entry)).toBe(0.2)
+      expect(fake.asked[5]?.input).toEqual([
+        {
+          type: "text",
+          text: `Instructions an AI coding agent was given for this repository:\n\n${instructions.slice(0, 12_000)}\n\nNote from the team's shared memory (procedure): Deploys use wrangler\nRun wrangler deploy.`,
+        },
+      ])
+      expect(fake.asked[5]?.questions.map((question) => question.name)).toEqual(["stated"])
     }),
   )
 
