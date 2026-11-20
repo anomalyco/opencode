@@ -96,6 +96,17 @@ describe("Session.list", () => {
     }),
   )
 
+  it.effect("keeps a title that starts like an ID out of the ID column", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      yield* session.create({ location: project, title: "ses notes" })
+      yield* session.create({ location: project, title: "different" })
+
+      const result = yield* session.list({ directory: project.directory, search: "ses" })
+      expect(result.data.map((item) => item.title)).toEqual(["ses notes"])
+    }),
+  )
+
   it.effect("rejects an invalid cursor", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

@@ -7,7 +7,7 @@ import { Workspace } from "@opencode/schema/workspace"
 import { AbsolutePath, PositiveInt, RelativePath } from "@opencode/schema/schema"
 import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { SessionID } from "@opencode/util/session-id"
+import { looksLikeSessionID } from "@opencode/schema/session-id"
 import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
@@ -166,7 +166,7 @@ const layer = Layer.effect(
         if (input.search) {
           const title = sql`${SessionTable.title} GLOB ${titlePattern(input.search)}`
           conditions.push(
-            SessionID.looksLikeSessionID(input.search)
+            looksLikeSessionID(input.search)
               ? or(title, sql`${SessionTable.id} GLOB ${idPattern(input.search)}`)!
               : title,
           )

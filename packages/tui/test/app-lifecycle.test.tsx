@@ -1484,6 +1484,17 @@ test("configured app binding opens settings", async () => {
   expect(settings).toContain("Animations")
 })
 
+test("choosing a slash command that takes an argument runs it right away", async () => {
+  await using setup = await createAppFixture()
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  await setup.mockInput.typeText("/sess")
+  await setup.waitForFrame((frame) => frame.includes("Switch session"))
+
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Sessions"))
+})
+
 test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => {
   await using setup = await createAppFixture()
   await setup.ready

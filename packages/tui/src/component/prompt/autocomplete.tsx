@@ -40,7 +40,7 @@ import { mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode/client"
 import { Skill } from "@opencode/schema/skill"
 import { stringWidth } from "../../util/string-width"
-import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
+import { parseFileLineRange, parseSlashHead, stripFileLineRange } from "../../prompt/parse"
 import { moveSelection, reconcileSelectionWindow, revealSelectionOffset } from "../../ui/select-controller"
 import { directoryAutocomplete, slashArgumentAutocomplete } from "../../prompt/directory-completion"
 
@@ -480,6 +480,15 @@ export function Autocomplete(props: {
     props.input().cursorOffset = measureEditText(newText, { widthMethod: renderer.widthMethod })
   }
 
+  /** Reports whether the prompt already carries an argument for the named slash command. */
+  function argumentStarted(name: string) {
+    const input = props.input()
+    const head = parseSlashHead(input.getTextRange(0, input.cursorOffset), /\s/)
+    if (!head) return false
+    if (head.name !== name) return false
+    return head.end < input.cursorOffset
+  }
+
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = keymapCommands().flatMap((command) => {
       const slash = command.slash
@@ -487,7 +496,14 @@ export function Autocomplete(props: {
       return [slash.name, ...(slash.aliases ?? [])].map((name) => ({
         display: `/${name}`,
         description: command.description ?? command.title,
-        onSelect: slash.arguments ? () => insertSlash(name) : command.run,
+        // A command that takes an argument still runs without one, so choosing it from the list runs it right away
+        // instead of leaving the user to submit the prompt a second time.
+        onSelect: slash.arguments
+          ? () => {
+              if (argumentStarted(name)) insertSlash(name)
+              else command.run()
+            }
+          : command.run,
       }))
     })
     const commandNames = new Set<string>()
