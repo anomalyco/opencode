@@ -201,6 +201,17 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
     },
   ])
 
+  // The desktop router keeps its history in memory, so the mouse's Back and Forward buttons do nothing on their own.
+  // The web app's browser already traverses its real history for them.
+  if (platform.platform === "desktop")
+    makeEventListener(window, "mouseup", (event) => {
+      if (event.button !== 3 && event.button !== 4) return
+      event.preventDefault()
+
+      if (event.button === 3) return history.back()
+      history.forward()
+    })
+
   return (
     <header
       data-slot="titlebar-v2"
