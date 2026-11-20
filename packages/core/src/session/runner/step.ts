@@ -81,6 +81,7 @@ export const make = Effect.gen(function* () {
     const pendingStartSnapshot = yield* snapshots.capture().pipe(Effect.forkScoped)
     const started = yield* Clock.currentTimeMillis
     let firstOutputAt: number | undefined
+    let events = 0
     const modelAttributes = {
       "gen_ai.provider.name": input.model.ref.providerID,
       "gen_ai.request.model": input.model.ref.id,
@@ -138,6 +139,7 @@ export const make = Effect.gen(function* () {
       Stream.withSpan("LLM.stream", { attributes: modelAttributes }),
       Stream.runForEach((streamed) =>
         Effect.gen(function* () {
+          events++
           const event = asProgram(streamed, programs, input.prepared.codeModeExpression)
           if (event === undefined) return
           if (publisher.record().providerFailed) return
@@ -225,8 +227,13 @@ export const make = Effect.gen(function* () {
         const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
         const llmError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
         const tokens = recorded.finish?.usage
+        // A dropped stream only leaves the socket error in the log. Record where in the stream it died - how long
+        // the connection lived, whether output had started, and how far generation had gotten - so a report can say
+        // whether a proxy, load balancer or middlebox is cutting long streams.
+        const failedAt = llmFailure === undefined ? undefined : (yield* Clock.currentTimeMillis)
         yield* Effect.annotateCurrentSpan({
           ...(firstOutputAt === undefined ? {} : { "opencode.llm.first_output_ms": firstOutputAt - started }),
+          ...(failedAt === undefined ? {} : { "opencode.llm.stream_elapsed_ms": failedAt - started }),
           ...(recorded.finish === undefined ? {} : { "gen_ai.response.finish_reasons": [recorded.finish.finish] }),
           ...(tokens?.inputTokens === undefined ? {} : { "gen_ai.usage.input_tokens": tokens.inputTokens }),
           ...(tokens?.outputTokens === undefined ? {} : { "gen_ai.usage.output_tokens": tokens.outputTokens }),
@@ -238,6 +245,17 @@ export const make = Effect.gen(function* () {
             : { "gen_ai.usage.cache_creation.input_tokens": tokens.cacheWriteInputTokens }),
           ...(llmFailure === undefined ? {} : { "error.type": llmFailure.reason._tag }),
         })
+        if (llmFailure?.reason._tag === "Transport")
+          yield* Effect.logWarning("provider stream failed", {
+            sessionID: input.sessionID,
+            model: input.model.ref,
+            code: llmFailure.reason.code,
+            operation: llmFailure.reason.operation,
+            elapsedMs: (failedAt ?? 0) - started,
+            outputStarted: recorded.outputStarted,
+            events,
+            ...(input.retryAttempt === undefined ? {} : { retryAttempt: input.retryAttempt }),
+          })
         if (
           input.recoverContinuation &&
           llmFailure?.reason._tag === "Transport" &&

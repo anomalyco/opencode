@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { ai, LanguageModel, LLMEvent } from "@opencode/ai/effect"
+import { ai, AIError, LanguageModel, LLMEvent, TransportError } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
@@ -24,7 +24,7 @@ import { ToolOutput } from "@opencode/core/tool-output"
 import { Money } from "@opencode/schema/money"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { asc, eq } from "drizzle-orm"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger } from "effect"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -227,6 +227,106 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
       .get()
     expect(message?.data).toMatchObject({ finish: "stop", cost: 0 })
     expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()).toMatchObject({ cost: 0 })
+  }),
+)
+
+it.effect("records where a transport-dropped stream died", () =>
+  Effect.gen(function* () {
+    const db = (yield* Database.Service).db
+    const llm = yield* TestLLM.Test
+    const sessionID = Session.ID.create()
+    const assistantMessageID = SessionMessage.ID.create()
+    const steps = yield* SessionStep.make.pipe(
+      Effect.provide(
+        Layer.mock(Snapshot.Service)({
+          capture: () => Effect.succeed(undefined),
+          files: () => Effect.succeed([]),
+        }),
+      ),
+    )
+    yield* db
+      .insert(ProjectTable)
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .run()
+    yield* db
+      .insert(SessionTable)
+      .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
+      .run()
+    const model = SessionRunnerModel.resolved(
+      LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
+      {
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        limit: { context: 100_000, output: 1_000 },
+        cost: [
+          {
+            input: Money.USDPerMillionTokens.zero,
+            output: Money.USDPerMillionTokens.zero,
+            cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+          },
+        ],
+      },
+    )
+    const reset = new AIError({
+      reason: new TransportError({
+        message: "ECONNRESET: The socket connection was closed unexpectedly",
+        transport: "http",
+        operation: "read",
+        code: "ECONNRESET",
+        url: "https://provider.example/v1/chat/completions",
+      }),
+    })
+    // A reset mid-generation: output has started, no finish ever arrives.
+    yield* llm.push(
+      TestLLM.failAfter(
+        reset,
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "msg-1" }),
+        LLMEvent.textDelta({ id: "msg-1", text: "partial" }),
+      ),
+    )
+    const failures: Array<ReadonlyArray<unknown>> = []
+    const result = yield* steps
+      .attempt({
+        isLocationClosed: () => false,
+        sessionID,
+        assistantMessageID,
+        agent: Agent.defaultID,
+        model,
+        prepared: {
+          retry: () => Effect.void,
+          request: ai.request({ model: model.model, prompt: "Hello" }),
+          options: {},
+          executeTool: () => Effect.die("no tools"),
+        },
+        retry: (_cause, _error, retry) =>
+          Effect.succeed(retry ? { retry: true, attempt: 2, delay: 0 } : { retry: false }),
+        recoverContinuation: true,
+        recoverOverflow: Effect.succeed(false),
+      })
+      .pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make((entry) => {
+              if (entry.logLevel === "Warn" && Array.isArray(entry.message)) failures.push(entry.message)
+            }),
+          ]),
+        ),
+        Effect.exit,
+      )
+    expect(Exit.isSuccess(result)).toBe(true)
+    if (!Exit.isSuccess(result)) return
+    expect(result.value._tag).toBe("Retry")
+    const failure = failures.find((entry) => entry[0] === "provider stream failed")
+    expect(failure).toBeDefined()
+    const details = failure?.[1] as Record<string, unknown> | undefined
+    expect(details).toMatchObject({
+      sessionID,
+      code: "ECONNRESET",
+      operation: "read",
+      outputStarted: true,
+      events: 3,
+    })
+    expect(typeof details?.elapsedMs).toBe("number")
   }),
 )
 
