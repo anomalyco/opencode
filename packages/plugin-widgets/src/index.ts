@@ -262,6 +262,7 @@ export default Plugin.define({
                 ...(input.title === undefined ? {} : { title: input.title }),
                 status: "open",
                 wait: input.wait === true,
+                ...(template.capabilities === undefined ? {} : { capabilities: template.capabilities }),
                 time: { created: yield* Clock.currentTimeMillis },
               }
               if (!state.wait) {
@@ -306,6 +307,7 @@ export default Plugin.define({
                   data: yield* required("data", input.data),
                   source: yield* required("source", input.source),
                   ...(input.mode === undefined ? {} : { mode: input.mode }),
+                  ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
                   example: yield* required("example", input.example),
                 })
                 .pipe(Effect.mapError(toolError))

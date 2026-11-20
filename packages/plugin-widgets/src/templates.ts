@@ -45,6 +45,8 @@ export interface SaveInput {
   readonly source: string
   /** `step` (default) or `live` (widgets-live.md). */
   readonly mode?: Widget.Mode
+  /** Live templates only. */
+  readonly capabilities?: Widget.Capabilities
   /**
    * Data checked against `data` and, for a step template, run through `init` (which renders the first view) before the
    * template is stored. A live template is only compiled.
@@ -64,13 +66,40 @@ const builtin = new Map(builtins.map((template) => [template.name, decode({ mode
  * A template's content address. Step templates use `@opencode/widget`'s `version`; a live template's also covers its
  * mode, so the same source and schema in the other mode is another version.
  */
-export const versionOf = (source: string, data: Widget.DataSchema, mode: Widget.Mode) =>
+export const versionOf = (
+  source: string,
+  data: Widget.DataSchema,
+  mode: Widget.Mode,
+  capabilities?: Widget.Capabilities,
+) =>
   mode === "step"
     ? version(source, data)
     : createHash("sha256")
-        .update(program(source) + "\n" + JSON.stringify(data) + "\nlive")
+        .update(
+          program(source) +
+            "\n" +
+            JSON.stringify(data) +
+            "\nlive" +
+            (capabilities === undefined ? "" : "\n" + JSON.stringify(capabilities)),
+        )
         .digest("hex")
         .slice(0, 16)
+
+// An exact host name, or `*.` and a host name for any subdomain of it.
+const HOST = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
+
+/** Why `capabilities` can't be stored on a template of `mode`, if they can't. */
+export function capabilitiesProblem(mode: Widget.Mode, capabilities: Widget.Capabilities | undefined) {
+  if (capabilities === undefined) return
+  if (mode !== "live") return "only live templates can declare capabilities"
+  const hosts = capabilities.https?.hosts
+  if (hosts === undefined) return
+  if (hosts.length === 0) return "https.hosts lists no hosts; leave https out instead"
+  if (hosts.length > 32) return "https.hosts lists more than 32 hosts"
+  const bad = hosts.find((host) => host !== "*" && !HOST.test(host))
+  if (bad !== undefined)
+    return `https.hosts entry ${JSON.stringify(bad)} is not a host name like "api.example.com", "*.example.com" or "*"`
+}
 
 // A version lives under its content address and never changes; `latest:<name>` names the newest saved one.
 const versionKey = (name: string, version: string) => `template:${name}:${version}`
@@ -154,10 +183,13 @@ export const make = (storage: StorageDomain) => {
     if (input.description.trim() === "") return yield* invalid("description is empty")
     if (input.data.type !== "object") return yield* invalid('the data schema must have type "object"')
     const mode = input.mode ?? "step"
+    const problem = capabilitiesProblem(mode, input.capabilities)
+    if (problem) return yield* invalid(problem)
     const template = decode({
       name: input.name,
-      version: versionOf(input.source, input.data, mode),
+      version: versionOf(input.source, input.data, mode, input.capabilities),
       mode,
+      ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
       description: input.description.trim(),
       data: input.data,
       source: input.source,

@@ -193,6 +193,61 @@ describe("live templates", () => {
     ))
 })
 
+describe("capabilities", () => {
+  const source = `async function main(data) {
+  const response = await widget.fetch("https://api.github.com/zen")
+  widget.render(ui.text(await response.text()))
+}`
+  const save = (fake: Effect.Success<typeof make>, input: Record<string, unknown>) =>
+    execute(fake, "widget_template", {
+      action: "save",
+      name: "zen",
+      description: "GitHub zen",
+      data: pickerSchema,
+      source,
+      example: { items: ["a"] },
+      mode: "live",
+      ...input,
+    })
+
+  test("stores a live template's capabilities in its version, summary, program and widget states", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const capabilities = { https: { hosts: ["api.github.com", "*.githubusercontent.com"] } }
+        yield* save(fake, {})
+        const bare = yield* fake.call<Widget.Program>("program", { name: "zen" })
+        yield* save(fake, { capabilities })
+        const granted = yield* fake.call<Widget.Program>("program", { name: "zen" })
+
+        expect(bare.capabilities).toBeUndefined()
+        expect(granted).toMatchObject({ capabilities })
+        expect(granted.version).not.toBe(bare.version)
+        expect(
+          (yield* fake.call<ReadonlyArray<Widget.Summary>>("templates", {})).find((item) => item.name === "zen"),
+        ).toMatchObject({ capabilities })
+        yield* execute(fake, "widget", { template: "zen", data: { items: ["x"] } })
+        expect((yield* states(fake))[0]).toMatchObject({ capabilities })
+      }),
+    ))
+
+  test("rejects capabilities on step templates and host lists that are not host names", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const reason = (input: Record<string, unknown>) =>
+          save(fake, input).pipe(Effect.map((exit) => String(failure(exit))))
+
+        expect(
+          yield* reason({ mode: "step", source: pickerSource, capabilities: { https: { hosts: ["api.github.com"] } } }),
+        ).toContain("only live templates can declare capabilities")
+        expect(yield* reason({ capabilities: { https: { hosts: ["https://api.github.com/"] } } })).toContain(
+          "is not a host name",
+        )
+        expect(yield* reason({ capabilities: { https: { hosts: [] } } })).toContain("lists no hosts")
+        expect(Exit.isSuccess(yield* save(fake, { capabilities: { https: { hosts: ["*"] } } }))).toBe(true)
+      }),
+    ))
+})
+
 describe("widget answers", () => {
   const show = (fake: Effect.Success<typeof make>) =>
     Effect.gen(function* () {

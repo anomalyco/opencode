@@ -62,6 +62,10 @@ export const TemplateInput = Schema.Struct({
     description:
       'For save: "step" (default) for init/view/update templates, "live" for a long-running async main(data) (games, timers, animations)',
   }),
+  capabilities: Widget.Capabilities.pipe(optional).annotate({
+    description:
+      'For save, live templates only: what the widget may use, e.g. { https: { hosts: ["api.github.com"] } } for widget.fetch. Declare the fewest hosts it needs',
+  }),
   example: Schema.Record(Schema.String, Schema.Json)
     .pipe(optional)
     .annotate({ description: "Example data (a JSON object) to test the template with, for save" }),

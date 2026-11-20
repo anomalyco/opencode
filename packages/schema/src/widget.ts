@@ -30,6 +30,15 @@ export type DataSchema = typeof DataSchema.Type
 export const Mode = Schema.Literals(["step", "live"]).annotate({ identifier: "Widget.Mode" })
 export type Mode = typeof Mode.Type
 
+/**
+ * What a live template may use beyond rendering (widgets-live.md, Capabilities). `https.hosts` entries are exact host
+ * names or `*.` suffix wildcards; `["*"]` is any host.
+ */
+export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
+export const Capabilities = Schema.Struct({
+  https: optional(Schema.Struct({ hosts: Schema.Array(Schema.String) })),
+}).annotate({ identifier: "Widget.Capabilities" })
+
 /** A template version without its source, as listed. */
 export interface Summary extends Schema.Schema.Type<typeof Summary> {}
 export const Summary = Schema.Struct({
@@ -39,6 +48,8 @@ export const Summary = Schema.Struct({
   description: Schema.String,
   data: DataSchema,
   mode: Mode,
+  /** Live templates only. */
+  capabilities: optional(Capabilities),
   builtin: Schema.Boolean,
 }).annotate({ identifier: "Widget.Summary" })
 
@@ -85,6 +96,8 @@ export const State = Schema.Struct({
   response: optional(Schema.Json),
   /** The tool call waits for the answer and returns it as its result. */
   wait: Schema.Boolean,
+  /** The template's capabilities, so clients can show what the widget is granted. */
+  capabilities: optional(Capabilities),
   /** Epoch milliseconds. */
   time: Schema.Struct({ created: Schema.Number, responded: optional(Schema.Number) }),
 }).annotate({ identifier: "Widget.State" })

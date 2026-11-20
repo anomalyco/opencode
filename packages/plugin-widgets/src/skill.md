@@ -164,6 +164,17 @@ ui.shader(wgsl, { id, height, width, values, fps, alt, poster })   a WGSL fragme
 
 Children may contain `null` or `false` (for `cond && node`) and nested arrays.
 
+## Live templates and capabilities
+
+Save a template with `mode: "live"` for games, timers, animations and live dashboards: it defines
+`async function main(data)` instead of `init`/`view`/`update`, and runs until it calls `widget.submit` or
+`widget.dismiss` (see the spec's `widgets-live.md`). The server only checks that it compiles.
+
+A live template that calls `widget.fetch` declares the hosts it needs, as narrowly as it can:
+`capabilities: { https: { hosts: ["api.github.com"] } }` (exact hosts, `*.example.com`, or `["*"]` only if it truly
+needs any host). Step templates can't declare capabilities. Fetching from the widget is for live dashboards that must
+refresh while open; for anything else, fetch the data yourself and pass it in `data`.
+
 ## Canvas and shader
 
 Use a **canvas** for custom 2D graphics driven by data and state: charts, diagrams, gauges, small games, anything that
