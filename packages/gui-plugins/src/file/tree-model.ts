@@ -88,6 +88,45 @@ export function collectAllowedCollapsedDirs(
   return collapsed
 }
 
+/** One directory the refresh button syncs: its normalized tree path and the native path to sync. */
+export type TreeRefreshTarget = { readonly dir: string; readonly original: string }
+
+/**
+ * The refresh button's targets: the root plus every already-loaded directory, including collapsed ones, read through
+ * the tree's current listing. Unloaded branches are not traversed and stay lazy. A directory's normalized path
+ * deduplicates the targets, and its listing's native path is kept for the forced sync.
+ */
+export function collectRefreshTargets(
+  children: (path: string) => readonly FileNode[],
+  state: (path: string) => { readonly loaded?: boolean } | undefined,
+) {
+  const targets = new Map<string, string>()
+  const seen = new Set<string>()
+  const queue = [""]
+
+  while (queue.length > 0) {
+    const dir = queue.shift()!
+
+    for (const node of children(dir)) {
+      if (node.type !== "directory") continue
+
+      const norm = normalizeFileTreeV2Path(node.path)
+
+      if (!norm || seen.has(norm)) continue
+      seen.add(norm)
+
+      if (!state(norm)?.loaded) continue
+
+      if (!targets.has(norm)) targets.set(norm, node.path)
+      queue.push(norm)
+    }
+  }
+
+  const root: TreeRefreshTarget = { dir: "", original: "" }
+
+  return [root, ...Array.from(targets, ([dir, original]) => ({ dir, original }))]
+}
+
 export function buildLiveTreeInput(
   children: (path: string) => readonly FileNode[],
   expanded: (path: string) => boolean,
