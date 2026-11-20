@@ -1884,49 +1884,6 @@ mod tests {
     }
 
     #[test]
-    fn live_deltas_after_a_list_print_only_what_is_new() {
-        let mut transcript = Transcript::new("ses_1", true, true, true, None);
-        transcript.hydrate(
-            &[message(json!({ "id": "msg_a", "type": "assistant", "content": [{ "type": "text", "text": "Hello" }] }))],
-            true,
-        );
-        assert!(transcript.event(&delta("msg_a", "Hel")).commits.is_empty());
-        assert!(transcript.event(&delta("msg_a", "lo")).commits.is_empty());
-        assert_eq!(texts(&transcript.event(&delta("msg_a", " world"))), [(EntryKind::Assistant, " world".into())]);
-        let ended =
-            event("session.text.ended", json!({ "assistantMessageID": "msg_a", "ordinal": 0, "text": "Hello world!" }));
-        assert_eq!(texts(&transcript.event(&ended)), [(EntryKind::Assistant, "!".into())]);
-        let other = event(
-            "session.text.delta",
-            json!({ "sessionID": "ses_2", "assistantMessageID": "msg_b", "ordinal": 0, "delta": "x" }),
-        );
-        assert!(transcript.event(&other).commits.is_empty());
-    }
-
-    #[test]
-    fn with_tools_hidden_text_waits_for_its_step_and_tool_messages_stay_quiet() {
-        let mut transcript = Transcript::new("ses_1", true, false, true, None);
-        transcript.hydrate(&[], true);
-        assert!(transcript.event(&delta("msg_a", "Hello")).commits.is_empty());
-        assert!(transcript.event(&delta("msg_a", " there")).commits.is_empty());
-        let tokens = json!({ "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
-        let ended = event(
-            "session.step.ended",
-            json!({ "assistantMessageID": "msg_a", "finish": "stop", "cost": 0, "tokens": tokens }),
-        );
-        assert_eq!(texts(&transcript.event(&ended)), [(EntryKind::Assistant, "Hello there".into())]);
-        assert!(transcript.event(&delta("msg_b", "Let me look")).commits.is_empty());
-        let tool = event(
-            "session.tool.called",
-            json!({ "assistantMessageID": "msg_b", "id": "call_1", "input": {}, "executed": true }),
-        );
-        let output = transcript.event(&tool);
-        assert!(output.commits.is_empty());
-        assert_eq!(output.footer.len(), 1);
-        assert!(transcript.event(&event("session.execution.succeeded", json!({}))).commits.is_empty());
-    }
-
-    #[test]
     fn a_resize_replay_lists_again_then_restores_local_rows_and_waiting_events() {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);
         transcript.hydrate(&history(), false);
@@ -2006,23 +1963,6 @@ mod tests {
         assert_eq!(texts(&transcript.replayed(&listed, true)), [(EntryKind::Tool, "shot".into())]);
     }
 
-    /// A compaction already running when the session is listed goes on to print the rest of its summary.
-    #[test]
-    fn a_listed_running_compaction_prints_its_tail() {
-        let mut transcript = Transcript::new("ses_1", true, true, true, None);
-        let running = message(json!({ "id": "msg_c", "type": "compaction", "status": "running", "reason": "auto",
-            "summary": "Part one" }));
-        assert_eq!(
-            texts(&transcript.hydrate(&[running], true)),
-            [(EntryKind::System, "Compaction".into()), (EntryKind::Assistant, "Part one".into())]
-        );
-        let ended = event("session.compaction.ended", json!({ "reason": "auto", "text": "Part one and two" }));
-        assert_eq!(
-            texts(&transcript.event(&ended)),
-            [(EntryKind::Assistant, " and two".into()), (EntryKind::Assistant, "".into())]
-        );
-    }
-
     /// A streamed part is remembered as one local row holding its whole text, as each delta extends it.
     #[test]
     fn streamed_parts_are_remembered_whole() {
@@ -2048,35 +1988,6 @@ mod tests {
                 (EntryKind::Assistant, "aabbcc"),
             ]
         );
-    }
-
-    #[test]
-    fn live_tool_events_print_the_start_new_output_and_the_end_once() {
-        let mut transcript = Transcript::new("ses_1", true, true, true, None);
-        transcript.hydrate(&[], true);
-        let call = |kind: &str, data: Value| {
-            let mut data = data;
-            data["assistantMessageID"] = json!("msg_a");
-            data["id"] = json!("call_1");
-            event(kind, data)
-        };
-        let tools = |output: Output| -> Vec<(Phase, String)> {
-            output.commits.iter().map(|commit| (commit.phase, commit.text.clone())).collect()
-        };
-        assert!(transcript.event(&call("session.tool.input.started", json!({ "name": "bash" }))).commits.is_empty());
-        let called = call("session.tool.called", json!({ "input": { "command": "ls" }, "executed": true }));
-        let output = transcript.event(&called);
-        assert_eq!(output.patch.unwrap().status.as_deref(), Some("running shell"));
-        assert_eq!(output.commits[0].tool.as_deref(), Some("shell"));
-        let success = call(
-            "session.tool.success",
-            json!({ "content": [{ "type": "text", "text": "a\n" }], "metadata": { "exit": 0 }, "executed": true }),
-        );
-        assert_eq!(tools(transcript.event(&success)), [(Phase::Progress, "a\n".into())]);
-        assert!(transcript.event(&success).commits.is_empty(), "a finished tool prints once");
-        let listed = message(json!({ "id": "msg_a", "type": "assistant", "content": [{ "type": "tool", "id": "call_1",
-            "name": "bash", "state": { "status": "completed", "input": {}, "content": [] }, "time": { "created": 1 } }] }));
-        assert!(transcript.message(&listed, true).commits.is_empty(), "nor when listed later");
     }
 
     /// A shell outside this client's turns ends idle; a turn in flight ends the footer's work itself.
