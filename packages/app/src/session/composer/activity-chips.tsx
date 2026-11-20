@@ -6,6 +6,7 @@ import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
 import { stripAnsi } from "@opencode/session-ui/tools/ansi"
+import { Match } from "effect"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
@@ -21,7 +22,16 @@ export type SessionActivityItem = {
   target: string
   // When the work started running, from the server's record of it.
   started: number
-} & ({ type: "subagent"; sessionID: string } | { type: "shell" })
+} & (
+  | {
+      type: "subagent"
+      sessionID: string
+      // Running jobs in its tree, which its Stop cancels.
+      jobs?: readonly string[]
+    }
+  | { type: "shell" }
+  | { type: "script" }
+)
 
 type DurationKey =
   | "ui.message.duration.seconds"
@@ -51,6 +61,7 @@ export function formatElapsed(ms: number, t: (key: DurationKey, params: Record<s
 export function SessionActivityChips(props: {
   subagents: readonly SessionActivityItem[]
   shells: readonly SessionActivityItem[]
+  scripts?: readonly SessionActivityItem[]
   shell: {
     directory: string
     output: (input: ShellOutputInput) => Promise<ShellOutputOutput>
@@ -72,6 +83,7 @@ export function SessionActivityChips(props: {
     enabled: () => settings.general.backgroundActivity() !== "off",
     subagents: () => props.subagents,
     shells: () => props.shells,
+    scripts: () => props.scripts ?? [],
     stop: props.onStop,
     ended: props.shell.ended,
     focus: {
@@ -105,9 +117,13 @@ export function SessionActivityChips(props: {
   const alignment = useComposerLaneAlignment()
 
   const row = (item: SessionActivityItem) => ({
-    // A shell opens its own panel in place; a subagent opens where it runs.
-    closeOnSelect: item.type !== "shell",
-    onSelect: () => (item.type === "shell" ? panel.open(item) : props.onOpen(item)),
+    // A shell opens its own panel in place; a subagent opens where it runs; a script has nowhere to open.
+    closeOnSelect: item.type === "subagent",
+    onSelect: () => {
+      if (item.type === "shell") return panel.open(item)
+
+      if (item.type === "subagent") props.onOpen(item)
+    },
     onKeyDown: (event: KeyboardEvent) => {
       if (event.key !== "Delete" && event.key !== "Backspace") return
 
@@ -147,7 +163,13 @@ export function SessionActivityChips(props: {
         tabIndex={-1}
         data-slot="session-activity-stop"
         icon={rowStopping(item) ? <Loader /> : <Icon name="close" />}
-        aria-label={language.t(item.type === "shell" ? "session.running.stop.shell" : "session.running.stop.subagent")}
+        aria-label={language.t(
+          Match.value(item.type).pipe(
+            Match.when("shell", () => "session.running.stop.shell" as const),
+            Match.when("script", () => "session.running.stop.script" as const),
+            Match.orElse(() => "session.running.stop.subagent" as const),
+          ),
+        )}
         aria-disabled={rowStopping(item) || undefined}
         aria-busy={rowStopping(item) || undefined}
         onPointerDown={(event) => {
@@ -194,6 +216,7 @@ export function SessionActivityChips(props: {
           <Menu.Portal>
             <Menu.Content
               data-slot="session-activity-panel"
+              data-focus-scope
               data-view={view().shell ? "shell" : "list"}
               aria-label={label()}
               ref={content}
@@ -214,6 +237,20 @@ export function SessionActivityChips(props: {
                             </bdi>
                           </span>
                           <span dir="auto" class="min-w-0 flex-1 truncate text-v2-text-text-muted">
+                            {item.label}
+                          </span>
+                          {end(item)}
+                        </Menu.Item>
+                      )}
+                    </For>
+                    <For each={props.scripts}>
+                      {(item) => (
+                        <Menu.Item {...row(item)} ref={(el: HTMLElement) => rows.set(item.key, el)}>
+                          <Icon name="code" class="shrink-0 text-v2-icon-icon-muted" />
+                          <span
+                            dir="ltr"
+                            class="min-w-0 flex-1 truncate font-mono text-[13px] tracking-[-0.04px] text-v2-text-text-base"
+                          >
                             {item.label}
                           </span>
                           {end(item)}

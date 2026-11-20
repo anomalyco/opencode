@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Օգտագործում",
   "usage.cost": "Արժեքը",
   "usage.view": "Դիտել համատեքստի օգտագործումը",
-  "systemPrompt.title": "Համակարգի հուշում",
   "rawMessages.title": "Հում հաղորդագրություններ",
   "export.session": "Արտահանման նիստ",
   "stats.session": "Նիստ",

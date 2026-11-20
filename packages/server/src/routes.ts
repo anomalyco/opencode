@@ -31,6 +31,8 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { LocationActivity } from "@opencode/core/location-activity"
+import { Machines } from "@opencode/core/machine/machines"
+import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Automation } from "@opencode/core/automation"
@@ -94,7 +96,10 @@ const applicationServiceNodes = [
   BlobStore.node,
   // Started with the server, so its leader election and polling resume jobs even before anyone calls the video API.
   VideoGeneration.node,
+  SessionSearchBuild.node,
   Workspace.node,
+  // The machine list: where a carrier hands over the workers dialing in from other computers.
+  Machines.node,
   FileWatch.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)

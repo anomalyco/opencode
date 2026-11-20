@@ -30,6 +30,7 @@ import { ConfigProviderPlugin } from "../config/plugin/provider.js"
 import { ConfigPolicyPlugin } from "../config/plugin/policy.js"
 import { ConfigReferencePlugin } from "../config/plugin/reference.js"
 import { ConfigShellPlugin } from "../config/plugin/shell.js"
+import { ConfigSessionSearchPlugin } from "../config/plugin/session-search.js"
 import { ConfigSnapshotPlugin } from "../config/plugin/snapshot.js"
 import { ConfigSkillPlugin } from "../config/plugin/skill.js"
 import { ConfigCompatibilityPlugin } from "../config/plugin/compatibility.js"
@@ -69,6 +70,8 @@ import { Automation } from "../automation.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
+import { SessionSearch } from "../session/search.js"
+import { SessionSearchBuild } from "../session/search-build.js"
 import { SubagentJob } from "../session/subagent-job.js"
 import { SharedCache } from "../shared-cache.js"
 import { Shell } from "../shell.js"
@@ -90,6 +93,7 @@ import { QuestionTool } from "../tool/plugin/question.js"
 import { ReadTool } from "../tool/plugin/read.js"
 import { ArtifactTools } from "../tool/plugin/artifact.js"
 import { AutomationTools } from "../tool/plugin/automation.js"
+import { SessionSearchTools } from "../tool/plugin/session-search.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
@@ -105,6 +109,7 @@ import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
 import { ForkNoticePlugin } from "./fork-notice.js"
+import { HomeMemoryPlugin } from "./home-memory.js"
 import { PlanPlugin } from "./plan.js"
 import { GoalPlugin } from "./goal.js"
 import { ModelsDevPlugin } from "./models-dev.js"
@@ -167,6 +172,8 @@ const services = [
   Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
+  SessionSearch.Service,
+  SessionSearchBuild.Service,
   SubagentJob.Service,
   SharedCache.Service,
   Shell.Service,
@@ -230,6 +237,8 @@ export const requirements = LayerNode.group([
   Session.node,
   SessionCompaction.node,
   SessionInstructions.node,
+  SessionSearch.node,
+  SessionSearchBuild.node,
   SubagentJob.node,
   SharedCache.node,
   Shell.node,
@@ -257,6 +266,7 @@ const pre = [
   VcsGitPlugin.Plugin,
   AgentPlugin.Plugin,
   ForkNoticePlugin.Plugin,
+  HomeMemoryPlugin.Plugin,
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
   GoalPlugin.Plugin,
@@ -281,6 +291,7 @@ const pre = [
   ReadTool.Plugin,
   ArtifactTools.Plugin,
   AutomationTools.Plugin,
+  SessionSearchTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,
@@ -302,6 +313,7 @@ const post = [
   ConfigImagePlugin.Plugin,
   ConfigLocationWatcherPlugin.Plugin,
   ConfigShellPlugin.Plugin,
+  ConfigSessionSearchPlugin.Plugin,
   ConfigSnapshotPlugin.Plugin,
   ConfigToolOutputPlugin.Plugin,
   ConfigCompatibilityPlugin.Plugin,

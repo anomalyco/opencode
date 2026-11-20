@@ -65,7 +65,13 @@ import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
 import type { Info as ToolInfo } from "@opencode/schema/tool"
-import { InstructionStateTable, SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import {
+  InstructionStateTable,
+  SessionInboxTable,
+  SessionMessageTable,
+  SessionPartTable,
+  SessionTable,
+} from "@opencode/core/session/sql"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionStore } from "@opencode/core/session/store"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -5112,15 +5118,20 @@ describe("SessionRunnerLLM", () => {
       executed: false,
     })
     yield* s.db
-      .update(SessionMessageTable)
+      .update(SessionPartTable)
       .set({
         data: sql`json_set(
-          ${SessionMessageTable.data},
-          '$.content[0].state.metadata',
+          ${SessionPartTable.data},
+          '$.state.metadata',
           json('{"sessionID":"ses_existing_child","status":"running","internal":"private"}')
         )`,
       })
-      .where(eq(SessionMessageTable.id, assistantMessageID))
+      .where(
+        and(
+          eq(SessionPartTable.message_id, assistantMessageID),
+          eq(SessionPartTable.call_id, "call-interrupted-subagent"),
+        ),
+      )
       .run()
       .pipe(Effect.orDie)
     s.requests.length = 0
@@ -5197,11 +5208,9 @@ describe("SessionRunnerLLM", () => {
     })
     yield* callTool(crashed, "call-running", "subagent")
     yield* s.db
-      .update(SessionMessageTable)
-      .set({
-        data: sql`json_set(${SessionMessageTable.data}, '$.content[1].state.metadata', json('{"sessionID":"ses_child"}'))`,
-      })
-      .where(eq(SessionMessageTable.id, crashed))
+      .update(SessionPartTable)
+      .set({ data: sql`json_set(${SessionPartTable.data}, '$.state.metadata', json('{"sessionID":"ses_child"}'))` })
+      .where(and(eq(SessionPartTable.message_id, crashed), eq(SessionPartTable.call_id, "call-running")))
       .run()
       .pipe(Effect.orDie)
     // An unfinished assistant behind the checkpoint is outside the history the runner settles.

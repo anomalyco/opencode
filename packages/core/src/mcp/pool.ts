@@ -111,8 +111,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const scope = yield* Effect.scope
     const run = yield* FiberSet.makeRuntime<never, void, never>()
-    const driver = Environment.makeLocalDriver(yield* ChildProcessSpawner)
-    const host = Environment.Service.of({ files: Environment.makeFiles(driver), spawner: driver.spawner })
+    const host = Environment.make(Environment.localID, Environment.makeLocalDriver(yield* ChildProcessSpawner))
     const fetch = yield* FetchHttpClient.Fetch
     const slots = new Map<string, Slot>()
     // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.

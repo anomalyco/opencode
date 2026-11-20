@@ -68,6 +68,14 @@ test("jump to latest is reachable only while it is shown", async ({ page }) => {
   await expect(latest).toBeInViewport()
   // The click focused the button; hiding it must not leave focus on an invisible control.
   await expect(jump).not.toBeFocused()
+
+  // From the keyboard, focus continues in the prompt instead of falling to the page.
+  await page.mouse.wheel(0, -3000)
+  await expect(latest).not.toBeInViewport()
+  await jump.focus()
+  await page.keyboard.press("Enter")
+  await expect(latest).toBeInViewport()
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeFocused()
 })
 
 function lines(count: number) {

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Ús",
   "usage.cost": "Cost",
   "usage.view": "Veure l'ús del context",
-  "systemPrompt.title": "Indicació del sistema",
   "rawMessages.title": "Missatges crus",
   "export.session": "Sessió d'exportació",
   "stats.session": "Sessió",

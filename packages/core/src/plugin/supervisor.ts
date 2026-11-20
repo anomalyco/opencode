@@ -1,7 +1,7 @@
 export * as PluginSupervisor from "./supervisor.js"
 
 import { Event } from "@opencode/schema/config"
-import { Cause, Clock, Effect, Layer, Queue, Stream } from "effect"
+import { Cause, Effect, Layer, Queue, Stream } from "effect"
 import { ConfigPluginSource } from "../config/plugin/source.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
@@ -136,9 +136,10 @@ export const layer = Layer.effectDiscard(
     let running = new Map<string, Plugin.Generation>()
     let outdated = new Set<string>()
     const updating = new Set<string>()
-    // When each `@latest` plugin last updated on its own. One attempt per check interval, so an update that doesn't
-    // take, or a new version that fails to load, isn't retried on every reload.
+    // The check interval in which each `@latest` plugin last updated on its own. One attempt per interval, so an update
+    // that doesn't take, or a new version that fails to load, isn't retried on every reload.
     const attempted = new Map<string, number>()
+    let cycle = 0
     let generation = 0
     let observed = 0
 
@@ -205,18 +206,17 @@ export const layer = Layer.effectDiscard(
         Effect.flatMap((checked) =>
           Effect.gen(function* () {
             if (current !== generation) return
-            const now = yield* Clock.currentTimeMillis
             // Only a plugin written as `name@latest` updates on its own; the update reloads it.
             yield* Effect.forEach(
               checked.filter(
                 ([target, available]) =>
                   available &&
                   target.endsWith("@latest") &&
-                  now - (attempted.get(target) ?? Number.NEGATIVE_INFINITY) >= PluginUpdate.interval,
+                  attempted.get(target) !== cycle,
               ),
               ([target]) =>
                 // Recorded first: the update itself triggers reloads, which check again while it runs.
-                Effect.sync(() => attempted.set(target, now)).pipe(
+                Effect.sync(() => attempted.set(target, cycle)).pipe(
                   Effect.andThen(updates.update(target)),
                   Effect.catchCause((cause) => Effect.logWarning("failed to update plugin", { target, cause })),
                 ),
@@ -247,7 +247,7 @@ export const layer = Layer.effectDiscard(
       )
     yield* watch(sources.changes())
     yield* watch(modules.changes())
-    yield* watch(Stream.fromEffectRepeat(Effect.sleep(PluginUpdate.interval)))
+    yield* watch(updates.intervals().pipe(Stream.tap((next) => Effect.sync(() => (cycle = next)))))
     yield* watch(bus.subscribe([Event.Updated, SdkPlugins.Updated]))
     yield* watch(
       updates.changes().pipe(

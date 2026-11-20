@@ -55,7 +55,10 @@ test("the content beside a panel follows the panel's edge on every frame of a to
     .locator("visible=true")
     .first()
 
-  const review = page.locator('[data-slot="session-review-toggle"] button')
+  // The header and the open panel's strip each hold a copy; only the one showing can be clicked.
+  const review = page
+    .locator('[data-slot="session-review-toggle"] button, [data-slot="session-review-panel-toggle"] button')
+    .locator("visible=true")
 
   const runs = [
     { toggle: sidebar, before: '[data-slot="vertical-tabs-mount"]', after: "main", gap: 0 },

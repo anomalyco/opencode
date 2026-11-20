@@ -39,14 +39,11 @@ export function handoffOutput(delivery: string, logs?: string) {
 const FORBIDDEN_TOOLS = new Set([
   // Approving the shell tool unattended would approve every command, not a particular command.
   "shell",
-  "opencode.automation_create",
-  "opencode.automation_pause",
-  "opencode.automation_resume",
-  "opencode.automation_delete",
-  "opencode.session_move",
-  "opencode.session_rename",
-  "opencode.worktree_create",
-  "opencode.worktree_remove",
+  "automation.create",
+  "automation.pause",
+  "automation.resume",
+  "automation.delete",
+  "opencode.session.move",
 ])
 
 export interface RunInput {
