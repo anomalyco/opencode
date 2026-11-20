@@ -1074,6 +1074,30 @@ export function createData(config: CreateDataInput) {
           match.time.completed = event.created
         })
         return
+      case "session.widget.posted":
+        message.insert(event.data.sessionID, {
+          id: event.data.messageID,
+          type: "widget",
+          title: event.data.title,
+          template: event.data.template,
+          data: event.data.data,
+          tool: event.data.tool,
+          status: "open",
+          metadata: event.metadata,
+          time: { created: event.created },
+        })
+        return
+      case "session.widget.responded":
+        if (!messageIndex.get(event.data.sessionID)?.has(event.data.messageID)) return
+        message.update(event.data.sessionID, (draft, index) => {
+          const position = index.get(event.data.messageID)
+          const item = position === undefined ? undefined : draft[position]
+          if (item?.type !== "widget" || item.status !== "open") return
+          item.status = event.data.status
+          item.response = event.data.response
+          item.time.responded = event.created
+        })
+        return
       case "session.step.started":
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.assistantMessageID)

@@ -95,6 +95,8 @@ import type {
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
   ExperimentalSessionWaitOutput,
+  ExperimentalSessionWidgetRespondInput,
+  ExperimentalSessionWidgetRespondOutput,
   ExperimentalSessionInstructionsEntryListInput,
   ExperimentalSessionInstructionsEntryListOutput,
   ExperimentalSessionInstructionsEntryPutInput,
@@ -279,6 +281,11 @@ import type {
   ExperimentalJobListOutput,
   ExperimentalJobCancelInput,
   ExperimentalJobCancelOutput,
+  ExperimentalWidgetTemplateListOutput,
+  ExperimentalWidgetTemplateLatestInput,
+  ExperimentalWidgetTemplateLatestOutput,
+  ExperimentalWidgetTemplateGetInput,
+  ExperimentalWidgetTemplateGetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1127,6 +1134,20 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+        widget: {
+          respond: (input: ExperimentalSessionWidgetRespondInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalSessionWidgetRespondOutput>(
+              {
+                method: "POST",
+                path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/widget/${encodeURIComponent(input.messageID)}/respond`,
+                body: input["payload"],
+                successStatus: 204,
+                declaredStatuses: [400, 401, 404, 409],
+                empty: true,
+              },
+              requestOptions,
+            ),
+        },
         instructions: {
           entry: {
             list: (input: ExperimentalSessionInstructionsEntryListInput, requestOptions?: RequestOptions) =>
@@ -1768,6 +1789,43 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+      },
+      widget: {
+        template: {
+          list: (requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalWidgetTemplateListOutput }>(
+              {
+                method: "GET",
+                path: `/api/experimental/widget/template`,
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          latest: (input: ExperimentalWidgetTemplateLatestInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalWidgetTemplateLatestOutput }>(
+              {
+                method: "GET",
+                path: `/api/experimental/widget/template/${encodeURIComponent(input.name)}`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          get: (input: ExperimentalWidgetTemplateGetInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalWidgetTemplateGetOutput }>(
+              {
+                method: "GET",
+                path: `/api/experimental/widget/template/${encodeURIComponent(input.name)}/${encodeURIComponent(input.version)}`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
       },
       migration: {
         v1: {

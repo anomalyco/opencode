@@ -104,6 +104,8 @@ import { WebFetchTool } from "../tool/plugin/webfetch.js"
 import { WebSearchTool } from "../tool/plugin/websearch.js"
 import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
+import { WidgetTools } from "../tool/plugin/widget.js"
+import { Widget } from "../widget.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
@@ -185,6 +187,7 @@ const services = [
   ToolOutput.Service,
   Watcher.Service,
   WellKnown.Service,
+  Widget.Service,
   VideoGeneration.Service,
   Worktree.Service,
   WorktreeStrategies.Service,
@@ -250,6 +253,7 @@ export const requirements = LayerNode.group([
   ToolOutput.node,
   Watcher.node,
   WellKnown.node,
+  Widget.node,
   VideoGeneration.node,
   Worktree.node,
   WorktreeStrategies.node,
@@ -288,6 +292,7 @@ const pre = [
   McpEventTools.Plugin,
   McpResourceTools.Plugin,
   QuestionTool.Plugin,
+  WidgetTools.Plugin,
   ReadTool.Plugin,
   ArtifactTools.Plugin,
   AutomationTools.Plugin,

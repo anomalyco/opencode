@@ -25,6 +25,7 @@ import { SessionInbox } from "./session-inbox.js"
 import { Project } from "./project.js"
 import { SessionFork } from "./session-fork.js"
 import { Permission } from "./permission.js"
+import { Widget as WidgetSchema } from "./widget.js"
 
 const Base = {
   sessionID: SessionID,
@@ -328,6 +329,35 @@ export namespace Shell {
     },
   })
   export type Ended = typeof Ended.Type
+}
+
+export namespace Widget {
+  export const Posted = Event.durable({
+    type: "session.widget.posted",
+    ...options,
+    schema: {
+      ...Base,
+      messageID: SessionMessage.ID,
+      title: Schema.String.pipe(optional),
+      template: WidgetSchema.Ref,
+      data: Schema.Json,
+      tool: SessionMessage.Widget.fields.tool,
+    },
+  })
+  export type Posted = typeof Posted.Type
+
+  export const Responded = Event.durable({
+    type: "session.widget.responded",
+    ...options,
+    schema: {
+      ...Base,
+      messageID: SessionMessage.ID,
+      status: Schema.Literals(["submitted", "dismissed"]),
+      /** The submitted value; absent for a dismissal. */
+      response: Schema.Json.pipe(optional),
+    },
+  })
+  export type Responded = typeof Responded.Type
 }
 
 export namespace Step {
@@ -689,6 +719,8 @@ export const Definitions = Event.inventory(
   Skill.Activated,
   Shell.Started,
   Shell.Ended,
+  Widget.Posted,
+  Widget.Responded,
   Step.Started,
   Step.FirstToken,
   Step.Streamed,

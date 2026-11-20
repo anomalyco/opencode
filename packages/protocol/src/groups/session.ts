@@ -39,6 +39,7 @@ import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Form } from "@opencode/schema/form"
 import { PublicSessionMessage } from "./message.js"
+import { WidgetRespondEndpoint } from "./widget.js"
 
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
@@ -471,6 +472,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         }),
       ),
     )
+    .add(WidgetRespondEndpoint)
     .add(
       HttpApiEndpoint.post("session.revert.stage", "/api/session/:sessionID/revert/stage", {
         params: { sessionID: Session.ID },

@@ -24,6 +24,7 @@ import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Shell } from "@opencode/core/shell"
 import { Job } from "@opencode/core/job"
+import { Widget } from "@opencode/core/widget"
 import { KV } from "@opencode/core/kv"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Global } from "@opencode/util/global"
@@ -78,6 +79,7 @@ const applicationServiceNodes = [
   Project.sweepNode,
   Worktree.node,
   Session.node,
+  Widget.node,
   Instance.node,
   SessionTransfer.node,
   InstructionEntry.node,

@@ -22,6 +22,7 @@ import { makeBlobGet } from "./blob"
 import { makeAutomation } from "./automation"
 import { makeJob } from "./job"
 import { makeMediaGet } from "./media"
+import { makeWidget } from "./widget"
 import { type Outbound, runPtySocket } from "./pty-socket"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
@@ -34,6 +35,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const mediaGet = yield* makeMediaGet
     const blobGet = yield* makeBlobGet
     const automation = yield* makeAutomation
+    const widget = yield* makeWidget
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
@@ -53,6 +55,9 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("automation.pause", (ctx) => automation.pause(ctx.params.automationID))
       .handle("automation.resume", (ctx) => automation.resume(ctx.params.automationID))
       .handle("automation.delete", (ctx) => automation.remove(ctx.params.automationID))
+      .handle("widget.template.list", () => widget.list())
+      .handle("widget.template.latest", (ctx) => widget.latest(ctx.params.name))
+      .handle("widget.template.get", (ctx) => widget.get(ctx.params.name, ctx.params.version))
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {

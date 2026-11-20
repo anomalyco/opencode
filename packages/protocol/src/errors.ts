@@ -369,3 +369,25 @@ export class ArtifactNotFoundError extends Schema.TaggedError<ArtifactNotFoundEr
   },
   { httpApiStatus: 404 },
 ) {}
+
+export class WidgetTemplateNotFoundError extends Schema.TaggedError<WidgetTemplateNotFoundError>()(
+  "WidgetTemplateNotFoundError",
+  {
+    // Not `name`: the generated client assigns error bodies onto an Error, whose `name` is the tag.
+    template: Schema.String,
+    version: Schema.optional(Schema.String),
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class WidgetAlreadyRespondedError extends Schema.TaggedError<WidgetAlreadyRespondedError>()(
+  "WidgetAlreadyRespondedError",
+  {
+    sessionID: Schema.String,
+    messageID: Schema.String,
+    status: Schema.Literals(["submitted", "dismissed"]),
+    message: Schema.String,
+  },
+  { httpApiStatus: 409 },
+) {}

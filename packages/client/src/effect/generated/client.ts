@@ -101,6 +101,8 @@ import type {
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
   ExperimentalSessionWaitOutput,
+  ExperimentalSessionWidgetRespondInput,
+  ExperimentalSessionWidgetRespondOutput,
   ExperimentalSessionInstructionsEntryListInput,
   ExperimentalSessionInstructionsEntryListOutput,
   ExperimentalSessionInstructionsEntryPutInput,
@@ -275,6 +277,11 @@ import type {
   ExperimentalJobListOutput,
   ExperimentalJobCancelInput,
   ExperimentalJobCancelOutput,
+  ExperimentalWidgetTemplateListOutput,
+  ExperimentalWidgetTemplateLatestInput,
+  ExperimentalWidgetTemplateLatestOutput,
+  ExperimentalWidgetTemplateGetInput,
+  ExperimentalWidgetTemplateGetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -847,6 +854,16 @@ const EndpointExperimentalSessionWait = (raw: RawClient["server.session"]) => (i
     raw["session.wait"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+type ExperimentalSessionWidgetRespondRequest = Parameters<RawClient["server.session"]["session.widget.respond"]>[0]
+const EndpointExperimentalSessionWidgetRespond =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionWidgetRespondInput) =>
+    preserveEffect<ExperimentalSessionWidgetRespondOutput>()(
+      raw["session.widget.respond"]({
+        params: { sessionID: input["sessionID"], messageID: input["messageID"] },
+        payload: input["payload"],
+      } as ExperimentalSessionWidgetRespondRequest).pipe(Effect.mapError(mapClientError)),
+    )
+
 const EndpointExperimentalSessionInstructionsEntryList =
   (raw: RawClient["server.session"]) => (input: ExperimentalSessionInstructionsEntryListInput) =>
     preserveEffect<ExperimentalSessionInstructionsEntryListOutput>()(
@@ -892,6 +909,7 @@ const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
   export: EndpointExperimentalSessionExport(raw),
   skill: EndpointExperimentalSessionSkill(raw),
   wait: EndpointExperimentalSessionWait(raw),
+  widget: { respond: EndpointExperimentalSessionWidgetRespond(raw) },
   instructions: {
     entry: {
       list: EndpointExperimentalSessionInstructionsEntryList(raw),
@@ -1758,6 +1776,32 @@ const EndpointExperimentalJobCancel = (raw: RawClient["server.experimental"]) =>
     raw["job.cancel"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointExperimentalWidgetTemplateList = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalWidgetTemplateListOutput>()(
+    raw["widget.template.list"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalWidgetTemplateLatest =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalWidgetTemplateLatestInput) =>
+    preserveEffect<ExperimentalWidgetTemplateLatestOutput>()(
+      raw["widget.template.latest"]({ params: { name: input["name"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalWidgetTemplateGet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalWidgetTemplateGetInput) =>
+    preserveEffect<ExperimentalWidgetTemplateGetOutput>()(
+      raw["widget.template.get"]({ params: { name: input["name"], version: input["version"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1788,6 +1832,13 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
   job: { list: EndpointExperimentalJobList(raw), cancel: EndpointExperimentalJobCancel(raw) },
+  widget: {
+    template: {
+      list: EndpointExperimentalWidgetTemplateList(raw),
+      latest: EndpointExperimentalWidgetTemplateLatest(raw),
+      get: EndpointExperimentalWidgetTemplateGet(raw),
+    },
+  },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>

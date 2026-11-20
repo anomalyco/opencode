@@ -250,6 +250,8 @@ permissions: [{ action: edit, resource: "*", effect: deny }]`,
       expect(build.permissions).toEqual([
         ...defaultPermissions,
         { action: "question", resource: "*", effect: "allow" },
+        { action: "widget", resource: "*", effect: "allow" },
+        { action: "widget_template", resource: "*", effect: "allow" },
         { action: "shell", resource: "*", effect: "ask" },
         { action: "edit", resource: "*", effect: "ask" },
         { action: "webfetch", resource: "*", effect: "ask" },

@@ -57,7 +57,11 @@ export const Plugin = define({
         item.name = Agent.Name.make("Build")
         item.description = "The default agent. Executes tools based on configured permissions."
         item.mode = "primary"
-        item.permissions.push({ action: "question", resource: "*", effect: "allow" })
+        item.permissions.push(
+          { action: "question", resource: "*", effect: "allow" },
+          { action: "widget", resource: "*", effect: "allow" },
+          { action: "widget_template", resource: "*", effect: "allow" },
+        )
       })
 
       editor.update(Agent.ID.make("general"), (item) => {
@@ -67,6 +71,7 @@ export const Plugin = define({
         item.mode = "subagent"
         item.permissions.push(
           { action: "question", resource: "*", effect: "deny" },
+          { action: "widget", resource: "*", effect: "deny" },
           { action: "subagent", resource: "*", effect: "deny" },
         )
       })
