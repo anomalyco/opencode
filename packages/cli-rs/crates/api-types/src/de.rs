@@ -7,6 +7,39 @@ use serde::de::{DeserializeOwned, Error, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
+/// The JSON text with each lone UTF-16 surrogate escape (`\ud83d` without its pair) written as `\ufffd`, or `None` when
+/// it has none. `JSON.parse` keeps a lone surrogate, which `JSON.stringify` writes for a string cut inside a pair;
+/// serde_json rejects it, and a Rust string cannot hold one. For a second parse after a failed first one.
+pub fn well_formed(text: &[u8]) -> Option<Vec<u8>> {
+    let escape = |at: usize| -> Option<u16> {
+        let digits = text.get(at..at + 6)?.strip_prefix(b"\\u")?;
+        u16::from_str_radix(std::str::from_utf8(digits).ok()?, 16).ok()
+    };
+    let (mut out, mut copied, mut at) = (None::<Vec<u8>>, 0, 0);
+    while let Some(offset) = text.get(at..).and_then(|rest| rest.iter().position(|byte| *byte == b'\\')) {
+        at += offset;
+        let Some(unit) = escape(at) else {
+            at += 2;
+            continue;
+        };
+        let pair =
+            (0xd800..0xdc00).contains(&unit) && escape(at + 6).is_some_and(|low| (0xdc00..0xe000).contains(&low));
+        if pair || !(0xd800..0xe000).contains(&unit) {
+            at += if pair { 12 } else { 6 };
+            continue;
+        }
+        let out = out.get_or_insert_with(Vec::new);
+        out.extend_from_slice(&text[copied..at]);
+        out.extend_from_slice(b"\\ufffd");
+        at += 6;
+        copied = at;
+    }
+    out.map(|mut out| {
+        out.extend_from_slice(&text[copied..]);
+        out
+    })
+}
+
 /// For an optional and nullable field: absent is `None` (through `#[serde(default)]`), `null` is
 /// `Some(None)`, and a value is `Some(Some(value))`.
 pub fn double_option<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
@@ -309,6 +342,22 @@ mod tests {
             assert_eq!(text.field("type").as_str(), value.get("type").and_then(Value::as_str), "{json}");
             assert_eq!(text.field("type").as_bool(), value.get("type").and_then(Value::as_bool), "{json}");
             assert_eq!(text.unknown::<serde_json::Error>().unwrap(), value, "{json}");
+        }
+    }
+
+    #[test]
+    fn lone_surrogates_read_as_replacement_characters() {
+        let cases = [
+            (r#""\ud83d""#, Some(r#""\ufffd""#)),
+            (r#""\ude00\ud83d\ude00x\uD83D""#, Some(r#""\ufffd\ud83d\ude00x\ufffd""#)),
+            (r#""\ud83d\ud83d\ude00""#, Some(r#""\ufffd\ud83d\ude00""#)),
+            (r#"{"\\ud83d":"\u00e9\\","a":"\ud83d\n"}"#, Some(r#"{"\\ud83d":"\u00e9\\","a":"\ufffd\n"}"#)),
+            (r#""\ud83d\ude00 \u12""#, None),
+            (r#""\"#, None),
+        ];
+        for (text, expected) in cases {
+            let fixed = well_formed(text.as_bytes());
+            assert_eq!(fixed.as_deref().map(|text| std::str::from_utf8(text).unwrap()), expected, "{text}");
         }
     }
 

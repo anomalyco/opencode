@@ -6,6 +6,7 @@ use std::fmt;
 
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
+use opencode_api_types::de::well_formed;
 use serde::de::DeserializeOwned;
 
 /// The largest buffered event, as `maxSseEventBytes` in the TypeScript client.
@@ -162,7 +163,12 @@ where
     futures_util::stream::unfold(state, |mut state| async move {
         loop {
             if let Some(data) = state.ready.pop_front() {
-                let item = serde_json::from_str(&data).map_err(|error| Error::MalformedResponse(error.to_string()));
+                let item = serde_json::from_str(&data)
+                    .or_else(|error| match well_formed(data.as_bytes()) {
+                        Some(text) => serde_json::from_slice(&text),
+                        None => Err(error),
+                    })
+                    .map_err(|error| Error::MalformedResponse(error.to_string()));
                 if item.is_err() {
                     state.ended = true;
                     state.ready.clear();
