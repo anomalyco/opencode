@@ -12,8 +12,10 @@ import { useLocal } from "@/providers/models/selection"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { LocationProvider } from "@/workspaces/location"
-import { createNewSessionMcps, createNewSessionSkills } from "./extensions/controller"
-import { useNewSessionExtensionsDialog } from "./extensions/dialog"
+import { createNewSessionMcps } from "./extensions/mcp/controller"
+import { useNewSessionMcpsDialog } from "./extensions/mcp/dialog"
+import { createNewSessionSkills } from "./extensions/skills/controller"
+import { useNewSessionSkillsDialog } from "./extensions/skills/dialog"
 import { useNewSessionLocationDialog } from "./location/dialog"
 import { createPromptProjectController, type PromptProject } from "./project/selector"
 import { NewSessionView } from "./view"
@@ -197,7 +199,8 @@ function DraftLanding(props: DraftArgs & { directory: string; setDirectory: (dir
     setDisabled: (ids) => setState("disabledSkills", ids),
   })
 
-  const openExtensions = useNewSessionExtensionsDialog({ mcps, skills, onDone: editor.restoreFocus })
+  const openMcps = useNewSessionMcpsDialog({ mcps, onDone: editor.restoreFocus })
+  const openSkills = useNewSessionSkillsDialog({ skills, onDone: editor.restoreFocus })
 
   return (
     <div class="relative flex h-dvh w-full flex-col bg-v2-background-bg-deep p-2">
@@ -208,7 +211,8 @@ function DraftLanding(props: DraftArgs & { directory: string; setDirectory: (dir
         location={openLocation}
         mcps={mcps}
         skills={skills}
-        extensions={openExtensions}
+        mcpsDialog={openMcps}
+        skillsDialog={openSkills}
       />
       <Show when={state.activity}>
         <output class="absolute inset-x-4 bottom-4 text-center text-12-regular text-text-weak">{state.activity}</output>

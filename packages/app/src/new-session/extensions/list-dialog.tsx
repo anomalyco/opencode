@@ -1,36 +1,23 @@
 import { Dialog, DialogBody, DialogTitle } from "@opencode/ui/dialog"
-import { useDialog } from "@opencode/ui/context/dialog"
 import { SearchList } from "@opencode/ui/search-list"
 import { Switch } from "@opencode/ui/switch"
 import { TruncatedText } from "@opencode/ui/truncated-text"
 import fuzzysort from "fuzzysort"
 import { createMemo, createSignal, Show } from "solid-js"
-import { useLanguage } from "@/runtime/i18n/language"
-import type { NewSessionExtensionList } from "./controller"
+import type { NewSessionExtensionList } from "./list"
 import "@/shell/commands/dialog.css"
 import "@/shell/search-list.css"
 
-type Kind = "mcp" | "skill"
-
-/** Opens the dialog that chooses which MCP servers, or which skills, the draft's session starts with. */
-export function useNewSessionExtensionsDialog(input: {
-  mcps: NewSessionExtensionList
-  skills: NewSessionExtensionList
-  onDone: () => void
+/** A searchable list with a switch per entry, shared by the MCPs and skills dialogs, which supply the copy. */
+export function NewSessionExtensionListDialog(props: {
+  list: NewSessionExtensionList
+  title: string
+  placeholder: string
+  empty: string
+  searchEmpty: string
+  status?: boolean
 }) {
-  const dialog = useDialog()
-
-  return (kind: Kind) =>
-    void dialog.show(
-      () => <NewSessionExtensionsDialog kind={kind} list={kind === "mcp" ? input.mcps : input.skills} />,
-      input.onDone,
-    )
-}
-
-function NewSessionExtensionsDialog(props: { kind: Kind; list: NewSessionExtensionList }) {
-  const language = useLanguage()
   const [query, setQuery] = createSignal("")
-  const mcp = props.kind === "mcp"
 
   const results = createMemo(() => {
     const current = query().trim()
@@ -43,30 +30,22 @@ function NewSessionExtensionsDialog(props: { kind: Kind; list: NewSessionExtensi
   return (
     <Dialog class="command-palette command-palette-compact search-list-dialog mcp-dialog" size="large" fit>
       <div class="sr-only">
-        <DialogTitle>{language.t(mcp ? "dialog.mcp.title" : "settings.extensions.tab.skills")}</DialogTitle>
+        <DialogTitle>{props.title}</DialogTitle>
       </div>
       <DialogBody class="command-palette-body">
         <SearchList
           query={query()}
           onQuery={setQuery}
-          placeholder={language.t(mcp ? "dialog.mcp.search.placeholder" : "session.new.skills.search.placeholder")}
+          placeholder={props.placeholder}
           items={results()}
           key={(item) => item.id}
-          empty={language.t(
-            props.list.items().length > 0
-              ? mcp
-                ? "dialog.mcp.search.empty"
-                : "session.new.skills.search.empty"
-              : mcp
-                ? "dialog.mcp.empty"
-                : "session.new.skills.empty",
-          )}
+          empty={props.list.items().length > 0 ? props.searchEmpty : props.empty}
           onSelect={(item) => props.list.toggle(item.id, !props.list.enabled(item))}
         >
           {(item, row) => (
             <div {...row} data-option-key={item().id} data-size="compact">
               <span class="mcp-dialog-lead">
-                <Show when={mcp}>
+                <Show when={props.status}>
                   <span class="mcp-dialog-status" aria-hidden="true">
                     <span class="mcp-status-dot" data-status={item().status} />
                   </span>

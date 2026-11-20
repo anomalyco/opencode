@@ -38,8 +38,10 @@ import {
   type CheckoutLabelEvent,
 } from "./workspace/checkout-machine"
 import { BaseBranchPicker } from "./workspace/selector"
-import type { NewSessionExtensionList } from "./extensions/controller"
-import type { useNewSessionExtensionsDialog } from "./extensions/dialog"
+import type { NewSessionMcps } from "./extensions/mcp/controller"
+import type { useNewSessionMcpsDialog } from "./extensions/mcp/dialog"
+import type { NewSessionSkills } from "./extensions/skills/controller"
+import type { useNewSessionSkillsDialog } from "./extensions/skills/dialog"
 import { NewSessionBrickBreaker } from "./brick-breaker"
 import { NewSessionPinBoard } from "./pin-board"
 import { NewSessionWordmark } from "./wordmark"
@@ -60,9 +62,10 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
   location: ReturnType<typeof useNewSessionLocationDialog>
-  mcps: NewSessionExtensionList
-  skills: NewSessionExtensionList
-  extensions: ReturnType<typeof useNewSessionExtensionsDialog>
+  mcps: NewSessionMcps
+  skills: NewSessionSkills
+  mcpsDialog: ReturnType<typeof useNewSessionMcpsDialog>
+  skillsDialog: ReturnType<typeof useNewSessionSkillsDialog>
 }) {
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
     Persist.global("workspace-onboarding"),
@@ -130,8 +133,8 @@ export function NewSessionView(props: {
                       onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
                       mcps={props.mcps}
                       skills={props.skills}
-                      onMcps={() => props.extensions("mcp")}
-                      onSkills={() => props.extensions("skill")}
+                      onMcps={() => props.mcpsDialog()}
+                      onSkills={() => props.skillsDialog()}
                     />
                   )}
                 </Show>
@@ -210,8 +213,8 @@ function NewSessionLocation(props: {
   onboarding: boolean
   onProjects: () => void
   onWorktree?: () => void
-  mcps: NewSessionExtensionList
-  skills: NewSessionExtensionList
+  mcps: NewSessionMcps
+  skills: NewSessionSkills
   onMcps: () => void
   onSkills: () => void
 }) {
