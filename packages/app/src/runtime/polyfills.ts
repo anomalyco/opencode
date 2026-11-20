@@ -37,3 +37,17 @@ if (!Promise.try) {
     return new Promise<T>((resolve) => resolve(callback(...args)))
   } as typeof Promise.try
 }
+
+// URL.parse landed in Safari 18; the connect screen, the pairing page and the office links all call it.
+if (!URL.parse) {
+  // SAFETY: absent in these browsers, so the fallback is the whole implementation, and it has the same shape.
+  URL.parse = function parse(value: string, base?: string | URL) {
+    try {
+      return new URL(value, base)
+    } catch {
+      return null
+    }
+  } as typeof URL.parse
+}
+
+export {}
