@@ -331,6 +331,24 @@ it.live("scheduled code uses the session files and runs shell after one approval
       lastOutcome: "fired",
       state: { file: "fixture contents", output: "automation-output", exitCode: 0 },
     })
+
+    const creatingGlob = yield* automations
+      .create({
+        name: "scan for fixtures",
+        sessionID: session.id,
+        trigger,
+        action: { type: "code", code: 'await new Bun.Glob("*.txt").scan(); return { done: true }' },
+      })
+      .pipe(Effect.forkChild)
+    yield* approveCodePermission("read", [], session)
+    yield* approveCodePermission("external_directory", [], session)
+
+    const glob = yield* Fiber.join(creatingGlob).pipe(Effect.timeout("10 seconds"))
+    expect(yield* tickCode(glob.id)).toMatchObject({
+      status: "paused",
+      lastOutcome: "failed",
+      lastOutput: expect.stringContaining("Permission glob needs approval"),
+    })
   }),
 )
 

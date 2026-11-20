@@ -164,6 +164,10 @@ const resolveCapabilities = Effect.fnUntraced(function* (scanned: ProgramScan) {
         actions.add("edit")
       actions.add("external_directory")
     }
+    if (use.member === "Glob") {
+      actions.add("read")
+      actions.add("external_directory")
+    }
     if (use.member === "write") {
       actions.add("edit")
       actions.add("external_directory")
