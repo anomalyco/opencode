@@ -18,7 +18,7 @@ import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
-import { SystemNotice } from "../../session/system-notice.js"
+import { BackgroundResult } from "../../session/background-result.js"
 import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { VideoGeneration } from "../../video-generation.js"
@@ -91,7 +91,7 @@ export const Output = Schema.Struct({
 
 /** The completion notice for a background video job, naming its job ID like image notices do. */
 export function notice(input: { id: string; state: string; body: string }) {
-  return SystemNotice.render(`Video job ${input.id} ${SystemNotice.outcome(input.state)}.`, {
+  return BackgroundResult.render("video", `Video job ${input.id} ${BackgroundResult.outcome(input.state)}.`, {
     label: "Result",
     text: input.body,
   })

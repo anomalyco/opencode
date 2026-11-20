@@ -5,7 +5,7 @@ import { Cause, Context, Deferred, Effect, Exit, Option, type Scope, Semaphore }
 import { extension } from "mime-types"
 import { Flag } from "../flag.js"
 import { Job } from "../job.js"
-import { SystemNotice } from "../session/system-notice.js"
+import { BackgroundResult } from "../session/background-result.js"
 import type { Session } from "../session.js"
 import type { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -15,7 +15,7 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
   const body = job.status === "running" ? "Interrupted by server restart." : (job.output ?? job.error ?? state)
   return {
     description: "Script",
-    text: SystemNotice.render(`Code Mode script ${job.id} ${SystemNotice.outcome(state)}.`, {
+    text: BackgroundResult.render("codemode", `Code Mode script ${job.id} ${BackgroundResult.outcome(state)}.`, {
       label: "Result",
       text: body,
     }),

@@ -96,42 +96,42 @@ describe("SubagentCompletion", () => {
       expect(sent).toHaveLength(4)
       expect(sent[0]?.text).toBe(
         [
-          "<system-notice>",
+          '<background-result kind="subagent">',
           'Subagent ses_deliver_child ("Deliver report") reported while its own background work is still running.',
           "Report:",
           "All green",
           "",
           "Background work still running:",
           "- shell (shell_1): bun test",
-          "</system-notice>",
+          "</background-result>",
         ].join("\n"),
       )
       expect(sent[0]?.metadata?.state).toBe("completed")
       expect(sent[3]?.text).toBe(
         [
-          "<system-notice>",
+          '<background-result kind="subagent">',
           'Subagent ses_deliver_child ("Deliver report") finished.',
           "Report:",
           "All done",
-          "</system-notice>",
+          "</background-result>",
         ].join("\n"),
       )
       expect(sent[1]?.text).toBe(
         [
-          "<system-notice>",
+          '<background-result kind="subagent">',
           'Subagent ses_deliver_child ("Deliver report") failed.',
           "Report:",
           "boom",
-          "</system-notice>",
+          "</background-result>",
         ].join("\n"),
       )
       expect(sent[2]?.text).toBe(
         [
-          "<system-notice>",
+          '<background-result kind="subagent">',
           'Subagent ses_deliver_child ("Deliver report") was cancelled.',
           "Report:",
           "Subagent cancelled",
-          "</system-notice>",
+          "</background-result>",
         ].join("\n"),
       )
       expect(completed).toEqual([notificationID])
@@ -161,20 +161,20 @@ describe("SubagentCompletion", () => {
 
       expect(sent[0]?.text).toBe(
         [
-          "<system-notice>",
+          '<background-result kind="subagent">',
           'Subagent ses_deliver_child ("Deliver report") was cancelled.',
           "Report:",
           output,
-          "</system-notice>",
+          "</background-result>",
         ].join("\n"),
       )
       expect(sent[1]?.text).toBe(
         [
-          "<system-notice>",
+          '<background-result kind="subagent">',
           'Subagent ses_deliver_child ("Deliver report") was cancelled.',
           "Report:",
           "Cancel failed",
-          "</system-notice>",
+          "</background-result>",
         ].join("\n"),
       )
     }),

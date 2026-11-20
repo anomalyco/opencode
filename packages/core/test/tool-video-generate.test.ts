@@ -151,7 +151,7 @@ describe("experimental_video_generate", () => {
       expect(id).toStartWith("video_")
       expect(result.output).toEqual({ id, path: file, model: "test/director" })
       expect(yield* notice(result)).toBe(
-        `<system-notice>\nVideo job ${id} finished.\nResult:\nVideo request finished. Saved 2 videos: ${file}, ${second}.\n</system-notice>`,
+        `<background-result kind="video">\nVideo job ${id} finished.\nResult:\nVideo request finished. Saved 2 videos: ${file}, ${second}.\n</background-result>`,
       )
       expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(file)))).toEqual(Uint8Array.of(...MP4, 0))
       expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(second)))).toEqual(Uint8Array.of(...MP4, 1))

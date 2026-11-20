@@ -394,7 +394,7 @@ describe("Code Mode session jobs", () => {
       yield* Fiber.join(delivered)
       yield* s.idle
       expect(yield* s.h.jobs.pendingBackground).toEqual([])
-      const text = `<system-notice>\nCode Mode script ${job.id} finished.\nResult:\nresult: done\n</system-notice>`
+      const text = `<background-result kind="codemode">\nCode Mode script ${job.id} finished.\nResult:\nresult: done\n</background-result>`
       expect((yield* s.h.llm.requests()).at(-1)?.messages).toContainEqual(
         expect.objectContaining({ content: expect.arrayContaining([expect.objectContaining({ type: "text", text })]) }),
       )
@@ -431,7 +431,7 @@ describe("subagent idle reports end to end", () => {
         const first = yield* deliveredReports(h, h.parent.id)
         expect(first).toHaveLength(1)
         expect(first[0]?.text).toContain(
-          `<system-notice>\nSubagent ${outputSessionID(launched.metadata)} ("review") reported while its own background work is still running.\nReport:\n`,
+          `<background-result kind="subagent">\nSubagent ${outputSessionID(launched.metadata)} ("review") reported while its own background work is still running.\nReport:\n`,
         )
         expect(first[0]?.metadata?.state).toBe("completed")
         expect(first[0]!.text).toContain("Started tests")
@@ -444,7 +444,7 @@ describe("subagent idle reports end to end", () => {
         expect(second).toHaveLength(2)
         expect(second[1]!.id).not.toBe(first[0]!.id)
         expect(second[1]?.text).toContain(
-          `<system-notice>\nSubagent ${outputSessionID(launched.metadata)} ("review") finished.\nReport:\n`,
+          `<background-result kind="subagent">\nSubagent ${outputSessionID(launched.metadata)} ("review") finished.\nReport:\n`,
         )
         expect(second[1]?.metadata?.state).toBe("completed")
         expect(second[1]!.text).toContain("Tests green")
@@ -474,7 +474,7 @@ describe("subagent idle reports end to end", () => {
         const launched = yield* h.call("call-launch")
         const childID = outputSessionID(launched.metadata)
         yield* waitForReports(h, h.parent.id, 1)
-        const text = `<system-notice>\nSubagent ${childID} ("review") finished.\nReport:\n${quote}\n</system-notice>`
+        const text = `<background-result kind="subagent">\nSubagent ${childID} ("review") finished.\nReport:\n${quote}\n</background-result>`
         expect((yield* deliveredReports(h, h.parent.id))[0]).toMatchObject({
           text,
           metadata: { source: "subagent", childID, agent: "reviewer", state: "completed" },
@@ -617,9 +617,11 @@ describe("subagent idle reports end to end", () => {
         expect(rootReports.every((report) => report.metadata?.childID === childID)).toBe(true)
         // A grandchild's shell is named in the child's background list, but the grandchild
         // never sends its own report to the root.
-        expect(rootReports.some((report) => report.text.includes(`<system-notice>\nSubagent ${grandchildID} (`))).toBe(
-          false,
-        )
+        expect(
+          rootReports.some((report) =>
+            report.text.includes(`<background-result kind="subagent">\nSubagent ${grandchildID} (`),
+          ),
+        ).toBe(false)
         expect(yield* h.jobs.pendingBackground).toEqual([])
       }),
     30_000,

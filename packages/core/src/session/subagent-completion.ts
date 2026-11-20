@@ -1,7 +1,7 @@
 export * as SubagentCompletion from "./subagent-completion.js"
 
 import { Effect } from "effect"
-import { SystemNotice } from "./system-notice.js"
+import { BackgroundResult } from "./background-result.js"
 import type { Job } from "../job.js"
 import type { SessionBackground } from "./background.js"
 import type { SessionMessage } from "./message.js"
@@ -76,8 +76,9 @@ export const deliver = Effect.fnUntraced(function* <E>(
     ...(input.notificationID ? { id: input.notificationID } : {}),
     sessionID: recovery.parentSessionID,
     description: recovery.description,
-    text: SystemNotice.render(
-      `Subagent ${recovery.childSessionID} (${JSON.stringify(recovery.description)}) ${SystemNotice.outcome(state)}.`,
+    text: BackgroundResult.render(
+      "subagent",
+      `Subagent ${recovery.childSessionID} (${JSON.stringify(recovery.description)}) ${BackgroundResult.outcome(state)}.`,
       { label: "Report", text: formatted },
     ),
     metadata: { source: "subagent", childID: recovery.childSessionID, agent: recovery.agent, state: input.status },

@@ -287,12 +287,12 @@ describe("Session.shell", () => {
         })
         expect(completion.payload.description).toBeUndefined()
         expect(completion.payload.text).toContain(
-          `<system-notice>\nShell ${message.shellID} (${command}) finished with exit code ${exit}.\nOutput:\n`,
+          `<background-result kind="shell">\nShell ${message.shellID} (${command}) finished with exit code ${exit}.\nOutput:\n`,
         )
         expect(completion.payload.text).toContain("user output")
         expect(completion.payload.text).toContain("user error")
         if (exit === 0) expect(completion.payload.text).not.toContain("Exit code")
-        if (exit !== 0) expect(completion.payload.text).toContain(`\n\nExit code: ${exit}\n</system-notice>`)
+        if (exit !== 0) expect(completion.payload.text).toContain(`\n\nExit code: ${exit}\n</background-result>`)
         expect(fixture.control.wakes).toEqual([])
       }),
     )
