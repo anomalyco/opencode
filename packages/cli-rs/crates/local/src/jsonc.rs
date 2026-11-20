@@ -434,12 +434,17 @@ impl Tree {
     }
 }
 
+/// How deep arrays and objects may nest. A deeper container is a parse error, read past without nodes, so parsing and
+/// the recursive walks of its values stay within a thread's stack; `jsonc-parser` itself throws past about 10,000.
+pub const MAX_DEPTH: usize = 512;
+
 /// `parseTree(text, errors, { allowTrailingComma: true })`.
 pub fn parse_tree(text: &str) -> Tree {
     let mut parser = Parser {
         scanner: Scanner::new(text),
         tree: Tree { nodes: vec![node(Kind::Array, 0, None, Value::Null)], errors: 0 },
         current: 0,
+        depth: 0,
     };
     parser.run();
     parser.tree
@@ -462,6 +467,7 @@ struct Parser<'a> {
     scanner: Scanner<'a>,
     tree: Tree,
     current: usize,
+    depth: usize,
 }
 
 impl Parser<'_> {
@@ -578,6 +584,34 @@ impl Parser<'_> {
     }
 
     fn parse_container(&mut self, object: bool) -> bool {
+        if self.depth == MAX_DEPTH {
+            self.skip_container();
+            return false;
+        }
+        self.depth += 1;
+        let parsed = self.parse_container_items(object);
+        self.depth -= 1;
+        parsed
+    }
+
+    // Reads past the container that opens here and its nesting, without recursion.
+    fn skip_container(&mut self) {
+        let mut open = 0usize;
+        loop {
+            match self.scanner.token() {
+                Token::OpenBrace | Token::OpenBracket => open += 1,
+                Token::CloseBrace | Token::CloseBracket => open -= 1,
+                Token::Eof => return,
+                _ => {}
+            }
+            self.scan_next();
+            if open == 0 {
+                return;
+            }
+        }
+    }
+
+    fn parse_container_items(&mut self, object: bool) -> bool {
         let (kind, close) = if object { (Kind::Object, Token::CloseBrace) } else { (Kind::Array, Token::CloseBracket) };
         self.current = self.push(kind, Value::Null);
         self.scan_next();

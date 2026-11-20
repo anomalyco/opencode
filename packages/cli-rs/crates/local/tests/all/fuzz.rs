@@ -1,4 +1,4 @@
-use opencode_local::jsonc::{Segment, modify, parse, parse_tree};
+use opencode_local::jsonc::{MAX_DEPTH, Segment, modify, parse, parse_tree};
 use opencode_util::rng::SplitMix64;
 
 #[test]
@@ -62,5 +62,16 @@ fn jsonc_never_panics() {
             }
         });
         assert!(outcome.is_ok(), "{text:?} {path:?} {value:?}");
+    }
+}
+
+// Nesting past the bound is a parse error rather than a stack overflow, in any thread.
+#[test]
+fn deep_jsonc_is_invalid_not_a_crash() {
+    let nested = |depth: usize| "[".repeat(depth) + &"]".repeat(depth);
+    assert!(parse(&nested(MAX_DEPTH)).is_some());
+    for depth in [MAX_DEPTH + 1, 100_000] {
+        assert_eq!(parse(&nested(depth)), None, "{depth}");
+        assert!(parse_tree(&nested(depth)).errors > 0, "{depth}");
     }
 }
