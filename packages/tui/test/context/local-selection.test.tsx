@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { RGBA } from "@opentui/core"
 import { agent, model, renderLocal, session } from "../fixture/local"
 import { json } from "../fixture/tui-client"
 
@@ -160,6 +161,33 @@ test("same-model agent switches clear drafts without a model acknowledgment", as
   await publishSelection(setup, "plan", "first", false)
   await publishSelection(setup, "plan", "second")
   expect(setup.local.model.current()?.modelID).toBe("second")
+})
+
+test("session with hidden agent resolves the hidden agent in current()", async () => {
+  await using setup = await renderLocal({
+    agents: [agent("build"), { ...agent("secret"), hidden: true }],
+    sessions: [session("ses_hidden", undefined, "secret")],
+  })
+  await setup.data.session.sync("ses_hidden")
+  setup.route.navigate({ type: "session", sessionID: "ses_hidden" })
+  expect(setup.local.agent.current()?.id).toBe("secret")
+})
+
+test("session with subagent does not resolve the subagent in current()", async () => {
+  await using setup = await renderLocal({
+    agents: [agent("build"), { ...agent("explore"), mode: "subagent" }],
+    sessions: [session("ses_subagent", undefined, "explore")],
+  })
+  await setup.data.session.sync("ses_subagent")
+  setup.route.navigate({ type: "session", sessionID: "ses_subagent" })
+  expect(setup.local.agent.current()?.id).toBe("build")
+})
+
+test("color resolves custom hex color for subagents", async () => {
+  await using setup = await renderLocal({
+    agents: [agent("build"), { ...agent("explore"), mode: "subagent", color: "#ff00ff" }],
+  })
+  expect(setup.local.agent.color("explore").equals(RGBA.fromHex("#ff00ff"))).toBe(true)
 })
 
 async function publishSelection(
