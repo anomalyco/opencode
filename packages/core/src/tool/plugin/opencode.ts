@@ -264,13 +264,13 @@ export const Plugin = {
                     left.providerID.localeCompare(right.providerID) ||
                     right.time.released - left.time.released,
                 )
-                .filter((model, index, sorted) => {
+                // Hide older versions only: a family's same-day siblings, like free and paid offerings, all stay listed.
+                .filter((model, _, sorted) => {
                   if (input.all || model.family === undefined) return true
-                  return (
-                    sorted.findIndex(
-                      (other) => other.providerID === model.providerID && other.family === model.family,
-                    ) === index
+                  const newest = sorted.find(
+                    (other) => other.providerID === model.providerID && other.family === model.family,
                   )
+                  return newest?.time.released === model.time.released
                 })
               const page = matching.slice(offset, offset + limit)
               const providers = Array.from(new Set(page.map((model) => model.providerID))).map((id) => ({
