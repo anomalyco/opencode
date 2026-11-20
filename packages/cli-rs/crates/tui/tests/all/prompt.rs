@@ -1,5 +1,6 @@
 //! Prompt editing and submission over a request-recording transport.
 
+use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness, WAIT, deref_harness, list};
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -624,4 +625,348 @@ fn history_file_is_shared_with_typescript() {
     assert!(loaded, "{:?}", again.textarea().text());
     again.app.press("up");
     assert_eq!(again.textarea().text(), "second \"quoted\" ünïcode");
+}
+
+#[derive(Clone, Debug)]
+enum Edit {
+    Type(&'static str),
+    Key(&'static str),
+    Paste(String),
+    Submit,
+    Stash,
+    Pop,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Item {
+    Char(char),
+    /// A collapsed paste: its label and its text.
+    Chip(String, String),
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Text {
+    items: Vec<Item>,
+    shell: bool,
+}
+
+impl Text {
+    fn shown(&self) -> String {
+        self.items
+            .iter()
+            .map(|item| match item {
+                Item::Char(c) => c.to_string(),
+                Item::Chip(label, _) => label.clone(),
+            })
+            .collect()
+    }
+
+    fn expanded(&self) -> String {
+        self.items
+            .iter()
+            .map(|item| match item {
+                Item::Char(c) => c.to_string(),
+                Item::Chip(_, text) => text.clone(),
+            })
+            .collect()
+    }
+}
+
+/// The reference prompt: the text with its pastes, the cursor and the selection anchor in items, the history with its
+/// position and draft, the stash, and what was sent.
+#[derive(Debug, Default)]
+struct Reference {
+    now: Text,
+    cursor: usize,
+    anchor: Option<usize>,
+    history: Vec<Text>,
+    index: i64,
+    draft: Option<Text>,
+    stash: Vec<Text>,
+    sent: Vec<(bool, String)>,
+}
+
+impl Reference {
+    /// Deletes the selection. OpenTUI's selection takes the item at its far end too, as the TypeScript textarea's does.
+    fn take_selection(&mut self) -> bool {
+        let Some(anchor) = self.anchor.take() else { return false };
+        let (start, end) = (anchor.min(self.cursor), (anchor.max(self.cursor) + 1).min(self.now.items.len()));
+        self.now.items.drain(start..end);
+        self.cursor = start;
+        start != end
+    }
+
+    fn insert(&mut self, items: impl IntoIterator<Item = Item>) {
+        self.take_selection();
+        for item in items {
+            self.now.items.insert(self.cursor, item);
+            self.cursor += 1;
+        }
+    }
+
+    fn restore(&mut self, text: Text, cursor_end: bool) {
+        self.now = text;
+        self.anchor = None;
+        self.cursor = if cursor_end { self.now.items.len() } else { 0 };
+    }
+
+    fn step(&mut self, direction: i64) {
+        let next = self.index + direction;
+        if next < -(self.history.len() as i64) || next > 0 {
+            return;
+        }
+        let at = |index: i64| &self.history[(self.history.len() as i64 + index) as usize];
+        let input = self.now.shown();
+        if self.index < 0 && !input.is_empty() && at(self.index).shown() != input {
+            return;
+        }
+        if self.index == 0 {
+            self.draft = Some(self.now.clone());
+        }
+        self.index = next;
+        let text = if next == 0 { self.draft.take().unwrap_or_default() } else { at(next).clone() };
+        self.restore(text, direction > 0);
+    }
+
+    /// Edits the model leaves to OpenTUI: arrows that step onto a paste chip, which jump past its edge, selections while
+    /// a chip shows, and Up and Down within several lines or a wrapped one.
+    fn skips(&self, edit: &Edit) -> bool {
+        let chip =
+            |index: Option<usize>| matches!(index.and_then(|index| self.now.items.get(index)), Some(Item::Chip(..)));
+        let chips = self.now.items.iter().any(|item| matches!(item, Item::Chip(..)));
+        match edit {
+            Edit::Key("shift+left" | "shift+right") => chips,
+            Edit::Key("left") => chip(self.cursor.checked_sub(1)),
+            Edit::Key("right") => chip(Some(self.cursor)) || chip(Some(self.cursor + 1)),
+            Edit::Key("delete") => chip(Some(self.cursor)),
+            Edit::Key("up" | "down") => self.now.items.contains(&Item::Char('\n')) || self.now.shown().len() > 100,
+            _ => chips && self.anchor.is_some(),
+        }
+    }
+
+    fn apply(&mut self, edit: &Edit) {
+        self.edit(edit);
+        // A selection back at its anchor is gone.
+        if self.anchor == Some(self.cursor) {
+            self.anchor = None;
+        }
+    }
+
+    fn edit(&mut self, edit: &Edit) {
+        let end = self.now.items.len();
+        match edit {
+            Edit::Type("!") if self.cursor == 0 && !self.now.shell => self.now.shell = true,
+            Edit::Type(text) => self.insert(text.chars().map(Item::Char)),
+            // A move with a selection collapses it to its start or its end.
+            Edit::Key("left" | "ctrl+a") if let Some(anchor) = self.anchor.take() => {
+                self.cursor = anchor.min(self.cursor)
+            }
+            Edit::Key("right" | "ctrl+e") if let Some(anchor) = self.anchor.take() => {
+                self.cursor = (anchor.max(self.cursor) + 1).min(end);
+            }
+            Edit::Key("left") => self.cursor = self.cursor.saturating_sub(1),
+            Edit::Key("right") => self.cursor = (self.cursor + 1).min(end),
+            // A selection starts only with a move.
+            Edit::Key("shift+left") if self.cursor > 0 => {
+                self.anchor.get_or_insert(self.cursor);
+                self.cursor -= 1;
+            }
+            Edit::Key("shift+right") if self.cursor < end => {
+                self.anchor.get_or_insert(self.cursor);
+                self.cursor += 1;
+            }
+            Edit::Key("shift+left" | "shift+right") => {}
+            // Home at a line's start goes to the end of the line before, and End at a line's end to the next line.
+            Edit::Key("ctrl+a") => {
+                let newline = self.now.items[..self.cursor].iter().rposition(|item| *item == Item::Char('\n'));
+                let start = newline.map_or(0, |index| index + 1);
+                self.cursor = if start == self.cursor { start.saturating_sub(1) } else { start };
+            }
+            Edit::Key("ctrl+e") => {
+                let newline = self.now.items[self.cursor..].iter().position(|item| *item == Item::Char('\n'));
+                let line_end = newline.map_or(end, |index| self.cursor + index);
+                self.cursor = if line_end == self.cursor { (line_end + 1).min(end) } else { line_end };
+            }
+            Edit::Key("backspace") if self.cursor == 0 && self.now.shell => self.now.shell = false,
+            Edit::Key("backspace") => {
+                if !self.take_selection() && self.cursor > 0 {
+                    self.cursor -= 1;
+                    self.now.items.remove(self.cursor);
+                }
+            }
+            Edit::Key("delete") => {
+                if !self.take_selection() && self.cursor < self.now.items.len() {
+                    self.now.items.remove(self.cursor);
+                }
+            }
+            Edit::Key("escape") => self.now.shell = false,
+            Edit::Key("up") if self.cursor != 0 => (self.anchor, self.cursor) = (None, 0),
+            Edit::Key("down") if self.cursor != end => (self.anchor, self.cursor) = (None, end),
+            // An Up that finds no entry falls through to a move, which ends the selection; a Down opens the composer.
+            Edit::Key("up") => (self.anchor, ()) = (None, self.step(-1)),
+            Edit::Key("down") => self.step(1),
+            Edit::Key(key) => unreachable!("{key}"),
+            Edit::Paste(text) => {
+                let lines = text.matches('\n').count() + 1;
+                if lines < 3 && text.encode_utf16().count() <= 150 {
+                    return self.insert(text.chars().map(Item::Char));
+                }
+                // The same text pasted right after its chip, or one cell after it, expands it.
+                let chip =
+                    |index: usize| matches!(self.now.items.get(index), Some(Item::Chip(_, pasted)) if pasted == text);
+                let narrow = |index: usize| matches!(self.now.items[index], Item::Char(c) if !"日本語👍".contains(c));
+                let repeat = [1, 2]
+                    .into_iter()
+                    .filter_map(|back| self.cursor.checked_sub(back))
+                    .find(|&index| chip(index) && (index + 1 == self.cursor || narrow(index + 1)));
+                if let Some(index) = repeat {
+                    self.now.items.splice(index..index + 1, text.chars().map(Item::Char));
+                    (self.anchor, self.cursor) = (None, index + text.chars().count());
+                    return;
+                }
+                self.insert([Item::Chip(format!("[Pasted ~{lines} lines]"), text.clone()), Item::Char(' ')]);
+            }
+            Edit::Submit => {
+                if self.now.shown().trim().is_empty() {
+                    return;
+                }
+                self.sent.push((self.now.shell, self.now.expanded()));
+                if self.history.last() != Some(&self.now) {
+                    self.history.push(self.now.clone());
+                }
+                (self.index, self.draft) = (0, None);
+                self.restore(Text::default(), false);
+            }
+            Edit::Stash => {
+                if self.now.items.is_empty() {
+                    return;
+                }
+                self.stash.push(self.now.clone());
+                (self.index, self.draft) = (0, None);
+                let shell = self.now.shell;
+                self.restore(Text { items: Vec::new(), shell }, false);
+            }
+            Edit::Pop => {
+                let Some(mut text) = self.stash.pop() else { return };
+                (self.index, self.draft) = (0, None);
+                text.shell = self.now.shell;
+                self.restore(text, true);
+            }
+        }
+    }
+}
+
+struct PromptModel;
+
+const TYPED: &[&str] = &["a", "b", "z", "é", "日", "👍", " ", "ab", "!"];
+const KEYS: &[&str] =
+    &["left", "right", "shift+left", "shift+right", "ctrl+a", "ctrl+e", "backspace", "delete", "escape", "up", "down"];
+
+impl Model for PromptModel {
+    type Command = Edit;
+
+    fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Edit> {
+        (0..steps)
+            .map(|_| match rng.below(100) {
+                0..30 => Edit::Type(*rng.pick(TYPED)),
+                30..65 => Edit::Key(*rng.pick(KEYS)),
+                65..75 => Edit::Paste(
+                    rng.pick(&[
+                        "xy".to_owned(),
+                        "日本 語".to_owned(),
+                        "l1\nl2\nl3".to_owned(),
+                        "a\nb\nc\nd".to_owned(),
+                        "q".repeat(160),
+                    ])
+                    .clone(),
+                ),
+                75..90 => Edit::Submit,
+                90..95 => Edit::Stash,
+                _ => Edit::Pop,
+            })
+            .collect()
+    }
+
+    fn run(&self, edits: &[Edit]) -> Option<Failure> {
+        let setup = Setup::serving(session_route(), Vec::new(), 160);
+        setup.ready();
+        let mut reference = Reference::default();
+        let sent = |setup: &Setup| {
+            let mut sent: Vec<(bool, String)> = Vec::new();
+            for (method, path, body) in setup.seen.lock().unwrap().iter() {
+                if method == "POST" && path.ends_with("/prompt") {
+                    sent.push((false, body["text"].as_str().unwrap_or_default().to_owned()));
+                } else if method == "POST" && path.ends_with("/shell") {
+                    sent.push((true, body["command"].as_str().unwrap_or_default().to_owned()));
+                }
+            }
+            sent
+        };
+        for (step, edit) in edits.iter().enumerate() {
+            let fail = |site, detail: String| Some(Failure { property: "prompt", site, step, detail });
+            if reference.skips(edit) {
+                continue;
+            }
+            match edit {
+                Edit::Type(text) => setup.app.type_text(text),
+                Edit::Key(key) => {
+                    setup.app.press(key);
+                    // Down past the newest entry opens the composer; Escape returns to the prompt.
+                    if setup.tui.keymap.mode() == "composer" {
+                        setup.app.press("escape");
+                    }
+                }
+                Edit::Paste(text) => setup.app.paste(text),
+                Edit::Submit => setup.app.press("return"),
+                Edit::Stash => setup.dispatch("prompt.stash"),
+                Edit::Pop => setup.dispatch("prompt.stash.pop"),
+            }
+            reference.apply(edit);
+            let textarea = setup.textarea();
+            let shown = reference.now.shown();
+            if textarea.text() != shown {
+                return fail("text", format!("the prompt shows {:?}, the model {shown:?}", textarea.text()));
+            }
+            let index = reference.now.items[..reference.cursor]
+                .iter()
+                .map(|item| match item {
+                    Item::Char(c) => c.len_utf8(),
+                    Item::Chip(label, _) => label.len(),
+                })
+                .sum();
+            let offset = opencode_ui::prompt_input::offset_at(&textarea, index);
+            if textarea.cursor_offset() != offset {
+                return fail(
+                    "cursor",
+                    format!("the cursor is at {}, the model's at {offset} in {shown:?}", textarea.cursor_offset()),
+                );
+            }
+            if reference.sent.len() > sent(&setup).len() {
+                setup.app.wait_until(WAIT, || sent(&setup).len() >= reference.sent.len());
+            }
+            if sent(&setup) != reference.sent {
+                return fail("sent", format!("sent {:?}, the model {:?}", sent(&setup), reference.sent));
+            }
+            let screen = setup.app.text();
+            if screen.contains("exit shell mode") != reference.now.shell {
+                return fail("mode", format!("the model's shell mode is {}:\n{screen}", reference.now.shell));
+            }
+        }
+        None
+    }
+
+    fn simplify(&self, edit: &Edit) -> Vec<Edit> {
+        match edit {
+            Edit::Paste(text) if text.len() > 20 => vec![Edit::Paste("a\nb\nc".to_owned())],
+            Edit::Type(text) if *text != "a" && *text != "!" => vec![Edit::Type("a")],
+            _ => Vec::new(),
+        }
+    }
+}
+
+/// Random typing, cursor moves, selections, pastes, history steps, shell mode, the stash and submits leave the prompt's
+/// text, cursor and mode, and what it sent, as a reference prompt has them.
+#[test]
+fn any_edit_sequence_matches_the_reference_prompt() {
+    model::check(&PromptModel, 4, 24);
 }
