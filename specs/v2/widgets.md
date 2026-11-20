@@ -179,25 +179,69 @@ type Widget = {
 }
 ```
 
-Events (event-sourced like other messages): `session.widget.posted` and `session.widget.responded`. A widget can be
-responded to once; later responses fail with a conflict.
+`status` is `"open"` until the one response; `response` is set only for `"submitted"` (it may be `null`). On the wire
+`time.*` are epoch milliseconds, like every other message.
 
-Model-facing: the `widget` tool result tells the model the widget is shown and to end its turn. A response appends a
-prompt to the session (as a synthetic user-visible message) and starts a turn:
-`User responded to widget "<title or template>": <JSON value>` or `User dismissed widget "<title>"`.
+Events (durable, event-sourced like other messages, in the `/api/event` stream and the session log):
+
+```ts
+type WidgetPosted = {
+  type: "session.widget.posted"
+  data: {
+    sessionID: SessionID
+    messageID: MessageID                             // the widget message's ID
+    title?: string
+    template: { name: string; version: string }
+    data: unknown
+    tool?: { messageID: MessageID; callID: string }
+  }
+}
+type WidgetResponded = {
+  type: "session.widget.responded"
+  data: { sessionID: SessionID; messageID: MessageID; status: "submitted" | "dismissed"; response?: unknown }
+}
+```
+
+The posted event projects a widget message with `status: "open"` and `time.created` = the event's `created`; the
+responded event sets `status`, `response` and `time.responded` (= the event's `created`) on an open widget and is
+ignored for one that is not open. A widget can be responded to once; later responses fail with a conflict.
+
+Model-facing: the widget message itself is not sent to the model. The `widget` tool result tells the model the widget is
+shown and to end its turn. A response appends a synthetic prompt to the session (steered, waking the session like a user
+prompt; `metadata: { widget: { messageID } }`, `description` `Responded to "<label>"` / `Dismissed "<label>"`), with
+text `User responded to widget "<label>": <JSON value>` or `User dismissed widget "<label>"`, where `<label>` is the
+title, or the template name when there is no title.
 
 ## HTTP API
 
-Follow the existing v2 HttpApi groups in `packages/protocol/src/groups`; regenerate `packages/client`.
+The routes are experimental (repo rule for new endpoints), so they live under `/api/experimental` and in the generated
+client under `client.experimental`. Like every other route, JSON success bodies are wrapped in `{ data }`; the generated
+TypeScript client unwraps it. Template routes are global (no location query).
 
-- `GET  /widget/template` → `Template[]` (latest version of every template, without `source`)
-- `GET  /widget/template/{name}` → latest `Template & { program: string }`
-- `GET  /widget/template/{name}/{version}` → `Template & { program: string }`, immutable: `Cache-Control: public,
-  max-age=31536000, immutable`. Clients cache by `name@version` forever.
-- `POST /session/{sessionID}/widget/{messageID}/respond` body `{ value: unknown } | { dismiss: true }` → 204.
-  409 when already responded, 404 when unknown.
+| Route | Response | SDK |
+| --- | --- | --- |
+| `GET /api/experimental/widget/template` | `{ data: Summary[] }`: latest version of every template, without `source`, sorted by name | `experimental.widget.template.list()` |
+| `GET /api/experimental/widget/template/{name}` | `{ data: Program }`: the latest version | `experimental.widget.template.latest({ name })` |
+| `GET /api/experimental/widget/template/{name}/{version}` | `{ data: Program }` with `Cache-Control: public, max-age=31536000, immutable` | `experimental.widget.template.get({ name, version })` |
+| `POST /api/experimental/session/{sessionID}/widget/{messageID}/respond` | 204; body `{ value: unknown }` or `{ dismiss: true }` | `experimental.session.widget.respond({ sessionID, messageID, payload })` |
 
-Clients get widget messages through the normal session message list and event stream, like every other message.
+```ts
+type Summary = { name: string; version: string; description: string; data: JSONSchema; builtin: boolean }
+type Program = Summary & { source: string; program: string }   // program = prelude + "\n" + source
+```
+
+Errors (JSON bodies with a `_tag`):
+
+- template routes: 404 `{ _tag: "WidgetTemplateNotFoundError", template, version?, message }`.
+- respond: 404 `SessionNotFoundError` (unknown session), 404 `MessageNotFoundError` (no widget message with that ID in
+  the session), 409 `{ _tag: "WidgetAlreadyRespondedError", sessionID, messageID, status: "submitted" | "dismissed",
+  message }`, 400 for a body that is neither shape.
+
+Every template version a widget message refers to stays retrievable by `name@version`, including built-in versions
+from older releases (the server stores a built-in's version when a widget using it is posted).
+
+Clients get widget messages through the normal session message list (`type=widget` filters them) and event stream,
+like every other message.
 
 ## Tools
 
@@ -212,17 +256,27 @@ with `@opencode/widget` once to fail fast on broken programs (errors go back to 
 it posts the widget message and returns `Widget "<title>" is shown to the user. Their response arrives as the next
 message; end your turn now unless there is unrelated work to do.`
 
-`widget_template` — manage templates.
+`widget_template` — manage templates. The input is one flat object (union inputs are poorly supported by some
+providers); fields an action needs are checked at run time.
 
 ```ts
-input:
-  | { action: "list" }                                  // names, descriptions, data schemas
-  | { action: "get"; name: string }                     // includes source
-  | { action: "save"; name: string; description: string; data: JSONSchema; source: string; example: unknown }
+input: {
+  action: "list" | "get" | "save"  // list: names, descriptions, data schemas; get: the latest version with source
+  name?: string                    // get, save
+  description?: string             // save
+  data?: JSONSchema                // save; top-level `type` must be "object"
+  source?: string                  // save
+  example?: unknown                // save
+}
 ```
 
-`save` validates the schema, checks `example` against it, and runs `init` plus one `view` with `example` before storing.
-Built-in names cannot be overwritten.
+`save` validates the name, checks `example` against the schema, and runs `init` (which renders the first `view`) with
+`example` before storing. Built-in names cannot be overwritten. Saving content that already exists (same version) makes
+that version the latest again and updates its description.
+
+Both tools are registered behind the `widgets` flag (on in local and dev builds, off in releases until shipped). Their
+permission actions are `widget` (resource: the template name) and `widget_template` (resource: the template name, or
+`*` for list); the Build agent allows both, Plan allows `widget`, and the `general` subagent denies `widget`.
 
 Tool descriptions should teach the model the node set and the ABI briefly and point at `suggestions` and `form` as
 examples to copy.
