@@ -119,7 +119,7 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 
 ### Errors and Usage
 
-- Claude Code retries failed requests itself, so opencode does not retry for this provider. Errors such as reaching a plan limit show once.
+- Claude Code retries failed requests itself, so opencode does not retry for this provider, apart from moving to the next folder in a `configDir` list. Errors such as reaching a plan limit show once.
 - Cost depends on the login Claude reports. A subscription shows $0 because it covers usage. An API key or a cloud account shows the models.dev price of the model Claude resolves, such as `claude-opus-5-5` for `opus`:
   - API key, Claude Platform on AWS or Google Cloud, and Bedrock's Mantle endpoint: Anthropic's prices.
   - Bedrock: Bedrock's prices, which are 10% higher for regional models like `us.anthropic.claude-opus-5-5`.
