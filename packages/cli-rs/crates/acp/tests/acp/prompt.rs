@@ -285,6 +285,37 @@ async fn attaches_readable_file_links_and_references_unreadable_ones_in_place() 
     assert_eq!(error.code, -32602);
     assert!(error.message.contains("image content has no data or uri"));
     assert_eq!(acp.server.state().submissions.len(), 2);
+
+    acp.prompt_blocks(
+        &acp.session_id,
+        json!([
+            { "type": "resource", "resource": { "uri": "file:///src/a.ts#L12", "text": "body" } },
+            { "type": "resource", "resource": { "uri": "untitled:notes", "text": "notes" } },
+            { "type": "resource", "resource": { "uri": "not a uri", "text": "raw" } },
+            { "type": "resource", "resource": { "uri": "file:///a.bin", "mimeType": "application/octet-stream", "blob": "AAE=" } },
+            { "type": "resource", "resource": { "uri": "file:///b.bin", "blob": "AAE=" } },
+            { "type": "resource_link", "uri": format!("zed://file?path={}", dir.path().join("notes.md").display()), "name": "" },
+            { "type": "resource_link", "uri": "https://example.com/a", "name": "" },
+            { "type": "image", "mimeType": "image/png", "data": "iVBO" },
+            { "type": "text", "text": "seen by user", "annotations": { "audience": ["user"] } },
+            { "type": "audio", "mimeType": "audio/wav", "data": "AA==" },
+        ]),
+    )
+    .await
+    .unwrap();
+    // A line fragment names the line, a resource without a MIME type or a user-only text is left out, as is audio.
+    assert_matches(
+        &acp.server.state().submissions[2],
+        &json!({
+            "kind": "prompt",
+            "text": "[/src/a.ts:12]\nbody\n[untitled:notes]\nnotes\n[not a uri]\nraw\nhttps://example.com/a",
+            "files": [
+                { "uri": "data:application/octet-stream;base64,AAE=", "name": "a.bin" },
+                { "uri": file, "name": "notes.md" },
+                { "uri": "data:image/png;base64,iVBO", "name": "image" },
+            ],
+        }),
+    );
 }
 
 #[tokio::test]
