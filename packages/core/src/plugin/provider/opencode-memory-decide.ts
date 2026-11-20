@@ -23,6 +23,8 @@ const DEADLINE = "5 seconds"
 export const LASTING = 0.7
 /** D2.z0: the message corrects the given entry with the highest probability. */
 export const CORRECTS = 0.5
+/** D6: the message asks to forget the given entry with the highest probability. A placeholder, as D2's, until labelled. */
+export const FORGETS = 0.5
 /** D3.t2: a distilled candidate is a durable lesson, not a note about one task. */
 export const DURABLE = 0.574
 /** D4.t3: an entry applies to the task, or the failure, at hand. */
@@ -126,6 +128,20 @@ export const make = (input: {
     const answer = answers?.find((item) => item.name === name)
     return answer?.type === "predicate" ? answer.probability : undefined
   }
+  /** A choice's most probable value other than "none", with its probability; undefined without an answer. */
+  const chosen = (answers: DecisionResult["answers"] | undefined, name: string) => {
+    const answer = answers?.find((item) => item.name === name)
+    return answer?.type === "choice"
+      ? answer.probabilities
+          .filter((item) => item.value !== "none" && typeof item.value === "string")
+          .reduce<{
+            id?: string
+            p: number
+          }>((top, item) => (item.probability > top.p ? { id: String(item.value), p: item.probability } : top), {
+            p: 0,
+          })
+      : undefined
+  }
   const logged = (
     question: string,
     ms: number,
@@ -178,19 +194,41 @@ export const make = (input: {
             },
           ],
         )
-        const answer = result.answers?.find((item) => item.name === "corrects")
-        const best =
-          answer?.type === "choice"
-            ? answer.probabilities
-                .filter((item) => item.value !== "none" && typeof item.value === "string")
-                .reduce<{
-                  id?: string
-                  p: number
-                }>((top, item) => (item.probability > top.p ? { id: String(item.value), p: item.probability } : top), {
-                  p: 0,
-                })
-            : undefined
+        const best = chosen(result.answers, "corrects")
         yield* logged("D2.z0", result.ms, best?.p, best?.id === undefined ? {} : { entry: best.id })
+        return best
+      }),
+    /**
+     * D6: the given entry a user's message asks to forget, by its probability, or none; one id at most. Only a person's
+     * request retires an entry, so this is the only way one is.
+     */
+    forgets: (message: string, given: ReadonlyArray<OpencodeMemoryPolicy.Given>) =>
+      Effect.gen(function* () {
+        const notes = given.map((entry) => `[${entry.id}] ${entry.title}\n${entry.text}`).join("\n\n")
+        const result = yield* ask(
+          `Team notes from shared memory that an AI coding agent was shown:\n\n${notes}\n\nThe user's message to the agent:\n\n${message}`,
+          [
+            {
+              type: "choice",
+              name: "forgets",
+              instructions:
+                "Which of the team notes, if any, does the user's message ask to forget: remove from the shared memory, delete, or stop using for good?",
+              choices: [
+                {
+                  value: "none",
+                  description:
+                    "The message asks to forget none of the notes: it corrects, follows, mentions or asks about one, asks the agent to undo or drop its own work, or asks to forget something no note is.",
+                },
+                ...given.map((entry) => ({
+                  value: entry.id,
+                  description: `The message asks to forget note ${entry.id} ("${entry.title}"): remove it from the shared memory, delete it or stop using it.`,
+                })),
+              ],
+            },
+          ],
+        )
+        const best = chosen(result.answers, "forgets")
+        yield* logged("D6", result.ms, best?.p, best?.id === undefined ? {} : { entry: best.id })
         return best
       }),
     /** D3: the probability a distilled candidate is a durable lesson, not a record of one fix. */

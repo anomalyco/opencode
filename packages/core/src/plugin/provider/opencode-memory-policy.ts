@@ -125,6 +125,8 @@ export interface Policy {
    * says so, since a bare "no longer applies" was once read as retracting the entry.
    */
   readonly withdrawn: (id: string) => string
+  /** What the session's instructions say of the entries retired because the user asked to forget them. */
+  readonly forgotten: (entries: ReadonlyArray<Given>) => string
   /** Whether a command is a test or build run, the kind that tells whether a fix worked. Runs on every shell command. */
   readonly test: (command: string) => boolean
 }
@@ -199,6 +201,13 @@ export const initial: Policy = {
   test: (command) => TEST.test(command),
   nudge: (entry) =>
     `<memory-correction>The user's last message may correct memory entry ${entry.id} r${entry.revision} "${line(entry.title)}". If it does, fix that entry now with memory \`edit\` (only the changed text, revision ${entry.revision}); otherwise ignore this.</memory-correction>`,
+  forgotten: (entries) =>
+    [
+      "<memory-forgotten>",
+      "At the user's request, these memory entries are retired: they're no longer searched or injected. Don't rely on them, and don't publish them again.",
+      ...entries.map((entry) => `- ${line(entry.id)} r${entry.revision} "${line(entry.title)}"`),
+      "</memory-forgotten>",
+    ].join("\n"),
   withdrawn: (id) =>
     `<memory-correction>The reminder about memory entry ${line(id)} is withdrawn: nothing more is asked about it. This only withdraws the reminder: entry ${line(id)} stands as it is. Don't retire or change it because of this notice.</memory-correction>`,
 }

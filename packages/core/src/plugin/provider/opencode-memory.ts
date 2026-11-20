@@ -15,7 +15,7 @@ import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
 import { AppProcess } from "@opencode/util/process"
-import { Clock, Deferred, Effect, Exit, Fiber, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
 import { Config } from "../../config.js"
@@ -56,10 +56,6 @@ const MAX_SEGMENT = 200
 const DISTILLATIONS_PER_TURN = 2
 /** The end of a command's output an event keeps. */
 const MAX_TAIL = 1500
-/** How long the workspace's list of restricted repositories is reused before Console is asked again. */
-const ANCHORS_MAX_AGE = 60 * 1000
-/** The most repositories a reader's reachable set names, as Console takes it. */
-const MAX_REACHABLE = 1000
 /** Commits a session made that it attaches to what it publishes, newest kept. */
 const MAX_COMMITS = 10
 /**
@@ -103,6 +99,11 @@ const VERIFIED = "verified-fix"
 /** The session instruction entries memory keeps: entries again after a compaction, and a correction reminder. */
 const DELIVERED = "memory.delivered"
 const CORRECTION = "memory.correction"
+/** The entries the user asked this session to forget, which it retired. */
+const FORGOTTEN = "memory.forgotten"
+/** The user's own messages a retire is checked against, newest kept, and how much of each. */
+const MAX_SAID = 3
+const MAX_SAID_TEXT = 2000
 /** The repository's rules for all its work, as an instruction file: a compaction restates them with the others. */
 const CONVENTIONS = "memory.conventions"
 /** Per-session state that outlives the process, removed with the session. */
@@ -271,6 +272,10 @@ type Tracked = {
   tainted?: boolean
   /** The entry the session's correction reminder names, until it's written or a compaction ends. */
   correcting?: string
+  /** The user's own messages in this session, newest last: only they can ask for an entry to be forgotten. */
+  readonly said: string[]
+  /** The entries retired because the user asked this session to forget them, by id. */
+  readonly forgotten: Map<string, OpencodeMemoryPolicy.Given>
   /** Its injected entries are in its instructions since a compaction. */
   restated?: boolean
   /** The repository (`host/owner/name`) of each entry the session read, unless it holds anywhere (tagged general). */
@@ -337,7 +342,6 @@ export const make = Effect.fnUntraced(function* (
       return offered.some((item) => item.providerID === model.providerID && item.id === model.id) ? model : undefined
     }),
   })
-  const github = yield* OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
   const tracked = (sessionID: string): Tracked => {
@@ -359,6 +363,8 @@ export const make = Effect.fnUntraced(function* (
       about: new Map(),
       instructions: Deferred.makeUnsafe<string>(),
       pending: [],
+      said: [],
+      forgotten: new Map(),
     }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
@@ -582,7 +588,7 @@ export const make = Effect.fnUntraced(function* (
     }).pipe(Effect.scoped)
   // A new revision of an entry, answered with its number and diff; the repository, branch and commit are recorded.
   const write = (
-    tool: "edit" | "append" | "rewrite" | "retire",
+    tool: "edit" | "append" | "rewrite",
     sessionID: Session.ID,
     id: string,
     revision: number,
@@ -592,83 +598,59 @@ export const make = Effect.fnUntraced(function* (
   ) =>
     Effect.gen(function* () {
       const state = tracked(sessionID)
-      if ((tool === "rewrite" || tool === "retire") && !state.shown.get(id)?.has(revision))
+      if (tool === "rewrite" && !state.shown.get(id)?.has(revision))
         return yield* new ToolFailure({
           message: `Nothing was sent: ${tool} acts on the whole of ${id}, so it starts from text you were shown, and this session hasn't been shown r${revision} whole${state.compactions > 0 ? " since the conversation was compacted" : ""}. Call ${namespace}.read with id "${id}", then call ${namespace}.${tool} again with the revision it shows.`,
         })
-      // An entry about another repository holds or not there, which this checkout can't show: it isn't replaced or
-      // retired from here, whatever this repository needs.
+      // An entry about another repository holds or not there, which this checkout can't show: it isn't replaced from
+      // here, whatever this repository needs.
       const about = state.about.get(id)
       const source = yield* repository
       const here = "repo" in source && source.repo ? repoName(source.repo) : undefined
-      if ((tool === "rewrite" || tool === "retire") && about && here && about.toLowerCase() !== here.toLowerCase())
+      if (tool === "rewrite" && about && here && about.toLowerCase() !== here.toLowerCase())
         return yield* new ToolFailure({
           message: `Nothing was sent: ${id} is about ${about}, not this repository (${here}), and what holds there can't be checked from here. Leave it as it is; if it's wrong for this repository too, publish what holds here instead.`,
         })
       const fields = yield* shared(tool, change)
       yield* resolved(tool, Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
-      if (tool !== "retire") yield* committed(tool, fields)
+      yield* committed(tool, fields)
       const expectedRevision = based(sessionID, id, revision)
-      const written = yield* call(
-        Written,
-        tool === "retire" ? "POST" : "PATCH",
-        `/api/memory/entries/${encodeURIComponent(id)}${tool === "retire" ? "/retire" : ""}`,
-        // Console's retire takes no provenance.
-        tool === "retire"
-          ? { expectedRevision, ...fields, ...(yield* reader) }
-          : {
-              expectedRevision,
-              ...fields,
-              source: { ...(yield* checkout), sessionID },
-              // A revision from a session that took in outside input is marked as one, as its publishes are.
-              ...(basis === "session" && (yield* tainted(sessionID)) ? { tainted: true } : {}),
-              ...(yield* reader),
-            },
-      )
+      const written = yield* call(Written, "PATCH", `/api/memory/entries/${encodeURIComponent(id)}`, {
+        expectedRevision,
+        ...fields,
+        source: { ...(yield* checkout), sessionID },
+        // A revision from a session that took in outside input is marked as one, as its publishes are.
+        ...(basis === "session" && (yield* tainted(sessionID)) ? { tainted: true } : {}),
+      })
       wrote(sessionID, id, expectedRevision, written)
       yield* settle(sessionID, id)
       return written
     }).pipe(Effect.mapError(failure))
-  // The restricted repositories the workspace has entries for, by workspace: the same list for every member.
-  const listed = new Map<string, { readonly at: number; readonly anchors: ReadonlyArray<string> }>()
   /**
-   * Which of those this reader can read, checked on this machine with the reader's own GitHub access, as Console names
-   * them (`github.com/<id>`): only numeric ids leave the machine. Anything unknown is left out, so Console withholds it.
+   * Retires `entry` because the user asked to forget it in their own words, `quote`: the only way an entry is retired,
+   * by anyone's request, never on the agent's own judgement. Their words go with it as confirmation, and Console records
+   * who asked; its history stays, so anyone can restore it.
    */
-  const reachable = Effect.gen(function* () {
-    const key = current?.console.key ?? ""
-    const now = yield* Clock.currentTimeMillis
-    const known = listed.get(key)
-    const anchors =
-      known && now - known.at < ANCHORS_MAX_AGE
-        ? known.anchors
-        : yield* call(Schema.Struct({ anchors: Schema.Array(Schema.String) }), "GET", "/api/memory/anchors").pipe(
-            Effect.timeout("10 seconds"),
-            Effect.map((answer) => answer.anchors),
-            Effect.tap((anchors) => Effect.sync(() => listed.set(key, { at: now, anchors }))),
-          )
-    const ids = anchors.flatMap((anchor) => {
-      const match = /^github\.com\/([1-9][0-9]*)$/.exec(anchor)
-      return match?.[1] === undefined ? [] : [Number(match[1])]
-    })
-    return (yield* github.reachable(ids.slice(0, MAX_REACHABLE))).map((id) => `github.com/${id}`)
-  }).pipe(Effect.catchCause(() => Effect.succeed(new Array<string>())))
-  // The reader's set as a request field; none when it names nothing.
-  const reader = reachable.pipe(Effect.map((keys) => (keys.length === 0 ? {} : { reachable: keys })))
-  /**
-   * The anchor of the checkout's repository, `host/owner/name`, as this machine resolves it now. Without GitHub's numeric
-   * id who may read the entry can't be recorded, so nothing is published.
-   */
-  const anchored = (name: string) =>
+  const forget = (sessionID: Session.ID, entry: OpencodeMemoryPolicy.Given, quote: string, reason: string) =>
     Effect.gen(function* () {
-      const anchor = yield* github.anchor(name)
-      if (anchor.repoId !== undefined) return { ...anchor, repoId: anchor.repoId }
-      return yield* new ToolFailure({
-        message:
-          anchor.host === "github.com"
-            ? `Nothing was sent: this machine couldn't look up ${anchor.name} on GitHub, so who may read the entry can't be recorded. Ask the user to sign in with \`gh auth login\` (or set GH_TOKEN), then call ${namespace}.publish again.`
-            : `Nothing was sent: entries from repositories on ${anchor.host} can't be shared yet, since who may read them can't be checked. Keep this in the repository's own docs instead.`,
+      const expectedRevision = based(sessionID, entry.id, entry.revision)
+      const written = yield* call(Written, "POST", `/api/memory/entries/${encodeURIComponent(entry.id)}/retire`, {
+        expectedRevision,
+        reason: reason.slice(0, 500).trim() || "The user asked to forget it",
+        evidence: [{ kind: "confirmation", ref: quote.slice(0, 500).trim() }],
+        source: { ...(yield* checkout), sessionID },
       })
+      wrote(sessionID, entry.id, expectedRevision, written)
+      yield* settle(sessionID, entry.id)
+      const state = tracked(sessionID)
+      state.given.delete(entry.id)
+      state.forgotten.set(entry.id, { ...entry, revision: written.revision ?? entry.revision })
+      yield* ctx.session.instructions.entry.put({
+        sessionID,
+        key: FORGOTTEN,
+        value: policy.forgotten([...state.forgotten.values()]),
+      })
+      return written
     })
   const metadata = (input: {
     readonly kind?: OpencodeMemoryPolicy.Kind
@@ -760,12 +742,6 @@ export const make = Effect.fnUntraced(function* (
       const found = OpencodeMemoryCapture.candidates(answer.text)
       if (found.length === 0) return
       const source = yield* checkout
-      const anchor =
-        "repo" in source && source.repo
-          ? yield* anchored(source.repo.slice("https://".length)).pipe(Effect.orElseSucceed(() => undefined))
-          : undefined
-      // Without its repository's id, who may read a candidate from a repository can't be recorded: none is sent.
-      if ("repo" in source && source.repo && anchor === undefined) return
       const observed = OpencodeMemoryCapture.evidence(segment)
       yield* Effect.forEach(found, (candidate, index) =>
         Effect.gen(function* () {
@@ -819,17 +795,14 @@ export const make = Effect.fnUntraced(function* (
           })
           yield* resolved("publish", Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
           yield* committed("publish", fields)
-          const set = yield* reader
           // A duplicate refusal records this session as having found the same lesson. The user's confirmation goes to the
           // entry that already says it, such as one the agent published itself when the user stated the rule.
           const published = yield* call(Written, "POST", "/api/memory/entries", {
             ...fields,
             ...(remaining.length === 0 ? {} : { supersedes: remaining }),
             source: { ...source, sessionID, ...writer },
-            ...(anchor === undefined ? {} : { anchor }),
             // A rule the user confirmed in their own words rests on them, not on what else the session read.
             ...(backing !== "confirmed" && (yield* tainted(sessionID)) ? { tainted: true } : {}),
-            ...set,
             // Keyed by what was distilled: no two distillations share a key, before a restart or after it.
             idempotencyKey: `${sessionID}:${boundary}:${Hash.sha256(prompt).slice(0, 16)}:${index}`.slice(0, 128),
           }).pipe(
@@ -840,7 +813,6 @@ export const make = Effect.fnUntraced(function* (
               return call(Schema.Unknown, "POST", `/api/memory/entries/${encodeURIComponent(existing)}/evidence`, {
                 evidence: confirmation,
                 source: { ...source, sessionID, ...writer },
-                ...set,
               }).pipe(Effect.as(undefined))
             }),
           )
@@ -908,7 +880,6 @@ export const make = Effect.fnUntraced(function* (
                 evidence: confirmation,
                 revision,
                 source,
-                ...(yield* reader),
               }).pipe(Effect.catch((cause) => Effect.logDebug("memory confirmation not sent", { id, cause })))
             return true
           }),
@@ -983,15 +954,13 @@ export const make = Effect.fnUntraced(function* (
                 evidence: [{ kind: VERIFIED, ref: sha }],
                 revision: entry.revision,
                 source: { ...(yield* checkout), sessionID },
-                ...(yield* reader),
               })
             }),
           { discard: true },
         )
       }).pipe(Effect.catchCause((cause) => Effect.logDebug("memory fix not verified", { cause })))
-    // Read now, so the first moment doesn't wait on Git or GitHub.
+    // Read now, so the first moment doesn't wait on Git.
     yield* repository.pipe(Effect.forkIn(lease, { startImmediately: true }))
-    yield* reachable.pipe(Effect.forkIn(lease, { startImmediately: true }))
     // The MCP servers whose tools and resources are outside input, by tool prefix and name: all but the Console's own,
     // while the server config ends up with under its name is the one the Console delivered rather than one of the user's.
     const servers = yield* Effect.cachedWithTTL(
@@ -1066,16 +1035,12 @@ export const make = Effect.fnUntraced(function* (
         // Console's own scoring hands out. A revision the agent already has isn't delivered again.
         const gated = yield* decide.available
         const task = moment.type === "prompt" ? moment.text : (state.task ?? moment.command)
-        return yield* reader.pipe(
-          Effect.flatMap((set) =>
-            call(Schema.Struct({ entries: Schema.Array(Injected) }), "POST", "/api/memory/inject", {
-              sessionID,
-              moment: moment.type,
-              ...inject,
-              ...(gated ? { ...CANDIDATES, ...(moment.type === "prompt" ? RULES : {}) } : {}),
-              ...set,
-            }),
-          ),
+        return yield* call(Schema.Struct({ entries: Schema.Array(Injected) }), "POST", "/api/memory/inject", {
+          sessionID,
+          moment: moment.type,
+          ...inject,
+          ...(gated ? { ...CANDIDATES, ...(moment.type === "prompt" ? RULES : {}) } : {}),
+        }).pipe(
           Effect.map((answer) =>
             answer.entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision),
           ),
@@ -1170,16 +1135,11 @@ export const make = Effect.fnUntraced(function* (
           )
     // Console records each delivered revision once, so what its own scoring handed out and already recorded isn't
     // recorded twice.
-    // The reader's reachable set goes with them, as Console needs it for an entry of a repository that isn't public.
     const report = (sessionID: Session.ID, entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>) =>
-      reader.pipe(
-        Effect.flatMap((set) =>
-          call(Schema.Unknown, "POST", DELIVERIES, {
-            sessionID,
-            entries: entries.slice(0, MAX_RECORDED).map((entry) => ({ id: entry.id, revision: entry.revision })),
-            ...set,
-          }),
-        ),
+      call(Schema.Unknown, "POST", DELIVERIES, {
+        sessionID,
+        entries: entries.slice(0, MAX_RECORDED).map((entry) => ({ id: entry.id, revision: entry.revision })),
+      }).pipe(
         Effect.catch((cause) => Effect.logDebug("memory delivery not recorded", { cause })),
         Effect.forkIn(lease, { startImmediately: true }),
       )
@@ -1218,28 +1178,40 @@ export const make = Effect.fnUntraced(function* (
           Option.isSome(session) && session.value.parentID === undefined && event.metadata?.automation === undefined
         const text = event.prompt.text
         const given = [...state.given.values()]
+        if (user) {
+          state.said.push(text.slice(0, MAX_SAID_TEXT))
+          state.said.splice(0, Math.max(0, state.said.length - MAX_SAID))
+        }
         // The distillation this message starts has the turn it closes; a new one begins.
         const closed = state.turn
         state.turn = { commits: [], tests: [], pending: [] }
-        // Judged off the prompt's path, when a decision model resolves: whether it states a lasting rule, and which given
-        // entry it corrects. A decision that fails is a no. The session's later events wait for it, so the segment keeps
-        // their order.
+        // Judged off the prompt's path, when a decision model resolves: whether it states a lasting rule, which given
+        // entry it corrects and which it asks to forget, which is then retired. A decision that fails is a no. The
+        // session's later events wait for it, so the segment keeps their order.
         yield* state.order
           .withPermit(
             Effect.gen(function* () {
-              const [lasting, corrected] =
+              const [lasting, corrected, forgot] =
                 user && (yield* decide.available)
                   ? yield* Effect.all(
                       [
                         decide.lasting(text),
                         given.length > 0 ? decide.corrects(text, given) : Effect.succeed(undefined),
+                        given.length > 0 ? decide.forgets(text, given) : Effect.succeed(undefined),
                       ],
-                      { concurrency: 2 },
+                      { concurrency: 3 },
                     )
-                  : [undefined, undefined]
+                  : [undefined, undefined, undefined]
               const rule = (lasting ?? 0) >= OpencodeMemoryDecide.LASTING
+              const dropped =
+                forgot?.id !== undefined && forgot.p >= OpencodeMemoryDecide.FORGETS
+                  ? given.find((item) => item.id === forgot.id)
+                  : undefined
+              // An entry the user asks to forget isn't one to correct.
               const entry =
-                corrected?.id !== undefined && corrected.p >= OpencodeMemoryDecide.CORRECTS
+                corrected?.id !== undefined &&
+                corrected.id !== dropped?.id &&
+                corrected.p >= OpencodeMemoryDecide.CORRECTS
                   ? given.find((item) => item.id === corrected.id)
                   : undefined
               yield* recorded(
@@ -1253,6 +1225,10 @@ export const make = Effect.fnUntraced(function* (
                 },
                 closed,
               )
+              if (dropped)
+                yield* forget(event.sessionID, dropped, text, "The user asked to forget it").pipe(
+                  Effect.catch((cause) => Effect.logDebug("memory entry not forgotten", { id: dropped.id, cause })),
+                )
               if (entry) yield* remind(event.sessionID, entry)
             }),
           )
@@ -1519,7 +1495,6 @@ export const make = Effect.fnUntraced(function* (
                 ...(input.tags === undefined ? {} : { tags: input.tags }),
                 ...(input.limit === undefined ? {} : { limit: input.limit }),
                 sessionID: context.sessionID,
-                ...(yield* reader),
               },
             )
             return {
@@ -1539,17 +1514,11 @@ export const make = Effect.fnUntraced(function* (
         output: Entry,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          reachable.pipe(
-            Effect.flatMap((keys) =>
-              call(
-                Entry,
-                "GET",
-                `/api/memory/entries/${encodeURIComponent(input.id)}?${new URLSearchParams([
-                  ["sessionID", context.sessionID],
-                  ...keys.map((key): [string, string] => ["reachable", key]),
-                ])}`,
-              ),
-            ),
+          call(
+            Entry,
+            "GET",
+            `/api/memory/entries/${encodeURIComponent(input.id)}?${new URLSearchParams([["sessionID", context.sessionID]])}`,
+          ).pipe(
             Effect.tap((entry) =>
               Effect.sync(() => {
                 const state = tracked(context.sessionID)
@@ -1607,17 +1576,12 @@ export const make = Effect.fnUntraced(function* (
             yield* resolved("publish", Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
             yield* committed("publish", fields)
             const source = yield* checkout
-            // The checkout's repository by GitHub's id and visibility, so Console gives the entry only to its readers.
-            const anchor =
-              "repo" in source && source.repo ? yield* anchored(source.repo.slice("https://".length)) : undefined
             const published = yield* call(Written, "POST", "/api/memory/entries", {
               ...fields,
               ...(input.distinctFrom === undefined ? {} : { distinctFrom: input.distinctFrom }),
               source: { ...source, sessionID: context.sessionID },
-              ...(anchor === undefined ? {} : { anchor }),
               // Its session read the web, issue text, an MCP server or another repository: Console never promotes it.
               ...((yield* tainted(context.sessionID)) ? { tainted: true } : {}),
-              ...(yield* reader),
               idempotencyKey: `${context.sessionID}:${context.id}`.slice(0, 128),
             })
             if (published.id !== undefined)
@@ -1708,27 +1672,50 @@ export const make = Effect.fnUntraced(function* (
       editor.add({
         name: "retire",
         description:
-          "Retire an entry that no longer holds, so it's no longer found or injected: the code changed, the decision was reversed, or another entry replaces it (supersededBy). To fix part of one, use `edit` instead. Pass the revision you read.",
+          "Retire (forget) an entry the user asked, in their own words in this session, to forget: it's no longer found or injected, and its history stays, so anyone can restore it. Only a person's request retires an entry: never retire one on your own judgement. To fix one that's wrong, use `edit`. Read the entry first and pass the revision you read.",
         input: Schema.Struct({
           id: Schema.String,
           revision: Schema.Int,
-          reason: Schema.String.annotate({ description: "Why it no longer holds, in one sentence" }),
-          supersededBy: Schema.optional(
-            Schema.String.annotate({ description: "The id of the entry that replaces it" }),
-          ),
+          reason: Schema.String.annotate({ description: "Why the user wants it forgotten, in one sentence" }),
         }),
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write("retire", context.sessionID, input.id, input.revision, {
-            reason: input.reason,
-            ...(input.supersededBy === undefined ? {} : { supersededBy: input.supersededBy }),
-          }).pipe(
-            Effect.map((written) => ({
+          Effect.gen(function* () {
+            const state = tracked(context.sessionID)
+            const done = state.forgotten.get(input.id)
+            if (done)
+              return {
+                output: { id: done.id, revision: done.revision },
+                content: `${done.id} is already retired (r${done.revision}), as the user asked.`,
+              }
+            const entry = state.given.get(input.id)
+            if (entry === undefined)
+              return yield* new ToolFailure({
+                message: `Nothing was sent: call ${namespace}.read with id "${input.id}" first, so what the user asked can be checked against it.`,
+              })
+            // The newest of the user's own messages that asks to forget it; none, and it stays live.
+            const asked = yield* Effect.forEach(state.said.toReversed(), (message) =>
+              decide.forgets(message, [entry]).pipe(Effect.map((answer) => ({ message, answer }))),
+            )
+            const request = asked.find(
+              (item) => item.answer?.id === entry.id && item.answer.p >= OpencodeMemoryDecide.FORGETS,
+            )
+            if (request === undefined)
+              return yield* new ToolFailure({
+                message: `Not retired: an entry is retired only when a person asks to forget it, and the user hasn't asked to forget ${entry.id} in this session. It stays live; if it's wrong, \`edit\` it.`,
+              })
+            const written = yield* forget(
+              context.sessionID,
+              { ...entry, revision: input.revision },
+              request.message,
+              input.reason,
+            )
+            return {
               output: written,
-              content: `${written.id ?? input.id} is retired (r${written.revision}); it's no longer searched or injected.`,
-            })),
-          ),
+              content: `${written.id ?? input.id} is retired (r${written.revision}), as the user asked; it's no longer searched or injected.`,
+            }
+          }).pipe(Effect.mapError(failure)),
       })
     })
     .pipe(Effect.orDie)
@@ -1755,7 +1742,6 @@ export const make = Effect.fnUntraced(function* (
       yield* Scope.close(current.lease, Exit.void)
       current = undefined
       sessions.clear()
-      listed.clear()
     }
     if (next) {
       const lease = yield* Scope.fork(scope)
@@ -1848,7 +1834,7 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
       const said =
         body?.message ??
         (response.status === 404
-          ? "Not found, or not readable with your repository access (or memory is off for this OpenCode Console workspace); retrying won't change that"
+          ? "Not found (or memory is off for this OpenCode Console workspace); retrying won't change that"
           : `OpenCode Console answered ${response.status}`)
       // Console's message ends with its next call; it goes last, once, as Console wrote it.
       const next = body?.next

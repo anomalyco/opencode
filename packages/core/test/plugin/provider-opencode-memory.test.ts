@@ -24,7 +24,6 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
-import { OpencodeMemoryAccess } from "@opencode/core/plugin/provider/opencode-memory-access"
 import { OpencodeMemory } from "@opencode/core/plugin/provider/opencode-memory"
 import { OpencodeMemoryPolicy } from "@opencode/core/plugin/provider/opencode-memory-policy"
 import { Provider } from "@opencode/core/provider"
@@ -43,8 +42,8 @@ import { makePluginTestLayer } from "./fixture"
 /**
  * OpenCode's decision generation: the decision models it offers, and how it answers, by question name, a predicate's
  * probability or a choice's probabilities by value, or the status a provider fails with. Unset, the stand-in model takes
- * an explicit team rule ("From now on", "Our convention") for a lasting one, corrects nothing, finds every lesson durable
- * and every entry applicable. Reset when a test's Console closes.
+ * an explicit team rule ("From now on", "Our convention") for a lasting one, corrects and forgets nothing, finds every
+ * lesson durable and every entry applicable. Reset when a test's Console closes.
  */
 const judge = {
   models: ["opencode/jev-1.13"],
@@ -56,6 +55,7 @@ const judge = {
 const stand = (asked: Asked): Record<string, number | Record<string, number>> => ({
   lasting: /from now on|our convention/i.test(asked.state) ? 0.92 : 0.05,
   corrects: { none: 1 },
+  forgets: { none: 1 },
   durable: 0.9,
   fix_record: 0.05,
   applies: 1,
@@ -203,16 +203,10 @@ function fakeConsole() {
     /** Applies a write over changes since its revision, as Console does when they don't touch it. */
     rebase: false,
     requests: new Array<{ method: string; path: string; body?: unknown; authorization: string | null }>(),
-    /** The restricted repositories Console lists, as `host/id`. */
-    anchors: new Array<string>(),
-    /** Console never answers for the list, as when it's slow. */
-    stalled: false,
     /** While set, `/api/memory/inject` answers only once it settles, as a slow Console would. */
     hold: undefined as Promise<void> | undefined,
-    /** GitHub, served here too: repositories by `owner/name`, and which ids the reader's credential can read. */
-    repositories: new Map<string, { id: number; visibility: string }>(),
-    readable: new Set<number>(),
-    github: new Array<{ path: string; authorization: string | null }>(),
+    /** Any request for GitHub's repository routes, which memory never makes. */
+    github: new Array<string>(),
   }
   // The user's confirmation backs a revision, unless its session took in outside input.
   const confirms = (body: Record<string, unknown> | undefined) =>
@@ -241,19 +235,9 @@ function fakeConsole() {
       if (state.malformed.has(url.pathname))
         return new Response("{ not json", { headers: { "content-type": "application/json" } })
       if (url.pathname.startsWith("/repos/") || url.pathname.startsWith("/repositories/")) {
-        const authorization = request.headers.get("authorization")
-        state.github.push({ path: url.pathname, authorization })
-        const named = state.repositories.get(url.pathname.slice("/repos/".length))
-        if (named && (named.visibility === "public" || authorization === "Bearer reader-token"))
-          return Response.json(named)
-        const id = Number(url.pathname.slice("/repositories/".length))
-        if (state.readable.has(id) && authorization === "Bearer reader-token")
-          return Response.json({ id, visibility: "private" })
+        state.github.push(url.pathname)
         return Response.json({ message: "Not Found" }, { status: 404 })
       }
-      // The list the reachable set is checked against, which the plugin keeps fresh on its own: not logged.
-      if (url.pathname === "/api/memory/anchors")
-        return state.stalled ? new Promise<Response>(() => {}) : Response.json({ anchors: state.anchors })
       if (url.pathname === "/api/v2/config")
         return Response.json(state.config, { headers: state.memory ? { [OpencodeMemory.header]: "1" } : {} })
       const body = (request.method === "GET" ? undefined : await request.json()) as Record<string, unknown> | undefined
@@ -452,13 +436,7 @@ const start = Effect.fnUntraced(function* (
       },
     },
   }
-  // GitHub is the fake Console too, asked with the reader's token.
-  yield* OpencodePlugin.effect(host).pipe(
-    Effect.provideService(OpencodeMemoryAccess.GitHub, {
-      api: console.server.url.origin,
-      env: { GH_TOKEN: "reader-token" },
-    }),
-  )
+  yield* OpencodePlugin.effect(host)
   // Lets the plugin's subscriber take the compaction before the test goes on.
   const compacted = (sessionID: Session.ID) =>
     Queue.offer(compactions, sessionID).pipe(Effect.andThen(Effect.yieldNow), Effect.andThen(Effect.yieldNow))
@@ -694,16 +672,9 @@ describe("OpencodePlugin memory", () => {
             return yield* search.execute({ query: "deploy" }, context(session.id, "call_2")).pipe(Effect.flip)
           }).pipe(Effect.provide(Logger.layer([logger])), Effect.provideService(References.MinimumLogLevel, "All"))
 
-          // Memory's config check, its reader's list, the injection and search all went to the endpoint, each with its header.
+          // Memory's config check, the injection and search all went to the endpoint, each with its header.
           const paths = endpoint.state.keys.map((item) => item.path)
-          expect(paths).toEqual(
-            expect.arrayContaining([
-              "/api/v2/config",
-              "/api/memory/anchors",
-              "/api/memory/inject",
-              "/api/memory/search",
-            ]),
-          )
+          expect(paths).toEqual(expect.arrayContaining(["/api/v2/config", "/api/memory/inject", "/api/memory/search"]))
           expect(endpoint.state.keys.every((item) => item.key === secret)).toBe(true)
           // Decisions are OpenCode's to ask, with the user's own credentials, never the endpoint's.
           expect(judge.asked.map((item) => item.model)).toContain("opencode/jev-1.13")
@@ -828,7 +799,7 @@ describe("OpencodePlugin memory", () => {
           .execute({ id: "mem_missing" }, context(session.id))
           .pipe(Effect.flip)
         expect(missing.message).toBe(
-          "Not found, or not readable with your repository access (or memory is off for this OpenCode Console workspace); retrying won't change that",
+          "Not found (or memory is off for this OpenCode Console workspace); retrying won't change that",
         )
       }),
     ),
@@ -896,28 +867,17 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
-  it.effect("sends the restricted repositories the reader's own GitHub access reaches, by id only", () =>
+  it.effect("sends no repository access of the reader's anywhere, and asks GitHub nothing", () =>
     withConsole((console) =>
       Effect.gen(function* () {
-        console.state.anchors = ["github.com/7", "github.com/8", "gitlab.example.com/9"]
-        console.state.readable.add(7)
         const { host } = yield* start(console)
         const session = yield* host.session.create({})
 
         yield* (yield* memoryTool("search")).execute({ query: "deploy" }, context(session.id))
-        expect(console.state.requests.at(-1)?.body).toMatchObject({ query: "deploy", reachable: ["github.com/7"] })
-        // Only GitHub's ids were checked, each with the reader's token; another host's is left out unchecked.
-        expect(new Set(console.state.github.map((request) => request.path))).toEqual(
-          new Set(["/repositories/7", "/repositories/8"]),
-        )
-        expect(console.state.github.every((request) => request.authorization === "Bearer reader-token")).toBe(true)
-
         yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
-        expect(console.state.requests.at(-1)?.path).toBe(
-          `/api/memory/entries/mem_1?sessionID=${session.id}&reachable=github.com%2F7`,
-        )
+        expect(console.state.requests.at(-1)?.path).toBe(`/api/memory/entries/mem_1?sessionID=${session.id}`)
         yield* (yield* memoryTool("append")).execute({ id: "mem_1", revision: 1, text: "More" }, context(session.id))
-        expect(console.state.requests.at(-1)?.body).toMatchObject({ append: "More", reachable: ["github.com/7"] })
+        yield* (yield* memoryTool("publish")).execute({ kind: "gotcha", title: "T", body: "B" }, context(session.id))
 
         // What a session was delivered is recorded with them too, at the revision Console gave.
         console.state.injected = [injected("mem_x", 0.9, 4)]
@@ -928,11 +888,13 @@ describe("OpencodePlugin memory", () => {
           Effect.sync(() => console.state.requests.find((item) => item.path === "/api/memory/deliveries")),
           (item) => item !== undefined,
         )
-        expect(recorded?.body).toEqual({
-          sessionID: session.id,
-          entries: [{ id: "mem_x", revision: 4 }],
-          reachable: ["github.com/7"],
-        })
+        expect(recorded?.body).toEqual({ sessionID: session.id, entries: [{ id: "mem_x", revision: 4 }] })
+        // No request carries a reachable set or an anchor, none asks for the workspace's anchors, and GitHub is never asked.
+        const sent = JSON.stringify(console.state.requests)
+        expect(sent).not.toContain("reachable")
+        expect(sent).not.toContain('"anchor"')
+        expect(console.state.requests.some((item) => item.path.startsWith("/api/memory/anchors"))).toBe(false)
+        expect(console.state.github).toEqual([])
       }),
     ),
   )
@@ -1143,7 +1105,7 @@ describe("OpencodePlugin memory", () => {
     }),
   )
 
-  it.effect("appends new material, rewrites a whole body with Console's warnings, and retires an entry", () =>
+  it.effect("appends new material, rewrites a whole body with Console's warnings, and shows a retired entry", () =>
     withConsole((console) =>
       Effect.gen(function* () {
         const { host } = yield* start(console)
@@ -1184,17 +1146,6 @@ describe("OpencodePlugin memory", () => {
           "mem_1 is now r3. It's pending, revision 1 is still in use.\nWarning: The rewrite removed more than 30% of the body.\n--- body\n-Body of mem_1\nMore\n\nAlso on CI.\n+Short",
         )
 
-        const retired = yield* (yield* memoryTool("retire")).execute(
-          { id: "mem_1", revision: 1, reason: "Deploys moved to the pipeline", supersededBy: "mem_2" },
-          context(session.id),
-        )
-        expect(retired.content).toBe("mem_1 is retired (r4); it's no longer searched or injected.")
-        expect(console.state.requests.at(-1)).toEqual({
-          method: "POST",
-          path: "/api/memory/entries/mem_1/retire",
-          body: { expectedRevision: 3, reason: "Deploys moved to the pipeline", supersededBy: "mem_2" },
-          authorization: "Bearer secret",
-        })
         const read = yield* (yield* memoryTool("read")).execute({ id: "mem_retired" }, context(session.id))
         expect(read.content).toContain("\nRetired 1970-01-01: Deploys moved to the pipeline (superseded by mem_2)\n")
       }),
@@ -1825,15 +1776,7 @@ describe("OpencodePlugin memory", () => {
           const session = yield* host.session.create({})
           const publish = yield* memoryTool("publish")
 
-          // Not found anonymously nor with the reader's token: who may read it can't be recorded.
-          const asked = console.state.requests.length
-          const unknown = yield* publish
-            .execute({ kind: "decision", title: "Decision", body: "Why" }, context(session.id))
-            .pipe(Effect.flip)
-          expect(unknown.message).toStartWith("Nothing was sent: this machine couldn't look up Acme/App on GitHub")
-          expect(console.state.requests.length).toBe(asked)
-
-          console.state.repositories.set("Acme/App", { id: 4242, visibility: "private" })
+          // The repository is context for the entry, recorded as the checkout names it, with no lookup of who may read it.
           yield* publish.execute({ kind: "decision", title: "Decision", body: "Why" }, context(session.id))
           const sent = console.state.requests.at(-1)?.body as { source: Record<string, string>; anchor: unknown }
           expect(sent.source).toEqual({
@@ -1842,13 +1785,10 @@ describe("OpencodePlugin memory", () => {
             commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
             sessionID: session.id,
           })
-          expect(sent.anchor).toEqual({ host: "github.com", name: "Acme/App", repoId: 4242, visibility: "private" })
-          // Asked anonymously first, then with the reader's token; the remote's own token is never sent anywhere.
-          expect(console.state.github.slice(-2)).toEqual([
-            { path: "/repos/Acme/App", authorization: null },
-            { path: "/repos/Acme/App", authorization: "Bearer reader-token" },
-          ])
-          expect(JSON.stringify([console.state.requests, console.state.github])).not.toContain("ghp_secret")
+          expect(sent.anchor).toBeUndefined()
+          expect(console.state.github).toEqual([])
+          // The remote's own token is never sent anywhere.
+          expect(JSON.stringify(console.state.requests)).not.toContain("ghp_secret")
         }),
       ),
   )
@@ -2364,28 +2304,176 @@ describe("OpencodePlugin memory conventions", () => {
     ),
   )
 
-  it.effect("doesn't retire or rewrite an entry about another repository from this one", () =>
+  it.effect("doesn't rewrite an entry about another repository from this one", () =>
     withConsole((console) =>
       Effect.gen(function* () {
         yield* inRepo
         const { host } = yield* start(console)
         const session = yield* host.session.create({})
         const read = yield* memoryTool("read")
-        const retire = yield* memoryTool("retire")
+        const rewrite = yield* memoryTool("rewrite")
         yield* read.execute({ id: "mem_web" }, context(session.id))
         const asked = console.state.requests.length
-        const refused = yield* retire
-          .execute({ id: "mem_web", revision: 1, reason: "Not in this repo" }, context(session.id))
+        const refused = yield* rewrite
+          .execute({ id: "mem_web", revision: 1, body: "Not in this repo" }, context(session.id))
           .pipe(Effect.flip)
         expect(refused.message).toBe(
           "Nothing was sent: mem_web is about github.com/acme/web, not this repository (github.com/Acme/App), and what holds there can't be checked from here. Leave it as it is; if it's wrong for this repository too, publish what holds here instead.",
         )
         expect(console.state.requests.length).toBe(asked)
         yield* read.execute({ id: "mem_app" }, context(session.id))
-        yield* retire.execute({ id: "mem_app", revision: 1, reason: "Outdated" }, context(session.id))
-        expect(console.state.requests.at(-1)?.path).toBe("/api/memory/entries/mem_app/retire")
+        yield* rewrite.execute({ id: "mem_app", revision: 1, body: "Outdated" }, context(session.id))
+        expect(console.state.requests.at(-1)?.path).toBe("/api/memory/entries/mem_app")
       }),
     ),
+  )
+})
+
+describe("OpencodePlugin memory forgetting", () => {
+  const inRepo = Effect.gen(function* () {
+    const directory = (yield* Location.Service).directory
+    yield* Effect.promise(async () => {
+      await initGit(directory, "-b", "main")
+      await fs.appendFile(
+        path.join(directory, ".git", "config"),
+        '[remote "origin"]\n\turl = https://github.com/Acme/App.git\n',
+      )
+      await $`git commit --allow-empty -m root`.cwd(directory).quiet()
+    })
+  })
+  const retires = (console: ReturnType<typeof fakeConsole>) =>
+    console.state.requests.filter((item) => item.path.endsWith("/retire"))
+
+  it.effect("retires an entry the user asks to forget, with their words as confirmation, from any repository", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        yield* inRepo
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        // An entry about another repository: forgetting it is the user's call, wherever it's from.
+        yield* (yield* memoryTool("read")).execute({ id: "mem_web" }, context(session.id))
+        const words = "That note about the web deploys is wrong, forget it."
+        judge.answer = (asked) =>
+          asked.questions.forgets
+            ? { forgets: { none: 0.05, mem_web: 0.95 } }
+            : asked.questions.corrects
+              ? { corrects: { none: 0.2, mem_web: 0.8 } }
+              : { lasting: 0.05 }
+        yield* prompt(session.id, words)
+        yield* judged(session.id)
+        expect(retires(console)).toEqual([
+          {
+            method: "POST",
+            path: "/api/memory/entries/mem_web/retire",
+            body: {
+              expectedRevision: 1,
+              reason: "The user asked to forget it",
+              evidence: [{ kind: "confirmation", ref: words }],
+              source: {
+                repo: "https://github.com/Acme/App",
+                branch: "main",
+                commitSha: expect.any(String),
+                sessionID: session.id,
+              },
+            },
+            authorization: "Bearer secret",
+          },
+        ])
+        // The agent is told, and isn't asked to correct what's gone.
+        const instructions = yield* host.session.instructions.entry.list({ sessionID: session.id })
+        expect(instructions).toEqual([
+          {
+            key: "memory.forgotten",
+            value: OpencodeMemoryPolicy.initial.forgotten([
+              { id: "mem_web", revision: 2, title: "Entry mem_web", text: "" },
+            ]),
+          },
+        ])
+        expect(String(instructions[0]?.value)).toContain('- mem_web r2 "Entry mem_web"')
+        // Retiring it again is answered from what the user asked, without another request.
+        const again = yield* (yield* memoryTool("retire")).execute(
+          { id: "mem_web", revision: 1, reason: "Wrong" },
+          context(session.id),
+        )
+        expect(again.content).toBe("mem_web is already retired (r2), as the user asked.")
+        expect(retires(console)).toHaveLength(1)
+        // What's forgotten is no longer an entry a later message may correct or forget.
+        const asked = judge.asked.length
+        yield* prompt(session.id, "Go on")
+        yield* judged(session.id)
+        expect(judge.asked.slice(asked).some((item) => item.questions.corrects || item.questions.forgets)).toBe(false)
+      }),
+    ),
+  )
+
+  it.effect(
+    "refuses a retire the agent decides on by itself, and takes one the user asked for in their own words",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          const retire = yield* memoryTool("retire")
+          // The user's words ask to forget whichever note they're judged against.
+          const words = "Please drop the note about Node 22 builds from the team memory."
+          judge.answer = (asked) => {
+            const id = /\[(mem_\w+)\]/.exec(asked.state)?.[1] ?? "none"
+            return asked.questions.forgets
+              ? { forgets: asked.state.includes(words) ? { none: 0.1, [id]: 0.9 } : { none: 0.9, [id]: 0.1 } }
+              : { lasting: 0.05 }
+          }
+
+          // Not read yet: there's nothing to check the user's words against.
+          const unread = yield* retire
+            .execute({ id: "mem_1", revision: 1, reason: "Outdated" }, context(session.id))
+            .pipe(Effect.flip)
+          expect(unread.message).toBe(
+            'Nothing was sent: call memory.read with id "mem_1" first, so what the user asked can be checked against it.',
+          )
+          yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
+
+          // The user only asked for a task, and an automation's prompt isn't the user's word.
+          yield* prompt(session.id, "Fix the build")
+          yield* prompt(session.id, words, { automation: { id: "aut_1" } })
+          yield* judged(session.id)
+          const own = yield* retire
+            .execute({ id: "mem_1", revision: 1, reason: "Builds use Node 24 now" }, context(session.id))
+            .pipe(Effect.flip)
+          expect(own.message).toBe(
+            "Not retired: an entry is retired only when a person asks to forget it, and the user hasn't asked to forget mem_1 in this session. It stays live; if it's wrong, `edit` it.",
+          )
+          expect(retires(console)).toEqual([])
+
+          // Asked in the user's own words before the agent read it, it's retired with them, whatever the user said since.
+          const other = yield* host.session.create({})
+          yield* prompt(other.id, words)
+          yield* prompt(other.id, "Then run the tests")
+          yield* judged(other.id)
+          yield* (yield* memoryTool("read")).execute({ id: "mem_2" }, context(other.id))
+          const done = yield* retire.execute(
+            { id: "mem_2", revision: 1, reason: "Builds use Node 24 now" },
+            context(other.id),
+          )
+          expect(done.content).toBe("mem_2 is retired (r2), as the user asked; it's no longer searched or injected.")
+          expect(retires(console).map((item) => item.body)).toEqual([
+            {
+              expectedRevision: 1,
+              reason: "Builds use Node 24 now",
+              evidence: [{ kind: "confirmation", ref: words }],
+              source: { sessionID: other.id },
+            },
+          ])
+
+          // Without a decision model, no request can be told from a task: nothing is retired.
+          judge.models = []
+          yield* (yield* memoryTool("read")).execute({ id: "mem_3" }, context(other.id))
+          const off = yield* retire
+            .execute({ id: "mem_3", revision: 1, reason: "Outdated" }, context(other.id))
+            .pipe(Effect.flip)
+          expect(off.message).toStartWith("Not retired:")
+          expect(retires(console)).toHaveLength(1)
+        }),
+      ),
   )
 })
 

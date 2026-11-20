@@ -470,11 +470,23 @@ features that need one are off.
 
 - No rules, corrections or lessons are captured from sessions.
 - No correction reminders are shown.
+- No entry is forgotten.
 - Entries are delivered as Console's own scoring picks them.
 - The memory tools and search work as usual.
 
 A decision call that fails or times out counts as a no for that item. Nothing is
 captured, reminded or delivered because of it.
+
+To forget an entry, ask for it in your own words, such as "forget the note about
+the old deploy script". Memory retires it right away, with your words as the
+reason.
+
+- Any workspace member can forget an entry, and anyone can restore it, since its
+  history is kept.
+- Only a person's request retires an entry. The agent can't retire one on its
+  own, and a subagent's or automation's prompt doesn't count.
+- An entry's repository is context, not access: entries from the repository
+  you're working in come first, and the decision model judges the rest.
 
 To use a memory endpoint of your own instead of the workspace's, give
 `console_memory` its URL, and headers if it needs a credential. Memory then

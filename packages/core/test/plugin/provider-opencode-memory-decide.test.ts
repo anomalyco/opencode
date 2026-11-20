@@ -254,6 +254,42 @@ describe("OpencodeMemoryDecide", () => {
     }),
   )
 
+  it.live("asks which given note the user's message asks to forget, as D2 asks which it corrects", () =>
+    Effect.gen(function* () {
+      const fake = generation(() =>
+        Effect.succeed([
+          {
+            type: "choice",
+            name: "forgets",
+            choice: "none",
+            confidence: 0.6,
+            probabilities: [
+              { value: "none", probability: 0.6 },
+              { value: "mem_a", probability: 0.1 },
+              { value: "mem_b", probability: 0.3 },
+            ],
+          } satisfies DecisionAnswer,
+        ]),
+      )
+      const decide = OpencodeMemoryDecide.make({
+        decisions: fake.decisions,
+        model: Effect.succeed(OpencodeMemoryDecide.MODEL),
+      })
+      // The best note, never "none", with its probability; the caller holds it to the cut.
+      expect(yield* decide.forgets("Forget the tests note", given)).toEqual({ id: "mem_b", p: 0.3 })
+      expect(OpencodeMemoryDecide.FORGETS).toBe(0.5)
+      expect(fake.asked[0]?.input).toEqual([
+        {
+          type: "text",
+          text: "Team notes from shared memory that an AI coding agent was shown:\n\n[mem_a] Deploys use wrangler\nRun wrangler deploy.\n\n[mem_b] Tests\nRun bun test.\n\nThe user's message to the agent:\n\nForget the tests note",
+        },
+      ])
+      const choice = fake.asked[0]?.questions[0]
+      expect(choice?.name).toBe("forgets")
+      expect(choice?.type === "choice" && choice.choices.map((item) => item.value)).toEqual(["none", "mem_a", "mem_b"])
+    }),
+  )
+
   it.live("asks another model when config names one, and none when config turns decisions off", () =>
     Effect.gen(function* () {
       const fake = generation(() => Effect.succeed([predicate("lasting", 0.5)]))
