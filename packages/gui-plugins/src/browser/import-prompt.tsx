@@ -3,20 +3,23 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createMemo, For, getOwner, onCleanup, runWithOwner, Show, type Accessor } from "solid-js"
-import { usePlugin } from "@opencode/plugin/gui"
+import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import { choiceLabel, Glyph, profileChoices, type Choice } from "./choices"
 import type definition from "./index"
 import { createProfileJobs } from "./jobs"
 import { importedCookies, importLoss } from "./jobs-machine"
 import { SiteChooser } from "./site-chooser"
 
+/** How long the confirmation of an import stays before it goes by itself. */
+const CONFIRMATION_MS = 5_000
+
 /**
  * The pane's offer to bring sign-ins from the browser the user already uses, until they import or decline once. A
  * `bar` sits above a page, where a signed-out site is the reason to import; a `card` sits on the new tab page.
  * Nothing shows where no other browser is installed, or while main's profile is away.
  *
- * Once cookies came in it says so, in place of the offer, until the user closes it: a page that loads again signed in is
- * the proof, and this names where the sign-ins came from.
+ * Once cookies came in it says so, in place of the offer, for `CONFIRMATION_MS` or until the user closes it: a page that
+ * loads again signed in is the proof, and this names where the sign-ins came from.
  *
  * `imported` runs once cookies came in, for the pane to load its page again with them, and `closed` when the user
  * closes the confirmation.
@@ -63,6 +66,21 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
     if (confirmed()) props.closed()
   })
 
+  // Dismissing clears `confirmed`, so the cleanup above does not report the close a second time.
+  const close = () => {
+    jobs.dismiss()
+    props.closed()
+  }
+
+  // The confirmation goes by itself; the close button ends it sooner.
+  createKeyed(
+    () => (confirmed() ? jobs.last() : undefined),
+    () => {
+      const timer = setTimeout(close, CONFIRMATION_MS)
+      onCleanup(() => clearTimeout(timer))
+    },
+  )
+
   const decline = () => preferences.set({ ...preferences.value, welcomed: true })
   const settings = () => ctx.layout.settings("browser")
 
@@ -107,10 +125,7 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
                 size="large"
                 icon={<Icon name="close" />}
                 aria-label={ctx.t("common.close")}
-                onClick={() => {
-                  jobs.dismiss()
-                  props.closed()
-                }}
+                onClick={close}
               />
             </Tooltip>
           </section>

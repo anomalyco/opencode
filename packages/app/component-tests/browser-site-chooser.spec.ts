@@ -318,3 +318,39 @@ story("keeps site names left to right in a right-to-left layout, the box at the 
   const long = view.dialog.locator('[data-site$="example.co.uk"]').first().locator("span[title]")
   expect(await long.evaluate((element) => [getComputedStyle(element).direction, element.scrollWidth > element.clientWidth])).toEqual(["rtl", true])
 })
+
+// The pane's sign-in bar says what an import brought for a few seconds, then goes by itself; Close ends it sooner.
+story("the sign-in bar's import confirmation goes by itself after 5 seconds, and Close ends it sooner", async ({ page }) => {
+  await page.clock.install()
+  await page.evaluate(
+    async (input) => {
+      const [{ mountSiteChooser }, { ui }] = await Promise.all([import(input.modules.fixture), import(input.modules.ui)])
+
+      mountSiteChooser({ ui, scenario: { sites: 5 }, offer: true })
+    },
+    { modules },
+  )
+  const record = page.getByTestId("site-chooser-imports")
+  const confirmation = page.getByRole("status").filter({ hasText: "Imported 10 cookies from Google Chrome" })
+  const importing = page.getByRole("button", { name: /^Import from Google Chrome/ })
+
+  // Close ends it at once, and only once: the timer it no longer needs does not report a second close.
+  await importing.click()
+  await expect(confirmation).toBeVisible()
+  await expect(record).toHaveAttribute("data-imported", "1")
+  await confirmation.getByRole("button", { name: "Close", exact: true }).click()
+  await expect(confirmation).toHaveCount(0)
+  await expect(record).toHaveAttribute("data-closes", "1")
+  await page.clock.runFor(10_000)
+  await expect(record).toHaveAttribute("data-closes", "1")
+
+  // Left alone, it goes after 5 seconds.
+  await importing.click()
+  await expect(confirmation).toBeVisible()
+  await page.clock.runFor(4_900)
+  await expect(confirmation).toBeVisible()
+  await expect(record).toHaveAttribute("data-closes", "1")
+  await page.clock.runFor(200)
+  await expect(confirmation).toHaveCount(0)
+  await expect(record).toHaveAttribute("data-closes", "2")
+})

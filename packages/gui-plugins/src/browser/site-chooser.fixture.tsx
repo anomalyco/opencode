@@ -8,6 +8,7 @@ import browserEn from "./i18n/en"
 import type definition from "./index"
 import type { BrowserProfile, ImportResult, ProfileSource, SiteList } from "./profile/ipc"
 import { SiteChooserDialog } from "./site-chooser"
+import { SignInOffer } from "./import-prompt"
 
 /**
  * What main answers the dialog: how many made-up sites the first profile has (or why it has none), whether the
@@ -52,7 +53,7 @@ function siteList(count: number): SiteList {
 // Component-test fixture: the real import dialog, with jobs of its own, in the real dialog host, and main's browser
 // profile faked at its Ipc. It records each import main receives and each list it reads in an element beside the
 // dialog, so the test reads what would be imported, and whether the dialog closed.
-export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direction?: "ltr" | "rtl" }) {
+export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direction?: "ltr" | "rtl"; offer?: boolean }) {
   const host = document.createElement("main")
   host.dataset.testid = "site-chooser-fixture"
   host.dir = input.direction ?? "ltr"
@@ -74,7 +75,8 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     reads: string[]
     closed: boolean
     imported: number
-  }>({ imports: [], reads: [], closed: false, imported: 0 })
+    closes: number
+  }>({ imports: [], reads: [], closed: false, imported: 0, closes: 0 })
 
   const held = Promise.withResolvers<void>()
 
@@ -117,7 +119,9 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     use: () => live,
     signal: controller.signal,
     desktop: { os: "windows" },
-    stores: { preferences: { value: { links: true, welcomed: true }, set() {} } },
+    stores: { preferences: { value: { links: true, welcomed: !input.offer }, set() {} } },
+    layout: { settings() {} },
+    dialogs: { open: () => ({ close() {} }) },
   }
 
   // SAFETY: the dialog uses only the context properties implemented above.
@@ -126,6 +130,15 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
 
   function Opener() {
     const dialog = useDialog()
+
+    // With `offer`, the pane's sign-in bar instead of the dialog: the bar's import and its confirmation.
+    if (input.offer)
+      return (
+        <PluginContext.Provider value={plugin}>
+          <SignInOffer variant="bar" imported={() => setStore("imported", (count) => count + 1)} closed={() => setStore("closes", (count) => count + 1)} />
+          <ol data-testid="site-chooser-imports" data-closes={store.closes} data-imported={store.imported} />
+        </PluginContext.Provider>
+      )
 
     onMount(() =>
       dialog.show(
