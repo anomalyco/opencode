@@ -230,6 +230,7 @@ export function fromPromise(plugin: Plugin) {
         const GenerateEndpoints = ClientApi.groups["server.generate"].endpoints
         const IntegrationEndpoints = ClientApi.groups["server.integration"].endpoints
         const McpEndpoints = ClientApi.groups["server.mcp"].endpoints
+        const MessageEndpoints = ClientApi.groups["server.message"].endpoints
         const ModelEndpoints = ClientApi.groups["server.model"].endpoints
         const PluginEndpoints = ClientApi.groups["server.plugin"].endpoints
         const PermissionEndpoints = ClientApi.groups["server.permission"].endpoints
@@ -685,6 +686,7 @@ export function fromPromise(plugin: Plugin) {
             move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
             context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
+            message: { list: adaptApiMethod(MessageEndpoints["session.messages"], host.session.message.list) },
             instructions: {
               entry: {
                 list: adaptApiMethod(
