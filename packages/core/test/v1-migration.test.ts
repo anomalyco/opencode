@@ -3,6 +3,7 @@ import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
 import { Database } from "@opencode/core/database/database"
 import { DatabaseMigration } from "@opencode/core/database/migration"
+import { migrations } from "@opencode/core/database/migration.gen"
 import { V1Migration } from "@opencode/core/database/v1-migration"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionSchema } from "@opencode/core/session/schema"
@@ -901,6 +902,139 @@ describe("V1Migration database workflow", () => {
         )
       }),
     )
+
+  test("preserves 1.19 API messages while migrating legacy sessions in the same database", async () => {
+    await using tmp = await tmpdir()
+    await initRepo(tmp.path)
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`PRAGMA foreign_keys = ON`)
+        // 1.19.3 includes the reset, but predates the V1/V2 table split.
+        yield* DatabaseMigration.applyOnly(
+          db,
+          migrations.filter((migration) => migration.id < "20260804233008_loose_psylocke"),
+        )
+        yield* db.run(sql`
+          INSERT INTO project (id, worktree, time_created, time_updated, sandboxes)
+          VALUES ('project', ${tmp.path}, 1, 2, '[]'), ('global', '/', 1, 2, '[]')
+        `)
+        yield* db.run(sql`
+          INSERT INTO session (id, project_id, slug, directory, title, version, cost, tokens_input,
+            agent, model, metadata, time_created, time_updated)
+          VALUES ('ses_native', 'global', 'native', ${tmp.path}, 'API history', '1.19.3', 2.25, 42,
+            'build', '{"id":"model","providerID":"provider"}', '{"keep":true}', 1, 2),
+            ('ses_test', 'project', 'legacy', '/tmp/test', 'Legacy history', '1.19.3', 0, 0,
+            NULL, NULL, NULL, 1, 2)
+        `)
+        const data = JSON.stringify({ text: "don't discard \u2028 this", time: { created: 3 } })
+        yield* db.run(sql`
+          INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+          VALUES ('msg_native', 'ses_native', 'user', 7, 3, 4, ${data})
+        `)
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_native', 9)`)
+        const source = user("msg_000000000040aaaaaaaaaaaaaa")
+        const sourcePart = part("prt_1", source.id, { type: "text", text: "legacy text" })
+        yield* db.run(sql`
+          INSERT INTO message (id, session_id, time_created, time_updated, data)
+          VALUES (${source.id}, 'ses_test', 10, 11, ${source.data})
+        `)
+        yield* db.run(sql`
+          INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+          VALUES ('prt_1', ${source.id}, 'ses_test', 1, 2, ${sourcePart.data})
+        `)
+
+        // A legacy session can later be continued through the 1.19 API.
+        yield* db.run(sql`
+          INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+          VALUES ('msg_mixed', 'ses_test', 'user', 0, 20, 21, ${data})
+        `)
+        yield* db.run(sql`
+          INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+          VALUES ('ses_relative', 'project', 'relative', '.', 'Relative', '1.19.3', 1, 2)
+        `)
+        yield* db.run(sql`
+          INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+          VALUES ('msg_relative', 'ses_relative', 'user', 0, 3, 4, ${data})
+        `)
+        yield* db.run(sql`
+          INSERT INTO message (id, session_id, time_created, time_updated, data)
+          VALUES ('msg_relative', 'ses_relative', 10, 11, ${source.data})
+        `)
+        yield* DatabaseMigration.apply(db)
+        yield* db.run(sql`
+          CREATE TRIGGER fail_native BEFORE INSERT ON session_message
+          WHEN NEW.id = 'msg_native' BEGIN SELECT RAISE(ABORT, 'stop'); END
+        `)
+        const migrate = V1Migration.run().pipe(
+          Effect.provide(
+            AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, FSUtil.node]), [
+              Database.node.replace(Layer.succeed(Database.Service, { db })),
+            ]),
+          ),
+        )
+        expect((yield* Effect.exit(migrate))._tag).toBe("Failure")
+        expect(yield* db.get(sql`SELECT id FROM session_v2 WHERE id = 'ses_native'`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
+          value: '{"phase":"sessions","cursor":"ses_relative"}',
+        })
+        expect(
+          yield* db.get(sql`SELECT id, seq, data FROM migration_v1_session_message WHERE session_id = 'ses_native'`),
+        ).toEqual({
+          id: "msg_native",
+          seq: 7,
+          data,
+        })
+        yield* db.run(sql`DROP TRIGGER fail_native`)
+        expect(yield* migrate).toEqual({ status: "completed" })
+        expect(yield* migrate).toEqual({ status: "completed" })
+
+        expect(yield* db.all(sql`SELECT id, seq, data FROM session_message WHERE session_id = 'ses_native'`)).toEqual([
+          { id: "msg_native", seq: 7, data },
+        ])
+        expect(
+          yield* db.get(sql`
+          SELECT title, cost, tokens_input, agent, model, metadata FROM session_v2 WHERE id = 'ses_native'
+        `),
+        ).toEqual({
+          title: "API history",
+          cost: 2.25,
+          tokens_input: 42,
+          agent: "build",
+          model: '{"id":"model","providerID":"provider"}',
+          metadata: '{"keep":true}',
+        })
+        const owner = yield* db.get<{ id: string }>(
+          sql`SELECT id FROM project WHERE worktree = ${tmp.path} AND id <> 'project'`,
+        )
+        expect(owner).toBeDefined()
+        expect(yield* db.get(sql`SELECT project_id, path FROM session_v2 WHERE id = 'ses_native'`)).toEqual({
+          project_id: owner?.id,
+          path: "",
+        })
+        expect(yield* db.get(sql`SELECT directory FROM session_v2 WHERE id = 'ses_relative'`)).toEqual({
+          directory: tmp.path,
+        })
+        expect(yield* db.get(sql`SELECT id, data FROM session_message WHERE session_id = 'ses_relative'`)).toEqual({
+          id: "msg_relative",
+          data,
+        })
+        expect(yield* db.get(sql`SELECT seq FROM event_sequence WHERE aggregate_id = 'ses_native'`)).toEqual({ seq: 9 })
+        expect(
+          yield* db.all(sql`SELECT id, data FROM session_message WHERE session_id = 'ses_test' ORDER BY seq`),
+        ).toEqual([
+          { id: source.id, data: '{"text":"legacy text","time":{"created":10}}' },
+          { id: "msg_mixed", data },
+        ])
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE name = 'migration_v1_session_message'`),
+        ).toBeUndefined()
+        expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
+          value: '{"phase":"completed"}',
+        })
+      }),
+    )
+  })
 
   test("reports required and completed status and completes an empty database idempotently", async () => {
     await database(
