@@ -25,6 +25,7 @@ import {
 } from "./history-machine"
 import { createRouteRevealState, routeRevealTarget, transitionRouteReveal } from "./machine"
 import { createTimelineModel } from "./model"
+import { recallScroll } from "./scroll-memory"
 
 /** `visible`: the conversation is on screen, not behind another narrow-screen view. */
 export function createSessionTimelineInteraction(session: SessionModel, visible: Accessor<boolean>) {
@@ -365,6 +366,10 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       (id, previous) => {
         // A switch resets the cursor, so only a `#message-<id>` or other hash can hold the new session elsewhere.
         if (!id || !previous || id === previous || location.hash) return
+        // A session the reader had scrolled up in restores its own row instead of jumping to the end.
+        const saved = recallScroll(session.identity.sessionKey())
+
+        if (saved?.following === false && saved.anchorKey) return
         follow.dispatch({ type: "follow" })
         scrollToEnd()
       },
