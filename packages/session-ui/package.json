@@ -84,6 +84,7 @@
     "diff": "catalog:",
     "effect": "catalog:",
     "dompurify": "3.4.17",
+    "katex": "0.18.11",
     "marked": "catalog:",
     "pele": "1.7.0",
     "solid-js": "catalog:"

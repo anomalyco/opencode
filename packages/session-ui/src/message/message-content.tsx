@@ -22,8 +22,11 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
 import { linkSegments } from "../components/link-segments"
 import { LinkedText } from "../components/linked-text"
-import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
-import { markdownClipboard } from "../components/markdown-clipboard"
+import {
+  sessionReferenceClipboardText,
+  sessionReferenceText,
+  setupSessionLinks,
+} from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
 import { useSources } from "../context/sources"
 import { SourcesChip } from "../sources/sources-chip"
@@ -891,7 +894,7 @@ function copySessionReferences(event: ClipboardEvent & { currentTarget: HTMLDivE
   const ranges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index))
 
   if (!ranges.every((range) => event.currentTarget.contains(range.commonAncestorContainer))) return
-  const text = markdownClipboard(event.currentTarget, ranges)?.text
+  const text = sessionReferenceClipboardText(event.currentTarget, ranges)
 
   if (text === undefined) return
   event.preventDefault()

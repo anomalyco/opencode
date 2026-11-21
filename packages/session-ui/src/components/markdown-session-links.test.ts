@@ -1,7 +1,6 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
-import { markdownClipboard } from "./markdown-clipboard"
+import { markSessionLinks, sessionReferenceClipboardText, setupSessionLinks } from "./markdown-session-links"
 
 const first = "ses_0123456789abcdefghijklmnop"
 
@@ -120,12 +119,12 @@ test("copied text writes each selected reference as its source instead of its ti
   markSessionLinks(root, title)
   const range = document.createRange()
   range.selectNodeContents(root.querySelector("p")!)
-  expect(markdownClipboard(root, [range])?.text).toBe(`Open @session:${first}, then ${second}.`)
+  expect(sessionReferenceClipboardText(root, [range])).toBe(`Open @session:${first}, then ${second}.`)
   expect(root.childElementCount).toBe(2)
   range.selectNodeContents(root.querySelector("button")!)
-  expect(markdownClipboard(root, [range])?.text).toBe(`@session:${first}`)
+  expect(sessionReferenceClipboardText(root, [range])).toBe(`@session:${first}`)
   const plain = document.createRange()
   plain.selectNodeContents(root.querySelectorAll("p")[1]!)
-  expect(markdownClipboard(root, [plain])).toBeUndefined()
+  expect(sessionReferenceClipboardText(root, [plain])).toBeUndefined()
   root.remove()
 })

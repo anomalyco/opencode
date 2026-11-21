@@ -32,7 +32,6 @@ export async function mountMarkdown(options: {
   images?: boolean
   synchronousFiles?: boolean
   localFileExists?: MarkdownLocalFileExists
-  sessionTitle?: string
 }) {
   if (options.cached) await preloadMarkdown(options.text, "markdown-test")
   const host = document.createElement("div")
@@ -75,7 +74,6 @@ export async function mountMarkdown(options: {
           }}
         >
           <MarkdownProvider
-            sessionTitle={options.sessionTitle ? () => options.sessionTitle : undefined}
             readImage={(path, signal) =>
               options.images ? readLocalImage(api, "C:/project", path, signal) : Promise.resolve(undefined)
             }

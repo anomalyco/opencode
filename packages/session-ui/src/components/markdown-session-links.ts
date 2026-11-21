@@ -143,6 +143,25 @@ function sessionReferenceTarget(root: HTMLElement, target: EventTarget | null) {
   return reference && root.contains(reference) ? reference : undefined
 }
 
+/** Undefined when the selection holds no session reference, so the caller keeps its usual copy. */
+export function sessionReferenceClipboardText(root: HTMLElement, ranges: readonly Range[]) {
+  const references = Array.from(root.querySelectorAll("[data-session-reference]"))
+
+  if (!ranges.some((range) => references.some((reference) => range.intersectsNode(reference)))) return
+  const container = document.createElement("div")
+  container.style.cssText = "position:fixed;top:0;left:-100000px"
+  ranges.forEach((range) => container.append(sessionReferenceRange(range).cloneContents()))
+  container.querySelectorAll<HTMLElement>("[data-session-reference]").forEach((reference) => {
+    reference.replaceWith(reference.dataset.sessionReference ?? "")
+  })
+  // `innerText` needs layout to keep line breaks.
+  root.append(container)
+  const text = container.innerText
+  container.remove()
+
+  return text
+}
+
 /** References copy atomically even when the selection starts or ends inside their displayed title. */
 export function sessionReferenceRange(range: Range) {
   const start = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement
