@@ -22,6 +22,7 @@ export function show(sender: WebContents, tag: string, input: ToastInput) {
 
   notification.on("click", () => {
     posted.delete(key)
+
     if (sender.isDestroyed()) return
     const win = BrowserWindow.fromWebContents(sender)
     showWindow(win)

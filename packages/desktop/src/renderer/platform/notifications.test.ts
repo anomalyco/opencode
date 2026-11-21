@@ -59,6 +59,7 @@ const api = {
   },
   onToastActivated: (cb: (tag: string) => void) => {
     activations.push(cb)
+
     return () => {}
   },
 }
