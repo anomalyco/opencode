@@ -57,7 +57,7 @@ fi
 
 # Pushes and pull requests made with GITHUB_TOKEN start no workflows; dispatches do. These produce the checks dev
 # requires on the new head.
-for workflow in check.yml check-test.yml check-bot-scope.yml; do
+for workflow in check.yml check-test.yml check-bot-scope.yml check-nix.yml; do
   gh workflow run "$workflow" --repo "$GH_REPO" --ref "$branch"
 done
 
