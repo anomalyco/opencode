@@ -41,7 +41,6 @@ export const authorize = Effect.fnUntraced(function* (
     command: action.command,
     program,
     target,
-    local: true,
     once: true,
   }).pipe(Effect.mapError((error) => error.message))
   // No save patterns: approval applies only to the command stored in this automation.
