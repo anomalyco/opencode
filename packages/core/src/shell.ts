@@ -108,12 +108,12 @@ type Spawned = {
   stop?: (reason: StopReason) => Effect.Effect<void>
 }
 
-// A command the process daemon runs. The daemon writes and counts its output file. It belongs to the server, not
+// A command its host runs. The host writes and counts its output file. It belongs to the server, not
 // to the Location that started it, so a Location closing or reloading never stops or forgets it.
 type Run = {
   kind: "daemon"
   info: Info
-  process: number
+  process: CommandProcess
   toolCall?: ToolCall
   // When a restart should stop it. Unset while a call waits on it: that call's timeout dies with this server.
   timeoutDeadline?: number
@@ -274,11 +274,30 @@ export interface DaemonInterface {
 /** The process daemon's shell commands, owned by the server and grouped by Location. */
 export class Daemon extends Context.Service<Daemon, DaemonInterface>()("@opencode/Shell/Daemon") {}
 
-const daemonLayer = Layer.effect(
-  Daemon,
+/** Keeps commands running outside the server and finds them again after it restarts. */
+interface CommandHost {
+  readonly create: (
+    input: PersistentPty.CreatePipeInput,
+  ) => Effect.Effect<CommandProcess, PersistentPty.UnavailableError | PersistentPty.RequestError>
+  readonly list: () => Effect.Effect<CommandProcess[], PersistentPty.UnavailableError | PersistentPty.RequestError>
+}
+
+interface CommandProcess {
+  readonly info: Omit<PersistentPty.PipeInfo, "id" | "groupID" | "outputTail">
+  readonly store: (metadata: Stored) => Effect.Effect<void, PersistentPty.UnavailableError | PersistentPty.RequestError>
+  readonly wait: () => Effect.Effect<
+    PersistentPty.PipeExit,
+    PersistentPty.UnavailableError | PersistentPty.RequestError
+  >
+  readonly signal: (
+    signal: "SIGTERM" | "SIGKILL",
+  ) => Effect.Effect<void, PersistentPty.UnavailableError | PersistentPty.RequestError>
+  readonly remove: () => Effect.Effect<void, PersistentPty.UnavailableError | PersistentPty.RequestError>
+}
+
+const commandRuns = (host: CommandHost) =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const pty = yield* PersistentPty.Service
     const scope = yield* Effect.scope
     const context = yield* Effect.context()
     const global = yield* Global.Service
@@ -297,7 +316,7 @@ const daemonLayer = Layer.effect(
       const ref = Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID })
       const outputDir = path.join(global.data, DIRECTORY, location.project.id)
 
-      const persisted = (run: Run): Stored => ({
+      const persisted = (run: Pick<Run, "info" | "toolCall" | "timeoutDeadline" | "stopReason">): Stored => ({
         id: run.info.id,
         command: run.info.command,
         shell: run.info.shell,
@@ -313,8 +332,8 @@ const daemonLayer = Layer.effect(
 
       // Records the command's latest timeout and stop reason in the daemon, so a restart sees them.
       const store = (run: Run) =>
-        pty
-          .setPipeMetadata(run.process, persisted(run))
+        run.process
+          .store(persisted(run))
           .pipe(
             Effect.catch((error) =>
               Effect.logWarning("failed to update shell command metadata", { id: run.info.id, error: error.message }),
@@ -332,7 +351,7 @@ const daemonLayer = Layer.effect(
         // Stop waiting first, so forgetting the process is not mistaken for losing it.
         if (run.wait) yield* Fiber.interrupt(run.wait)
         // Terminate a running command or just forget a finished one before deleting its file.
-        yield* pty.terminatePipe(run.process).pipe(Effect.ignore)
+        yield* run.process.remove().pipe(Effect.ignore)
         yield* Effect.promise(() => unlink(run.info.file).catch(() => {}))
         yield* Deferred.fail(run.done, new NotFoundError({ id }))
         // Every shell reports exactly one exit; removing a running one ends it as killed.
@@ -383,12 +402,12 @@ const daemonLayer = Layer.effect(
           run.stopReason = reason
           run.timeoutDeadline = undefined
           yield* store(run)
-          yield* pty.signalPipe(run.process, "SIGTERM").pipe(Effect.ignore)
+          yield* run.process.signal("SIGTERM").pipe(Effect.ignore)
           run.stopping = yield* fork(
             Effect.gen(function* () {
               const ended = yield* Deferred.await(run.done).pipe(Effect.timeoutOption(STOP_GRACE), Effect.exit)
               if (Exit.isSuccess(ended) && Option.isNone(ended.value))
-                yield* pty.signalPipe(run.process, "SIGKILL").pipe(Effect.ignore)
+                yield* run.process.signal("SIGKILL").pipe(Effect.ignore)
             }),
           )
         }).pipe(Effect.uninterruptible)
@@ -411,7 +430,7 @@ const daemonLayer = Layer.effect(
       // Watches the exit, and the timeout (in ms from now, none if undefined).
       const attach = Effect.fnUntraced(function* (run: Run, duration: number | undefined) {
         run.wait = yield* fork(
-          pty.waitPipe(run.process).pipe(
+          run.process.wait().pipe(
             Effect.map((exit): Ended => {
               run.outputLines = exit.outputLines
               run.outputError = exit.outputError
@@ -439,7 +458,7 @@ const daemonLayer = Layer.effect(
         )
         // A stop interrupted by a restart lost its grace period: kill now.
         if (run.stopReason !== undefined) {
-          run.stopping = yield* fork(pty.signalPipe(run.process, "SIGKILL").pipe(Effect.ignore))
+          run.stopping = yield* fork(run.process.signal("SIGKILL").pipe(Effect.ignore))
           return
         }
         if (duration === undefined) return
@@ -448,28 +467,26 @@ const daemonLayer = Layer.effect(
       })
 
       const create: Runs["create"] = Effect.fnUntraced(function* (input) {
-        const run: Run = {
-          kind: "daemon",
+        const pending = {
           info: input.info,
-          process: 0,
           toolCall: input.toolCall,
           timeoutDeadline: !input.waited && input.timeout > 0 ? input.info.time.started + input.timeout : undefined,
           done: Deferred.makeUnsafe<Info, NotFoundError>(),
         }
-        const created = yield* pty.createPipe({
+        const created = yield* host.create({
           program: input.info.shell,
           args: input.args,
           cwd: input.info.cwd,
           env: input.env,
           groupID: location.project.id,
           outputPath: input.info.file,
-          metadata: persisted(run),
+          metadata: persisted(pending),
         })
-        run.process = created.id
+        const run: Run = { kind: "daemon", ...pending, process: created }
         run.info = produce(input.info, (draft) => {
-          if (created.pid !== undefined) draft.pid = created.pid
+          if (created.info.pid !== undefined) draft.pid = created.info.pid
           // The daemon's clock, so the command reports the same start wherever it is read.
-          draft.time.started = created.startedAt
+          draft.time.started = created.info.startedAt
         })
         runs.set(run.info.id, run)
         // Timed from now: starting the daemon may have taken a while.
@@ -481,8 +498,8 @@ const daemonLayer = Layer.effect(
       // Takes back this Location's commands, left by a previous server. Two Locations can share a project's output
       // directory, so match the Location itself.
       const recover = Effect.fnUntraced(function* () {
-        const processes = yield* pty
-          .listPipes()
+        const processes = yield* host
+          .list()
           .pipe(
             Effect.catch((error) =>
               Effect.logWarning("failed to list shell commands to recover", { error: error.message }).pipe(
@@ -491,7 +508,8 @@ const daemonLayer = Layer.effect(
             ),
           )
         const finished: Run[] = []
-        for (const process of processes) {
+        for (const handle of processes) {
+          const process = handle.info
           const stored = Option.getOrUndefined(decodeStored(process.metadata))
           if (
             !stored ||
@@ -522,7 +540,7 @@ const daemonLayer = Layer.effect(
                 ...(running ? {} : { completed: process.exitedAt ?? process.startedAt }),
               },
             },
-            process: process.id,
+            process: handle,
             toolCall: stored.toolCall,
             timeoutDeadline: stored.timeoutDeadline,
             stopReason: stored.stopReason,
@@ -578,14 +596,31 @@ const daemonLayer = Layer.effect(
       return placed.runs
     })
 
-    return Daemon.of({
+    return {
       at,
-      handoffPrepared: pty.handoffPrepared,
-      watch: (effect) =>
+      watch: (effect: Effect.Effect<void, unknown>) =>
         fork(effect.pipe(Effect.catch((error) => Effect.logError("shell watcher failed", { error })))).pipe(
           Effect.asVoid,
         ),
+    }
+  })
+
+const daemonLayer = Layer.effect(
+  Daemon,
+  Effect.gen(function* () {
+    const pty = yield* PersistentPty.Service
+    const pipe = (info: PersistentPty.PipeInfo): CommandProcess => ({
+      info,
+      store: (metadata) => pty.setPipeMetadata(info.id, metadata),
+      wait: () => pty.waitPipe(info.id),
+      signal: (signal) => pty.signalPipe(info.id, signal),
+      remove: () => pty.terminatePipe(info.id),
     })
+    const runs = yield* commandRuns({
+      create: (input) => pty.createPipe(input).pipe(Effect.map(pipe)),
+      list: () => pty.listPipes().pipe(Effect.map((items) => items.map(pipe))),
+    })
+    return Daemon.of({ ...runs, handoffPrepared: pty.handoffPrepared })
   }),
 )
 
