@@ -16,8 +16,7 @@ panic in one of its calls fails it, and its command and dialogs go. The toasts a
 error, or `view error` (space) on any, the manager's included, shows the error, and the user's enter or click on the
 manager's own row, whose footer says "failed, enter enables it again", starts the manager again, after which the
 host's list goes; a run of the select by name, as another plugin's `dispatch`, starts nothing. A restart whose setup
-fails leaves the manager failed and the list up. A held build of the manager's ID after a crash is not the manager:
-the manager that runs keeps `/plugins` and lists that build. A manager disabled by the user (`-opencode.plugins` in the
+fails leaves the manager failed and the list up. A manager disabled by the user (`-opencode.plugins` in the
 config) leaves no `/plugins`, as in TS.
 
 ## Reason

@@ -1,7 +1,7 @@
 # Plugins
 
 A plugin adds commands, keys, parts of the screen, pages, dialogs and renderers to `opencode-native`. This guide
-covers the model, writing a plugin in Rust, Luau or TypeScript, waiting, limits, and how the client finds and runs
+covers the model, writing a plugin in Luau or TypeScript, waiting, limits, and how the client finds and runs
 plugins. [`plugin-abi.md`](plugin-abi.md) is the reference, and `cargo doc -p opencode-plugin-abi --open` documents
 every type. Paths are relative to `packages/cli-rs`.
 
@@ -15,31 +15,23 @@ Schema, `crates/plugin-abi/schema/v2.json`. A *carrier* runs a plugin against it
 | Carrier | A plugin is | A call crosses as | Host code |
 | --- | --- | --- | --- |
 | Linked Rust | an `abi::Plugin { id, setup }` compiled into the client | Rust values | `Builtin` in `crates/plugin/src/lib.rs` |
-| C ABI | a shared library that exports `opencode_plugin_v2`: Rust with `plugin!`, or C on `crates/plugin-abi/include/opencode_plugin.h` | JSON in byte buffers | `crates/plugin/src/loader/native.rs`, and `loader/requests.rs`, which it shares with the pipe |
 | Luau | a directory with `plugin.toml` and `init.luau` | Luau tables, in a sandboxed VM for each activation | `crates/plugin/src/luau` |
-| Pipe | a TypeScript TUI plugin, unmodified | framed messages to one Bun process for all TS plugins, the *JS host* | `crates/plugin/src/pipe` |
+| Pipe | a TypeScript TUI plugin, unmodified | framed messages to one Bun process for all TS plugins, the *JS host* | `crates/plugin/src/pipe`, and `loader/requests.rs` |
 
 - **Every built-in is a linked plugin on the public contract** (`crates/tui/src/plugins`, `crates/latex`,
   `crates/mermaid`), the plugin manager (`/plugins`) and the diff viewer included.
-- **The first three run on the UI thread, inside the frame.** No frame waits for the JS host, so a TS plugin's tree
+- **The first two run on the UI thread, inside the frame.** No frame waits for the JS host, so a TS plugin's tree
   and reads arrive a frame or more late.
 - **A TS plugin gets the context the TypeScript client gives it** from a compatibility layer, which turns its JSX
   into contract trees. [`F16-v2-compat-layer.md`](../parity/deviations/F16-v2-compat-layer.md) lists what does not
   map.
-- **The JS host, Luau and the C ABI are cargo features**, `ts`, `luau` and `native` (of `opencode-cli`,
-  `opencode-tui` and `opencode-plugin`). `ts` and `luau` are on by default; `native` is off, so third-party native
-  plugins load only in a build with `--features native`. `OPENCODE_PLUGIN_JS=0`, `OPENCODE_PLUGIN_LUAU=0` and
-  `OPENCODE_PLUGIN_NATIVE=0` turn them off at run time. A plugin of a missing carrier is listed as skipped.
-- **Without `native`** no library is opened and no `dlopen` of a plugin is linked: a library target, a project's
-  included, is skipped and never asked about; `plugin dev` and `plugin test` say the build lacks native plugins; the
-  crash guard (`opencode-native` as the parent of its TUI) starts only for Luau plugins. `native` turns on
-  `opencode-plugin-abi`'s `c-abi`, the C ABI's types and shims, which the linked built-ins do not use. On macOS only a
-  build with `native` needs the `disable-library-validation` entitlement.
-- **The musl builds are fully static** (Rust's default `crt-static`, O-188), so they run on any Linux, but a static
-  executable has no dynamic loader: they load no native plugins and have no Zed editor context. The build scripts of
-  `opencode-plugin`, `opencode-tui` and `opencode-cli` derive `cfg(native)`, the `native` feature outside a static
-  musl build, and the carrier is behind that, so a musl build with `--features native` behaves as one without
-  `native`, and its skip reason names the static musl build.
+- **The JS host and Luau are cargo features**, `ts` and `luau` (of `opencode-cli`, `opencode-tui` and
+  `opencode-plugin`), both on by default. `OPENCODE_PLUGIN_JS=0` and `OPENCODE_PLUGIN_LUAU=0` turn them off at run
+  time, and `--no-plugins` loads no external plugin at all for one run ([Failures](#failures)). A plugin of a missing
+  carrier is listed as skipped.
+- **Native plugin libraries do not load.** A `plugin.so` (`plugin.dylib`, `plugin.dll`) or a configured library is
+  listed as skipped. Third-party native code may return as a supervised helper process (O-192); it will not run in the
+  client's process.
 
 `setup` runs once for each activation. The same registrations on each language:
 
@@ -73,36 +65,9 @@ something it could show changed, and `Changed` says what. [When claims render](p
 
 ## Writing a plugin
 
-The same plugin three times: a command, in the palette and as `/hello`, that shows a toast, and a `hello` at the end
-of the home screen's footer that runs the command when clicked. Each file is in the repository, and a test loads and
-runs it.
-
-### Rust
-
-`crates/plugin/examples/hello/src/lib.rs`:
-
-```rust
-use opencode_plugin_abi::{Click, Command, Node, Placement, Render, Setup, Span, Toast, Variant, plugin};
-
-fn setup(setup: &mut Setup) -> Result<(), String> {
-    // A command in the palette and as `/hello`.
-    setup.command(Command::new("hello.greet").title("Say hello").slash("hello").palette(), |host, _input| {
-        host.toast(Toast::new(Variant::Success, "Hello from a plugin"))
-    });
-    // A line at the end of the home screen's footer; a click runs the command.
-    setup.slot(Placement::append("home.footer"), |_read, _input, _changed| {
-        let text = Node::text([Span::new("hello").fg("text.muted")]);
-        Render::Show(text.on_click(Click::command("hello.greet")))
-    });
-    Ok(())
-}
-
-plugin!(id = "example.hello", setup);
-```
-
-It is a `cdylib` on `opencode-plugin-abi` alone; the [SDK's README](../crates/plugin-abi/README.md) has the
-manifest, the build and the install. Install the library as `~/.config/opencode/plugins/hello/plugin.so`
-(`plugin.dylib`, `plugin.dll`).
+The same plugin twice: a command, in the palette and as `/hello`, that shows a toast, and a `hello` at the end of the
+home screen's footer that runs the command when clicked. Each file is in the repository, and a test loads and runs
+it. The built-ins are the same contract in Rust (`abi::Plugin { id, setup }`), linked into the client.
 
 ### Luau
 
@@ -110,7 +75,7 @@ manifest, the build and the install. Install the library as `~/.config/opencode/
 
 ```lua
 --!strict
--- `examples/hello` in Luau, line for line.
+-- The quick start: a command in the palette and as `/hello`, and a line in the home footer that runs it.
 local plugin = require("@opencode/plugin")
 
 return plugin.define(function(setup)
@@ -129,7 +94,7 @@ end)
 Beside it, `plugin.toml`:
 
 ```toml
-# The quick start (`examples/hello`) in Luau: a command and a footer line that runs it.
+# The quick start in Luau: a command and a footer line that runs it.
 id = "example.luau-hello"
 name = "Hello"
 version = "0.1.0"
@@ -148,7 +113,7 @@ plugin, and `bun run check:luau-types` checks every Luau plugin in the repositor
 
 ```tsx
 /** @jsxImportSource @opentui/solid */
-// `examples/hello` as a TypeScript TUI plugin, which the JS host runs.
+// The quick start as a TypeScript TUI plugin, which the JS host runs.
 import { Plugin } from "@opencode/plugin/tui"
 
 export default Plugin.define({
@@ -183,37 +148,18 @@ export default Plugin.define({
 Copy the file to `~/.config/opencode/plugins/hello/tui.tsx`, or publish it to npm and run
 `opencode-native plugin add <name>`. It needs Bun ([TypeScript plugins](#typescript-plugins)).
 
-### `plugin dev` and `plugin test`
-
-`opencode-native plugin dev <crate dir>` builds the crate, runs the TUI with its library beside the configured
-plugins, and builds it again after a change anywhere in the crate but `target` and hidden directories. The TUI's
-reload takes the new library. A failed build leaves the running one, writes `<dir>/target/opencode-dev/build.log`,
-and shows a toast that names it.
-
-`opencode-native plugin test <library, crate or plugin dir> [--route NAME] [--size WxH] [--command NAME[=INPUT]]
-[--wait TEXT]...` loads the plugin into a headless TUI with no server and prints text frames. It fails when the
-plugin does not load or fails, the route is not the plugin's, or a command does not run. Its clock is its own, but
-the plugin's threads run in real time: `--wait TEXT` advances the clock until the frame shows `TEXT`, for ten seconds
-at most. `--conformance` replays the [conformance transcripts](plugin-abi.md#conformance) against a library.
-
-Neither is in the TypeScript CLI, so neither is in `--help`; each takes `-h`
-([`D01-plugin-dev-test.md`](../parity/deviations/D01-plugin-dev-test.md)).
-
 ### Examples
 
 Under `crates/plugin/examples`:
 
-- `board`: surfaces: a route of memoized cards, a panel, an overlay, a dialog, and a thread that floods its mailbox;
-- `author`: a sidebar counter with storage, a command, a server event and a fence renderer;
-- `c/plugin.c`: a plugin in C on the header alone;
-- `luau/counter`: `author` in Luau, with a confirm dialog and a module of its own;
-- `conformance`: the conformance plugin, in Rust and in C;
-- `sample` and `pipe`: fixtures for the loader's and the JS host's tests.
+- `luau/hello` and `luau/counter`: the quick start, and a sidebar counter with storage, a command, a server event, a
+  fence renderer, a confirm dialog and a module of its own;
+- `pipe`: fixtures for the JS host's tests.
 
-The separate `plugins` repository ports ten published TS plugins to Rust and to Luau, built on the SDK by git. Four
-show the most: queue-manager (chained dialogs and ordered writes as one task), session-usage (paged typed calls, work
-off the UI thread, a tick), session-manager (a route with two key layers, a search field, a debounce) and goal-plugin
-(a sidebar read from tool results, with a tick that runs only while the sidebar shows).
+The separate `plugins` repository ports ten published TS plugins to Luau. Four show the most: queue-manager (chained
+dialogs and ordered writes as one task), session-usage (paged typed calls, a tick), session-manager (a route with two
+key layers, a search field, a debounce) and goal-plugin (a sidebar read from tool results, with a tick that runs only
+while the sidebar shows).
 
 ## Waiting: tasks, `await` and timers
 
@@ -226,11 +172,11 @@ as `async` code does in TypeScript, while every stretch of it still runs inside 
   call is ([Limits](#limits)). What it asks for takes effect when that call returns.
 - **Tasks interleave at their waits,** as `async` calls do.
 
-**Rust** (`crates/plugin-abi/src/task.rs`). `Setup::tasks()` returns a `Tasks` handle, and `tasks.spawn(host, f)`
-starts a task. It is a plain `Future` with real wakers, so other crates' combinators work; `task::join_all` waits for
-several. Its `Cx` has the waits (`select`, `prompt`, `confirm`, `alert`, `fetch`, `foreground`, `sleep`, `blocking`,
-and the typed `call` and `send`). `Cx::with` lends the current call's host to a closure; the borrow cannot be held
-across a wait. This is the module's own doc-tested example:
+**Rust**, for the built-ins (`crates/plugin-abi/src/task.rs`). `Setup::tasks()` returns a `Tasks` handle, and
+`tasks.spawn(host, f)` starts a task. It is a plain `Future` with real wakers, so other crates' combinators work;
+`task::join_all` waits for several. Its `Cx` has the waits (`select`, `prompt`, `confirm`, `alert`, `fetch`,
+`foreground`, `sleep`, `blocking`, and the typed `call` and `send`). `Cx::with` lends the current call's host to a
+closure; the borrow cannot be held across a wait. This is the module's own doc-tested example:
 
 ```rust
 fn setup(setup: &mut Setup) -> Result<(), String> {
@@ -271,10 +217,9 @@ end)
 ```
 
 **TypeScript** awaits promises as in the TS client (`await context.ui.dialog.confirm(..)`); each is an effect whose
-answer comes in a later message. **C** has no `async`: a C plugin answers the `reply` and `cancelled` requests
-itself.
+answer comes in a later message.
 
-Both SDKs also send typed API calls, generated from the server's OpenAPI document, so a wrong path or field fails the
+Both SDKs send typed API calls, generated from the server's OpenAPI document, so a wrong path or field fails the
 build or the type check: `cx.call(client::session_inbox_list(&input)).await?` in Rust, and
 `plugin.client.session.inbox.list({ sessionID = id })` in Luau.
 
@@ -303,7 +248,7 @@ A fetch, a foreground program and a timer are *requests*, and each belongs to wh
 - **Cancel is told once:** as the error above in a task, in `Setup::on_cancelled` for a Rust plugin without tasks,
   and as an `AbortError` in TypeScript.
 
-`plugin_ownership.rs` in `crates/tui/tests/all` holds these rules on all four carriers.
+`plugin_ownership.rs` in `crates/tui/tests/all` holds these rules on all three carriers.
 
 ### Timers
 
@@ -326,16 +271,16 @@ A timer is a request (`Host::try_timer`) on the host's clock, owned and cancelle
 
 ## Limits
 
-A plugin is code the user chose to run, and a native library runs in the client's process, so none of this is a
-security boundary. The limits keep one plugin from freezing or starving the client, and name the culprit.
+A plugin is code the user chose to run, and a Luau plugin runs in the client's process, so none of this is a security
+boundary. The limits keep one plugin from freezing or starving the client, and name the culprit.
 
-| What is bounded | Linked, C ABI | Luau | Pipe (TS) |
+| What is bounded | Linked | Luau | Pipe (TS) |
 | --- | --- | --- | --- |
 | Time in one frame | 1 ms a plugin, 4 ms for all. Over it in more than 12 of its last 120 frames, the plugin is slow, which the user is told once a session | the same | no frame waits |
 | One call | an external plugin over 100 ms of CPU time fails when the call returns; a built-in's overrun is logged as a host bug | the VM's interrupt stops the call at 100 ms of CPU time, and the plugin fails | a JS host that owes an answer and is silent for 1 s (10 s for a load or setup) is restarted; the plugin it was running fails |
-| A call that never returns | a notice at 0.5 s; at 2 s the client is ended and restarted with external plugins held off ([Failures](#failures)) | stopped by the interrupt | as above |
+| A call that never returns | a built-in's bug: nothing stops it | stopped by the interrupt | as above |
 | Memory | the client's | 32 MiB of heap a VM; 1 MiB of sources | 512 MiB resident for the JS host |
-| One message | 256 MiB a buffer | 320,000 keys and values, 32 MiB of strings, 128 levels of nesting | 256 KiB a control message, 8 MiB a tree; 512 unread messages and 8 unread trees |
+| One message | none: nothing crosses | 320,000 keys and values, 32 MiB of strings, 128 levels of nesting | 256 KiB a control message, 8 MiB a tree; 512 unread messages and 8 unread trees |
 | Waiting work | 256 tasks, 32 timers, 4 `blocking` threads, 64 unanswered dialogs | 256 parked tasks, 32 timers, 64 dialogs | 256 effects a call, 128 watched reads |
 
 On every carrier, a tree may make the host build at most 20,000 nodes and 3,000 rows, 1 MiB of text a node and 32 MiB
@@ -363,8 +308,8 @@ In the places the TypeScript client looks, in this order:
 
 Targets merge by local path; a later entry replaces an earlier one in its place. The target decides the carrier:
 
-- a shared library, or a directory with `plugin.so` (`plugin.dylib`, `plugin.dll`): the C ABI;
-- a directory with `plugin.toml` and no native build: Luau;
+- a shared library, or a directory with `plugin.so` (`plugin.dylib`, `plugin.dll`): none, it is listed as skipped;
+- a directory with `plugin.toml`: Luau;
 - any other directory, and an npm package: the JS host.
 
 An npm spec (`name`, `name@1.2.3`, a range, a tag, `@scope/name`, a git spec) resolves to the package the TypeScript
@@ -410,14 +355,8 @@ The global directory and `cli.json` need no approval, because a project cannot w
 - **Enter on its row asks "Run project plugin?"** with what would run and the start of its SHA-256. Decline is the
   default button and lists it `declined` until the build changes. Escape, Ctrl+C, the header and the backdrop decide
   nothing. Enter on a declined row asks again.
-- **A decision covers what the user was shown:** for a library, the directory, the library's real path and the
-  SHA-256 of its bytes, which are the bytes loaded; for TypeScript and Luau, the directory and a SHA-256 of every file
-  in it, and a copy of the approved files is what runs. A changed build is pending again, and a running build of it
-  stops.
-- **A library may load only system libraries with it** (`crates/plugin/src/loader/deps.rs`). No build may name a
-  dependency or search path relative to the current directory or outside its private copy, and a project's build may
-  name no absolute path outside `/usr/lib` (and `/System` on macOS). On Windows the loader searches neither the
-  current directory nor `PATH` for a plugin's DLLs.
+- **A decision covers what the user was shown:** the directory and a SHA-256 of every file in it, and a copy of the
+  approved files is what runs. A changed build is pending again, and a running build of it stops.
 - **Decisions are kept in `plugin-approvals.json`** in the client's state directory, written under a lock as a private
   file. A store inside the project, at a relative path, or in a directory other users can write is not used, and
   decisions then last only as long as the TUI. A store that cannot be read approves nothing. Remove an entry, or the
@@ -425,7 +364,7 @@ The global directory and `cli.json` need no approval, because a project cannot w
 
 ### Reload
 
-The TUI watches the `plugins` directories, each plugin directory and the directory of each configured library, and
+The TUI watches the `plugins` directories, each plugin directory and the directory of each configured path, and
 loads a new build 100 ms after the last change (`OPENCODE_FILEWATCHER_DISABLE` turns this off). The new build starts
 before the running one stops. If it fails to load or set up, the running version stays and `/plugins` says
 `… (previous version still active)`. A plugin keeps its place among the claims across a reload and a toggle.
@@ -442,8 +381,8 @@ failed plugin has an `x`, and Space ("view error") shows its error (Enter, on a 
 "Plugin failed: <id>" offers "Open plugins", and the home footer counts failed plugins. The log (`opencode.log` in the
 directory `opencode-native debug paths` prints) has every failure.
 
-A crash or hang of a native library ends the client. So when a native build is among the targets, the TUI runs under
-a small parent process (`crates/cli/src/contain.rs`). After a crash it restores the terminal and starts a new client
-with the build that crashed disabled and the prompt's draft restored. After a second crash within 10 minutes that
-names no plugin, the new client runs with every external plugin off. The parent restarts the client at most twice in
-60 s.
+A crash of the process ends the client; only the Luau VM could cause one, and there is no crash guard. If a plugin
+keeps the client from starting, `opencode-native --no-plugins` starts the TUI with no external plugin for that
+run: no Luau, TypeScript or local plugin, and the built-ins as always. It is not in the TypeScript CLI
+([`D01-no-plugins.md`](../parity/deviations/D01-no-plugins.md)). `OPENCODE_PLUGIN_LUAU=0` and `OPENCODE_PLUGIN_JS=0`
+turn off one carrier for as long as they are set.

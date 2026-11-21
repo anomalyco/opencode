@@ -3,7 +3,7 @@
 // limits, a checkpoint and a stop reason), and its palette command `Goal` opens a large select whose filter's
 // placeholder is the goal's summary, one line a field; picking Resume sends the plugin's resume prompt to the session.
 // TS loads the package from node_modules; the Rust client runs the same files on the JS host through the V2
-// compatibility layer, and its native and Luau ports in its place (`app::ports_replay`).
+// compatibility layer, and its Luau port in its place (`app::ports_replay`).
 import { assistant, defineApp, session, user } from "../../lib/app"
 
 const id = "ses_g"

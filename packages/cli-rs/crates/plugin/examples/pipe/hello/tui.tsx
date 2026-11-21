@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-// `examples/hello` as a TypeScript TUI plugin, which the JS host runs.
+// The quick start as a TypeScript TUI plugin, which the JS host runs.
 import { Plugin } from "@opencode/plugin/tui"
 
 export default Plugin.define({

@@ -16,7 +16,7 @@ Crate `opencode-<name>` is in `crates/<name>`. A crate depends only on crates ab
 - `local`: the client-local files shared with the TypeScript client.
 - `service`: finding, probing, starting and stopping the server.
 - `store`: the client's copy of the server's state, fed by the event stream.
-- `plugin-abi`: the plugin contract and the SDK of native plugins.
+- `plugin-abi`: the plugin contract, its schema, and the Rust SDK of the built-in plugins.
 - `ui`: themes, keymap, dialogs, content widgets, grammars.
 - `plugin`: the plugin host: registry, loader, carriers, the renderer of plugin trees.
 - `latex`, `mermaid`: two built-in plugins, on `plugin-abi` alone.
@@ -40,8 +40,7 @@ dumps, and `src/tests/output.rs` byte for byte against the help and usage errors
 records.
 
 `serve`, `uninstall` and `plugin` run the TypeScript `opencode` with the same arguments, streams and exit code
-(`crates/service/src/delegate.rs`). `plugin dev` and `plugin test` are the client's own
-([`plugins.md`](plugins.md#plugin-dev-and-plugin-test)).
+(`crates/service/src/delegate.rs`).
 
 ## Talking to the server
 

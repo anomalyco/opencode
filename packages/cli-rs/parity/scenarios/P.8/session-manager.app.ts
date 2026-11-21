@@ -3,7 +3,7 @@
 // page of it, Tab groups by project,
 // `/` searches in a field that takes the focus, `r` asks for a new title in a prompt, `d` asks before it deletes. TS
 // loads the package from node_modules; the Rust client runs the same files on the JS host through the V2
-// compatibility layer, and its native and Luau ports in its place (`app::ports_replay`).
+// compatibility layer, and its Luau port in its place (`app::ports_replay`).
 import { defineApp } from "../../lib/app"
 
 const at = (id: string, title: string, directory: string, created: number, updated: number) => ({

@@ -1,5 +1,5 @@
 --!strict
--- `examples/author` in Luau, plus a dialog: a counter in the sidebar that `/count` and a click raise and storage keeps,
+-- A counter in the sidebar that `/count` and a click raise and storage keeps,
 -- `/count-reset` asks before it clears it, a toast on a finished session, and a `shout` fence.
 local plugin = require("@opencode/plugin")
 local shout = require("@self/shout")

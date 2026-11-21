@@ -1,5 +1,5 @@
 --!strict
--- `examples/hello` in Luau, line for line.
+-- The quick start: a command in the palette and as `/hello`, and a line in the home footer that runs it.
 local plugin = require("@opencode/plugin")
 
 return plugin.define(function(setup)

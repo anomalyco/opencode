@@ -29,10 +29,9 @@ whether the message streams and the fence closed. The host's own row is the fall
 - A view that returns a tree the host refuses leaves that part to the host's row for the rest of its mount (a keep the
   host does not hold is first asked for once more as a whole tree) (a fence's mount also ends at a theme change, when Markdown builds the block again). The plugin stays active,
   and its other parts keep their trees.
-- A view that takes longer than the overrun limit (100 ms; P4c's limits) is treated by carrier, as P4c treats every
-  overrun (synthesis 4.4): a built-in in process leaves that part to the host's row and stays active, and the overrun
-  is counted as a host bug; a plugin loaded as a library fails, as an external plugin does, and every part it claimed
-  shows the host's row, with the `Plugin failed` toast.
+- A view that takes longer than the overrun limit (100 ms) is treated as every overrun is (synthesis 4.4): a built-in
+  in process leaves that part to the host's row and stays active, and the overrun is counted as a host bug; an
+  external plugin fails, and every part it claimed shows the host's row, with the `Plugin failed` toast.
 - Disabling or reloading the plugin mounts the route again: every part it claimed shows the host's row, or the new
   build's tree.
 - While a part streams, its view runs at most once a frame, with the newest content, whichever row shows the part
@@ -44,7 +43,7 @@ whether the message streams and the fence closed. The host's own row is the fall
 Where the two differ beyond that:
 
 - TS throws when a plugin registers a renderer for a language that resolves to no filetype, or registers one language
-  twice (`plugin/api.tsx`). A native claim takes both: a claim of an empty name matches nothing, and within one
+  twice (`plugin/api.tsx`). A Rust or Luau claim takes both: a claim of an empty name matches nothing, and within one
   plugin, as across plugins, the claim made last wins. A TS plugin's on the JS host throws as in TS.
 - TS shows a thought as Markdown source (`<code filetype="markdown">`), so no renderer runs in it. Rust draws thoughts
   as Markdown with the plugins' fences, so a fence claim draws in an open thought too.
@@ -53,9 +52,9 @@ Where the two differ beyond that:
 
 A TS plugin's code-block renderer runs on the JS host as a fence claim (contract 2.x, step D), whose view answers
 after the frame: the host's code view shows until its tree comes, and a renderer that throws falls back that part
-alone, with a toast, where a native view's panic fails the plugin (`F16-v2-compat-layer`, "Code-block renderers";
-`P.8/good-fences` draws the same package in both clients). A native claim, and a JS one, take the rules above
-otherwise; `parity/scenarios/Pr/fence.app.ts` compares a TS renderer with its Rust twin, a native claim.
+alone, with a toast, where a Rust or Luau view's panic fails the plugin (`F16-v2-compat-layer`, "Code-block
+renderers"; `P.8/good-fences` draws the same package in both clients). A Rust or Luau claim, and a JS one, take the
+rules above otherwise; `parity/scenarios/Pr/fence.app.ts` compares a TS renderer with its Rust twin, a linked claim.
 
 ## Reason
 
