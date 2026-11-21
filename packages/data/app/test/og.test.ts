@@ -250,18 +250,18 @@ describe("og.png response", () => {
 })
 
 describe("card text", () => {
-  // Satori draws a character no font file has as the same empty box. The check mark and the warning sign are in the
+  // Satori draws a character no font file has as the same empty box. The Greek alpha and the arrow ⥈ are in the
   // font's "rest" file, not the Latin one, so each must draw as itself: different from that box and from the other.
   test("draws characters the Latin file lacks from the rest file", async () => {
     const card = modelOgCard(inkling)!
-    const [check, warning, missing] = await Promise.all(
-      ["\u2713", "\u26a0", "\ue000"].map(async (character) =>
+    const [alpha, arrow, missing] = await Promise.all(
+      ["\u03b1", "\u2948", "\ue000"].map(async (character) =>
         Buffer.from(await resource.renderOgCard({ ...card, name: `Inkling ${character}` })).toString("base64"),
       ),
     )
-    expect(check).not.toBe(missing)
-    expect(warning).not.toBe(missing)
-    expect(check).not.toBe(warning)
+    expect(alpha).not.toBe(missing)
+    expect(arrow).not.toBe(missing)
+    expect(alpha).not.toBe(arrow)
   }, 30_000)
 })
 
