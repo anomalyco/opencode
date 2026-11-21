@@ -303,6 +303,7 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
     return {
       ...message,
       metadata: meta,
+      native: metadata("assistant-native", message.id, message.native),
       content: message.content.map((content) => {
         if (content.type === "text")
           return {
