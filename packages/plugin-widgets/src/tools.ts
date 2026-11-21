@@ -9,7 +9,7 @@ export const templateName = "widget_template"
 
 export const description = `Show the user an interactive widget inline in the conversation: choices with images, forms, confirmations, charts and diagrams, canvas drawings, GPU shaders, or live programs such as games and timers. The answer arrives as your next message.
 
-Built-ins (schemas via widget_template "list"): suggestions, form, confirm, chart, backdrop, minigame, and diagrams (pie, scatter, histogram, area, heatmap, treemap, sankey, graph, tree, timeline, funnel, radar, gauge, boxplot, flowchart, sequence, table). Load the "widgets" skill before writing your own template.
+Built-ins (schemas via widget_template "list"): suggestions, form, confirm, chart, backdrop, and diagrams (pie, scatter, histogram, area, heatmap, treemap, sankey, graph, tree, timeline, funnel, radar, gauge, boxplot, flowchart, sequence, table). Load the "widgets" skill before writing your own template.
 
 - \`data\` is a JSON object matching the template's schema; fix errors and call again. Never invent image URLs.
 - To change a widget you showed (a fix, new data, the next step), post the new one with \`replaces\` set to the old call ID from its result: the old one closes as superseded.

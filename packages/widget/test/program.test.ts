@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { builtins, compile, prelude, program, step, version } from "../src/index.js"
-import { backdrop, chart, confirm, form, minigame, suggestions } from "../src/source.js"
+import { backdrop, chart, confirm, form, suggestions } from "../src/source.js"
 
 const src = path.resolve(import.meta.dir, "../src")
 
@@ -12,7 +12,6 @@ test("source.ts embeds the canonical .js files", async () => {
   expect(confirm).toBe(await Bun.file(path.join(src, "templates/confirm.js")).text())
   expect(chart).toBe(await Bun.file(path.join(src, "templates/chart.js")).text())
   expect(backdrop).toBe(await Bun.file(path.join(src, "templates/backdrop.js")).text())
-  expect(minigame).toBe(await Bun.file(path.join(src, "templates/minigame.js")).text())
 })
 
 test("program is the prelude, a newline, then the source", () => {
@@ -113,7 +112,6 @@ test("version covers the mode and a live template's capabilities", () => {
   expect(version("source", data, "live")).toBe(hash(base + "\nlive"))
   const capabilities = { https: { hosts: ["api.example.com"] } }
   expect(version("source", data, "live", capabilities)).toBe(hash(base + "\nlive\n" + JSON.stringify(capabilities)))
-  expect(builtins.find((template) => template.name === "minigame")?.mode).toBe("live")
 })
 
 test("compile checks syntax without running, with lines counted in the source", () => {

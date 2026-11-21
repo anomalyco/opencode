@@ -104,7 +104,7 @@ describe("every diagram", () => {
 
   test("every diagram has an example", () => {
     const names = builtins.filter(
-      (item) => !["suggestions", "form", "confirm", "chart", "backdrop", "minigame"].includes(item.name),
+      (item) => !["suggestions", "form", "confirm", "chart", "backdrop"].includes(item.name),
     )
     expect(names.map((item) => item.name).sort()).toEqual(Object.keys(examples).sort())
   })

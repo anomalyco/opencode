@@ -13,7 +13,6 @@ const names = [
   "templates/confirm",
   "templates/chart",
   "templates/backdrop",
-  "templates/minigame",
   ...[
     "pie",
     "scatter",

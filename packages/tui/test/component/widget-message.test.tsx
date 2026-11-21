@@ -1,4 +1,4 @@
-import { builtins, program } from "@opencode/widget"
+import { program } from "@opencode/widget"
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
@@ -104,14 +104,6 @@ test("a live widget points to desktop and mobile instead of running", async () =
   using setup = await render("confirm", { program: async () => ({ program: "", mode: "live" }) })
   const current = await frame(setup, (current) => current.includes("Open this widget on desktop or mobile."))
   expect(current).not.toContain("Confirm")
-})
-
-test("the built-in live minigame shows the desktop and mobile fallback", async () => {
-  const minigame = builtins.find((template) => template.name === "minigame")!
-  using setup = await render("confirm", {
-    widget: { template: { name: minigame.name, version: minigame.version }, data: { title: "Tap the dots" } },
-  })
-  await frame(setup, (current) => current.includes("Open this widget on desktop or mobile."))
 })
 
 test("a failing step is reported to the agent", async () => {

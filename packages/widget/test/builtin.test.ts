@@ -52,7 +52,6 @@ test("built-ins have valid names", () => {
     "confirm",
     "chart",
     "backdrop",
-    "minigame",
     "pie",
     "scatter",
     "histogram",

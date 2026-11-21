@@ -1,7 +1,7 @@
 # @opencode/widget
 
 The shared widget runtime: the canonical prelude, the view node set, the step ABI and the built-in templates
-(`suggestions`, `form`, `confirm`, `chart`, `backdrop`, the live `minigame`, and 17 diagrams listed in
+(`suggestions`, `form`, `confirm`, `chart`, `backdrop`, and 17 diagrams listed in
 `docs/diagrams.md`). The contracts are `specs/v2/widgets.md`
 and `specs/v2/widgets-live.md`; this README is the short version for client authors in other languages (Rune desktop,
 Rust). The TypeScript runtime targets Bun.

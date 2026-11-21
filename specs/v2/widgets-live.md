@@ -2,7 +2,7 @@
 
 A template can opt into **live mode**: instead of short `init`/`view`/`draw` steps, the client starts one
 long-running PsychoScript program per open widget. It keeps its state in the VM, waits on timers and display frames,
-takes input through handlers on its nodes, and renders whenever it wants. This is what minigames, timers, simulations, step-by-step animations and other
+takes input through handlers on its nodes, and renders whenever it wants. This is what games, timers, simulations, step-by-step animations and other
 free-running widgets use. Step mode stays the default; everything in `widgets.md` still applies unless said here.
 
 ## Opting in
@@ -138,10 +138,4 @@ source (an `async function main`, top-level declarations only; see `widgets.md`,
 fails reports it with the `report` RPC (`phase: "main"`, or `"fetch"` for a fetch error it can't handle).
 `widget_template` `save` takes `mode` and `capabilities`; both are part of the template version (see `widgets.md`, Template). Step templates
 can't declare capabilities. The skill teaches when to use live mode (games, timers, animations,
-simulations) and shows a small game.
-
-## Built-in example
-
-`minigame` (live): "tap the dots". `data: { title, seconds?: number (default 20) }`. A canvas with dots spawning on a
-timer and shrinking; tap to score; shows score and time left; at the end shows the result with "Submit score" /
-"Play again"; submits `{ score, seconds }`.
+simulations) and shows a small live example.

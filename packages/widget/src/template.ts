@@ -1,7 +1,7 @@
 import { diagrams } from "./diagram.js"
 import type { JSONSchema } from "./json-schema.js"
 import { version } from "./program.js"
-import { backdrop, chart, confirm, form, minigame, suggestions } from "./source.js"
+import { backdrop, chart, confirm, form, suggestions } from "./source.js"
 
 /** `step` (default): short init/view/draw steps, events through handlers on nodes. `live`: one long-running `main(data)` (widgets-live.md). */
 export type Mode = "step" | "live"
@@ -217,21 +217,6 @@ export const builtins: ReadonlyArray<Template> = [
       required: ["title", "preset"],
       additionalProperties: false,
     },
-  ),
-  make(
-    "minigame",
-    'A live "tap the dots" game: dots appear and shrink, tapping scores (smaller is worth more) until time runs out. Submits { score, seconds }.',
-    minigame,
-    {
-      type: "object",
-      properties: {
-        title: string("Heading of the game"),
-        seconds: { type: "integer", minimum: 5, maximum: 120, description: "Length of a round (default 20)" },
-      },
-      required: ["title"],
-      additionalProperties: false,
-    },
-    "live",
   ),
   ...diagrams,
 ]

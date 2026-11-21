@@ -54,7 +54,7 @@ A template version is immutable. Saving a template with an existing name creates
 latest; old versions stay retrievable forever so old widgets keep rendering.
 
 Built-in templates ship in `@opencode/widget` and are always present: `suggestions`, `form`, `confirm`, `chart`,
-`backdrop`, the live `minigame`, and the diagrams `pie`, `scatter`, `histogram`, `area`, `heatmap`, `treemap`, `sankey`,
+`backdrop`, and the diagrams `pie`, `scatter`, `histogram`, `area`, `heatmap`, `treemap`, `sankey`,
 `graph`, `tree`, `timeline`, `funnel`, `radar`, `gauge`, `boxplot`, `flowchart`, `sequence`, `table`
 (`packages/widget/docs/diagrams.md`).
 

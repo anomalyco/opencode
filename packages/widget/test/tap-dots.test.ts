@@ -1,26 +1,17 @@
 import { expect, test } from "bun:test"
-import {
-  builtins,
-  type Command,
-  type LiveFrame,
-  LiveWidget,
-  ManualClock,
-  type Node,
-  program,
-  validateData,
-} from "../src/index.js"
+import { type Command, type LiveFrame, LiveWidget, ManualClock, type Node, program } from "../src/index.js"
 
-const minigame = builtins.find((template) => template.name === "minigame")!
+// A complete live game (not a built-in), run on the reference live host: frames, a canvas handler, timers, pausing.
+const source = await Bun.file(new URL("./fixtures/tap-dots.js", import.meta.url)).text()
 const WIDTH = 360
 const HEIGHT = 320
 // The canvas's id: the prelude derives it from the canvas's `key`.
 const BOARD = "0/:board"
 
 const play = (data: unknown) => {
-  expect(validateData(minigame.data, data)).toEqual([])
   const clock = new ManualClock()
   // The TypeScript interpreter on a loaded CI runner can take longer than the spec's 50 ms to start the program.
-  const widget = LiveWidget.start(program(minigame.source), data, { clock, busyMs: 2000 })
+  const widget = LiveWidget.start(program(source), data, { clock, busyMs: 2000 })
   const time = { t: 0 }
   // One display frame 16 ms after the last, once the program asks for it; resolves once it is drawn.
   const frame = async () => {
@@ -53,7 +44,7 @@ const buttons = (view: Node | undefined) => all(view).flatMap((node) => (node.ty
 const button = (view: Node | undefined, label: string) =>
   all(view).flatMap((node) => (node.type === "button" && node.label === label ? [node.id] : []))[0] ?? ""
 
-test("minigame: tap to start, tap shrinking dots to score, then submit the score", async () => {
+test("tap the dots: tap to start, tap shrinking dots to score, then submit the score", async () => {
   const game = play({ title: "Tap the dots", seconds: 5 })
   await game.frame()
   expect(all(game.widget.view).map((node) => node.type)).toEqual(["column", "text", "canvas", "text"])
@@ -89,7 +80,7 @@ test("minigame: tap to start, tap shrinking dots to score, then submit the score
   expect(await game.widget.done).toEqual({ type: "submit", value: { score, seconds: 5 } })
 })
 
-test("minigame: a miss scores nothing, the round ends on time even without frames, and it can be played again", async () => {
+test("tap the dots: a miss scores nothing, the round ends on time even without frames, and it can be played again", async () => {
   const game = play({ title: "Dots" })
   await game.frame()
   game.tap(5, 5)
@@ -108,7 +99,7 @@ test("minigame: a miss scores nothing, the round ends on time even without frame
   await game.widget.stop()
 })
 
-test("minigame: pausing freezes the clock", async () => {
+test("tap the dots: pausing freezes the clock", async () => {
   const game = play({ title: "Dots", seconds: 10 })
   await game.frame()
   game.tap(5, 5)

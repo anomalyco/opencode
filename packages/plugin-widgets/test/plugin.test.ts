@@ -345,24 +345,6 @@ test("every diagram built-in posts with its example data and is listed in the sk
     }),
   ))
 
-test("the built-in minigame is a live template end to end", () =>
-  run((fake) =>
-    Effect.gen(function* () {
-      const minigame = builtins.find((template) => template.name === "minigame")!
-      expect(
-        (yield* fake.call<ReadonlyArray<Widget.Summary>>("templates", {})).find((item) => item.name === "minigame"),
-      ).toMatchObject({ mode: "live", version: minigame.version, builtin: true })
-      expect(yield* fake.call<Widget.Program>("program", { name: "minigame" })).toMatchObject({
-        mode: "live",
-        program: program(minigame.source),
-      })
-      // Posting only validates the data and compiles the program; `main` runs on the user's device.
-      expect(
-        yield* execute(fake, "widget", { template: "minigame", data: { title: "Tap the dots", seconds: 10 } }),
-      ).toMatchObject(Exit.succeed({ metadata: { template: { name: "minigame", version: minigame.version } } }))
-    }),
-  ))
-
 describe("capabilities", () => {
   const source = `async function main(data) {
   const response = await widget.fetch("https://api.github.com/zen")

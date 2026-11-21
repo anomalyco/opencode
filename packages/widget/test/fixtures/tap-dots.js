@@ -1,4 +1,4 @@
-// "Tap the dots", a live template: dots pop up on a timer and shrink until they vanish; tapping one scores more the
+// "Tap the dots", a live game used as a test fixture for the live runtime (not a built-in): dots pop up on a timer and shrink until they vanish; tapping one scores more the
 // smaller it is. Taps arrive through the canvas's handler between frames; the loop draws once per display frame.
 
 const HEIGHT = 320

@@ -48,7 +48,6 @@ Diagrams submit nothing unless `choose: true` adds a Choose button that submits 
 | `confirm` | `message` (markdown), `confirmLabel?`, `danger?` | `{ confirmed }` |
 | `chart` | `kind: bar \| line`, `labels`, `series: { label, values }[≤6]`, `unit?`, `choose?` | nothing, or the tapped point |
 | `backdrop` | `preset: plasma \| aurora \| waves`, `text?`, `accent?` (an animated shader banner) | nothing |
-| `minigame` | `seconds?` (live: tap the dots) | `{ score, seconds }` |
 
 **Diagrams** (field names in `list`): `pie` slices ≤ 12 (parts of a whole) · `scatter` x/y points, `size`, `trend` ·
 `histogram` raw values ≤ 2,000 · `area` series over time, stacked/percent/stream · `heatmap` matrix or calendar ·
