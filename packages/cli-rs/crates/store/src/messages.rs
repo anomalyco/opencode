@@ -44,6 +44,10 @@ impl Transcript {
         &mut self.items
     }
 
+    pub(crate) fn into_items(self) -> Vec<SessionMessageInfo> {
+        self.items
+    }
+
     /// Appends unless the ID is present; reports whether it did.
     pub(crate) fn append(&mut self, item: SessionMessageInfo) -> bool {
         if self.index.contains_key(item.id()) {
@@ -209,24 +213,24 @@ pub struct LoadMore {
 
 impl State {
     pub fn messages(&self, session: &SessionID) -> &[SessionMessageInfo] {
-        self.messages.get(session).map(Transcript::items).unwrap_or_default()
+        self.transcript(session).map(Transcript::items).unwrap_or_default()
     }
 
     pub fn transcript(&self, session: &SessionID) -> Option<&Transcript> {
-        self.messages.get(session)
+        self.sessions.get(session)?.transcript.as_ref()
     }
 
     pub fn message(&self, session: &SessionID, message: &str) -> Option<&SessionMessageInfo> {
-        self.messages.get(session)?.get(message)
+        self.transcript(session)?.get(message)
     }
 
     /// True while older pages remain (`message.more`).
     pub fn has_more_messages(&self, session: &SessionID) -> bool {
-        self.cursor.contains_key(session)
+        self.sessions.get(session).is_some_and(|session| session.cursor.is_some())
     }
 
     pub fn messages_loading(&self, session: &SessionID) -> bool {
-        self.loading.contains(session)
+        self.sessions.get(session).is_some_and(|session| session.loading)
     }
 
     pub(crate) fn stored(&self, mut message: SessionMessageInfo) -> SessionMessageInfo {
@@ -238,7 +242,7 @@ impl State {
 
     /// The transcript of `session`, created empty when missing (`draft[sessionID] ??= []`).
     pub(crate) fn transcript_mut(&mut self, session: &SessionID) -> &mut Transcript {
-        self.messages.entry(session.clone()).or_default()
+        self.sessions.get_or_insert(session).transcript.get_or_insert_default()
     }
 
     pub(crate) fn message_changed(&mut self, session: &SessionID, message: &SessionMessageID) {
@@ -248,14 +252,20 @@ impl State {
     /// Appends `item` unless present (`message.insert`).
     pub(crate) fn insert_message(&mut self, session: &SessionID, item: SessionMessageInfo) {
         // A session the store found missing shows nothing, whatever arrives late (model O9).
-        if self.missing.contains(session) {
+        if self.is_missing(session) {
             return;
         }
-        let id = item.id().to_owned();
-        if self.transcript_mut(session).append(item) {
-            self.created(session, &id);
-            self.log.messages(session);
+        let record = self.sessions.get_or_insert(session);
+        let transcript = record.transcript.get_or_insert_default();
+        if !transcript.append(item) {
+            return;
         }
+        if let Some(read) = &mut record.head_read
+            && let Some(item) = transcript.items().last()
+        {
+            read.record_created(self.event_seq, item.id());
+        }
+        self.log.messages(session);
     }
 
     pub(crate) fn upsert_message(&mut self, session: &SessionID, item: SessionMessageInfo) {
@@ -272,15 +282,19 @@ impl State {
 
     /// Records a row the current event created, with its `durable.seq`, for the head read in flight.
     pub(crate) fn created(&mut self, session: &SessionID, id: &str) {
-        let (Some(seq), Some(read)) = (self.event_seq, self.head_reads.get_mut(session)) else { return };
-        if read.room() {
-            read.created.push((id.to_owned(), seq));
+        if let Some(read) = self.sessions.get_mut(session).and_then(|session| session.head_read.as_mut()) {
+            read.record_created(self.event_seq, id);
         }
     }
 
     /// Records a durable edit for the head read of its session in flight, to replay onto the page.
     pub(crate) fn record_edit(&mut self, event: &V2Event) {
-        let Some(read) = edit_session(event).and_then(|session| self.head_reads.get_mut(session)) else { return };
+        let Some(read) = edit_session(event)
+            .and_then(|session| self.sessions.get_mut(session))
+            .and_then(|session| session.head_read.as_mut())
+        else {
+            return;
+        };
         if read.room() {
             read.edits.push(event.clone());
         }
@@ -326,10 +340,8 @@ impl State {
             .collect();
         // A read racing an admission must not wipe its local transcript row.
         let admitted: HashSet<&str> = self
-            .pending
-            .get(session)
-            .into_iter()
-            .flatten()
+            .pending(session)
+            .iter()
             .filter(|item| matches!(item.tag(), "user" | "synthetic"))
             .map(|item| item.id())
             .collect();
@@ -352,19 +364,17 @@ impl State {
             self.outbox.remove(id);
             self.remove_pending(session, id);
         }
-        let paged = self.cursor.contains_key(session) == next.is_some();
-        match next {
-            Some(next) => self.cursor.insert(session.clone(), next),
-            None => self.cursor.remove(session),
-        };
+        let record = self.sessions.get_or_insert(session);
+        let paged = record.cursor.is_some() == next.is_some();
+        record.cursor = next;
         // Like TS `reconcile`: the same IDs in the same order only update the changed messages.
-        let current = self.messages.get_mut(session).filter(|transcript| {
+        let current = record.transcript.as_mut().filter(|transcript| {
             paged
                 && transcript.items().iter().map(SessionMessageInfo::id).eq(messages.iter().map(SessionMessageInfo::id))
         });
         match current {
             None => {
-                self.messages.insert(session.clone(), Transcript::new(messages));
+                record.transcript = Some(Transcript::new(messages));
                 self.log.messages(session);
             }
             Some(transcript) => {
@@ -389,8 +399,11 @@ impl State {
         message: &SessionMessageID,
         f: impl FnOnce(&mut SessionMessageAssistant),
     ) {
-        let Some(SessionMessageInfo::Assistant(assistant)) =
-            self.messages.get_mut(session).and_then(|transcript| transcript.get_mut(&message.0))
+        let Some(SessionMessageInfo::Assistant(assistant)) = self
+            .sessions
+            .get_mut(session)
+            .and_then(|session| session.transcript.as_mut())
+            .and_then(|transcript| transcript.get_mut(&message.0))
         else {
             return;
         };
@@ -461,7 +474,7 @@ impl State {
         let data = &event.data;
         let session = &data.session_id;
         let started = data.started as f64;
-        if self.missing.contains(session) {
+        if self.is_missing(session) {
             return;
         }
         let transcript = self.transcript_mut(session);
@@ -785,7 +798,9 @@ impl State {
 
     pub(crate) fn on_shell_ended(&mut self, event: &SessionShellEnded) {
         let session = &event.data.session_id;
-        let Some(transcript) = self.messages.get_mut(session) else { return };
+        let Some(transcript) = self.sessions.get_mut(session).and_then(|session| session.transcript.as_mut()) else {
+            return;
+        };
         let Some(shell) = transcript.items_mut().iter_mut().rev().find_map(|item| match item {
             SessionMessageInfo::Shell(shell) if shell.shell_id == event.data.shell.id => Some(shell),
             _ => None,
@@ -810,7 +825,9 @@ impl State {
 
     pub(crate) fn on_compaction_delta(&mut self, data: &SessionCompactionDeltaData) {
         let session = &data.session_id;
-        let Some(transcript) = self.messages.get_mut(session) else { return };
+        let Some(transcript) = self.sessions.get_mut(session).and_then(|session| session.transcript.as_mut()) else {
+            return;
+        };
         let Some(running) = running_compaction(transcript) else { return };
         let SessionMessageInfo::Compaction(SessionMessageCompaction::Running(current)) =
             &mut transcript.items_mut()[running]
@@ -918,10 +935,15 @@ pub(crate) struct HeadRead {
 impl HeadRead {
     /// Ends the read `ticket` of `session`: its records, while that read is still the current one.
     fn take(state: &mut State, session: &SessionID, ticket: u64) -> Option<Self> {
-        if state.head_reads.get(session)?.ticket != ticket {
-            return None;
+        state.sessions.get_mut(session)?.head_read.take_if(|read| read.ticket == ticket)
+    }
+
+    /// Records a row the event being applied created, with its `durable.seq`.
+    fn record_created(&mut self, seq: Option<i64>, id: &str) {
+        let Some(seq) = seq else { return };
+        if self.room() {
+            self.created.push((id.to_owned(), seq));
         }
-        state.head_reads.remove(session)
     }
 
     /// False once overflowed; it then records nothing more.
@@ -969,7 +991,7 @@ impl Data {
             key.clone(),
             move |state| {
                 let ticket = state.token();
-                state.head_reads.insert(begin.clone(), HeadRead { ticket, ..HeadRead::default() });
+                state.sessions.get_or_insert(&begin).head_read = Some(HeadRead { ticket, ..HeadRead::default() });
                 (state.incarnation(&begin), ticket)
             },
             move |data, (incarnation, ticket)| async move {
@@ -1020,16 +1042,18 @@ impl Data {
     pub fn restore_files(&self) {
         let sessions: Vec<(SessionID, Vec<SessionMessageID>)> = self.read(|state| {
             state
-                .messages
+                .sessions
                 .iter()
-                .filter_map(|(session, transcript)| {
-                    let ids: Vec<_> = transcript
+                .filter_map(|session| {
+                    let ids: Vec<_> = session
+                        .transcript
+                        .as_ref()?
                         .items()
                         .iter()
                         .filter(|message| has_dropped_file_data(message))
                         .map(|message| SessionMessageID(message.id().to_owned()))
                         .collect();
-                    (!ids.is_empty()).then(|| (session.clone(), ids))
+                    (!ids.is_empty()).then(|| (session.id.clone(), ids))
                 })
                 .collect()
         });
@@ -1087,10 +1111,14 @@ impl Data {
             return Ok(());
         }
         loop {
-            let Some(pending) = self.read(|state| state.message_loads.get(session).map(|(_, task)| task.clone()))
-            else {
-                break;
-            };
+            let pending = self.read(|state| {
+                state
+                    .sessions
+                    .get(session)
+                    .and_then(|session| session.message_load.as_ref())
+                    .map(|(_, task)| task.clone())
+            });
+            let Some(pending) = pending else { break };
             let published = match &options.cancel {
                 None => pending.await?,
                 Some(token) => tokio::select! {
@@ -1118,10 +1146,11 @@ impl Data {
     /// Starts an older-page load from the current cursor, if any, and registers it for joiners.
     fn start_load(&self, session: &SessionID, options: LoadMore) -> Option<Task<bool>> {
         let mut state = self.lock();
-        let cursor = state.cursor.get(session).cloned()?;
-        let incarnation = state.incarnation(session);
+        let key = state.sessions.key(session)?;
+        let cursor = state.sessions[key].cursor.clone()?;
+        let incarnation = state.sessions[key].incarnation;
         // No view reads `messages_loading` (the transcript keeps its own flag), so it logs no change.
-        state.loading.insert(session.clone());
+        state.sessions[key].loading = true;
         let token = state.token();
         let data = self.clone();
         let id = session.clone();
@@ -1130,17 +1159,16 @@ impl Data {
         let task = self.spawn(async move {
             let result = load_pages(&data, &id, (cursor, incarnation), all, cancel.as_ref()).await;
             data.write(|state| {
-                state.loading.remove(&id);
-                if state.message_loads.get(&id).is_some_and(|(current, _)| *current == token) {
-                    state.message_loads.remove(&id);
-                }
+                let Some(session) = state.sessions.get_mut(&id) else { return };
+                session.loading = false;
+                session.message_load.take_if(|(current, _)| *current == token);
             });
             match result {
                 Err(_) if cancel.as_ref().is_some_and(CancellationToken::is_cancelled) => Ok(false),
                 result => result,
             }
         });
-        state.message_loads.insert(session.clone(), (token, task.clone()));
+        state.sessions[key].message_load = Some((token, task.clone()));
         self.flush(&mut state);
         Some(task)
     }
@@ -1184,19 +1212,18 @@ async fn load_pages(
             }
         }
         let stale = data.write(|state| {
-            if state.cursor.get(session) != Some(&cursor) || state.incarnation(session) != incarnation {
-                return Some(state.cursor.get(session).cloned().map(|cursor| (cursor, state.incarnation(session))));
+            let current = state.sessions.get(session).and_then(|session| session.cursor.as_ref());
+            if current != Some(&cursor) || state.incarnation(session) != incarnation {
+                return Some(current.cloned().map(|cursor| (cursor, state.incarnation(session))));
             }
             let fetched: Vec<_> = fetched.into_iter().map(|item| state.stored(item)).collect();
-            let transcript = state.transcript_mut(session);
+            let record = state.sessions.get_or_insert(session);
+            let transcript = record.transcript.get_or_insert_default();
             let mut messages: Vec<_> =
                 fetched.into_iter().rev().filter(|item| !transcript.contains(item.id())).collect();
             messages.append(transcript.items_mut());
             *transcript = Transcript::new(messages);
-            match &next {
-                Some(next) => state.cursor.insert(session.clone(), next.clone()),
-                None => state.cursor.remove(session),
-            };
+            record.cursor = next;
             state.log.messages(session);
             None
         });

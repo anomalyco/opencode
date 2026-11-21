@@ -127,24 +127,25 @@ impl Data {
                         None => snapshot.remove(&id),
                     };
                 }
-                let changed: Vec<SessionID> = state
-                    .active
-                    .keys()
-                    .chain(snapshot.keys())
-                    .filter(|id| state.active.get(*id) != snapshot.get(*id))
-                    .cloned()
-                    .collect();
-                for id in &changed {
-                    state.log.status(id);
+                for session in state.sessions.iter_mut() {
+                    let status = snapshot.remove(&session.id);
+                    if session.status != status {
+                        state.log.status(&session.id);
+                        session.status = status;
+                    }
                 }
-                state.active = snapshot;
+                // What is left names sessions the store holds nothing of.
+                for (id, status) in snapshot {
+                    state.log.status(&id);
+                    state.sessions.get_or_insert(&id).status = Some(status);
+                }
                 // Sessions created before this connection never delivered `session.created`;
                 // without their info a running child never joins its root's family.
                 state
-                    .active
+                    .sessions
                     .iter()
-                    .filter(|(id, status)| **status == SessionStatus::Running && !state.info.contains_key(*id))
-                    .map(|(id, _)| id.clone())
+                    .filter(|session| session.status == Some(SessionStatus::Running) && session.info.is_none())
+                    .map(|session| session.id.clone())
                     .collect()
             });
             for id in unknown {

@@ -57,26 +57,23 @@ impl State {
     /// cached is read again instead.
     pub(crate) fn on_worktree_resolved(&mut self, data: &WorktreeResolvedData) -> Vec<Follow> {
         let mut follow = Vec::new();
-        let ids: Vec<SessionID> = self.info.keys().cloned().collect();
-        for id in ids {
-            let Some(info) = self.info.get(&id) else { continue };
+        for session in self.sessions.iter_mut() {
+            let Some(info) = &mut session.info else { continue };
             let explicit = data.adopted.as_ref().is_some_and(|adopted| adopted.contains(&info.project_id));
             let directory = if explicit {
-                self.projects.get(&info.project_id).map(|project| project.canonical.0.clone())
+                self.projects.get(&info.project_id).map(|project| project.canonical.as_str())
             } else {
-                Some(info.location.directory.0.clone())
+                Some(info.location.directory.as_str())
             };
             let Some(directory) = directory else {
-                self.syncs.invalidate(&format!("session:{}", id.0));
-                follow.push(Follow::Session(id));
+                self.syncs.invalidate(&format!("session:{}", session.id.0));
+                follow.push(Follow::Session(session.id.clone()));
                 continue;
             };
-            let Some((project, subpath)) = adopt(&info.project_id.0, &directory, data) else { continue };
-            if let Some(info) = self.info.get_mut(&id) {
-                info.project_id = ProjectID(project);
-                info.subpath = subpath.map(RelativePath);
-            }
-            self.log.session(&id);
+            let Some((project, subpath)) = adopt(&info.project_id.0, directory, data) else { continue };
+            info.project_id = ProjectID(project);
+            info.subpath = subpath.map(RelativePath);
+            self.log.session(&session.id);
         }
         follow
     }
