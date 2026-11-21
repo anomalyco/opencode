@@ -9,7 +9,7 @@ import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Log, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
-import { browserFailure, CodedError, missingArtifact, PageEndedError, pageReports } from "./errors"
+import { browserFailure, CodedError, keepsOpenedTab, missingArtifact, PageEndedError, pageReports } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
 import { activityOwner, agentDriven, agentTabShow, agentRefusal, childActivity, createdActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
@@ -685,7 +685,14 @@ export function createBrowserPane(input: {
       return handle.registered.resolve()
     }
 
-    if (effect.type === "emit") return emit(effect.binding, effect.event)
+    if (effect.type === "emit") {
+      // A binding's last state says why it closed. The window lists no tab of a session another window took or the
+      // server lacks, so the log names the reason, and how many tabs the window keeps for its next registration.
+      if (effect.event.type === "state")
+        input.log.write("info", "browser pane closed", { session: handle.session, reason: effect.event.error, kept: effect.event.state?.tabs.length ?? 0 })
+
+      return emit(effect.binding, effect.event)
+    }
 
     if (effect.type === "report") {
       emit(effect.binding, effect.event)
@@ -1068,6 +1075,13 @@ export function createBrowserPane(input: {
       announce(binding, tabID, reveal, active)
     }
 
+    // Undoes a tab this command made and could show no page in. The log names it: no person and no close tool did.
+    const rollback = (tabID: Browser.TabID, opened: BrowserPage) => {
+      if (page(binding, tabID) !== opened) return
+      input.log.write("warn", "browser tab closed: its open failed", { session: handles.get(binding)?.session, action: action.type, origin })
+      dispatchBinding(binding, { type: "tab.closed", tabID })
+    }
+
     const acquire = (id: Browser.TabID) => {
       if (origin !== "agent") return load(binding, id, action.type === "navigate" ? action.url : undefined)
       const handle = handles.get(binding)
@@ -1117,8 +1131,11 @@ export function createBrowserPane(input: {
         using opening = new DisposableStack()
         const tabID = tab.state().id
 
-        if (!existing) opening.defer(() => { if (page(binding, tabID) === tab) dispatchBinding(binding, { type: "tab.closed", tabID }) })
-        await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin)
+        if (!existing) opening.defer(() => rollback(tabID, tab))
+        await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin).catch((error: Error) => {
+          if (keepsOpenedTab(error, origin)) opening.move()
+          throw error
+        })
         refresh(binding, tabID, tab)
         // A workspace file is opened to show it to the person: it takes the pane even when another tab is selected there.
         present(tabID, "tab")
@@ -1178,7 +1195,7 @@ export function createBrowserPane(input: {
       if (origin === "agent" && shown.background) handles.get(binding)?.background.add(tabID)
       created?.(tabID)
       using opening = new DisposableStack()
-      opening.defer(() => { if (page(binding, tabID) === opened) dispatchBinding(binding, { type: "tab.closed", tabID }) })
+      opening.defer(() => rollback(tabID, opened))
 
       if (file) openingFiles.set(opened, file)
 
@@ -1187,9 +1204,14 @@ export function createBrowserPane(input: {
       try {
         await opened.ready
 
-        // A new page already loads about:blank, so only another address needs a navigation.
+        // A new page already loads about:blank, so only another address needs a navigation. A load that is still
+        // under way, or that failed where the person sees why, keeps the tab: only an open that showed no page is
+        // undone.
         if (action.url !== undefined)
-          await opened.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
+          await opened.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin).catch((error: Error) => {
+            if (keepsOpenedTab(error, origin)) opening.move()
+            throw error
+          })
         refresh(binding, tabID, opened)
 
         if (origin === "agent") present(tabID, shown.reveal, action.focus !== false)
