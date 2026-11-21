@@ -38,6 +38,8 @@ const palette = '[role="dialog"] [role="combobox"]'
 
 const selected = '[role="dialog"] [role="option"][aria-selected="true"]'
 
+const paletteList = '[role="dialog"] [data-component="menu-scroll"] > [data-scrollable]'
+
 // Eight restored tabs of a normal 20-message first page each (44 parts, 139 KB).
 const restored = Array.from({ length: 8 }, (_, index) => ({
   ...fixture.sessions[0],
@@ -69,22 +71,38 @@ const restoring: Scene = {
   ready: answer(restored[0].id),
 }
 
-/** Where each case starts: its open tabs, its first page and what that page shows once ready. */
-const scenes = new Map<string, Scene>([
-  ["open a session from home", onHome],
-  ["close the last tab", inSource],
-  ["new session from home", { ...onHome, ready: '[data-action="home-new-session"]' }],
-  ["new session from a session", inSource],
-  ["open the new session page", { ...inSource, draft: true }],
-  [
-    "leave the new session page",
-    { tabs: [fixture.sourceID, fixture.targetID], draft: true, first: () => draftHref(draftID), ready: newSession },
-  ],
-  ["open a child session", inSource],
-  ["restore 8 tabs", restoring],
-  ["activate a restored tab", restoring],
-  ["search commands in a session", inSource],
-  ["search commands on home", onHome],
+/** The places cases start from: open tabs, a first page and what that page shows once ready. */
+const scenes = {
+  home: onHome,
+  "home, new session": { ...onHome, ready: '[data-action="home-new-session"]' },
+  source: inSource,
+  "source, new session tab": { ...inSource, draft: true },
+  "new session page": {
+    tabs: [fixture.sourceID, fixture.targetID],
+    draft: true,
+    first: () => draftHref(draftID),
+    ready: newSession,
+  },
+  restoring,
+} satisfies Record<string, Scene>
+
+/** Where each case starts. */
+/** What a launch sets up: the scene, and whether setup opens the command palette. */
+type Setup = { scene: keyof typeof scenes; palette: boolean }
+
+const sceneOf = new Map<string, keyof typeof scenes>([
+  ["open a session from home", "home"],
+  ["close the last tab", "source"],
+  ["new session from home", "home, new session"],
+  ["new session from a session", "source"],
+  ["open the new session page", "source, new session tab"],
+  ["leave the new session page", "new session page"],
+  ["open a child session", "source"],
+  ["restore 8 tabs", "restoring"],
+  ["activate a restored tab", "restoring"],
+  ["search commands in a session", "source"],
+  ["search commands on home", "home"],
+  ["scroll the command palette", "source"],
 ])
 
 const fresh: Pick<Case<{}>, "reset"> = {
@@ -97,15 +115,25 @@ const fresh: Pick<Case<{}>, "reset"> = {
 const metrics = ["run.duration", "interaction.p50"]
 
 export default bench({
-  targets: {
-    web: web({
-      viewport: { width: 1440, height: 900 },
-      async prepare({ case: name, playwright, mock, url }) {
-        const server = new URL(url).origin
-        const scene = scenes.get(name)
-        const page = cached(playwright.page, mock)
+  // A case's scene, and whether setup opens the command palette: cases with the same ones share a launch.
+  setupKey: ({ case: name }): Setup => {
+    const scene = sceneOf.get(name)
 
-        if (!scene) throw new Error(`navigation.bench.ts: no scene for "${name}"`)
+    if (!scene) throw new Error(`navigation.bench.ts: no scene for "${name}"`)
+
+    return { scene, palette: name === "scroll the command palette" }
+  },
+
+  targets: {
+    // A target is made before the bench, so its hooks see the setup key as typed here.
+    web: web<{}, Setup>({
+      expect: { title: "OpenCode" },
+      viewport: { width: 1440, height: 900 },
+      async prepare(ctx) {
+        const { url } = ctx
+        const server = new URL(url).origin
+        const scene: Scene = scenes[ctx.setupKey.scene]
+        const page = cached(ctx)
 
         if (scene === restoring)
           await mockOpenCodeServer(page, {
@@ -132,8 +160,10 @@ export default bench({
     }),
   },
 
-  async setup({ page, prepared }) {
+  async setup({ setupKey, page, prepared }) {
     await page.waitFor(prepared.ready, { timeout: 60_000 })
+
+    if (setupKey.palette) await page.press("ControlOrMeta+Shift+P", { until: paletteList })
     await page.idle()
   },
 
@@ -257,6 +287,22 @@ export default bench({
       },
       async reset({ page }) {
         await page.press("Escape")
+        await page.idle()
+      },
+    },
+
+    // The palette's result list scrolls in a MenuScroll, which moves its thumb on every scroll frame.
+    "scroll the command palette": {
+      primary: "main.busy",
+      metrics: ["main.work", "frames.dropped.pct"],
+      async run({ page }) {
+        await page.scroll(paletteList, { by: 3000, speed: 3000 })
+        await page.scroll(paletteList, { by: -3000, speed: 3000 })
+      },
+      // Opens the palette again each run, so a run starts at the top even if something closed it.
+      async reset({ page }) {
+        await page.press("Escape")
+        await page.press("ControlOrMeta+Shift+P", { until: paletteList })
         await page.idle()
       },
     },

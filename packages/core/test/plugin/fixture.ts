@@ -1,5 +1,7 @@
 import { Agent } from "@opencode/core/agent"
+import { App } from "@opencode/core/app"
 import { Artifact } from "@opencode/core/artifact"
+import { BlobStore } from "@opencode/core/blob-store"
 import { AISDK } from "@opencode/core/aisdk"
 import { Command } from "@opencode/core/command"
 import { Config } from "@opencode/core/config"
@@ -7,6 +9,7 @@ import { Credential } from "@opencode/core/credential"
 import { Database } from "@opencode/core/database/database"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
+import { Flag } from "@opencode/core/flag"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -41,6 +44,7 @@ import { SkillDiscovery } from "@opencode/core/skill/discovery"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Tool } from "@opencode/core/tool"
 import { Vcs } from "@opencode/core/vcs"
+import { VideoGeneration } from "@opencode/core/video-generation"
 import { WebSearch } from "@opencode/core/websearch"
 import { Worktree } from "@opencode/core/worktree"
 import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
@@ -56,6 +60,8 @@ const npmLayer = Layer.succeed(
     resolve: (name) => Effect.succeed({ directory: "", name }),
     check: () => Effect.succeed(false),
     update: (name) => Effect.succeed({ directory: "", name }),
+    follows: () => Effect.succeed(false),
+    reject: () => Effect.succeed(false),
     which: () => Effect.undefined,
   }),
 )
@@ -66,6 +72,12 @@ const generateLayer = Layer.succeed(
     text: () => Effect.succeed(""),
     image: () => Effect.die("unused"),
     decisions: () => Effect.die("unused"),
+    video: {
+      start: () => Effect.die("unused"),
+      status: () => Effect.die("unused"),
+      result: () => Effect.die("unused"),
+      cancel: () => Effect.die("unused"),
+    },
   }),
 )
 
@@ -83,12 +95,18 @@ const permissionLayer = Layer.succeed(
     get: () => Effect.succeed(undefined),
     forSession: () => Effect.succeed([]),
     list: () => Effect.succeed([]),
+    nested: () => Effect.void,
   }),
 )
 
-export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer) =>
+export const makePluginTestLayer = (
+  permission = permissionLayer,
+  generate = generateLayer,
+  replacements: LayerNode.Replacements = [],
+) =>
   AppNodeBuilder.build(
     LayerNode.group([
+      App.node,
       AppProcess.node,
       FileSystem.node,
       FSUtil.node,
@@ -96,6 +114,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Npm.node,
       Credential.node,
       Config.node,
+      Flag.node,
       Database.node,
       Environment.node,
       FileAccess.node,
@@ -108,6 +127,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Agent.node,
       Artifact.node,
       AISDK.node,
+      BlobStore.node,
       Provider.node,
       Model.node,
       Command.node,
@@ -129,6 +149,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       SkillDiscovery.node,
       Tool.node,
       Vcs.node,
+      VideoGeneration.node,
       Watcher.node,
       WebSearch.node,
       Worktree.node,
@@ -142,6 +163,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Generate.node.replace(generate),
       Permission.node.replace(permission),
       offlineModels,
+      ...replacements,
     ],
   ).pipe(Layer.provideMerge(configLayer))
 

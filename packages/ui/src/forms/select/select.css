@@ -97,7 +97,7 @@
   box-shadow: none;
 }
 
-[data-component="select-v2"]:where(:focus-within):not([data-disabled], [data-invalid]):not([data-expanded]) {
+[data-component="select-v2"]:where(:focus-visible):not([data-disabled], [data-invalid]):not([data-expanded]) {
   outline-color: var(--v2-border-border-focus);
   box-shadow: none;
 }
@@ -202,6 +202,9 @@
   box-shadow: none;
   outline: none;
   align-self: auto;
+  transition:
+    background 85ms ease-out,
+    box-shadow 85ms ease-out;
 }
 
 [data-component="select-v2"][data-appearance="inline"]:where(:hover):not([data-disabled], [data-invalid]):not(
@@ -214,6 +217,11 @@
   background: var(--v2-overlay-simple-overlay-hover);
   outline: none;
   box-shadow: none;
+}
+
+[data-component="select-v2"][data-appearance="inline"]:where(:focus-visible):not([data-disabled], [data-expanded]) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
 }
 
 [data-component="select-v2"][data-appearance="inline"]:where(:active):not([data-disabled], [data-invalid]):not(
@@ -233,6 +241,14 @@
   padding: 0;
 }
 
+[data-component="menu-v2-content"][data-slot="select-v2-content"] > [data-component="menu-scroll"] {
+  max-height: 12rem;
+
+  > [data-scrollable] {
+    overflow-x: hidden;
+  }
+}
+
 /* Listbox inside menu surface */
 [data-component="menu-v2-content"][data-slot="select-v2-content"] [data-slot="select-v2-listbox"] {
   box-sizing: border-box;
@@ -244,9 +260,6 @@
   list-style: none;
   min-width: 0;
   width: 100%;
-  max-height: 12rem;
-  overflow-x: hidden;
-  overflow-y: auto;
   outline: none;
   white-space: nowrap;
 

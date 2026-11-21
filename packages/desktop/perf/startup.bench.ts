@@ -54,7 +54,12 @@ export default bench({
   targets: {
     // The installed app by its strobe.json profile. Compare two packaged builds with
     // `--base exe:<path> --head exe:<path>`, or channels with `--base app:opencode-beta`.
+    // Launches keep the GPU shader caches earlier launches of the same build compiled (strobe's `gpuCache: "warm"`),
+    // as a returning user's machine has them.
     desktop: app("opencode"),
+    // Right after an install the driver and Chromium have compiled none of the app's shaders: every launch starts
+    // with empty GPU shader caches.
+    install: app("opencode", { gpuCache: "cold" }),
     // A contributor's `bun dev:desktop` in each variant's checkout, isolated under the launch's home.
     dev: command("bun dev:desktop", {
       unset: ["OPENCODE_*", "OTEL_*", "SENTRY_*"],
@@ -101,10 +106,10 @@ export default bench({
       targets: ["desktop"],
       launch: { until: home, milestones: packaged, profile: "warm", before: skipOnboarding },
     },
-    // Right after an install: no profile, and onboarding opens a draft session.
+    // Right after an install: no profile, no GPU shader caches, and onboarding opens a draft session.
     "first launch": {
       primary: "launch.ready",
-      targets: ["desktop"],
+      targets: ["install"],
       launch: { until: composer, milestones: packaged },
     },
     // `bun dev:desktop` with Vite's caches and the built output deleted.

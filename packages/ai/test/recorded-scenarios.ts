@@ -66,10 +66,8 @@ export const weatherToolLoopRequest = (input: {
     system: input.system ?? "Use the get_weather tool, then answer in one short sentence.",
     prompt: "What is the weather in Paris?",
     cache: "none",
-    generation:
-      input.temperature === false
-        ? { maxTokens: input.maxTokens ?? 80 }
-        : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
+    maxTokens: input.maxTokens ?? 80,
+    temperature: input.temperature === false ? undefined : (input.temperature ?? 0),
   })
 
 export const goldenWeatherToolLoopRequest = (input: {
@@ -250,7 +248,7 @@ const runGeneratedConversation = (context: GoldenScenarioContext, steps: Readonl
           tools: step.tools,
           toolChoice: step.toolChoice,
           providerOptions: step.providerOptions,
-          generation: generation(context, step.maxTokens ?? context.maxTokens ?? 80),
+          ...generation(context, step.maxTokens ?? context.maxTokens ?? 80),
         }),
       )
       if (step.text !== undefined) assertAssistantText(response.text, step.text)
@@ -317,7 +315,7 @@ const runImageToolResultScenario = (context: GoldenScenarioContext) =>
         model: context.model,
         system: "Read images carefully. Reply only with the visible text, lowercase, no punctuation.",
         cache: "none",
-        generation: generation(context, context.maxTokens ?? 40),
+        ...generation(context, context.maxTokens ?? 40),
         messages: [
           Message.user("Use the read_screenshot tool, then reply with the words shown."),
           Message.assistant([{ type: "tool-call", id: "call_screenshot_1", name: screenshotToolName, input: {} }]),

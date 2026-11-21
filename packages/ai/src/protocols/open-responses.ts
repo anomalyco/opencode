@@ -14,6 +14,7 @@ import {
   type ReasoningPart,
   type TextPart,
   type ToolCallPart,
+  type ToolChanges,
   type ToolDefinition,
   type ToolResultPart,
   type UserMessage,
@@ -30,6 +31,7 @@ import {
 } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate } from "../effort-updates.js"
+import { toolsUpdate } from "../tool-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -189,9 +191,49 @@ export const HostedToolReplay = Schema.StructWithRest(
 )
 export type HostedToolReplayItem = Schema.Schema.Type<typeof HostedToolReplay>
 
+export const Tool = Schema.Struct({
+  type: Schema.tag("function"),
+  name: Schema.String,
+  description: Schema.String,
+  parameters: JsonObject,
+  strict: Schema.optional(Schema.Boolean),
+})
+
+export const CustomTool = Schema.Struct({
+  type: Schema.tag("custom"),
+  name: Schema.String,
+  description: Schema.String,
+  format: Schema.Union([
+    Schema.Struct({ type: Schema.tag("text") }),
+    Schema.Struct({
+      type: Schema.tag("grammar"),
+      syntax: Schema.Literals(["lark", "regex"]),
+      definition: Schema.String,
+    }),
+  ]),
+})
+
+export const HostedTool = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+  }),
+  [JsonObject],
+)
+export type HostedTool = Schema.Schema.Type<typeof HostedTool>
+
+const NamedTool = Schema.Struct({ type: Schema.Literals(["function", "custom"]), name: Schema.String })
+
+// Tools added mid-conversation. Only the OpenAI extension lowers it; other hosts fold tool updates.
+export const AdditionalTools = Schema.Struct({
+  type: Schema.Literal("additional_tools"),
+  role: Schema.Literal("developer"),
+  tools: Schema.Array(Schema.Union([Tool, CustomTool, HostedTool])),
+})
+
 export const InputItem = Schema.Union([
   CompactionItem,
   ConfigurationUpdate,
+  AdditionalTools,
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({
@@ -243,38 +285,6 @@ type OpenResponsesReasoningInput = {
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
-export const Tool = Schema.Struct({
-  type: Schema.tag("function"),
-  name: Schema.String,
-  description: Schema.String,
-  parameters: JsonObject,
-  strict: Schema.optional(Schema.Boolean),
-})
-
-export const CustomTool = Schema.Struct({
-  type: Schema.tag("custom"),
-  name: Schema.String,
-  description: Schema.String,
-  format: Schema.Union([
-    Schema.Struct({ type: Schema.tag("text") }),
-    Schema.Struct({
-      type: Schema.tag("grammar"),
-      syntax: Schema.Literals(["lark", "regex"]),
-      definition: Schema.String,
-    }),
-  ]),
-})
-
-export const HostedTool = Schema.StructWithRest(
-  Schema.Struct({
-    type: Schema.String,
-  }),
-  [JsonObject],
-)
-export type HostedTool = Schema.Schema.Type<typeof HostedTool>
-
-const NamedTool = Schema.Struct({ type: Schema.Literals(["function", "custom"]), name: Schema.String })
-
 export const ToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
   NamedTool,
@@ -434,6 +444,8 @@ export interface ProviderAdapter {
     readonly request: LLMRequest
   }) => MediaInput | undefined
   readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
+  /** Lowers a `Message.tools(...)` marker sent in place; routes without it must fold tool updates. */
+  readonly lowerToolChanges?: (changes: ToolChanges) => Effect.Effect<ReadonlyArray<OpenResponsesInputItem>, AIError>
 }
 
 const BASE_ADAPTER: ProviderAdapter = { id: ADAPTER, name: NAME }
@@ -641,7 +653,7 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
+export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
@@ -662,6 +674,13 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
         if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
         input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
         continue
+      }
+      // Planning folds every marker on routes whose protocol has no `toolUpdates`, so only adapters with
+      // `lowerToolChanges` see one.
+      const tools = toolsUpdate(message)
+      if (tools && adapter.lowerToolChanges) {
+        input.push(...(yield* adapter.lowerToolChanges(tools)))
+        if (message.content.length === 0) continue
       }
       input.push({
         type: "message",
@@ -805,26 +824,28 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
   return input
 })
 
+// The system prompt leads `input` as a developer message: GPT-6.2 models never cache top-level `instructions`.
 export const lowerConversation = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
-  const instructions = ProviderShared.joinText(request.system)
+  const system = ProviderShared.joinText(request.system)
   return {
     model: request.model.id,
-    input: yield* lowerMessages(request, adapter),
-    ...(instructions ? { instructions } : {}),
+    input: [
+      ...(system ? [{ type: "message" as const, role: "developer" as const, content: system }] : []),
+      ...(yield* lowerMessages(request, adapter)),
+    ],
   }
 })
 
 export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
-  const generation = request.generation
   const cacheKey = ProviderShared.promptCacheKey(request)
   const parallelToolCalls = resolveParallelToolCalls(request, options)
   return {
     stream: true as const,
-    max_output_tokens: generation?.maxTokens,
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    presence_penalty: generation?.presencePenalty,
-    frequency_penalty: generation?.frequencyPenalty,
+    max_output_tokens: request.maxTokens,
+    temperature: request.temperature,
+    top_p: request.topP,
+    presence_penalty: request.presencePenalty,
+    frequency_penalty: request.frequencyPenalty,
     ...(options.store !== undefined ? { store: options.store } : {}),
     ...(options.metadata ? { metadata: options.metadata } : {}),
     ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
@@ -891,7 +912,11 @@ export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(reque
 // cached-read and cache-write subsets, and `output_tokens` (inclusive total)
 // with a `reasoning_tokens` subset. Pass the totals through and derive the
 // non-cached breakdown.
-export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerMetadataKey: string) => {
+export const mapUsage = (
+  usage: OpenResponsesUsage | null | undefined,
+  providerMetadataKey: string,
+  ...frames: ReadonlyArray<unknown>
+) => {
   if (!usage) return undefined
   const cached = usage.input_tokens_details?.cached_tokens
   const cacheWrite = usage.input_tokens_details?.cache_write_tokens
@@ -905,9 +930,39 @@ export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerM
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, usage.total_tokens),
-    ...ProviderShared.reportedBilling(usage),
+    ...ProviderShared.reportedBilling(usage, ...frames),
     providerMetadata: { [providerMetadataKey]: usage },
   })
+}
+
+// GitHub Copilot lists the filters that ran; the blocking one names its rule in `content_filter_raw`.
+const decodeContentFilters = Schema.decodeUnknownOption(
+  Schema.Array(
+    Schema.Struct({
+      source_type: Schema.optional(Schema.String),
+      blocked: Schema.optional(Schema.Boolean),
+      content_filter_raw: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            action: Schema.optional(Schema.String),
+            label: Schema.optional(Schema.String),
+            result: Schema.optional(Schema.Unknown),
+          }),
+        ),
+      ),
+      content_filter_results: Schema.optional(Schema.Unknown),
+    }),
+  ),
+)
+
+const contentFilterCategory = (raw: unknown) => {
+  const blocked = Option.getOrElse(decodeContentFilters(raw), () => []).filter((filter) => filter.blocked)
+  const filter = blocked.find((item) => item.source_type === "completion") ?? blocked[0]
+  if (!filter) return undefined
+  return (
+    filter.content_filter_raw?.find((rule) => rule.action === "BLOCK" && rule.result === true)?.label ??
+    ProviderShared.contentFilterCategory(filter.content_filter_results)
+  )
 }
 
 const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason => {
@@ -982,8 +1037,9 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
   compaction: "cmp",
 }
 
-// An item without an id adopts the id already open in its output slot,
-// otherwise it gets a locally minted one.
+// An item adopts the id already open in its output slot, since GitHub Copilot
+// sends a different id on every event, including the item's own done event.
+// Otherwise it keeps its id or gets a locally minted one.
 const resolveItem = (
   state: Pick<ParserState, "outputItems">,
   item: StreamItem,
@@ -991,8 +1047,8 @@ const resolveItem = (
 ): OutputItem => ({
   ...item,
   id:
-    item.id ??
     (index === undefined ? undefined : state.outputItems[index]) ??
+    item.id ??
     `${ITEM_ID_PREFIX[item.type] ?? "item"}_${crypto.randomUUID().replaceAll("-", "")}`,
 })
 
@@ -1393,12 +1449,15 @@ const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event:
     }
     events.push(...pending.events)
   }
+  const normalized = mapFinishReason(event, current.hasFunctionCall)
   const lifecycle = Lifecycle.finish(current.lifecycle, events, {
     reason: {
-      normalized: mapFinishReason(event, current.hasFunctionCall),
+      normalized,
       raw: event.response?.incomplete_details?.reason,
+      ...(normalized === "content-filter" ? { category: contentFilterCategory(event.response?.content_filters) } : {}),
     },
-    usage: mapUsage(event.response?.usage, current.providerMetadataKey),
+    // Copilot reports its billing on the terminal event, beside `response`.
+    usage: mapUsage(event.response?.usage, current.providerMetadataKey, event, event.response),
     providerMetadata:
       event.response?.id || event.response?.service_tier
         ? providerMetadata(current, {

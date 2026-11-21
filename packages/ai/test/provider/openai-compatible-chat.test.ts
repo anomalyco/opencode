@@ -25,8 +25,14 @@ const request = ai.request({
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
+
+const copilot = OpenAICompatibleChat.route
+  .with({ provider: "github-copilot", endpoint: { baseURL: "https://api.githubcopilot.test" } })
+  .model({ id: "gemini-3-pro" })
+const copilotRequest = ai.request({ model: copilot, prompt: "Read the project." })
 
 const deltaChunk = (delta: object, finishReason: string | null = null) => ({
   id: "chatcmpl_fixture",
@@ -186,9 +192,7 @@ describe("OpenAI-compatible Chat route", () => {
       const compatible = OpenAICompatibleChat.route
         .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
         .model({ id: "custom-model", compatibility: { maxTokensField: "max_completion_tokens" } })
-      const prepared = yield* compileRequest(
-        ai.request({ model: compatible, prompt: "Say hello.", generation: { maxTokens: 20 } }),
-      )
+      const prepared = yield* compileRequest(ai.request({ model: compatible, prompt: "Say hello.", maxTokens: 20 }))
 
       expect(prepared.body).toMatchObject({ max_completion_tokens: 20 })
       expect(prepared.body).not.toHaveProperty("max_tokens")
@@ -653,6 +657,31 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("names the content filter that blocked a response", () =>
+    Effect.gen(function* () {
+      const finish = (choice: object) =>
+        LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents({ id: "chatcmpl_fixture", choices: [{ finish_reason: "content_filter", ...choice }] }),
+            ),
+          ),
+          Effect.map((response) => response.finishReason),
+        )
+
+      expect(yield* finish({ delta: { copilot_annotations: { TextCopyright: [{ id: 1 }] } } })).toMatchObject({
+        normalized: "content-filter",
+        category: "TextCopyright",
+      })
+      expect(
+        yield* finish({
+          delta: {},
+          content_filter_results: { hate: { filtered: false }, violence: { filtered: true } },
+        }),
+      ).toMatchObject({ normalized: "content-filter", category: "violence" })
+    }),
+  )
+
   it.effect("preserves late text and reasoning for replay without changing the finished tool call", () =>
     Effect.gen(function* () {
       const details = [{ type: "reasoning.encrypted", data: "opaque", id: "late-reasoning" }]
@@ -691,6 +720,75 @@ describe("OpenAI-compatible Chat route", () => {
         content: "Hello world (refusal)",
         reasoning_content: "First then more thoughts",
         reasoning_details: details,
+      })
+    }),
+  )
+
+  it.effect("replays the latest reasoning_opaque with the concatenated reasoning text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(copilotRequest).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ reasoning_text: "Read the readme first." }),
+              deltaChunk({
+                reasoning_opaque: "opaque-first",
+                tool_calls: [{ index: 0, id: "call_first", function: { name: "read", arguments: "{}" } }],
+              }),
+              deltaChunk({ reasoning_text: " Then the manifest." }),
+              deltaChunk({
+                reasoning_opaque: "opaque-second",
+                tool_calls: [{ index: 1, id: "call_second", function: { name: "read", arguments: "{}" } }],
+              }),
+              deltaChunk({}, "tool_calls"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Read the readme first. Then the manifest.")
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toMatchObject([
+        {
+          providerMetadata: {
+            "github-copilot": { reasoningField: "reasoning_text", reasoningOpaque: "opaque-second" },
+          },
+        },
+      ])
+      expect(response.toolCalls.map((call) => call.id)).toEqual(["call_first", "call_second"])
+      const replay = yield* compileRequest(ai.request({ model: copilot, messages: [response.message] }))
+      expect(replay.body.messages[0]).toMatchObject({
+        role: "assistant",
+        content: null,
+        reasoning_text: "Read the readme first. Then the manifest.",
+        reasoning_opaque: "opaque-second",
+      })
+    }),
+  )
+
+  it.effect("keeps a reasoning_opaque that arrives without reasoning text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(copilotRequest).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Checking.", reasoning_opaque: "opaque-only" }),
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "read", arguments: "{}" } }] }),
+              deltaChunk({}, "tool_calls"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("")
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toMatchObject([
+        { providerMetadata: { "github-copilot": { reasoningOpaque: "opaque-only" } } },
+      ])
+      const replay = yield* compileRequest(ai.request({ model: copilot, messages: [response.message] }))
+      expect(replay.body.messages[0]).toEqual({
+        role: "assistant",
+        content: "Checking.",
+        tool_calls: [{ id: "call_1", type: "function", function: { name: "read", arguments: "{}" } }],
+        reasoning_opaque: "opaque-only",
       })
     }),
   )

@@ -17,7 +17,7 @@ recorded.effect(
         ai.request({
           model: cohere.model("command-a-03-2025"),
           prompt: "Reply exactly: OK",
-          generation: { maxTokens: 64 },
+          maxTokens: 64,
         }),
       )
       expect(response.text.trim()).toMatch(/^OK\.?$/)
@@ -38,7 +38,7 @@ recorded.effect(
           model: cohere.model("command-a-reasoning-08-2025"),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { thinking: { type: "enabled", tokenBudget: 128 } },
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
         }),
       )
       expect(response.reasoning.length).toBeGreaterThan(0)
@@ -81,7 +81,7 @@ recorded.effect(
           model: cohere.chat("command-a-reasoning-08-2025"),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { reasoningEffort: "high" },
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
         }),
       )
       expect(response.reasoning.length).toBeGreaterThan(0)

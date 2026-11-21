@@ -10,17 +10,28 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
 import { showToast } from "@/shell/notifications/toast"
+import type { PluginUpdateView } from "@/settings/providers/plugin-update-machine"
 import "@/settings/settings.css"
 import { builtins } from "./builtins"
 import { usePluginHost } from "./host"
-import { createInstalled } from "./installed"
 import { useReservedPlugins } from "./root"
+
+/** Update controls for the listed plugins' packages; without them the rows offer no update. */
+export type ExtensionPluginUpdates = {
+  readonly view: (source: Extract<PluginInfo["source"], { type: "package" }>) => PluginUpdateView
+  readonly update: (target: string) => void
+}
 
 /**
  * The plugins a server lists, for the Plugins tab of Extensions. Only the desktop app's own server (`own`) runs its
  * plugins' GUIs in this window, so only its rows add the window's controls; other servers and the web list names.
+ * Any server's package plugins can be updated.
  */
-export function ExtensionPlugins(props: { plugins: readonly PluginInfo[]; own: boolean }) {
+export function ExtensionPlugins(props: {
+  plugins: readonly PluginInfo[]
+  own: boolean
+  updates?: ExtensionPluginUpdates
+}) {
   const listed = () => props.plugins.filter((plugin) => plugin.source.type !== "builtin")
 
   return (
@@ -35,13 +46,14 @@ export function ExtensionPlugins(props: { plugins: readonly PluginInfo[]; own: b
                   <Icon name="cube" class="text-v2-icon-icon-muted shrink-0" />
                   <span class="settings-extension-name truncate">{pluginLabel(plugin)}</span>
                 </div>
+                <PluginUpdateButton plugin={plugin} updates={props.updates} />
               </div>
             )}
           </For>
         </SettingsList>
       }
     >
-      <OwnServerPlugins plugins={listed()} />
+      <OwnServerPlugins plugins={listed()} updates={props.updates} />
     </Show>
   )
 }
@@ -51,18 +63,17 @@ export function ExtensionPlugins(props: { plugins: readonly PluginInfo[]; own: b
  * switch that turns off only the desktop UI, Reload, status and errors, and rows for plugins main lists that the
  * server list does not name. Built-ins always run and stay hidden unless they failed, which only this list reports.
  */
-function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
+function OwnServerPlugins(props: { plugins: readonly PluginInfo[]; updates?: ExtensionPluginUpdates }) {
   const language = useLanguage()
   const host = usePluginHost()
   const bridge = usePlatform().plugins
-  const installed = createInstalled(bridge)
   const reserved = useReservedPlugins()
 
   const builtin = (id: string) => builtins.some((definition) => definition.id === id)
 
   // A server plugin's id can be a built-in's (a reserved id), so each row looks up its own kind of item.
   const itemOf = (id: string, kind: "builtin" | "config") =>
-    installed.list().find((item) => item.id === id && item.builtin === (kind === "builtin"))
+    host.installed().find((item) => item.id === id && item.builtin === (kind === "builtin"))
 
   const defined = (id: string) => !builtin(id) && host.definitions().some((definition) => definition.id === id)
 
@@ -90,14 +101,14 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
     return [
       ...new Set([
         ...host.definitions().flatMap((definition) => (builtin(definition.id) ? [] : [definition.id])),
-        ...installed.list().flatMap((item) => (item.builtin ? [] : [item.id])),
+        ...host.installed().flatMap((item) => (item.builtin ? [] : [item.id])),
         ...reserved(),
       ]),
     ].filter((id) => !named.has(id))
   })
 
   // Why the window entry or main's entry failed; either fails the plugin.
-  const errorOf = (id: string, kind: "builtin" | "config") => host.state.failures[id]?.error ?? itemOf(id, kind)?.error
+  const errorOf = (id: string, kind: "builtin" | "config") => host.failure(id)?.error ?? itemOf(id, kind)?.error
 
   const failedBuiltins = createMemo(() =>
     host
@@ -109,7 +120,7 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
 
   // The switch already shows whether a plugin runs; only the states it cannot show get a label.
   const status = (id: string, kind: "builtin" | "config") => {
-    const value = host.state.status[id] ?? "loading"
+    const value = host.status(id) ?? "loading"
 
     if (value === "failed" || (value === "active" && itemOf(id, kind)?.error))
       return language.t("settings.plugins.status.failed")
@@ -138,7 +149,7 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
     run(bridge?.manager.reload(id))
   }
 
-  const row = (input: { id: string | undefined; name: string; builtin?: boolean }) => {
+  const row = (input: { id: string | undefined; name: string; builtin?: boolean; plugin?: PluginInfo }) => {
     const state = () => (input.builtin ? "loaded" : kind(input.id))
     const part = input.builtin ? "builtin" : "config"
     const live = () => (state() === "loaded" ? input.id : undefined)
@@ -186,9 +197,15 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
             </Show>
           </div>
         </div>
+        <Show when={!live() && input.plugin}>
+          {(plugin) => <PluginUpdateButton plugin={plugin()} updates={props.updates} />}
+        </Show>
         <Show when={live()}>
           {(id) => (
             <div class="settings-servers-actions">
+              <Show when={input.plugin}>
+                {(plugin) => <PluginUpdateButton plugin={plugin()} updates={props.updates} />}
+              </Show>
               <Button size="small" variant="ghost" onClick={() => reload(id())}>
                 {language.t("settings.plugins.reload")}
               </Button>
@@ -208,14 +225,47 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
   return (
     <>
       <SettingsList variant="catalog">
-        <For each={props.plugins}>{(plugin) => row({ id: plugin.id, name: pluginLabel(plugin) })}</For>
+        <For each={props.plugins}>{(plugin) => row({ id: plugin.id, name: pluginLabel(plugin), plugin })}</For>
         <For each={unnamed()}>{(id) => row({ id, name: id })}</For>
         <For each={failedBuiltins()}>{(id) => row({ id, name: id, builtin: true })}</For>
       </SettingsList>
-      <Show when={installed.list().some((item) => !item.builtin)}>
+      <Show when={host.installed().some((item) => !item.builtin)}>
         <p class="text-11-regular text-v2-text-text-muted">{language.t("settings.plugins.parts.note")}</p>
       </Show>
     </>
+  )
+}
+
+/** Update for a package plugin with a newer version, or the update in progress; nothing otherwise. */
+function PluginUpdateButton(props: { plugin: PluginInfo; updates?: ExtensionPluginUpdates }) {
+  const language = useLanguage()
+
+  const view = createMemo(() => {
+    const source = props.plugin.source
+
+    if (source.type !== "package" || !props.updates) return undefined
+
+    const current = props.updates.view(source)
+
+    return current.outdated || current.updating ? { ...current, target: source.target } : undefined
+  })
+
+  return (
+    <Show when={view()}>
+      {(current) => (
+        <Button
+          size="small"
+          variant="ghost"
+          class="shrink-0 whitespace-nowrap"
+          disabled={current().updating}
+          aria-busy={current().updating}
+          aria-label={language.t("settings.plugins.update.label", { name: pluginLabel(props.plugin) })}
+          onClick={() => props.updates?.update(current().target)}
+        >
+          {language.t(current().updating ? "settings.plugins.updating" : "settings.plugins.update")}
+        </Button>
+      )}
+    </Show>
   )
 }
 

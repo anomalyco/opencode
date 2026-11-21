@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/nav-menus",
+  "version": "2.3.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./nav-menus.css": "./src/nav-menus.css"
+  },
+  "scripts": {
+    "typecheck": "bun check --no-script",
+    "test": "bun test",
+    "brand": "bun script/brand.ts"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "20.0.11",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:",
+    "happy-dom": "20.11.1",
+    "typescript": "catalog:"
+  }
+}

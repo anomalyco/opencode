@@ -149,25 +149,6 @@ const GeminiThinkingConfig = Schema.Struct({
   thinkingLevel: Schema.optional(GeminiThinkingLevel),
 })
 
-const GeminiSafetySetting = Schema.Struct({
-  category: knownString<
-    | "HARM_CATEGORY_UNSPECIFIED"
-    | "HARM_CATEGORY_HATE_SPEECH"
-    | "HARM_CATEGORY_DANGEROUS_CONTENT"
-    | "HARM_CATEGORY_HARASSMENT"
-    | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
-    | "HARM_CATEGORY_CIVIC_INTEGRITY"
-  >(),
-  threshold: knownString<
-    | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
-    | "BLOCK_LOW_AND_ABOVE"
-    | "BLOCK_MEDIUM_AND_ABOVE"
-    | "BLOCK_ONLY_HIGH"
-    | "BLOCK_NONE"
-    | "OFF"
-  >(),
-})
-
 // =============================================================================
 // Provider Options
 // =============================================================================
@@ -180,7 +161,7 @@ const GeminiThinkingConfigInput = Schema.Struct({
 })
 const Options = Schema.Struct({
   cachedContent: lenient(Schema.String),
-  safetySettings: lenient(Schema.Array(GeminiSafetySetting)),
+  safetySettings: lenient(Schema.Array(GeminiGenerateContent.SafetySetting)),
   serviceTier: lenient(knownString<"standard" | "flex" | "priority">()),
   thinkingConfig: lenient(GeminiThinkingConfigInput),
 })
@@ -202,7 +183,7 @@ const GeminiBodyFields = {
   cachedContent: Schema.optional(Schema.String),
   contents: Schema.Array(GeminiContent),
   labels: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  safetySettings: optionalArray(GeminiSafetySetting),
+  safetySettings: optionalArray(GeminiGenerateContent.SafetySetting),
   serviceTier: Schema.optional(Schema.String),
   systemInstruction: Schema.optional(GeminiSystemInstruction),
   tools: optionalArray(GeminiTool),
@@ -444,17 +425,16 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const flattened = ProviderShared.flattenToolRequest(request)
   const hasTools = flattened.tools.length > 0
-  const generation = request.generation
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const generationConfig = {
-    maxOutputTokens: generation?.maxTokens,
-    temperature: generation?.temperature,
-    topP: generation?.topP,
-    topK: generation?.topK,
-    frequencyPenalty: generation?.frequencyPenalty,
-    presencePenalty: generation?.presencePenalty,
-    seed: generation?.seed,
-    stopSequences: generation?.stop,
+    maxOutputTokens: request.maxTokens,
+    temperature: request.temperature,
+    topP: request.topP,
+    topK: request.topK,
+    frequencyPenalty: request.frequencyPenalty,
+    presencePenalty: request.presencePenalty,
+    seed: request.seed,
+    stopSequences: request.stop,
     // Gemini accepts a budget above `maxOutputTokens`, but thinking then leaves the answer empty.
     thinkingConfig:
       options.thinkingConfig === undefined
@@ -467,7 +447,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
                 ? undefined
                 : ProviderShared.fitThinkingBudget(
                     options.thinkingConfig.thinkingBudget,
-                    generation?.maxTokens,
+                    request.maxTokens,
                     MIN_THINKING_BUDGET,
                   ),
           },

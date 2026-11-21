@@ -129,7 +129,8 @@ describe("PDF recorded", () => {
               id: `recorded_pdf_${target.id}_user_input`,
               model: target.model,
               cache: "none",
-              generation: { maxTokens: target.maxTokens, temperature: 0 },
+              maxTokens: target.maxTokens,
+              temperature: 0,
               messages: [
                 Message.user([
                   { type: "media", media: Media.base64(PDF, "application/pdf"), filename: target.filename },
@@ -162,7 +163,8 @@ describe("PDF recorded", () => {
                   "Call read_pdf exactly once with path verification.pdf, then reply only with the verification code from its PDF.",
                 prompt: "Use read_pdf with path verification.pdf and return the verification code.",
                 cache: "none",
-                generation: { maxTokens: target.maxTokens, temperature: 0 },
+                maxTokens: target.maxTokens,
+                temperature: 0,
               }),
               tools: [readPdfRuntime],
             }).pipe(Stream.runCollect),
@@ -179,7 +181,8 @@ describe("PDF recorded", () => {
               model: target.model,
               system: "Read the PDF returned by the tool and follow the user's response format exactly.",
               cache: "none",
-              generation: { maxTokens: target.maxTokens, temperature: 0 },
+              maxTokens: target.maxTokens,
+              temperature: 0,
               messages: [
                 Message.user(prompt),
                 Message.assistant([{ type: "tool-call", id: "call_pdf_1", name: readPdf.name, input: {} }]),

@@ -1,7 +1,7 @@
-import type { Page } from "@playwright/test"
+import type { Page } from "@hona/strobe"
 
-/** A divider to drag: its centre, how far it can travel each way (px), and the display's frame period (ms). */
-export type Divider = { x: number; y: number; left: number; right: number; period: number }
+/** A divider to drag: how far it can travel each way (px). */
+export type Divider = { left: number; right: number }
 
 type Leg = { seconds: number; at: (progress: number) => number }
 
@@ -36,13 +36,11 @@ function legs(divider: Divider) {
 }
 
 /**
- * Presses the divider, moves the pointer once per display frame along the drag above without letting go, and releases
- * it where it started. strobe's driver has no pointer drag (`page.move` does not hold a button, and its `until:
- * "frame"` waits two animation frames and a round trip per move), so Playwright's mouse drives the drag, from the
- * runner, paced by the display's frame period on the wall clock. A frame the page misses is skipped, as a hand keeps
- * moving while the screen lags.
+ * Presses the divider (`selector`), moves the pointer along the drag above without letting go, and releases it where
+ * it started. strobe's `page.drag` sends one move per display frame on its own clock, without waiting for the page to
+ * handle each, as a hand keeps moving while the screen lags; `input.rate` says how evenly the moves went out.
  */
-export async function dragDivider(mouse: Page["mouse"], divider: Divider) {
+export function dragDivider(page: Page, selector: string, divider: Divider) {
   const path = legs(divider)
   const total = path.reduce((sum, leg) => sum + leg.seconds, 0)
 
@@ -57,49 +55,19 @@ export async function dragDivider(mouse: Page["mouse"], divider: Divider) {
     return 0
   }
 
-  await mouse.move(divider.x, divider.y)
-  await mouse.down()
-  const began = performance.now()
-
-  for (let frame = 1; ; frame++) {
-    const wait = began + frame * divider.period - performance.now()
-
-    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
-    frame = Math.max(frame, Math.floor((performance.now() - began) / divider.period))
-    const seconds = (performance.now() - began) / 1000
-
-    if (seconds >= total) break
-    await mouse.move(divider.x + offset(seconds), divider.y)
-  }
-
-  await mouse.move(divider.x, divider.y)
-  await mouse.up()
+  return page.drag(selector, (progress) => [offset(progress * total), 0], { duration: total * 1000 })
 }
 
 /**
- * Reads, in the page, where the divider `selector` sits, the room its panel `panel` has to shrink to `min` and grow to
- * the row `row` less `rest` (px), and the display's frame period over 30 frames. Only in setup: it reads layout.
+ * Reads, in the page, the room the panel `panel` beside the divider `selector` has to shrink to `min` and grow to the
+ * row `row` less `rest` (px). Only in setup: it reads layout.
  */
-export function measureDivider(input: { selector: string; panel: string; row: string; min: number; rest: number }) {
-  return new Promise<Divider>((resolve) => {
-    const box = document.querySelector(input.selector)!.getBoundingClientRect()
-    const width = document.querySelector(input.panel)!.getBoundingClientRect().width
-    const row = document.querySelector(input.row)!.getBoundingClientRect().width
-    const times: number[] = []
+export function measureDivider(input: { panel: string; row: string; min: number; rest: number }): Divider {
+  const width = document.querySelector(input.panel)!.getBoundingClientRect().width
+  const row = document.querySelector(input.row)!.getBoundingClientRect().width
 
-    const tick = (time: number) => {
-      times.push(time)
-
-      if (times.length < 31) return requestAnimationFrame(tick)
-      resolve({
-        x: box.left + box.width / 2,
-        y: box.top + box.height / 2,
-        left: Math.max(0, Math.min(360, width - input.min - 10)),
-        right: Math.max(0, Math.min(160, row - input.rest - width - 10)),
-        period: (times[30]! - times[0]!) / 30,
-      })
-    }
-
-    requestAnimationFrame(tick)
-  })
+  return {
+    left: Math.max(0, Math.min(360, width - input.min - 10)),
+    right: Math.max(0, Math.min(160, row - input.rest - width - 10)),
+  }
 }

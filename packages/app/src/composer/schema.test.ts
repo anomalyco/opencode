@@ -39,7 +39,8 @@ describe("composer persistence schemas", () => {
       cursor: -1,
       mode: "unknown",
       model: { providerID: 42, modelID: "model" },
-      retry: { id: "bad", agent: "build", providerID: "provider", modelID: "model" },
+      // A retry stored before fingerprints matched only the selection, so it cannot prove its payload.
+      retry: { id: "msg_retry", agent: "build", providerID: "provider", modelID: "model" },
       context: {
         items: [
           { type: "file", path: "src/app.ts", commentID: "note", key: "stale" },
@@ -158,7 +159,7 @@ describe("composer persistence schemas", () => {
         },
       ],
       model: { providerID: "provider", modelID: "model", variant: null },
-      retry: { id: "msg_retry", agent: "build", providerID: "provider", modelID: "model", variant: false },
+      retry: { id: "msg_retry", fingerprint: "42:abc", agent: "build" },
     })
 
     expect(value.prompt.map((part) => part.type)).toEqual(["text", "agent", "skill", "file"])
@@ -171,12 +172,7 @@ describe("composer persistence schemas", () => {
       filename: "app.ts",
     })
     expect(value.model?.variant).toBeNull()
-    expect(value.retry).toEqual({
-      id: SessionMessage.ID.make("msg_retry"),
-      agent: "build",
-      providerID: "provider",
-      modelID: "model",
-    })
+    expect(value.retry).toEqual({ id: SessionMessage.ID.make("msg_retry"), fingerprint: "42:abc" })
     expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 

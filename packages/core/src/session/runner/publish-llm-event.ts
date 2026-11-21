@@ -15,6 +15,7 @@ import { SessionError } from "@opencode/schema/session-error"
 import { Money } from "@opencode/schema/money"
 import { contentFilterError } from "../to-session-error.js"
 import type { Tool } from "../../tool.js"
+import { LiveToolMetadata } from "./live-tool-metadata.js"
 import { stringify } from "../../tool/runtime.js"
 
 type Input = {
@@ -29,6 +30,14 @@ type Input = {
 }
 
 const asRecord = (value: unknown): Record<string, unknown> => (isRecord(value) ? value : { value })
+
+/** Provider events that carry a step's first generated token, matching how the stream counts output. */
+const beginsOutput = (event: LLMEvent) =>
+  event.type === "text-start" ||
+  event.type === "reasoning-start" ||
+  event.type === "tool-input-start" ||
+  event.type === "tool-input-error" ||
+  event.type === "tool-call"
 
 const INPUT_EXCERPT_LIMIT = 2048
 
@@ -138,6 +147,15 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     stepStarted ? Effect.succeed(assistantMessageID) : Effect.die(new Error("Tool event before assistant step start"))
   const streamed = Effect.fnUntraced(function* () {
     yield* bus.publish(SessionEvent.Step.Streamed, {
+      sessionID: input.sessionID,
+      assistantMessageID: yield* startAssistant(),
+    })
+  })
+  let firstTokenPublished = false
+  const firstToken = Effect.fnUntraced(function* () {
+    if (firstTokenPublished) return
+    firstTokenPublished = true
+    yield* bus.publish(SessionEvent.Step.FirstToken, {
       sessionID: input.sessionID,
       assistantMessageID: yield* startAssistant(),
     })
@@ -351,6 +369,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     const tool = tools.get(id)
     if (!tool || tool.settled) return false
     tool.settled = true
+    LiveToolMetadata.clear(assistantMessageID, id)
     yield* bus.publish(SessionEvent.Tool.Failed, {
       sessionID: input.sessionID,
       assistantMessageID,
@@ -413,6 +432,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   )
 
   const publish = Effect.fnUntraced(function* (event: LLMEvent) {
+    if (beginsOutput(event)) yield* firstToken()
     switch (event.type) {
       case "step-start":
         yield* startAssistant()
@@ -502,6 +522,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           return yield* Effect.die(new Error(`Duplicate tool result: ${event.id}`))
         }
         tool.settled = true
+        LiveToolMetadata.clear(assistantMessageID, event.id)
         const executed = event.providerExecuted === true || tool.providerExecuted
         if (event.result.type === "error") {
           yield* bus.publish(SessionEvent.Tool.Failed, {
@@ -549,6 +570,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     const tool = tools.get(id)
     if (!tool?.called || tool.settled) return yield* Effect.die(new Error(`Tool progress outside running call: ${id}`))
     tool.progress = update
+    LiveToolMetadata.set(assistantMessageID, id, update)
     yield* bus.publish(SessionEvent.Tool.Progress, {
       sessionID: input.sessionID,
       assistantMessageID,
@@ -565,6 +587,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       return yield* Effect.die(new Error(`Tool execution name changed for ${id}: ${tool.name} -> ${name}`))
     if (tool.settled) return yield* Effect.die(new Error(`Duplicate tool execution: ${id}`))
     tool.settled = true
+    LiveToolMetadata.clear(assistantMessageID, id)
     const content = result.content
     if (!isReadonlyArrayNonEmpty(content)) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
     yield* bus.publish(SessionEvent.Tool.Success, {

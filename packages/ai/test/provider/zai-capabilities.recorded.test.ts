@@ -17,7 +17,7 @@ recorded.effect.with(
         ai.request({
           model: ZAI.configure({ apiKey, providerOptions: { thinking: { type: "disabled" } } }).chat("glm-5.3"),
           prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-          generation: { maxTokens: 4096 },
+          maxTokens: 4096,
         }),
       ).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
@@ -40,7 +40,7 @@ for (const modelID of ["glm-4.7", "glm-5.2"]) {
                 modelID,
               ),
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-              generation: { maxTokens: 4096 },
+              maxTokens: 4096,
             }),
           )
           expect(response.text.replaceAll(",", "")).toContain("37887")
@@ -64,7 +64,7 @@ for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max"
           ai.request({
             model: ZAI.configure({ apiKey, providerOptions: { reasoningEffort: effort } }).chat("glm-5.2"),
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-            generation: { maxTokens: 4096 },
+            maxTokens: 4096,
           }),
         )
         expect(response.text.replaceAll(",", "")).toContain("37887")
@@ -95,7 +95,7 @@ recorded.effect.with(
               { type: "media", media: Media.bytes(bytes, "image/png") },
             ]),
           ],
-          generation: { maxTokens: 4096 },
+          maxTokens: 4096,
         }),
       )
       expect(response.text.toLowerCase()).toContain("jiggling restroom prison")
@@ -117,7 +117,7 @@ recorded.effect.with(
             providerOptions: { reasoningEffort: "low", responseFormat: { type: "json_object" } },
           }).chat("glm-5.3"),
           prompt: 'Return a JSON object with one key "city" set to the capital city of France.',
-          generation: { maxTokens: 4096 },
+          maxTokens: 4096,
         }),
       )
       expect(JSON.parse(response.text)).toEqual({ city: "Paris" })
@@ -146,7 +146,7 @@ recorded.effect.with(
               },
             }),
           ],
-          generation: { maxTokens: 4096 },
+          maxTokens: 4096,
         }),
       )
       expect(response.toolCalls).toMatchObject([{ name: "get_weather", input: { city: "Paris" } }])

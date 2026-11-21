@@ -12,4 +12,12 @@ export default {
   noChanges: "Өөрчлөлт байхгүй",
   "settings.wrapLines.title": "Мөрүүдийг нугалах",
   "settings.wrapLines.description": "Мобайл diff дээр урт мөрүүдийг хэвтээ гүйлгэхийн оронд нугалах",
+  "menu.count.one": "{{count}} файл өөрчлөгдсөн",
+  "menu.count.other": "{{count}} файл өөрчлөгдсөн",
+  "folder.more": "{{count}} · бусад нь харагдахгүй",
+  "folder.failed": "Өөрчлөлтүүдийг ачаалж чадсангүй",
+  "command.open": "Хяналтыг нээх",
+  "load.failed": "Өөрчлөлтүүдийг ачаалж чадсангүй",
+  "load.timeout": "Сервер хариулахад хэт удлаа",
+  offline: "Энэ серверт хүрч чадахгүй байна",
 }

@@ -139,28 +139,55 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
+// Sessions migrated from V1 never recorded `time.ran`, so a completed call also counts as run.
+const ranTool = (item: SessionMessage.AssistantContent) =>
+  item.type === "tool" && (item.time.ran !== undefined || item.state.status === "completed")
+
 const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
-  const reuseProviderMetadata = sameModel && message.error === undefined
-  const reasoningInterrupted = message.content.some(
-    (item) => item.type === "reasoning" && item.time !== undefined && item.time.completed === undefined,
-  )
-  const content = message.content.flatMap((item): Array<AssistantMessage["content"][number]> => {
+  // A failed stream is retried from what had already happened: the local calls that ran and everything
+  // before them. Cutting after a local call's result keeps the retried request from ending on an assistant
+  // reply; hosted calls after it are provider-side reads, so the retry can redo them.
+  const kept =
+    message.error === undefined || message.error.type === "aborted"
+      ? message.content
+      : message.content.slice(
+          0,
+          message.content.findLastIndex((item) => item.type === "tool" && item.executed !== true && ranTool(item)) + 1,
+        )
+  // A stream cut by Esc, a crash or a failure may end mid-block, so its last block's provider state is not
+  // replayed, and reasoning is only replayed once the model moved on to output. Calls it cut off before
+  // they ran are dropped; input errors stay so the model can reissue the call.
+  const cut = message.error !== undefined || message.finish === undefined
+  const tail = cut ? message.content.at(-1) : undefined
+  const items = cut
+    ? kept.filter(
+        (item) =>
+          item.type !== "tool" ||
+          ranTool(item) ||
+          (item.state.status === "error" && item.state.error.type.startsWith("tool.input")),
+      )
+    : kept
+  const content = items.flatMap((item, index): Array<AssistantMessage["content"][number]> => {
     if (item.type === "text")
       return [
         {
           type: "text",
           text: item.text,
-          // Text can carry provider-bound state (e.g. Gemini thought signatures),
-          // which is only replayable against the model that produced it.
-          providerMetadata: reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
+          providerMetadata: sameModel && item !== tail ? providerMetadata(providerMetadataKey, item.native) : undefined,
         },
       ]
     // Let the destination adapter handle readable reasoning after a model/provider switch.
     if (item.type === "reasoning") {
-      if (message.error !== undefined || reasoningInterrupted) return []
-      return reuseProviderMetadata
+      if (
+        cut &&
+        !items
+          .slice(index + 1)
+          .some((after) => after.type === "tool" || (after.type === "text" && after.text.trim() !== ""))
+      )
+        return []
+      return sameModel
         ? [
             {
               type: "reasoning",
@@ -175,13 +202,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.
-    const reuseToolProviderMetadata =
-      reuseProviderMetadata ||
-      (sameModel && item.executed === true && (item.state.status === "completed" || item.state.status === "error"))
-    const call = toolCall(
-      item,
-      reuseToolProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
-    )
+    const call = toolCall(item, sameModel ? providerMetadata(providerMetadataKey, item.native) : undefined)
     if (item.executed !== true) return [call]
     // Hosted tools (e.g. google_search) run inside the provider, so their
     // native data is provider-format result data rather than model-scoped
@@ -190,15 +211,13 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     return result ? [call, result] : [call]
   })
   const meaningful = content.filter((part) => {
-    if (part.type === "text") return part.text !== ""
+    if (part.type === "text") return cut ? part.text.trim() !== "" : part.text !== ""
     if (part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
-  const results = message.content
+  const results = items
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
-    .map((item) =>
-      toolResult(item, reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined),
-    )
+    .map((item) => toolResult(item, sameModel ? providerMetadata(providerMetadataKey, item.native) : undefined))
     .filter((message) => message !== undefined)
     .map(Message.tool)
   if (meaningful.length === 0) return results

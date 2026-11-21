@@ -1,3 +1,25 @@
+import type { ParentProps } from "solid-js"
+import {
+  formatKeybindParts,
+  matchKeybind,
+  parseKeybind,
+  type CommandOption,
+} from "../../../../app/src/shell/commands/command"
+
+export {
+  COMMAND_SEARCH_ID,
+  DEFAULT_PALETTE_KEYBIND,
+  commandPaletteOptions,
+  formatKeybind,
+  formatKeybindParts,
+  keyFromKeyboardEvent,
+  matchKeybind,
+  parseKeybind,
+  type CommandOption,
+  type CommandSection,
+  type CommandSource,
+} from "../../../../app/src/shell/commands/command"
+
 const keybinds: Record<string, string> = {
   "file.attach": "mod+u",
   "prompt.mode.shell": "mod+shift+x",
@@ -7,58 +29,31 @@ const keybinds: Record<string, string> = {
   "model.choose": "mod+m",
   "model.variant.cycle": "mod+shift+m",
   "session.background": "ctrl+b",
+  "project.open": "mod+o",
 }
 
-export const DEFAULT_PALETTE_KEYBIND = "mod+k,mod+shift+p"
-
-export function parseKeybind(config: string) {
-  if (!config || config === "none") return []
-  return config.split(",").map((combo) => {
-    const parts = combo.trim().toLowerCase().split("+")
-    return {
-      key:
-        parts.find(
-          (part) => !["ctrl", "control", "meta", "cmd", "command", "mod", "alt", "option", "shift"].includes(part),
-        ) ?? "",
-      ctrl: parts.includes("ctrl") || parts.includes("control") || parts.includes("mod"),
-      meta: parts.includes("meta") || parts.includes("cmd") || parts.includes("command"),
-      shift: parts.includes("shift"),
-      alt: parts.includes("alt") || parts.includes("option"),
-    }
-  })
-}
-
-export function matchKeybind(keybinds: ReturnType<typeof parseKeybind>, event: KeyboardEvent) {
-  return keybinds.some(
-    (keybind) =>
-      keybind.key === event.key.toLowerCase() &&
-      keybind.ctrl === event.ctrlKey &&
-      keybind.meta === event.metaKey &&
-      keybind.shift === event.shiftKey &&
-      keybind.alt === event.altKey,
-  )
-}
-
-export function formatKeybind(config: string) {
-  return config === "none" ? "" : config
-}
-
-export function formatKeybindParts(config: string) {
-  return !config || config === "none" ? [] : config.split(",")[0].split("+")
+export function CommandProvider(props: ParentProps) {
+  return props.children
 }
 
 export function useCommand() {
+  const options: CommandOption[] = []
+
   return {
-    options: [],
+    options,
+    catalog: options,
     register() {
       return () => undefined
     },
     trigger() {},
+    matches(id: string, event: KeyboardEvent) {
+      return matchKeybind(parseKeybind(keybinds[id] ?? "none"), event)
+    },
     keybind(id: string) {
       return keybinds[id]
     },
     keybindParts(id: string) {
-      return keybinds[id]?.split("+") ?? []
+      return formatKeybindParts(keybinds[id] ?? "none")
     },
   }
 }

@@ -26,7 +26,6 @@ testEffect(
         model: "fixture",
         stream: true,
         store: true,
-        instructions: "Keep the context",
         parallel_tool_calls: false,
         prompt_cache_key: "session-key",
         service_tier: "priority",
@@ -37,8 +36,13 @@ testEffect(
         text: { verbosity: "high", format: { type: "json_object" } },
         prompt_cache_retention: "24h",
         prompt_cache_options: { mode: "session", ttl: "1h" },
-        input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }, { type: "compaction_trigger" }],
+        input: [
+          { role: "developer", content: "Keep the context" },
+          { role: "user", content: [{ type: "input_text", text: "hello" }] },
+          { type: "compaction_trigger" },
+        ],
       })
+      expect(body.instructions).toBeUndefined()
       expect(body.tools).toHaveLength(1)
       expect(body.tools[0].name).toBe("lookup")
       expect(body.max_output_tokens).toBeUndefined()
@@ -156,7 +160,7 @@ testEffect(
     ai.request({
       model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
       prompt: "Hello.",
-      generation: { maxTokens: 20_000 },
+      maxTokens: 20_000,
       providerOptions: { textVerbosity: "low" },
       http: { body: { text: { verbosity: "high", format: { type: "json_object" } } } },
     }),
@@ -181,7 +185,7 @@ testEffect(
         ai.request({
           model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
           prompt: "Hello.",
-          generation: { maxTokens: 128 },
+          maxTokens: 128,
         }),
         trigger,
       )

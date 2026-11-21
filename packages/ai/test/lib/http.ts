@@ -40,8 +40,11 @@ export const json = (input: HandlerInput, value: unknown, init?: ResponseInit) =
 /** Fork the polling program, let the test clock cover `seconds` of polling, and join. */
 export const settle = <A, E, R>(program: Effect.Effect<A, E, R>, seconds: number) =>
   Effect.gen(function* () {
-    const fiber = yield* Effect.forkChild(program)
-    yield* TestClock.adjust(`${seconds} seconds`)
+    const fiber = yield* Effect.forkChild(program, { startImmediately: true })
+    for (let i = 0; i < seconds && fiber.pollUnsafe() === undefined; i++) {
+      yield* TestClock.withLive(Effect.sleep("1 millis"))
+      yield* TestClock.adjust("1 second")
+    }
     return yield* Fiber.join(fiber)
   })
 

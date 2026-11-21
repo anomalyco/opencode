@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { createEventListener } from "@solid-primitives/event-listener"
 import type { Panel, PanelProps, SessionRef } from "@opencode/plugin/gui"
 import { adjacentTabKey } from "@/shell/titlebar/tab-order"
+import type { SessionPane } from "@/shell/state/session-tabs"
 
 /** The most closed tabs a session keeps. */
 export const CLOSED_TABS_LIMIT = 30
@@ -20,6 +21,9 @@ export type ClosedSideTab = {
   readonly detail?: string
   /** What the panel's `restore` needs. */
   readonly data?: string
+  /** The pane it showed in and its position in the strip, where it reopens. */
+  readonly pane?: SessionPane
+  readonly index?: number
   /** When it closed, in milliseconds since the epoch. */
   readonly closed: number
 }
@@ -185,5 +189,8 @@ function inSide(event: Event, fallback: boolean) {
   const placed =
     target instanceof Element && target !== document.body && target !== document.documentElement && target.isConnected
 
-  return placed ? !!target.closest("#review-panel") : fallback
+  // The review toggle in the panel's strip belongs to the session.
+  return placed
+    ? !!target.closest("#review-panel") && !target.closest('[data-slot="session-review-panel-toggle"]')
+    : fallback
 }

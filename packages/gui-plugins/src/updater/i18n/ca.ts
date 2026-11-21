@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "A continuació",
   "releaseNotes.action.hideFuture": "No mostris aquestes en el futur",
   "releaseNotes.media.alt": "Allibera la vista prèvia",
+  "action.reload": "Torna a carregar per actualitzar",
+  "action.reloading": "S'està tornant a carregar…",
+  "web.ready.title": "Actualització a punt",
+  "web.ready.message":
+    "Hi ha una versió nova d'OpenCode a punt. Torneu a carregar per utilitzar-la a totes les finestres obertes.",
+  "web.reload": "Torna a carregar",
+  "web.reset.title": "Torna a carregar des del servidor",
+  "web.reset.description": "Esborra la còpia desada de l'aplicació i carrega la versió actual del servidor",
+  "web.reset.action": "Torna a carregar des del servidor",
 }

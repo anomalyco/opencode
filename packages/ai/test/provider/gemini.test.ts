@@ -39,7 +39,8 @@ const request = ai.request({
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 describe("Gemini route", () => {
@@ -100,7 +101,7 @@ describe("Gemini route", () => {
       const thinkingBudget = (budget: number, maxTokens = 32_000) =>
         compileRequest({
           ...request,
-          generation: { maxTokens },
+          maxTokens,
           providerOptions: { thinkingConfig: { thinkingBudget: budget } },
         }).pipe(Effect.map((prepared) => prepared.body.generationConfig?.thinkingConfig?.thinkingBudget))
 
@@ -117,16 +118,14 @@ describe("Gemini route", () => {
         ai.request({
           model,
           prompt: "Say hello.",
-          generation: {
-            maxTokens: 40,
-            temperature: 0.2,
-            topP: 0.8,
-            topK: 12,
-            frequencyPenalty: 0.3,
-            presencePenalty: 0.4,
-            seed: 42,
-            stop: ["done"],
-          },
+          maxTokens: 40,
+          temperature: 0.2,
+          topP: 0.8,
+          topK: 12,
+          frequencyPenalty: 0.3,
+          presencePenalty: 0.4,
+          seed: 42,
+          stop: ["done"],
         }),
       )
 

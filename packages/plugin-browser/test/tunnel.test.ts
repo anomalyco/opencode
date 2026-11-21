@@ -60,6 +60,47 @@ test("cancelled reads release their listener and attachment disposal closes sock
   }
 }, 15_000)
 
+test("a final write settles when the tunnel closes before it flushes", async () => {
+  // The peer never reads, so the end waits on "finish"; destroy() emits only "close".
+  const accepted = Promise.withResolvers<Socket>()
+  const server = createServer((socket) => accepted.resolve(socket))
+  await once(server.listen(0, "127.0.0.1"), "listening")
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("No TCP address")
+  const tunnel = BrowserTunnel.make()
+  try {
+    const id = await Effect.runPromise(tunnel.open({ host: "127.0.0.1", port: address.port }))
+    await accepted.promise
+    const write = Effect.runPromise(tunnel.write(id, new Uint8Array(64 * 1024 * 1024), true))
+    await Effect.runPromise(tunnel.close(id))
+    await expect(write).rejects.toThrow()
+  } finally {
+    tunnel.dispose()
+    void accepted.promise.then((peer) => peer.destroy())
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+}, 15_000)
+
+test("finished tunnels free their slots without tunnel.close", async () => {
+  const server = createServer((socket) => socket.pipe(socket))
+  await once(server.listen(0, "127.0.0.1"), "listening")
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("No TCP address")
+  const tunnel = BrowserTunnel.make()
+  const finish = async () => {
+    const id = await Effect.runPromise(tunnel.open({ host: "127.0.0.1", port: address.port }))
+    await Effect.runPromise(tunnel.write(id, new Uint8Array([1]), true))
+    while (!(await Effect.runPromise(tunnel.read(id))).eof) continue
+  }
+  try {
+    await Promise.all(Array.from({ length: 64 }, finish))
+    await finish()
+  } finally {
+    tunnel.dispose()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+}, 15_000)
+
 test("HTTP proxy requires local credentials and resolves targets only through its transport", async () => {
   const target = Bun.serve({
     hostname: "127.0.0.1",

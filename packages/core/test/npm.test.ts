@@ -57,7 +57,7 @@ async function createGitFixture(directory: string) {
 
 async function createRegistryFixture(directory: string) {
   const tarballs = new Map<string, Uint8Array>()
-  for (const version of ["1.0.0", "1.1.0"]) {
+  for (const version of ["1.0.0", "1.1.0", "2.0.0"]) {
     const root = path.join(directory, version)
     await fs.mkdir(path.join(root, "package"), { recursive: true })
     await writePackage(path.join(root, "package"), {
@@ -162,6 +162,43 @@ describe("Npm.cacheKey", () => {
     expect(await Npm.cacheKey(spec)).toMatch(/^git-plugin-[a-f0-9]{12}$/)
     expect(await Npm.cacheKey(spec)).toBe(await Npm.cacheKey(spec))
     expect(await Npm.cacheKey(`${spec}-other`)).not.toBe(await Npm.cacheKey(spec))
+  })
+})
+
+describe("Npm.follows", () => {
+  test("follows only @latest, ranges and Git branches", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path)
+    await Bun.$`git -C ${fixture.repository} tag fixture-tag`
+    const repository = `git+${pathToFileURL(fixture.repository).href}`
+    const commit = "0123456789abcdef0123456789abcdef01234567"
+    const specs = {
+      plugin: false,
+      "plugin@latest": true,
+      "@acme/plugin@latest": true,
+      "plugin@next": false,
+      "plugin@^1.2.0": true,
+      "plugin@~1.2.0": true,
+      "plugin@1.x": true,
+      "plugin@>=1.2.0 <2": true,
+      "plugin@1.2.0": false,
+      "github:acme/plugin": false,
+      "github:acme/plugins#::path:packages/plugin": false,
+      [`github:acme/plugin#${commit}`]: false,
+      "github:acme/plugin#semver:^1.2.0": true,
+      [`${repository}#fixture-branch`]: true,
+      [`${repository}#fixture-branch::path:packages/subdirectory-plugin`]: true,
+      [`${repository}#fixture-tag`]: false,
+      [`${repository}#${fixture.commit.slice(0, 7)}`]: false,
+      "./plugin": false,
+    }
+    const followed = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* Effect.forEach(Object.keys(specs), (spec) =>
+        npm.follows(spec).pipe(Effect.map((value) => [spec, value])),
+      )
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+    expect(Object.fromEntries(followed)).toEqual(specs)
   })
 })
 
@@ -310,6 +347,49 @@ describe("Npm.add", () => {
     expect(result.current).toBeFalse()
   }, 30_000)
 
+  test("rejects only the newest installed version, keeping its files for what still runs it", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path)
+    const mutable = `git+${pathToFileURL(fixture.repository).href}#fixture-branch`
+
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      const first = yield* npm.add(mutable)
+      const alone = yield* npm.reject(mutable, first.version ?? "")
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
+        await Bun.$`git -C ${fixture.repository} add .`
+        await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
+      })
+      const second = yield* npm.update(mutable)
+      const other = yield* npm.reject(mutable, first.version ?? "")
+      const rejected = yield* npm.reject(mutable, second.version ?? "")
+      const current = yield* npm.resolve(mutable)
+      return {
+        alone,
+        other,
+        rejected,
+        current: yield* Effect.promise(() => Bun.file(path.join(current.directory, "index.js")).text()),
+        kept: yield* Effect.promise(() => Bun.file(path.join(second.directory, "index.js")).exists()),
+      }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+    expect(result).toMatchObject({ alone: false, other: false, rejected: true, kept: true })
+    expect(result.current).toContain("root: true")
+  }, 30_000)
+
+  test("reports Git's own error when a Git package cannot be fetched", async () => {
+    await using tmp = await tmpdir()
+    const spec = `git+${pathToFileURL(path.join(tmp.path, "missing")).href}`
+
+    const error = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec).pipe(Effect.flip)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    expect(error.message).toContain(`Failed to install ${spec}`)
+    expect(error.message).toContain("does not appear to be a git repository")
+  }, 30_000)
+
   // Symlink creation needs elevated privileges on Windows.
   test.skipIf(win)("records Git revisions when the cache directory is reached through a symlink", async () => {
     await using tmp = await tmpdir()
@@ -425,6 +505,25 @@ describe("Npm.check and Npm.update", () => {
     expect(result.generations).not.toContain("1")
     expect(result.generations).not.toContain("2")
     expect(result.updated).toBeFalse()
+  })
+
+  test("updates a range only within it", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const range = "@fixture/registry-plugin@^1.0.0"
+    await registry.configure(cache, range)
+
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      const installed = yield* npm.add(range)
+      registry.state.latest = "2.0.0"
+      const outdated = yield* npm.check(range)
+      const updated = yield* npm.update(range)
+      return { installed: installed.version, outdated, updated: updated.version, current: yield* npm.check(range) }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(result).toEqual({ installed: "1.0.0", outdated: true, updated: "1.1.0", current: false })
   })
 
   test("never reports a pinned registry target as outdated", async () => {

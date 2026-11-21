@@ -49,7 +49,7 @@ for (const item of [
   recorded.effect.with("streams text", { tags: ["text", "usage"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.request({ model: item.model, prompt: "Reply exactly: OK", generation: { maxTokens: 64 } }),
+        ai.request({ model: item.model, prompt: "Reply exactly: OK", maxTokens: 64 }),
       )
       expect(response.text.trim()).toMatch(/^OK\.?$/)
       expect(response.events.some(LLMEvent.is.textDelta)).toBe(true)
@@ -80,7 +80,7 @@ for (const item of [
           prompt: "Use the run tool to execute exactly this code: print(1)",
           tools: run,
           toolChoice: "required",
-          generation: { maxTokens: 256 },
+          maxTokens: 256,
         }),
       )
       expect(response.toolCalls).toMatchObject([{ name: "run", input: { code: expect.stringContaining("print(1)") } }])

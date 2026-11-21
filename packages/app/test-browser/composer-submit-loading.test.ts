@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import type { ActiveComposerAdapter, ComposerSession } from "@/composer/adapter"
-import { createMemoryComposerState } from "@/composer/state"
+import { createMemoryComposerState, type Prompt } from "@/composer/state"
+import { composerSubmitView } from "@/composer/machine"
 import { createComposerSubmit } from "@/composer/submit"
 import type { ModelSelection } from "@/providers/models/selection"
 
@@ -21,7 +22,6 @@ const selection = {
   setVisibility() {},
   variant: {
     configured: () => undefined,
-    selected: () => undefined,
     current: () => undefined,
     list: () => [],
     set() {},
@@ -29,21 +29,105 @@ const selection = {
   },
 } satisfies ModelSelection
 
-test.each([
-  { name: "a send asks for a selection only once loading finds none", agent: "", toasts: ["missing"], left: "ship it" },
-  { name: "editing a held send cancels it and keeps the edit", edit: "ship i", toasts: [], left: "ship i" },
-  { name: "clearing a held send cancels it", edit: "", toasts: [], left: "" },
-  { name: "stopping a held send cancels it and keeps the prompt", stop: true, toasts: [], left: "ship it" },
+test.each<{
+  name: string
+  mode?: "shell"
+  agent?: string
+  edit?: string
+  stop?: boolean
+  toasts: string[]
+  sent: string[]
+  left: string
+  timeline: string[]
+  history: string[]
+}>([
+  {
+    name: "a held prompt shows in the session at once and sends once the Location loads, keeping a new draft",
+    edit: "next",
+    toasts: [],
+    sent: ["ship it"],
+    left: "next",
+    timeline: ["hold:ship it", "set:ship it"],
+    history: ["add:ship it"],
+  },
+  {
+    name: "a held prompt whose Location loads without an agent returns to the composer and asks for one",
+    agent: "",
+    toasts: ["missing"],
+    sent: [],
+    left: "ship it",
+    timeline: ["hold:ship it", "clear"],
+    history: ["add:ship it", "remove:ship it"],
+  },
+  {
+    name: "stopping a held prompt cancels it and returns it to the composer",
+    stop: true,
+    toasts: [],
+    sent: [],
+    left: "ship it",
+    timeline: ["hold:ship it", "clear"],
+    history: ["add:ship it", "remove:ship it"],
+  },
+  // A draft typed while the prompt waited is the user's too, so the prompt goes back in front of it.
+  {
+    name: "stopping a held prompt after typing a new draft puts it back in front of the draft",
+    edit: "next",
+    stop: true,
+    toasts: [],
+    sent: [],
+    left: "ship it\n\nnext",
+    timeline: ["hold:ship it", "clear"],
+    history: ["add:ship it", "remove:ship it"],
+  },
+  {
+    name: "a held prompt whose Location loads without an agent goes back in front of a draft typed since",
+    agent: "",
+    edit: "next",
+    toasts: ["missing"],
+    sent: [],
+    left: "ship it\n\nnext",
+    timeline: ["hold:ship it", "clear"],
+    history: ["add:ship it", "remove:ship it"],
+  },
+  {
+    name: "editing a held shell command cancels it and keeps the edit",
+    mode: "shell",
+    edit: "ship i",
+    toasts: [],
+    sent: [],
+    left: "ship i",
+    timeline: [],
+    history: [],
+  },
+  {
+    name: "clearing a held shell command cancels it",
+    mode: "shell",
+    edit: "",
+    toasts: [],
+    sent: [],
+    left: "",
+    timeline: [],
+    history: [],
+  },
 ])("$name", async (row) => {
   const state = createMemoryComposerState({ prompt: "ship it" }).capture()
   const sent: string[] = []
   const toasts: string[] = []
+  const timeline: string[] = []
+  const history: string[] = []
+  const statuses: string[] = []
+  const prompted = Promise.withResolvers<void>()
   const [agent, setAgent] = createSignal<string>()
 
   const session: ComposerSession = {
     id: "session-1",
     directory: "/repo",
-    handoff: { set() {}, clear() {} },
+    handoff: {
+      set: (handoff) => void timeline.push(`set:${handoff.message.text}`),
+      hold: (handoff) => void timeline.push(`hold:${handoff.message.text}`),
+      settle() {},
+      clear: () => void timeline.push("clear"),
+    },
     current: () => undefined,
     admitted: () => true,
     api: {
@@ -53,11 +137,13 @@ test.each([
       switchModel: async () => undefined,
       revert: { commit: async () => undefined },
     },
+    file: { list: async () => ({ data: [] }) },
     data: {
       location: { command: { list: () => [] } },
       session: {
         prompt: async (value) => {
           sent.push(value.text)
+          prompted.resolve()
 
           return {
             id: value.id ?? "msg_admitted",
@@ -68,7 +154,7 @@ test.each([
             delivery: value.delivery ?? "steer",
           }
         },
-        setStatus() {},
+        setStatus: (_id, status) => void statuses.push(status),
       },
     },
   }
@@ -92,14 +178,13 @@ test.each([
   await createRoot(async (dispose) => {
     const submission = createComposerSubmit({
       adapter,
-      mode: () => "normal",
+      mode: () => row.mode ?? "normal",
       commands: () => [],
       editor: () => undefined,
       queueScroll() {},
-      addToHistory() {},
-      removeFromHistory() {},
+      addToHistory: (prompt) => void history.push(`add:${promptText(prompt)}`),
+      removeFromHistory: (prompt) => void history.push(`remove:${promptText(prompt)}`),
       resetHistory() {},
-      setMode() {},
       closePopover() {},
       notify: { missingSelection: () => void toasts.push("missing"), unqueueable() {}, failed() {} },
       comments: { capture: () => [], clear() {}, restore() {} },
@@ -109,33 +194,42 @@ test.each([
     // Pressing send again while it waits neither sends twice nor asks for a selection.
     await submission.submit(new Event("submit"))
 
-    expect(submission.held()).toBe(true)
+    expect(composerSubmitView(submission.state()).held).toBe(true)
     expect(toasts).toEqual([])
+    // A prompt shows in the session and leaves the composer at once; a shell command waits in the composer.
+    expect(text(state)).toBe(row.mode ? "ship it" : "")
 
     if (row.edit !== undefined) state.set([{ type: "text", content: row.edit, start: 0, end: row.edit.length }])
 
     if (row.stop) await submission.stop()
 
     // A cancelled hold settles before loading finishes, and loading afterwards sends nothing.
-    if (row.agent === undefined) {
+    if (row.edit !== undefined && row.mode) {
       await held
-      expect(submission.held()).toBe(false)
+      expect(composerSubmitView(submission.state()).held).toBe(false)
     }
 
     setAgent(row.agent ?? "build")
     await held
 
-    expect(submission.held()).toBe(false)
+    if (row.sent.length > 0) await prompted.promise
+
+    expect(composerSubmitView(submission.state()).held).toBe(false)
     expect(toasts).toEqual(row.toasts)
-    expect(sent).toEqual([])
+    expect(sent).toEqual(row.sent)
     expect(text(state)).toBe(row.left)
+    expect(timeline).toEqual(row.timeline)
+    expect(history).toEqual(row.history)
+    // A held prompt marks the Session running only once it is dispatched, like any prompt into an idle Session.
+    expect(statuses).toEqual(row.sent.length > 0 ? ["running"] : [])
     dispose()
   })
 })
 
 function text(state: ReturnType<ReturnType<typeof createMemoryComposerState>["capture"]>) {
-  return state
-    .current()
-    .map((part) => ("content" in part ? part.content : ""))
-    .join("")
+  return promptText(state.current())
+}
+
+function promptText(prompt: Prompt) {
+  return prompt.map((part) => ("content" in part ? part.content : "")).join("")
 }

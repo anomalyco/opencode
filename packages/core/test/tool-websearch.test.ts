@@ -2,6 +2,8 @@ import { describe, expect } from "bun:test"
 import { Context, Effect, Layer } from "effect"
 import type { HttpClientError } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Permission } from "@opencode/core/permission"
 import { KV } from "@opencode/core/kv"
@@ -12,11 +14,9 @@ import { toSessionError } from "@opencode/core/session/to-session-error"
 import { Tool } from "@opencode/core/tool"
 import { WebSearchTool } from "@opencode/core/tool/plugin/websearch"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Image } from "@opencode/core/image"
 import { testEffect } from "./lib/effect"
-import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 import { webSearchHost } from "./plugin/host"
 import { TestWebSearch } from "./lib/websearch"
 
@@ -25,10 +25,12 @@ const webSearchToolNode = makeLocationNode({
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
       const websearch = yield* WebSearch.Service
-      yield* registerToolPlugin(WebSearchTool.Plugin, { websearch: webSearchHost(websearch) })
+      yield* registerToolPlugin(WebSearchTool.Plugin, {
+        websearch: webSearchHost(websearch),
+      })
     }),
   ),
-  deps: [Tool.node, Permission.node, WebSearch.node, Form.node],
+  deps: [Tool.node, Permission.node, WebSearch.node, Form.node, Config.node, Flag.node],
 })
 
 const sessionID = Session.ID.make("ses_websearch_test")
@@ -50,7 +52,7 @@ class Fixture {
   ]
 }
 
-const it = testEffect(TestWebSearch.layer)
+const it = testEffect(Layer.mergeAll(TestWebSearch.layer, Layer.succeed(Flag.Overrides, undefined)))
 const setup = Effect.gen(function* () {
   const fixture = new Fixture()
   const websearch = yield* TestWebSearch.Service
@@ -70,7 +72,7 @@ const setup = Effect.gen(function* () {
   )
   const context = yield* Layer.build(
     AppNodeBuilder.build(LayerNode.group([Tool.node, webSearchToolNode]), [
-      Permission.node.replace(
+      ...toolNodeReplacements(
         permissionLayer({
           assert: (input) =>
             Effect.sync(() => {
@@ -90,7 +92,6 @@ const setup = Effect.gen(function* () {
             }),
         }),
       ),
-      Image.node.replace(imagePassthrough),
     ]),
   )
   return Object.assign(fixture, { websearch, kv, registry: Context.get(context, Tool.Service) })
@@ -117,6 +118,7 @@ describe("WebSearchTool registration", () => {
         }),
       ).toMatchObject({
         status: "completed",
+        output: [{ url: "https://example.com", title: "Search results", content: "search results" }],
         content: [{ type: "text", text: "## [Search results](https://example.com)\n\nsearch results" }],
       })
       expect(fixture.assertions).toMatchObject([
@@ -139,7 +141,7 @@ describe("WebSearchTool registration", () => {
     }),
   )
 
-  it.effect("keeps normalized results in structured output", () =>
+  it.effect("returns flat results and keeps the provider in metadata", () =>
     Effect.gen(function* () {
       const fixture = yield* setup
       yield* fixture.websearch.select(WebSearch.ID.make("parallel"))
@@ -161,17 +163,14 @@ describe("WebSearchTool registration", () => {
         }),
       ).toEqual({
         status: "completed",
-        output: {
-          provider: "parallel",
-          results: [
-            {
-              url: "https://effect.website",
-              title: "Effect",
-              content: "parallel results",
-              time: { published: Date.parse("2026-07-25T00:00:00.000Z") },
-            },
-          ],
-        },
+        output: [
+          {
+            url: "https://effect.website",
+            title: "Effect",
+            content: "parallel results",
+            published: Date.parse("2026-07-25T00:00:00.000Z"),
+          },
+        ],
         content: [
           {
             type: "text",
@@ -198,6 +197,7 @@ describe("WebSearchTool registration", () => {
         }),
       ).toMatchObject({
         status: "completed",
+        output: [],
         content: [{ type: "text", text: WebSearchTool.NO_RESULTS }],
       })
     }),
@@ -393,7 +393,7 @@ describe("WebSearchTool registration", () => {
       const replacement = WebSearch.ID.make(first === "exa" ? "parallel" : "exa")
       expect(progress).toEqual([{ provider: first }, { provider: replacement }])
       expect(result).toMatchObject({
-        output: { provider: replacement, results: fixture.results },
+        output: [{ url: "https://example.com", title: "Search results", content: "search results" }],
         metadata: { provider: replacement },
       })
       expect(fixture.formRequests).toEqual([])

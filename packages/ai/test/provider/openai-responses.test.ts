@@ -102,7 +102,8 @@ const request = ai.request({
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 const configEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
@@ -127,8 +128,10 @@ describe("OpenAI Responses route", () => {
 
       expect(prepared.body).toEqual({
         model: "gpt-4.1-mini",
-        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
-        instructions: "You are concise.",
+        input: [
+          { type: "message", role: "developer", content: "You are concise." },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "Say hello." }] },
+        ],
         store: false,
         include: ["reasoning.encrypted_content"],
         stream: true,
@@ -714,6 +717,56 @@ describe("OpenAI Responses route", () => {
       expect(ProviderShared.decodeJson(create.message)).toMatchObject({
         previous_response_id: "resp_1",
         input: [{ type: "function_call_output", call_id: "call_1", output: '{"temperature":22}' }],
+      })
+    }),
+  )
+
+  it.effect("continues a custom tool call from completed response output", () =>
+    Effect.gen(function* () {
+      const firstRequest = {
+        type: "response.create",
+        model: "gpt-6-astra",
+        store: false,
+        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Run it." }] }],
+      }
+      const first = continuationDriver(firstRequest)
+      const firstCreate = yield* first.create(undefined)
+      const saved = checkpoint(
+        yield* first.observe(
+          firstCreate,
+          ProviderShared.encodeJson({
+            type: "response.completed",
+            response: {
+              id: "resp_1",
+              output: [
+                {
+                  type: "custom_tool_call",
+                  id: "ctc_1",
+                  status: "completed",
+                  call_id: "call_1",
+                  name: "run",
+                  input: "ls",
+                },
+              ],
+            },
+          }),
+        ),
+      )
+      const second = continuationDriver({
+        ...firstRequest,
+        input: [
+          ...firstRequest.input,
+          { type: "custom_tool_call", call_id: "call_1", name: "run", input: "ls" },
+          { type: "custom_tool_call_output", call_id: "call_1", output: "a.txt" },
+        ],
+      })
+
+      const create = yield* second.create(saved)
+
+      expect(create.mode).toBe("incremental")
+      expect(ProviderShared.decodeJson(create.message)).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [{ type: "custom_tool_call_output", call_id: "call_1", output: "a.txt" }],
       })
     }),
   )
@@ -1458,6 +1511,28 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("keeps the system code when a WebSocket fails to connect", () =>
+    Effect.gen(function* () {
+      const socket = Object.assign(new EventTarget(), { readyState: globalThis.WebSocket.CONNECTING, close: () => {} })
+      const failed = Object.assign(new Event("error"), {
+        error: Object.assign(new Error("Failed to connect"), { code: "ENOTFOUND" }),
+      })
+      queueMicrotask(() => socket.dispatchEvent(failed))
+      const error = yield* WebSocketTransport.fromWebSocket(
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- waitOpen only listens for events on this branch.
+        socket as unknown as globalThis.WebSocket,
+        { url: "wss://api.openai.test/v1/responses", headers: Headers.empty },
+      ).pipe(Effect.flip)
+
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        code: "ENOTFOUND",
+        phase: "connect",
+        delivery: "not-sent",
+      })
+    }),
+  )
+
   it.effect("adds native query params to the Responses URL", () =>
     Effect.gen(function* () {
       yield* LLMClient.generate({
@@ -1944,9 +2019,10 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
+      expect(prepared.body).not.toHaveProperty("instructions")
       expect(prepared.body).toMatchObject({
-        instructions: "You are concise. Continue from the provided history.",
         input: [
+          { type: "message", role: "developer", content: "You are concise. Continue from the provided history." },
           {
             type: "message",
             role: "user",
@@ -2009,7 +2085,8 @@ describe("OpenAI Responses route", () => {
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model("gpt-5.2"),
           prompt: "think",
           promptCacheKey: "session_123",
-          generation: { presencePenalty: 0.25, frequencyPenalty: -0.25 },
+          presencePenalty: 0.25,
+          frequencyPenalty: -0.25,
           tools: [
             ToolDefinition.make({ name: "read", description: "Read a file", inputSchema: { type: "object" } }),
             ToolDefinition.make({ name: "grep", description: "Search files", inputSchema: { type: "object" } }),
@@ -2205,18 +2282,18 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("omits the prompt cache key when compatibility disables it", () =>
+  it.effect("omits the prompt cache key when capabilities disable it", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { supportsPromptCacheKey: false } }),
+          model: LanguageModel.update(model, { capabilities: { promptCacheKey: false } }),
           prompt: "Hello",
           promptCacheKey: "request_cache",
         }),
       )
 
       expect(prepared.body).not.toHaveProperty("prompt_cache_key")
-      expect(model.compatibility?.supportsPromptCacheKey).toBeUndefined()
+      expect(model.capabilities?.promptCacheKey).toBeUndefined()
       expect(
         (yield* compileRequest(ai.request({ model, prompt: "Hello", promptCacheKey: "request_cache" }))).body,
       ).toHaveProperty("prompt_cache_key", "request_cache")

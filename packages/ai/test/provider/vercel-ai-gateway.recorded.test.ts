@@ -88,7 +88,7 @@ recorded.effect(
         ai.request({
           model: VercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-5.5"),
           prompt: "Hello",
-          generation: { maxTokens: 32 },
+          maxTokens: 32,
         }),
       ).pipe(Effect.flip)
       expect(error.reason.http?.status).toBe(401)
@@ -114,7 +114,7 @@ recorded.effect(
           { type: "text", text: "Reply with OK only." },
         ],
         prompt: "Confirm.",
-        generation: { maxTokens: 32 },
+        maxTokens: 32,
         providerOptions: { gateway: { only: ["anthropic"] } },
       })
       yield* LLMClient.generate(request)

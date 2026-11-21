@@ -34,7 +34,14 @@ export async function createAppFixture(
   const events = createEventStream()
   const calls = createFetch(input.fetch, events)
   // Updates apply to a copy, as a config file would, so preference writes persist for the rest of the test.
-  let config: Config.Info = structuredClone(input.config ?? { animations: false })
+  // Tests were written for the previous designs and theme, so they keep new designs off and use
+  // opencode-classic unless they choose otherwise.
+  const base = input.config ?? { animations: false }
+  let config: Config.Info = structuredClone({
+    ...base,
+    experimental: { "new-designs": false, ...base.experimental },
+    theme: { name: "opencode-classic", ...base.theme },
+  })
   const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
   const task = Effect.runPromise(
     run({

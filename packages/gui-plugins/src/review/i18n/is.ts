@@ -12,4 +12,12 @@ export default {
   noChanges: "Engar breytingar",
   "settings.wrapLines.title": "Brjóta línur",
   "settings.wrapLines.description": "Vefjið langar línur inn í farsímadiffur í stað þess að fletta lárétt",
+  "menu.count.one": "{{count}} skrá breytt",
+  "menu.count.other": "{{count}} skrám breytt",
+  "folder.more": "{{count}} · fleiri ekki sýndar",
+  "folder.failed": "Ekki tókst að hlaða breytingum",
+  "command.open": "Opna yfirferð",
+  "load.failed": "Ekki tókst að hlaða breytingum",
+  "load.timeout": "Netþjónninn var of lengi að svara",
+  offline: "Ekki næst samband við þennan netþjón",
 }

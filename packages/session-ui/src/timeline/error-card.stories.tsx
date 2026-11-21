@@ -8,6 +8,8 @@ export default {
   id: "current-session-error-card",
   component: SessionTimeline,
   parameters: { layout: "fullscreen" },
+  args: { width: 480 },
+  argTypes: { width: { control: { type: "range", min: 320, max: 960, step: 10 } } },
 }
 
 const document = {
@@ -43,12 +45,12 @@ const document = {
 } satisfies SessionDocument
 
 export const ProviderErrors = {
-  render: () => (
+  render: (args: { width: number }) => (
     <CurrentSessionTimelineStory
       title="Provider errors"
       description="Short and wrapped provider errors in the production timeline."
       document={document}
-      width="480px"
+      width={`${args.width}px`}
     />
   ),
 }
@@ -89,12 +91,12 @@ const executionErrorsDocument = {
 } satisfies SessionDocument
 
 export const ExecutionErrors = {
-  render: () => (
+  render: (args: { width: number }) => (
     <CurrentSessionTimelineStory
       title="Execution errors"
       description="Pre-step and between-step session execution failures surfaced from the idle marker."
       document={executionErrorsDocument}
-      width="480px"
+      width={`${args.width}px`}
     />
   ),
 }
@@ -121,12 +123,12 @@ const linkDocument = {
 } satisfies SessionDocument
 
 export const LinkedError = {
-  render: () => (
+  render: (args: { width: number }) => (
     <CurrentSessionTimelineStory
       title="Linked error"
       description="A provider error whose message includes a URL."
       document={linkDocument}
-      width="480px"
+      width={`${args.width}px`}
     />
   ),
 }

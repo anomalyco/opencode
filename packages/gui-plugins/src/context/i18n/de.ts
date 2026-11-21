@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Nutzung",
   "usage.cost": "Kosten",
   "usage.view": "Kontextnutzung anzeigen",
-  "systemPrompt.title": "System-Prompt",
   "rawMessages.title": "Rohdaten der Nachrichten",
   "export.session": "Sitzung exportieren",
   "stats.session": "Sitzung",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sitzung unter {{filename}} gespeichert",
   "export.failed.title": "Sitzung konnte nicht exportiert werden",
   "export.failed.description": "Beim Exportieren der Sitzung ist ein Fehler aufgetreten",
+  "usage.toggle": "Sitzungskontext umschalten",
 }

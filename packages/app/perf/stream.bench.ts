@@ -1,12 +1,28 @@
 // A reply streaming into a long session: 160 markdown deltas (bold text, tables, code fences) at 40 a second, from a
 // server that never waits for the renderer. Per-delta cost that grows with the reply or the history shows up here.
-import { bench, web, type Case } from "@hona/strobe"
+import { bench, web, type Case, type Page } from "@hona/strobe"
 import { reviewDiffs } from "./fixtures/diffs"
 import { cached } from "./fixtures/mock"
 import { openReview } from "./fixtures/review"
 import { mockTimelineSession, reply, streamedReply, timeline } from "./fixtures/timeline"
 
 const { start, deltas } = streamedReply(160)
+
+const withFind = "stream with Find open"
+
+const find = '[data-component="timeline-search-bar"] input'
+
+// A phrase only the reply's last delta holds, so Find stays on the reply while every delta rescans the transcript.
+// One input event: typed key by key, its prefixes would match the history and seek the timeline away from the reply.
+async function openFind(page: Page) {
+  await page.press("ControlOrMeta+f", { until: find })
+  await page.eval(() => {
+    const input = document.querySelector<HTMLInputElement>('[data-component="timeline-search-bar"] input')!
+    input.value = "benchmark-complete"
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }))
+  })
+  await page.waitFor('[data-slot="timeline-search-count"]', { text: "0/0" })
+}
 
 const stream: Case<{}> = {
   primary: "main.work",
@@ -23,35 +39,50 @@ const stream: Case<{}> = {
     await page.goto(prepared.path, { until: timeline, timeout: 60_000 })
 
     if (name === "stream with review open") await openReview(page)
+
+    if (name === withFind) await openFind(page)
     await page.idle()
   },
 }
 
+/** What a case's launch sets up beyond the 120-turn session: cases with the same one share a launch. */
+const setups = new Map<string, "tool-heavy" | "review" | "find" | "wait">([
+  ["stream into a tool-heavy history", "tool-heavy"],
+  ["stream with review open", "review"],
+  [withFind, "find"],
+  ["wait on a running session", "wait"],
+])
+
 export default bench({
+  setupKey: (ctx) => setups.get(ctx.case) ?? "plain",
+
   targets: {
     web: web({
+      expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
-      prepare: ({ case: name, playwright, mock, url }) =>
-        mockTimelineSession(cached(playwright.page, mock), {
-          server: new URL(url).origin,
-          historyTurns: name === "stream into a tool-heavy history" ? 320 : 120,
-          toolHeavy: name === "stream into a tool-heavy history",
+      prepare: (ctx) =>
+        mockTimelineSession(cached(ctx), {
+          server: new URL(ctx.url).origin,
+          historyTurns: ctx.setupKey === "tool-heavy" ? 320 : 120,
+          toolHeavy: ctx.setupKey === "tool-heavy",
           busy: true,
           stream: true,
-          vcsDiff: name === "stream with review open" ? reviewDiffs() : undefined,
+          vcsDiff: ctx.setupKey === "review" ? reviewDiffs() : undefined,
         }),
       url: ({ prepared }) => prepared.path,
     }),
   },
 
-  async setup({ case: name, page }) {
+  async setup({ setupKey, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
 
-    if (name === "stream with review open") await openReview(page)
+    if (setupKey === "review") await openReview(page)
+
+    if (setupKey === "find") await openFind(page)
 
     // Its animations never stop, and with the attribution probes on a slow machine their frames can run long enough
     // that the page never counts as idle.
-    if (name === "wait on a running session") return page.wait(2000)
+    if (setupKey === "wait") return page.wait(2000)
     await page.idle()
   },
 
@@ -64,6 +95,8 @@ export default bench({
     "stream into a tool-heavy history": stream,
     // The review pane open beside the timeline on 72 changed files.
     "stream with review open": stream,
+    // Find open on a phrase that only the last delta holds: each delta rescans the 120-turn transcript for it.
+    [withFind]: stream,
     // Five seconds of a running session between deltas: the tab's spinner and the Working shimmer animate, and nothing
     // else changes. Animation the compositor runs costs the page's main thread nothing.
     "wait on a running session": {

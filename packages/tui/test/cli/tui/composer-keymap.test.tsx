@@ -235,6 +235,29 @@ test("disabled shell bindings have no component fallbacks", async () => {
   }
 })
 
+test("composer tabs switch by mouse and keyboard", async () => {
+  const composer = await renderComposer("subagents", {})
+  try {
+    const lines = composer.app.captureCharFrame().split("\n")
+    const row = lines.findIndex((line) => line.includes("Subagents") && line.includes("Shell"))
+    await composer.app.mockMouse.click(lines[row].indexOf("Shell"), row)
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("bun test")
+    expect(composer.app.captureCharFrame()).not.toContain("First")
+
+    await composer.app.mockMouse.click(lines[row].indexOf("Subagents"), row)
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("First")
+    expect(composer.app.captureCharFrame()).not.toContain("bun test")
+
+    composer.app.mockInput.pressArrow("right")
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("bun test")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
 test("shell list shows one line per command", async () => {
   const composer = await renderComposer("shell", {})
   try {

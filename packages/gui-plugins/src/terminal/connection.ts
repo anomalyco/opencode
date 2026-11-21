@@ -1,14 +1,30 @@
-import { decodePersistentPtyMessage, persistentPtyFrame } from "@opencode/client/solid"
-import { Option } from "effect"
+import {
+  canAcceptOutput,
+  createConnectionState,
+  transitionConnection,
+  type ConnectionEffect,
+  type ConnectionEvent,
+  type TerminalFailure,
+  type TerminalSize,
+} from "./connection-machine"
 import { terminalWriter } from "./writer"
 
-export type TerminalSize = { cols: number; rows: number }
+export type { TerminalFailure, TerminalSize } from "./connection-machine"
 
-export type TerminalFailure = "disconnected" | "failed" | "outdated"
+const REPLAY_DRAINED: ConnectionEvent = { type: "replay.drained" }
+
+const INTERACTED: ConnectionEvent = { type: "interacted" }
+
+const SOCKET_CLOSED: ConnectionEvent = { type: "socket.closed" }
+
+const SOCKET_ERRORED: ConnectionEvent = { type: "socket.errored" }
+
+const DISPOSED: ConnectionEvent = { type: "disposed" }
 
 // One attachment to a persistent PTY, following the TUI's terminal pane: the snapshot restores the screen, then
 // socket output, canonical resizes and the end of the replay apply in order through one queue. Input goes live once
-// the replay completes, and size frames take control at the pane's size.
+// the replay completes, and size frames take control at the pane's size. The protocol lives in `./connection-machine`;
+// binary output skips it and goes straight to the writer.
 export function terminalConnection(input: {
   attachmentID: string
   write: (data: Uint8Array, done: VoidFunction) => void
@@ -17,142 +33,80 @@ export function terminalConnection(input: {
   fail: (failure: TerminalFailure) => void
 }) {
   const encoder = new TextEncoder()
-  const pendingInput: Uint8Array[] = []
-  let attached = false
-  let controller = false
-  let restored = false
-  let wantsControl = false
-  let exited = false
-  let failed = false
+  let current = createConnectionState(input.attachmentID)
   let writing = false
-  let canonical: TerminalSize | undefined
-  let desired: TerminalSize | undefined
 
-  // ghostty-web answers device and color queries itself while writing and reports the replies as input. The daemon
-  // already answers them, and forwarding a reply would also take control from another client.
-  const output = terminalWriter((data, done) => {
+  // ghostty-web answers device and color queries itself while writing and reports the replies as input, synchronously.
+  // The daemon already answers them, and forwarding a reply would also take control from another client.
+  const writer = terminalWriter((data, done) => {
     writing = true
-    input.write(data, done)
-    writing = false
+
+    try {
+      input.write(data, done)
+    } finally {
+      writing = false
+    }
   })
 
-  const send = (frame: Uint8Array<ArrayBuffer>) => {
-    if (attached && !failed) input.send(frame)
+  const dispatch = (event: ConnectionEvent) => {
+    const next = transitionConnection(current, event)
+    current = next.state
+    next.effects.forEach(run)
   }
 
-  const interact = () => {
-    if (!restored) {
-      wantsControl = true
+  const drained = () => dispatch(REPLAY_DRAINED)
 
-      return
-    }
+  const run = (effect: ConnectionEffect) => {
+    if (effect.type === "queue-resize") {
+      const size = effect.size
+      writer.push(() => input.resize(size))
 
-    if (desired) send(persistentPtyFrame(desired))
-  }
-
-  const sendInput = (data: Uint8Array) => {
-    if (!restored) {
-      pendingInput.push(data)
-
-      return
-    }
-
-    const size = desired ?? canonical
-
-    if (size) send(persistentPtyFrame(size, data))
-  }
-
-  // The checkpoint is a binary string: one character per byte.
-  const resize = (size: TerminalSize, checkpoint?: string) => {
-    output.push(() => {
-      canonical = size
-      input.resize(size)
-    })
-
-    if (checkpoint !== undefined) output.push(Uint8Array.from(checkpoint, (char) => char.charCodeAt(0)))
-  }
-
-  const fail = (failure: TerminalFailure) => {
-    if (failed) return
-    failed = true
-    input.fail(failure)
-  }
-
-  const message = (text: string) => {
-    const decoded = decodePersistentPtyMessage(text)
-
-    if (Option.isNone(decoded)) return
-    const next = decoded.value
-
-    if (next.type === "attached") {
-      if (next.inputProtocol !== 1) {
-        fail("outdated")
-
-        return
+      // The checkpoint is a binary string: one character per byte.
+      if (effect.checkpoint !== undefined) {
+        const checkpoint = (effect.reset ? "\x1bc" : "") + atob(effect.checkpoint)
+        writer.push(Uint8Array.from(checkpoint, (char) => char.charCodeAt(0)))
       }
 
-      resize(next.info.size)
-      controller = next.role === "controller"
-      attached = true
-
       return
     }
 
-    if (next.type === "resized") {
-      resize({ cols: next.cols, rows: next.rows }, `\x1bc${atob(next.checkpoint)}`)
+    if (effect.type === "queue-replay-end") return writer.push(drained)
 
-      return
-    }
+    if (effect.type === "send") return input.send(effect.frame)
 
-    if (next.type === "replay_complete") {
-      output.push(() => {
-        restored = true
-        const queued = pendingInput.splice(0)
-        queued.forEach(sendInput)
+    if (effect.type === "fail") return input.fail(effect.failure)
 
-        if (!queued.length && (controller || wantsControl)) interact()
-        wantsControl = false
-      })
-
-      return
-    }
-
-    if (next.type === "controller_changed") {
-      const previous = controller
-      controller = next.attachmentID === input.attachmentID
-
-      if (controller && !previous && restored) interact()
-
-      return
-    }
-
-    if (next.type === "exited") exited = true
+    writer.clear()
   }
 
   return {
     restore(snapshot: { size: TerminalSize; checkpoint: string }) {
-      resize(snapshot.size, atob(snapshot.checkpoint))
+      dispatch({ type: "snapshot.restored", size: snapshot.size, checkpoint: snapshot.checkpoint })
     },
     output(data: Uint8Array) {
-      output.push(data)
+      if (canAcceptOutput(current)) writer.push(data)
     },
-    message,
+    message(text: string) {
+      dispatch({ type: "socket.message", text })
+    },
     input(data: string) {
-      if (writing) return
-      sendInput(encoder.encode(data))
+      if (!writing) dispatch({ type: "input", data: encoder.encode(data) })
     },
-    interact,
-    size(next: TerminalSize) {
-      if (desired?.cols === next.cols && desired.rows === next.rows) return
-      desired = next
-
-      if (controller && restored) interact()
+    interact() {
+      dispatch(INTERACTED)
+    },
+    size(size: TerminalSize) {
+      dispatch({ type: "size.changed", size })
     },
     close() {
-      if (!exited) fail("disconnected")
+      dispatch(SOCKET_CLOSED)
     },
     error() {
-      fail("failed")
+      dispatch(SOCKET_ERRORED)
+    },
+    /** Stops output not yet written; the owner calls it on unmount. */
+    dispose() {
+      dispatch(DISPOSED)
     },
   }
 }

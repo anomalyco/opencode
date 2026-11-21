@@ -36,10 +36,12 @@ const exported = exportFile ? (JSON.parse(readFileSync(exportFile, "utf8")) as S
 
 // The destination was rendered before and is cached: switching back and forth. A cached transcript is not fetched
 // again (`net.requests` on the history endpoint stays 0), and the switch moves nothing that was already on screen.
+// The run ends on the frame after the answer shows: headless, it ends at its last step, and the wait at the first
+// match, so the style and layout the switch left for that frame would count in main.work but not run.duration.
 const warm: Case<{}> = {
   primary: "main.work",
   metrics: ["run.duration", "interaction.p50", "net.requests{/api/session/*/message}", "layout.shift"],
-  run: ({ page, prepared }) => page.click(tab(prepared.target), { until: prepared.targetReady }),
+  run: ({ page, prepared }) => page.click(tab(prepared.target), { until: [prepared.targetReady, "frame"] }),
   async reset({ page, prepared }) {
     await page.click(tab(prepared.source), { until: prepared.sourceReady })
     await page.idle()
@@ -65,6 +67,16 @@ const cases = {
   "switch tab": warm,
   // The review pane open on 72 changed files beside both timelines.
   "switch tab with review open": warm,
+  // Away from the session with the review open, to one with nothing beside it, and back: both directions a person
+  // pays when switching between them.
+  "switch away and back with review open": {
+    ...warm,
+    async run({ page, prepared }) {
+      await page.click(tab(prepared.target), { until: prepared.targetReady })
+      await page.click(tab(prepared.source), { until: [prepared.sourceReady, "frame"] })
+    },
+    reset: ({ page }) => page.idle(),
+  },
   // The destination was laid out before the review pane narrowed the timeline, so it lays out again.
   "switch tab after review resized it": {
     ...warm,
@@ -85,21 +97,34 @@ const cases = {
 } satisfies Record<string, Case<{}>>
 
 export default bench({
+  // What a case's launch sets up: the sessions and catalog it serves, the review pane, and whether setup has rendered
+  // the target tab already. Cases with the same setup share a launch.
+  setupKey: ({ case: name }) => ({
+    export: !!exported && name.endsWith("your session"),
+    catalog: name.includes("model catalog"),
+    diffs: name.includes("review"),
+    review: name.includes("review open"),
+    warm: !name.startsWith("open"),
+    resized: name.includes("resized"),
+  }),
+
   targets: {
     web: web({
+      expect: { title: "OpenCode" },
       viewport: { width: 1440, height: 900 },
-      async prepare({ case: name, playwright, mock, url }) {
+      async prepare(ctx) {
+        const { setupKey: setup, url } = ctx
         const server = new URL(url).origin
-        const page = cached(playwright.page, mock)
+        const page = cached(ctx)
 
-        if (exported && name.endsWith("your session")) return mockExport(page, server, exported)
+        if (exported && setup.export) return mockExport(page, server, exported)
         await mockOpenCodeServer(page, {
           server,
           sessions: fixture.sessions,
-          provider: name.includes("model catalog") ? catalog(1_200) : fixture.provider,
+          provider: setup.catalog ? catalog(1_200) : fixture.provider,
           directory: fixture.directory,
           project: fixture.project,
-          vcsDiff: name.includes("review") ? reviewDiffs() : undefined,
+          vcsDiff: setup.diffs ? reviewDiffs() : undefined,
           pageMessages: (sessionID) => ({ items: messages[sessionID] ?? [] }),
         })
         await installTimelineSettings(page)
@@ -120,17 +145,17 @@ export default bench({
     }),
   },
 
-  async setup({ case: name, page, prepared }) {
+  async setup({ setupKey: setup, page, prepared }) {
     await page.waitFor(prepared.sourceReady, { timeout: 60_000 })
 
-    if (name.includes("review open")) await openReview(page)
+    if (setup.review) await openReview(page)
 
-    if (!name.startsWith("open")) {
+    if (setup.warm) {
       await page.click(tab(prepared.target), { until: prepared.targetReady, timeout: 60_000 })
       await page.click(tab(prepared.source), { until: prepared.sourceReady })
     }
 
-    if (name.includes("resized")) await openReview(page)
+    if (setup.resized) await openReview(page)
     await page.idle()
   },
 
