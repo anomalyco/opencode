@@ -16,6 +16,16 @@ export const PublicRef = Schema.Struct(Struct.omit(Ref.fields, ["workspaceID"]))
 })
 export interface PublicRef extends Schema.Schema.Type<typeof PublicRef> {}
 
+// A directory a client asks to work in: a POSIX, drive or UNC absolute path without NUL bytes.
+export const Directory = AbsolutePath.check(
+  Schema.isPattern(/^(?:\/|[A-Za-z]:[\\/]|\\\\)[^\0]*$/u, { expected: "an absolute path without NUL bytes" }),
+).annotate({
+  identifier: "Location.Directory",
+})
+
+export const Input = Schema.Struct({ directory: Directory }).annotate({ identifier: "Location.Input" })
+export interface Input extends Schema.Schema.Type<typeof Input> {}
+
 export class Info extends Schema.Class<Info>("Location.Info")({
   directory: AbsolutePath,
   workspaceID: optional(WorkspaceID),
