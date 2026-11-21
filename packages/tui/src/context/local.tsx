@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
@@ -56,15 +56,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     function createAgent() {
-      const agents = createMemo(() =>
-        (data.location.agent.list(location.ref) ?? []).filter((agent) => agent.mode !== "subagent" && !agent.hidden),
-      )
-      const visibleAgents = createMemo(() =>
-        (data.location.agent.list(location.ref) ?? []).filter((agent) => !agent.hidden),
-      )
+      const catalog = () => data.location.agent.list(location.ref)
+      const visibleAgents = createMemo(() => (catalog() ?? []).filter((agent) => !agent.hidden))
+      const agents = createMemo(() => visibleAgents().filter((agent) => agent.mode !== "subagent"))
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
         draftBySession: {} as Record<string, { agent?: string } | undefined>,
+      })
+      createEffect(() => {
+        if (catalog() === undefined) return
+        const available = agents()
+        if (available.some((agent) => agent.id === agentStore.current)) return
+        setAgentStore("current", available.at(0)?.id)
       })
       onCleanup(event.on("session.deleted", (evt) => setAgentStore("draftBySession", evt.data.sessionID, undefined)))
       onCleanup(

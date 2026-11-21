@@ -2,6 +2,33 @@ import { expect, test } from "bun:test"
 import { agent, model, renderLocal, session } from "../fixture/local"
 import { json } from "../fixture/tui-client"
 
+test("retains the active fallback across catalog reordering and clears it when no agents remain", async () => {
+  const build = agent("build")
+  const plan = agent("plan")
+  let agents = [build, plan]
+  await using setup = await renderLocal({
+    fetch: (url) => {
+      if (url.pathname === "/api/agent")
+        return json({ location: { directory: url.searchParams.get("location[directory]") }, data: agents })
+    },
+  })
+
+  const refresh = async (next: typeof agents) => {
+    agents = next
+    const catalog = setup.data.location.agent
+    catalog.invalidate(setup.location.ref)
+    await catalog.sync(setup.location.ref)
+  }
+
+  expect(setup.local.agent.current()?.id).toBe("build")
+  await refresh([plan, build])
+  expect(setup.local.agent.current()?.id).toBe("build")
+  await refresh([])
+  expect(setup.local.agent.current()).toBeUndefined()
+  await refresh([plan, build])
+  expect(setup.local.agent.current()?.id).toBe("plan")
+})
+
 test("cycles all recent models in a stable order in both directions", async () => {
   await using setup = await renderLocal({
     models: [model("first"), model("second"), model("third")],
