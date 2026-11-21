@@ -6,6 +6,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Frames } from "@opencode/core/machine/frames"
 import { Identity } from "@opencode/core/machine/identity"
+import { Iroh } from "@opencode/core/machine/iroh"
 import { Join } from "@opencode/core/machine/join"
 import { Link } from "@opencode/core/machine/link"
 import { Machines } from "@opencode/core/machine/machines"
@@ -262,7 +263,13 @@ export const makeMachineLink = Effect.gen(function* () {
   })
 })
 
-/** `machine.*` HTTP routes in the `server.experimental` group. Every route needs the `machines` flag. */
+/**
+ * `machine.*` HTTP routes in the `server.experimental` group. Every route needs the `machines` flag.
+ *
+ * The home's Iroh endpoint is bound the first time it is needed and kept for the routes' scope: when a join string is
+ * made, and at start when the flag is on and there are machines to come back. Until then the binding is not imported.
+ * Without it, logged once, join strings carry only their URLs.
+ */
 export const makeMachine = Effect.gen(function* () {
   const enabled = yield* machinesEnabled
   const machines = yield* Machines.Service
@@ -270,6 +277,25 @@ export const makeMachine = Effect.gen(function* () {
     if (yield* enabled) return
     return yield* new ForbiddenError({ message: "Machines are disabled; enable experimental.machines" })
   })
+  const iroh = yield* Effect.cached(
+    Iroh.listen().pipe(
+      Effect.tapError((error) =>
+        Effect.logWarning("Machines connect over WebSockets only: Iroh is unavailable", error),
+      ),
+      Effect.option,
+      Scope.provide(yield* Effect.scope),
+      Effect.provide(yield* Effect.context<Machines.Service | Identity.Service>()),
+    ),
+  )
+  yield* Effect.forkScoped(
+    Effect.gen(function* () {
+      // The list first: reading the flag starts the configuration's Location, which an idle server has not done.
+      const list = yield* machines.list()
+      if (list.length === 0) return
+      const on = yield* enabled
+      if (on) yield* iroh
+    }),
+  )
 
   return {
     list: Effect.fn("MachineHandler.list")(function* () {
@@ -284,7 +310,8 @@ export const makeMachine = Effect.gen(function* () {
           Effect.fail(new InvalidRequestError({ message: error.message, kind: "invalid_name", field: "name" })),
         ),
       )
-      const join = yield* machines.invite(id, { reach: payload.reach, replace: payload.replace }).pipe(
+      const reach = Option.isSome(yield* iroh) ? [...payload.reach, { type: "iroh" as const }] : payload.reach
+      const join = yield* machines.invite(id, { reach, replace: payload.replace }).pipe(
         Effect.catchTags({
           "Machines.AlreadyPaired": (error) =>
             Effect.fail(new ConflictError({ message: error.message, resource: error.machine })),
