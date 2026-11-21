@@ -179,6 +179,13 @@ debug-assertions = false
 [profile.release]
 debug = "line-tables-only"
 
+# The performance scenarios (`bun run perf`): release code generation, without the line tables and in more units, so
+# compiling the TUI's test binary fits in 4 GB.
+[profile.perf]
+inherits = "release"
+debug = false
+codegen-units = 64
+
 [profile.dist]
 inherits = "release"
 lto = "fat"

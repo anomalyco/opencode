@@ -859,6 +859,7 @@ version = "0.1.0"
 dependencies = [
  "futures-util",
  "indexmap",
+ "libc",
  "log",
  "opencode-api",
  "opencode-local",
@@ -958,6 +959,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "indexmap",
+ "libc",
  "log",
  "opencode-api",
  "opencode-drive",

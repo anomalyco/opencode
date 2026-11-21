@@ -41,6 +41,8 @@ luau = ["opencode-plugin/luau"]
 
 [dev-dependencies]
 bytes.workspace = true
+# The performance scenarios (`tests/all/perf.rs`): the process's CPU time and the thread's instruction counter.
+libc.workspace = true
 opencode-latex.workspace = true
 opencode-mermaid.workspace = true
 opencode-parity.workspace = true

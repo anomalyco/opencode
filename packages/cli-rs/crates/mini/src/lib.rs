@@ -24,6 +24,9 @@ pub mod theme;
 pub mod tools;
 pub mod variants;
 
+#[cfg(test)]
+mod perf;
+
 /// What `opencode mini` runs with (`MiniCommandInput` after the handler resolved it).
 pub struct Input {
     pub client: Client,
