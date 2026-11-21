@@ -74,7 +74,7 @@ OpenCode ayrıca masaüstü uygulaması olarak da mevcuttur. [opencode.ai/downlo
 | Linux                 | `.deb`, `.rpm` veya AppImage       |
 
 ```bash
-# macOS (Homebrew)
+# Linux ve macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 

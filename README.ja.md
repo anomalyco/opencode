@@ -74,7 +74,7 @@ OpenCode はデスクトップアプリとしても利用できます。[opencod
 | Linux                 | `.deb`、`.rpm`、または AppImage    |
 
 ```bash
-# macOS (Homebrew)
+# Linux と macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 

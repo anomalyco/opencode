@@ -74,7 +74,7 @@ OpenCode je dostupan i kao desktop aplikacija. Preuzmi je sa [opencode.ai/downlo
 | Linux                 | `.deb`, `.rpm`, ili AppImage       |
 
 ```bash
-# macOS (Homebrew)
+# Linux i macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 

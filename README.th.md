@@ -74,7 +74,7 @@ OpenCode มีให้ใช้งานเป็นแอปพลิเค�
 | Linux                 | `.deb`, `.rpm`, หรือ AppImage      |
 
 ```bash
-# macOS (Homebrew)
+# Linux และ macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 

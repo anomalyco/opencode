@@ -74,7 +74,7 @@ OpenCode findes også som desktop-app. Download fra [opencode.ai/download](https
 | Linux                 | `.deb`, `.rpm`, eller AppImage     |
 
 ```bash
-# macOS (Homebrew)
+# Linux og macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 
