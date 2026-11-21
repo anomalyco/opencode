@@ -22,6 +22,7 @@ type Param = {
 
 type Spec = {
   readonly description?: string
+  readonly unlisted: boolean
   readonly config: { readonly flags: ReadonlyArray<Param>; readonly arguments: ReadonlyArray<Param> }
   readonly globalFlags: ReadonlyArray<{ readonly flag: Param }>
 }
@@ -94,6 +95,8 @@ function node(input: Node, aliases: ReadonlyArray<string>): unknown {
     name: input.name,
     aliases: [spec.alias, ...aliases].filter((alias) => alias !== undefined),
     description: spec.description ?? "",
+    // Only unlisted commands carry the key, so the rest of the recording stays as it was.
+    ...(spec.unlisted ? { hidden: true } : {}),
     globalFlags: spec.globalFlags.map((global) => walk(global.flag).single.name),
     arguments: spec.config.arguments.map(argument),
     flags: spec.config.flags.map(flag),

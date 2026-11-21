@@ -27,6 +27,7 @@ fn compare_command(path: &str, ts: &Value, spec: &Spec, diffs: &mut Vec<String>)
         "name": spec.name,
         "aliases": spec.alias.into_iter().collect::<Vec<_>>(),
         "description": spec.description,
+        "hidden": spec.hidden,
         // The root adds `--print-logs` separately; the recording includes it with the built-ins.
         "globalFlags": spec.globals.iter().map(|flag| flag.name).filter(|_| path != "opencode").collect::<Vec<_>>(),
         "arguments": spec.arguments().map(argument).collect::<Vec<_>>(),
@@ -35,6 +36,7 @@ fn compare_command(path: &str, ts: &Value, spec: &Spec, diffs: &mut Vec<String>)
     for key in ["name", "aliases", "description", "globalFlags", "arguments", "flags"] {
         compare(&format!("{path} {key}"), &ts[key], &node[key], diffs);
     }
+    compare(&format!("{path} hidden"), &Value::from(ts["hidden"].as_bool().unwrap_or(false)), &node["hidden"], diffs);
     let expected: Vec<&str> =
         ts["commands"].as_array().unwrap().iter().filter_map(|sub| sub["name"].as_str()).collect();
     let actual: Vec<&str> = spec.commands.iter().map(|sub| sub.name).collect();

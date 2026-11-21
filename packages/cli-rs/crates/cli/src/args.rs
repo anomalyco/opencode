@@ -13,6 +13,8 @@ pub struct Spec {
     /// Flags and arguments in declaration order, which is the order Effect parses and reports them in.
     pub params: &'static [Param],
     pub commands: &'static [Spec],
+    /// `Command.unlisted`: still parses, but stays out of its parent's help, completions, typo suggestions and wizard.
+    pub hidden: bool,
 }
 
 pub enum Param {
@@ -157,7 +159,11 @@ impl Kind {
 
 impl Spec {
     const fn new(name: &'static str, description: &'static str) -> Spec {
-        Spec { name, alias: None, description, globals: &[], params: &[], commands: &[] }
+        Spec { name, alias: None, description, globals: &[], params: &[], commands: &[], hidden: false }
+    }
+
+    const fn hidden(self) -> Spec {
+        Spec { hidden: true, ..self }
     }
 
     const fn alias(self, alias: &'static str) -> Spec {
@@ -188,6 +194,11 @@ impl Spec {
             Param::Arg(arg) => Some(arg),
             Param::Flag(_) => None,
         })
+    }
+
+    /// The subcommands its help, completions, typo suggestions and wizard show.
+    pub fn listed(&self) -> impl Iterator<Item = &Spec> {
+        self.commands.iter().filter(|sub| !sub.hidden)
     }
 
     /// The subcommand named `name` or aliased so.
@@ -269,6 +280,12 @@ const CREDENTIAL: Param =
     Param::Arg(optional("credential", "Credential ID or label (opens an account picker when omitted)"));
 /// `Updater.methods`.
 const UPGRADE_METHODS: &[&str] = &["curl", "npm", "pnpm", "bun", "yarn", "vp", "brew", "winget"];
+/// `auth login` and its hidden shortcut `login`.
+const LOGIN: &[Param] = &[
+    Param::Arg(optional("target", "Integration ID, name, or well-known provider URL")),
+    Param::Flag(string("method", "Authentication method ID")),
+    Param::Flag(string("answer", "Provider form answer (key=value; repeat for multiple fields)").count(AT_MOST_100)),
+];
 const MCP_NAME: &str = "Name of the MCP server";
 const KEY: &str = "Service setting or env";
 
@@ -323,13 +340,7 @@ pub static ROOT: Spec = Spec::new("opencode", "OpenCode command line interface")
         ]),
         Spec::new("auth", "manage integrations and credentials").globals(SERVER_FLAGS).commands(&[
             Spec::new("list", "list integrations and credentials").params(&[FORMAT]),
-            Spec::new("login", "connect an integration").params(&[
-                Param::Arg(optional("target", "Integration ID, name, or well-known provider URL")),
-                Param::Flag(string("method", "Authentication method ID")),
-                Param::Flag(
-                    string("answer", "Provider form answer (key=value; repeat for multiple fields)").count(AT_MOST_100),
-                ),
-            ]),
+            Spec::new("login", "connect an integration").params(LOGIN),
             Spec::new("logout", "log out of a saved account").params(&[TARGET, CREDENTIAL]),
             Spec::new("export", "print stored credentials, including secrets, as JSON").params(&[Param::Arg(optional(
                 "target",
@@ -339,6 +350,10 @@ pub static ROOT: Spec = Spec::new("opencode", "OpenCode command line interface")
                 .params(&[Param::Arg(optional("file", "JSON file to import (reads stdin when omitted)"))]),
             Spec::new("switch", "switch the active account for an integration").params(&[TARGET, CREDENTIAL]),
         ]),
+        Spec::new("login", "Connect an integration (alias for auth login)")
+            .hidden()
+            .globals(SERVER_FLAGS)
+            .params(LOGIN),
         Spec::new("mcp", "Manage MCP (Model Context Protocol) servers").commands(&[
             Spec::new("list", "List configured MCP servers and their status").globals(SERVER_FLAGS),
             Spec::new("add", "Add an MCP server to your configuration").params(&[
@@ -957,17 +972,14 @@ fn command(path: &[&str], v: &mut Values) -> Option<Command> {
                 ["list"] => {
                     Some(AuthCommand::List(AuthListArgs { format: OutputFormat::from_choice(&v.text("format")) }))
                 }
-                ["login"] => Some(AuthCommand::Login(AuthLoginArgs {
-                    target: v.string("target"),
-                    method: v.string("method"),
-                    answer: v.list("answer"),
-                })),
+                ["login"] => Some(AuthCommand::Login(login(v))),
                 ["logout"] => Some(AuthCommand::Logout(account(v))),
                 ["export"] => Some(AuthCommand::Export(AuthExportArgs { target: v.string("target") })),
                 ["import"] => Some(AuthCommand::Import(AuthImportArgs { file: v.string("file") })),
                 _ => Some(AuthCommand::Switch(account(v))),
             },
         }),
+        ["login"] => Command::Auth(AuthArgs { command: Some(AuthCommand::Login(login(v))) }),
         ["mcp", rest @ ..] => Command::Mcp(McpArgs {
             command: match rest {
                 [] => None,
@@ -1074,6 +1086,10 @@ fn command(path: &[&str], v: &mut Values) -> Option<Command> {
         ["pair"] => Command::Pair(PairArgs { url: v.string("url"), remote: v.flag("remote"), yes: v.flag("yes") }),
         _ => Command::Serve(ServeArgs),
     })
+}
+
+fn login(values: &mut Values) -> AuthLoginArgs {
+    AuthLoginArgs { target: values.string("target"), method: values.string("method"), answer: values.list("answer") }
 }
 
 fn account(values: &mut Values) -> AuthAccountArgs {

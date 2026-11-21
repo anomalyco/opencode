@@ -173,7 +173,7 @@ pub fn render(path: &[&'static Spec], program: &str, colors: bool) -> String {
     }
 
     let mut usage = parse::command_path(path, program).join(" ");
-    if !spec.commands.is_empty() {
+    if spec.listed().next().is_some() {
         usage += " <subcommand>";
     }
     usage += " [flags]";
@@ -208,10 +208,9 @@ pub fn render(path: &[&'static Spec], program: &str, colors: bool) -> String {
     flag_section("FLAGS", spec.flags().collect());
     flag_section("GLOBAL FLAGS", parse::active_globals(path));
 
-    if !spec.commands.is_empty() {
+    if spec.listed().next().is_some() {
         let rows: Vec<(String, String)> = spec
-            .commands
-            .iter()
+            .listed()
             .map(|sub| {
                 let name = match sub.alias {
                     Some(alias) => format!("{}, {alias}", sub.name),

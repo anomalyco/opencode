@@ -31,7 +31,7 @@ fn every_command() -> Vec<Vec<&'static Spec>> {
 #[test]
 fn help_matches_the_typescript_cli() {
     let paths = every_command();
-    assert_eq!(paths.len(), 48);
+    assert_eq!(paths.len(), 49);
     for path in paths {
         let name = parse::command_path(&path, PROGRAM).join(" ");
         let expected = std::fs::read_to_string(fixtures().join(format!("help/{name}.txt"))).unwrap();
@@ -53,6 +53,24 @@ fn help_flag_selects_the_command() {
     assert_eq!(help(&["-h", "update"]), "opencode upgrade");
     assert_eq!(help(&["run", "--bogus", "-h", "false"]), "opencode run");
     assert_eq!(help(&["--wizard", "--help"]), "opencode");
+}
+
+/// login-alias.test.ts: `login` stays out of the root's help and completions, and helps like `auth login`.
+#[test]
+fn login_is_hidden_but_helps_like_auth_login() {
+    let help = |names: &[&str]| help::render(&parse::find_path(names), PROGRAM, false);
+    let root = help(&[]);
+    assert!(root.contains("\n  auth "), "{root}");
+    assert!(!root.contains("\n  login "), "{root}");
+    let login = help(&["login"]);
+    assert!(login.contains("opencode login [flags] [<target>]"), "{login}");
+    let sections = |help: &str| help[help.find("ARGUMENTS").unwrap()..].to_string();
+    assert_eq!(sections(&login), sections(&help(&["auth", "login"])));
+    for shell in [Shell::Bash, Shell::Zsh, Shell::Fish, Shell::Powershell] {
+        let script = completions::generate(shell, PROGRAM);
+        assert!(script.contains("acp") && !script.contains("alias for auth login"), "{shell:?}");
+    }
+    assert!(!completions::generate(Shell::Bash, PROGRAM).contains("_opencode_login"));
 }
 
 #[test]
