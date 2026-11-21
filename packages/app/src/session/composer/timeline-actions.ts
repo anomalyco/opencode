@@ -1,5 +1,7 @@
 import type { Accessor } from "solid-js"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
+import type { MessageFavorites } from "@/session/favorites"
+import type { ServerConnection } from "@/runtime/server/registry"
 
 type PendingActions = NonNullable<SessionUserActions["pending"]>
 
@@ -14,11 +16,12 @@ export type TimelinePendingActions = Omit<PendingActions, "status"> & {
   status: (sessionID: string, messageID: string) => ReturnType<PendingActions["status"]>
 }
 
-/** A timeline's message actions. A child session's timeline only opens attachments. */
+/** A timeline's message actions. A child session's timeline keeps only attachment and favorites actions. */
 export function createTimelineActions(
   view: TimelineActionsView,
   actions: Required<Pick<SessionUserActions, "revert" | "fork" | "chooseModel" | "openAttachment">> & {
     pending: TimelinePendingActions
+    favorites: { store: MessageFavorites; server: ServerConnection.Key }
   },
 ): SessionUserActions {
   const pending: PendingActions = {
@@ -29,6 +32,19 @@ export function createTimelineActions(
     },
     queue: actions.pending.queue,
     remove: actions.pending.remove,
+  }
+
+  const favorites: NonNullable<SessionUserActions["favorites"]> = {
+    has: (messageID) => {
+      const id = view.sessionID()
+
+      return id ? actions.favorites.store.has(actions.favorites.server, id, messageID) : false
+    },
+    toggle: (input) => {
+      const id = view.sessionID()
+
+      if (id) actions.favorites.store.toggle({ ...input, server: actions.favorites.server, sessionID: id })
+    },
   }
 
   return {
@@ -45,5 +61,6 @@ export function createTimelineActions(
       return view.isChild() ? undefined : actions.chooseModel
     },
     openAttachment: actions.openAttachment,
+    favorites,
   }
 }

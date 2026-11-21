@@ -3,8 +3,8 @@
 // A dialog's chunk that has not loaded by then is reported as a failed request.
 export const SESSION_DIALOG_LOAD_TIMEOUT_MS = 15_000
 
-/** The lazily loaded dialogs: the /fork picker, the /open file palette and the /mcp list. */
-export type SessionDialogKind = "fork" | "jump" | "palette" | "mcp"
+/** The lazily loaded dialogs: favorites, jump, the /fork picker, the /open file palette and the /mcp list. */
+export type SessionDialogKind = "favorites" | "fork" | "jump" | "palette" | "mcp"
 
 /**
  * The session commands stay mounted while tabs switch between sessions, so compactions are keyed by the session they

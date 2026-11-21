@@ -21,6 +21,14 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M2.5 5.5V13.5H13.5V5.5M2.5 5.5H1.5V2.5H14.5V5.5H13.5M2.5 5.5H13.5M6.5 7.5H9.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
   },
+  star: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M8 2L9.854 5.78L14.023 6.386L11.011 9.32L11.722 13.47L8 11.514L4.278 13.47L4.989 9.32L1.977 6.386L6.146 5.78L8 2Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
+  },
+  "star-filled": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M8 2L9.854 5.78L14.023 6.386L11.011 9.32L11.722 13.47L8 11.514L4.278 13.47L4.989 9.32L1.977 6.386L6.146 5.78L8 2Z" fill="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
+  },
   prompt: {
     viewBox: "0 0 20 20",
     body: `<path d="M14.5841 12.0807H17.9193V2.91406H5.6276V6.2474M14.5859 6.2474H2.08594V15.4141H5.0026V17.4974L8.7526 15.4141H14.5859V6.2474Z" stroke="currentColor" stroke-linecap="square"/>`,
