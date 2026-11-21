@@ -32,7 +32,7 @@ export function show(sender: WebContents, tag: string, input: ToastInput) {
   if (posted.size >= MAX_POSTED) {
     const oldest = posted.keys().next().value
 
-    if (oldest) posted.delete(oldest)
+    if (oldest) dismiss(oldest)
   }
 
   posted.set(tag, notification)
