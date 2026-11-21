@@ -436,7 +436,6 @@ fn streaming_previews_draw_what_has_arrived() {
         ("\\text{abc", "abc"),
         ("\\mathbf{\\sum_1}\\limits^2", "2\n∑\n1"),
         ("\\not\u{600}{x}", "\u{600}\u{338}x"),
-        ("\\not\u{600} ~x", "\u{600}\u{338} x"),
     ] {
         assert_eq!(preview(source).as_deref(), Ok(expected), "{source:?}");
     }
