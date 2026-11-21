@@ -121,6 +121,7 @@ export const dict = {
   "command.session.export.description": "Export the full session transcript as JSON",
   "command.session.import": "Import session",
   "command.session.copyID": "Copy Session ID",
+  "command.session.archive": "Archive session",
   "command.session.rename": "Rename session",
   "command.session.delete": "Delete session",
 

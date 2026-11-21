@@ -478,6 +478,24 @@ test("keyboard navigation and numbered shortcuts follow the visible tab order an
   await expectPath(page, sessionHref(c.id))
 })
 
+test("⌘⇧S archives the open session and moves to the next tab", async ({ page }) => {
+  await mockWorkspace(page, { name: "ArchiveShortcut", sessions: [a, b], seed: { tabs: [a.id, b.id] } })
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+
+  const archive = page.waitForRequest(
+    (request) => request.method() === "PATCH" && new URL(request.url()).pathname === `/api/session/${a.id}`,
+  )
+
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+  expect((await archive).postDataJSON()).toMatchObject({ archived: true })
+
+  await expectPath(page, sessionHref(b.id))
+  await expect(page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"])`)).toHaveCount(0)
+  await expect(page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)).toBeVisible()
+})
+
 test("option arrows move to the previous or next tab, and with shift to the next unread one", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Tabs",

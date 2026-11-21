@@ -489,6 +489,14 @@ function flattenTools(node: ToolNode, path: ReadonlyArray<string>, tools: Tools)
   for (const [name, child] of node.children) flattenTools(child, [...path, name], tools)
 }
 
+/** An inventory tool and its registry ID, by registry ID or by the path a program calls it at (`opencode.session.search`). */
+export const find = (inventory: Inventory, name: string) => {
+  const registration = inventory.tools.get(name)
+  if (registration) return { id: name, registration }
+  const entry = Array.from(inventory.tools).find(([, item]) => qualifiedName(item) === name)
+  return entry && { id: entry[0], registration: entry[1] }
+}
+
 export function qualifiedName(registration: Info) {
   const normalized = normalizedName(registration)
   if (registration.options?.namespace === undefined) return normalized

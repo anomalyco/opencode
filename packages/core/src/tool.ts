@@ -3,7 +3,7 @@ export { CallID, Content, Error, FileContent, TextContent } from "@opencode/sche
 export type { Context, Info, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
-import type { CodeMode } from "@opencode/codemode"
+import { toolExpression, type CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
 import { isRecord } from "@opencode/util/record"
 import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
@@ -114,6 +114,11 @@ export interface Snapshot {
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
+  /**
+   * The expression a Code Mode program calls a tool by (`tools.opencode.session.search`), when `name` is the path or
+   * registry ID of one of this snapshot's Code Mode tools.
+   */
+  readonly codeModeExpression?: (name: string) => string | undefined
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Tool") {}
@@ -363,10 +368,18 @@ const layer = Layer.effect(
                   }
                   catalogs.set(key, entry)
                 }
-                return { tool, catalog: entry.value, definition: entry.definition }
+                return { tool, inventory, catalog: entry.value, definition: entry.definition }
               })()
           return {
-            ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog }),
+            ...(codemode === undefined
+              ? {}
+              : {
+                  codeModeCatalog: codemode.catalog,
+                  codeModeExpression: (name: string) => {
+                    const found = CodeModeTool.find(codemode.inventory, name)
+                    return found && toolExpression(CodeModeTool.qualifiedName(found.registration))
+                  },
+                }),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
