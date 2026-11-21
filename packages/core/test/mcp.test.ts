@@ -3543,8 +3543,28 @@ describe("MCP pool", () => {
       expect((yield* status(a.mcp))?.status).toBe("failed")
       expect(probes).toHaveLength(1)
       // On Windows the spawn succeeds through the shell and the missing command shows up only as an exit
-      // during the handshake, which can't be told apart from a server refusing it, so it tries once more.
-      expect(spawns).toHaveLength(process.platform === "win32" ? 1 : 0)
+      // during the handshake, which can't be told apart from a server refusing it, so the Location connects
+      // on its own: see the next test.
+      expect(spawns).toHaveLength(process.platform === "win32" ? 2 : 0)
+    }),
+  )
+
+  live("connects on its own, probe then legacy, when a pooled server exits during the handshake", () =>
+    Effect.gen(function* () {
+      const probes: Array<ChildProcess.Command> = []
+      const spawns: Array<ChildProcess.Command> = []
+      const pool = yield* recordingPool(probes)
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, "-e", "process.exit(1)"],
+        pool: true,
+      })
+      const a = yield* open(config, pool, directories[0], { environment: recordingEnvironmentLayer(spawns) })
+      expect((yield* status(a.mcp))?.status).toBe("failed")
+      expect(probes).toHaveLength(1)
+      // The private connection keeps the configured protocol, so it probes, sees the exit as a legacy server
+      // rejecting the probe would show it, and respawns for the plain initialize handshake.
+      expect(spawns).toHaveLength(2)
     }),
   )
 
