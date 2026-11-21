@@ -274,20 +274,27 @@ export const ProjectSettingsExtensions: Component<{
   })
 
   const globalMcpNames = createMemo(() =>
-    [...new Set((data.location.mcp.server.list() ?? []).map((server) => server.name))].sort(),
+    [...new Set((data.location.mcp.server.list() ?? []).map((server) => server.id))].sort(byMcpTitle),
   )
 
   const projectMcpNames = createMemo(() => {
     const shared = new Set(globalMcpNames())
 
     return (data.location.mcp.server.list({ directory: directorySDK().directory }) ?? [])
-      .map((server) => server.name)
+      .map((server) => server.id)
       .filter((name) => !shared.has(name))
-      .sort()
+      .sort(byMcpTitle)
   })
 
   const mcpServer = (name: string) =>
-    data.location.mcp.server.list({ directory: directorySDK().directory })?.find((server) => server.name === name)
+    data.location.mcp.server.list({ directory: directorySDK().directory })?.find((server) => server.id === name)
+
+  const mcpTitle = (name: string) =>
+    mcpServer(name)?.title ?? data.location.mcp.server.list()?.find((server) => server.id === name)?.title ?? name
+
+  function byMcpTitle(a: string, b: string) {
+    return mcpTitle(a).localeCompare(mcpTitle(b))
+  }
 
   const mcpStatus = (name: string) => mcpServer(name)?.status.status
 
@@ -365,7 +372,7 @@ export const ProjectSettingsExtensions: Component<{
       {(name) => (
         <ExtensionRow
           status={mcpDot(name)}
-          name={name}
+          name={mcpTitle(name)}
           console={sources.managed(name) && sources.links(name)?.manage}
           replaces={sources.mcp(name)?.overridden ? sources.links(name)?.manage : undefined}
         >
@@ -385,7 +392,7 @@ export const ProjectSettingsExtensions: Component<{
                       mcp.dispatch({ type: "toggle.requested", name, enabled, status: untrack(() => mcpStatus(name)) })
                     }
                   >
-                    {name}
+                    {mcpTitle(name)}
                   </Switch>
                 }
               >
@@ -394,7 +401,7 @@ export const ProjectSettingsExtensions: Component<{
                   variant="ghost-muted"
                   disabled={mcpRowView(mcp.state(), name, "needs_auth").busy}
                   aria-busy={mcpRowView(mcp.state(), name, "needs_auth").busy}
-                  aria-label={language.t("dialog.mcp.signIn.open", { name })}
+                  aria-label={language.t("dialog.mcp.signIn.open", { name: mcpTitle(name) })}
                   onClick={() => mcp.dispatch({ type: "toggle.requested", name, enabled: true, status: "needs_auth" })}
                 >
                   {language.t(
@@ -408,7 +415,7 @@ export const ProjectSettingsExtensions: Component<{
               <Button
                 size="small"
                 variant="ghost-muted"
-                aria-label={language.t("settings.extensions.console.connect", { name })}
+                aria-label={language.t("settings.extensions.console.connect", { name: mcpTitle(name) })}
                 onClick={() => platform.openExternal(href())}
               >
                 {language.t("common.connect")}

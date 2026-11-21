@@ -258,7 +258,7 @@ test("syncs MCP status when a connection settles during bootstrap", async () => 
       mcpRequests++
       return json({
         location: { directory, project: { id: "proj_test", directory } },
-        data: [{ name: "context7", status: { status: mcpRequests === 1 ? "pending" : "connected" } }],
+        data: [{ id: "context7", name: "context7", title: "context7", status: { status: mcpRequests === 1 ? "pending" : "connected" } }],
       })
     }
     if (url.pathname === "/api/model")

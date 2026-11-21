@@ -35,7 +35,7 @@ const authenticate = Effect.fn("cli.mcp.auth.run")(function* (name?: string) {
     return
   }
 
-  const server = name ? servers.data.find((item) => item.name === name) : undefined
+  const server = name ? servers.data.find((item) => item.id === name) : undefined
   if (name && !server) return yield* Effect.fail(new Error(`MCP server not found: ${name}`))
   const integrationID = server
     ? server.integrationID
@@ -94,7 +94,7 @@ export function mcpAuthChoices(servers: McpServer[], integrations: IntegrationIn
       return [
         {
           value: integration.id,
-          label: server.name,
+          label: server.title,
           category: "MCP" as const,
           connected: integration.connections.length > 0,
           hint: statusHint(server.status),

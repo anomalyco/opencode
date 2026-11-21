@@ -21615,6 +21615,9 @@
               "type": "string"
             }
           },
+          "title": {
+            "type": "string"
+          },
           "cwd": {
             "type": "string"
           },
@@ -21700,6 +21703,9 @@
             "enum": ["remote"]
           },
           "url": {
+            "type": "string"
+          },
+          "title": {
             "type": "string"
           },
           "headers": {
@@ -21822,8 +21828,16 @@
       "Mcp.Server": {
         "type": "object",
         "properties": {
-          "name": {
+          "id": {
             "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Deprecated: same as `id`. Use `id`. Removed in the next minor."
+          },
+          "title": {
+            "type": "string",
+            "description": "Display name: the configured `title`, else the title the connected server reports, else the server's ID."
           },
           "status": {
             "anyOf": [
@@ -21844,14 +21858,11 @@
               }
             ]
           },
-          "title": {
-            "type": "string"
-          },
           "integrationID": {
             "$ref": "#/components/schemas/Integration.ID"
           }
         },
-        "required": ["name", "status"],
+        "required": ["id", "name", "title", "status"],
         "additionalProperties": false
       },
       "Mcp.Status.Connected": {

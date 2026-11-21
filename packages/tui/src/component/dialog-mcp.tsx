@@ -44,10 +44,10 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   const servers = createMemo(() =>
     pipe(
       data.location.mcp.server.list(current()) ?? [],
-      sortBy((server) => server.name),
+      sortBy((server) => server.title),
     ),
   )
-  const initial = props.initialServer ? servers().find((server) => server.name === props.initialServer) : undefined
+  const initial = props.initialServer ? servers().find((server) => server.id === props.initialServer) : undefined
   const [focused, setFocused] = createSignal<string | undefined>(props.initialServer)
   const [detail, setDetail] = createSignal<McpServer | undefined>(
     props.details && initial?.status.status === "failed" ? initial : undefined,
@@ -64,23 +64,23 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   createEffect(() => {
     if (focused()) return
     const first = servers()[0]
-    if (first) setFocused(first.name)
+    if (first) setFocused(first.id)
   })
 
   const options = createMemo(() => {
     const loadingMcp = loading()
     return servers().map((server) => {
-      const pending = loadingMcp.has(server.name) || server.status.status === "pending"
+      const pending = loadingMcp.has(server.id) || server.status.status === "pending"
       return {
-        value: server.name,
-        title: server.name,
+        value: server.id,
+        title: server.title,
         footer: <Status status={server.status} loading={pending} />,
         footerColor: pending ? theme.text.muted : statusColor(server.status),
       }
     })
   })
 
-  const focusedServer = createMemo(() => servers().find((server) => server.name === focused()))
+  const focusedServer = createMemo(() => servers().find((server) => server.id === focused()))
 
   const toggleTitle = createMemo(() => {
     const status = focusedServer()?.status.status
@@ -98,14 +98,14 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   })
 
   const select = (name: string | undefined) => {
-    const server = servers().find((entry) => entry.name === name)
+    const server = servers().find((entry) => entry.id === name)
     if (!server) return
     if (server.status.status === "needs_auth" && server.integrationID) {
       dialog.replace(() => (
         <DialogIntegration
           integrationID={server.integrationID}
           autoConnect
-          onConnected={() => dialog.replace(() => <DialogMcp initialServer={server.name} />)}
+          onConnected={() => dialog.replace(() => <DialogMcp initialServer={server.id} />)}
         />
       ))
       return
@@ -118,7 +118,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   // The mcp.status.changed event refreshes the list, so no manual sync is needed.
   const toggle = (name: string) => {
     if (loading().has(name)) return
-    const server = servers().find((entry) => entry.name === name)
+    const server = servers().find((entry) => entry.id === name)
     if (!server || server.status.status === "pending") return
     if (server.status.status === "needs_auth" && server.integrationID) {
       select(name)
@@ -167,9 +167,9 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
       >
         {(server) => (
           <DialogErrorDetails
-            title={`MCP server: ${server().name}`}
+            title={`MCP server: ${server().title}`}
             error={statusError(server().status) ?? "Unknown MCP connection error"}
-            context={`Status: ${server().status.status}\nConfiguration: mcp.servers.${server().name}${
+            context={`Status: ${server().status.status}\nConfiguration: mcp.servers.${server().id}${
               server().integrationID ? `\nIntegration: ${server().integrationID}` : ""
             }`}
             onBack={() => {
