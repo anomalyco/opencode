@@ -538,7 +538,8 @@ const layer = Layer.effect(
         )
       const [tracked, untracked] = yield* Effect.all(
         [
-          list(["diff-files", "--name-only", "-z", "--", literalPathspec(scope)]),
+          // A gitlink records only the embedded repository's HEAD, so skip its work tree status, which can fail.
+          list(["diff-files", "--name-only", "--ignore-submodules=dirty", "-z", "--", literalPathspec(scope)]),
           list([
             "ls-files",
             "--others",
