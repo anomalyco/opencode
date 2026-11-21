@@ -1,5 +1,7 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
+import fs from "fs"
 import os from "os"
+import path from "path"
 import { Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -15,7 +17,8 @@ import { readInitial, readUpdate } from "../lib/instructions"
 const directory = AbsolutePath.make(FSUtil.resolve("/repo/packages/core"))
 const projectDirectory = AbsolutePath.make(FSUtil.resolve("/repo"))
 const timestamp = Date.parse("2026-06-03T12:00:00.000Z")
-const temporary = os.tmpdir()
+// Its own directory: building the node starts the tmp retention sweep there.
+const temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "opencode-builtins-")))
 const localDate = (time: number) => new Date(time).toDateString()
 const locationLayer = Layer.succeed(
   Location.Service,
@@ -32,6 +35,8 @@ const it = testEffect(
     Global.node.replace(Global.layerWith({ config: temporary, tmp: temporary })),
   ]),
 )
+
+afterAll(() => fs.rmSync(temporary, { recursive: true, force: true }))
 
 describe("InstructionBuiltIns", () => {
   it.effect("loads location-scoped environment and host-local date instructions", () =>
@@ -50,7 +55,7 @@ describe("InstructionBuiltIns", () => {
           `  Workspace root folder: ${projectDirectory}`,
           "  Is directory a git repo: yes",
           `  Platform: ${process.platform}`,
-          `  Prefer ${temporary} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
+          `  Prefer ${temporary} over generic system temporary directories such as /tmp; it is pre-created and approved for external access. Files there untouched for 7 days are deleted automatically.`,
           "</env>",
         ].join("\n"),
       )
