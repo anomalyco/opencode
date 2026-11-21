@@ -2,6 +2,7 @@ import { $ } from "bun"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { eq } from "drizzle-orm"
 import { Effect } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
@@ -18,6 +19,7 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionMessageTable } from "@opencode/core/session/sql"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Money } from "@opencode/schema/money"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -38,6 +40,74 @@ const it = testEffect(
     ],
   ),
 )
+
+const setup = Effect.gen(function* () {
+  const tmp = yield* tmpdirScoped()
+  const directory = tmp.path
+  yield* Effect.promise(async () => {
+    await Bun.write(path.join(directory, "file.txt"), "original")
+    await $`git init -q`.cwd(directory).quiet()
+    await $`git -c core.fsmonitor=false add .`.cwd(directory).quiet()
+  })
+  const sessions = yield* Session.Service
+  const database = yield* Database.Service
+  const bus = yield* Bus.Service
+  const root = yield* sessions.create({ location: { directory: AbsolutePath.make(directory) } })
+  const prompt = Effect.fnUntraced(function* (sessionID: Session.ID, text: string) {
+    const result = yield* sessions.prompt({ sessionID, text, resume: false })
+    yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
+    return result.id
+  })
+  const step = Effect.fnUntraced(function* (
+    sessionID: Session.ID,
+    action: (assistantMessageID: SessionMessage.ID) => Effect.Effect<unknown>,
+  ) {
+    const snapshots = yield* Snapshot.Service
+    const assistantMessageID = SessionMessage.ID.create()
+    const start = (yield* snapshots.capture())!
+    yield* bus.publish(SessionEvent.Step.Started, {
+      sessionID,
+      assistantMessageID,
+      agent: Agent.defaultID,
+      model: { id: Model.ID.make("test-model"), providerID: Provider.ID.make("test-provider") },
+      snapshot: start,
+      started: Date.now(),
+    })
+    yield* action(assistantMessageID)
+    const end = (yield* snapshots.capture())!
+    yield* bus.publish(SessionEvent.Step.Ended, {
+      sessionID,
+      assistantMessageID,
+      finish: "stop",
+      cost: Money.USD.zero,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      snapshot: end,
+      files: yield* snapshots.files({ from: start, to: end }),
+    })
+  })
+  const delegate = (parent: Session.ID, child: Session.ID, promptID?: SessionMessage.ID) =>
+    step(parent, (assistantMessageID) =>
+      Effect.gen(function* () {
+        const call = { sessionID: parent, assistantMessageID, id: "call" }
+        yield* bus.publish(SessionEvent.Tool.Input.Started, { ...call, name: "subagent" })
+        yield* bus.publish(SessionEvent.Tool.Called, {
+          ...call,
+          input: promptID ? { sessionID: child } : {},
+          executed: false,
+        })
+        yield* bus.publish(SessionEvent.Tool.Success, {
+          ...call,
+          executed: false,
+          content: [{ type: "text", text: "started" }],
+          metadata: { sessionID: child, ...(promptID ? { promptMessageID: promptID } : {}) },
+        })
+      }),
+    )
+  const write = (file: string, text: string) => Effect.promise(() => Bun.write(path.join(directory, file), text))
+  const read = (file: string) => Effect.promise(() => Bun.file(path.join(directory, file)).text())
+  const exists = (file: string) => Effect.promise(() => Bun.file(path.join(directory, file)).exists())
+  return { root, sessions, database, bus, directory, prompt, step, delegate, write, read, exists }
+})
 
 describe("Session.revert files", () => {
   it.live(
@@ -116,6 +186,172 @@ describe("Session.revert files", () => {
         }).pipe(Effect.provide(LocationServiceMap.Service.get(created.location)))
       }),
     // Real Location/plugin startup and Git snapshots can exceed five seconds under CI load.
+    { timeout: 15_000 },
+  )
+
+  it.live(
+    "reverts a background child edit and restores it on clear",
+    () =>
+      Effect.gen(function* () {
+        const f = yield* setup
+        yield* Effect.gen(function* () {
+          yield* (yield* Plugin.Service).awaitActivation
+          const boundary = yield* f.prompt(f.root.id, "Delegate an edit")
+          const child = yield* f.sessions.create({ parentID: f.root.id })
+          yield* f.delegate(f.root.id, child.id)
+          yield* f.prompt(child.id, "Edit file.txt")
+          yield* f.step(child.id, () => f.write("file.txt", "child"))
+
+          const result = yield* f.sessions.revert.stage({ sessionID: f.root.id, messageID: boundary })
+          expect(result.files?.map((file) => file.file)).toEqual(["file.txt"])
+          expect(yield* f.read("file.txt")).toBe("original")
+          yield* f.sessions.revert.clear(f.root.id)
+          expect(yield* f.read("file.txt")).toBe("child")
+        }).pipe(Effect.provide(LocationServiceMap.Service.get(f.root.location)))
+      }),
+    { timeout: 15_000 },
+  )
+
+  it.live(
+    "keeps a direct child prompt between two delegated prompts",
+    () =>
+      Effect.gen(function* () {
+        const f = yield* setup
+        yield* Effect.gen(function* () {
+          yield* (yield* Plugin.Service).awaitActivation
+          const boundary = yield* f.prompt(f.root.id, "First delegation")
+          const child = yield* f.sessions.create({ parentID: f.root.id })
+          yield* f.delegate(f.root.id, child.id)
+          yield* f.prompt(child.id, "First task")
+          yield* f.step(child.id, () => f.write("first.txt", "first"))
+
+          yield* f.prompt(child.id, "Direct child task")
+          yield* f.step(child.id, () => f.write("direct.txt", "keep"))
+
+          yield* f.prompt(f.root.id, "Second delegation")
+          const next = yield* f.sessions.prompt({ sessionID: child.id, text: "Second task", resume: false })
+          yield* f.delegate(f.root.id, child.id, next.id)
+          yield* SessionInbox.promote(f.database.db, f.bus, child.id, "steer")
+          yield* f.step(child.id, () => f.write("second.txt", "second"))
+
+          yield* f.sessions.revert.stage({ sessionID: f.root.id, messageID: boundary })
+          expect(yield* f.exists("first.txt")).toBe(false)
+          expect(yield* f.exists("second.txt")).toBe(false)
+          expect(yield* f.read("direct.txt")).toBe("keep")
+        }).pipe(Effect.provide(LocationServiceMap.Service.get(f.root.location)))
+      }),
+    { timeout: 15_000 },
+  )
+
+  it.live(
+    "preserves a sibling edit between delegated steps on the same path",
+    () =>
+      Effect.gen(function* () {
+        const f = yield* setup
+        yield* Effect.gen(function* () {
+          yield* (yield* Plugin.Service).awaitActivation
+          yield* f.prompt(f.root.id, "Earlier sibling task")
+          const sibling = yield* f.sessions.create({ parentID: f.root.id })
+          yield* f.delegate(f.root.id, sibling.id)
+          yield* f.prompt(sibling.id, "Write first")
+          yield* f.step(sibling.id, () => f.write("file.txt", "sibling first"))
+
+          const boundary = yield* f.prompt(f.root.id, "Target child task")
+          const child = yield* f.sessions.create({ parentID: f.root.id })
+          yield* f.delegate(f.root.id, child.id)
+          yield* f.prompt(child.id, "Write twice")
+          yield* f.step(child.id, () => f.write("file.txt", "child first"))
+          yield* f.step(sibling.id, () => f.write("file.txt", "sibling middle"))
+          yield* f.step(child.id, () => f.write("file.txt", "child second"))
+
+          yield* f.sessions.revert.stage({ sessionID: f.root.id, messageID: boundary })
+          expect(yield* f.read("file.txt")).toBe("sibling middle")
+        }).pipe(Effect.provide(LocationServiceMap.Service.get(f.root.location)))
+      }),
+    { timeout: 15_000 },
+  )
+
+  it.live(
+    "reverts a legacy follow-up delivered after its tool call",
+    () =>
+      Effect.gen(function* () {
+        const f = yield* setup
+        yield* Effect.gen(function* () {
+          yield* (yield* Plugin.Service).awaitActivation
+          yield* f.prompt(f.root.id, "First delegation")
+          const child = yield* f.sessions.create({ parentID: f.root.id })
+          yield* f.delegate(f.root.id, child.id)
+          yield* f.prompt(child.id, "Earlier task")
+          yield* f.step(child.id, () => f.write("file.txt", "earlier"))
+
+          const boundary = yield* f.prompt(f.root.id, "Legacy follow-up")
+          let queued: SessionMessage.ID | undefined
+          yield* f.step(f.root.id, (assistantMessageID) =>
+            Effect.gen(function* () {
+              const call = { sessionID: f.root.id, assistantMessageID, id: "legacy-call" }
+              yield* f.bus.publish(SessionEvent.Tool.Input.Started, { ...call, name: "subagent" })
+              yield* f.bus.publish(SessionEvent.Tool.Called, {
+                ...call,
+                input: { sessionID: child.id, prompt: "Later task" },
+                executed: false,
+              })
+              queued = (yield* f.sessions
+                .prompt({ sessionID: child.id, text: "Later task", resume: false })
+                .pipe(Effect.orDie)).id
+              yield* f.bus.publish(SessionEvent.Tool.Success, {
+                ...call,
+                executed: false,
+                content: [{ type: "text", text: "queued" }],
+                metadata: { sessionID: child.id },
+              })
+            }),
+          )
+          const afterTool = Date.now()
+          yield* SessionInbox.promote(f.database.db, f.bus, child.id, "steer")
+          if (!queued) throw new Error("Follow-up was not queued")
+          yield* f.database.db
+            .update(SessionMessageTable)
+            .set({ time_created: afterTool + 1000 })
+            .where(eq(SessionMessageTable.id, queued))
+            .run()
+            .pipe(Effect.orDie)
+          const delivered = yield* f.database.db
+            .select({ created: SessionMessageTable.time_created })
+            .from(SessionMessageTable)
+            .where(eq(SessionMessageTable.id, queued))
+            .get()
+            .pipe(Effect.orDie)
+          expect(delivered?.created).toBeGreaterThan(afterTool)
+          yield* f.step(child.id, () => f.write("file.txt", "later"))
+
+          yield* f.sessions.revert.stage({ sessionID: f.root.id, messageID: boundary })
+          expect(yield* f.read("file.txt")).toBe("earlier")
+        }).pipe(Effect.provide(LocationServiceMap.Service.get(f.root.location)))
+      }),
+    { timeout: 15_000 },
+  )
+
+  it.live(
+    "reverts a nested delegated child edit",
+    () =>
+      Effect.gen(function* () {
+        const f = yield* setup
+        yield* Effect.gen(function* () {
+          yield* (yield* Plugin.Service).awaitActivation
+          const boundary = yield* f.prompt(f.root.id, "Delegate nested work")
+          const child = yield* f.sessions.create({ parentID: f.root.id })
+          yield* f.delegate(f.root.id, child.id)
+          yield* f.prompt(child.id, "Ask a grandchild")
+          const grandchild = yield* f.sessions.create({ parentID: child.id })
+          yield* f.delegate(child.id, grandchild.id)
+          yield* f.prompt(grandchild.id, "Write nested.txt")
+          yield* f.step(grandchild.id, () => f.write("nested.txt", "grandchild"))
+
+          yield* f.sessions.revert.stage({ sessionID: f.root.id, messageID: boundary })
+          expect(yield* f.exists("nested.txt")).toBe(false)
+          expect(yield* f.read("file.txt")).toBe("original")
+        }).pipe(Effect.provide(LocationServiceMap.Service.get(f.root.location)))
+      }),
     { timeout: 15_000 },
   )
 })
