@@ -12,7 +12,11 @@ function init(data) {
 }
 
 function view(state, data) {
-  const widths = measure(data)
+  // Once per view: every cell formatted, and per column its width and whether it's numeric. A row's line must not
+  // rescan the rows (that made views O(rows²)).
+  const cells = data.rows.map((row) => data.columns.map((_, index) => text(data, index, row.cells[index])))
+  const widths = measure(data, cells)
+  const numbers = data.columns.map((_, index) => numeric(data, index))
   const trend = data.rows.some((row) => row.trend)
   // Rows are keyed by their index in `data.rows`, so sorting keeps each row's ids.
   const wrap = (index, children) =>
@@ -44,10 +48,9 @@ function view(state, data) {
     wrap(null, [
       ui.text(
         line(
-          data,
           widths,
+          numbers,
           data.columns.map((column) => column.label),
-          true,
         ),
         { style: "code", tone: "muted" },
       ),
@@ -56,7 +59,7 @@ function view(state, data) {
     !data.choose && ui.divider(),
     order(state, data).map((index) =>
       wrap(index, [
-        ui.text(line(data, widths, data.rows[index].cells, false), { style: "code" }),
+        ui.text(line(widths, numbers, cells[index]), { style: "code" }),
         trend &&
           data.rows[index].trend &&
           ui.canvas({
@@ -133,21 +136,21 @@ function numeric(data, column) {
 }
 
 // Character widths of each column: the longest of the label and the formatted cells, capped at MAX_WIDTH.
-function measure(data) {
+function measure(data, cells) {
   return data.columns.map((column, index) =>
     Math.min(
       MAX_WIDTH,
-      Math.max(column.label.length, ...data.rows.map((row) => text(data, index, row.cells[index]).length)),
+      cells.reduce((widest, row) => Math.max(widest, row[index].length), column.label.length),
     ),
   )
 }
 
-function line(data, widths, cells, header) {
-  return data.columns
-    .map((_, index) => {
-      const value = header ? cells[index] : text(data, index, cells[index])
+// One line of already formatted cells, cut and padded to the column widths.
+function line(widths, numbers, cells) {
+  return cells
+    .map((value, index) => {
       const cell = value.length > widths[index] ? value.slice(0, widths[index] - 1) + "…" : value
-      return numeric(data, index) ? cell.padStart(widths[index]) : cell.padEnd(widths[index])
+      return numbers[index] ? cell.padStart(widths[index]) : cell.padEnd(widths[index])
     })
     .join("  ")
 }

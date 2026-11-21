@@ -8,6 +8,7 @@ import {
   MAX_COMMANDS,
   type Node,
   program,
+  step,
   StepError,
   validateData,
   WidgetSession,
@@ -471,4 +472,35 @@ test("table: aligned monospace rows, sort, sparklines, select a row, choose", as
     index: 2,
     row: { Endpoint: "GET /search", Requests: 120900, p95: 210, Errors: 0.3 },
   })
+})
+
+test("table: a large table builds in linear time and lines up exactly", async () => {
+  // Past the 50-row schema cap on purpose: clients may run old or hand-written data, and a view that rescans every row
+  // per row (as `line` once did) blows the step and slice budgets there.
+  const rows = 300
+  const data = {
+    title: "Big",
+    columns: [{ label: "Name" }, { label: "Count" }],
+    rows: Array.from({ length: rows }, (_, index) => ({
+      cells: ["item " + index, index * 7],
+      trend: [1, 2, index % 4],
+    })),
+  }
+  const source = program(template("table").source)
+  const times: number[] = []
+  let view: Node | undefined
+  for (let run = 0; run < 3; run++) {
+    const started = performance.now()
+    view = (await step(source, { phase: "init", data }, { timeoutMs: 5000 })).view
+    times.push(performance.now() - started)
+  }
+  // About 50 ms on a laptop; the quadratic version took over twice that, and 800 rows hit the 250 ms step timeout.
+  expect(times.toSorted((a, b) => a - b)[1]).toBeLessThan(200)
+  const lines = texts(view!).filter((text) => text.startsWith("item "))
+  expect(lines).toHaveLength(rows)
+  // Names pad right and counts left, to the widest cell of each column.
+  const count = (index: number) => String(index * 7).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+  expect(lines.slice(0, 2)).toEqual(["item 0    " + "0".padStart(5), "item 1    " + "7".padStart(5)])
+  expect(lines.at(-1)).toBe("item 299  " + count(299).padStart(5))
+  expect(canvases(view!)).toHaveLength(rows)
 })
