@@ -3543,8 +3543,9 @@ describe("MCP pool", () => {
       expect((yield* status(a.mcp))?.status).toBe("failed")
       expect(probes).toHaveLength(1)
       // On Windows the spawn succeeds through the shell and the missing command shows up only as an exit
-      // during the handshake, which can't be told apart from a server refusing it, so it tries once more.
-      expect(spawns).toHaveLength(process.platform === "win32" ? 1 : 0)
+      // during the handshake, which can't be told apart from a server refusing it, so it connects on its own.
+      // That exit also looks like a legacy server quitting on the version probe, so it respawns once for initialize.
+      expect(spawns).toHaveLength(process.platform === "win32" ? 2 : 0)
     }),
   )
 
