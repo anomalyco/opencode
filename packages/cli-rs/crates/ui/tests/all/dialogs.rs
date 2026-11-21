@@ -50,6 +50,26 @@ fn alert_matches_typescript() {
 }
 
 #[test]
+fn alert_confirms_on_enter_and_closes() {
+    let kit = kit(60, 12);
+    let confirmed = Rc::new(RefCell::new(0));
+    let count = confirmed.clone();
+    alert::show(
+        &kit.dialogs,
+        alert::AlertProps {
+            title: "Heads up".into(),
+            message: "Done.".into(),
+            on_confirm: Some(Rc::new(move || *count.borrow_mut() += 1)),
+        },
+    );
+    kit.app.press("return");
+    assert_eq!(*confirmed.borrow(), 1);
+    assert!(!kit.dialogs.is_open());
+    assert_eq!(kit.keymap.mode(), "base");
+    assert!(kit.app.render().text().trim().is_empty());
+}
+
+#[test]
 fn a_confirm_can_dismiss_on_escape_and_start_on_cancel() {
     for (dismiss, cancel_first, key, chosen) in [
         (true, false, "escape", &[][..]),
@@ -139,6 +159,55 @@ fn confirm_keys_toggle_the_active_button() {
         kit.app.press("return");
         assert_eq!(*log.borrow(), [chosen], "{keys:?}");
     }
+}
+
+#[test]
+fn confirm_cancels_on_escape() {
+    let kit = kit(70, 16);
+    let log = Rc::default();
+    open_confirm(&kit, &log);
+    kit.app.press("escape");
+    assert_eq!(*log.borrow(), ["cancel"]);
+    assert!(!kit.dialogs.is_open());
+}
+
+#[test]
+fn escape_closes_the_dialog_and_calls_its_close_handler() {
+    let kit = kit(70, 16);
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let closed = log.clone();
+    kit.dialogs.replace(
+        |cx| alert::alert(cx, alert::AlertProps { title: "A".into(), message: "B".into(), on_confirm: None }),
+        Some(Box::new(move || closed.borrow_mut().push("closed"))),
+        Default::default(),
+    );
+    kit.app.press("escape");
+    assert_eq!(*log.borrow(), ["closed"]);
+    assert!(!kit.dialogs.is_open());
+    assert_eq!(kit.keymap.mode(), "base");
+}
+
+#[test]
+fn replace_closes_the_previous_dialog_and_restores_focus_after_the_last() {
+    let kit = kit(70, 16);
+    let input = Input::new(&kit.app);
+    kit.app.root().add(&input);
+    input.focus();
+    let log = Rc::new(RefCell::new(Vec::new()));
+    for name in ["first", "second"] {
+        let closed = log.clone();
+        kit.dialogs.replace(
+            |cx| alert::alert(cx, alert::AlertProps { title: name.into(), message: String::new(), on_confirm: None }),
+            Some(Box::new(move || closed.borrow_mut().push(name))),
+            Default::default(),
+        );
+        assert!(!input.is_focused());
+    }
+    assert_eq!(*log.borrow(), ["first"]);
+    assert_eq!(kit.dialogs.len(), 1);
+    kit.dialogs.clear();
+    assert_eq!(*log.borrow(), ["first", "second"]);
+    assert!(input.is_focused());
 }
 
 #[test]
@@ -635,6 +704,19 @@ fn open_select(kit: &Kit, options: Vec<SelectOption<usize>>) -> select::Select<u
 
 fn numbered(count: usize, title: impl Fn(usize) -> String) -> Vec<SelectOption<usize>> {
     (0..count).map(|i| SelectOption::new(title(i), i)).collect()
+}
+
+#[test]
+fn a_select_opens_and_resizes_in_a_twelve_row_terminal() {
+    let kit = kit(72, 12);
+    open_models(&kit);
+    kit.app.press("down");
+    kit.app.render();
+    let kit = self::kit(72, 30);
+    open_models(&kit);
+    kit.app.resize(72, 12);
+    kit.app.press("down");
+    kit.app.render();
 }
 
 #[test]
