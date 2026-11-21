@@ -4,7 +4,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { expect, spyOn, test } from "bun:test"
-import { Effect, FileSystem, Layer, PlatformError, Stream } from "effect"
+import { Duration, Effect, FileSystem, Layer, PlatformError, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
@@ -51,6 +51,7 @@ function fixture(
         JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
       )
     const requests: string[] = []
+    const timeouts: number[] = []
     // The updater uses global fetch; scope this replacement to each install test.
     yield* Effect.acquireRelease(
       Effect.sync(() =>
@@ -116,12 +117,13 @@ function fixture(
         AppProcess.Service,
         AppProcess.Service.of({
           ...spawner,
-          run: (command) =>
+          run: (command, options) =>
             Effect.suspend(() => {
               if (command._tag !== "StandardCommand") return Effect.die("Unexpected piped install command")
               const args = command.args.map(String)
               const lookup = command.command === "git" && args[0] === "--exec-path"
               if (!lookup) commands.push([command.command, ...args])
+              if (!lookup && options?.timeout) timeouts.push(Duration.toMillis(options.timeout))
               if (!lookup) paths.push(command.options.env?.PATH?.toString())
               const result = lookup
                 ? { stdout: Buffer.from(`${path.join(git, "mingw64", "libexec", "git-core")}\n`) }
@@ -148,7 +150,7 @@ function fixture(
     const prefix = yield* fs.realPath(root)
     // Windows keeps the npm on PATH and its default prefix.
     const prefixArgs = process.platform === "win32" ? [] : ["--prefix", prefix]
-    return { updater, commands, paths, requests, global, fs, executable, bash, prefix, prefixArgs }
+    return { updater, commands, paths, requests, timeouts, global, fs, executable, bash, prefix, prefixArgs }
   })
 }
 
@@ -386,6 +388,7 @@ it.live("bun ignores install cache cleanup failures", () =>
         ...(failure === "download" ? [] : [[test.bash, installer, "--version", "2.3.4-beta.1", "--no-modify-path"]]),
       ])
       expect(yield* test.fs.readDirectory(test.global.cache)).toEqual([])
+      expect(test.timeouts).toEqual(failure === "download" ? [300_000] : [300_000, 600_000])
       expect(result._tag).toBe(failure === "success" ? "None" : "Some")
       if (result._tag === "Some") expect(result.value.message).toBe(`${failure} failed`)
     }),
