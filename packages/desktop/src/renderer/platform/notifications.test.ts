@@ -147,7 +147,7 @@ describe("desktop notifications", () => {
     expect(created).toEqual([])
   })
 
-  test("on windows a tagged notification is a toast main posts, with its detail line; a click runs the callback and an answer takes it back", async () => {
+  test("on windows a tagged notification is a toast main posts, with its detail line; a click runs the callback and an answer takes it back, also one another window posted", async () => {
     const desktop = createDesktopNotify(api, "windows")
     const tag = "server\0request:per_1"
 
@@ -158,13 +158,14 @@ describe("desktop notifications", () => {
     activations.forEach((activate) => activate({ tag }))
     await desktop.notify("Permission required", "Fix login", undefined, { tag, detail: "bash: git status" })
     desktop.dismissNotification?.(tag)
-    desktop.dismissNotification?.(tag)
+    desktop.dismissNotification?.("server\0session:ses_9")
 
     expect(events).toEqual([
       "api.showToast:server\0request:per_1:Permission required:Fix login\nbash: git push:",
       "session.select",
       "api.showToast:server\0request:per_1:Permission required:Fix login\nbash: git status:",
       "api.dismissToast:server\0request:per_1",
+      "api.dismissToast:server\0session:ses_9",
     ])
     expect(created).toEqual([])
   })

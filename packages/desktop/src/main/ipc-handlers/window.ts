@@ -88,7 +88,7 @@ export const windowHandlers = WindowRpcs.toLayer(
         }),
       WindowShowToast: ({ tag, ...input }, context) =>
         Effect.sync(() => Toasts.show(sender(handoff, context), tag, input)),
-      WindowDismissToast: ({ tag }, context) => Effect.sync(() => Toasts.dismiss(sender(handoff, context), tag)),
+      WindowDismissToast: ({ tag }) => Effect.sync(() => Toasts.dismiss(tag)),
     })
   }),
 )
