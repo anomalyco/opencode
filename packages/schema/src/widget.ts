@@ -84,6 +84,30 @@ export const Response = Schema.Union([Submit, Dismiss]).annotate({ identifier: "
 export type Response = Submit | Dismiss
 
 /**
+ * A program error a client hit running the widget (widgets.md, Failures): the template's own code failed or broke a
+ * contract. `phase` is open: clients may report others.
+ */
+export interface RuntimeError extends Schema.Schema.Type<typeof RuntimeError> {}
+export const RuntimeError = Schema.Struct({
+  phase: Schema.String.annotate({
+    description: '"init", "event" (a handler or hook), "view", "draw", "main", "shader", "fetch" or another',
+  }),
+  message: Schema.String,
+  /** 1-based, in the template's source. */
+  line: optional(Schema.Number),
+  column: optional(Schema.Number),
+}).annotate({ identifier: "Widget.RuntimeError" })
+
+/** A widget's recorded program error. `sent`: the agent has been told (automatically, or through `ask`). */
+export interface Failure extends Schema.Schema.Type<typeof Failure> {}
+export const Failure = Schema.Struct({
+  ...RuntimeError.fields,
+  /** The client that reported it: `tui`, `rune`, `ios`, `android`, `web`. */
+  client: Schema.String,
+  sent: Schema.Boolean,
+}).annotate({ identifier: "Widget.Failure" })
+
+/**
  * One widget: a `widget` tool call in a Session's history plus its answer. `messageID` is the assistant message that
  * holds the call; a call ID is unique only within its message.
  */
@@ -101,23 +125,13 @@ export const State = Schema.Struct({
   wait: Schema.Boolean,
   /** The template's capabilities, so clients can show what the widget is granted. */
   capabilities: optional(Capabilities),
+  /** The program error its last report recorded; the widget keeps its status. */
+  failure: optional(Failure),
   /** The widget that replaced this one, when `status` is `superseded`. */
   supersededBy: optional(Schema.Struct({ messageID: Schema.String, callID: Schema.String })),
   /** Epoch milliseconds. */
   time: Schema.Struct({ created: Schema.Number, responded: optional(Schema.Number) }),
 }).annotate({ identifier: "Widget.State" })
-
-/** Where a client's run of a widget failed. `phase` is open: clients may report others. */
-export interface RuntimeError extends Schema.Schema.Type<typeof RuntimeError> {}
-export const RuntimeError = Schema.Struct({
-  phase: Schema.String.annotate({
-    description: '"init", "event" (a handler or hook), "view", "draw", "main", "shader", "fetch" or another',
-  }),
-  message: Schema.String,
-  /** 1-based, in the template's source. */
-  line: optional(Schema.Number),
-  column: optional(Schema.Number),
-}).annotate({ identifier: "Widget.RuntimeError" })
 
 const Call = { sessionID: Schema.String, messageID: Schema.String, callID: Schema.String }
 const standard = Schema.toStandardSchemaV1
@@ -155,11 +169,15 @@ export const Definition = Rpc.define({
       errors: { not_found: NotFound, closed: Closed, rate_limited: NotFound },
     },
     /**
-     * A runtime error a client hit running the widget (the server never runs templates). Delivered once to the agent:
-     * identical reports are dropped, and at most one per widget every 10 seconds. A closed widget ignores reports.
+     * A program error a client hit running the widget (never a client error; widgets.md, Failures). It is recorded as
+     * the widget's `failure`, and sent to the agent automatically only when the widget's Session created the template
+     * version (`failure.sent`); `ask: true` sends it once otherwise (the user's "Ask agent to fix it"). Automatic sends
+     * drop repeats and go out at most once per widget every 10 seconds. A closed widget ignores reports.
      */
     report: {
-      input: standard(Schema.Struct({ ...Call, error: RuntimeError, client: Schema.String })),
+      input: standard(
+        Schema.Struct({ ...Call, error: RuntimeError, client: Schema.String, ask: optional(Schema.Boolean) }),
+      ),
       output: standard(State),
       errors: { not_found: NotFound },
     },

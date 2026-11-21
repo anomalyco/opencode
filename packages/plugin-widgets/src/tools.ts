@@ -14,13 +14,14 @@ Built-ins (schemas via widget_template "list"): suggestions, form, confirm, char
 - \`data\` is a JSON object matching the template's schema; fix errors and call again. Never invent image URLs.
 - To change a widget you showed (a fix, new data, the next step), post the new one with \`replaces\` set to the old call ID from its result: the old one closes as superseded.
 - By default the call returns at once: end your turn and don't repeat the question in text. With \`wait: true\` it blocks and returns the answer (a dismissal is an error); only for short decisions you need this turn.
-- The server doesn't run templates: a client's runtime error arrives as "Widget ... failed on <client>: ..."; fix the template and show it again.`
+- The server doesn't run templates: a program error arrives as "Widget ... failed on <client>: ..." (for templates saved in this session, or when the user asks you to fix it); fix the template and show it again.`
 
 export const templateDescription = `List, read, save and edit widget templates for the widget tool.
 
 - "list": every template with its description and data schema. "get": one template with its source (built-ins are real examples to copy).
 - "save": name, description, data (JSON Schema), source, example (checked against data), mode "live" for a long-running main. Saving a name again makes a new version; built-in names can't be overwritten. The source is parsed and linted, never run: errors in running it come back from clients as messages.
 - "edit": name and edits [{ oldText, newText }] applied to the latest source (each oldText must match exactly once), optionally description, data and example (required when data changes); saves a new version. Prefer it over resending the whole source. To start from a built-in or another template, add from: "<template>" and a new name.
+- Edit or save over an existing template only when the user asks or you created it in this session; otherwise copy it with from under a new name.
 
 Load the "widgets" skill for handlers, the step ABI, the live API, nodes, drawing and shaders.`
 

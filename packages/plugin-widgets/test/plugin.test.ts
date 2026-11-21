@@ -146,6 +146,15 @@ describe("widget templates", () => {
     ))
 })
 
+test("the template tool says when to change an existing template and when to copy it", () =>
+  run((fake) =>
+    Effect.sync(() => {
+      expect(fake.tools.get("widget_template")!.description).toContain(
+        "Edit or save over an existing template only when the user asks or you created it in this session; otherwise copy it with from under a new name.",
+      )
+    }),
+  ))
+
 describe("template edits", () => {
   const save = (fake: Effect.Success<typeof make>) =>
     execute(fake, "widget_template", {
@@ -520,32 +529,62 @@ test("the respond input decodes a dismissal as a dismissal, as the RPC route par
 })
 
 describe("error reports", () => {
-  const show = (fake: Effect.Success<typeof make>) =>
+  // The picker template saved in `origin`, shown in `in` (a Session other than the origin, or the same one).
+  const show = (fake: Effect.Success<typeof make>, input: { origin?: string; in?: string; wait?: boolean } = {}) =>
     Effect.gen(function* () {
-      const at = context()
-      yield* execute(fake, "widget", { template: "confirm", data: confirmData, title: "Deploy" }, at)
-      return { sessionID, messageID, callID: at.id }
+      const origin = Session.ID.make(input.origin ?? sessionID)
+      const shown = Session.ID.make(input.in ?? sessionID)
+      yield* execute(
+        fake,
+        "widget_template",
+        {
+          action: "save",
+          name: "picker",
+          description: "Pick one",
+          data: pickerSchema,
+          source: pickerSource,
+          example: { items: ["a"] },
+        },
+        context({ sessionID: origin }),
+      )
+      const at = context({ sessionID: shown })
+      const posted = execute(
+        fake,
+        "widget",
+        { template: "picker", data: { items: ["a"] }, title: "Pick", wait: input.wait },
+        at,
+      )
+      const fiber = input.wait ? yield* posted.pipe(Effect.forkChild({ startImmediately: true })) : undefined
+      if (!fiber) yield* posted
+      while ((yield* fake.call<ReadonlyArray<Widget.State>>("states", { sessionID: shown })).length === 0)
+        yield* Effect.yieldNow
+      return { call: { sessionID: shown, messageID, callID: at.id }, fiber }
     })
   const error = { phase: "view", message: "data.items is undefined", line: 3, column: 12 }
 
-  test("delivers a client's runtime error once as a waking message, then drops repeats and floods", () =>
+  test("in the template's origin Session: recorded, sent once as a waking message, repeats and floods dropped", () =>
     run((fake) =>
       Effect.gen(function* () {
-        const call = yield* show(fake)
+        const { call } = yield* show(fake)
 
-        expect(yield* fake.call("report", { ...call, error, client: "android" })).toMatchObject({ status: "open" })
+        expect(yield* fake.call("report", { ...call, error, client: "android" })).toMatchObject({
+          status: "open",
+          failure: { ...error, client: "android", sent: true },
+        })
         expect(fake.synthetic).toEqual([
           {
             sessionID,
-            text: 'Widget "Deploy" failed on android: view: data.items is undefined (line 3, col 12)',
-            description: "Deploy failed on android",
+            text: 'Widget "Pick" failed on android: view: data.items is undefined (line 3, col 12)',
+            description: "Pick failed on android",
             metadata: { widget: { messageID, callID: call.callID, kind: "error" } },
             resume: true,
           },
         ])
-        // The same error from another client, and a new one within the window, are dropped.
+        // The same error from another client, and a new one within the window, aren't sent; the new one is recorded.
         yield* fake.call("report", { ...call, error, client: "tui" })
-        yield* fake.call("report", { ...call, error: { phase: "event", message: "boom" }, client: "tui" })
+        expect(
+          yield* fake.call("report", { ...call, error: { phase: "event", message: "boom" }, client: "tui" }),
+        ).toMatchObject({ failure: { phase: "event", message: "boom", client: "tui", sent: false } })
         expect(fake.synthetic).toHaveLength(1)
 
         yield* fake.call("respond", { ...call, response: { dismiss: true } })
@@ -560,33 +599,69 @@ describe("error reports", () => {
       }),
     ))
 
-  test("fails a waiting tool call with the reported error instead of messaging", () =>
+  test("elsewhere: recorded unsent and not sent, until the user asks, then sent once", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const { call } = yield* show(fake, { origin: "ses_author", in: sessionID })
+
+        expect(yield* fake.call("report", { ...call, error, client: "rune" })).toMatchObject({
+          failure: { ...error, client: "rune", sent: false },
+        })
+        expect(fake.synthetic).toEqual([])
+        expect((yield* states(fake))[0]).toMatchObject({ status: "open", failure: { sent: false } })
+
+        expect(yield* fake.call("report", { ...call, error, client: "rune", ask: true })).toMatchObject({
+          failure: { sent: true },
+        })
+        expect(fake.synthetic).toEqual([
+          expect.objectContaining({
+            sessionID,
+            text: 'Widget "Pick" failed on rune: view: data.items is undefined (line 3, col 12) The user asked you to fix it.',
+            resume: true,
+          }),
+        ])
+        // Asking again, or the same error again, sends nothing more.
+        yield* fake.call("report", { ...call, error, client: "rune", ask: true })
+        yield* fake.call("report", { ...call, error, client: "ios" })
+        expect(fake.synthetic).toHaveLength(1)
+      }),
+    ))
+
+  test("a built-in never sends on its own", () =>
     run((fake) =>
       Effect.gen(function* () {
         const at = context()
-        const fiber = yield* execute(
-          fake,
-          "widget",
-          {
-            template: "confirm",
-            data: confirmData,
-            title: "Deploy",
-            wait: true,
-          },
-          at,
-        ).pipe(Effect.forkChild({ startImmediately: true }))
-        while ((yield* states(fake)).length === 0) yield* Effect.yieldNow
+        yield* execute(fake, "widget", { template: "confirm", data: confirmData, title: "Deploy" }, at)
+        const call = { sessionID, messageID, callID: at.id }
+        expect(yield* fake.call("report", { ...call, error, client: "web" })).toMatchObject({
+          failure: { sent: false },
+        })
+        expect(fake.synthetic).toEqual([])
+        yield* fake.call("report", { ...call, error, client: "web", ask: true })
+        expect(fake.synthetic).toHaveLength(1)
+      }),
+    ))
 
+  test("a waiting call fails with the error in the origin Session, and elsewhere only when asked", () =>
+    run((fake) =>
+      Effect.gen(function* () {
+        const own = yield* show(fake, { wait: true })
+        yield* fake.call("report", { ...own.call, error: { phase: "init", message: "boom" }, client: "rune" })
+        expect(failure(yield* Fiber.join(own.fiber!))).toEqual(
+          new Tool.Error({ message: 'Widget "Pick" failed on rune: init: boom' }),
+        )
+
+        const other = yield* show(fake, { origin: "ses_author", in: "ses_other", wait: true })
+        yield* fake.call("report", { ...other.call, error: { phase: "init", message: "boom" }, client: "rune" })
+        expect(other.fiber!.pollUnsafe()).toBeUndefined()
         yield* fake.call("report", {
-          sessionID,
-          messageID,
-          callID: at.id,
+          ...other.call,
           error: { phase: "init", message: "boom" },
           client: "rune",
+          ask: true,
         })
-
-        expect(failure(yield* Fiber.join(fiber))).toEqual(
-          new Tool.Error({ message: 'Widget "Deploy" failed on rune: init: boom' }),
+        expect(failure(yield* Fiber.join(other.fiber!))).toEqual(
+          new Tool.Error({ message: 'Widget "Pick" failed on rune: init: boom The user asked you to fix it.' }),
         )
         expect(fake.synthetic).toEqual([])
       }),

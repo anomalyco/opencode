@@ -196,33 +196,45 @@ export default Plugin.define({
         }).pipe(Semaphore.withPermit(lock))
       })
 
-      // A client's runtime error reaches the model once: a waiting call fails with it, otherwise a waking message.
+      // A client's program error is recorded on the widget. It reaches the model on its own only when the widget's
+      // Session created the template version it runs; elsewhere only when the user asks (`ask`). Either way once: a
+      // waiting call fails with it, otherwise a waking message.
       const report = Effect.fn("WidgetPlugin.report")(function* (
         call: Call,
         error: Widget.RuntimeError,
         client: string,
+        ask: boolean,
       ) {
         return yield* Effect.gen(function* () {
           const state = yield* read(call)
           if (!state) return undefined
           if (state.status !== "open") return state
-          const now = yield* Clock.currentTimeMillis
+          const known = state.failure?.phase === error.phase && state.failure.message === error.message
+          const failure: Widget.Failure = known && state.failure ? state.failure : { ...error, client, sent: false }
+          const origin = yield* templates.origin(state.template.name, state.template.version)
           const key = stateKey(call)
+          const now = yield* Clock.currentTimeMillis
           const seen = reports.get(key) ?? { seen: new Set<string>(), last: -Infinity }
           const id = `${error.phase}\0${error.message}`
-          if (seen.seen.has(id) || now - seen.last < REPORT_WINDOW_MS) return state
-          seen.seen.add(id)
-          seen.last = now
-          reports.set(key, seen)
-          const text = errorText(state, error, client)
+          const automatic = origin === state.sessionID && !seen.seen.has(id) && now - seen.last >= REPORT_WINDOW_MS
+          const sending = !failure.sent && (ask || automatic)
+          if (automatic) {
+            seen.seen.add(id)
+            seen.last = now
+            reports.set(key, seen)
+          }
+          const next: Widget.State = { ...state, failure: sending ? { ...failure, sent: true } : failure }
+          if (!known || sending) yield* write(next)
+          if (!sending) return next
+          const text = errorText(state, error, client) + (ask ? " The user asked you to fix it." : "")
           const waiter = waiters.get(key)
           if (waiter) {
             waiters.delete(key)
             yield* Deferred.fail(waiter, new WaitFailure(text))
-            return state
+            return next
           }
-          yield* deliver(state, "error", text, `${label(state)} failed on ${client}`, true)
-          return state
+          yield* deliver(next, "error", text, `${label(state)} failed on ${client}`, true)
+          return next
         }).pipe(Semaphore.withPermit(lock))
       })
 
@@ -247,7 +259,7 @@ export default Plugin.define({
               return outcome.state
             }),
           report: (input, call) =>
-            report(input, input.error, input.client).pipe(
+            report(input, input.error, input.client, input.ask === true).pipe(
               Effect.flatMap((state) =>
                 state ? Effect.succeed(state) : Effect.fail(call.error("not_found", "Widget not found", {})),
               ),
@@ -407,6 +419,7 @@ export default Plugin.define({
                         ...(input.description === undefined ? {} : { description: input.description }),
                         ...(input.data === undefined ? {} : { data: input.data }),
                         ...(input.example === undefined ? {} : { example: input.example }),
+                        origin: context.sessionID,
                       })
                       .pipe(Effect.mapError(toolError))
                   : yield* templates
@@ -418,6 +431,7 @@ export default Plugin.define({
                         ...(input.mode === undefined ? {} : { mode: input.mode }),
                         ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
                         example: yield* required("example", input.example),
+                        origin: context.sessionID,
                       })
                       .pipe(Effect.mapError(toolError))
               const metadata = yield* summary(saved)

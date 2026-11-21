@@ -54,6 +54,8 @@ export interface SaveInput {
    * lints the source.
    */
   readonly example: Schema.Json
+  /** The Session whose `widget_template` call saves it; recorded when the version is first stored. */
+  readonly origin?: string
 }
 
 /** An `edit`: exact-text replacements on the latest source of `name`, or of `from` copied to the new `name`. */
@@ -65,6 +67,7 @@ export interface EditInput {
   readonly data?: Widget.DataSchema
   /** Required when `data` changes; otherwise the stored schema was already checked. */
   readonly example?: Schema.Json
+  readonly origin?: string
 }
 
 /** How the server builds a version's program; the current prelude by default, another one in tests. */
@@ -73,8 +76,13 @@ export interface Builder {
 }
 const current: Builder = { program }
 
-// A stored version: the template and the exact program it was saved with.
-const Stored = Schema.Struct({ ...Widget.Template.fields, program: Schema.optional(Schema.String) })
+// A stored version: the template, the exact program it was saved with, and the Session that created it (none for
+// built-ins). The origin decides whether the widget's failures reach the agent on their own (widgets.md, Failures).
+const Stored = Schema.Struct({
+  ...Widget.Template.fields,
+  program: Schema.optional(Schema.String),
+  origin: Schema.optional(Schema.String),
+})
 const decode = Schema.decodeUnknownSync(Widget.Template)
 const encodeStored = Schema.encodeSync(Stored)
 // Versions stored before templates had a mode are step templates.
@@ -123,10 +131,20 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
   const read = Effect.fnUntraced(function* (name: string, version: string) {
     const stored = Option.getOrUndefined(decodeOption(yield* storage.get(versionKey(name, version))))
     if (!stored) return undefined
-    return { ...stored, program: stored.program ?? builder.program(stored.source) } satisfies Widget.Program
+    const { origin: _, program: text, ...template } = stored
+    return { ...template, program: text ?? builder.program(template.source) } satisfies Widget.Program
   })
-  const store = (template: Widget.Program) =>
-    storage.set(versionKey(template.name, template.version), encodeStored(template))
+  const store = (template: Widget.Program, origin?: string) =>
+    storage.set(
+      versionKey(template.name, template.version),
+      encodeStored(origin === undefined ? template : { ...template, origin }),
+    )
+
+  /** The Session that created a saved version; undefined for built-ins and versions saved before origins were kept. */
+  const origin = Effect.fn("WidgetTemplates.origin")(function* (name: string, version: string) {
+    const stored = Option.getOrUndefined(decodeOption(yield* storage.get(versionKey(name, version))))
+    return stored?.builtin ? undefined : stored?.origin
+  })
 
   const savedLatest = Effect.fnUntraced(function* (name: string) {
     const version = yield* storage.get(latestKey(name))
@@ -212,8 +230,8 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
     if (input.example !== undefined)
       yield* check(template, input.example).pipe(Effect.mapError((error) => invalid(`example: ${error.reason}`)))
     // The version first, so `latest` never names a version that is not stored. Saving existing content promotes it
-    // again with the new description.
-    yield* store({ ...template, program: text })
+    // again with the new description, and keeps the Session that first created it.
+    yield* store({ ...template, program: text }, (yield* origin(template.name, template.version)) ?? input.origin)
     if ((yield* revision(template.name, template.version)) === undefined)
       yield* storage.set(revisionKey(template.name, template.version), yield* count(template.name))
     yield* storage.set(latestKey(template.name), template.version)
@@ -268,10 +286,11 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
       mode: base.mode,
       ...(base.capabilities === undefined ? {} : { capabilities: base.capabilities }),
       ...(input.example === undefined ? {} : { example: input.example }),
+      ...(input.origin === undefined ? {} : { origin: input.origin }),
     })
   })
 
-  return { latest, get, list, remember, check, save, edit, revision }
+  return { latest, get, list, remember, check, save, edit, revision, origin }
 }
 
 export type Interface = ReturnType<typeof make>

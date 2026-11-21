@@ -61,9 +61,11 @@ messages · `table` ≤ 50 sortable rows with sparklines. For one or two plain s
 `widget_template` `save`: `name`, `description`, `data` (JSON Schema, `type: "object"`), `source`, an `example`
 matching the schema, `mode: "live"` for live ones. Saving again makes a new version; templates persist, so keep them
 general and put specifics in `data`. To change a template, prefer `edit` (`edits: [{ oldText, newText }]`, each
-matching once; `from` copies a built-in under a new name) over resending the source. The server only parses and lints the source (entry functions, only function and
-`const` declarations at the top level, no prelude names redeclared, ≤ 128 KB). Clients report runtime errors as
-`Widget "<title>" failed on <client>: <phase>: <message> (line N, col M)` (the tool error with `wait: true`): fix the
+matching once) over resending the source; a template you didn't create in this session, change only when the user
+asks, otherwise copy it with `from` under a new name. The server only parses and lints the source (entry functions,
+only function and `const` declarations at the top level, no prelude names redeclared, ≤ 128 KB). A program error
+comes back as `Widget "<title>" failed on <client>: <phase>: <message> (line N, col M)` (the tool error with
+`wait: true`), on its own for templates saved in this session, otherwise when the user asks you to fix it: fix the
 source, save it and show the widget again.
 
 **Handlers.** Attach handlers to nodes (`onPress`, `onChange`, `onPointer`); the prelude gives nodes ids and routes
