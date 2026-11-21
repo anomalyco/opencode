@@ -10,6 +10,13 @@ export function missingSession(error: Session.NotFoundError) {
   })
 }
 
+export function unmigratedSession(error: Session.UnmigratedError) {
+  return new SessionNotFoundError({
+    sessionID: error.sessionID,
+    message: error.message,
+  })
+}
+
 export function missingMessage(error: Session.MessageNotFoundError) {
   return new MessageNotFoundError({
     sessionID: error.sessionID,
