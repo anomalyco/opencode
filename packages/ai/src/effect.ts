@@ -40,5 +40,24 @@ export { EmbeddingRoute } from "./route/embedding.js"
 export { Generation } from "./generation.js"
 export { ToolFailure, emptyInputJsonSchema, toDefinitions, tool } from "./tool.js"
 export { ToolRuntime } from "./tool-runtime.js"
-export type { ToolSettlement } from "./tool-runtime.js"
-export * from "./public.js"
+export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime.js"
+export type {
+  AnyExecutableTool,
+  AnyTool,
+  ExecutableTool,
+  ExecutableTools,
+  Definition as ToolShape,
+  ToolExecute,
+  ToolExecuteContext,
+  ToolModelOutputInput,
+  Tools,
+  ToolSchema,
+  ToolToModelOutput,
+} from "./tool.js"
+export * as LLM from "./llm.js"
+export type {
+  Definition as ProviderPackageDefinition,
+  Settings as ProviderPackageSettings,
+} from "./provider-package.js"
+export { applySecretShield, isSecretShieldMode } from "./secret-shield.js"
+export type { SecretShieldMode, ShieldResult, ShieldReport } from "./secret-shield.js"
