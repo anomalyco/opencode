@@ -282,6 +282,9 @@ image(src, x, y, w, h)`, and `g.commands` is the list. A `paint` may be a `Color
 (`{ stroke: color }` for `line`); an omitted paint is the `"text"` color. `draw` may return the builder itself. The
 TypeScript runtime rejects a draw output that breaks these shapes or exceeds 2,000 commands.
 
+State works as in the Canvas 2D API: `alpha` sets the opacity (clamped to 0–1) for the commands after it, replacing
+the current value rather than multiplying it, and `save`/`restore` save and restore the transform and opacity.
+
 ## Shader
 
 A `shader` node runs a WGSL fragment shader on the GPU, free-running at `fps` (default 60). The node's `wgsl` must define
