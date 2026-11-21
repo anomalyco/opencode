@@ -262,12 +262,9 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
       if (value !== "true" && value !== "false") throw new Error("Remote must be true or false")
       // A tunnel that cannot be created leaves remote access off instead of a service that keeps retrying.
       if (value === "true") yield* RemoteTunnel.ensure()
+      // Other clients may restart the service as soon as it stops, so save the setting first.
+      yield* value === "true" ? remote() : disableRemote()
       yield* Service.stop(yield* options())
-      if (value === "true") {
-        yield* remote()
-        return
-      }
-      yield* disableRemote()
       return
     }
     case "hostname": {
@@ -320,8 +317,8 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
       return
     }
     case "remote": {
-      yield* Service.stop(yield* options())
       yield* disableRemote()
+      yield* Service.stop(yield* options())
       return
     }
     case "hostname": {
