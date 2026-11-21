@@ -1,7 +1,9 @@
-import { expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Queue, Scope, Sink, Stream } from "effect"
+import childProcess from "node:child_process"
+import { expect, spyOn } from "bun:test"
+import { Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
+import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
@@ -17,6 +19,128 @@ import { tempGlobalLayer } from "./fixture/global"
 import { location, tempLocationLayer } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
+
+it.effect("a shell timeout also bounds host process creation", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>()
+    const proc = new childProcess.ChildProcess()
+    const kill = spyOn(proc, "kill")
+    const original = childProcess.spawn
+    const executable = "opencode-stalled-launch"
+    // Keep the real host spawner, replacing only an OS launch that never signals readiness.
+    const spawn = spyOn(childProcess, "spawn").mockImplementation(
+      new Proxy(original, {
+        apply(target, receiver, args) {
+          if (args[0] !== executable && (!Array.isArray(args[1]) || !args[1].join(" ").includes(executable)))
+            // oxlint-disable-next-line no-restricted-globals -- Forward every native spawn overload with its receiver and arguments.
+            return Reflect.apply(target, receiver, args)
+          Deferred.doneUnsafe(entered, Exit.succeed(undefined))
+          return proc
+        },
+      }),
+    )
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        spawn.mockRestore()
+        kill.mockRestore()
+      }),
+    )
+    yield* Effect.gen(function* () {
+      const shell = yield* Shell.Service
+      const pending = yield* shell
+        .create({ shell: executable, command: "fixture", timeout: 200 })
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(entered)
+      yield* TestClock.adjust("200 millis")
+      expect(pending.pollUnsafe()).toMatchObject({ _tag: "Failure" })
+      const error = yield* Fiber.join(pending).pipe(Effect.flip)
+      expect(error).toMatchObject({ _tag: "AppProcessError", cause: { _tag: "TimeoutError" } })
+      expect(kill).toHaveBeenCalledWith("SIGTERM")
+      expect(yield* shell.list()).toEqual([])
+    }).pipe(
+      Effect.ensuring(Effect.sync(() => proc.emit("error", new Error("fixture cleanup")))),
+      Effect.provide(
+        AppNodeBuilder.build(Shell.node, [
+          Location.node.replace(tempLocationLayer),
+          Global.node.replace(tempGlobalLayer),
+          Config.node.replace(Config.testLayer()),
+          Environment.node.replace(hostEnvironmentLayer),
+        ]),
+      ),
+    )
+  }),
+)
+
+// The timeout is the contract; advance its clock only after real setup reaches the spawner.
+for (const input of [
+  { name: "zero timeout permits delayed process creation", timeout: 0 },
+  { name: "process creation can finish before its timeout", timeout: 500 },
+]) {
+  it.effect(input.name, () =>
+    Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const environment = Layer.effect(
+        Environment.Service,
+        Effect.gen(function* () {
+          const host = yield* Environment.Service
+          const scope = yield* Scope.Scope
+          return Environment.Service.of({
+            ...host,
+            spawner: ChildProcessSpawner.make(() =>
+              Effect.withFiber((fiber) =>
+                Scope.addFinalizer(scope, Fiber.interrupt(fiber)).pipe(
+                  Effect.andThen(Deferred.succeed(entered, undefined)),
+                  Effect.andThen(Deferred.await(release)),
+                  Effect.as(
+                    makeHandle({
+                      pid: ProcessId(1),
+                      exitCode: Effect.succeed(ExitCode(0)),
+                      isRunning: Effect.succeed(false),
+                      kill: () => Effect.void,
+                      stdin: Sink.drain,
+                      stdout: Stream.succeed(Buffer.from("ready")),
+                      stderr: Stream.empty,
+                      all: Stream.succeed(Buffer.from("ready")),
+                      getInputFd: () => Sink.drain,
+                      getOutputFd: () => Stream.empty,
+                      unref: Effect.succeed(Effect.void),
+                    }),
+                  ),
+                ),
+              ),
+            ),
+          })
+        }),
+      ).pipe(Layer.provide(hostEnvironmentLayer))
+
+      yield* Effect.gen(function* () {
+        const shell = yield* Shell.Service
+        const pending = yield* shell
+          .create({ shell: "sh", command: "delayed", timeout: input.timeout })
+          .pipe(Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(entered)
+        yield* TestClock.adjust("200 millis")
+        expect(pending.pollUnsafe()).toBeUndefined()
+        yield* Deferred.succeed(release, undefined)
+        const info = yield* Fiber.join(pending)
+        expect(yield* shell.result(info)).toMatchObject({
+          info: { status: "exited", exit: 0 },
+          capture: { output: "ready", truncated: false },
+        })
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(Shell.node, [
+            Location.node.replace(tempLocationLayer),
+            Global.node.replace(tempGlobalLayer),
+            Config.node.replace(Config.testLayer()),
+            Environment.node.replace(environment),
+          ]),
+        ),
+      )
+    }),
+  )
+}
 
 it.live("eviction makes progress past an already-removed shell", () =>
   Effect.gen(function* () {
