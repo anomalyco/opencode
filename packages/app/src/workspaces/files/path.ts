@@ -1,12 +1,14 @@
 import { encodeFilePath } from "@opencode/util/path"
 
 const wslPath = /^\/\/wsl(?:\.localhost|\$|%24)\//i
+
 const isWindowsPath = (path: string) => /^[A-Za-z]:/.test(path) || path.startsWith("\\\\") || wslPath.test(path)
 
 export function toFileUri(path: string, directory: string) {
   const encoded = encodeFilePath(path)
   // A double leading slash can also be part of a POSIX path.
   const windows = path.startsWith("\\\\") || isWindowsPath(directory || path)
+
   return windows && /^\/\/[^/]+\/[^/]/.test(encoded) ? `file:${encoded}` : `file://${encoded}`
 }
 
@@ -14,10 +16,12 @@ export function stripFileProtocol(input: string, directory = "") {
   if (!input.startsWith("file://")) return input
 
   const path = input.slice("file://".length)
+
   // A UNC authority belongs to the path. Legacy file://C:/... values already have a drive prefix.
   if (!/^[^/:\\]+\/[^/]/.test(path)) return path
 
   const unc = `//${path}`
+
   return (directory ? isWindowsPath(directory) : wslPath.test(unc)) ? unc : path
 }
 

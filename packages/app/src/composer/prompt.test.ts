@@ -247,6 +247,7 @@ describe("extractPromptFromMessage", () => {
       "file://wsl.localhost/Ubuntu-24.04/project/src/a.ts?start=3&end=7",
       "file://wsl.localhost/Ubuntu-24.04/other.ts",
     ]
+
     const message = {
       id: "msg_1",
       type: "user",

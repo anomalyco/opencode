@@ -7,10 +7,12 @@ test.each(["wsl.localhost", "wsl$"])("normalizes the forward-slash %s location f
   const directory = AbsolutePath.make(`//${host}/Ubuntu-24.04/project/`)
   const expected = process.platform === "win32" ? `\\\\${host}\\Ubuntu-24.04\\project` : `/${host}/Ubuntu-24.04/project`
 
-  expect(LocationServiceMap.canonical(Location.Ref.make({ directory })).directory).toBe(expected)
+  expect(LocationServiceMap.canonical(Location.Ref.make({ directory })).directory).toBe(AbsolutePath.make(expected))
 })
 
 test("keeps POSIX locations in POSIX form", () => {
   const directory = AbsolutePath.make("//remote/project/")
-  expect(LocationServiceMap.canonical(Location.Ref.make({ directory })).directory).toBe("/remote/project")
+  expect(LocationServiceMap.canonical(Location.Ref.make({ directory })).directory).toBe(
+    AbsolutePath.make("/remote/project"),
+  )
 })

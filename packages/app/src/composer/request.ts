@@ -64,6 +64,7 @@ const absolute = (directory: string, path: string) => {
 
 const fileUri = (directory: string, path: string, selection?: FileSelection) => {
   const uri = toFileUri(absolute(directory, path), directory)
+
   return selection ? `${uri}?start=${selection.startLine}&end=${selection.endLine}` : uri
 }
 
