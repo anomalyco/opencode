@@ -56,12 +56,14 @@ const document = {
 } satisfies SessionDocument
 
 export const ErrorAndUpdates = {
-  render: () => (
+  args: { preset: "detailed" },
+  argTypes: { preset: { options: timelinePresets.map((preset) => preset.id) } },
+  render: (args: { preset: string }) => (
     <section class="mx-auto min-h-screen w-full max-w-[720px] bg-v2-background-bg-base p-6">
       <CurrentSessionProviders document={document}>
         <SessionTimeline
           document={document}
-          timelineDetail={timelinePresets.find((preset) => preset.id === "detailed")!.value}
+          timelineDetail={timelinePresets.find((preset) => preset.id === args.preset)!.value}
         />
       </CurrentSessionProviders>
     </section>

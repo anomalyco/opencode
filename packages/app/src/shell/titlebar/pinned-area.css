@@ -1,0 +1,164 @@
+/* A group's marker: a small square of its color, drawn like a project avatar (its colors, top highlight and
+   hairline border). */
+[data-slot="pinned-group-rect"] {
+  --pinned-group-bg: var(--v2-avatar-bg-gray);
+  --pinned-group-border: var(--v2-avatar-border-gray);
+  display: block;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  /* Brighter than an avatar's fill, since the square has no letter to carry it; a softer highlight. */
+  background:
+    linear-gradient(180deg, var(--v2-alpha-light-10) 0%, var(--v2-alpha-light-0) 100%),
+    oklch(from var(--pinned-group-bg) calc(l + 0.1) calc(c * 1.15) h);
+  box-shadow: inset 0 0 0 0.5px var(--pinned-group-border);
+}
+
+[data-slot="pinned-group-rect"][data-group-color="blue"] {
+  --pinned-group-bg: var(--v2-avatar-bg-blue);
+  --pinned-group-border: var(--v2-avatar-border-blue);
+}
+
+[data-slot="pinned-group-rect"][data-group-color="green"] {
+  --pinned-group-bg: var(--v2-avatar-bg-green);
+  --pinned-group-border: var(--v2-avatar-border-green);
+}
+
+[data-slot="pinned-group-rect"][data-group-color="orange"] {
+  --pinned-group-bg: var(--v2-avatar-bg-orange);
+  --pinned-group-border: var(--v2-avatar-border-orange);
+}
+
+[data-slot="pinned-group-rect"][data-group-color="purple"] {
+  --pinned-group-bg: var(--v2-avatar-bg-purple);
+  --pinned-group-border: var(--v2-avatar-border-purple);
+}
+
+[data-slot="pinned-group-rect"][data-group-color="cyan"] {
+  --pinned-group-bg: var(--v2-avatar-bg-cyan);
+  --pinned-group-border: var(--v2-avatar-border-cyan);
+}
+
+[data-slot="pinned-group-rect"][data-group-color="pink"] {
+  --pinned-group-bg: var(--v2-avatar-bg-pink);
+  --pinned-group-border: var(--v2-avatar-border-pink);
+}
+
+/* Menus center it in the 16px icon slot. */
+[data-component="menu-v2-item"] [data-slot="pinned-group-rect"],
+[data-slot="pinned-group-name"] [data-slot="pinned-group-rect"] {
+  margin: 3px;
+}
+
+/* The name field matches the new session project search: borderless on the menu, a hairline below it. */
+[data-slot="pinned-group-name"] {
+  padding: 4px 4px 2px;
+}
+
+[data-slot="pinned-group-name"] [data-component="text-input-v2"] {
+  width: 100%;
+  height: 28px;
+  padding-inline-end: 6px;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (forced-colors: none) {
+  [data-slot="pinned-group-name"] [data-component="text-input-v2"] {
+    outline: 0;
+  }
+}
+
+[data-slot="pinned-group-name"] [data-slot="text-input-v2-value"] {
+  gap: 6px;
+}
+
+[data-slot="pinned-group-name"] [data-slot="text-input-v2-leading-icon"] {
+  padding-inline-start: 6px;
+}
+
+[data-slot="pinned-group-name"] [data-slot="text-input-v2-input"]::placeholder {
+  color: var(--v2-text-text-base);
+  opacity: 0.5;
+}
+
+[data-component="pinned-group"][data-orientation="vertical"] [data-slot="pinned-group-rect"] {
+  margin-inline: 3px;
+}
+
+/* Top tabs outline a group around its marker and sessions, so its sessions read as one set. The outline is drawn
+   above the tabs, whose backgrounds would otherwise cover it. */
+[data-component="pinned-group"][data-orientation="horizontal"] {
+  border-radius: 8px;
+}
+
+[data-component="pinned-group"][data-orientation="horizontal"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--tab-group-pill-border);
+  pointer-events: none;
+}
+
+/* The group's outline would cover the edge of an inset ring on its first and last controls. */
+[data-component="pinned-group"] [data-pinned-slot]:has(:focus-visible),
+[data-slot="pinned-group-trigger"]:focus-visible {
+  position: relative;
+  z-index: 2;
+}
+
+[data-slot="pinned-group-label"] {
+  color: var(--v2-text-text-base);
+}
+
+/* Pinned tabs sit in their own row, so the strip's separators between tabs don't apply. */
+[data-component="pinned-area"] [data-titlebar-tab-slot]::before {
+  display: none;
+}
+
+/* Icon-only pinned tabs have no close button. The strip centers its close slot over the avatar at this width and
+   paints it on hover, which hid the avatar; keep the slot only for a running session's activity ring. */
+[data-pinned-slot][data-orientation="horizontal"] [data-titlebar-tab]:not([data-status="busy"]) [data-slot="tab-close"] {
+  display: none;
+}
+
+[data-pinned-slot][data-orientation="horizontal"] [data-slot="tab-close"] {
+  background: none !important;
+}
+
+/* Side tabs hang a group's sessions off a thin line running down from the center of its square (8px inset + 3px
+   margin + half of 10px). */
+[data-component="pinned-group"][data-orientation="vertical"] [data-slot="pinned-group-sessions"]:not(:empty)::before {
+  content: "";
+  position: absolute;
+  inset-block: 2px;
+  inset-inline-start: 15.5px;
+  width: 1px;
+  border-radius: 1px;
+  background: var(--v2-border-border-muted);
+  pointer-events: none;
+}
+
+/* A closed group whose hidden sessions need you: a dot on its square's corner, as on a tab's avatar. */
+[data-slot="pinned-group-mark"] {
+  position: absolute;
+  top: -3px;
+  inset-inline-end: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--v2-background-bg-accent);
+  pointer-events: none;
+
+  &[data-mark="attention"] {
+    background: var(--v2-state-fg-warning);
+  }
+}
+
+[data-component="pinned-group"][data-orientation="vertical"] [data-slot="pinned-group-mark"] {
+  inset-inline-end: 0;
+}

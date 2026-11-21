@@ -10,7 +10,7 @@ import { getFilename } from "@opencode/util/path"
 import { usePlugin, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
 import { current, useShared } from "./context"
 import { OpenInAppMenuItemsV2, useOpenInApp } from "./open-in-app"
-import { resolveOpenInAppPath, workspaceFileUrl } from "./path"
+import { resolveOpenInAppPath } from "./path"
 
 export function ArtifactToolbar(props: {
   session: MountedSession
@@ -89,7 +89,7 @@ export function ArtifactToolbar(props: {
                 size="large"
                 aria-label={modeLabel()}
                 onClick={toggleMode}
-                icon={<Icon name={props.mode === "preview" ? "outline-code-brackets" : "outline-eye"} size="normal" />}
+                icon={<Icon name={props.mode === "preview" ? "outline-code-brackets" : "eye"} size="normal" />}
               />
             </Tooltip>
           </Show>
@@ -100,7 +100,7 @@ export function ArtifactToolbar(props: {
                 size="large"
                 aria-label={ctx.t("view.copyContent")}
                 onClick={() => copy(props.text ?? "")}
-                icon={<Icon name="outline-copy" size="normal" />}
+                icon={<Icon name="copy" size="normal" />}
               />
             </Tooltip>
           </Show>
@@ -129,7 +129,7 @@ export function ArtifactToolbar(props: {
                 <Show when={browser()}>
                   {(pane) => (
                     <Menu.Item
-                      onSelect={() => pane().open(props.session, workspaceFileUrl(props.screen.file.root, props.path))}
+                      onSelect={() => pane().openFile(props.session, props.path)}
                     >
                       {ctx.t("view.openInBrowser")}
                     </Menu.Item>

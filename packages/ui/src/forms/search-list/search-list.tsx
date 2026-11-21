@@ -2,6 +2,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createSelector,
   For,
   type JSX,
   on,
@@ -129,6 +130,9 @@ export function SearchList<T>(props: {
     return item === undefined ? undefined : props.key(item)
   })
 
+  // Moving the highlight updates the two rows it leaves and lands on, not every row.
+  const isActive = createSelector(activeKey)
+
   // The first row shows from the top, so its header is never hidden; any other row scrolls in only as far as needed.
   const reveal = () => {
     const item = typeahead.activeItem()
@@ -187,8 +191,9 @@ export function SearchList<T>(props: {
   createEffect(() => props.onActive?.(typeahead.activeItem()))
 
   // A new query starts from the top. Results that arrive later for the same query bring a chosen row back into view,
-  // but leave the list where the wheel put it while the first row is still the default.
+  // but leave the list where the wheel put it while the first row is still the default or the pointer took the row.
   let revealed = props.query
+  let pointed: string | undefined
 
   createEffect(
     on(
@@ -197,7 +202,7 @@ export function SearchList<T>(props: {
         const fresh = props.query !== revealed
         revealed = props.query
 
-        if (!fresh && typeahead.activeItem() === all[0]) return
+        if (!fresh && (typeahead.activeItem() === all[0] || activeKey() === pointed)) return
         const frame = requestAnimationFrame(reveal)
         onCleanup(() => cancelAnimationFrame(frame))
       },
@@ -205,7 +210,12 @@ export function SearchList<T>(props: {
     ),
   )
 
-  props.ref?.({ active: typeahead.activeItem, setActive: typeahead.setActive })
+  const choose = (key: string | undefined) => {
+    pointed = undefined
+    typeahead.setActive(key)
+  }
+
+  props.ref?.({ active: typeahead.activeItem, setActive: choose })
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.isComposing) return
@@ -232,7 +242,7 @@ export function SearchList<T>(props: {
     const target = all[step(from)]
 
     if (target === undefined) return
-    typeahead.setActive(props.key(target))
+    choose(props.key(target))
     reveal()
   }
 
@@ -254,7 +264,7 @@ export function SearchList<T>(props: {
     },
     onInput: (event) => {
       // A new query starts again from its first row.
-      typeahead.setActive(undefined)
+      choose(undefined)
       props.onQuery(event.currentTarget.value)
     },
     onKeyDown,
@@ -266,23 +276,28 @@ export function SearchList<T>(props: {
     },
     role: "option",
     get "aria-selected"() {
-      return activeKey() === key
+      return isActive(key)
     },
     "data-slot": "search-list-row",
     get "data-active"() {
-      return activeKey() === key ? ("" as const) : undefined
+      return isActive(key) ? ("" as const) : undefined
     },
     onMouseMove: (event) => {
       // A static cursor must not take the active row while the keyboard scrolls rows beneath it.
-      if (event.movementX !== 0 || event.movementY !== 0) typeahead.setActive(key)
+      if (event.movementX === 0 && event.movementY === 0) return
+      pointed = key
+      typeahead.setActive(key)
     },
     // Focus stays in the field.
     onMouseDown: (event) => event.preventDefault(),
     onClick: () => props.onSelect(item()),
   })
 
+  // Every highlighted row reads this, so the query is trimmed and lower-cased once per keystroke, not once per row.
+  const needle = createMemo(() => props.query.trim().toLowerCase())
+
   return (
-    <QueryContext.Provider value={() => props.query}>
+    <QueryContext.Provider value={needle}>
       <div data-component="search-list" data-popover={props.popover ? "" : undefined} class={props.class}>
         <Show
           when={props.field}
@@ -376,17 +391,16 @@ export function SearchList<T>(props: {
 
 /** Text with its first match for the list's query marked. One mark per row keeps short queries from speckling the list. */
 export function SearchHighlight(props: { text: string }) {
-  const query = useContext(QueryContext)
+  const needle = useContext(QueryContext)
+  const haystack = createMemo(() => props.text.toLowerCase())
 
   const match = createMemo(() => {
-    const needle = query().trim().toLowerCase()
-    const haystack = props.text.toLowerCase()
-    const at = needle ? haystack.indexOf(needle) : -1
+    const at = needle() ? haystack().indexOf(needle()) : -1
 
     // Lower-casing a few scripts changes the length, and then offsets no longer line up with the text.
-    if (at === -1 || haystack.length !== props.text.length) return
+    if (at === -1 || haystack().length !== props.text.length) return
 
-    return { at, end: at + needle.length }
+    return { at, end: at + needle().length }
   })
 
   return (

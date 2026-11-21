@@ -169,6 +169,8 @@ describe("app lifecycle machine", () => {
     { quit: { type: "exit.requested", mode: "quit" }, state: { status: "stopping", attempt: 2, exit: "quit" } },
     { quit: { type: "will.quit" }, state: { status: "quitting" } },
     { quit: { type: "before.quit" }, state: { status: "stopping", attempt: 2, exit: "quit" } },
+    // Windows logoff or shutdown: a handoff that fails late must not make the app look running again.
+    { quit: { type: "session.ending" }, state: { status: "stopping", attempt: 2, exit: "quit" } },
   ] satisfies { quit: Event; state: State }[]
 
   test.each(phases.flatMap((phase) => quits.map((quit) => ({ ...phase, ...quit, name: quit.quit.type }))))(
@@ -193,8 +195,43 @@ describe("app lifecycle machine", () => {
       ])
       expect(keptScope(next.state)).toBeUndefined()
       expect(transition(next.state, row.stale)).toEqual({ state: next.state, commands: [] })
+      expect(isQuitting(next.state)).toBe(true)
     },
   )
+
+  test("Windows ending the session stops every plugin once, however many windows report it", () => {
+    const first = transition(initialState(), { type: "session.ending" })
+
+    expect(first.state).toEqual({ status: "stopping", attempt: 1, exit: "quit" })
+    expect(first.commands).toEqual([{ type: "stop-plugins", attempt: 1 }])
+    expect(isQuitting(first.state)).toBe(true)
+    expect(restoresWindows(first.state)).toBe(false)
+
+    const second = transition(first.state, { type: "session.ending" })
+    expect(second.state).toBe(first.state)
+    expect(second.commands).toEqual([])
+
+    const done = transition(second.state, { type: "plugins.stopped", attempt: 1 })
+    expect(done).toEqual({ state: { status: "quitting" }, commands: [{ type: "exit", mode: "quit" }] })
+    expect(transition(done.state, { type: "session.ending" }).state).toBe(done.state)
+  })
+
+  test("Windows ending the session turns a pending relaunch into a quit", () => {
+    const result = replay([{ type: "exit.requested", mode: "relaunch" }, { type: "session.ending" }])
+
+    expect(result.state).toEqual({ status: "stopping", attempt: 1, exit: "quit" })
+    expect(result.commands).toEqual([{ type: "stop-plugins", attempt: 1 }])
+    expect(transition(result.state, { type: "plugins.stopped", attempt: 1 }).commands).toEqual([
+      { type: "exit", mode: "quit" },
+    ])
+  })
+
+  test("a repeated quit while stopping keeps the same state", () => {
+    const stopping = transition(initialState(), { type: "exit.requested", mode: "quit" }).state
+
+    expect(transition(stopping, { type: "exit.requested", mode: "quit" }).state).toBe(stopping)
+    expect(transition(stopping, { type: "before.quit" }).state).toBe(stopping)
+  })
 
   test.each([
     { phase: "suspending", events: [], kind: "busy" },

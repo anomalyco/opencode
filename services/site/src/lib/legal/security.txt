@@ -1,0 +1,37 @@
+#        1         2         3         4         5         6         7         8
+#...:....|....:....|....:....|....:....|....:....|....:....|....:....|....:....|
+# ------------------------------------------------------------------------------
+#                                  ▄
+# █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+# █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+# ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+#
+# OPENCODE.AI · SECURITY CONTACTS · RFC 9116
+# ------------------------------------------------------------------------------
+# OpenCode security contacts. Please report vulnerabilities privately.
+# We do not accept AI-generated reports. Submitting one means an automatic ban.
+#
+# REPORTING CHANNELS
+# +--------------------+-------------------------------------------------------+
+# | Channel            | Use                                                   |
+# +--------------------+-------------------------------------------------------+
+# | GitHub advisory    | first; private, with progress updates                 |
+# | security@anoma.ly  | if no acknowledgement within 6 business days          |
+# +--------------------+-------------------------------------------------------+
+#
+# FILE
+# +--------------------+-------------------------------------------------------+
+# | Field              | Value                                                 |
+# +--------------------+-------------------------------------------------------+
+# | Expires            | 4 November 2027                                       |
+# | Language           | English                                               |
+# +--------------------+-------------------------------------------------------+
+# ------------------------------------------------------------------------------
+Contact: https://github.com/anomalyco/opencode/security/advisories/new
+Contact: mailto:security@anoma.ly
+Expires: 2027-11-04T00:00:00.000Z
+Policy: https://github.com/anomalyco/opencode/security/policy
+Preferred-Languages: en
+Canonical: https://opencode.ai/.well-known/security.txt
+Hiring: mailto:engineering@anomaly.jobs
+# ------------------------------------------------------------------------------

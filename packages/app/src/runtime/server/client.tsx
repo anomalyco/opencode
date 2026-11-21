@@ -161,7 +161,16 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     )
   }
 
-  onCleanup(() => dispatchEndpoint({ type: "disposed" }))
+  onCleanup(() => {
+    dispatchEndpoint({ type: "disposed" })
+    transport.dispose()
+  })
+
+  // After sleep a stream can still read as connected while its socket is gone; replace it now rather than at its idle
+  // watchdog.
+  const stopResume = platform.onSystemResume?.(() => connection.internal.resync("System resumed from sleep"))
+
+  if (stopResume) onCleanup(stopResume)
 
   return {
     server,
@@ -218,13 +227,18 @@ export interface ServerTransport {
   readonly http: ServerConnection.HttpBase
   /** The current API client. */
   readonly api: ServerApi
+  /** Cancels every queued and in-flight request; later requests reject at once. */
+  dispose(): void
 }
 
 export function createServerTransport(input: {
   http: ServerConnection.HttpBase
   fetch?: typeof globalThis.fetch
 }): ServerTransport {
-  const queue = createRequestQueue({ fetch: input.fetch ?? globalThis.fetch })
+  const queue = createRequestQueue({
+    fetch: input.fetch ?? globalThis.fetch,
+    prefix: () => serverPathPrefix(state.current.http.url),
+  })
 
   // Keeps the endpoint as plain values: a plugin's endpoint can be a store proxy that already reads the next password,
   // and the client built here keeps the one it started with.
@@ -252,6 +266,7 @@ export function createServerTransport(input: {
     get api() {
       return state.current.api
     },
+    dispose: queue.dispose,
   }
 }
 
@@ -283,4 +298,11 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDKBase): Locat
     directory,
     event: serverSDK.event.location(directory),
   }
+}
+
+/** The path a server URL sits under, such as `/opencode` for `https://host/opencode/`; empty at the root. */
+function serverPathPrefix(url: string) {
+  if (!URL.canParse(url)) return ""
+
+  return new URL(url).pathname.replace(/\/+$/, "")
 }

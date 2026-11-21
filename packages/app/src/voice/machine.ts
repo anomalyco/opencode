@@ -16,8 +16,11 @@ export const TIMED_OUT = JSON.stringify({
 export type ToolOutput = { call_id: string; output: string }
 
 export type DelegationPhase =
-  /** Waiting for the delegator's response to finish, collecting the function calls it makes. */
-  | { type: "responding"; attempt: number; responseID?: string; calls: readonly ToolCall[] }
+  /**
+   * Waiting for the delegator's response to finish, collecting the function calls it makes. `requestID` is the
+   * `response.create` that asked for it after a round; Live never answers one it rejected.
+   */
+  | { type: "responding"; attempt: number; responseID?: string; requestID?: string; calls: readonly ToolCall[] }
   /** Running the previous response's function calls locally, in order; Live waits for an output for each. */
   | { type: "running"; attempt: number; outputs: readonly ToolOutput[]; pending: readonly string[] }
 
@@ -57,6 +60,8 @@ export type VoiceDelegationEvent =
   | { type: "tool.completed"; id: string; attempt: number; sessionID: string; output: ToolOutput }
   /** `channelOpen` is whether Live's data channel can still take tool outputs when the timer fires. */
   | { type: "delegation.timeout"; id: string; attempt: number; channelOpen: boolean }
+  /** Live rejected the client event with this ID. */
+  | { type: "request.rejected"; requestID: string }
   | { type: "call.reset" }
 
 export type VoiceDelegationEffect =
@@ -72,8 +77,8 @@ export type VoiceDelegationEffect =
     }
   /** Aborts the delegation's running tools; the machine already ignores their late results. */
   | { type: "abort"; id: string }
-  /** Sends the outputs to Live and asks the delegator to continue. */
-  | { type: "outputs"; outputs: readonly ToolOutput[] }
+  /** Sends the outputs to Live and asks the delegator to continue with a `response.create` sent as `requestID`. */
+  | { type: "outputs"; outputs: readonly ToolOutput[]; requestID: string }
   /** Clears the delegation's timer and tools. An answered transcript is spent; a discarded one is offered again. */
   | { type: "finish"; id: string; outcome: "answered" | "discarded" }
 
@@ -174,11 +179,26 @@ export function transitionVoiceDelegation(
     return { state: replace(state, delegation), effects: [] }
   }
 
+  if (event.type === "request.rejected") {
+    const delegation = state.delegations.filter(responding).find((item) => item.phase.requestID === event.requestID)
+
+    // No response will come, so the delegation ends now instead of at its deadline.
+    if (!delegation) return unchanged(state)
+
+    return finish({ ...state, finished: [...state.finished, ...abandoned(delegation)] }, delegation, "discarded")
+  }
+
   return responded(state, event)
 }
 
 /** Maps a Live event to the machine, reading the response ID wherever the decoder found one. */
 export function responseEvent(event: VoiceEvent): VoiceDelegationEvent | undefined {
+  if (event.type === "error") {
+    const requestID = event.error?.event_id ?? event.client_event_id
+
+    return requestID ? { type: "request.rejected", requestID } : undefined
+  }
+
   if (event.type !== "response.event" || !event.event) return undefined
   const nested = event.event
   const routed = { delegationID: event.delegation_id, responseID: nested.response?.id ?? nested.response_id }
@@ -215,11 +235,16 @@ function resume(
   outputs: readonly ToolOutput[],
 ): VoiceDelegationTransition {
   const attempt = state.seq + 1
+  // Unique in the session: Live names each delegation, and every phase takes a new attempt.
+  const requestID = `${delegation.id}_${attempt}`
 
   return {
-    state: replace({ ...state, seq: attempt }, { ...delegation, phase: { type: "responding", attempt, calls: [] } }),
+    state: replace(
+      { ...state, seq: attempt },
+      { ...delegation, phase: { type: "responding", attempt, requestID, calls: [] } },
+    ),
     effects: [
-      { type: "outputs", outputs },
+      { type: "outputs", outputs, requestID },
       { type: "deadline", id: delegation.id, attempt, ms: RESPONSE_TIMEOUT },
     ],
   }

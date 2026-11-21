@@ -63,11 +63,40 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("replaces characters providers reject in replayed names of undeclared tool calls", () =>
+    Effect.gen(function* () {
+      const invented = ToolCallPart.make({ id: "call_1", name: "opencode.session.search", input: {} })
+      const declared = ToolCallPart.make({ id: "call_2", name: "weather.get", input: {} })
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          tools: [
+            ToolDefinition.make({ name: "weather.get", description: "Weather", inputSchema: { type: "object" } }),
+          ],
+          messages: [
+            Message.assistant([invented, declared]),
+            Message.tool({ id: invented.id, name: invented.name, result: "unknown tool", resultType: "error" }),
+            Message.tool({ id: declared.id, name: declared.name, result: "sunny", resultType: "text" }),
+          ],
+        }),
+      )
+
+      // A declared name stays as declared, for providers that accept it.
+      expect(prepared.body.messages[0]).toMatchObject({
+        role: "assistant",
+        tool_calls: [
+          { id: "call_1", function: { name: "opencode_session_search" } },
+          { id: "call_2", function: { name: "weather.get" } },
+        ],
+      })
+    }),
+  )
+
   it.effect("omits stream usage options when compatibility disables them", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { streamUsage: false } }),
+          model: LanguageModel.update(model, { capabilities: { streamUsage: false } }),
           prompt: "Hello",
         }),
       )
@@ -89,7 +118,7 @@ describe("OpenAI Chat route", () => {
       const optedIn = yield* compileRequest(
         ai.request({
           model: LanguageModel.update(compatible.model("compatible-model"), {
-            compatibility: { supportsStore: true },
+            capabilities: { store: true },
           }),
           prompt: "Hello",
         }),
@@ -378,7 +407,7 @@ describe("OpenAI Chat route", () => {
         ai.request({
           model: OpenAIChat.route
             .with({ endpoint: { baseURL: "https://api.compatible.test/v1" }, auth: Auth.bearer("test") })
-            .model({ id: "compatible-model", compatibility: { supportsPromptCacheKey: true } }),
+            .model({ id: "compatible-model", capabilities: { promptCacheKey: true } }),
           prompt: "Hello",
           promptCacheKey: "session_123",
         }),
@@ -1247,6 +1276,85 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  // A mid-session model switch can keep the same provider metadata key while the new model reads reasoning from a
+  // declared field of its own; details replayed from the earlier model are refused by some endpoints.
+  it.effect("does not replay reasoning details when the model declares another reasoning field", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const replay = yield* compileRequest(
+        ai.request({
+          model: LanguageModel.update(model, { compatibility: { reasoningField: "reasoning_content" } }),
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_content: "thinking" }])
+    }),
+  )
+
+  it.effect("keeps replayed reasoning details when the model declares reasoning_details", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const replay = yield* compileRequest(
+        ai.request({
+          model: LanguageModel.update(model, { compatibility: { reasoningField: "reasoning_details" } }),
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: details }])
+    }),
+  )
+
+  it.effect("keeps replayed reasoning details when the model declares no reasoning field", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const replay = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+      ])
+    }),
+  )
+
   it.effect("reports the cost the endpoint billed", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
@@ -1261,6 +1369,42 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0 })
+    }),
+  )
+
+  it.effect("reads top-level reasoning tokens whether or not completion tokens include them", () =>
+    Effect.gen(function* () {
+      const generate = (usage: object) =>
+        LLMClient.generate(request).pipe(
+          Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hi" }, "stop"), usageChunk(usage)))),
+          Effect.map((response) => response.usage),
+        )
+
+      // Copilot's Gemini: total = prompt + completion + reasoning.
+      expect(
+        yield* generate({ prompt_tokens: 7, completion_tokens: 2, total_tokens: 62, reasoning_tokens: 53 }),
+      ).toMatchObject({ outputTokens: 55, reasoningTokens: 53, totalTokens: 62 })
+      // Copilot's Kimi: total = prompt + completion, which already includes reasoning.
+      expect(
+        yield* generate({ prompt_tokens: 96, completion_tokens: 50, total_tokens: 146, reasoning_tokens: 35 }),
+      ).toMatchObject({ outputTokens: 50, reasoningTokens: 35, totalTokens: 146 })
+    }),
+  )
+
+  it.effect("converts the GitHub Copilot billing beside usage to USD", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(deltaChunk({ content: "Hello" }, "stop"), {
+              ...usageChunk({ prompt_tokens: 5, completion_tokens: 2 }),
+              copilot_usage: { total_nano_aiu: 4_473_525_000, token_details: [] },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0.04473525 })
     }),
   )
 

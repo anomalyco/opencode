@@ -1,0 +1,163 @@
+[data-page="home"] [data-component="oss-proof"] {
+  --avatar: 32px;
+  --avatar-gap: 4px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+
+  /* As its own section the parts are the section body's own items, spaced like the others. */
+  &[data-layout="section"] {
+    display: contents;
+  }
+
+  [data-slot="stars"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    [data-slot="value"] {
+      font-family: var(--font-mono);
+      font-size: min(var(--hero-size), var(--fs-display-max));
+      line-height: 1.2;
+      letter-spacing: -0.03em;
+      color: var(--text-strong);
+      font-variant-numeric: tabular-nums;
+    }
+
+    [data-slot="label"] {
+      color: var(--text-weak);
+    }
+  }
+
+  /* Two rows of greyscale avatars, always the same height, so nothing moves as the images load. */
+  [data-slot="people"] {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, var(--avatar));
+    grid-auto-rows: var(--avatar);
+    gap: var(--avatar-gap);
+    justify-content: space-between;
+    max-width: var(--two-cards);
+    height: calc(var(--avatar) * 2 + var(--avatar-gap));
+    overflow: hidden;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    li,
+    a {
+      display: block;
+      width: var(--avatar);
+      height: var(--avatar);
+    }
+
+    /* The focus ring sits inside the avatar, so the wall's clipped edges never cut it off. A 2px band
+       of the page colour inside it means the blue always touches --bg, never the photo (the tight
+       buttons' ring, site.css). */
+    a {
+      position: relative;
+
+      &:focus-visible {
+        outline: none;
+
+        &::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          outline: 2px solid var(--link);
+          outline-offset: -2px;
+          box-shadow: inset 0 0 0 4px var(--bg);
+        }
+      }
+    }
+
+    /* The part the reveal (reveal.css) animates; while the wall is armed it waits for its turn. */
+    [data-slot="brand"] {
+      display: block;
+      width: var(--avatar);
+      height: var(--avatar);
+    }
+
+    img {
+      display: block;
+      width: var(--avatar);
+      height: var(--avatar);
+      background: var(--bg-weak);
+      filter: grayscale(1);
+      opacity: 0.85;
+      transition:
+        filter 150ms ease,
+        opacity 150ms ease;
+    }
+
+    /* Avatar links: the one under the pointer or keyboard focus shows in colour. */
+    @media (hover: hover) and (pointer: fine) {
+      a:hover img {
+        filter: none;
+        opacity: 1;
+      }
+    }
+
+    a:active img {
+      filter: none;
+      opacity: 1;
+    }
+
+    a:focus-visible img {
+      filter: none;
+      opacity: 1;
+    }
+  }
+
+  /* Its links follow the site's inline link style (site.css). Trimmed to its cap height, 16px
+     under the avatars: the same gap as the stat numerals to their labels. */
+  [data-slot="licence"] {
+    color: var(--text);
+    max-width: var(--two-cards);
+    text-box: trim-start cap alphabetic;
+  }
+
+  [data-slot="people"] + [data-slot="licence"] {
+    margin-top: calc(1rem - 2rem);
+  }
+
+  /* The section body's 2.5rem, as from the stat labels to the avatars, so the line sits as far
+     above the buttons as the labels do above the wall. */
+  [data-slot="licence"] + [data-slot="actions"] {
+    margin-top: calc(2.5rem - 2rem);
+  }
+
+  [data-slot="actions"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+
+    [data-slot="star"] {
+      flex-shrink: 0;
+      margin-top: -1px;
+    }
+
+    [data-slot="count"] {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      opacity: 0.7;
+    }
+
+    [data-slot="external"] {
+      translate: 0 -2px;
+    }
+  }
+
+  /* On phones the star button drops its count so both buttons stay on one row. */
+  @media (max-width: 40rem) {
+    [data-slot="actions"] [data-slot="count"] {
+      display: none;
+    }
+
+    /* The smaller stat labels end 2px lower in their box than the line does, so the line's gap
+       takes 2px off to keep the two gaps equal by eye. */
+    [data-slot="licence"] + [data-slot="actions"] {
+      margin-top: calc(2.5rem - 2rem - 2px);
+    }
+  }
+}

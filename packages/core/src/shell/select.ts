@@ -8,7 +8,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { State } from "../state.js"
-import { which } from "../util/which.js"
+import { isAppExecutionAlias, which } from "../util/which.js"
 
 const META: Record<string, { deny?: boolean; login?: boolean; ps?: boolean }> = {
   bash: { login: true },
@@ -86,7 +86,8 @@ function rooted(file: string) {
 function executable(file: string, options?: Options, bin?: string) {
   const shell = full(file, options, bin)
   if (rooted(shell)) {
-    if (stat(shell)?.isFile()) return shell
+    // Check the alias first: stat throws EACCES for it.
+    if (isAppExecutionAlias(shell) || stat(shell)?.isFile()) return shell
     return
   }
   return findExecutable(shell, bin) ?? undefined
@@ -165,6 +166,8 @@ export function args(file: string, command: string) {
   const n = name(file)
   if (n === "cmd") return ["/c", command]
   if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
+  // zsh aborts the whole line on an unmatched glob; pass it through literally as bash does.
+  if (n === "zsh") return ["+o", "nomatch", "-c", command]
   return ["-c", command]
 }
 

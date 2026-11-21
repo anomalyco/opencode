@@ -48,9 +48,6 @@ type PlatformBase = {
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
 
-  /** Open a local file URL in its default app (desktop only) */
-  openLocalFile?(url: string): void
-
   /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
   revealPath?(path: string): Promise<boolean>
 
@@ -59,6 +56,9 @@ type PlatformBase = {
 
   /** Send a system notification */
   notify(title: string, description?: string, onClick?: () => void): Promise<void>
+
+  /** Draw the user to a window in the background, as a flashing taskbar button on Windows (desktop only) */
+  requestAttention?(): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?<Value>(
@@ -72,8 +72,17 @@ type PlatformBase = {
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
 
+  /**
+   * Observe `opencode://` links opened with the app (desktop only). Links that arrived before the first listener
+   * are delivered to it at once.
+   */
+  onDeepLinks?(listener: (urls: string[]) => void): () => void
+
   /** Observe native drag cancellation that does not reach the renderer event loop. */
   onDragCancel?(callback: () => void): () => void
+
+  /** Observe the machine waking from sleep, when server event streams may be dead without knowing it (desktop only) */
+  onSystemResume?(callback: () => void): () => void
 
   /** Open a native save file dialog and write content to the selected path (desktop only) */
   saveFile?(opts: SaveFilePickerOptions, content: string): Promise<boolean>

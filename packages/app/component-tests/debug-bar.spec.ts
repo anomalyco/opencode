@@ -52,6 +52,37 @@ story("the debug bar stays open across a remount until its close button hides it
   expect(result).toEqual({ opened: true, saved: { visible: false, motion: false }, reopened: false })
 })
 
+story("running memory diagnostics pin the bar without a close button, and its Knobs still open", async ({ page }) => {
+  const result = await page.evaluate(async (modules) => {
+    const { mountPlugins, until } = await import(modules.fixture)
+    const debug = await import(modules.debug)
+    const definition = { ...debug.default, id: "debug", windowEntry: () => import(modules.renderer) }
+    const memory = { state: () => ({ on: true, env: false }), set: async () => undefined, on: () => () => {} }
+
+    // The user hid the bar and left the Knobs open before turning diagnostics on.
+    const host = mountPlugins({
+      definitions: [definition],
+      stored: { "plugin.debug.bar": { visible: false, motion: true } },
+      ipc: (token: { readonly id: string }) => (token.id === "debug.memory" ? memory : undefined),
+    })
+
+    host.release()
+    await until(() => host.container.querySelector("aside") !== null)
+    await until(() => document.querySelector('button[aria-label="Close Knobs"]') !== null)
+
+    const view = {
+      close: host.container.querySelector('button[aria-label="Hide debug bar"]') !== null,
+      knobs: document.querySelector('button[aria-label="Close Knobs"]') !== null,
+    }
+
+    host.unmount()
+
+    return view
+  }, modules)
+
+  expect(result).toEqual({ close: false, knobs: true })
+})
+
 story("a feature page's Enabled switch turns that feature on after another feature's page", async ({ page }) => {
   const result = await page.evaluate(
     async (modules) => {

@@ -1,5 +1,4 @@
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { isMixedContent } from "./browser"
 import { legacyPairingLink, pairingLink, redeemPairingLink, type Pairing } from "./pairing"
 
@@ -14,9 +13,8 @@ type Redeemed = { code?: string; pairing?: Pairing }
 // Pasted and scanned links share one redeem path so every surface explains a failure the same way.
 // Each form keeps the last token it redeemed: the code is spent, so a retry after a failed connection check reuses it,
 // whichever form the link takes (a scanned QR payload, or the link the scanner then shows).
-export function useRedeemPairing(): RedeemPairing {
+export function useRedeemPairing(exchange: typeof redeemPairingLink, pageHref?: string): RedeemPairing {
   const language = useLanguage()
-  const platform = usePlatform()
   const last: Redeemed = {}
 
   return async (value) => {
@@ -32,7 +30,7 @@ export function useRedeemPairing(): RedeemPairing {
       return { pairing: { url, password: last.pairing.password } }
     }
 
-    const result = await redeemPairingLink(link)
+    const result = await exchange(link)
 
     if (result.type === "paired") {
       last.code = link.code
@@ -44,7 +42,7 @@ export function useRedeemPairing(): RedeemPairing {
     if (result.type === "expired") return { error: language.t("server.connect.link.expired") }
 
     // A QR code can carry several addresses; the HTTPS page can reach none of them only when every one is plain HTTP.
-    if (platform.platform === "web" && link.urls.every((url) => isMixedContent(location.href, url)))
+    if (pageHref && link.urls.every((url) => isMixedContent(pageHref, url)))
       return { error: language.t("server.connect.mixedContent") }
 
     return { error: language.t("server.connect.link.unreachable", { url: link.urls.join(", ") }) }

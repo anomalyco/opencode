@@ -13,11 +13,11 @@ export const Plugin = define({
     const compaction = yield* SessionCompaction.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, compaction.reload())
     yield* compaction.transform((editor) => {
-      editor.configure({ precompute: Config.latest(loaded.entries, "experimental")?.background_compaction === true })
       for (const entry of loaded.entries) {
         if (entry.type !== "document" || !entry.info.compaction) continue
         editor.configure({
           ...(entry.info.compaction.auto === undefined ? {} : { auto: entry.info.compaction.auto }),
+          ...(entry.info.compaction.background === undefined ? {} : { background: entry.info.compaction.background }),
           ...(entry.info.compaction.buffer === undefined ? {} : { buffer: entry.info.compaction.buffer }),
           ...(entry.info.compaction.keep?.tokens === undefined ? {} : { keep: entry.info.compaction.keep.tokens }),
         })

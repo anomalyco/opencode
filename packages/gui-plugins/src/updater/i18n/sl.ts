@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Naprej",
   "releaseNotes.action.hideFuture": "V prihodnje jih ne prikazujte",
   "releaseNotes.media.alt": "Predogled izdaje",
+  "action.reload": "Znova naloži za posodobitev",
+  "action.reloading": "Ponovno nalaganje …",
+  "web.ready.title": "Posodobitev je pripravljena",
+  "web.ready.message": "Nova različica OpenCode je pripravljena. Znova naložite, da jo uporabite v vseh odprtih oknih.",
+  "web.reload": "Znova naloži",
+  "web.reset.title": "Znova naloži s strežnika",
+  "web.reset.description": "Počisti shranjeno kopijo aplikacije in naloži trenutno različico s strežnika",
+  "web.reset.action": "Znova naloži s strežnika",
 }

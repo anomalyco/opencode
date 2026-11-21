@@ -8,7 +8,7 @@
 
 /*
  * The open panel sits just above the capsule, with their inline-start edges aligned, and its rows share the capsule's
- * grid: the same hairline and 10px inset put row glyphs on the capsule's glyph, and the same 16px glyph and 8px gap put
+ * grid: the same hairline and 8px inset put row glyphs on the capsule's glyph, and the same 16px glyph and 6px gap put
  * row text on the capsule's label. Rows are subgrids of one table, so agent names, descriptions and run times each
  * line up in a column; descriptions take the remaining width and truncate only when the panel reaches its maximum.
  */
@@ -37,7 +37,7 @@
     display: grid;
     grid-template-columns: auto auto minmax(0, 1fr) auto;
     align-content: start;
-    column-gap: 8px;
+    column-gap: 6px;
   }
 
   [data-slot="menu-v2-item-content"] > span[dir] {
@@ -49,17 +49,19 @@
     unicode-bidi: isolate;
   }
 
-  /* With the list's 4px padding, rows inset 10px like the capsule's content, at the end as at the start. */
+  /* With the list's 4px padding, rows inset 8px like the capsule's content, at the end as at the start. */
   [data-component="menu-v2-item"],
   [data-slot="menu-v2-item-content"] {
     display: grid;
     grid-column: 1 / -1;
     grid-template-columns: subgrid;
     align-items: center;
+    /* The table's gap in place of a menu row's own 8px, which would shift each row's columns off the table's. */
+    column-gap: 6px;
   }
 
   [data-component="menu-v2-item"] {
-    padding-inline: 6px;
+    padding-inline: 4px;
     border-radius: 4px;
   }
 
@@ -94,7 +96,12 @@
     visibility: hidden;
   }
 
-  [data-component="menu-v2-item"][data-stoppable]:is(:hover, [data-highlighted]) {
+  /* A row whose Stop is in flight keeps showing its loader until the work leaves the list or the Stop settles. */
+  [data-component="menu-v2-item"]:is(
+    :hover,
+    [data-highlighted],
+    :has([data-slot="session-activity-stop"][aria-disabled="true"])
+  ) {
     [data-slot="session-activity-stop"] {
       visibility: visible;
     }
@@ -121,8 +128,7 @@
     }
 
     [data-slot="session-activity-stop"],
-    [data-component="menu-v2-item"][data-stoppable]:is(:hover, [data-highlighted])
-      [data-slot="session-activity-elapsed"] {
+    [data-component="menu-v2-item"]:is(:hover, [data-highlighted]) [data-slot="session-activity-elapsed"] {
       visibility: visible;
     }
   }

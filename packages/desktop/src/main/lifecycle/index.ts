@@ -4,10 +4,11 @@ import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DeepLinks } from "../deep-links"
+import { deepLinkArguments, takeLaunchLinks } from "./launch-links"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
-import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, mainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import { safeWebContentsOrigin } from "../windows/state"
+import { getLastFocusedWindow, mainWindows } from "../windows"
 import type { Scope } from "@opencode/plugin/gui/host"
 import { marks } from "./marks"
 import {
@@ -44,9 +45,6 @@ const runtime = Layer.effect(
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
-    const windows = yield* mainWindows()
-    const createWindow = windows.create
-    const restoreWindows = windows.restore
     const exits = new Set<NodeJS.Immediate>()
 
     // A hung step would otherwise leave every quit, or the app after a failed handoff, waiting on it forever.
@@ -82,8 +80,18 @@ const runtime = Layer.effect(
 
         exits.add(exit)
       },
-      quitting: setAppQuitting,
     })
+
+    const relaunch = () => driver.dispatch({ type: "exit.requested", mode: "relaunch" })
+
+    const windows = yield* mainWindows({
+      appState: driver.state,
+      relaunch,
+      sessionEnding: () => driver.dispatch({ type: "session.ending" }),
+    })
+
+    const createWindow = windows.create
+    const restoreWindows = windows.restore
 
     const focusWindow = (win: BrowserWindow | null) => {
       if (!win) return
@@ -95,10 +103,8 @@ const runtime = Layer.effect(
 
     const deepLinks = yield* DeepLinks.make(focusWindow)
 
-    const relaunch = () => driver.dispatch({ type: "exit.requested", mode: "relaunch" })
-
     const secondInstance = (_event: Event, argv: string[]) => {
-      const urls = argv.filter((arg) => arg.startsWith("opencode://"))
+      const urls = deepLinkArguments(argv)
 
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
@@ -130,8 +136,13 @@ const runtime = Layer.effect(
       webContents: Electron.WebContents,
       details: Electron.RenderProcessGoneDetails,
     ) => {
+      // Every page's process reports here, a plugin's views included (the in-app browser's pages), and logs go into
+      // bug reports: the origin only. A window's own line has its address (recovery.ts).
       runFork(
-        scoped("window", Effect.logError("app render process gone", { url: safeWebContentsURL(webContents), details })),
+        scoped(
+          "window",
+          Effect.logError("app render process gone", { origin: safeWebContentsOrigin(webContents), details }),
+        ),
       )
     }
 
@@ -147,7 +158,6 @@ const runtime = Layer.effect(
       if (BrowserWindow.getAllWindows().length === 0) restoreWindows()
     }
 
-    const resetRelaunchHandler = setRelaunchHandler(relaunch)
     let windowsWired = false
 
     app.on("second-instance", secondInstance)
@@ -158,6 +168,15 @@ const runtime = Layer.effect(
     app.on("render-process-gone", renderProcessGone)
     process.on("SIGINT", signal)
     process.on("SIGTERM", signal)
+
+    // The router waits for a window to be ready, so the links the app was started with open once one is.
+    const launched = takeLaunchLinks()
+
+    if (launched.length) {
+      runFork(Effect.logInfo("deep link received at launch", { urls: launched }))
+      deepLinks.receive(launched)
+    }
+
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         app.off("second-instance", secondInstance)
@@ -170,7 +189,6 @@ const runtime = Layer.effect(
         app.off("activate", activate)
         process.off("SIGINT", signal)
         process.off("SIGTERM", signal)
-        resetRelaunchHandler()
         exits.forEach(clearImmediate)
         exits.clear()
       }),

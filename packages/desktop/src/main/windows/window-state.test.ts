@@ -1,10 +1,16 @@
-import { describe, expect, mock, test } from "bun:test"
+import { afterEach, describe, expect, mock, test } from "bun:test"
 import { EventEmitter } from "node:events"
-import type { BrowserWindow } from "electron"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { manageWindowState, readWindowState, resolveWindowState } from "./window-state"
+import type { Rectangle } from "electron"
+import { manageWindowState, readWindowState, resolveWindowState, type ManagedWindow } from "./window-state"
+
+const originalPlatform = process.platform
+
+afterEach(() => {
+  Object.defineProperty(process, "platform", { value: originalPlatform })
+})
 
 const defaults = { width: 1280, height: 800 }
 
@@ -110,6 +116,63 @@ describe("window state", () => {
     expect(readWindowState(file)).toBeUndefined()
     expect(readWindowState(path.join(dir, "missing.json"))).toBeUndefined()
   })
+
+  test.each([
+    { platform: "win32" as const, expected: "kept" },
+    { platform: "linux" as const, expected: "reset" },
+  ])("on $platform a window snapped to the primary display's left edge is $expected", ({ platform, expected }) => {
+    Object.defineProperty(process, "platform", { value: platform })
+    // A left-half snap at 100% scale: the invisible resize borders put the frame 7px past the left and bottom edges.
+    const snapped = { x: -7, y: 0, width: 974, height: 1047, displayBounds: primary }
+    const resolved = resolveWindowState(snapped, defaults, displays)
+
+    expect(resolved).toEqual(expected === "kept" ? snapped : { ...defaults, x: 0, y: 0, displayBounds: primary })
+  })
+
+  test.each([
+    {
+      name: "a maximized window keeps the frame Windows restores it to",
+      reading: { maximized: true, minimized: false, bounds: { x: 1912, y: -8, width: 2576, height: 1456 } },
+      expected: { x: 2100, y: 200, width: 1100, height: 700, isMaximized: true, isFullScreen: false },
+    },
+    {
+      name: "a minimized window keeps how it was shown",
+      reading: { maximized: false, minimized: true, bounds: { x: -32000, y: -32000, width: 160, height: 28 } },
+      expected: { x: 100, y: 100, width: 1000, height: 600, isMaximized: true, displayBounds: primary },
+    },
+  ])("on win32 $name", ({ reading, expected }) => {
+    Object.defineProperty(process, "platform", { value: "win32" })
+    const dir = mkdtempSync(path.join(tmpdir(), "opencode-window-state-"))
+    const file = path.join(dir, "window-state-a.json")
+    const second = { x: 1920, y: 0, width: 2560, height: 1440 }
+    const events = new EventEmitter()
+
+    const fake: ManagedWindow = {
+      maximize: () => {},
+      setFullScreen: () => {},
+      isDestroyed: () => false,
+      isMaximized: () => reading.maximized,
+      isMinimized: () => reading.minimized,
+      isFullScreen: () => false,
+      getBounds: () => reading.bounds,
+      getNormalBounds: () => ({ x: 2100, y: 200, width: 1100, height: 700 }),
+      on: (event, listener) => events.on(event, listener),
+      off: (event, listener) => events.off(event, listener),
+    }
+
+    const initial = { x: 100, y: 100, width: 1000, height: 600, isMaximized: true, displayBounds: primary }
+
+    const matching = (bounds: Rectangle) => (bounds.x >= second.x - 16 ? second : primary)
+
+    manageWindowState(fake, file, initial, { ...displays, matching }, (error) => {
+      throw error
+    })
+    events.emit("close")
+    events.emit("closed")
+
+    const written: unknown = JSON.parse(readFileSync(file, "utf8"))
+    expect(written).toEqual(expected.displayBounds ? expected : { ...expected, displayBounds: second })
+  })
 })
 
 test("a failed window-state save reports the error and allows closing to continue", () => {
@@ -119,6 +182,9 @@ test("a failed window-state save reports the error and allows closing to continu
   const closed = mock(() => {})
 
   const win = Object.assign(new EventEmitter(), {
+    maximize: () => {},
+    setFullScreen: () => {},
+    getNormalBounds: () => ({ x: 10, y: 20, width: 800, height: 600 }),
     isDestroyed: () => false,
     getBounds: () => ({ x: 10, y: 20, width: 800, height: 600 }),
     isMaximized: () => false,
@@ -129,8 +195,7 @@ test("a failed window-state save reports the error and allows closing to continu
   try {
     writeFileSync(file, "previous state")
     mkdirSync(`${file}.tmp`)
-    // SAFETY: the fixture implements the window events and getters used for this non-maximized state.
-    manageWindowState(win as BrowserWindow, file, defaults, displays, report)
+    manageWindowState(win, file, defaults, displays, report)
     win.on("closed", closed)
     win.emit("close")
     expect(() => win.emit("closed")).not.toThrow()

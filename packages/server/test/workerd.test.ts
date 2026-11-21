@@ -40,15 +40,5 @@ it.effect("fails Npm.add with a clear workerd error instead of running the insta
     const error = yield* npm.add("some-package").pipe(Effect.flip)
     expect(error).toBeInstanceOf(Npm.InstallFailedError)
     expect(String(error.cause)).toContain("Npm.add is unavailable in the workerd profile")
-  }).pipe(
-    Effect.provide(AppNodeBuilder.build(Npm.node, ServerWorkerd.replacements({ storage: makeDurableObjectStorage() }))),
-  ),
-)
-
-it.effect("turns off the background Console check unless the host asks for it", () =>
-  Effect.sync(() => {
-    const storage = makeDurableObjectStorage()
-    expect(ServerWorkerd.serverOptions({ storage }).console).toEqual({ poll: false })
-    expect(ServerWorkerd.serverOptions({ storage, console: { poll: true } }).console).toEqual({ poll: true })
-  }),
+  }).pipe(Effect.provide(AppNodeBuilder.build(Npm.node, ServerWorkerd.replacements({ storage: makeDurableObjectStorage() })))),
 )

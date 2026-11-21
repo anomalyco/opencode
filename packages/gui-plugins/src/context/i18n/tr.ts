@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Kullanım",
   "usage.cost": "Maliyet",
   "usage.view": "Bağlam kullanımını görüntüle",
-  "systemPrompt.title": "Sistem İstemi",
   "rawMessages.title": "Ham mesajlar",
   "export.session": "Oturumu dışa aktar",
   "stats.session": "Oturum",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Oturum {{filename}} dosyasına kaydedildi",
   "export.failed.title": "Oturum dışa aktarılamadı",
   "export.failed.description": "Oturum dışa aktarılırken bir hata oluştu",
+  "usage.toggle": "Oturum bağlamını aç/kapat",
 }

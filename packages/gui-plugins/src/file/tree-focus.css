@@ -1,0 +1,6 @@
+button[data-type="item"]:focus-visible,
+:host(:focus-visible) button[data-type="item"][data-item-focused="true"] {
+  outline: 2px solid var(--v2-border-border-focus) !important;
+  outline-offset: -2px;
+  box-shadow: none !important;
+}

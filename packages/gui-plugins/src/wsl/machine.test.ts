@@ -312,3 +312,21 @@ describe("host jobs", () => {
     expect(toServersState(settled.state)).toMatchObject({ hostJob: "idle", runtime })
   })
 })
+
+describe("servers state", () => {
+  // Windows reconcile this state into a Solid store, which writes into the objects it holds: a shared runtime
+  // object would let starting one server rewrite another's row.
+  test("stopped servers never share a runtime object, open or closed", () => {
+    const open = createWslMachineState([ubuntu, { id: "wsl:Debian", distro: "Debian" }])
+    const closed = transitionWslMachine(open, { type: "close" }).state
+
+    const runtimes = [open, closed].map((state) => toServersState(state).servers.map((server) => server.runtime))
+
+    expect(runtimes).toEqual([
+      [{ kind: "stopped" }, { kind: "stopped" }],
+      [{ kind: "stopped" }, { kind: "stopped" }],
+    ])
+    expect(runtimes[0]?.[0]).not.toBe(runtimes[0]?.[1])
+    expect(runtimes[1]?.[0]).not.toBe(runtimes[1]?.[1])
+  })
+})

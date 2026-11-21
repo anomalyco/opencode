@@ -8,6 +8,8 @@ export default {
         "Range, If-Range, If-Match, If-None-Match, If-Modified-Since, If-Unmodified-Since",
       "Access-Control-Expose-Headers":
         "Accept-Ranges, Content-Length, Content-Range, Content-Disposition, ETag, Last-Modified",
+      // Like everything on dev.opencode.ai, dev's files ask search engines not to index them.
+      ...(env.STAGE === "dev" ? { "X-Robots-Tag": "noindex, nofollow" } : {}),
     }
 
     if (!url.pathname.startsWith("/files/")) {
@@ -75,7 +77,9 @@ export default {
     headers.set("Last-Modified", object.uploaded.toUTCString())
     headers.set("Accept-Ranges", "bytes")
     if (!headers.has("Content-Type")) headers.set("Content-Type", "application/octet-stream")
-    if (!headers.has("Cache-Control")) headers.set("Cache-Control", "public, max-age=3600")
+    // The site's media never changes in place: a changed file gets a new dated folder (services/site/MEDIA.md).
+    if (!headers.has("Cache-Control"))
+      headers.set("Cache-Control", key.startsWith("site/") ? "public, max-age=31536000, immutable" : "public, max-age=3600")
 
     const modified = Math.floor(object.uploaded.getTime() / 1000) * 1000
     const ifMatch = request.headers.get("If-Match")
@@ -153,7 +157,7 @@ export default {
     }
     return response
   },
-} satisfies ExportedHandler<{ FILES: R2Bucket }>
+} satisfies ExportedHandler<{ FILES: R2Bucket; STAGE: "dev" | "production" }>
 
 function matches(value: string, etag: string, weak: boolean) {
   return value.split(",").some((part) => {

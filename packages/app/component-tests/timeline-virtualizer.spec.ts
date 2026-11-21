@@ -147,6 +147,27 @@ story("leaves a reader who scrolled up in place after a scroll to the zoomed end
   expect(await distance()).toBeGreaterThan(70)
 })
 
+story("holds a revealed tool inside a group of several through a later resize", async ({ page }) => {
+  // The anchor looked only for an element naming the tool alone, so a grouped tool let go on the next resize.
+  await page.evaluate(async (fixture) => {
+    const { mountTimelineVirtualizer } = await import(fixture)
+    mountTimelineVirtualizer({ count: 40, rowHeight: 60, immediate: true })
+  }, fixture)
+  const root = page.getByTestId("timeline-virtualizer-fixture")
+  const controls = root.getByTestId("timeline-controls")
+  await root.getByRole("button", { name: "Complete Markdown", exact: true }).click()
+  await expect(root.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+  await expect(controls).toHaveAttribute("data-pinned", "true")
+
+  await root.getByRole("button", { name: "Anchor first row", exact: true }).click()
+  await expect(root.locator('[data-timeline-part-ids="prt_first,prt_grouped"]')).toBeAttached()
+  await root.getByRole("button", { name: "Grow last row", exact: true }).click()
+
+  const viewport = root.locator("[data-scrollable]")
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(0)
+  await expect(controls).toHaveAttribute("data-anchored", "true")
+})
+
 for (const input of [
   { name: "offset-only", count: 1, rowHeight: 600, reveal: { scrollTop: 0 } },
   { name: "zero-height", count: 4, rowHeight: 60, reveal: {} },
@@ -197,5 +218,52 @@ for (const input of [
       await expect(root).toHaveAttribute("data-scrolls", "0")
       await expect(root).toHaveAttribute("data-viewport-resizes", resizes!)
     }
+  })
+}
+
+// TanStack lists the rows it last read, and rows found their row by key or else by index. A listed key the projection
+// had dropped found nothing and crashed rendering with "Match/exhaustive: absurd" (#63944). A row whose key had left
+// read the row that moved to its index, and a renderer handed another kind of row throws (#62800). Two rows can share
+// a key, as the dividers of a turn interrupted twice do, and one of them mounts.
+for (const input of [
+  {
+    name: "a row dropped in the flush that added it",
+    rows: ["a", "b"],
+    next: ["a", "b", "c"],
+    settled: ["a", "b"],
+    mounted: ["a", "b"],
+  },
+  {
+    name: "a row that left while another took its index",
+    rows: ["a", "b", "c"],
+    next: ["b", "c"],
+    settled: undefined,
+    mounted: ["b", "c"],
+  },
+  {
+    name: "two rows that share a key",
+    rows: ["a", "b"],
+    next: ["a", "b", "a"],
+    settled: undefined,
+    mounted: ["a", "b"],
+  },
+]) {
+  story(`mounts each row with its own row through ${input.name}`, async ({ page }) => {
+    const result = await page.evaluate(
+      async ({ fixture, input }) => {
+        const { mountTimelineRowChanges } = await import(fixture)
+        const timeline = mountTimelineRowChanges(input.rows)
+
+        while (timeline.mounted().length < input.rows.length)
+          await new Promise((resolve) => requestAnimationFrame(resolve))
+
+        timeline.replace(input.next, input.settled)
+
+        return { errors: timeline.errors, foreign: timeline.foreign, mounted: timeline.mounted() }
+      },
+      { fixture, input },
+    )
+
+    expect(result).toEqual({ errors: [], foreign: [], mounted: input.mounted.map((id) => `user-message:${id}`) })
   })
 }

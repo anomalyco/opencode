@@ -15,6 +15,7 @@ import {
   terminalPassedDocument,
 } from "@opencode/session-ui/storybook"
 import { SessionPreview } from "./story-model"
+import type { SubagentStatus } from "./composer/subagent-bar"
 
 const description = "opencode · modular-session-ui"
 
@@ -307,21 +308,33 @@ export const ChildSessionNoOutcome = {
   ),
 }
 
-export const ChildSessionDone = {
-  render: () => (
+function finishedChild(title: string, status: Exclude<SubagentStatus, "running">) {
+  return (
     <SessionPreview
-      title="Inspect a finished child Session"
+      title={title}
       description={description}
       document={subagentDocument}
       child={{
         agent: "surveyor",
         model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
-        status: "succeeded",
+        status,
         started: 0,
         ended: 252_000,
       }}
     />
-  ),
+  )
+}
+
+export const ChildSessionDone = {
+  render: () => finishedChild("Inspect a finished child Session", "succeeded"),
+}
+
+export const ChildSessionFailed = {
+  render: () => finishedChild("Inspect a failed child Session", "failed"),
+}
+
+export const ChildSessionInterrupted = {
+  render: () => finishedChild("Inspect an interrupted child Session", "interrupted"),
 }
 
 export const MobileLayout = {

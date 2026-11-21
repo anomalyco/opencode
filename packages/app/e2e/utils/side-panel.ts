@@ -17,6 +17,15 @@ export async function openReviewLauncher(panel: Locator) {
   await panel.getByRole("button", { name: /^Review/ }).click()
 }
 
+/** The session keys whose side strips the stored layout holds, in stored order, once the app has saved them. */
+export function storedStrips(page: Page) {
+  return page.evaluate((): string[] => {
+    const layout: { sessionTabs?: Record<string, { all: string[] }> } = JSON.parse(localStorage.getItem("opencode.global.dat:layout") ?? "{}")
+
+    return Object.keys(layout.sessionTabs ?? {})
+  })
+}
+
 /** Storage that restores the Review tab, selected, in each session's side strip, as the app writes it. */
 export function reviewTabs(directory: string, ...sessions: string[]) {
   return {

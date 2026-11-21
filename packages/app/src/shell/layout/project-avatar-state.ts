@@ -5,6 +5,7 @@ import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests
 import { needsUser } from "@/session/requests/auto-approve-machine"
 import { ServerConnection } from "@/runtime/server/registry"
 import { projectSettingsKey, useSettings } from "@/settings/model"
+import { useTabs } from "@/shell/tabs/tabs"
 
 type ServerData = ServerCtx["data"]
 
@@ -26,9 +27,8 @@ export function useSessionTabAvatarState(
     if (!ctx) return false
 
     const project = projectSettingsKey(ctx.sdk.scope, ctx.data.session.get(sessionId())?.projectID)
-    const requests = sessionRequests(ctx, sessionId(), !!root?.(), settings.permissions.autoApproves(project))
 
-    return !!requests.permission || !!requests.form
+    return attention(ctx, sessionId(), !!root?.(), settings.permissions.autoApproves(project))
   })
 
   const unread = createMemo(
@@ -42,12 +42,7 @@ export function useSessionTabAvatarState(
 
     if (needsAttention()) return false
 
-    if (root?.())
-      return data.session
-        .list()
-        .some((session) => data.session.root(session.id) === sessionId() && sessionBusy(data, session.id))
-
-    return sessionBusy(data, sessionId())
+    return running(data, sessionId(), !!root?.())
   })
 
   return { unread, loading, attention: needsAttention }
@@ -74,7 +69,84 @@ export function sessionRequests(ctx: ServerCtx, sessionId: string, root: boolean
   }
 }
 
+export type SessionSidebarStatus = "input" | "failed" | "unread" | "running" | "idle"
+
+// The same status the session tab avatar shows, readable for many sessions at once (to filter and sort the sidebar).
+export function sessionStatus(
+  ctx: ServerCtx,
+  sessionId: string,
+  input: { root: boolean; autoApprove: boolean; snapshot?: SessionInfo },
+): SessionSidebarStatus {
+  if (attention(ctx, sessionId, input.root, input.autoApprove)) return "input"
+
+  if (running(ctx.data, sessionId, input.root)) return "running"
+
+  if (ctx.notification.session.unread(sessionId, input.snapshot)) return "unread"
+
+  if ((ctx.data.session.get(sessionId) ?? input.snapshot)?.outcome === "failed") return "failed"
+
+  return "idle"
+}
+
+function attention(ctx: ServerCtx, sessionId: string, root: boolean, autoApprove: boolean) {
+  const requests = sessionRequests(ctx, sessionId, root, autoApprove)
+
+  return !!requests.permission || !!requests.form
+}
+
+// A root runs while any session in its family is busy.
+function running(data: ServerData, sessionId: string, root: boolean) {
+  if (root)
+    return data.session
+      .list()
+      .some((session) => data.session.root(session.id) === sessionId && sessionBusy(data, session.id))
+
+  return sessionBusy(data, sessionId)
+}
+
 export type SessionRequests = ReturnType<typeof sessionRequests>
+
+export type WindowTabActivity = {
+  readonly waiting: number
+  /** Tabs that wait on the user or finished a run this window hasn't viewed: the taskbar badge's count. */
+  readonly needsYou: number
+  readonly failed: boolean
+  readonly busy: boolean
+}
+
+/** Summarizes the open session tabs in the current window for OS taskbar status indicators. */
+export function useWindowTabActivity(): Accessor<WindowTabActivity> {
+  const tabs = useTabs()
+  const global = useGlobal()
+  const settings = useSettings()
+
+  return createMemo(() =>
+    tabs.store
+      .filter((tab) => tab.type === "session")
+      .reduce<WindowTabActivity>(
+        (summary, tab) => {
+          const ctx = global.serverCtx(tab.server)
+
+          if (!ctx) return summary
+          const session = ctx.data.session.get(tab.sessionId)
+          const muted = global.sessionPreferences.muted(tab.server, tab.sessionId)
+          const autoApprove = settings.permissions.autoApproves(projectSettingsKey(ctx.sdk.scope, session?.projectID))
+          const isWaiting = !muted && attention(ctx, tab.sessionId, true, autoApprove)
+          const isBusy = running(ctx.data, tab.sessionId, true)
+          const isUnread = !muted && !isWaiting && !isBusy && ctx.notification.session.unread(tab.sessionId)
+          const isFailed = isUnread && session?.outcome === "failed"
+
+          return {
+            waiting: summary.waiting + (isWaiting ? 1 : 0),
+            needsYou: summary.needsYou + (isWaiting || isUnread ? 1 : 0),
+            failed: summary.failed || isFailed,
+            busy: summary.busy || isBusy,
+          }
+        },
+        { waiting: 0, needsYou: 0, failed: false, busy: false },
+      ),
+  )
+}
 
 // Like the TUI, work waiting in the inbox counts as busy; parked synthetic context does not.
 export function sessionBusy(data: ServerData, sessionId: string) {

@@ -4,10 +4,6 @@ const MAX_FILE_CONTENT_ENTRIES = 40
 
 const MAX_FILE_CONTENT_BYTES = 20 * 1024 * 1024
 
-const lru = new Map<string, number>()
-
-let total = 0
-
 export function approxBytes(content: FileContent) {
   const patchBytes =
     content.patch?.hunks.reduce((sum, hunk) => {
@@ -20,67 +16,59 @@ export function approxBytes(content: FileContent) {
   return body + ((content.diff?.length ?? 0) + patchBytes) * 2
 }
 
-function setBytes(path: string, nextBytes: number) {
-  const prev = lru.get(path)
+// One file provider's content budget, in recency order. Each provider owns one, so a provider that resets or evicts
+// never touches another provider's accounting.
+export function createFileContentCache() {
+  const lru = new Map<string, number>()
+  let total = 0
 
-  if (prev !== undefined) total -= prev
-  lru.delete(path)
-  lru.set(path, nextBytes)
-  total += nextBytes
-}
+  const touch = (path: string, bytes?: number) => {
+    const prev = lru.get(path)
 
-function touch(path: string, bytes?: number) {
-  const prev = lru.get(path)
-
-  if (prev === undefined && bytes === undefined) return
-  setBytes(path, bytes ?? prev ?? 0)
-}
-
-function remove(path: string) {
-  const prev = lru.get(path)
-
-  if (prev === undefined) return
-  lru.delete(path)
-  total -= prev
-}
-
-function reset() {
-  lru.clear()
-  total = 0
-}
-
-export function evictContentLru(keep: Set<string> | undefined, evict: (path: string) => void) {
-  const set = keep ?? new Set<string>()
-
-  while (lru.size > MAX_FILE_CONTENT_ENTRIES || total > MAX_FILE_CONTENT_BYTES) {
-    const path = lru.keys().next().value
-
-    if (!path) return
-
-    if (set.has(path)) {
-      touch(path)
-
-      if (lru.size <= set.size) return
-      continue
-    }
-
-    remove(path)
-    evict(path)
+    if (prev === undefined && bytes === undefined) return
+    const next = bytes ?? prev ?? 0
+    lru.delete(path)
+    lru.set(path, next)
+    total += next - (prev ?? 0)
   }
-}
 
-export function resetFileContentLru() {
-  reset()
-}
+  const remove = (path: string) => {
+    const prev = lru.get(path)
 
-export function removeFileContentBytes(path: string) {
-  remove(path)
-}
+    if (prev === undefined) return
+    lru.delete(path)
+    total -= prev
+  }
 
-export function touchFileContent(path: string, bytes?: number) {
-  touch(path, bytes)
-}
+  return {
+    touch,
+    remove,
+    reset: () => {
+      lru.clear()
+      total = 0
+    },
+    // Drops the oldest entries until the cache fits, rotating protected ones to the newest end, and returns what it
+    // dropped. One pass over the entries bounds the loop, so protected entries alone over budget cannot spin it.
+    evict: (keep?: ReadonlySet<string>) => {
+      const evicted: string[] = []
+      let remaining = lru.size
 
-export function hasFileContent(path: string) {
-  return lru.has(path)
+      while (remaining > 0 && (lru.size > MAX_FILE_CONTENT_ENTRIES || total > MAX_FILE_CONTENT_BYTES)) {
+        remaining -= 1
+        const path = lru.keys().next().value
+
+        if (path === undefined) break
+
+        if (keep?.has(path)) {
+          touch(path)
+          continue
+        }
+
+        remove(path)
+        evicted.push(path)
+      }
+
+      return evicted
+    },
+  }
 }

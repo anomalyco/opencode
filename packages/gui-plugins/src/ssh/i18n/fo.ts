@@ -37,4 +37,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Legg ambætara til",
   "menu.delete": "Strika",
+  "error.unavailable": "SSH er ikki tøkt",
 }

@@ -11,6 +11,17 @@ const Envelope = Schema.Struct({
   type: Schema.String,
   event_id: Schema.optional(Schema.String),
   client_event_id: Schema.optional(Schema.String),
+  // `error` events say whether the session ended or one client event was rejected.
+  error: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        type: Schema.optional(Schema.NullOr(Schema.String)),
+        code: Schema.optional(Schema.NullOr(Schema.String)),
+        message: Schema.optional(Schema.NullOr(Schema.String)),
+        event_id: Schema.optional(Schema.NullOr(Schema.String)),
+      }),
+    ),
+  ),
   delta: Schema.optional(Schema.String),
   delegation_id: Schema.optional(Schema.NullOr(Schema.String)),
   delegation: Schema.optional(Schema.Struct({ id: Schema.String, target: Schema.String })),

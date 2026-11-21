@@ -25,7 +25,7 @@ export type Terminal = "succeeded" | "failed" | "interrupted"
 export type TurnContext = {
   readonly sessionID: Session.ID
   readonly cwd: string
-  readonly start: TurnStart
+  readonly start?: TurnStart
   readonly childUpdates: boolean
   readonly compaction: boolean
 }
@@ -44,13 +44,17 @@ type RetryStatus = {
   readonly error: SessionError.Error
 }
 
+type Child = ACPChild.Session & { readonly turnID?: string }
+
 export type TurnState = {
   readonly started: boolean
   readonly tools: ReadonlyMap<string, Tool>
   readonly retries: ReadonlyMap<string, RetryStatus>
   readonly compactions: ACPCompaction.Tracked
-  readonly children: ReadonlyMap<string, ACPChild.Session>
+  readonly children: ReadonlyMap<string, Child>
   readonly openChildren: ReadonlySet<string>
+  /** Background shells that will wake their session, with the inbox ID of their notice once it is queued. */
+  readonly shells: ReadonlyMap<string, string | undefined>
   readonly asks: ReadonlySet<string>
   readonly finish?: SessionMessage.Assistant["finish"]
   readonly usage?: { readonly turn: TokenUsage.Info; readonly last: TokenUsage.Info }
@@ -69,9 +73,9 @@ export type Output =
       readonly _tag: "PermissionAsk"
       readonly event: PermissionEvent
       readonly tool?: Tool
-      readonly child?: ACPChild.Session
+      readonly child?: Child
     }
-  | { readonly _tag: "FormAsk"; readonly form: FormEvent["data"]["form"]; readonly child?: ACPChild.Session }
+  | { readonly _tag: "FormAsk"; readonly form: FormEvent["data"]["form"]; readonly child?: Child }
   | { readonly _tag: "AskSettled"; readonly id: string }
 
 export type Folded = {
@@ -87,6 +91,7 @@ export const initial: TurnState = {
   compactions: new Map(),
   children: new Map(),
   openChildren: new Set(),
+  shells: new Map(),
   asks: new Set(),
 }
 
@@ -95,20 +100,21 @@ export function fold(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): 
 
   const sessionID = sessionIDFromEvent(event)
   const child = sessionID ? state.children.get(sessionID) : undefined
+  const openChild = child && state.openChildren.has(child.id) ? child : undefined
 
-  if (event.type === "permission.asked" && (event.data.sessionID === ctx.sessionID || child)) {
+  if (event.type === "permission.asked" && (event.data.sessionID === ctx.sessionID || openChild)) {
     const tool = event.data.source?.id
       ? state.tools.get(toolKey(event.data.sessionID, event.data.source.id))
       : undefined
     return {
       state: { ...state, asks: new Set(state.asks).add(event.data.id) },
-      outputs: [{ _tag: "PermissionAsk", event, tool, child }],
+      outputs: [{ _tag: "PermissionAsk", event, tool, child: openChild }],
     }
   }
-  if (event.type === "form.created" && (event.data.form.sessionID === ctx.sessionID || child)) {
+  if (event.type === "form.created" && (event.data.form.sessionID === ctx.sessionID || openChild)) {
     return {
       state: { ...state, asks: new Set(state.asks).add(event.data.form.id) },
-      outputs: [{ _tag: "FormAsk", form: event.data.form, child }],
+      outputs: [{ _tag: "FormAsk", form: event.data.form, child: openChild }],
     }
   }
   const settledID =
@@ -123,15 +129,26 @@ export function fold(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): 
     return { state: { ...state, asks }, outputs: [{ _tag: "AskSettled", id: settledID }] }
   }
   if (!sessionID || (sessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
-  if (event.type === "session.inbox.delivered" && event.data.inboxID === ctx.start.id)
-    return { state: { ...state, started: true }, outputs: [] }
-  if (!state.started) return { state, outputs: [] }
+  if (event.type === "session.inbox.enqueued") return { state: shellNoticed(state, event), outputs: [] }
+  if (event.type === "session.inbox.delivered" || event.type === "session.inbox.cancelled") {
+    const settled = noticeSettled(state, event.data.inboxID)
+    const started =
+      sessionID === ctx.sessionID &&
+      event.type === "session.inbox.delivered" &&
+      (!ctx.start || event.data.inboxID === ctx.start.id)
+    return { state: started ? { ...settled, started: true } : settled, outputs: [] }
+  }
+  if (!child && !state.started) return { state, outputs: [] }
   return child ? childEvent(state, event, ctx, child) : rootEvent(state, event, ctx)
 }
 
-export function fromTrackedChild(state: TurnState, event: OpenCodeEvent) {
-  const sessionID = event.type === "session.created" ? event.data.parentID : sessionIDFromEvent(event)
-  return sessionID !== undefined && state.children.has(sessionID)
+/** Whether work that outlives the turn, such as a background child or shell, can still wake the session. */
+export function pending(state: TurnState) {
+  return state.openChildren.size > 0 || state.shells.size > 0
+}
+
+export function projectChild(ctx: TurnContext, child: Child) {
+  return !ctx.childUpdates && ctx.start !== undefined && child.turnID === ctx.start.id
 }
 
 export function failure(state: TurnState) {
@@ -202,7 +219,13 @@ function childCreated(state: TurnState, event: CreatedEvent, ctx: TurnContext): 
   if (!parentID) return { state, outputs: [] }
   const parent = parentID === ctx.sessionID ? undefined : state.children.get(parentID)
   if (!parent && parentID !== ctx.sessionID) return { state, outputs: [] }
-  const child = { id: event.data.sessionID, parentID, depth: parent ? parent.depth + 1 : 1, title: event.data.title }
+  const child: Child = {
+    id: event.data.sessionID,
+    parentID,
+    depth: parent ? parent.depth + 1 : 1,
+    title: event.data.title,
+    turnID: parent ? parent.turnID : ctx.start?.id,
+  }
   return {
     state: {
       ...state,
@@ -224,20 +247,27 @@ function rootEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): Fo
       return { state: { ...recorded, stepError: event.data.error }, outputs: [] }
     }
     case "session.execution.succeeded":
-      return { state, outputs: [], terminal: "succeeded" }
+      return { state: { ...state, started: Boolean(ctx.start) }, outputs: [], terminal: "succeeded" }
     case "session.execution.interrupted":
-      return { state, outputs: [], terminal: "interrupted" }
+      return { state: { ...state, started: Boolean(ctx.start) }, outputs: [], terminal: "interrupted" }
     case "session.execution.failed":
-      return { state: { ...state, executionError: event.data.error }, outputs: [], terminal: "failed" }
+      return {
+        state: { ...state, started: Boolean(ctx.start), executionError: event.data.error },
+        outputs: [],
+        terminal: "failed",
+      }
     default:
       return sessionEvent(state, event, ctx, undefined)
   }
 }
 
-function childEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, child: ACPChild.Session): Folded {
+function childEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, child: Child): Folded {
   switch (event.type) {
     case "session.execution.started":
-      return { state, outputs: childStatus(ctx, child, { type: "status", status: "running" }) }
+      return {
+        state: { ...state, openChildren: new Set(state.openChildren).add(child.id) },
+        outputs: childStatus(ctx, child, { type: "status", status: "running" }),
+      }
     case "session.execution.succeeded":
       return childEnded(state, ctx, child, { type: "status", status: "completed" })
     case "session.execution.interrupted":
@@ -249,12 +279,7 @@ function childEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, ch
   }
 }
 
-function sessionEvent(
-  state: TurnState,
-  event: OpenCodeEvent,
-  ctx: TurnContext,
-  child: ACPChild.Session | undefined,
-): Folded {
+function sessionEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, child: Child | undefined): Folded {
   const sessionID = child?.id ?? ctx.sessionID
   const send = (update: SessionUpdate) => route(ctx, child, update)
   switch (event.type) {
@@ -369,8 +394,17 @@ function sessionEvent(
     case "session.tool.success": {
       const key = toolKey(event.data.sessionID, event.data.id)
       const tool = state.tools.get(key) ?? newTool(event.data.sessionID, event.data.id)
+      // A shell moved to the background reports its end through a notice that wakes the session.
+      const shellID = event.data.metadata?.status === "running" ? event.data.metadata.shellID : undefined
       return {
-        state: { ...state, tools: without(state.tools, key) },
+        state: {
+          ...state,
+          tools: without(state.tools, key),
+          // A command that exits at once can queue its notice first; keep the notice it already has.
+          ...(typeof shellID === "string" && !state.shells.has(shellID)
+            ? { shells: new Map(state.shells).set(shellID, undefined) }
+            : {}),
+        },
         outputs: send({
           sessionUpdate: "tool_call_update",
           ...completedToolUpdate({
@@ -415,11 +449,11 @@ function newTool(sessionID: string, id: string, name = "tool"): Tool {
   return { sessionID, id, name, input: {}, metadata: {} }
 }
 
-function route(ctx: TurnContext, child: ACPChild.Session | undefined, update: SessionUpdate): Output[] {
+function route(ctx: TurnContext, child: Child | undefined, update: SessionUpdate): Output[] {
   if (!child) return [{ _tag: "SessionUpdate", update }]
   const projected = ACPChild.project(update, child)
   if (ctx.childUpdates) return childStatus(ctx, child, { type: "update", update: projected })
-  return [{ _tag: "SessionUpdate", update: projected }]
+  return projectChild(ctx, child) ? [{ _tag: "SessionUpdate", update: projected }] : []
 }
 
 function childStatus(ctx: TurnContext, child: ACPChild.Session, event: ACPChild.Event): Output[] {
@@ -431,6 +465,19 @@ function childEnded(state: TurnState, ctx: TurnContext, child: ACPChild.Session,
   const openChildren = new Set(state.openChildren)
   openChildren.delete(child.id)
   return { state: { ...state, openChildren }, outputs: childStatus(ctx, child, status) }
+}
+
+// A background shell's notice wakes the session once delivered, so the shell stays pending until then. Only a job's
+// notice wakes it: a user's shell command queues one without a job ID that waits for the next prompt.
+function shellNoticed(state: TurnState, event: Extract<OpenCodeEvent, { type: "session.inbox.enqueued" }>) {
+  const metadata = event.data.item.type === "synthetic" ? event.data.item.payload.metadata : undefined
+  if (typeof metadata?.shellID !== "string" || typeof metadata.jobID !== "string") return state
+  return { ...state, shells: new Map(state.shells).set(metadata.shellID, event.data.inboxID) }
+}
+
+function noticeSettled(state: TurnState, inboxID: string) {
+  const shells = new Map([...state.shells].filter(([, notice]) => notice !== inboxID))
+  return shells.size === state.shells.size ? state : { ...state, shells }
 }
 
 function recordStep(state: TurnState, tokens: TokenUsage.Info): TurnState {
