@@ -14,6 +14,7 @@ export interface Interface {
   readonly which: () => string | undefined
   // Before our isolation settings
   readonly env: () => Record<string, string | undefined>
+  readonly directoryExists: (directory: string) => Promise<boolean>
   readonly sessionExists: (sessionID: string, configDir?: string) => Promise<boolean>
   readonly fork: (sessionID: string, messageID: string, configDir?: string) => Promise<ClaudeFork.Result | undefined>
   readonly remove: (sessionID: string, configDir?: string) => Promise<void>
@@ -22,6 +23,13 @@ export interface Interface {
 export const real: Interface = {
   which: () => process.env.OPENCODE_CLAUDE_PATH || which("claude") || undefined,
   env: () => process.env,
+  directoryExists: async (directory) => {
+    const info = await stat(directory).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT" || error.code === "ENOTDIR") return undefined
+      throw error
+    })
+    return info?.isDirectory() ?? false
+  },
   sessionExists: async (sessionID, configDir) => {
     if (configDir) {
       // Look for the transcript the way the SDK does. Loading the SDK in a worker for this would slow every resume.
