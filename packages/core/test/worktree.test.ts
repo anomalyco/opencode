@@ -12,11 +12,14 @@ import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { Session } from "@opencode/schema/session"
+import { SessionTable } from "@opencode/core/session/sql"
 import { Worktree } from "@opencode/core/worktree"
 import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { WorktreeDirectory } from "@opencode/core/worktree/directory"
 import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { WorktreeGit } from "@opencode/core/worktree/git"
+import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Location } from "@opencode/core/location"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -28,6 +31,7 @@ import { EventManifest } from "@opencode/schema/event-manifest"
 import { Workspace } from "@opencode/schema/workspace"
 import { host } from "./plugin/host"
 import { initRepo } from "./fixture/git"
+import { fakeDaemon } from "./fixture/persistent-pty-daemon"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -74,6 +78,32 @@ function worktreeLayer(
           }),
         ),
       ),
+    ],
+  ).pipe(Layer.fresh)
+}
+
+function ptyWorktreeLayer(
+  input: Effect.Success<ReturnType<typeof makeFixture>>,
+  database: Database.Interface,
+  bus: Bus.Interface,
+  pty: PersistentPty.Options,
+) {
+  return AppNodeBuilder.build(
+    LayerNode.group([Worktree.node, WorktreeStrategies.node, PersistentPty.node]),
+    [
+      Database.node.replace(Layer.succeed(Database.Service, database)),
+      Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+      Global.node.replace(Global.layerWith({ data: input.root.path })),
+      Location.node.replace(
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of({
+            directory: input.sourceDirectory,
+            project: { id: input.projectID, directory: input.sourceDirectory, canonical: input.sourceDirectory },
+          }),
+        ),
+      ),
+      PersistentPty.node.replace(PersistentPty.configured(pty)),
     ],
   ).pipe(Layer.fresh)
 }
@@ -241,6 +271,118 @@ describe("Worktree", () => {
 
       expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
       expect(yield* Effect.promise(() => Bun.file(target).exists())).toBe(false)
+    }),
+  )
+
+  it.live("releases worktree terminals and running pipes before removing", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const daemon = yield* fakeDaemon()
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-release"))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+
+      yield* Effect.gen(function* () {
+        const service = yield* Worktree.Service
+        const strategies = yield* WorktreeStrategies.Service
+        const pty = yield* PersistentPty.Service
+
+        const created = yield* service.create({ projectID: input.projectID, directory: parent, name: "worktree" }, strategies)
+        const sesWt = Session.ID.make("ses_wt")
+        const sesMain = Session.ID.make("ses_main")
+        yield* input.db
+          .insert(SessionTable)
+          .values([
+            { id: sesWt, project_id: input.projectID, slug: "s1", directory: created.directory, version: "1", time_created: 1, time_updated: 1 },
+            { id: sesMain, project_id: input.projectID, slug: "s2", directory: input.sourceDirectory, version: "1", time_created: 1, time_updated: 1 },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+
+        yield* pty.create(sesWt, { args: [], cwd: created.directory, title: "wt", env: {} })
+        const termMain = yield* pty.create(sesMain, { args: [], cwd: input.sourceDirectory, title: "main", env: {} })
+
+        const pipeWt = yield* pty.createPipe({
+          program: process.execPath,
+          args: [],
+          cwd: created.directory,
+          env: {},
+          groupID: input.projectID,
+          outputPath: path.join(input.root.path, "wt.out"),
+          metadata: {},
+        })
+        const pipeMain = yield* pty.createPipe({
+          program: process.execPath,
+          args: [],
+          cwd: input.sourceDirectory,
+          env: {},
+          groupID: input.projectID,
+          outputPath: path.join(input.root.path, "main.out"),
+          metadata: {},
+        })
+
+        yield* service.remove({ projectID: input.projectID, directory: created.directory, force: false }, strategies)
+
+        expect((yield* pty.list()).map((item) => item.id)).toEqual([termMain.id])
+        expect((yield* pty.listPipes()).map((item) => item.id)).toEqual([pipeMain.id])
+        const terminatedIds = daemon.requests.flatMap((req) => (req.op === "terminate" ? [req.id] : []))
+        expect(terminatedIds).toContain(pipeWt.id)
+        expect(terminatedIds).not.toContain(pipeMain.id)
+        expect(yield* Effect.promise(() => fs.stat(created.directory).catch(() => undefined))).toBeUndefined()
+      }).pipe(Effect.provide(ptyWorktreeLayer(input, database, bus, daemon.options)))
+    }),
+  )
+
+  it.live("keeps worktree terminals and pipes when git refuses a dirty removal", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const daemon = yield* fakeDaemon()
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-dirty-release"))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+
+      yield* Effect.gen(function* () {
+        const service = yield* Worktree.Service
+        const strategies = yield* WorktreeStrategies.Service
+        const pty = yield* PersistentPty.Service
+
+        const created = yield* service.create({ projectID: input.projectID, directory: parent, name: "worktree" }, strategies)
+        const sesWt = Session.ID.make("ses_dirty")
+        yield* input.db
+          .insert(SessionTable)
+          .values({ id: sesWt, project_id: input.projectID, slug: "s1", directory: created.directory, version: "1", time_created: 1, time_updated: 1 })
+          .run()
+          .pipe(Effect.orDie)
+
+        const term = yield* pty.create(sesWt, { args: [], cwd: created.directory, title: "dirty", env: {} })
+        const pipe = yield* pty.createPipe({
+          program: process.execPath,
+          args: [],
+          cwd: created.directory,
+          env: {},
+          groupID: input.projectID,
+          outputPath: path.join(input.root.path, "dirty.out"),
+          metadata: {},
+        })
+        yield* Effect.promise(() => Bun.write(path.join(created.directory, "dirty.txt"), "dirty"))
+
+        const error = yield* service
+          .remove({ projectID: input.projectID, directory: created.directory, force: false }, strategies)
+          .pipe(Effect.flip)
+        expect(error).toBeInstanceOf(Git.WorktreeError)
+        if (error instanceof Git.WorktreeError) expect(error.forceRequired).toBe(true)
+        expect((yield* pty.list()).map((item) => item.id)).toEqual([term.id])
+        expect((yield* pty.listPipes()).map((item) => item.id)).toEqual([pipe.id])
+
+        yield* service.remove({ projectID: input.projectID, directory: created.directory, force: true }, strategies)
+        expect(yield* pty.list()).toEqual([])
+        expect(yield* pty.listPipes()).toEqual([])
+        expect(yield* Effect.promise(() => fs.stat(created.directory).catch(() => undefined))).toBeUndefined()
+      }).pipe(Effect.provide(ptyWorktreeLayer(input, database, bus, daemon.options)))
     }),
   )
 

@@ -5,6 +5,7 @@ import { and, asc, desc, eq, isNull, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { FSUtil } from "@opencode/util/fs-util"
+import { containsDirectory } from "@opencode/util/path"
 import { Git } from "./git.js"
 import { Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -20,6 +21,8 @@ import { WorktreeTable } from "./worktree/sql.js"
 import { canonical, DirectoryUnavailableError } from "./worktree/directory.js"
 import type { EffectDrizzleSqlite } from "./database/drizzle.js"
 import { ProjectTable } from "./project/sql.js"
+import { SessionTable } from "./session/sql.js"
+import { PersistentPty } from "./persistent-pty.js"
 import { AppProcess } from "@opencode/util/process"
 import { ChildProcess } from "effect/process"
 import { WorktreeStrategies } from "./worktree/strategies.js"
@@ -112,6 +115,7 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const processService = yield* AppProcess.Service
     const locations = yield* LocationServiceMap.Service
+    const pty = yield* PersistentPty.Service
     const project = Effect.fnUntraced(function* (projectID: Project.ID) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       if (!row) return yield* new Project.NotFoundError({ projectID })
@@ -254,6 +258,38 @@ const layer = Layer.effect(
       return result
     }, Effect.scoped)
 
+    const release = Effect.fnUntraced(function* (worktreeDirectory: AbsolutePath, projectID: Project.ID) {
+      const sessions = yield* db
+        .select({ id: SessionTable.id, directory: SessionTable.directory })
+        .from(SessionTable)
+        .where(eq(SessionTable.project_id, projectID))
+        .all()
+        .pipe(Effect.orDie)
+      const sessionIDs = new Set<string>(
+        sessions.flatMap((row) => (containsDirectory(worktreeDirectory, row.directory) ? [row.id] : [])),
+      )
+
+      const terminals = yield* pty.list().pipe(Effect.orElseSucceed((): PersistentPty.Info[] => []))
+      yield* Effect.forEach(
+        terminals.filter(
+          (terminal) => sessionIDs.has(terminal.sessionID) || containsDirectory(worktreeDirectory, terminal.cwd),
+        ),
+        (terminal) => pty.remove(terminal.id).pipe(Effect.ignore),
+        { discard: true },
+      )
+
+      const pipes = yield* pty.listPipes().pipe(Effect.orElseSucceed((): PersistentPty.PipeInfo[] => []))
+      yield* Effect.forEach(
+        pipes.filter((pipe) => pipe.lifecycle.status === "running" && containsDirectory(worktreeDirectory, pipe.cwd)),
+        (pipe) => pty.terminatePipe(pipe.id).pipe(Effect.ignore),
+        { discard: true },
+      )
+
+      yield* LocationServiceMap.invalidateUnder(worktreeDirectory).pipe(
+        Effect.provideService(LocationServiceMap.Service, locations),
+      )
+    })
+
     const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput, current?: WorktreeStrategies.Interface) {
       const row = yield* project(input.projectID)
       const worktreeDirectory = yield* canonical(fs, input.directory)
@@ -261,6 +297,11 @@ const layer = Layer.effect(
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: worktreeDirectory })
       const settings = yield* load(row.worktree, current)
       const strategy = yield* getStrategy(stored.strategy, settings.strategies)
+      const ready =
+        input.force || !strategy.canRemove
+          ? true
+          : yield* strategy.canRemove(worktreeDirectory).pipe(Effect.orElseSucceed(() => false))
+      if (ready) yield* release(worktreeDirectory, input.projectID)
       yield* strategy
         .remove({
           directory: worktreeDirectory,
@@ -338,11 +379,12 @@ const layer = Layer.effect(
   }),
 )
 
-export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = Node.makeGlobalNode({
-  service: Service,
-  layer,
-  deps: [FSUtil.node, Bus.node, Database.node, AppProcess.node, LocationServiceMap.node],
-})
+export const node: LayerNode.Provider<Service, PersistentPty.UnavailableError, typeof Node.tags.values.global> =
+  Node.makeGlobalNode({
+    service: Service,
+    layer,
+    deps: [FSUtil.node, Bus.node, Database.node, AppProcess.node, LocationServiceMap.node, PersistentPty.node],
+  })
 
 function operationError(strategy: StrategyID, operation: string, error: unknown) {
   if (

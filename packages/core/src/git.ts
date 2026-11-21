@@ -155,6 +155,7 @@ export interface Interface {
       directory: AbsolutePath
       force: boolean
     }) => Effect.Effect<void, WorktreeError>
+    readonly isClean: (directory: AbsolutePath) => Effect.Effect<boolean>
     readonly list: (repository: Repository) => Effect.Effect<readonly Worktree[], WorktreeError>
   }
   readonly index: {
@@ -1439,6 +1440,17 @@ const layer = Layer.effect(
       )
     })
 
+    const worktreeIsClean = Effect.fn("Git.worktree.isClean")(function* (directory: AbsolutePath) {
+      const status = yield* run(path.dirname(directory), proc, [
+        "-C",
+        directory,
+        "status",
+        "--porcelain",
+        "--ignore-submodules=none",
+      ])
+      return status.exitCode === 0 && status.text.length === 0
+    })
+
     const worktreeList = Effect.fn("Git.worktree.list")(function* (repository: Repository) {
       return (yield* worktreeRun("list", repository, ["worktree", "list", "--porcelain"]))
         .split("\n")
@@ -1457,7 +1469,7 @@ const layer = Layer.effect(
       remote: { get: remote },
       history: { head, branch, defaultRemoteBranch: remoteHead, rootCommits: roots },
       sync: { fetchRemotes: fetch, fetchBranch, checkoutRemoteBranch: checkout, resetHard: reset },
-      worktree: { create: worktreeCreate, remove: worktreeRemove, list: worktreeList },
+      worktree: { create: worktreeCreate, remove: worktreeRemove, list: worktreeList, isClean: worktreeIsClean },
       index: { refresh, ignored },
       tree: {
         capture: captureTree,

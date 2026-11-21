@@ -2,6 +2,7 @@ import { Context, Effect, Exit, Layer, LayerMap, RcMap } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
 import { AbsolutePath } from "@opencode/schema/schema"
+import { containsDirectory } from "@opencode/util/path"
 import path from "path"
 import { Location } from "./location.js"
 import type { Instance } from "./instance.js"
@@ -33,6 +34,17 @@ export const reload = Effect.fn("LocationServiceMap.reload")(function* () {
   const failure = results.find(Exit.isFailure)
   if (failure) return yield* Effect.failCause(failure.cause)
   yield* Effect.logInfo("location services reloaded", { count: refs.length })
+})
+
+export const invalidateUnder = Effect.fn("LocationServiceMap.invalidateUnder")(function* (directory: AbsolutePath) {
+  const locations = yield* Service
+  const refs = Array.from(yield* RcMap.keys(locations.rcMap)).filter((ref) =>
+    containsDirectory(directory, ref.directory),
+  )
+  yield* Effect.forEach(refs, (ref) => locations.invalidate(ref), {
+    discard: true,
+    concurrency: "unbounded",
+  })
 })
 
 /** Normalize equivalent placements before they become resource-cache keys. */
