@@ -1932,6 +1932,7 @@ export type ConfigInfoEncoded = {
     }?,
     username: string?,
     timezone: string?,
+    automations: boolean?,
     permissions: PermissionRuleset?,
     policies: { {
         action: ("provider.use" | "tool.use" | "integration.connect" | "integration.use" | "mcp.use" | "skill.use" | "plugin.use" | "websearch.use"),
@@ -1990,7 +1991,6 @@ export type ConfigInfoEncoded = {
         all_flags: boolean?,
         todo: boolean?,
         media_blob: boolean?,
-        automations: boolean?,
         artifacts: boolean?,
         video_generate: (boolean | {
             model: (string | {
@@ -2007,7 +2007,6 @@ export type ConfigInfoEncoded = {
         home_memory: boolean?,
         project_overlay: boolean?,
         sqlite_fts: boolean?,
-        schedules: boolean?,
         part_rows: boolean?,
         image_generate: (boolean | {
             model: (string | {
@@ -2900,6 +2899,25 @@ export type LocationPublicRef = {
 
 export type LocationShutdown = _Event1<"location.shutdown", any>
 
+export type MachineInfo = {
+    id: string,
+    online: boolean,
+    paired: boolean,
+    os: string?,
+    arch: string?,
+}
+
+export type MachineInvite = {
+    name: string,
+    join: string,
+    expires: number,
+}
+
+export type MachineReach = {
+    type: "url",
+    url: string,
+}
+
 export type McpLocalConfigEncoded = {
     type: "local",
     command: { string },
@@ -2925,7 +2943,7 @@ export type McpOAuthConfigEncoded = {
     auth_server_metadata_url: string?,
 }
 
---- MCP protocol negotiation. "legacy" (default) opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. "auto" probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. "2026-07-28" requires that revision and fails otherwise.
+--- MCP protocol negotiation. "auto" (default) probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. "legacy" opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. "2026-07-28" requires that revision and fails otherwise.
 export type McpProtocol = ("legacy" | "auto" | "2026-07-28")
 
 export type McpRemoteConfigEncoded = {
@@ -5131,6 +5149,17 @@ export type Client = {
                 status: ("running" | "completed" | "error" | "cancelled")?,
                 descendants: boolean?,
             }?) -> ({ JobInfo }?, string?),
+        },
+        machine: {
+            add: (input: {
+                name: string,
+                reach: { MachineReach },
+                replace: boolean?,
+            }) -> (MachineInvite?, string?),
+            list: (input: {}?) -> ({ MachineInfo }?, string?),
+            remove: (input: {
+                name: string,
+            }) -> (nil, string?),
         },
         mcp: {
             add: (input: {

@@ -10788,6 +10788,50 @@ pub struct ExperimentalJobCancelInput {
     pub id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MachineInfo {
+    pub id: String,
+    pub online: bool,
+    pub paired: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub os: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arch: Option<String>,
+}
+
+/// Output of `Client::experimental_machine_list`.
+pub type ExperimentalMachineListOutput = Vec<MachineInfo>;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MachineReach {
+    pub r#type: String,
+    pub url: String,
+}
+
+/// Input of `Client::experimental_machine_add`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalMachineAddInput {
+    pub name: String,
+    pub reach: Vec<MachineReach>,
+    pub replace: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MachineInvite {
+    pub name: String,
+    pub join: String,
+    pub expires: i64,
+}
+
+/// Output of `Client::experimental_machine_add`.
+pub type ExperimentalMachineAddOutput = MachineInvite;
+
+/// Input of `Client::experimental_machine_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalMachineRemoveInput {
+    pub name: String,
+}
+
 /// Input of `Client::shell_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellListInput {
@@ -12155,8 +12199,6 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_blob: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub automations: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
@@ -12176,8 +12218,6 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub project_overlay: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite_fts: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub schedules: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_rows: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12210,6 +12250,8 @@ pub struct ConfigEntryDocumentInfo {
     pub username: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automations: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permissions: Option<PermissionRuleset>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12865,6 +12907,18 @@ pub struct ArtifactNotFoundError {
 
 impl crate::TaggedError for ArtifactNotFoundError {
     const TAG: &'static str = "ArtifactNotFoundError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MachineNotFoundError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    pub machine: String,
+    pub message: String,
+}
+
+impl crate::TaggedError for MachineNotFoundError {
+    const TAG: &'static str = "MachineNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
