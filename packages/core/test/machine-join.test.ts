@@ -79,6 +79,12 @@ describe("Join", () => {
     )
     expect(decoded.reach).toEqual([url("https://home.example")])
   })
+
+  test("keeps an iroh entry after the URLs, and round-trips it", () => {
+    const reach = [url("https://home.example"), { type: "iroh" as const }]
+    expect(Option.getOrThrow(Join.decode(encodeRaw({ reach }))).reach).toEqual(reach)
+    expect(Option.getOrThrow(Join.decode(Join.encode({ ...value, reach }))).reach).toEqual(reach)
+  })
 })
 
 const global = (directory: string) =>

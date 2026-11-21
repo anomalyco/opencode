@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
-import { fileDiff, openSession } from "../utils/workspace"
-import { openReviewLauncher } from "../utils/side-panel"
+import { fileDiff, fileNode, openSession } from "../utils/workspace"
+import { openFileLauncher, openReviewLauncher, storedStrips } from "../utils/side-panel"
+import { expectSessionTitle } from "../utils/waits"
 import { base64Encode } from "@opencode/util/encode"
 
 test("review content stays aligned with the side region in both directions", async ({ page }) => {
@@ -304,6 +305,59 @@ test("a reopened side tab returns to where it closed", async ({ page }) => {
   await page.keyboard.press("ControlOrMeta+Shift+t")
   await expect(side.getByRole("tab")).toHaveText(["a.md", "b.md", "c.md"])
   await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveAttribute("aria-selected", "true")
+})
+
+// The layout stores the side tabs of 50 sessions. It ranked them only by when each was last on screen in this run, so
+// after a restart, or once enough other sessions were used, it forgot a session that was still open in a shell tab:
+// its file, review, terminal and browser tabs were gone when the person switched back to it.
+test("a session open in a shell tab keeps its side tabs when the layout forgets old sessions, at startup and after a scroll", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/KeepOpenStrip"
+  const key = (session: string) => `local\u0000${base64Encode(directory)}/${session}`
+  // Fifty-one sessions whose shell tabs are closed, oldest first, then the one open in a background shell tab.
+  const closed = Array.from({ length: 51 }, (_, index) => key(`ses_closed_${String(index).padStart(2, "0")}`))
+  const strip = { all: ["file://notes.md"], active: "file://notes.md" }
+
+  await openSession(page, {
+    name: "KeepOpenStrip",
+    sessions: [
+      { id: "ses_onscreen", title: "On screen" },
+      { id: "ses_background", title: "In the background" },
+    ],
+    fileList: () => [fileNode(directory, "long.txt")],
+    fileContent: (path) => ({ type: "text", content: path === "long.txt" ? Array.from({ length: 400 }, (_, index) => `line ${index + 1}`).join("\n") : `contents:${path}` }),
+    seed: {
+      panes: { ses_background: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: Object.fromEntries([...closed.map((item) => [item, strip]), [key("ses_background"), strip]]),
+        },
+      },
+    },
+  })
+
+  // Startup: 52 stored strips. The two oldest closed sessions go; the open one, stored last and not used yet, stays.
+  await expect.poll(() => storedStrips(page)).toEqual([...closed.slice(2), key("ses_background")])
+
+  // The person opens a file in the session on screen and scrolls it, which stores a 51st session and prunes again.
+  const panel = page.locator("#review-panel")
+  await page.getByRole("button", { name: "Toggle review" }).click()
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "long.txt" }).click()
+  await expect(panel.getByRole("tab", { name: "long.txt", exact: true })).toHaveAttribute("aria-selected", "true")
+  const code = panel.locator("[data-scrollable]", { has: page.locator('[data-component="file"]') })
+  await expect.poll(() => code.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
+  await code.hover()
+  await page.mouse.wheel(0, 2_000)
+  await expect.poll(() => storedStrips(page)).toEqual([...closed.slice(3), key("ses_background"), key("ses_onscreen")])
+
+  // Its side tab is there when the person switches to it.
+  await page.locator("[data-titlebar-tab-slot]", { hasText: "In the background" }).click()
+  await expectSessionTitle(page, "In the background")
+  await expect(panel.getByRole("tab", { name: "notes.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("contents:notes.md", { exact: true })).toBeVisible()
 })
 
 async function expectTreeSentinel(page: Page) {
