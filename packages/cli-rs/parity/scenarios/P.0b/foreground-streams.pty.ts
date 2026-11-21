@@ -1,6 +1,6 @@
 // A plugin's program in the foreground has the terminal on all three standard streams, so its stderr shows and a
-// program that asks `isatty` takes the interactive path (reviews bigboi-5, carbon-1); input it leaves unread is
-// dropped and does not reach the composer once the TUI is back (bigboi-5). Rust only.
+// program that asks `isatty` takes the interactive path; input it leaves unread is
+// dropped and does not reach the composer once the TUI is back. Rust only.
 import { definePty } from "../../pty/run"
 import { home, install, leave, run } from "./fixture"
 

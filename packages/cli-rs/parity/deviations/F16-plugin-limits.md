@@ -8,7 +8,7 @@ messages arrive, however many there are.
 
 ## Rust
 
-The host admits a plugin's tree by what it would cost before it builds any of it (synthesis 4.2, phase Pl), on every
+The host admits a plugin's tree by what it would cost before it builds any of it, on every
 carrier and for built-ins too:
 
 - The nodes of a tree, its rows built at once (a node is a row, a patch, code or Markdown also its lines), a node's
@@ -30,6 +30,6 @@ carrier and for built-ins too:
 
 ## Reason
 
-O-123 runs plugin code in the client's process and on its UI thread, so what a plugin's tree makes the host build is
-UI-thread time the user waits for (synthesis 4.2, "Limits on host work"). TS has the same exposure and no limit; a
+The client runs plugin code in the client's process and on its UI thread, so what a plugin's tree makes the host build is
+UI-thread time the user waits for. TS has the same exposure and no limit; a
 limit there would be a change of its own.

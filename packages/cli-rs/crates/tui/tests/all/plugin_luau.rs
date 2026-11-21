@@ -1,4 +1,4 @@
-//! Luau plugins in the real TUI (spike `luau-spike`): an example draws and sends what its Rust twin does, a dialog's
+//! Luau plugins in the real TUI: an example draws and sends what its Rust twin does, a dialog's
 //! answer comes back, and a plugin that spins is failed on CPU time while the TUI keeps drawing. The ownership table's
 //! Luau column is `plugin_ownership`.
 

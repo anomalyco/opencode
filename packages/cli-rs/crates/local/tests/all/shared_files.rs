@@ -93,7 +93,7 @@ fn leftovers(state: &Path) -> Vec<String> {
 ///
 /// TypeScript saves without the lock, so neither side can keep everything while both write: a
 /// TypeScript save between a Rust read and rename is lost, and TypeScript saves the list it read at
-/// startup, so it drops Rust's pins (see `steps/rs-test-flakes.md`). A racing Rust write can drop only
+/// startup, so it drops Rust's pins. A racing Rust write can drop only
 /// TypeScript's newest pins, so TypeScript's pins in the file stay a prefix of its own list.
 #[test]
 fn session_json_under_contention() {

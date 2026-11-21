@@ -10,7 +10,7 @@ TS also applies `permission.asked` and `form.created` for a session it already f
 `data.ts:1372-1378` have no check), so a late ask or form for a deleted session brings its permissions or forms back
 until the next read (model O9).
 
-**Rust** (model M1, decisions O-91 and O-92). Permissions and forms share one overlay (`state::Overlay`). Each list
+**Rust.** Permissions and forms share one overlay (`state::Overlay`). Each list
 read takes a ticket when it starts and records an overlay of the changes that overtake it, in arrival order:
 
 - permissions: the asks and replies (events and local `permission_reply`) of its session;
@@ -21,11 +21,11 @@ read takes a ticket when it starts and records an overlay of the changes that ov
 Only the read whose ticket is current publishes, as the snapshot with the overlay applied: settled entries are
 dropped, and new ones the snapshot lacks follow its own entries. A global form read replaces only the forms of the
 location the server answered for; global forms of other locations stay. The overlay holds at most 1,024 changes; past
-that the read publishes nothing, keeps the event-applied list, and reads again (O-92 Q1 (a)), so the bound costs a
+that the read publishes nothing, keeps the event-applied list, and reads again, so the bound costs a
 read, never an entry. `permission.asked` and `form.created` for a session the store found missing are dropped.
 
 This replaces the global windows of the newest 512 IDs across all sessions (`permission_live`, `form_live`), which a
 burst could overflow: it lost entries that overtook a read in the same session (O7) or in another session (O8). TS
-shares O8 and O9 for both lists (O-92 Q3 (a)), and loses every overtaking entry in the O7 case.
+shares O8 and O9 for both lists, and loses every overtaking entry in the O7 case.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

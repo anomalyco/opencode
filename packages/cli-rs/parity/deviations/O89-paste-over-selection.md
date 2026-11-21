@@ -9,4 +9,4 @@ the extmark one or more offsets after it. Submitting `a`, Up, Shift+Right, then 
 **Rust.** `prompt/paste.rs` deletes the selection first, then takes the cursor, so the extmark covers the label and
 the prompt sends the pasted text.
 
-**Reason.** A TS defect fixed in Rust (O-89): the sent prompt must be what the prompt shows.
+**Reason.** A TS defect fixed in Rust: the sent prompt must be what the prompt shows.

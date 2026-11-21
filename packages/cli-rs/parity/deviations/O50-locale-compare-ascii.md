@@ -11,6 +11,6 @@ the letters by code point, so `é` comes after `z`, and a tab or DEL after every
 It shows in the order of theme, model, provider, agent and plugin names that hold such characters. ASCII names sort
 as in TypeScript.
 
-**Reason.** Decision O-50 (D6): one small port instead of ICU's collation tables. Matching ICU would take its root
+**Reason.** One small port instead of ICU's collation tables. Matching ICU would take its root
 collation data (a crate such as `icu_collator`, with its data), or an approximation that folds Latin accents into a
 primary key with the table `script/gen/accents.ts` writes for `fuzzy`, and orders control characters as ICU does.

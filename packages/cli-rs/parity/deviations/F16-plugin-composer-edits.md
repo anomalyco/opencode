@@ -19,7 +19,7 @@ TS's `submit` refuses a disabled prompt.
 
 ## Reason
 
-A plugin cannot reach OpenTUI's renderables (decision O-67), so the edit is an effect on a named target. The
-composer is the target the npm plugins mean (the audit's `prompt-edit` class, `investigations/tui-plugin-audit.md`):
+A plugin cannot reach OpenTUI's renderables, so the edit is an effect on a named target. The
+composer is the target the npm plugins mean (an audit's `prompt-edit` class):
 voice input, snippets and prompt rewriting. When the composer has the focus, which is when those plugins act, the
 result is the same; `parity/scenarios/P.1/p0a-composer.app.ts` checks an insert against TS.

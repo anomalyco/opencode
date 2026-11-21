@@ -14,6 +14,6 @@ Releasing any other button over a row does nothing.
 ## Reason
 
 Choosing a row on a right-click release is a TypeScript bug: a right-click is not a request to choose, and it
-can run an action the user did not ask for (O-41, `reviews/ms3-ms4.review-carbon.md` notes). The left-click path
+can run an action the user did not ask for. The left-click path
 is the same on both sides; `ui/tests/all/dialogs.rs::clicks_select_rows_and_the_backdrop_closes_the_dialog`
 covers both buttons.

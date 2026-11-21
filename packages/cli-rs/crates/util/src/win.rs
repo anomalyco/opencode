@@ -177,7 +177,7 @@ pub fn user_locale() -> Option<String> {
 /// directories added with `AddDllDirectory` (`LOAD_LIBRARY_SEARCH_DEFAULT_DIRS`), and for a library given by its
 /// absolute path also in that library's own directory (`LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR`, which needs a full path).
 /// The current directory and `PATH` are not searched: the current directory is the project, which must not supply a
-/// dependency of a plugin (rich-plugins 3.9).
+/// dependency of a plugin.
 ///
 /// # Safety
 ///
@@ -391,7 +391,7 @@ pub struct Duplex(OwnedHandle);
 /// this one (`FILE_FLAG_FIRST_PIPE_INSTANCE`), it has one instance, only this user may open it, no remote client may,
 /// and its one client is connected here before anything else can be. Both ends are overlapped: Bun reads its stdin
 /// through libuv's overlapped path, and a synchronous end would serialize its pending read with its writes, which then
-/// wait for input (js-stdio's spike on Windows 11).
+/// wait for input (seen on Windows 11).
 pub fn duplex() -> io::Result<(Duplex, OwnedHandle)> {
     use std::hash::{BuildHasher, Hasher};
     use windows_sys::Win32::Foundation::{

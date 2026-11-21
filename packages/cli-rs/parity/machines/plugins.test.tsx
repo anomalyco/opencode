@@ -1,4 +1,4 @@
-// The shared fixture of the plugin work (rich-plugins 4.14, O-124), TypeScript reader: the TS TUI is driven through
+// The shared fixture of the plugin work, TypeScript reader: the TS TUI is driven through
 // the life, project, manager and viewer machines of plugins.json, with parity/plugins/life loaded as a local plugin or found in a
 // project, each path on a fresh app,
 // observing after every action. The Rust reader is crates/tui/tests/all/plugin_machines.rs; both read the file and
@@ -49,11 +49,11 @@ function parse(source: (typeof machines.machines)[keyof typeof machines.machines
 const machine = parse(machines.machines.life)
 // The same plugin found in the project's plugins directory, with nothing in the config naming it.
 const project = parse(machines.machines.project)
-// The plugin manager's keys (phase P2); every action of a state has an edge, or is one it leaves unspecified.
+// The plugin manager's keys; every action of a state has an edge, or is one it leaves unspecified.
 const managerKeys = parse(machines.machines.manager)
-// The plugin manager's views (phase P6b), with the plugin failing as it loads; as the keys, every action has an outcome.
+// The plugin manager's views, with the plugin failing as it loads; as the keys, every action has an outcome.
 const managerViews = parse(machines.machines.views)
-// The diff viewer's route (phase P6c); as the manager's keys, every action has an outcome.
+// The diff viewer's route; as the manager's keys, every action has an outcome.
 const viewer = parse(machines.machines.viewer)
 let runs = 0
 

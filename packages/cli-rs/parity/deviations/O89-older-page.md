@@ -11,4 +11,4 @@ refresh replaced it, the fetched pages are dropped and the load starts again fro
 ends as [2, 3] with the cursor to [1] kept. When the cursor is gone (no older pages, eviction, or deletion), the
 load publishes nothing.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

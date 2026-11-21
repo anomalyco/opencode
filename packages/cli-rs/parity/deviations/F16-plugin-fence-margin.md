@@ -17,7 +17,7 @@ Markdown's `bg` (the page, `#0a0a0a`), so inside the plugin's box each line of c
 in Rust the code's glyphs keep the box's background. About 44 cells differ in color only (75 after the theme change):
 `P.8/good-fences`.
 
-**Reason.** Decision O-89: Rust keeps the spacing Core means, one row between blocks. The second row is TS's leftover
+**Reason.** A TS defect, fixed in Rust: Rust keeps the spacing Core means, one row between blocks. The second row is TS's leftover
 margin, not a design: once the built-in renderers drop `marginTop: 1`, `P.2/fence-margin` is equal again. Drives:
 `P.2/fence-margin` (two formulas and a diagram after blocks, about 175 cells), `P.2/inline-math` (the fence pushes the
 transcript up a row), the P-COMP tests `crates/latex/src/tests.rs` (`transcript_fences_match_typescript`) and

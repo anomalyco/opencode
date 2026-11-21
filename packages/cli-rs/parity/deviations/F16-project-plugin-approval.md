@@ -31,8 +31,8 @@ approval: the approved code chose to import it.
 A decision is kept in `plugin-approvals.json` in the client's state directory, so it lasts across clients. The global
 `plugins` directory and the entries of `cli.json` need no approval, also an entry that names a project's plugin
 another way (a link). A server plugin's TUI part loads without approval only when the user's own configuration
-(`cli.json`, the global opencode config) names its spec or path, or its path is under a global plugin directory
-(O-162). Any other is held: a local path for the same approval as a project's plugin directory, keyed by the same
+(`cli.json`, the global opencode config) names its spec or path, or its path is under a global plugin directory.
+Any other is held: a local path for the same approval as a project's plugin directory, keyed by the same
 artifact, and a package for one keyed by its files and its install's lockfile (`F16-typescript-plugins-skipped`).
 
 The shared fixture `parity/machines/plugins.json`, machine `project`, has this deviation's two `xfail` rows: TS shows
@@ -43,7 +43,7 @@ and the Luau loader's tests).
 
 ## Reason
 
-Decision O-125, 1 (rich-plugins synthesis 3.9): a Luau plugin runs inside the client, on the UI thread, with the
+A Luau plugin runs inside the client, on the UI thread, with the
 user's permissions, and a TypeScript plugin on the JS host runs with them too, so a repository the user clones must not
 run code in it unasked. An approval by path alone would cover different code after the next `git pull`, so it names
 the files' bytes too. A project cannot write `cli.json` or the global directory, so those stay as in TS.

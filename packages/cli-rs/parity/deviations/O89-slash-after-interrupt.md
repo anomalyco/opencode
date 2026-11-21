@@ -14,4 +14,4 @@ interrupt the command runs at once, as in TS.
 **Reach.** Only a slash command chosen right after a second Escape (or `ctrl+⏎` of force-input) on a running
 session, before the server answers the interrupt. The command's dialog or toast shows after that answer.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

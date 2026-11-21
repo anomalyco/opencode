@@ -65,8 +65,8 @@ fn allow_list_matches_the_graph() {
     assert!(
         differences.iter().all(Option::is_none),
         "deps-allow.txt does not match the dependency graph for {TARGET}.\n{}\n\
-         \nA new third-party crate, build script, proc macro or source, in any section, needs an orchestrator \
-         decision (O-58, an O- entry in decisions.md) before its line goes into deps-allow.txt; otherwise remove the \
+         \nA new third-party crate, build script, proc macro or source, in any section, needs a maintainer's \
+         approval before its line goes into deps-allow.txt; otherwise remove the \
          dependency. For a crate that left the graph, delete its line.",
         differences.into_iter().flatten().collect::<Vec<_>>().join("\n"),
     );

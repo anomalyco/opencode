@@ -21,6 +21,6 @@ Differences:
   the roots.
 - ring offers no post-quantum key exchange (X25519MLKEM768). Servers negotiate X25519 instead.
 
-Reason: decision O-50 (D2). One root store for HTTPS and `wss://`, so a socket never fails where
+Reason: one root store for HTTPS and `wss://`, so a socket never fails where
 the HTTP request to the same server works, and ring instead of aws-lc removes a C build and about
 3 MB from the binary.

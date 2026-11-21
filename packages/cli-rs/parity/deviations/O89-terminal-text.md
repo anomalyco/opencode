@@ -20,5 +20,4 @@ characters prints exactly as before, on a terminal and into a pipe. `--format js
 `auth export` are unchanged, as in TS: they are data, their JSON escapes C0 controls, and C1 stays as it is. Help escapes C1 in usage errors as `\xNN`, as
 it does C0.
 
-**Reason.** The user decided to fix the defects the TS client shares in Rust and record them as deviations, with no
-upstream proposal (O-89).
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations, with no upstream proposal.

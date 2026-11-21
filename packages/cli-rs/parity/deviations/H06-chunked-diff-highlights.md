@@ -9,6 +9,6 @@ Rust: `opencode_ui::diff::Chunked` (`crates/ui/src/diff.rs`) mounts the same chu
 construct spans a chunk boundary, such as a multi-line string or block comment, the lines after the boundary can
 take other colors than in TS. JSON, the case TS's own test uses, has no multi-line constructs and colors the same.
 
-Reason: the chunks are what keeps a large added file from mounting thousands of lines at once (r2 review,
-bigboi-ui-6). Highlighting the whole file for each chunk would bring that cost back. Files of 3,000 lines or fewer,
+Reason: the chunks are what keeps a large added file from mounting thousands of lines at once.
+Highlighting the whole file for each chunk would bring that cost back. Files of 3,000 lines or fewer,
 and every other patch, highlight as before.

@@ -411,7 +411,7 @@ pub fn is_read(method: &str, path: &str) -> bool {
 }
 
 /// `actual` holds every Rust request in order; `unmatched` the ones no route answered. Writes are compared by
-/// method, path, sorted query, and body, with client-minted IDs normalized (plan 7.5). Both sides get the status
+/// method, path, sorted query, and body, with client-minted IDs normalized. Both sides get the status
 /// of the same recorded route, so it is not compared.
 pub fn compare_requests(recording: &Recording, actual: &[Sent], unmatched: &[Sent]) -> RequestComparison {
     // Bodies stay JSON values, so key order does not count.

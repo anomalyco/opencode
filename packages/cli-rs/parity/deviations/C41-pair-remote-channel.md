@@ -17,5 +17,5 @@ To use a TS build of another channel, set `OPENCODE_CHANNEL` to that channel (fo
 `OPENCODE_CHANNEL=oc-opentui-next`).
 
 Reason: the route belongs to the TS binary's config, and the Rust client has no reliable way to learn which
-channel a TS binary was built for. Decision O-39 in `decisions.md` accepts this. No P-CLI case covers it,
+channel a TS binary was built for, and this difference is accepted. No P-CLI case covers it,
 since the cases run both clients on the same channel.

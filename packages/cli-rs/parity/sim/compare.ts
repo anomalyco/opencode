@@ -166,7 +166,7 @@ export type RequestComparison = {
 // Writes must match in order after the normalizers, with their sorted query and any status other than 2xx; reads
 // one side sent and the other did not are listed only.
 export function compareRequests(a: Logged[], b: Logged[], root: string): RequestComparison {
-  // A live server stamps real times, so epoch milliseconds are normalized too (plan 7.5, timestamps).
+  // A live server stamps real times, so epoch milliseconds are normalized too.
   // Bodies are compared as JSON values, so key order does not count.
   const line = (entry: Logged) => {
     const query = new URLSearchParams(

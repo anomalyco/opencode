@@ -58,7 +58,7 @@ indexmap = { version = "2", features = ["serde"] }
 libc = "0.2"
 log = { version = "0.4", features = ["std"] }
 memchr = "2"
-# Luau plugins, behind opencode-plugin's default feature `luau` (O-178): Luau's VM and compiler. Values cross as
+# Luau plugins, behind opencode-plugin's default feature `luau`: Luau's VM and compiler. Values cross as
 # JSON (`crates/plugin/src/luau/json.rs`), so mlua's own serde is off.
 mlua = { version = "0.12", features = ["luau"] }
 notify = "8"
@@ -122,13 +122,13 @@ tree-sitter-vim = "0.4.0"
 tree-sitter-vue-next = "0.1.0"
 tree-sitter-xml = "=0.7.0"
 
-# Luau 747 (O-172): mlua `main`'s "Bump Luau to 0.747", whose mlua-sys takes `luau0-src` 0.24.0+luau747 from
+# Luau 747: mlua `main`'s "Bump Luau to 0.747", whose mlua-sys takes `luau0-src` 0.24.0+luau747 from
 # crates.io. mlua 0.12.2's mlua-sys pins 740's type numbers, so `luau0-src` cannot move alone. The patch goes once
 # mlua 0.12.3 is on crates.io (its deprecation notes say "since 0.12.3"), which `mlua = "0.12"` takes.
 [patch.crates-io]
 mlua = { git = "https://github.com/mlua-rs/mlua", rev = "01b48a402fffa83c1429b4a49cfd55c6caaa5939" }
 mlua-sys = { git = "https://github.com/mlua-rs/mlua", rev = "01b48a402fffa83c1429b4a49cfd55c6caaa5939" }
-# Luau 747 with simonklee/luau's fixes (O-176), their flags on by default: linear-time plain `string.find`,
+# Luau 747 with simonklee/luau's fixes, their flags on by default: linear-time plain `string.find`,
 # `string.split` and literal `gsub`; table built-ins and pattern matching bounded between interrupts; a collector goal
 # by heap size, for the carrier to set; small allocator pages while a heap is small; single-class patterns matched
 # against a byte table; `string.format` and `bit32` edge cases defined; and a build without the codegen-only libraries,

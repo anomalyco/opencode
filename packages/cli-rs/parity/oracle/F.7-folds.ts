@@ -1,4 +1,4 @@
-// P-ORACLE for the event fold of crates/store (models step 7, O-91, O-92 Q6 (a)): runs every V2Event variant
+// P-ORACLE for the event fold of crates/store: runs every V2Event variant
 // through TypeScript's createData, once on an empty store and once on a loaded one, and records what the store holds
 // afterwards and which reads the event started. Writes parity/fixtures/F.7/folds.json; crates/store/tests/
 // fold_oracle.rs folds the same events with `Data::apply` against the same routes and compares field by field.

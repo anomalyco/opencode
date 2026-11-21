@@ -1,4 +1,4 @@
-// The root command with a background service of another version registered in its channel (O-167): "Restarting
+// The root command with a background service of another version registered in its channel: "Restarting
 // background server (version mismatch)..." on stderr, the old service stopped, then the replacement started, which
 // fails as in `service-start.cli.ts`, and exit 1. Only the first stderr line is compared: what follows is the failed
 // child's error, which differs as `service-start.cli.ts` says. Both sides run as channel `local`, the TS CLI from

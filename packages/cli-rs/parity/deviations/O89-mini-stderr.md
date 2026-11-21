@@ -12,5 +12,4 @@ panic on the UI thread restores stderr before the panic is printed. Only this pr
 Windows does the same with an anonymous pipe as the standard error handle (`SetStdHandle`), which the reader polls
 every 50 ms.
 
-**Reason.** The user decided to fix the defects the TS client shares in Rust and record them as deviations, with no
-upstream proposal (O-89).
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations, with no upstream proposal.

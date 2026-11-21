@@ -12,4 +12,4 @@ model until the refetch of the projected message replaces it.
 only an event without it shows the difference. The F.7 fold oracle (`parity/fixtures/F.7/folds.json`,
 `session.model.selected#no-previous@loaded`) records it.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

@@ -30,7 +30,7 @@ Schema, `crates/plugin-abi/schema/v2.json`. A *carrier* runs a plugin against it
   time, and `--no-plugins` loads no external plugin at all for one run ([Failures](#failures)). A plugin of a missing
   carrier is listed as skipped.
 - **Native plugin libraries do not load.** A `plugin.so` (`plugin.dylib`, `plugin.dll`) or a configured library is
-  listed as skipped. Third-party native code may return as a supervised helper process (O-192); it will not run in the
+  listed as skipped. Third-party native code may return as a supervised helper process; it will not run in the
   client's process.
 
 `setup` runs once for each activation. The same registrations on each language:

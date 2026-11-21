@@ -18,7 +18,7 @@ A TUI plugin can draw the Markdown fences of a language with `markdown.registerC
 ## Rust
 
 A plugin can claim the calls of one tool, or the fences of one language, with a renderer claim of contract 2.0
-(`abi::claim`, phase Pr). Its view draws each claimed part with a keyed tree, as a surface does, and gets the part as
+(`abi::claim`). Its view draws each claimed part with a keyed tree, as a surface does, and gets the part as
 it is now: a tool call's state (pending, running, completed, error), whether it waits for a permission, and its input,
 without what the call returned, which the view names by reference for the host to draw; a fence's info, code, and
 whether the message streams and the fence closed. The host's own row is the fallback:
@@ -29,7 +29,7 @@ whether the message streams and the fence closed. The host's own row is the fall
 - A view that returns a tree the host refuses leaves that part to the host's row for the rest of its mount (a keep the
   host does not hold is first asked for once more as a whole tree) (a fence's mount also ends at a theme change, when Markdown builds the block again). The plugin stays active,
   and its other parts keep their trees.
-- A view that takes longer than the overrun limit (100 ms) is treated as every overrun is (synthesis 4.4): a built-in
+- A view that takes longer than the overrun limit (100 ms) is treated as every overrun is: a built-in
   in process leaves that part to the host's row and stays active, and the overrun is counted as a host bug; an
   external plugin fails, and every part it claimed shows the host's row, with the `Plugin failed` toast.
 - Disabling or reloading the plugin mounts the route again: every part it claimed shows the host's row, or the new
@@ -58,7 +58,7 @@ rules above otherwise; `parity/scenarios/Pr/fence.app.ts` compares a TS renderer
 
 ## Reason
 
-Tool claims are the transcript half of the rich-plugin design (synthesis 4.11): a plugin draws a tool's calls, and
-the host keeps its own rows as the fallback. The fallbacks follow the plugin machine of synthesis 4.14 and the budget
-of 4.4: a panic fails the plugin as every panicking call does in Rust, and the faults that concern one part (a slow
+Tool claims are the transcript half of the rich-plugin design: a plugin draws a tool's calls, and
+the host keeps its own rows as the fallback. The fallbacks follow the plugin's life and its time budget
+(`F16-plugin-budget-and-restart`): a panic fails the plugin as every panicking call does in Rust, and the faults that concern one part (a slow
 view, a bad tree) fall back for that part alone, so one odd input does not take the plugin's other parts down.

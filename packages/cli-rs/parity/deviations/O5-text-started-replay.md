@@ -11,5 +11,4 @@ skipped when the message already holds a tool part with the same call ID. A star
 call ID still adds a part. The model test's `text.started replayed over a snapshot` sequence is `KNOWN`, and
 `data.rs` `part_starts_are_idempotent` covers all three starts.
 
-**Reason.** The user's decision O-92 (Q3 (a) of the models plan): fix in Rust the defects TS shares, and record them
-as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

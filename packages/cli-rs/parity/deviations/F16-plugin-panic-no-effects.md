@@ -35,9 +35,9 @@ render or handler unwound into the host.
 ## Reason
 
 JavaScript has no transaction, so TS keeps the effects because it cannot undo them. Rust queues every effect until
-the call returns, so it can apply the rule the plugin design sets (synthesis 4.5: a panicking call's effects are
-dropped as a whole). A half-done call cannot leave a toast or a dialog for an action that did not happen, or a
-storage value that the plugin's own invariants never allowed (spike SC found the dialog "LEAKED EFFECT" on screen
+the call returns, so it can apply the rule the plugin design sets: a panicking call's effects are
+dropped as a whole. A half-done call cannot leave a toast or a dialog for an action that did not happen, or a
+storage value that the plugin's own invariants never allowed (a test found the dialog "LEAKED EFFECT" on screen
 after a panic). Rust also fails the whole plugin where TS keeps it active after a command or render error, which was
-already the behavior for external plugins (O-42). A panic in Rust usually means the plugin's state is broken, while
+already the behavior for external plugins. A panic in Rust usually means the plugin's state is broken, while
 a JS exception usually does not.

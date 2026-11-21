@@ -35,8 +35,7 @@
   (`State::apply_event`, `crates/store/src/connection.rs`). The F.7 fold oracle
   (`parity/fixtures/F.7/folds.json`, `server.connected@loaded`) records the two extra reads.
 - Reason: a reconnect that the status watch coalesced, or a queue-full drop (A09-bounded-queue),
-  never shows a disconnected status, and the events of the old stream are lost (F.7 review,
-  carbon-1).
+  never shows a disconnected status, and the events of the old stream are lost.
 
 ## `session.model.selected` adds its row only to a loaded transcript
 

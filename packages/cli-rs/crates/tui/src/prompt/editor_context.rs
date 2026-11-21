@@ -937,7 +937,7 @@ mod sqlite {
 
     impl Sqlite {
         /// The system library, loaded once, on first use; `None` when it is missing, and always in a static musl build,
-        /// which opens no library (O-188). Either way the Zed source stays silent.
+        /// which opens no library. Either way the Zed source stays silent.
         pub fn system() -> Option<&'static Sqlite> {
             static SYSTEM: OnceLock<Option<Sqlite>> = OnceLock::new();
             SYSTEM.get_or_init(|| Sqlite::load(LIBRARY)).as_ref()

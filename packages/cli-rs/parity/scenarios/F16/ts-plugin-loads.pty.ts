@@ -1,4 +1,4 @@
-// O-166: the JS host is on by default. A TypeScript TUI plugin in the global `plugins` directory, with no variable set,
+// The JS host is on by default. A TypeScript TUI plugin in the global `plugins` directory, with no variable set,
 // loads in both clients: TS runs it in its own process, opencode-native on the JS host (Bun on the path), and
 // `/plugins` lists `parity.energy` active, with no notice (`F16-typescript-plugins-skipped`).
 import { mkdir, writeFile } from "node:fs/promises"

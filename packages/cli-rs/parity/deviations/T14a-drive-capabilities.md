@@ -9,6 +9,6 @@ Rust: the handshake offers `ui.type`, `ui.press`, `ui.enter`, `ui.arrow`, `ui.mo
 JSON-RPC error that names the alternative (`ui.mouse` with coordinates). `CapturedFrame.images` is always empty.
 `parity/scenarios/H.4/drive.ts` shows the difference in the `responses` of its report (`ui.state`).
 
-Reason: plan 7.3. Renderable numbers are a Core detail with no opentui-rust counterpart, so scenarios address the
+Reason: renderable numbers are a Core detail with no opentui-rust counterpart, so scenarios address the
 screen by coordinates; a headless opentui-rust app writes no output bytes to record, and it has no image readback
 (G.7's report).

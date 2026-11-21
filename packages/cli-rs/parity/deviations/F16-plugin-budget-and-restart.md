@@ -7,7 +7,7 @@ returns freezes the TUI for good.
 
 ## Rust
 
-Every plugin call, of a built-in and of an external plugin, is timed (synthesis 4.4).
+Every plugin call, of a built-in and of an external plugin, is timed.
 
 - A plugin over 1 ms in more than 12 of the last 120 frames it ran in is slow. One warning toast a session says
   `Plugin is slow: <id>`, with what a slow frame costs and a Disable action, and its row in `/plugins` shows p50, p99
@@ -21,7 +21,7 @@ There is no crash guard: a plugin that crashes the process (only the Luau VM cou
 
 ## Reason
 
-O-123 runs plugin UI code in the client's process and on its UI thread, so the budget is what tells the user which
+The client runs plugin UI code in the client's process and on its UI thread, so the budget is what tells the user which
 plugin makes the UI slow. TS plugins run in the JS host's process, Luau calls stop on Luau's own CPU interrupt, and
-the built-ins are first-party, so nothing in process needs a watchdog or a restarting parent (O-192). The slow state
+the built-ins are first-party, so nothing in process needs a watchdog or a restarting parent. The slow state
 applies to built-ins because the budget cannot tell them apart on the frame; it only informs.

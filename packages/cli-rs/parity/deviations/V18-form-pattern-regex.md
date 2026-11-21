@@ -14,5 +14,5 @@ work, and `\d`, `\w` and `\b` match ASCII only.
 
 Patterns that use neither give the same result in both clients.
 
-**Reason.** The user kept the `regex` crate instead of adding an ECMAScript engine such as `regress` (O-58, O-88).
+**Reason.** The user kept the `regex` crate instead of adding an ECMAScript engine such as `regress`.
 `regex` runs in linear time, so a pattern from a server or tool cannot hang the UI.

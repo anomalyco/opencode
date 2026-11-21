@@ -2125,7 +2125,7 @@ mod tests {
     }
 
     /// A shell outside this client's turns ends idle; a turn in flight ends the footer's work itself. A resize replay
-    /// prints a shell, a skill and a failed or aborted compaction as a new client does, once (O-89).
+    /// prints a shell, a skill and a failed or aborted compaction as a new client does, once: a TS defect, fixed here.
     #[test]
     fn a_shell_ends_idle_and_a_resize_replay_prints_what_a_new_client_prints() {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);

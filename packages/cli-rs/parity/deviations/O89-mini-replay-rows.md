@@ -21,5 +21,4 @@ reasoning row of a listed message whose part the list does not hold is dropped. 
 further along as it is. With tools hidden, an end buffers only the text after what a list showed. After a resize, the
 screen shows what a new client shows for the same list.
 
-**Reason.** The user decided to fix the defects the TS client shares in Rust and record them as deviations, with no
-upstream proposal (O-89).
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations, with no upstream proposal.

@@ -10,7 +10,7 @@ built-ins (`-<id>`, `<id>`, `*`, `<prefix>.*`) exactly as TS does. The loader (`
 `cli.json` entries that name no built-in. A directory with a `plugin.toml` is a Luau plugin, and loads with hot
 reload. A native plugin library (`plugin.so`, `.dylib`, `.dll`) is listed `Skipped`: "opencode-native does not load
 native plugin libraries". Any other directory target is a TypeScript plugin. By default it
-runs on the JS host (O-166, which reverses O-151's opt-in), a Bun process the client starts (`docs/plugin-abi.md`, "The JS
+runs on the JS host, a Bun process the client starts (`docs/plugin-abi.md`, "The JS
 host"), through the V2 compatibility layer (P8), which gives a V2 `{ id, setup }` module the context
 and the modules TS gives it. Bun is looked for only when the first TypeScript plugin needs it (`OPENCODE_BUN`, the
 local server's opencode binary run as its own Bun, the opencode bundled beside the client, or `bun` on the path), so a client with none runs no process for
@@ -39,20 +39,20 @@ picks the same directory, and a range is never matched against another version i
 classification is `npm-package-arg` 13 and `hosted-git-info` 9 ported: hosted git URLs (HTTPS, SSH, SCP
 `git@host:path`, `www.`), `name@<hosted URL>`, GitHub's `user/repo` with a `#committish`, sourcehut's `~user/repo`,
 and tarballs keyed by their text. `plugin_npm.rs` checks 95 specs against TS's own `Npm.cacheKey`. Unlike TS, only a
-spec TS's `parse` classifies (a version, range or tag of a named package, or a git spec) is looked up (carbon
-`jsnpm-4`). A tarball, a URL, an alias or a path keyed by its text names no package, and such a key can lead out of the
+spec TS's `parse` classifies (a version, range or tag of a named package, or a git spec) is looked up.
+A tarball, a URL, an alias or a path keyed by its text names no package, and such a key can lead out of the
 cache, as `existing@1.0.0/../../x` does in TS. The name joined under `node_modules` must be a package name (`name`,
 `@scope/name`, as `validate-npm-package-name` takes it), so a `dependencies` key that is absolute or `..` is refused.
 The package's real path must lie under the cache's `npm` directory, so a link out of it is refused too. The JS
-host loads its `./tui` export, as for a directory. The TUI module must be one of the plugin's own files (carbon
-`jsnpm-3`). TS's client imports whatever `<name>/tui` resolves to (`packages/plugin/src/host.ts` `resolve`); TS's
+host loads its `./tui` export, as for a directory. The TUI module must be one of the plugin's own files.
+TS's client imports whatever `<name>/tui` resolves to (`packages/plugin/src/host.ts` `resolve`); TS's
 server checks only its own server entry (`FSUtil.contains`, `core/src/config/plugin/source.ts`). The JS host refuses a
 module whose real path is not inside the plugin directory's real path, for every plugin: a `package.json` `name` of
 `../../x` or an absolute path resolves anywhere. A confined (approved project) plugin's own resolution from its root is
 also refused there. Either way the plugin fails, saying why. A package's `<name>/tui` resolves inside the package, by
 self-reference or from the `node_modules` it sits in, so no legitimate plugin is refused. "Inside" is TS's own
 `FSUtil.contains` test, `path.relative` between real paths (`realpathSync.native`, with no verbatim prefix), for the
-module and for each confined root (carbon `recheck-3`, `pipe/compat/paths.ts`). So on Windows a drive letter's case, an
+module and for each confined root (`pipe/compat/paths.ts`). So on Windows a drive letter's case, an
 8.3 short name or a `\\?\` prefix on either side does not read as outside. The loader also hands the JS host real
 paths without that prefix. Like any global or `cli.json` plugin a `cli.json` package needs no
 approval, and its build identity is computed off the UI thread (FT-2). As TS resolves a loaded package once a session
@@ -66,12 +66,12 @@ then the server parts, then `cli.json`; one the cache does not hold is left out,
 cannot load (`context.tsx:362-363`).
 
 Unlike TS, which asks for no approval at all, a server part loads without approval only when the user's own
-configuration names it (O-162, carbon `jsnpm-2`). `GET /api/plugin` carries no provenance, and a project's
+configuration names it. `GET /api/plugin` carries no provenance, and a project's
 `opencode.json` can name a package (a `.tgz`, a git spec) with no server export, so the server runs none of its code.
 So the client reads the user's layers itself. They are the `plugins` entries of the global opencode config (`opencode.json`,
 then `opencode.jsonc`, in the global config directory, in the order TS's `loadDirectory` reads them), then those of
 `cli.json`. Each is a string or the `package` of `{ package, options }`. The entries fold in order, as TS's server folds
-its operations (`core/src/plugin/supervisor.ts` `resolve`, carbon `recheck-1`):
+its operations (`core/src/plugin/supervisor.ts` `resolve`):
 - a plugin directly under a global `plugin` or `plugins` directory starts named, as discovery adds it before any
   entry;
 - an entry that is a part's spec, or names its path, names and enables it;
@@ -88,7 +88,7 @@ refolds them at once.
   waits for approval. A managed, explicit (`OPENCODE_CONFIG`) or `OPENCODE_CONFIG_CONTENT` layer vouches for
   nothing.
 - **`cli.json`'s version of a package wins.** A server part for a package that a `cli.json` entry names, by its npm
-  name or, for a git spec, by its installed name, is left out at whatever version (carbon `recheck-2`). TS folds
+  name or, for a git spec, by its installed name, is left out at whatever version. TS folds
   `cli.json` after the server's parts, and `desired.set` keys by plugin ID, so `cli.json`'s version replaces the
   server's (`tui/src/plugin/context.tsx:289-309`). The client decides by package name before anything loads. So
   `cli.json`'s entry never fails as "plugin ID … is already registered" behind the server's, and the server's part is
@@ -98,7 +98,7 @@ refolds them at once.
   approved it runs where it is, unstaged and unconfined: its dependencies sit beside it in the generation (about
   300 MB for a field-test plugin), so a copy of it could not import them.
 - **Local path:** the path a server reports is made a real path: canonicalized, without the `\\?\` verbatim prefix
-  Windows gives (carbon `recheck-3`).
+  Windows gives.
   - **Vouched:** a direct child of a global plugin directory (the reported path's parent is one; a link there
     counts, nothing deeper such as its `node_modules` does), or a path an entry of the user's configuration names
     (TS resolves `./`, `../` and `file://` against the config file's directory).
@@ -141,6 +141,6 @@ its answer applied (`hold`). All TypeScript plugins share one process: when it e
 it, or it went over its memory), every other plugin is set up again with new state, where TS's plugins share the TUI's
 process and die with it. The calls the process never started run once on the next one; the one it ran is not run again.
 
-**Reason.** User decision Q5: external plugins become Rust plugins; P.4 loads them as native shared
-libraries (decision O-42). The Rust client cannot run TypeScript in its own process; O-125 and O-128 run today's V2
+**Reason.** External plugins become Rust plugins; P.4 loads them as native shared
+libraries. The Rust client cannot run TypeScript in its own process, so it runs today's V2
 plugins on a JS host beside it, as the second tier, where their features map.

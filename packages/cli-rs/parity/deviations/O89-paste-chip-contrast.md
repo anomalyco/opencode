@@ -20,5 +20,4 @@ background `#e1e2e7` and foreground `#3760bf`: `#3760bf` on `#8c6c3e`, 1.21.
 A known pure-black terminal background (`#000000`) can't be told apart from no background, because both resolve to
 `rgba(0, 0, 0, 0)`. It takes the neutral fallback, which is the near-black end of its neutral scale on any yellow.
 
-**Reason.** The user decided to fix the defects the TS client shares in Rust and record them as deviations, with no
-upstream proposal (O-89).
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations, with no upstream proposal.

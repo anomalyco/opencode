@@ -21,5 +21,5 @@ config) leaves no `/plugins`, as in TS.
 
 ## Reason
 
-Synthesis 3.6 and 4.10 (O-125, 3): the manager is a plugin, so it can fail, and the way back to it must not depend on
+The plugin design: the manager is a plugin, so it can fail, and the way back to it must not depend on
 it. The host keeps the smallest list that names the failures and enables the manager again.

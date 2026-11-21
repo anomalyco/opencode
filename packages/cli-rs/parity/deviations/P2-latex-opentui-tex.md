@@ -7,7 +7,7 @@ row between matrix rows, maps `\epsilon` to `ε` and `\varepsilon` to `ϵ`, keep
 that parsed).
 
 **Rust.** `crates/latex` follows Simon's opentui-tex (`math-layout.ts`, `math-parser.ts`, `math-symbols.ts`,
-`unicode-tex-backend.ts`, `tex-renderable.ts`), the reference for this plugin (O-89: a TS defect fixed in Rust):
+`unicode-tex-backend.ts`, `tex-renderable.ts`), the reference for this plugin (a TS defect fixed in Rust):
 
 - the radical is `√` on the radicand's baseline under an overbar that starts with `╭`;
 - matrix, `cases`, `aligned`, `array` and `\displaylines` rows follow each other without a blank row;

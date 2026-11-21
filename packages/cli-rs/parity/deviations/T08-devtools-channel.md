@@ -6,13 +6,13 @@ at build time (`packages/cli/src/version.ts`); a CLI run from source has none, s
 release build is `latest` (or `beta`, `next`, ...) and draws none.
 
 Rust: the same rule (`crates/tui/src/features/devtools.rs`), but the channel is read at run time:
-`OPENCODE_CHANNEL`, else `latest` (plan 6.6, C09). Without the variable Rust draws no bar, as a released TS client
+`OPENCODE_CHANNEL`, else `latest` (`C09-db-channel`). Without the variable Rust draws no bar, as a released TS client
 does; with `OPENCODE_CHANNEL=local` it draws the bar the TS CLI from source draws.
 
 Driven: `parity/scenarios/E.18a/channel.pty.ts` runs the home screen with no `debug.devtools` against the TS CLI
 from source. TS shows the bar on the last row and moves the version row up one (3 lines). `E.18a/channel-local.pty.ts`
 sets `OPENCODE_CHANNEL=local`, and both clients are equal. The plugins field test saw the bar in every TS capture
-and in none of Rust's (`steps/plugins-field-test.md`, "Not plugin defects").
+and in none of Rust's.
 
-Reason: the Rust client has no build channel (plan 6.6), and `latest` is the channel whose service, database and
+Reason: the Rust client has no build channel, and `latest` is the channel whose service, database and
 defaults it uses. A Rust build cannot tell a run from source from a release, so it follows the release.

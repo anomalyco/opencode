@@ -15,6 +15,6 @@ gives such a session in its links (`SessionTitleFallback.displayLabel`). A title
 
 ## Reason
 
-A TS defect, fixed here (O-89): the row names the session, and an empty one says nothing; the D131 Windows run
+A TS defect, fixed here: the row names the session, and an empty one says nothing; the D131 Windows run
 showed it for a session the server gave no title. Driven by `parity/scenarios/D131/title-untitled.pty.ts`
 (checkpoint `epilogue`, one line); `title-renamed.pty.ts` checks that a titled session prints as in TS.

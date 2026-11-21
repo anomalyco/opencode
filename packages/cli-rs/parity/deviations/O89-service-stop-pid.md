@@ -13,4 +13,4 @@ OpenCode server registered in FILE, so it was not stopped. Remove that file if t
 file. A dead pid is handled as before: the stale file is removed. `ensure` still stops only a process it started
 itself, which it holds a handle to.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

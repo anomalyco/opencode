@@ -1,5 +1,5 @@
-// A Luau plugin under a real terminal (spike `luau-spike`): the quick start in Luau on the Rust side
-// (`crates/plugin/examples/luau/hello`; Luau plugins are on by default, O-178) against its TypeScript twin
+// A Luau plugin under a real terminal: the quick start in Luau on the Rust side
+// (`crates/plugin/examples/luau/hello`; Luau plugins are on by default) against its TypeScript twin
 // (`parity/plugins/luau-hello/tui.tsx`), in one `plugins` directory: its line closes the home footer, and `/hello` shows
 // its toast. The suite's `*.pty.ts` glob still leaves this file out, from when a default build had no Luau; run it by
 // path:

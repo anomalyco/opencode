@@ -11,5 +11,4 @@ theme, then loads the built-in `opencode` theme and logs `custom theme opencode:
 opencode theme`. This holds whether the broken custom `opencode` was selected or was the fallback of another theme
 (a broken custom theme, or `system` without a terminal palette).
 
-**Reason.** The user's decision O-89: fix the defects the TypeScript client shares in Rust, and record them as
-deviations. A broken theme file should not stop the client.
+**Reason.** Defects the TypeScript client shares are fixed in Rust and recorded as deviations. A broken theme file should not stop the client.

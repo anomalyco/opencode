@@ -44,5 +44,5 @@ label parses where TypeScript rejects it; the server or DNS rejects it later.
 segments, `zed://@` parses, a non-special URL with a host and an empty path gets no `/`, and an opaque path keeps a
 space before `#` that Bun writes as `%20`.
 
-Reason: decision O-58 (E1). Full IDNA pulls ICU4X into the build, 21 crates with 2 build scripts
+Reason: dependency weight. Full IDNA pulls ICU4X into the build, 21 crates with 2 build scripts
 and 4 proc macros, for host names that a user can write in punycode.

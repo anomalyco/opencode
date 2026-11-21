@@ -1,4 +1,4 @@
-// Two programs asked for in one call (reviews bigboi-4, carbon-1): the terminal goes to the first, and the second is
+// Two programs asked for in one call: the terminal goes to the first, and the second is
 // refused at once with its own reply, instead of replacing the first unseen. Rust only.
 import { definePty } from "../../pty/run"
 import { home, install, leave } from "./fixture"

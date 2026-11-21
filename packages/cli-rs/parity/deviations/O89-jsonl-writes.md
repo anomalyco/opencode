@@ -21,5 +21,4 @@ after the rename check are carried over from its open handle to the end of the n
 - A TypeScript rewrite from memory drops lines Rust appended since TypeScript loaded the file, as it drops its own
   other clients' lines today.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations, with no
-upstream proposal (the TypeScript lock is not added).
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations, with no upstream proposal (the TypeScript lock is not added).

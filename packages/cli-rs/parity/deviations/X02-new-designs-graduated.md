@@ -9,7 +9,7 @@ step, and many dialogs back to the old designs.
 
 ## Rust
 
-The Rust client draws the new designs only, whatever the config says (`decisions.md`, "Design target"). The
+The Rust client draws the new designs only, whatever the config says. The
 experiment is graduated as `packages/tui/AGENTS.md` describes: its registry entry and gates are gone, and the
 registry, dialog, and `experimental.<id>` persistence stay. A `cli.json` that sets `new-designs` is read and
 written unchanged; `false` has no effect.

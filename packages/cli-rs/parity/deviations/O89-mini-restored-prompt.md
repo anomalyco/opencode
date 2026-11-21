@@ -8,5 +8,4 @@ stream reconnects) prints the same prompt a second time.
 **Rust.** `Transcript::restore` records the message ID of a restored user row, so the listed message counts as shown
 and the prompt prints once. The skill rows and the images of that message were already handled once each.
 
-**Reason.** The user decided to fix the defects the TS client shares in Rust and record them as deviations, with no
-upstream proposal (O-89).
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations, with no upstream proposal.

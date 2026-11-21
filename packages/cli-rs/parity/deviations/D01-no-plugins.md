@@ -13,5 +13,5 @@ The tests that hold the command table, the help and the usage errors to TypeScri
 (`Flag::own`, `crates/cli/src/tests`), and the P-CLI completions cases mask its lines on both sides
 (`parity/scenarios/C.0/own-flags.ts`).
 
-Reason: opencode-native has no crash guard (O-192). A plugin that crashes or freezes the client as it starts would
+Reason: opencode-native has no crash guard. A plugin that crashes or freezes the client as it starts would
 stop every run; the flag is the way back in to disable or remove it.

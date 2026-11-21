@@ -527,7 +527,7 @@ mod tests {
         assert_eq!(ts(&Env::default()), prefix.join("opencode.cmd").as_os_str());
         assert_eq!(ts(&missing_ts()), "/nonexistent/opencode-ts");
         assert_eq!(Env::default().ts_with(var, false, None).program, "opencode");
-        // Expected (bundle-server): the binary beside the client wins over the shim on `PATH`, not over the variable.
+        // Expected (the bundled layout): the binary beside the client wins over the shim on `PATH`, not over the variable.
         let bundled = || Some(PathBuf::from("C:\\oc\\opencode.exe"));
         assert_eq!(Env::default().ts_with(var, true, bundled()).program, "C:\\oc\\opencode.exe");
         assert_eq!(missing_ts().ts_with(var, true, bundled()).program, "/nonexistent/opencode-ts");

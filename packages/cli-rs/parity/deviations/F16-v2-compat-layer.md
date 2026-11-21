@@ -11,7 +11,7 @@ read once as the component is created; a local module compiles with Solid's comp
 Solid's universal renderer into plain nodes, which each view reads into a contract 2.0 tree for the host to draw. The
 four published packages P8 runs draw cell for cell as TS draws them at the checkpoints of `parity/scenarios/P.8`
 (settled pictures, not every state or the first frame after each event). The JS host is on unless
-`OPENCODE_PLUGIN_JS` is `0`, `false` or `off` (O-166). What differs:
+`OPENCODE_PLUGIN_JS` is `0`, `false` or `off`. What differs:
 
 - **Every module compiles as an installed one**, with Bun's JSX transform: a local TSX plugin that relies on Solid's
   compiler for props that follow signals renders them once, as the same plugin installed from npm does in TS. A
@@ -250,7 +250,7 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   declarations returns a promise from answers a resolved promise of an inert value, so a chain such as
   `getTreeSitterClient().initialize().then(…)` runs on (CT-16, `P.8/shell-highlighting`): the grammar it registers is
   not the host's, which would need the contract to take a plugin's tree-sitter grammar. The `effect` package is not
-  served (O-170): the layer serves what the TUI plugin API defines, not libraries a plugin expects the host to happen
+  served: the layer serves what the TUI plugin API defines, not libraries a plugin expects the host to happen
   to have. TS's runtime provides its own, so a plugin that imports it (opencode-plugboard and
   @davidaayers/opencode-codex-usage-plugin declare it a peer) fails to load here, named
   (`plugin_compat::a_plugin_that_imports_effect_fails_to_load_naming_it`).
@@ -287,6 +287,6 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   output, …`), and change nothing on screen; the JS host and its plugins keep running. Forwarding them would need
   OpenTUI to write them between its frames, so they cannot cut into one (js-stdio).
 
-**Reason.** O-123 and O-125 keep plugin UI code native and in-process; O-128 makes TypeScript a compatibility shim on
+**Reason.** Plugin UI code is native and in-process, and TypeScript is a compatibility shim on
 the JS host, the second tier: what it cannot read in the frame, or that the contract does not carry, it reports rather
-than imitates (rich-plugins synthesis 3.7).
+than imitates.

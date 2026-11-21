@@ -14,5 +14,5 @@ ported; `E.3/complete` matches TS at every checkpoint. `service.restart` is not 
 
 ## Reason
 
-Restarting stops the shared background service, which this client never does (orchestrator decision O-21).
-`opencode-native service restart` restarts it as an explicit command (O-39).
+Restarting stops the shared background service, which this client never does.
+`opencode-native service restart` restarts it as an explicit command.

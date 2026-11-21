@@ -1,4 +1,4 @@
-// A plugin's title longer than the 4091 bytes OpenTUI takes (reviews bigboi-2, carbon-3): the TUI sends it cut on a
+// A plugin's title longer than the 4091 bytes OpenTUI takes: the TUI sends it cut on a
 // character boundary and keeps running, instead of failing its terminal session and exiting. Rust only.
 import { definePty } from "../../pty/run"
 import { home, install, leave } from "./fixture"

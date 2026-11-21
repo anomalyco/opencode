@@ -62,7 +62,7 @@ On Linux and macOS the library links statically with its own libc++, so neither 
   needs `libc.so.6`, `libm.so.6`, `libpthread.so.0` and `libdl.so.2` at `GLIBC_2.17` or older, and no libstdc++ or
   libgcc_s.
 - **musl** (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`): fully static, with Rust's default
-  `crt-static` (O-188), so the binary needs no library and runs on any Linux. A static executable cannot `dlopen`, so
+  `crt-static`, so the binary needs no library and runs on any Linux. A static executable cannot `dlopen`, so
   the musl builds have no Zed editor context.
 
 `--release` keeps line-table debug info (about 180 MB; `strip` brings it to about 40 MB). `--profile dist` adds fat

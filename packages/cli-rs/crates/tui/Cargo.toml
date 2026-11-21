@@ -36,7 +36,7 @@ rand.workspace = true
 # (ts-feature). On by default; `OPENCODE_PLUGIN_JS=0` still turns the host off at run time.
 default = ["ts", "luau"]
 ts = ["opencode-plugin/ts"]
-# Luau plugins, in process (O-178). On by default; `OPENCODE_PLUGIN_LUAU=0` turns them off at run time.
+# Luau plugins, in process. On by default; `OPENCODE_PLUGIN_LUAU=0` turns them off at run time.
 luau = ["opencode-plugin/luau"]
 
 [dev-dependencies]

@@ -22,6 +22,6 @@ write the same value.
 
 ## Reason
 
-A plugin must not read or overwrite another plugin's storage by choosing its ID or key (review carbon-6), on the
+A plugin must not read or overwrite another plugin's storage by choosing its ID or key, on the
 native and the pipe carriers alike. The host also keeps what it read of each key, so what a plugin may make it keep is
 bounded.

@@ -139,8 +139,8 @@ impl Config {
 
     /// Bun for the JS host, over the environment `var` reads, for a client in `directory`. The runtime is
     /// `OPENCODE_BUN` (an absolute path only), else the opencode binary of a local server run as its own Bun
-    /// ([`Config::opencode`]; opencode ships with Bun), else `bundled`, the opencode installed beside the client
-    /// (bundle-server), else `bun` on the path ([`find_in`]). The server's binary is the executable its process runs,
+    /// ([`Config::opencode`]; opencode ships with Bun), else `bundled`, the opencode installed beside the client,
+    /// else `bun` on the path ([`find_in`]). The server's binary is the executable its process runs,
     /// or, where the client cannot tell, the first `opencode` on the path that answers, after `bundled`.
     pub fn find(
         var: impl Fn(&str) -> Option<std::ffi::OsString>,
@@ -3327,7 +3327,7 @@ mod tests {
         // `OPENCODE_BUN` wins, unasked.
         let named = from(Server::Local(Some(server.join("opencode"))), &all, Some("/opt/bun/bin/bun"));
         assert_eq!(named, Some((PathBuf::from("/opt/bun/bin/bun"), false, None)));
-        // Expected (bundle-server): the opencode installed beside the client comes after the server's binary and before
+        // Expected (the bundled layout): the opencode installed beside the client comes after the server's binary and before
         // the path, for a remote server too; an old one, or one inside the project, is passed over.
         let bundle = root.join("bundle");
         script(&bundle.join("opencode"), &opencode("1.4.5"));

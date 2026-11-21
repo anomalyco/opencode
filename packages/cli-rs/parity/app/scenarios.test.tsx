@@ -193,7 +193,7 @@ function unpackPinned(name: string, into: string) {
   rmSync(into, { recursive: true, force: true })
   mkdirSync(into, { recursive: true })
   const tarball = `${parity}plugins/npm/${name.replace("/", "__")}.tgz`
-  // What runs is what was checked against the registry (carbon-6): the pin in `integrity.json`.
+  // What runs is what was checked against the registry: the pin in `integrity.json`.
   const pins = JSON.parse(readFileSync(`${parity}plugins/npm/integrity.json`, "utf8"))
   const digest = `sha512-${new Bun.CryptoHasher("sha512").update(readFileSync(tarball)).digest("base64")}`
   if (pins[`${name.replace("/", "__")}.tgz`] !== digest) throw new Error(`${tarball} is not the pinned tarball`)

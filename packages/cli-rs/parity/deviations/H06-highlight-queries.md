@@ -10,7 +10,7 @@ Core's rewrite. They use Core's capture rules (`Grammar::core_captures`) and Cor
 (`SyntaxTheme::first_part_fallback`). `crates/ui/tests/all/grammars.rs` and `content.rs` match the TypeScript renders cell
 for cell. Here is what still differs:
 
-- **OCaml and F# are not linked** (O-122). TS highlights them; Rust shows their code in the text color. Their parse
+- **OCaml and F# are not linked**. TS highlights them; Rust shows their code in the text color. Their parse
   tables are the largest of the TUI's grammars (OCaml 15.4 MB and F# 14.2 MB of object code): the stripped Linux
   release binary is 103.5 MB without them and 120.6 MB with them.
 - **Kotlin is not linked.** TS highlights it; Rust shows its code in the text color. TS uses fwcd's

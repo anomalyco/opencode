@@ -7,7 +7,7 @@ the global `opencode.json` (`Plugin "<package>" installed and added to …`); a 
 Rust: `opencode-native plugin add` runs the TypeScript CLI with the same arguments, stdio and exit code, as every
 `plugin` subcommand does (D.1), but as a child it waits for rather than in its place. opencode-native loads a TUI
 package named in `cli.json` from the cache that install filled, on its JS host (`F16-typescript-plugins-skipped`).
-The JS host is on by default (O-166), and then it prints nothing more, as TS. Only when `OPENCODE_PLUGIN_JS` turns
+The JS host is on by default, and then it prints nothing more, as TS. Only when `OPENCODE_PLUGIN_JS` turns
 it off (`0`, `false` or `off`), and the child succeeded and added an entry to `cli.json`, it prints one more line to
 stdout for each: `opencode-native loads TUI plugin "<package>" on its JS host, which OPENCODE_PLUGIN_JS turns off: unset
 it to load it. The TypeScript client (opencode) loads it as it is.` A build without the cargo feature `ts` (ts-feature)

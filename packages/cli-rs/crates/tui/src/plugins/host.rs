@@ -1578,7 +1578,7 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
 }
 
 /// The build of the project plugin of `target` the user would be asked about, or why it cannot be read, and why
-/// decisions are not saved, if they are not (rich-plugins 3.9).
+/// decisions are not saved, if they are not.
 pub fn held(tui: &Tui, target: &str) -> Option<(Result<Artifact, String>, Option<String>)> {
     let loader = tui.plugins.loader.borrow().clone()?;
     Some((loader.held(target)?, loader.unsaved()))

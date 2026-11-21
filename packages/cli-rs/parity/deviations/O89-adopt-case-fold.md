@@ -8,4 +8,4 @@ changed a length. For `adopt(C:\İ\ä, root c:\i̇)` it gives the subpath `""` (
 **Rust.** `projects::adopt` takes the directory's path segments after the root's segments, so the example gives
 `"ä"`. Every other input gives the same subpath as TypeScript.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

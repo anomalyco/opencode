@@ -32,7 +32,7 @@ new build's line as it was.
 
 ## Reason
 
-Rich-plugins 4.14 and O-125: "a reload ends every mount of the old build", and when a plugin leaves `active` nothing
+The plugin design: a reload ends every mount of the old build, and when a plugin leaves `active` nothing
 it owned is left and focus is at the composer. A dialog's action is a command name, which the host dispatches; left
 open after a reload, a prompt, a list, a confirm or an alert of the old build ran the new build's command (the plugin
 model, `a-stale-prompt-reaches-no-new-build` and `a-stale-alert-reaches-no-new-build`, and the P0a review). A dialog of an activation that ended can only call into

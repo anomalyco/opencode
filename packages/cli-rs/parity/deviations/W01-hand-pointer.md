@@ -22,5 +22,5 @@ the prompt and other inputs, the terminal pane, and dialog backdrops keep the de
 `opencode_ui::click_pointer` picks the shape; the shared helpers (select rows, dialog footer actions and close,
 toasts, `sidebar::on_click`, the inline and block tool rows) set it, so new elements built on them get it too.
 
-Reason: the user's decision O-46 ("yes"): a hand over tabs and every other clickable element, as a deliberate
+Reason: a hand over tabs and every other clickable element, as a deliberate
 deviation from TypeScript.

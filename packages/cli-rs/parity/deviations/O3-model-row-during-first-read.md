@@ -8,5 +8,4 @@ row is never inserted, and the page, read before the switch, lacks it too. The r
 inserts the row while the first read is in flight. When the page lands, the row is placed by `durable.seq` like any
 row created during the read. The model test's `model row during the first head read` sequence is `KNOWN`.
 
-**Reason.** The user's decision O-92 (Q3 (a) of the models plan): fix in Rust the defects TS shares, and record them
-as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

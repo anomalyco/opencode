@@ -7,5 +7,5 @@
 **Rust.** `crates/cli/src/commands/session.rs` (`pager`) starts `%SYSTEMROOT%\System32\more.com` directly
 (`C:\Windows` when the variable is unset). If it cannot start, the list is printed, as before.
 
-**Reason.** Decision O-89: a defect the TS client shares is fixed in Rust. Listing sessions in an untrusted
+**Reason.** A defect the TS client shares is fixed in Rust. Listing sessions in an untrusted
 checkout must not run code from that checkout. The pager the user sees is the same program.

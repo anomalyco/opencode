@@ -17,5 +17,5 @@ sends `"p0b long "` and 2041 `é` (4091 bytes). Scenario: `P.0b/title-long` (P-P
 
 OpenTUI's Rust session refuses a title longer than 4091 bytes (`ESC ] 0 ; <title> BEL` must fit 4096 bytes,
 `session.zig` `title_bytes_max`), and the refusal fails the app's terminal session, which ends the TUI. A plugin
-must not be able to end the client with a long string (reviews bigboi-2, carbon-3). A control character in a
+must not be able to end the client with a long string. A control character in a
 title could end the escape sequence early, so plugin titles get the cleaning the client's own titles get.

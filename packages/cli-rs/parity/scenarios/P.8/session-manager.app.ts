@@ -87,7 +87,7 @@ export default defineApp({
     { keys: ["enter"] },
     { checkpoint: "deleted", until: "Deleted 1 session" },
     // Its listing layer and its searching layer each bind `pageup` and `pagedown`, the same commands, one enabled while
-    // the other is not: listing, they move the selection a page (carbon ce-1: the searching layer's disabled state
+    // the other is not: listing, they move the selection a page (a regression: the searching layer's disabled state
     // disabled them).
     { keys: ["pagedown"] },
     { checkpoint: "paged-down", until: "Plan the release" },

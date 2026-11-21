@@ -6,7 +6,7 @@ the `session.step.started` row and its text are gone once the older page lands, 
 are dropped because the row is not loaded. The reply reappears only after another invalidation. Events create rows for
 any session, also one the store found missing (`message.update` does `draft[sessionID] ??= []`, `data.ts:495`).
 
-**Rust** (model M2, decisions O-91 and O-92 Q2 (a)). Each head read records what overtakes it (`messages::HeadRead`):
+**Rust.** Each head read records what overtakes it (`messages::HeadRead`):
 the rows events create, each with its event's `durable.seq`, and the durable edits (step, text, reasoning and tool
 starts and ends, shell end, retry), in arrival order. The record exists from the start of the read, also before the
 transcript is loaded. When the page lands:
@@ -38,4 +38,4 @@ published. A row created before them, delivered later still, has nothing to comp
 rows until the next read. TS does the same. Closing it client-side needs a re-read for the first row an event creates
 in every paged window that has no row with a known `seq`.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

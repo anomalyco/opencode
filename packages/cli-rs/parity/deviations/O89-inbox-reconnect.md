@@ -15,4 +15,4 @@ its head again. `session.inbox.enqueued` and local admission do nothing for a se
 store model's `KNOWN` sequences "cancel lost in a reconnect", "delivery of a prompt missed in a reconnect" and "late
 enqueue for a missing session" cover them.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

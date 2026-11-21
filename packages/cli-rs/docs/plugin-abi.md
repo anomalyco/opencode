@@ -19,7 +19,7 @@ side answers a request it does not know with an error. The host states optional 
 (`Abi::has_feature`). A 2.0 host has `image-bounds`, `focus-input` and `fence-node`. The SDK's
 [README](../crates/plugin-abi/README.md) describes each.
 
-Third-party native code is not loaded in process (O-192); if it returns, it will run as a supervised helper process.
+Third-party native code is not loaded in process; if it returns, it will run as a supervised helper process.
 
 ## What setup registers
 

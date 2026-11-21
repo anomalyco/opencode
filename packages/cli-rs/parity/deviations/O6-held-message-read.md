@@ -11,5 +11,4 @@ evicting its transcript and committing a revert end the window and give it a new
 same, so a response for a deleted, evicted or reverted transcript publishes nothing. The model test's `held
 single-message read after a delete` sequence is `KNOWN`.
 
-**Reason.** The user's decision O-92 (Q3 (a) of the models plan): fix in Rust the defects TS shares, and record them
-as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

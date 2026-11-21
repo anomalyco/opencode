@@ -670,7 +670,7 @@ fn a_long_pattern_match_is_stopped_at_the_budget() {
         .and_then(|rest| rest.split(' ').next())
         .and_then(|ms| ms.parse().ok())
         .unwrap_or_else(|| panic!("{failed}"));
-    println!("luau: carbon's pattern stopped after {used} ms of CPU, {took:?}");
+    println!("luau: the backtracking pattern stopped after {used} ms of CPU, {took:?}");
     assert!(failed.contains("Luau budget") && used <= 200, "{failed} after {took:?}");
     assert_ne!(toast.as_deref(), Some("matched"));
 }
@@ -1892,7 +1892,7 @@ fn each(rounds: u32, mut f: impl FnMut()) -> Duration {
     start.elapsed() / rounds
 }
 
-// The spike's carrier measure, printed: one render of the quick start's claim and one run of its command, linked and
+// The carrier measure, printed: one render of the quick start's claim and one run of its command, linked and
 // in Luau. Run with `--release --ignored --nocapture`.
 #[test]
 #[ignore]
@@ -2035,7 +2035,7 @@ fn heavy_calls() {
     }
 }
 
-// The spike's memory measure, printed: what an idle VM of each example holds once its setup ran, and what compiling
+// The memory measure, printed: what an idle VM of each example holds once its setup ran, and what compiling
 // the counter costs. Run with `--release --ignored --nocapture`.
 #[test]
 #[ignore]

@@ -17,5 +17,5 @@ position is not restored after a failed first read, and Rust adds no retry: a la
 previous-message move, asks again as it does in TS. P-APP `E.6a/history-failed` records this. The cells outside the
 toast equal TS's empty transcript.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations. Without the
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations. Without the
 toast, the user has no sign that the transcript failed to load.

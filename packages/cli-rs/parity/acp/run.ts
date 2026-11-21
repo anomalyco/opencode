@@ -1,4 +1,4 @@
-// P-WIRE (plan 7.1): runs each ACP subprocess suite of `packages/cli/test/acp` against the TS agent and
+// P-WIRE: runs each ACP subprocess suite of `packages/cli/test/acp` against the TS agent and
 // against `opencode-native acp`, records every agent's JSON-RPC traffic, and compares the transcripts.
 //
 //   bun run parity/acp/run.ts [suite ...]
@@ -8,7 +8,7 @@
 // agent) and `out.ndjson` (agent to client) per agent process under
 // `$TMPDIR/opencode-parity/acp/<suite>-<side>/`. The n-th process of one side is compared with the n-th
 // of the other, each direction on its own, so the interleaving of the two directions does not matter.
-// Lines are compared byte for byte, key order included, after the plan 7.5 normalizers (`parity/cli`)
+// Lines are compared byte for byte, key order included, after the normalizers of `parity/cli`
 // and with the fixture's temporary root replaced.
 
 import { Glob } from "bun"

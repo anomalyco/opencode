@@ -61,7 +61,7 @@ export default defineApp({
     { type: "src" },
     { checkpoint: "typed", until: "2 matches", deviation },
     // Escape leaves the field and clears its search: its commands, disabled while it had the focus, are enabled again,
-    // so `q` closes the browser (carbon ce-2: read where the layer did not follow it, the field's focus left them
+    // so `q` closes the browser (a regression: read where the layer did not follow it, the field's focus left them
     // disabled for good).
     { keys: ["escape"] },
     // The user types once the field let the focus go: on the JS host it lets go as its `onKeyDown` runs, after the key,

@@ -1,4 +1,4 @@
-// The title after a program in the foreground (reviews carbon-3, bigboi): suspending the terminal clears it, and the
+// The title after a program in the foreground: suspending the terminal clears it, and the
 // TUI sends its last title again once it is back, also one a plugin set. Rust only.
 import { definePty } from "../../pty/run"
 import { home, install, leave, run } from "./fixture"

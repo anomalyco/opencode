@@ -18,4 +18,4 @@ nothing, for the built-ins and for every plugin of the one API.
 ## Reason
 
 The same rule as `DLG35-select-right-click.md`: a right-click is not a request to act, and it can run an action the
-user did not ask for (O-41). The left-click path is the same on both sides.
+user did not ask for. The left-click path is the same on both sides.

@@ -8,4 +8,4 @@ ignored; the prompt is cleared and the draft lives only in memory until the TUI 
 still cleared and the entry stays in the in-memory stash, so `prompt.stash.pop` or the stash list brings it back
 while the TUI runs. A failed pop or remove is only logged, as before.
 
-**Reason.** The user's decision O-89: fix in Rust the defects TS shares, and record them as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

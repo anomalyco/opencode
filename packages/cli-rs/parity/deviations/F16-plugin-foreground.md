@@ -29,5 +29,4 @@ Scenarios: `P.0b/foreground-signals`, `-streams`, `-title`, `-twice` (P-PTY, Rus
 
 ## Reason
 
-A plugin must not be able to end or stop the client with an ordinary key in a program it ran (reviews bigboi-1,
-bigboi-5, carbon-1). The Rust host owns the program, so it gives it job control a shell would.
+A plugin must not be able to end or stop the client with an ordinary key in a program it ran. The Rust host owns the program, so it gives it job control a shell would.

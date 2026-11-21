@@ -9,4 +9,4 @@ does not move; after a new message it moves part of the way.
 **Rust.** `routes/session/scroll.rs` measures the rows to where the slack starts, so the slack is what the target
 needs and the message lands at the top, as it does in a longer session.
 
-**Reason.** A TS defect fixed in Rust (O-89): a jump must land on its target.
+**Reason.** A TS defect fixed in Rust: a jump must land on its target.

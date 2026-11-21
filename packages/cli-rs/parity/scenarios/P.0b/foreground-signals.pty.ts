@@ -1,7 +1,7 @@
-// A plugin's program in the foreground gets the signals of the terminal's keys, and the TUI does not (reviews
-// bigboi-1, carbon-1): Ctrl+C and Ctrl+\ end the program alone, Ctrl+Z neither stops the TUI nor strands it (the
+// A plugin's program in the foreground gets the signals of the terminal's keys, and the TUI does not:
+// Ctrl+C and Ctrl+\ end the program alone, Ctrl+Z neither stops the TUI nor strands it (the
 // program is continued), and afterwards a key reaches the same TUI. The TUI works in the fake server's directory,
-// which does not exist here, so the program runs in the TUI's own (carbon-1). The sample sets each reply as the
+// which does not exist here, so the program runs in the TUI's own. The sample sets each reply as the
 // title, so the title log has them. Rust only: the TS client shares the process group.
 import { definePty } from "../../pty/run"
 import { home, install, leave, run } from "./fixture"

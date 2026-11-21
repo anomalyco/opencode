@@ -23,7 +23,7 @@ pub fn beside(executable: &Path) -> Option<PathBuf> {
 mod tests {
     use super::*;
 
-    // Expected (bundle-server): the server is the sibling of the client's real path, through a link to the client; a
+    // Expected (the bundled layout): the server is the sibling of the client's real path, through a link to the client; a
     // directory, a missing file or the client itself is none.
     #[test]
     fn the_server_is_the_file_beside_the_clients_real_path() {

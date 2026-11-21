@@ -9,5 +9,4 @@ was, and it stays so until another read.
 replays them onto the page when it lands (O89-transcript-refresh). Each sets a whole value, so a replay the page already
 holds changes nothing. The model test's `text.ended during the first head read` sequence is `KNOWN`.
 
-**Reason.** The user's decision O-92 (Q3 (a) of the models plan): fix in Rust the defects TS shares, and record them
-as deviations.
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

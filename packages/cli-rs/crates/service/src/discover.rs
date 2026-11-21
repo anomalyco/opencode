@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(discover_with(&live, &paths, None, &owner).await.unwrap().channel, "v2");
         let owner = Owner::with_lookup(printing("1.2.3"), fake_proc);
         assert_eq!(discover_with(&live, &paths, None, &owner).await.unwrap().channel, "oc-next");
-        // As the TS binary prints it (bundle-server: the bundled binary on macOS, whose executable is unknown).
+        // As the TS binary prints it (the bundled binary on macOS, whose executable is unknown).
         let owner = Owner::with_lookup(printing("opencode v1.2.3"), fake_proc);
         assert_eq!(discover_with(&live, &paths, None, &owner).await.unwrap().channel, "oc-next");
         // One answering registration is taken without asking the binary.

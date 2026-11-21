@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(from(None).program, "opencode");
         assert_eq!(from(Some("")).program, "opencode");
         assert_eq!(from(Some("/x/opencode")).program, "/x/opencode");
-        // Expected (bundle-server): the bundled binary comes after the variable and before `PATH`.
+        // Expected (the bundled layout): the bundled binary comes after the variable and before `PATH`.
         let path = |name: &str| (name == "PATH").then(|| OsString::from("/usr/bin"));
         for windows in [false, true] {
             let with = |var: &dyn Fn(&str) -> Option<OsString>| {

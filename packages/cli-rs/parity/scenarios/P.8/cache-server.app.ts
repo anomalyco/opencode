@@ -2,7 +2,7 @@
 // with a TUI feature) by its package spec, and both clients resolve that in the npm cache (`cache`) without installing
 // (`context.tsx:301-305`, `Npm.resolve`), then load its TUI entry, the same files as sidebar-prompt. `cli.json` names
 // no plugin. The Rust replay's global opencode config names the spec, as Rust loads a server part with no approval only
-// then (O-162).
+// then.
 import { assistant, defineApp, session, user } from "../../lib/app"
 
 const id = "ses_l"

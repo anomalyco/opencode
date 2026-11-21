@@ -6,7 +6,7 @@
 # lists what only tests and other workspace members add, and [optional] what non-default features add; a crate
 # from an earlier section is listed again when its marks there differ.
 #
-# Adding a line needs an orchestrator decision (O-58: an O- entry in decisions.md). A crate that leaves the graph
+# Adding a line needs a maintainer's approval. A crate that leaves the graph
 # leaves this file in the same commit.
 
 aho-corasick
@@ -166,13 +166,12 @@ zmij build
 
 [tests]
 # Third-party crates only the rest of the workspace reaches, over normal, build and dev edges with default features:
-# tests, examples, and members opencode-cli does not ship. The same rules apply: a new line needs an orchestrator
-# decision. Empty: tests use only crates that ship.
+# tests, examples, and members opencode-cli does not ship. The same rules apply: a new line needs a maintainer's
+# approval. Empty: tests use only crates that ship.
 
 [optional]
 # Third-party crates only non-default features bring in, over normal, build and dev edges of the whole workspace
-# with --all-features. The same rules apply. Empty: the `luau` feature is on by default (O-178), so the crates it brings
-# in are in the shipped graph above, accepted by O-168 (the O-58 decision for `luau-spike`); mlua and mlua-sys from
-# mlua's git at Luau 747, and maybe-dangling, which that mlua adds, by O-172; luau0-src from simonklee/luau-src-rs's
-# git, by O-176.
+# with --all-features. The same rules apply. Empty: the `luau` feature is on by default, so the crates it brings
+# in are in the shipped graph above, among them mlua and mlua-sys from mlua's git at Luau 747, maybe-dangling, which
+# that mlua adds, and luau0-src from simonklee/luau-src-rs's git.
 

@@ -9,5 +9,4 @@ follows the setting at once.
 child's reasoning that arrives after the change follows the new setting, as the main transcript does. Reasoning
 already shown stays, as in the main transcript.
 
-**Reason.** The user decided to fix the defects the TS client shares in Rust and record them as deviations, with no
-upstream proposal (O-89).
+**Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations, with no upstream proposal.

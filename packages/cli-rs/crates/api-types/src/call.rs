@@ -1,6 +1,6 @@
 //! A request as the generated builders describe it ([`crate::client`]), typed by what it answers and with no transport:
-//! `opencode-api`'s client sends it with its credentials, and a plugin sends it as a `Fetch` through its host
-//! (`design/contract-ergonomics.md` 2.2 B). The encodings are the TypeScript client's: the query's brackets
+//! `opencode-api`'s client sends it with its credentials, and a plugin sends it as a `Fetch` through its host.
+//! The encodings are the TypeScript client's: the query's brackets
 //! (`appendQuery`, `packages/client/src/promise/generated/client.ts:2795-2810`) and `encodeURIComponent` for a path's
 //! parameters.
 

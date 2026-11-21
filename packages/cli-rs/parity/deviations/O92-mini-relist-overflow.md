@@ -16,4 +16,4 @@ Below the limit, mini prints what TS prints. Past it, the terminal is cleared an
 `session.renamed` among the dropped events does not update the title until the next one.
 
 **Reason.** Every queue between tasks and the UI is bounded (`packages/cli-rs/AGENTS.md`). Bounded storage cannot
-replay a slow read exactly, so the relist starts over after the dropped events (O-92, models plan M6 and S5).
+replay a slow read exactly, so the relist starts over after the dropped events.

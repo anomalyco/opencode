@@ -26,7 +26,7 @@ use serde_json::{Value, json};
 const MACHINES: &str = include_str!("../../../../parity/machines/plugins.json");
 
 /// The life plugin of the shared fixture, `parity/plugins/life` (its Luau side), copied into the config's `plugins`
-/// directory, or with `project` into the project's, where it waits for approval (rich-plugins 3.9); with `failing`,
+/// directory, or with `project` into the project's, where it waits for approval; with `failing`,
 /// its setup fails as it first loads, and so does the distractor's beside it (`parity/plugins/other`), each named in
 /// `cli.json` with the option `fail`, as TS's reader names them.
 #[cfg(luau)]
