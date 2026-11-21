@@ -1,5 +1,5 @@
 // With `terminal.title` off and no plugin title, the TUI sets no title, and exiting still clears it, as TS's
-// `destroyRenderer` clears the title whatever the setting. The counterpart of title-off.pty.ts without the plugin.
+// `destroyRenderer` clears the title whatever the setting. The counterpart of a plugin title with the setting off.
 // Only the title OSC log is compared.
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"

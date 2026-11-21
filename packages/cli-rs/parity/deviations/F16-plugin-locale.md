@@ -16,11 +16,11 @@ without `LANG`. macOS was not measured.
 
 **Reason.**
 
-- **The fact names the user's locale, not Bun's default.** A native plugin picks its strings by it, and a fixed
+- **The fact names the user's locale, not Bun's default.** A Luau or linked plugin picks its strings by it, and a fixed
   `en-US` would tell it nothing.
 - **Terminals set the variables.** Terminal.app and iTerm2 set `LANG` from the system's language by default, so on
   macOS the fact usually carries the system's locale anyway.
 - **What is left:**
-  - A TS plugin and a native one can be told different locales, the TS plugin always `en-US`.
+  - A TS plugin and a Luau one can be told different locales, the TS plugin always `en-US`.
   - On macOS, a launch with no locale variable is told `None`.
 - **Effect:** the host formats nothing by the locale, so the only effect is which strings a plugin chooses.

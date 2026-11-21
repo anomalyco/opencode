@@ -15,7 +15,7 @@ it made stays written.
 
 ## Rust
 
-A plugin call runs as one unit, on both paths (built-ins in process and libraries over the C ABI), and through every
+A plugin call runs as one unit, on every carrier (built-ins in process, Luau and the JS host), and through every
 entry point: setup, commands, event handlers, fetch replies, wakes, slot and route mount handlers, and slot, route
 and fence renders.
 

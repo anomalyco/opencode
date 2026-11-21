@@ -8,7 +8,7 @@ theme's text color (`text.base`) and its placeholder in the muted one (`text.mut
 dialogs do.
 
 **Reason.** The field is the host's, so it looks as the host's fields do on every carrier: the published package on
-the JS host and its native and Luau ports draw the same. `parity/scenarios/P.8/session-manager.app.ts` drives it: its
+the JS host and its Luau port draw the same. `parity/scenarios/P.8/session-manager.app.ts` drives it: its
 `searching` checkpoint differs by the 29 cells of the placeholder and its `search` checkpoint by the five of the typed
 word, in color only, and the rest of the scenario is equal.
 `/` focuses the field the same call shows (contract 2.x, step B, the focus waits for the view that shows it), and the

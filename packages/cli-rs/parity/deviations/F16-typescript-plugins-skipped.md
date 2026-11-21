@@ -1,4 +1,4 @@
-# F16: TypeScript TUI plugins run by default on the JS host when Bun is found; native plugins load beside them
+# F16: TypeScript TUI plugins run by default on the JS host when Bun is found; Luau plugins load beside them
 
 **TypeScript.** The plugin host (`packages/tui/src/plugin/context.tsx:290-420`) loads every `cli.json`
 `plugins` entry that names no built-in, every directory under the `plugins` directories, and the server's
@@ -7,8 +7,9 @@ TUI plugins, then runs each one's `setup` beside the built-ins.
 **Rust.** The registry (`crates/plugin/src/lib.rs`, `docs/plugin-abi.md`) applies the entries that select
 built-ins (`-<id>`, `<id>`, `*`, `<prefix>.*`) exactly as TS does. The loader (`crates/plugin/src/loader`,
 `docs/plugins.md`) discovers the same targets as TS: the subdirectories of the `plugins` directories and the
-`cli.json` entries that name no built-in. A target with a native build (a shared library on the C ABI of
-`opencode-plugin-abi`) loads, with hot reload. A directory target without one is a TypeScript plugin. By default it
+`cli.json` entries that name no built-in. A directory with a `plugin.toml` is a Luau plugin, and loads with hot
+reload. A native plugin library (`plugin.so`, `.dylib`, `.dll`) is listed `Skipped`: "opencode-native does not load
+native plugin libraries". Any other directory target is a TypeScript plugin. By default it
 runs on the JS host (O-166, which reverses O-151's opt-in), a Bun process the client starts (`docs/plugin-abi.md`, "The JS
 host"), through the V2 compatibility layer (P8), which gives a V2 `{ id, setup }` module the context
 and the modules TS gives it. Bun is looked for only when the first TypeScript plugin needs it (`OPENCODE_BUN`, the

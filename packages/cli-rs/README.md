@@ -34,8 +34,6 @@ The bundled `opencode` stays off `PATH`, so your own is untouched. Run the scrip
 
 ```sh
 bun run --cwd packages/cli-rs cargo build --bin opencode-native
-# with third-party native plugins, which are off by default:
-bun run --cwd packages/cli-rs cargo build --bin opencode-native --features native
 ```
 
 Run cargo this way. `bun run cargo` first installs OpenTUI's native library, and cargo reads `.cargo/config.toml`
@@ -65,8 +63,7 @@ On Linux and macOS the library links statically with its own libc++, so neither 
   libgcc_s.
 - **musl** (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`): fully static, with Rust's default
   `crt-static` (O-188), so the binary needs no library and runs on any Linux. A static executable cannot `dlopen`, so
-  the musl builds load no native plugins (they are listed as skipped) and have no Zed editor context; the build
-  compiles the native carrier out even with `--features native`, as `docs/plugins.md` describes.
+  the musl builds have no Zed editor context.
 
 `--release` keeps line-table debug info (about 180 MB; `strip` brings it to about 40 MB). `--profile dist` adds fat
 LTO for a smaller, faster binary in `target/dist/`; its link takes about 10 minutes.
@@ -104,12 +101,12 @@ default leader `ctrl+x`:
 ## Plugins
 
 `opencode-native` runs the TypeScript TUI plugins the TypeScript TUI runs, on a Bun process of its own. It also runs
-native plugins (shared libraries on a C ABI) and Luau plugins. `/plugins` shows each plugin's state and error.
+Luau plugins. `/plugins` shows each plugin's state and error.
 
-- [`docs/plugins.md`](docs/plugins.md): how plugins work, how to write one in Rust, Luau or TypeScript, and how they
-  are found, approved and reloaded.
+- [`docs/plugins.md`](docs/plugins.md): how plugins work, how to write one in Luau or TypeScript, and how they are
+  found, approved and reloaded.
 - [`docs/plugin-abi.md`](docs/plugin-abi.md): the contract, in full.
-- [`crates/plugin-abi/README.md`](crates/plugin-abi/README.md): the Rust SDK and its quick start.
+- [`crates/plugin-abi/README.md`](crates/plugin-abi/README.md): the contract's Rust SDK, which the built-ins use.
 
 ## More
 

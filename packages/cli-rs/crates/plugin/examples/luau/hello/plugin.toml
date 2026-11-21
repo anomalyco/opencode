@@ -1,4 +1,4 @@
-# The quick start (`examples/hello`) in Luau: a command and a footer line that runs it.
+# The quick start in Luau: a command and a footer line that runs it.
 id = "example.luau-hello"
 name = "Hello"
 version = "0.1.0"

@@ -2,7 +2,7 @@
 // that comes back after each task. It adds a draft through a prompt, stages ten copies of a preset message after a
 // confirm, moves a draft to the top of the stored list, publishes the eleven drafts to the session's queue one by one,
 // and cancels a pending item of the session's inbox. TS loads the package from node_modules; the Rust client runs the
-// same files on the JS host through the V2 compatibility layer, and its native and Luau ports in its place
+// same files on the JS host through the V2 compatibility layer, and its Luau port in its place
 // (`app::ports_replay`).
 import { assistant, defineApp, session, user } from "../../lib/app"
 

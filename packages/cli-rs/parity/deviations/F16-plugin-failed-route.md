@@ -13,6 +13,6 @@ example after its view overran the call limit while the route showed, the screen
 
 ## Reason
 
-A native plugin fails at run time, under containment (synthesis 4.5, 4.14), while its route is on screen, and the host
-then shows its route again. "Unknown plugin route" named a route that exists and hid why it went (PL-8). The plugins
+A plugin fails at run time, under containment (synthesis 4.14), while its route is on screen, and the host then
+shows its route again. "Unknown plugin route" named a route that exists and hid why it went (PL-8). The plugins
 list has the error.

@@ -1,4 +1,4 @@
-# `examples/author` in Luau, with a dialog: storage, a command, a sidebar claim, an event, a fence, and a confirm.
+# A counter with a dialog: storage, a command, a sidebar claim, an event, a fence, and a confirm.
 id = "example.luau-counter"
 name = "Counter"
 version = "0.1.0"

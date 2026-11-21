@@ -1,7 +1,7 @@
 // Ports trio: `@khaosoigai/oc-context-grid@0.3.2`, unmodified from npm: the session's context window as a grid of
 // squares in the sidebar, and its `/contextgrid` page (a route of the plugin's own, with its keyboard mode), which
 // escape leaves for the session. TS loads the package from node_modules; the Rust client runs the same files on the JS
-// host through the V2 compatibility layer, and its native and Luau ports in its place (`app::ports_replay`).
+// host through the V2 compatibility layer, and its Luau port in its place (`app::ports_replay`).
 import { assistant, defineApp, location, model, session, user } from "../../lib/app"
 
 const id = "ses_g"

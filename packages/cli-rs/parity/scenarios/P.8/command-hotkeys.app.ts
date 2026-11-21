@@ -1,7 +1,7 @@
 // Ports trio: `opencode-command-hotkeys@0.1.1`, unmodified from npm, with two bindings in its options: the palette's
 // "Run the review" runs the server's `review` command with `--all` in the session in view, and alt+r runs it again.
 // TS loads the package from node_modules; the Rust client runs the same files on the JS host through the V2
-// compatibility layer, and its native and Luau ports in its place (`app::ports_replay`).
+// compatibility layer, and its Luau port in its place (`app::ports_replay`).
 import { assistant, defineApp, session, user } from "../../lib/app"
 
 const id = "ses_h"

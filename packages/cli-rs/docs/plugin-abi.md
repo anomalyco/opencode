@@ -1,67 +1,31 @@
 # The plugin contract
 
-This is the reference for the contract between `opencode-native` and its plugins: the C ABI, what a plugin registers
-and draws, what each callback may do, and how the host runs a plugin on each carrier. Read [`plugins.md`](plugins.md)
+This is the reference for the contract between `opencode-native` and its plugins: its messages, what a plugin
+registers and draws, what each callback may do, and how the host runs a plugin on each carrier. Read [`plugins.md`](plugins.md)
 first. The contract is the crate `crates/plugin-abi`, whose rustdoc documents every type; the host side is
 `crates/plugin`. Paths are relative to `packages/cli-rs`.
 
-## The C ABI
+## Messages and versions
 
-A native plugin is a shared library (`.so`, `.dylib`, `.dll`) that the host opens with `opencode_util::dl`. The
-boundary is C, because the Rust ABI changes with every compiler and crate version. The library exports one symbol,
-`opencode_plugin_v2`, which returns a `#[repr(C)]` table, `PluginApi`. Rust gets it from `plugin!`; C declares it
-with `crates/plugin-abi/include/opencode_plugin.h`.
+A built-in is linked into the client and calls the contract's Rust types directly. A Luau plugin's calls are
+converted to the same types in process, and a TypeScript plugin's cross to the JS host as JSON: the `Manifest` of what
+it registered, a `Request` from the host, and a `HostRequest` from the plugin, each with one definition in
+`crates/plugin-abi/schema/v2.json`. The rustdoc of `Request` and `HostRequest` lists every request and its answer. An
+answer the host cannot decode (cut short, not JSON, an unknown node kind) fails the plugin and leaves no effect, as a
+panic does.
 
-| Entry | Purpose |
-| --- | --- |
-| `size`, `major`, `minor` | Read first, before anything else |
-| `requires_minor` | The oldest host minor the plugin works with |
-| `create(host, options, &instance, &out)` | Runs the setup; writes the manifest JSON |
-| `call(instance, request, &out)` | Handles a request; writes the result JSON |
-| `destroy(instance)`, `free(buffer)` | Ends an instance (optional); frees a buffer the plugin wrote |
-| `describe(&out)` | The plugin's ID and version, read before any setup |
+The contract is 2.0, and it only grows: payloads only gain optional fields, readers ignore unknown fields, and either
+side answers a request it does not know with an error. The host states optional features, read with `Read::abi`
+(`Abi::has_feature`). A 2.0 host has `image-bounds`, `focus-input` and `fence-node`. The SDK's
+[README](../crates/plugin-abi/README.md) describes each.
 
-The host passes a `HostApi` table: `size`, `major`, `minor`, `ctx`, `call`, `free`, and the nullable
-`theme_mode(ctx)`, `wake(ctx)`, `send(ctx, key, message)`, `report(ctx, message)`, `stopped(ctx)` and `features`.
-`wake`, `send`, `report` and `stopped` may be called from any thread until `destroy` returns.
-
-Everything else crosses as JSON in byte buffers: the `Manifest`, a `Request` from the host, and a `HostRequest` from
-the plugin. The rustdoc of `Request` and `HostRequest` lists every request and its answer. Each side frees what it
-allocated, and a buffer over 256 MiB is refused unread. An answer the host cannot decode (cut short, not JSON, an
-unknown node kind) fails the plugin and leaves no effect, as a panic does.
-
-The host opens a copy of each build, because the platform loader returns a library already open at the same path and
-build tools overwrite builds in place. On macOS the copy keeps the file's quarantine. When the system refuses a
-library, the plugin manager names the file, the cause (another team's signature, a download's quarantine, a missing
-or invalid signature) and what to do.
-
-### Versions
-
-The ABI is 2.0, and it only grows by appending:
-
-- **Tables.** A table shorter than 2.0's is refused. A later minor's entry goes at the end and is optional, and a
-  reader treats entries past the other side's `size` as absent.
-- **JSON.** Payloads only gain optional fields, and readers ignore unknown fields.
-- **A newer plugin on an older host** loads and uses what the host offers. Either side answers a request it does not
-  know with an error, and the host sends a library no request newer than the minor its table states. A plugin that
-  needs a newer host says `plugin!(id = id, requires_minor = N, setup)`, and an older host refuses it: "plugin needs
-  host ABI 2.1 or newer, this opencode-native has 2.0; update opencode-native".
-- **One major.** Any other major is refused: "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x
-  plugins (up to 2.0); rebuild the plugin against opencode-plugin-abi 2". A library that exports
-  `opencode_plugin_v1` is refused as "plugin ABI 1.x". Nothing is removed inside a major.
-- **Features.** The host states optional features in `HostApi::features`, read with `Read::abi`
-  (`Abi::has_feature`). A 2.0 host has `image-bounds`, `focus-input` and `fence-node`. A plugin that needs one lists
-  it in `Metadata::requires`, and a host without it refuses the plugin at load. The SDK's
-  [README](../crates/plugin-abi/README.md#compatibility) describes each, and what the Rust SDK promises a plugin's
-  source.
+Third-party native code is not loaded in process (O-192); if it returns, it will run as a supervised helper process.
 
 ## What setup registers
 
-`plugin!(setup)` takes the plugin's ID from the crate's package name, `plugin!(id = "my.plugin", setup)` names it,
-and `setup` is `fn(&mut Setup) -> Result<(), String>`. The macro generates the table, `describe` and the shims, and
-holds every `unsafe`. A plugin built with `panic = "abort"` does not compile.
+A linked plugin is an `abi::Plugin { id, setup }`, and `setup` is `fn(&mut Setup) -> Result<(), String>`.
 
-Setup registers everything as data, because widgets and closures cannot cross the boundary:
+Setup registers everything as data, as the same registrations cross to the JS host and come from a Luau VM:
 
 | TypeScript plugin API | `opencode_plugin_abi::Setup` |
 | --- | --- |
@@ -330,7 +294,7 @@ placeholder. A `Fence` in a surface's tree fails the plugin, and a claim's tree 
 shows the host's row. Lower it for an older host with `View::or(Node::fence(), fallback)`; the SDK refuses a tree
 that still holds one.
 
-**Over the C ABI** the host runs a view as the request `View`, with the mount, the input and the next content handle.
+**On the pipe** the host runs a view as the request `View`, with the mount, the input and the next content handle.
 The plugin answers the tree, the content it gave and released, and its memo table's size. `Unmount` drops that table.
 
 ## Panels, overlays and input
@@ -421,7 +385,7 @@ move the transcript, as a user's command may. It runs as its mount's call, so it
 A handler or a select's search is a plugin call, timed and contained as any other. One that panics fails the plugin:
 its layers, modes, capture, hold and overlays go, and the focus goes to the composer.
 
-**Over the C ABI**, the manifest lists each surface's `handler` and `layers`, and the plugin's own `layers` and
+**On the pipe**, the manifest lists each surface's `handler` and `layers`, and the plugin's own `layers` and
 `searches`. The host calls a handler as the request `input` and a search as `search`. The verbs and reads are host
 requests (`open-panel`, `close-panel`, `overlay`, `close-overlay`, `focus`, `blur`, `set-mode`, `release-keys`,
 `rect`, `focused`, `input-mode`) on the mount whose call runs; during `create` they answer an error. The `board`
@@ -462,8 +426,7 @@ whether it has an activation, and whether it is slow and at what cost.
   skipped by a config edit, slow or no longer slow), never when nothing changed or only a slow plugin's cost did. A
   failure is a contained call named `on-plugins`.
 - **Only the host changes the list**: a plugin offers a toggle row and the user picks it.
-- **Over the C ABI** the change is the request `{"type": "plugins"}` and the read the host request
-  `{"type": "plugins"}`. The pipe answers the read but not the change.
+- **On the pipe** the read is the host request `{"type": "plugins"}`; the change is not sent.
 
 The plugin manager (`opencode.plugins`, `crates/tui/src/plugins/manager.rs`) is a plugin of this contract: a rich
 select that follows `on_plugins`, with fetches for the server rows, check and update. While it has failed, the host
@@ -511,8 +474,7 @@ managed service it follows across restarts).
 - **A fetch from a failed setup or a dispose callback is not sent.**
 - **IDs.** A fetch gets an ID only when its reply can come, and every ID gets exactly one reply. An ID is never 0.
 - **Refusal.** The effect queue is bounded. While waiting effects fill it, or a dispatch chain is too deep, the host
-  takes no fetch or `foreground`: `try_fetch` and `try_foreground` return an `Err` with the reason, the C ABI answers
-  `OPENCODE_ERROR`, and a TypeScript fetch resolves as a failed reply. A fetch the host takes is admitted past the
+  takes no fetch or `foreground`: `try_fetch` and `try_foreground` return an `Err` with the reason, and a TypeScript fetch resolves as a failed reply. A fetch the host takes is admitted past the
   bound.
 
 A fetch or `foreground` belongs to a mount or to the activation, the same on every carrier
@@ -547,7 +509,7 @@ returned `Code` sends nothing, and the host sends `FenceGone` only to a plugin w
 thread, one call a message, then renders the plugin's claims and surfaces again. Each plugin has one mailbox of 256
 entries (`BOUND`). `send` never blocks: it queues the message, or hands it back as `Full`, or as `Closed` once the
 plugin left `active` (and what waited is dropped). `replace(key, message)` replaces the message waiting under `key`,
-so a flood of progress holds one entry. Over the C ABI messages are JSON.
+so a flood of progress holds one entry.
 
 `Setup::spawner()` starts named threads (`<id>:<name>`) with a `Stop` flag, set when the plugin leaves `active`, and
 catches their panics: the host fails the plugin. A thread cannot be killed.
@@ -558,21 +520,17 @@ every clone of the waker, waiting for wakes in progress, before `on_dispose` run
 
 ## Lifecycle
 
-- **Load** reads the ID from `describe` and runs no setup. A null `describe`, or one that names no ID, is refused. A
-  build whose ID another external plugin has is refused ("plugin ID … is already registered") until the ID is free.
-- **Activation.** Setup (`create`) runs on each activation. Deactivation, unloading, a reload and the TUI's exit
+- **Load** reads the plugin's ID and runs no setup. A build whose ID another external plugin has is refused ("plugin ID … is already registered") until the ID is free.
+- **Activation.** Setup runs on each activation. Deactivation, unloading, a reload and the TUI's exit
   destroy that instance, so a plugin `cli.json` disables starts nothing.
 - **Disposal** revokes the waker, then runs the `on_dispose` callbacks, last registered first, each even when another
   panics. Their effects run, except a fetch (not sent) and a dialog (its activation is gone).
 - **A failed setup** (an `Err` or a panic) runs the `on_dispose` callbacks it registered, and the plugin is `failed`,
   with a toast. Enabling it again runs setup again.
-- **A panic** never unwinds across the boundary: the shims catch the plugin's, the host's callbacks catch the host's,
-  and the shims silence the plugin's panic hook, which would print over the TUI. An instance whose call panicked is
-  never called or destroyed again, so its `on_dispose` callbacks never run.
+- **A panic** of a call is caught at the host's call, and its hook prints nothing over the TUI. An activation whose
+  call panicked is never called again, so its `on_dispose` callbacks never run.
 - **Reload.** `Loader::reconcile` loads new and changed builds (by content digest), unloads removed ones, and remounts
   the route when anything changed. A failed build of an inactive or panicked plugin replaces its error.
-- **Libraries are never unloaded,** because a plugin's code must outlive every pointer into it; a reload leaks one
-  mapping.
 - **Order.** A plugin keeps its claim order and fence precedence across reloads and toggles. An external plugin with a
   built-in's ID takes the built-in's place, and unloading it brings the built-in back as it was.
 
@@ -602,8 +560,7 @@ The JS host loads a directory's TUI module as the TypeScript client does (`packa
 - A plugin's files are read off the UI thread, and it is listed as starting until that walk ends. A global plugin's
   build is its own files plus its dependencies by version (each package's `package.json`, and the lockfiles).
 - A project's plugin runs from a staged copy of the approved files and imports nothing outside it. Its approval
-  hashes every file, hidden ones and `node_modules` included. Safe mode holds a TypeScript plugin as it holds a
-  library.
+  hashes every file, hidden ones and `node_modules` included.
 
 ### The compatibility layer
 
@@ -699,63 +656,22 @@ No frame waits for the JS host.
 Its `Host` trait is what every carrier's adapter calls. The TUI implements it once, in
 `crates/tui/src/plugins/host.rs`, the only code of the crate that sees the TUI.
 
-- **Built-ins.** `Registry::new` takes `Builtin::Plugin(abi::Plugin)`, or `Builtin::Abi(abi::Plugin)` for the same
-  plugin through the C ABI's byte shims, which the carrier tests use. The TUI's built-ins are in the TypeScript
+- **Built-ins.** `Registry::new` takes `Builtin::Plugin(abi::Plugin)`. The TUI's built-ins are in the TypeScript
   client's order, the diff viewer last. Mermaid and LaTeX come from the binary crate, so `opencode-tui` does not depend
   on them, and none of them depends on OpenTUI. The linked host serves every optional feature (`abi::FEATURES`).
 - **Mounts.** `host::slot(tui, parent, path, input, content)` mounts a slot: before, prepend, the host's own content
   (skipped when a claim replaces it), append, after. A `SlotMount` or `RouteMount` syncs with `abi::Changed`, built
   from each store batch.
-- **Limits.** `crates/plugin/src/limits.rs` bounds trees, `contain` times every call, and `crates/cli/src/contain.rs`
-  restarts the client after a native crash.
+- **Limits.** `crates/plugin/src/limits.rs` bounds trees, and `contain` times every call.
 
 ## Tests
 
-The tests build each native example once a run into `target/sample-plugin`. The loader's unit tests are in
-`crates/plugin/src/loader/native/tests.rs`, and the TUI's in `crates/tui/tests/all/plugins.rs` and the `plugin_*.rs`
-files beside it:
+The loader's unit tests are in `crates/plugin/src/loader/tests.rs` and `crates/plugin/src/luau/tests.rs`, and the
+TUI's in `crates/tui/tests/all/plugins.rs` and the `plugin_*.rs` files beside it:
 
-- `plugin_carriers.rs` runs the `board` source linked, through the C ABI's byte shims, and as a loaded `cdylib`, and
-  compares frames, toasts and status at every step.
-- `plugin_ownership.rs` runs one table of request ownership on all four carriers.
+- `plugin_ownership.rs` runs one table of request ownership on all three carriers.
 - `plugin_published.rs` and the P-APP scenarios under `parity/scenarios/P.8` run published TypeScript plugins (pinned
   in `parity/plugins/npm`) unmodified on the JS host, and compare their cells and requests with TypeScript's.
-- `crates/plugin-abi/tests/sdk.rs` checks that the SDK's README and [`plugins.md`](plugins.md) show the examples as
-  they are, and that they build on the SDK alone.
+- `crates/plugin-abi/tests/sdk.rs` checks that [`plugins.md`](plugins.md) shows the examples as they are.
 - `parity/machines/plugins.json` is a state machine of a plugin's life that both clients read
   ([`testing.md`](testing.md#the-plugin-state-machine)).
-
-## Conformance
-
-The conformance suite holds the C ABI still for every binding. `crates/plugin/conformance/scripts.json` lists
-scripted sessions: activation and its end, commands and their host requests, surfaces with content and memoized
-subtrees, the mailbox and a wake, a canvas, scroll verbs and reads, input, searches, renderer claims of a tool call
-and a fence, dialogs, the plugin list, a panic, a refused tree, a failed setup, and an overrun.
-
-Each is recorded from `crates/plugin/examples/conformance` (the reference, called through the SDK's byte shims) into
-`crates/plugin/conformance/transcripts.jsonl`: every request and reply across the C ABI on the UI thread, with what
-the user sees at each `observe` step. Only `CONFORMANCE_WRITE=1` on the loader's `conformance::` tests writes it and
-`versions.jsonl`.
-
-A transcript keeps what the host sends as exact JSON, except that mount generations and content handles are numbered
-by first appearance. It keeps what the library sends as the host decodes and re-encodes it, so field order, defaults
-and unknown fields do not count. A canvas's list is kept as hex bytes. Statuses and error and panic texts compare
-exactly. `crates/plugin/src/conformance/tests.rs` checks each transcript from both sides:
-
-- the reference records it again, so a change to what crosses fails until the file is rewritten;
-- the host runs the script against a plugin that answers from the transcript, also posing as a later minor (a longer
-  table, an unknown field in every object, an unknown request in each call);
-- a fake host drives the reference as a `cdylib`, and `examples/conformance/plugin.c` (symbols hidden, warnings as
-  errors), through every transcript of their major, also as a later-minor host;
-- changing or dropping any part of any entry fails the side that writes it.
-
-`the_version_gate_is_exact` runs a grid of tables (majors 0 to 3, minors around the host's, `requires_minor`, short
-tables, failing or unreadable `describe` answers, unknown features and fields) through the host's gate, checks each
-verdict against the header's rule, and pins the messages in `versions.jsonl`. The tap that records transcripts also
-feeds a protocol machine written from `opencode_plugin.h` (`conformance::Protocol`): one call at a time, host requests
-only inside a call, no call into a failed or destroyed instance, read-only renders, and only requests the contract
-names. Every seeded model of the TUI's tests runs under it.
-
-A new request or surface kind adds a transcript, not harness code: it goes into the conformance plugin in Rust and in
-C and into a script, and the writer records it. To prove a binding in another language, port the conformance plugin
-and run `opencode-native plugin test <library> --conformance`.
