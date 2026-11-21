@@ -243,14 +243,22 @@ export function createSessionQueue(input: {
         signal: progress.controller.signal,
         cancelInboxItem: async () => {
           progress.stage = "committed"
-          const result = await data.session.sequence(input.sessionID, () =>
+          return data.session.sequence(input.sessionID, () =>
             withdrawPrompt(server.api, input.sessionID, operation.item.id),
           )
-          if (result === "delivered") throw new Error("Queued prompt was already delivered")
         },
       }).then(
-        (prompt) =>
-          dispatch({ type: "mutation.undone", attempt, prompt, context: [...context.comments, ...context.files] }),
+        (result) =>
+          dispatch(
+            result.type === "delivered"
+              ? { type: "mutation.delivered", attempt }
+              : {
+                  type: "mutation.undone",
+                  attempt,
+                  prompt: result.prompt,
+                  context: [...context.comments, ...context.files],
+                },
+          ),
         () => dispatch({ type: "mutation.failed", attempt, hidden: [] }),
       )
       await data.session.pending.sync(input.sessionID).catch(() => undefined)
@@ -499,16 +507,16 @@ export type SessionQueueView = Pick<
 // Pin `media:<hash>` attachments before cancelling: the cancel releases the item's blob refs and sweeps blobs
 // nothing else references, so a pin that fails leaves the item queued.
 // An undo stopped while its media loads leaves the item queued.
-export async function undoQueuedPrompt<A>(input: {
+export async function undoQueuedPrompt(input: {
   prompt: Prompt
   signal?: AbortSignal
-  cancelInboxItem: () => Promise<A>
-}): Promise<Prompt> {
+  cancelInboxItem: () => Promise<"withdrawn" | "delivered">
+}): Promise<{ type: "withdrawn"; prompt: Prompt } | { type: "delivered" }> {
   const pinned = await pinPromptMedia(input.prompt)
   input.signal?.throwIfAborted()
-  await input.cancelInboxItem()
+  const result = await input.cancelInboxItem()
 
-  return pinned
+  return result === "withdrawn" ? { type: "withdrawn", prompt: pinned } : { type: "delivered" }
 }
 
 // A stored file re-admits by the URI it came from, as the TUI does, so a file:// reference keeps its

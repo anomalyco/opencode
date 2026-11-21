@@ -999,7 +999,9 @@ test("Undo keeps the draft when the queued prompt has already reached the sessio
   mock.messages.push({ id: delivered.id, type: "user", text, time: delivered.time })
   await undo.click()
 
-  await expect(page.getByText("Request failed")).toBeVisible()
+  await expect(page.getByText("This prompt was already sent")).toBeVisible()
+  await expect(page.getByText("Request failed")).toHaveCount(0)
+  await expect(view.rows.filter({ hasText: text })).toHaveCount(0)
   await expect(view.input).toHaveText("My next draft")
   expect(mock.changes).toEqual([{ inboxID: delivered.id, action: "cancel" }])
   expect(mock.prompts).toEqual([])
