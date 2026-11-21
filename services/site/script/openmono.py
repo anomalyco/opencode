@@ -5,13 +5,14 @@
 # rebuilds from those copies. The copies are OpenMono 1.000.
 #
 # Each style is three files, split by unicode-range like Inter: "latin" (Latin, punctuation, arrows,
-# shapes and box drawing, what the site sets in mono), "cyrillic" (the Russian and Ukrainian pages,
-# and those languages' names in a language menu) and "rest" (every other character the font has),
-# each only fetched when a page uses one of its characters. No character is left out. OpenCode
-# Desktop's script (packages/app/script/openmono.py) follows the same rules, so both make the same
-# files. The ranges are written to src/asset/fonts/openmono.json for mono-fonts.ts; if they change,
-# write them into src/style/fonts.css too (test/fonts.test.ts compares the two). packages/data/app
-# serves copies of the regular and bold files; refresh them too.
+# shapes, box drawing and a few keys and common symbols: what the site sets in mono), "cyrillic" (the
+# Russian and Ukrainian pages, and those languages' names in a language menu) and "rest" (every other
+# character the font has), each only fetched when a page uses one of its characters. No character is
+# left out. OpenCode Desktop's script (packages/app/script/openmono.py) follows the same rules; with
+# the same lists of keys and symbols as below, both make the same files. The ranges are written to
+# src/asset/fonts/openmono.json for mono-fonts.ts; if they change, write them into
+# src/style/fonts.css too (test/fonts.test.ts compares the two). packages/data/app serves copies of
+# the regular and bold files; refresh them too.
 #
 # The app build has no ligatures and every character one cell wide (0.6 em, like the metric-matched
 # fallbacks), so no CSS feature is needed. Only the layout features for accents are kept.
@@ -41,9 +42,22 @@ styles = {
 }
 latin = [(0x0000, 0x017F), (0x2000, 0x206F), (0x20AC, 0x20AC), (0x2122, 0x2122), (0x2190, 0x21FF), (0x2212, 0x2212), (0x2500, 0x25FF)]
 # The keys that shortcuts name (⌃ ⌘ ⌥ ⌫ ⎋ ⏎, as in Inter's Latin file), which are in the Latin file too: the
-# search box on every page shows ⌘K, and from the "rest" file that one character would cost 124 kB.
-# Desktop's script has no such list, so its Latin files lack these six.
+# search box on every page shows ⌘K, and from the "rest" file that one character would cost 123 kB.
 keys = {0x2303, 0x2318, 0x2325, 0x232B, 0x238B, 0x23CE}
+# Common symbols, in the Latin file too for the same reason. Each is one a terminal prints as a status
+# mark, or one that a page of opencode.ai, its docs, the Console or opentui.com sets in mono:
+symbols = {
+    # ✓ ✗ ✕ ✖ ⚠: status marks (✓ is in opentui.com's docs and the Console's demos)
+    *(0x2713, 0x2717, 0x2715, 0x2716, 0x26A0),
+    # ∙ ⋅: the dots that two of opentui.com's terminal recordings draw
+    *(0x2219, 0x22C5),
+    # ≈ ≠ ≤ ≥ ∞ √ ∑: plain math (≈ is on /font, ∞ is the Console's unlimited allowance)
+    *(0x2248, 0x2260, 0x2264, 0x2265, 0x221E, 0x221A, 0x2211),
+    # ⋯ and the replacement character: in code on a changelog page
+    *(0x22EF, 0xFFFD),
+    # ⁰ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹, ₀ ₁ and σ: the numbers on /font (¹ ² ³ are in Latin-1). Σ too: the page sets its σ in capitals
+    *(0x2070, 0x2074, 0x2075, 0x2076, 0x2077, 0x2078, 0x2079, 0x2080, 0x2081, 0x03C3, 0x03A3),
+}
 cyrillic = [(0x0400, 0x052F), (0x1C80, 0x1C8F), (0x2DE0, 0x2DFF), (0xA640, 0xA69F)]
 # The stress marks, which the Cyrillic file has too: a stressed letter such as у́ has no code point of
 # its own, and a browser sets a letter and its mark from one file or falls back for both. (A Latin
@@ -126,10 +140,12 @@ with tempfile.TemporaryDirectory() as folder:
         if wide:
             raise SystemExit(f"Nothing was written. {inputs[file]} is not the one-cell build: {ranges(wide)} are not 600 units wide")
         codes = set(font.getBestCmap())
+        if (keys | symbols) - codes:
+            raise SystemExit(f"Nothing was written. {inputs[file]} lacks {ranges((keys | symbols) - codes)}, which the Latin file is to have")
         groups = {
-            "latin": {code for code in codes if within(code, latin) or code in keys},
+            "latin": {code for code in codes if within(code, latin) or code in keys | symbols},
             "cyrillic": {code for code in codes if within(code, cyrillic) or code in stress},
-            "rest": {code for code in codes if not within(code, latin + cyrillic) and code not in keys},
+            "rest": {code for code in codes if not within(code, latin + cyrillic) and code not in keys | symbols},
         }
         for group, chars in groups.items():
             if members.setdefault(group, chars) != chars:
