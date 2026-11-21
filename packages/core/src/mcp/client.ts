@@ -117,13 +117,15 @@ const EventList = Schema.toStandardSchemaV1(
   Schema.Struct({ events: Schema.Array(Schema.Unknown), nextCursor: Schema.optional(Schema.String) }),
 )
 const decodeEventType = Schema.decodeUnknownOption(EventType)
-const ISO_8601 = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
-// The date must exist on the calendar: Date.parse rolls 2026-02-31 over to March.
+const ISO_8601 =
+  /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d+)?)?(Z|[+-](0\d|1[0-4]):[0-5]\d)$/
+// The day must exist in its month: Date.parse rolls 2026-02-31 over to March.
 const isTimestamp = (text: string) => {
   const match = ISO_8601.exec(text)
   if (!match) return false
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
-  return date.getUTCMonth() === Number(match[2]) - 1 && date.getUTCDate() === Number(match[3])
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
+  return day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
 }
 const AnyValue = Schema.toStandardSchemaV1(Schema.Unknown)
 const ActiveNotification = Schema.toStandardSchemaV1(
@@ -903,6 +905,8 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           catch: (error) => error,
         }),
         (subscription) => Effect.sync(() => void subscription.close().catch(() => {})),
+        // Opening waits for the server's ack; without this, closing the connection would wait for it too.
+        { interruptible: true },
       ).pipe(
         Effect.tap(() => Queue.offer(changed, undefined)),
         Effect.flatMap((subscription) => Effect.promise(() => subscription.closed)),
