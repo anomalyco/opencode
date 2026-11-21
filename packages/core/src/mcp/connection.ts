@@ -36,7 +36,8 @@ export interface Events {
   readonly changed: (kind: Kind) => Effect.Effect<void>
   /**
    * Shared connections only: the server negotiated an older protocol than 2026-07-28, so the attempt closed
-   * right after the handshake, without listing tools. Reported instead of `connected` or `failed`.
+   * right after the handshake, without listing tools, or a stdio server closed on the version probe.
+   * Reported instead of `connected` or `failed`.
    */
   readonly legacy?: (version: string | undefined) => Effect.Effect<void>
 }
@@ -217,6 +218,10 @@ export function make(input: Input): Connection {
       yield* Scope.close(scope, Exit.void)
       state.scope = undefined
       const error = Cause.squash(result.cause)
+      // A shared attempt doesn't respawn a server that closed on the probe; it is taken for legacy, so the
+      // Location's own connection opens it with initialize once instead of probing it again.
+      if (input.shared && error instanceof McpClient.ConnectError && error.probeClosed && input.events.legacy)
+        return yield* input.events.legacy(undefined)
       yield* input.events.failed(
         error instanceof McpClient.NeedsAuthError
           ? { status: "needs_auth", error: error.message }

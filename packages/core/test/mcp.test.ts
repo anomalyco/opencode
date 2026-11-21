@@ -3548,6 +3548,24 @@ describe("MCP pool", () => {
     }),
   )
 
+  live("opens a pooled server that exits on the version probe only once more, with initialize", () =>
+    Effect.gen(function* () {
+      const probes: Array<ChildProcess.Command> = []
+      const spawns: Array<ChildProcess.Command> = []
+      const pool = yield* recordingPool(probes)
+      // Exits as soon as it starts, as a missing command does on Windows, where the spawn goes through the shell.
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, "-e", "process.exit(1)"],
+        pool: true,
+      })
+      const a = yield* open(config, pool, directories[0], { environment: recordingEnvironmentLayer(spawns) })
+      expect((yield* status(a.mcp))?.status).toBe("failed")
+      expect(probes).toHaveLength(1)
+      expect(spawns).toHaveLength(1)
+    }),
+  )
+
   live("connects each Location on its own without pool", () =>
     Effect.gen(function* () {
       const server = yield* resourceServer({ modern: true, resources: false })
