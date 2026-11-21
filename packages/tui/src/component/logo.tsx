@@ -1,12 +1,16 @@
 import { RGBA, TextAttributes } from "@opentui/core"
 import { For, type JSX } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
+import { useConfig } from "../config"
 import { useTheme } from "../context/theme"
 import { tint } from "../theme/color"
 import { go, logo } from "../logo"
 
 export function Logo() {
   const theme = useTheme()
+  const config = useConfig()
+  // `false` hides the logo; an array of lines replaces it.
+  const custom = () => config.data.logo
   const dimensions = useTerminalDimensions()
 
   const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
@@ -51,7 +55,11 @@ export function Logo() {
 
   return (
     <box>
-      {dimensions().height < 12 ? null : dimensions().width < 22 ? (
+      {dimensions().height < 12 || custom() === false ? null : Array.isArray(custom()) ? (
+        <For each={custom() as readonly string[]}>
+          {(line) => <box flexDirection="row">{renderLine(line, theme.text.base, true)}</box>}
+        </For>
+      ) : dimensions().width < 22 ? (
         <For each={go.right.slice(1)}>
           {(line) => <box flexDirection="row">{renderLine(line, theme.text.base, true)}</box>}
         </For>
