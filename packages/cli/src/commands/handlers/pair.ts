@@ -30,21 +30,18 @@ export default Runtime.handler(
     const urls = yield* pairingURLs(client, input)
     const pairing = yield* Effect.tryPromise(() => client.server.pair())
     const links = urls.map((url) => new URL(`/auth/connect/${pairing.code}`, url).href)
-    // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
-    const remote = urls.filter((url) => !isLoopback(new URL(url).hostname))
+    const qr = qrPayload(pairing.code, urls)
     process.stdout.write(
       [
         "",
         `  Open a link to connect. Links work once and expire in ${Math.round(pairing.expires_in / 60)} minutes.`,
         "",
         ...(links.length ? links.map((link) => `  ${link}`) : ["  (no server URLs)"]),
-        ...(remote.length
+        ...(qr
           ? [
               "",
               // renderUnicodeCompact separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
-              renderUnicodeCompact(JSON.stringify({ code: pairing.code, urls: remote }), {
-                border: 2,
-              })
+              renderUnicodeCompact(qr, { border: 2 })
                 .split("\n")
                 .map((line) => "  " + line)
                 .join(EOL),
@@ -69,6 +66,15 @@ export default Runtime.handler(
     )
   }),
 )
+
+// Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses. A host with a
+// bridge per Docker network has more addresses than a QR code can hold, so it carries the first few; every link is
+// still printed.
+export function qrPayload(code: string, urls: ReadonlyArray<string>) {
+  const remote = urls.filter((url) => !isLoopback(new URL(url).hostname)).slice(0, 8)
+  if (remote.length === 0) return
+  return JSON.stringify({ code, urls: remote })
+}
 
 export const remoteWarning = [
   "This will expose your OpenCode server to the internet.",
