@@ -89,6 +89,9 @@ const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
 const MISSED_HEARTBEATS = 3
 const UNGRANTED_SILENCE = Duration.minutes(1)
 const EVENT_LIST_PAGES = 100
+const LISTEN_REOPEN = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")]).pipe(
+  Schedule.jittered,
+)
 
 /** Experimental: MCP Events is a beta extension; may change without compatibility guarantees. */
 export const EventType = Schema.Struct({
@@ -878,11 +881,18 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       })
       // The SDK's filter type predates Events; it sends the filter as given.
       const filter: Record<string, boolean> = { eventsListChanged: true }
-      yield* Effect.tryPromise(() => client.listen(filter, { timeout: catalog.timeout })).pipe(
+      // Held for the connection's life: a listen the server ends or fails is reopened after a capped, jittered delay.
+      yield* Effect.acquireRelease(
+        Effect.tryPromise(() => client.listen(filter, { timeout: catalog.timeout })),
+        (subscription) => Effect.promise(() => subscription.close()),
+      ).pipe(
+        Effect.flatMap((subscription) => Effect.promise(() => subscription.closed)),
+        Effect.scoped,
+        Effect.andThen(Effect.fail(new Error("the server closed the listen stream"))),
         Effect.tapError((error) =>
-          Effect.logWarning("failed to listen for MCP event list changes", { server, error: describe(error) }),
+          Effect.logWarning("MCP event list change listener stopped", { server, error: describe(error) }),
         ),
-        Effect.ignore,
+        Effect.retry(LISTEN_REOPEN),
         Effect.forkScoped,
       )
     }
