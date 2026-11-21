@@ -36,6 +36,7 @@ test(
         committed: boolean
         plugin: { loading: Handed; dropped: Handed; nothing: Handed }
         agent: { front: Asked; behind: Asked; preview: Asked }
+        registered: { held: string[]; again: string[] }
         logged: string[]
       } = JSON.parse(await runElectronFixture({ fixture: path.join(import.meta.dir, "electron-open.fixture.ts"), schemes, env: { ELECTRON_OPEN_ROOT: root } }))
 
@@ -69,6 +70,11 @@ test(
       expect(result.agent.preview.answer).toBe(told(result.agent.preview, "preview"))
       expect(result.agent.preview.tabID).toMatch(/^tab_/)
       expect(result.agent.preview.shown).toEqual(["tab"])
+      // A registration is no close either. The window registers again with an inventory that has only its first two
+      // tabs; the new binding lists every tab the pane held, in its order. It used to start from that inventory alone.
+      expect(result.registered.held.slice(0, 2)).toEqual(result.person.before)
+      expect(result.registered.held.length).toBeGreaterThan(2)
+      expect(result.registered.again).toEqual(result.registered.held)
       // Only the address that opened no page was undone.
       expect(result.logged.filter((line) => line === "browser tab closed: its open failed")).toHaveLength(1)
     } finally {
