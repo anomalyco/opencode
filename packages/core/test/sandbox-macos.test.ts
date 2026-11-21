@@ -2,6 +2,14 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Location } from "@opencode/core/location"
+import { Sandbox } from "@opencode/core/sandbox"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Workspace } from "@opencode/core/workspace"
+import { Effect, Layer } from "effect"
+import { location } from "./fixture/location"
+import { testEffect } from "./lib/effect"
 import { MacSandbox } from "../src/sandbox/macos"
 import { SandboxPolicy } from "../src/sandbox/policy"
 
@@ -174,6 +182,29 @@ describe("macOS sandbox launch", () => {
     },
   )
 })
+
+const remote = testEffect(
+  AppNodeBuilder.build(Sandbox.node, [
+    Sandbox.settingsNode.replace(Layer.succeed(Sandbox.Settings, { enabled: true })),
+    Location.node.replace(
+      Layer.succeed(
+        Location.Service,
+        location({ directory: AbsolutePath.make("/remote"), workspaceID: Workspace.ID.make("wrk_sandbox_test") }),
+      ),
+    ),
+  ]),
+)
+
+remote.effect("remote locations initialize but cannot prepare a sandboxed shell launch", () =>
+  Effect.gen(function* () {
+    const sandbox = yield* Sandbox.Service
+    expect(sandbox.enabled).toBe(true)
+    const error = yield* Effect.flip(
+      sandbox.prepare({ command: "pwd", cwd: "/remote", shell: "/bin/sh", timeout: 0, env: {} }),
+    )
+    expect(error.message).toContain("Shell commands are unavailable in remote workspaces")
+  }),
+)
 
 // A restricted parent sandbox cannot install another Seatbelt profile. Report the missing
 // capability rather than treating a failed sandbox_apply as evidence of command confinement.

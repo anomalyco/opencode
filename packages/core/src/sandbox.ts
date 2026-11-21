@@ -90,6 +90,7 @@ export class Service extends Context.Service<
   {
     readonly enabled: boolean
     readonly fullDiskRead: boolean
+    readonly unavailable?: UnavailableError
     readonly prepare: (invocation: ShellCreateBefore) => Effect.Effect<SandboxPolicy.Launch, UnavailableError>
   }
 >()("@opencode/Sandbox") {}
@@ -109,8 +110,17 @@ export const configured = (input?: Options) =>
             fullDiskRead: false,
             prepare: () => Effect.fail(new UnavailableError({ message: "Shell sandboxing is disabled." })),
           })
-        if (process.platform !== "darwin" || location.workspaceID !== undefined)
-          return yield* Effect.die(new UnavailableError({ message: "The shell sandbox requires a local macOS host." }))
+        if (location.workspaceID !== undefined) {
+          const unavailable = new UnavailableError({
+            message: "Shell commands are unavailable in remote workspaces while shell sandboxing is enabled.",
+          })
+          return Service.of({
+            enabled: true,
+            fullDiskRead: options.fullDiskRead ?? false,
+            unavailable,
+            prepare: () => Effect.fail(unavailable),
+          })
+        }
         const { MacSandbox } = yield* Effect.promise(() => import("./sandbox/macos.js"))
         const scratch = yield* Effect.acquireRelease(
           Effect.tryPromise(() => fs.mkdtemp(path.join(global.tmp, "sandbox-"))).pipe(Effect.orDie),

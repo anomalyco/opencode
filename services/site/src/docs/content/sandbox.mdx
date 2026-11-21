@@ -62,4 +62,4 @@ Set `full_disk_read` to `true` to allow broad filesystem reads while retaining t
 
 OpenCode configuration, data and state directories, its configured SQLite database and journals, and `.aws` and `.ssh` directly under the home directory or writable roots are excluded. This list describes the current implementation and may change; it does not cover every possible credential or sensitive file.
 
-The server fails closed if sandbox setup fails, the host is unsupported, or the location is remote. Sandboxed background commands are tied to their location and do not survive location teardown or server restart. CPU, memory, and process-count quotas are not provided.
+The server refuses to start if sandbox setup fails or the host is unsupported. On a supported host, remote workspaces remain available, but their shell tool reports that sandboxed execution is unavailable. Sandboxed background commands are tied to their location and do not survive location teardown or server restart. CPU, memory, and process-count quotas are not provided.

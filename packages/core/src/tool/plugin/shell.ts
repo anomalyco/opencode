@@ -409,6 +409,7 @@ export const Plugin = {
           input: codeMode ? CodeModeInput : Input,
           output: StructuredOutput,
           execute: (input, context) => {
+            if (sandbox.unavailable) return Effect.fail(new ToolFailure({ message: sandbox.unavailable.message }))
             // Code Mode input has no background parameter.
             const background = "background" in input && input.background === true
             // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
