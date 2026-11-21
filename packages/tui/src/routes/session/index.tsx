@@ -24,14 +24,7 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
-import {
-  BoxRenderable,
-  ScrollBoxRenderable,
-  addDefaultParsers,
-  TextAttributes,
-  RGBA,
-  MouseEvent,
-} from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import {
   mediaHashFromUri,
@@ -44,6 +37,7 @@ import {
   type SessionMessageUser,
   type SessionInfo,
   type ModelInfo,
+  isSessionNotFoundError,
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
@@ -81,6 +75,8 @@ import { busyCounts, busyTab } from "./composer/tabs"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
+import { retrySessionSync } from "../../util/session-sync"
+import { abort as abortController } from "@opencode/util/abort"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
@@ -299,6 +295,7 @@ export function Session(props: {
     },
     // A scroll-triggered history load joins this boundary load instead of publishing its own page.
     () => pinAbove(),
+    (message) => toast.show({ title: "Failed to load session history", message, variant: "error", duration: 5000 }),
   )
   const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
   const anchors = createTimelineAnchors()
@@ -343,39 +340,40 @@ export function Session(props: {
     }),
   )
 
-  createEffect(() => {
-    if (client.connection.status() !== "connected") return
-    setSynced(false)
-    const sessionID = route.sessionID
-    void (async () => {
-      await Promise.all([
-        data.session.sync(sessionID, { children: true }),
-        data.session.permission.sync(sessionID).catch(() => undefined),
-        data.session.form.sync(sessionID).catch(() => undefined),
-      ])
-      const info = data.session.get(sessionID)
-      if (!info) {
-        toast.show({
-          message: `Session not found: ${sessionID}`,
-          variant: "error",
-          duration: 5000,
+  createEffect(
+    on([() => route.sessionID, () => client.connection.status()], ([sessionID, status]) => {
+      if (status !== "connected") return
+      setSynced(false)
+      const controller = new AbortController()
+      onCleanup(() => abortController(controller))
+      void data.session.permission.sync(sessionID).catch(() => undefined)
+      void data.session.form.sync(sessionID).catch(() => undefined)
+      void retrySessionSync(() => data.session.sync(sessionID, { children: true }), controller.signal)
+        .then(() => {
+          if (controller.signal.aborted) return
+          const info = data.session.get(sessionID)
+          if (!info) {
+            toast.show({ message: `Session not found: ${sessionID}`, variant: "error", duration: 5000 })
+            sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
+            return
+          }
+          editor.reconnect(info.location.directory)
+          void data.job.sync(data.session.root(sessionID)).catch(() => undefined)
+          setSynced(true)
         })
-        sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
-        return
-      }
-      editor.reconnect(info.location.directory)
-      void data.job.sync(data.session.root(sessionID)).catch(() => undefined)
-      setSynced(true)
-    })().catch((error) => {
-      if (route.sessionID !== sessionID) return
-      toast.show({
-        message: errorMessage(error),
-        variant: "error",
-        duration: 5000,
-      })
-      sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
-    })
-  })
+        .catch((error) => {
+          if (controller.signal.aborted) return
+          toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+          // An exhausted retry on a temporary error must not discard a session we can still show.
+          // The effect runs again on the next reconnect. Only an explicitly missing session leaves.
+          if (isSessionNotFoundError(error)) {
+            sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
+            return
+          }
+          if (data.session.get(sessionID)) setSynced(true)
+        })
+    }),
+  )
 
   let seeded = false
   let sent = false
@@ -1286,7 +1284,9 @@ export function Session(props: {
       },
       run: () => {
         const lastAssistantMessage = messagesBeforeRevert().findLast(
-          (msg) => msg.type === "assistant" || (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
+          (msg) =>
+            msg.type === "assistant" ||
+            (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
         )
         if (!lastAssistantMessage) {
           toast.show({ message: "No assistant messages found", variant: "error" })
@@ -1594,9 +1594,7 @@ export function Session(props: {
                   onMouseOut={() => setLatestHovered(false)}
                   onMouseUp={toBottom}
                 >
-                  <text
-                    fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
-                  >
+                  <text fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}>
                     Jump to latest ↓
                   </text>
                 </box>
@@ -1642,12 +1640,7 @@ export function Session(props: {
                     }}
                   </Show>
                 </Match>
-                <Match
-                  when={
-                    session() &&
-                    currentLocation.error?.location.directory === session()!.location.directory
-                  }
-                >
+                <Match when={session() && currentLocation.error?.location.directory === session()!.location.directory}>
                   <SessionLocationMissing
                     directory={session()!.location.directory}
                     projectID={session()!.projectID}
@@ -2951,9 +2944,7 @@ function BlockTool(props: BlockToolProps) {
               <Show
                 when={props.spinner}
                 fallback={
-                  <text
-                    fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}
-                  >
+                  <text fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}>
                     {title()}
                   </text>
                 }
@@ -3153,11 +3144,7 @@ function ShellDisplay(props: {
           <Show
             when={isRunning()}
             fallback={
-              <text
-                fg={theme.text.base}
-                wrapMode={expanded() ? "word" : "char"}
-                maxHeight={expanded() ? undefined : 2}
-              >
+              <text fg={theme.text.base} wrapMode={expanded() ? "word" : "char"} maxHeight={expanded() ? undefined : 2}>
                 {limitedInput()}
               </text>
             }
@@ -3258,15 +3245,15 @@ function Read(props: ToolProps) {
         Read {pathFormatter.format(stringValue(props.input.path))}
         <Show when={props.input.offset !== undefined || props.input.limit !== undefined}>
           :{finiteNumber(props.input.offset) || 1}-
-          {props.input.limit ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1 : ""}
+          {props.input.limit
+            ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1
+            : ""}
         </Show>
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
-            <text fg={theme.text.muted}>
-              ↳ Loaded {pathFormatter.format(filepath)}
-            </text>
+            <text fg={theme.text.muted}>↳ Loaded {pathFormatter.format(filepath)}</text>
           </box>
         )}
       </For>
