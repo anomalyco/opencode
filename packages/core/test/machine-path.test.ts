@@ -620,7 +620,9 @@ on.effect("refuses another user's home in a command on a machine", () =>
         call("shell", { command: "cd ~other/src", workdir: "gpu:/work" }),
       )
       expect(result.status).toBe("error")
-      expect(result.error?.message).toBe("Machine paths are absolute or start with ~/: write gpu:/… or gpu:~/…")
+      expect(result.error?.message).toBe(
+        "Machine paths are absolute or start with ~/: write gpu:/… or gpu:~/… (for a local folder with that name, start with ./)",
+      )
       expect(tools.assertions.filter((entry) => entry.action === "external_directory")).toEqual([])
       expect(worker.runs).toEqual([])
     }).pipe(Effect.provide(graph(tools)))
@@ -728,7 +730,9 @@ on.effect("refuses another user's home on a machine and says what a machine path
       yield* connected(machines, "gpu")
       const result = yield* executeTool(yield* Tool.Service, call("read", { path: "gpu:~other/x" }))
       expect(result.status).toBe("error")
-      expect(result.error?.message).toBe("Machine paths are absolute or start with ~/: write gpu:/… or gpu:~/…")
+      expect(result.error?.message).toBe(
+        "Machine paths are absolute or start with ~/: write gpu:/… or gpu:~/… (for a local folder with that name, start with ./)",
+      )
       expect(tools.assertions).toEqual([])
     }).pipe(Effect.provide(graph(tools)))
   }),
@@ -745,7 +749,9 @@ on.effect("refuses a relative machine path in a shell working directory, naming 
         call("shell", { command: "pwd", workdir: "gpu:machines-test" }),
       )
       expect(result.status).toBe("error")
-      expect(result.error?.message).toBe("Machine paths are absolute or start with ~/: write gpu:/… or gpu:~/…")
+      expect(result.error?.message).toBe(
+        "Machine paths are absolute or start with ~/: write gpu:/… or gpu:~/… (for a local folder with that name, start with ./)",
+      )
       expect(tools.assertions).toEqual([])
       expect(worker.runs).toEqual([])
     }).pipe(Effect.provide(graph(tools)))
@@ -760,7 +766,9 @@ on.effect("refuses a relative machine path in a file tool, naming the fix", () =
       yield* connected(machines, "gpu")
       const result = yield* executeTool(yield* Tool.Service, call("read", { path: "gpu:notes.txt" }))
       expect(result.status).toBe("error")
-      expect(result.error?.message).toBe("Machine paths are absolute or start with ~/: write gpu:/… or gpu:~/…")
+      expect(result.error?.message).toBe(
+        "Machine paths are absolute or start with ~/: write gpu:/… or gpu:~/… (for a local folder with that name, start with ./)",
+      )
       expect(tools.assertions).toEqual([])
     }).pipe(Effect.provide(graph(tools)))
   }),
