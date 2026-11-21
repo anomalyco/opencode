@@ -211,7 +211,11 @@ test.each([false, true])(
   "production model menu keeps labels and current state before metadata (mono=%s)",
   async (mono) => {
     const app = await setup(mono)
-    const title = "\u6a21\u578b\u6d4b\u8bd5 Alpha"
+    // The menu orders labels with localeCompare, whose Latin-vs-CJK order flips by ICU locale
+    // (zh-CN sorts CJK first). The "N" prefix keeps this title after the "Model NN" fixtures in
+    // every locale. It also keeps the original 14-column width that the narrow-row assertions
+    // below are calibrated to.
+    const title = "N\u6a21\u578b\u6d4b\u8bd5 Beta"
     try {
       app.footer.event({
         type: "models",
