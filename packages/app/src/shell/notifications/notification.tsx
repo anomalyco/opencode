@@ -395,6 +395,7 @@ export function createServerNotificationState(input: {
 
     void input.coordinator.system(key, () => {
       if (!pending()) return
+      void platform.requestAttention?.().catch(() => undefined)
 
       return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, () =>
         openNotificationSession(tabs, input.key, target),

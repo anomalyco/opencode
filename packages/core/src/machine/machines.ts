@@ -30,6 +30,7 @@ export class Info extends Schema.Class<Info>("Machines.Info")({
   /** Last reported by the worker's hello, while it is online. */
   os: Schema.optionalKey(Schema.String),
   arch: Schema.optionalKey(Schema.String),
+  connection: Schema.optionalKey(Machine.ConnectionInfo),
 }) {}
 
 export class NotFound extends Schema.TaggedError<NotFound>()("Machines.NotFound", {
@@ -191,8 +192,16 @@ const layer = Layer.effect(
           .sort(([left], [right]) => left.localeCompare(right))
           .map(([id, machine]) => {
             const hello = machine.hello()
+            const connection = machine.describe()
             return hello
-              ? new Info({ id, online: true, paired: keys.has(id), os: hello.os, arch: hello.arch })
+              ? new Info({
+                  id,
+                  online: true,
+                  paired: keys.has(id),
+                  os: hello.os,
+                  arch: hello.arch,
+                  ...(connection ? { connection } : {}),
+                })
               : new Info({ id, online: false, paired: keys.has(id) })
           })
       }),

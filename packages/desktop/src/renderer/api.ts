@@ -62,6 +62,7 @@ export const api: ElectronAPI = {
     ),
   writeClipboardText: (text) => invoke("FilesWriteClipboardText", { text }),
   getWindowFocused: () => invoke("WindowGetFocused"),
+  requestAttention: () => invoke("WindowRequestAttention"),
   requestMicrophone: () => invoke("WindowRequestMicrophone"),
   setVoiceCallActive: (active) => invoke("WindowSetVoiceCallActive", { active }),
   getWindowFullscreen: () => invoke("WindowGetFullscreen"),
