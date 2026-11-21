@@ -20,7 +20,7 @@ export async function openReviewLauncher(panel: Locator) {
 /** The session keys whose side strips the stored layout holds, in stored order, once the app has saved them. */
 export function storedStrips(page: Page) {
   return page.evaluate((): string[] => {
-    const layout: { sessionTabs?: Record<string, unknown> } = JSON.parse(localStorage.getItem("opencode.global.dat:layout") ?? "{}")
+    const layout: { sessionTabs?: Record<string, { all: string[] }> } = JSON.parse(localStorage.getItem("opencode.global.dat:layout") ?? "{}")
 
     return Object.keys(layout.sessionTabs ?? {})
   })
