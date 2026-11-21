@@ -35,28 +35,31 @@ widget holds keyboard focus or pointer capture (closing releases both). A widget
 
 ## Layout
 
-The root node fills the screen. In full screen every `canvas` and `shader` grows by default to share the remaining
+The root node fills the safe area minus the full-screen **padding**, the same on every side: 12 pt on iOS, 12 dp on
+Android, 16 logical px on Rune desktop and 16 CSS px on the web host. Nothing is full-bleed: canvases sit inside the
+padding too, and the padding shows the widget's background. In full screen every `canvas` and `shader` grows by default to share the remaining
 height equally (its `height` is the minimum); `fill: false` keeps it at its `height`. Width is the available width as
 usual. Content taller than the screen scrolls. Inline (not full screen), sizes are unchanged.
 
 ## Chrome
 
-Full screen has no title bar: only the floating close button, always visible, over the widget's top-right corner. The
-widget keeps the whole screen; the button floats above its content, and the client tells the widget where it is
-(below) so the widget template can keep content out of that area. The widget's own view supplies any title.
+Full screen has no title bar: only the floating close button, always visible. The button is placed relative to the
+screen or window, not the root: its hit area (the **area**) is 8 from the top and the trailing edge of the safe area,
+so it overlaps the padded root's top-right corner. The button floats above the widget's content, and the client tells
+the widget where it is (below) so the widget template can keep content out of that area. The widget's own view
+supplies any title.
 
-The close button's **area** is its hit area, measured from the root node's top-right corner (the root fills the
-safe area):
+| Client | Padding | Area, from the safe area's top-right corner | Visible button | `close`, for a root `W` wide |
+| --- | --- | --- | --- | --- |
+| iOS | 12 pt | 44 × 44 pt, 8 pt from the top and the trailing edge | a 32 pt circle centered in it | `{ x: W - 40, y: -4, width: 44, height: 44 }` |
+| Android | 12 dp | 44 × 44 dp, 8 dp from the top and the end edge | a 32 dp circle centered in it | `{ x: W - 40, y: -4, width: 44, height: 44 }` |
+| Rune desktop | 16 px | 32 × 32 px (logical), 8 px from the top and the right edge | the whole area | `{ x: W - 24, y: -8, width: 32, height: 32 }` |
+| Web host | 16 CSS px | 32 × 32 CSS px, 8 px from the top and the right edge | the whole area | `{ x: W - 24, y: -8, width: 32, height: 32 }` |
 
-| Client | Area | Visible button |
-| --- | --- | --- |
-| iOS | 44 × 44 pt, 8 pt from the top and the trailing edge | a 32 pt circle centered in it |
-| Android | 44 × 44 dp, 8 dp from the top and the end edge | a 32 dp circle centered in it |
-| Rune desktop | 32 × 32 px (logical), 8 px from the top and the right edge | the whole area |
-| Web host | 32 × 32 CSS px, 8 px from the top and the right edge | the whole area |
-
-So on iOS a root `width` wide has the area `{ x: width - 52, y: 8, width: 44, height: 44 }`. The TUI has no full
-screen.
+`close` is in the root's coordinates (origin at the root's top-left, inside the padding), computed from the button's
+real position: with padding `P` and area size `S`, `x = W + P - 8 - S` and `y = 8 - P`, so the area reaches past the
+root's top and right edges. A canvas gets the same area in its own coordinates. In a right-to-left layout the button
+sits at the trailing (left) edge and `x = 8 - P`. The TUI has no full screen.
 
 ## Telling the program
 
