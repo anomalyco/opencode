@@ -5,6 +5,7 @@ import {
   isMachineNotFoundError,
   OpenCode,
   type MachineInfo,
+  type MachineInvite,
 } from "@opencode/client/promise"
 import { Service } from "@opencode/client/effect/service"
 import { MACHINE_LINK_PATH, type MachineReach } from "@opencode/protocol/groups/machine"
@@ -46,12 +47,19 @@ export function formatMachineAdd(input: {
   readonly name: string
   readonly join: string
   readonly expires: number
-  readonly reach: ReadonlyArray<MachineReach>
+  readonly reach: MachineInvite["reach"]
   readonly tty: boolean
   readonly now?: number
 }) {
   if (!input.tty) return input.join + EOL
-  const addresses = input.reach.length ? input.reach.map((entry) => `  ${entry.url}`) : ["  (none)"]
+  const addresses = input.reach.length
+    ? input.reach.map((entry) => `  ${entry.type === "iroh" ? "iroh" : entry.url}`)
+    : ["  (none)"]
+  const access = input.reach.some((entry) => entry.type === "iroh")
+    ? "Works from any network."
+    : input.reach.some((entry) => entry.type === "url" && !isLoopback(new URL(entry.url).hostname))
+      ? "Works from computers that can reach one of these addresses."
+      : "Only works on this computer. Pass --url with an address other computers can reach."
   return (
     [
       `Machine: ${input.name}`,
@@ -59,6 +67,7 @@ export function formatMachineAdd(input: {
       "",
       input.join,
       "",
+      access,
       "Addresses:",
       ...addresses,
     ].join(EOL) + EOL
@@ -75,8 +84,19 @@ export function formatMachineList(machines: ReadonlyArray<MachineInfo>) {
       const paired = (machine.paired ? "paired" : "waiting").padEnd(pairedWidth)
       const online = machine.online ? "connected" : "offline"
       const platform = machine.os && machine.arch ? `${machine.os}/${machine.arch}` : (machine.os ?? machine.arch)
-      if (!platform) return `${machine.id.padEnd(nameWidth)}  ${paired}  ${online}`
-      return `${machine.id.padEnd(nameWidth)}  ${paired}  ${online.padEnd(onlineWidth)}  ${platform}`
+      const connection = machine.online ? machine.connection : undefined
+      const carrier = connection
+        ? [
+            connection.kind,
+            connection.path,
+            connection.rtt === undefined ? undefined : `${Math.round(connection.rtt)}ms`,
+          ]
+            .filter((part) => part !== undefined)
+            .join(" ")
+        : undefined
+      const details = [platform, carrier].filter((part) => part !== undefined).join("  ")
+      if (!details) return `${machine.id.padEnd(nameWidth)}  ${paired}  ${online}`
+      return `${machine.id.padEnd(nameWidth)}  ${paired}  ${online.padEnd(onlineWidth)}  ${details}`
     })
     .join(EOL)
 }

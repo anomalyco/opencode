@@ -88,7 +88,16 @@ const serve = (incoming: Incoming, handshakes: Semaphore.Semaphore, admit: Effec
           (connection) => Effect.sync(() => connection.close(CLOSE, [])),
         )
         const stream = yield* Effect.tryPromise(() => connection.acceptBi()).pipe(Effect.timeout(DEADLINE))
-        return yield* Link.serve(carrier(stream, () => connection.close(CLOSE, [])))
+        return yield* Link.serve({
+          ...carrier(stream, () => connection.close(CLOSE, [])),
+          describe: () => {
+            const path = connection.paths().find((path) => path.isSelected)
+            return {
+              kind: "iroh",
+              ...(path ? { path: path.isRelay ? "relayed" : "direct", rtt: path.rttMs } : {}),
+            }
+          },
+        })
       }),
     )
     if (Option.isNone(admitted)) return yield* Effect.promise(() => incoming.refuse())

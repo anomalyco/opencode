@@ -1,4 +1,5 @@
 import { NodeServices } from "@effect/platform-node"
+import type { MachineInfo, MachineInvite } from "@opencode/client/promise"
 import { describe, expect, test } from "bun:test"
 import { Console, Effect, Option, Stdio } from "effect"
 import { EOL } from "node:os"
@@ -92,6 +93,44 @@ describe("machine output formatting", () => {
     expect(lines[1]).toContain("Expires in 5 minutes")
     expect(lines).toContain("ocjoin_example")
     expect(lines).toContain("  wss://example.com/api/experimental/machine/link")
+    expect(lines).toContain("Works from computers that can reach one of these addresses.")
+  })
+
+  test.each([
+    {
+      reach: [{ type: "url", url: "ws://localhost:4096" }, { type: "iroh" }],
+      sentence: "Works from any network.",
+    },
+    {
+      reach: [{ type: "url", url: "wss://example.com" }],
+      sentence: "Works from computers that can reach one of these addresses.",
+    },
+    {
+      reach: ["localhost", "127.0.0.1", "[::1]"].map((host) => ({ type: "url", url: `ws://${host}:4096` })),
+      sentence: "Only works on this computer. Pass --url with an address other computers can reach.",
+    },
+  ] satisfies Array<{ reach: MachineInvite["reach"]; sentence: string }>)(
+    "explains invite reach: $sentence",
+    ({ reach, sentence }) => {
+      const input = { name: "gpu", join: "ocjoin_example", expires: 300_000, now: 0, reach }
+      const output = formatMachineAdd({ ...input, tty: true })
+      expect(output).toContain(`${sentence}${EOL}Addresses:${EOL}`)
+      for (const entry of reach) expect(output).toContain(`  ${entry.type === "iroh" ? "iroh" : entry.url}${EOL}`)
+      expect(formatMachineAdd({ ...input, tty: false })).toBe(`ocjoin_example${EOL}`)
+    },
+  )
+
+  test.each([
+    [{ kind: "websocket" }, "websocket"],
+    [{ kind: "iroh" }, "iroh"],
+    [{ kind: "iroh", path: "direct", rtt: 81.6 }, "iroh direct 82ms"],
+    [{ kind: "iroh", path: "relayed", rtt: 123 }, "iroh relayed 123ms"],
+    [{ kind: "iroh", path: "direct", rtt: 0 }, "iroh direct 0ms"],
+  ] satisfies Array<[MachineInfo["connection"], string]>)("prints connection %j", (connection, label) => {
+    expect(formatMachineList([{ id: "gpu", paired: true, online: true, os: "linux", arch: "x64", connection }])).toBe(
+      `gpu  paired  connected  linux/x64  ${label}`,
+    )
+    expect(formatMachineList([{ id: "gpu", paired: true, online: false, connection }])).toBe("gpu  paired  offline")
   })
 
   test("formats empty and populated machine lists", () => {

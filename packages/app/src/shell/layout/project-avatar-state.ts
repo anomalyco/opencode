@@ -108,6 +108,8 @@ export type SessionRequests = ReturnType<typeof sessionRequests>
 
 export type WindowTabActivity = {
   readonly waiting: number
+  /** Tabs that wait on the user or finished a run this window hasn't viewed: the taskbar badge's count. */
+  readonly needsYou: number
   readonly failed: boolean
   readonly busy: boolean
 }
@@ -136,11 +138,12 @@ export function useWindowTabActivity(): Accessor<WindowTabActivity> {
 
           return {
             waiting: summary.waiting + (isWaiting ? 1 : 0),
+            needsYou: summary.needsYou + (isWaiting || isUnread ? 1 : 0),
             failed: summary.failed || isFailed,
             busy: summary.busy || isBusy,
           }
         },
-        { waiting: 0, failed: false, busy: false },
+        { waiting: 0, needsYou: 0, failed: false, busy: false },
       ),
   )
 }
