@@ -405,4 +405,7 @@ export const dict = {
   "ui.question.singleHint": "選取一個答案",
   "ui.question.classic.multiHint": "選取所有適用的答案",
   "ui.question.custom.answerPlaceholder": "輸入你自己的答案…",
+
+  "ui.message.wrapLines": "自動換行",
+  "ui.message.unwrapLines": "不自動換行",
 } satisfies Partial<Record<Keys, string>>
