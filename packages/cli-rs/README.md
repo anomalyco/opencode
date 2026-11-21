@@ -83,15 +83,15 @@ and password `opencode service` reports, on the `dev` TUI storage channel, as th
 The TUI reads the same `cli.json` (keybinds, theme, session settings) as the TypeScript TUI. Main keys, with the
 default leader `ctrl+x`:
 
-| Key | Action |
-| --- | --- |
-| `enter` | Send the prompt (on home it creates a session) |
-| `esc` | Interrupt a running reply; close a dialog; reject a permission |
-| `<leader>l`, `<leader>m`, `<leader>n` | Session list, models, new session |
-| `ctrl+p` | Command palette |
-| `pageup`, `pagedown` | Scroll the transcript |
-| `ctrl+g` or `home`, `ctrl+alt+g` or `end` | First and last message |
-| `ctrl+c` | Clear the prompt, or quit when it is empty |
+| Key                                       | Action                                                         |
+| ----------------------------------------- | -------------------------------------------------------------- |
+| `enter`                                   | Send the prompt (on home it creates a session)                 |
+| `esc`                                     | Interrupt a running reply; close a dialog; reject a permission |
+| `<leader>l`, `<leader>m`, `<leader>n`     | Session list, models, new session                              |
+| `ctrl+p`                                  | Command palette                                                |
+| `pageup`, `pagedown`                      | Scroll the transcript                                          |
+| `ctrl+g` or `home`, `ctrl+alt+g` or `end` | First and last message                                         |
+| `ctrl+c`                                  | Clear the prompt, or quit when it is empty                     |
 
 ## Plugins
 
