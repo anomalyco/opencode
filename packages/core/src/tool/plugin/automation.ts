@@ -7,7 +7,6 @@ import { DateTime, Effect, Option, Schema } from "effect"
 import { Automation } from "../../automation.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
-import { Flag } from "../../flag.js"
 import { Permission } from "../../permission.js"
 import PROMPT_AUTOMATION from "../../plugin/command/automation.txt"
 import { Session } from "../../session.js"
@@ -54,10 +53,9 @@ export const Plugin = {
       ctx.event,
       Effect.andThen(ctx.tool.reload(), ctx.command.reload()),
     )
-    const flags = yield* Flag.Service
-    const enabled = () => flags.resolve(loaded.entries).automations.enabled
+    const enabled = () => Config.latest(loaded.entries, "automations") ?? true
 
-    // A request keeps the tools it started with after config reloads, so each call rechecks the flag where the
+    // A request keeps the tools it started with after config reloads, so each call rechecks config where the
     // calling Session lives, and returns that Session for scoping.
     const caller = (sessionID: SessionSchema.ID) =>
       Effect.gen(function* () {

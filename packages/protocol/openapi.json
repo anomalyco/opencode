@@ -12406,7 +12406,7 @@
             }
           }
         },
-        "description": "Create an automation that sends a prompt, runs a Code Mode program, or runs a shell command at a time, every interval, or on a cron. Creating an MCP event watch requires the automation_create tool in a local session; a session ID over HTTP is not a watch authorization. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Create an automation that sends a prompt, runs a Code Mode program, or runs a shell command at a time, every interval, or on a cron. Creating an MCP event watch requires the automation_create tool in a local session; a session ID over HTTP is not a watch authorization. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "Create automation",
         "requestBody": {
           "content": {
@@ -12513,7 +12513,7 @@
             }
           }
         },
-        "description": "List automations, oldest first. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "List automations, oldest first. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "List automations"
       }
     },
@@ -12591,7 +12591,7 @@
             }
           }
         },
-        "description": "Read one automation. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Read one automation. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "Get automation"
       },
       "delete": {
@@ -12653,7 +12653,7 @@
             }
           }
         },
-        "description": "Delete an automation. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Delete an automation. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "Delete automation"
       }
     },
@@ -12731,7 +12731,7 @@
             }
           }
         },
-        "description": "Stop an automation from running until it is resumed. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Stop an automation from running until it is resumed. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "Pause automation"
       }
     },
@@ -12809,7 +12809,7 @@
             }
           }
         },
-        "description": "Resume a paused automation. A missed `at` runs once; repeating timers resume at their next slot. Event watches request replay from their saved cursor. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Resume a paused automation. A missed `at` runs once; repeating timers resume at their next slot. Event watches request replay from their saved cursor. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "Resume automation"
       }
     },
@@ -17346,6 +17346,9 @@
           "timezone": {
             "type": "string"
           },
+          "automations": {
+            "type": "boolean"
+          },
           "permissions": {
             "$ref": "#/components/schemas/Permission.Ruleset"
           },
@@ -17657,9 +17660,6 @@
               "media_blob": {
                 "type": "boolean"
               },
-              "automations": {
-                "type": "boolean"
-              },
               "artifacts": {
                 "type": "boolean"
               },
@@ -17725,9 +17725,6 @@
                 "type": "boolean"
               },
               "sqlite_fts": {
-                "type": "boolean"
-              },
-              "schedules": {
                 "type": "boolean"
               },
               "part_rows": {

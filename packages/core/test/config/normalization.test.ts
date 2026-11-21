@@ -614,13 +614,22 @@ describe("ConfigNormalize", () => {
     }
   })
 
-  test("normalizes every registered flag as a boolean", () => {
+  test("normalizes flag booleans and keeps automations at the top level", () => {
     const result = normalized({
-      experimental: { todo: true, media_blob: false, automations: "yes", full_codemode: true },
+      automations: false,
+      experimental: {
+        todo: true,
+        media_blob: false,
+        artifacts: "yes",
+        full_codemode: true,
+        automations: true,
+        schedules: true,
+      },
     })
+    expect(result.encoded.automations).toBe(false)
     expect(result.encoded.experimental).toEqual({ todo: true, media_blob: false, full_codemode: true })
     expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
-      ["invalid", ["experimental", "automations"]],
+      ["invalid", ["experimental", "artifacts"]],
     ])
   })
 

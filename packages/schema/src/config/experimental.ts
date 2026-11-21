@@ -38,9 +38,6 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     .annotate({
       description: `${ConfigFlag.registry.video_generate} Defaults to on in local and dev builds and off in releases. An object turns it on and sets the tool's options.`,
     }),
-  schedules: Schema.Boolean.pipe(optional).annotate({
-    description: "Deprecated: use experimental.automations.",
-  }),
   part_rows: Schema.Boolean.pipe(optional).annotate({
     description:
       "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to true; set false to fall back to whole-message writes.",

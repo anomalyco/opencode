@@ -2465,6 +2465,7 @@ export type ConfigEntry =
         enterprise?: { url?: string }
         username?: string
         timezone?: string
+        automations?: boolean
         permissions?: PermissionRuleset
         policies?: Array<{
           action:
@@ -2641,7 +2642,6 @@ export type ConfigEntry =
           all_flags?: boolean
           todo?: boolean
           media_blob?: boolean
-          automations?: boolean
           artifacts?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           console_watches?: boolean
@@ -2652,7 +2652,6 @@ export type ConfigEntry =
           home_memory?: boolean
           project_overlay?: boolean
           sqlite_fts?: boolean
-          schedules?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
