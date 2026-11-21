@@ -264,7 +264,8 @@ ways, never both:
 - **2D** (no `wgsl`): by the widget template's optional `draw(state, data, frame)` function, which returns draw
   commands (below).
 - **GPU** (`wgsl` set): by that WGSL fragment shader, fed the canvas's `values` (see GPU canvases). `draw` is never
-  called for it, and live `widget.draw` refuses it.
+  called for it, and live `widget.draw` refuses it. A live program can instead drive a canvas with `gpu: true` through a
+  WebGPU subset (`widgets-gpu.md`), of which `wgsl` is the shorthand.
 
 Everything else is the same for both: size and `width`, `fps` and `duration`, `alt` and `poster` (an image src shown
 where the canvas can't be drawn: the TUI, a shader that fails to compile), `fill` and full screen, `onPointer` and
