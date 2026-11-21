@@ -259,3 +259,15 @@ Review only the staged changes: !`git diff --cached`
 ```
 
 Saving this file updates `/review` without restarting OpenCode.
+
+## API
+
+Over the HTTP API, [`session.prompt`](/api#session.prompt) stores `text` verbatim as a plain user message and does not parse leading slash commands. Call [`session.command`](/api#session.command) with the command `name` without a leading `/` and its arguments in `text`.
+
+```ts
+await client.session.command({
+  sessionID: session.id,
+  name: "review",
+  text: "src/auth.ts",
+})
+```

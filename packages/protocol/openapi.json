@@ -2114,7 +2114,7 @@
             }
           }
         },
-        "description": "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+        "description": "Durably admit one session input and schedule agent-loop execution unless resume is false. Text is stored verbatim as plain user input and does not parse or dispatch slash commands; use session.command (POST /api/session/{sessionID}/command) to run a command.",
         "summary": "Send message",
         "requestBody": {
           "content": {
@@ -2133,7 +2133,8 @@
                     ]
                   },
                   "text": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Plain user prompt text, stored verbatim. Leading slash commands are not parsed or dispatched; use session.command instead."
                   },
                   "files": {
                     "type": "array",
@@ -2256,7 +2257,7 @@
             }
           }
         },
-        "description": "Execute a slash command callback immediately.",
+        "description": "Execute a registered slash command callback immediately. Pass the command name without a leading slash (for example, \"goal\" or \"review\") in name and its argument string in text.",
         "summary": "Run command",
         "requestBody": {
           "content": {
@@ -2265,10 +2266,12 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Registered command name without a leading slash, for example \"goal\" or \"review\"."
                   },
                   "text": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Argument string passed to the command."
                   },
                   "files": {
                     "type": "array",

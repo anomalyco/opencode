@@ -43,6 +43,18 @@ options, and `AsyncIterable` streams as `@opencode/client`. It exposes the
 full generated client and adds the convenience aliases `sessions` and `events`
 for the session and event groups.
 
+`sessions.prompt` stores `text` verbatim as plain user input and does not parse
+slash commands. Call `sessions.command` with the command `name` without a
+leading `/` and its arguments in `text` to run a registered command.
+
+```ts
+await opencode.sessions.command({
+  sessionID: session.id,
+  name: "review",
+  text: "src/auth.ts",
+})
+```
+
 ## Worktrees
 
 Worktree operations require a `projectID`. Create and refresh load configuration and plugins from the project's saved
