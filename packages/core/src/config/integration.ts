@@ -5,6 +5,7 @@ import { Config, type Entry } from "@opencode/schema/config"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ConfigProvider } from "@opencode/schema/config/provider"
+import { ConfigWebSearch } from "@opencode/schema/config/websearch"
 import { Connection } from "@opencode/schema/connection"
 import { IntegrationID } from "@opencode/schema/integration-id"
 
@@ -25,6 +26,20 @@ export const Policies = Schema.Array(Schema.Unknown).pipe(
   Schema.decodeTo(Schema.Array(ConfigPolicy.Info)),
 )
 
+const RemoteWebsearch = Schema.Union([
+  Schema.Literal(false),
+  Schema.Struct({ provider: ConfigWebSearch.Info.fields.provider.pipe(Schema.optional) }),
+]).pipe(
+  Schema.decodeTo(Schema.UndefinedOr(ConfigWebSearch.Selection), {
+    decode: SchemaGetter.transform((websearch) => {
+      if (websearch === false) return false
+      if (websearch.provider === undefined) return undefined
+      return new ConfigWebSearch.Info({ provider: websearch.provider })
+    }),
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+)
+
 /**
  * The allow-listed keys of a remote config. Only these keys are read before decoding, so a newer remote source's
  * other keys, valid or not, can never reject the document.
@@ -33,7 +48,7 @@ export const Remote = Schema.Struct({
   providers: Config.Info.fields.providers,
   mcp: Config.Info.fields.mcp,
   policies: Policies.pipe(Schema.optional),
-  websearch: Config.Info.fields.websearch,
+  websearch: RemoteWebsearch.pipe(Schema.optional),
 })
 export type Remote = typeof Remote.Type
 
