@@ -7,6 +7,7 @@ import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Shell as ShellSchema } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
 import { Clock, Deferred, Effect, Fiber, Option, Schema, Struct } from "effect"
+import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
@@ -303,6 +304,7 @@ export const Plugin = {
   id: "opencode.tool.shell",
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Context) {
     const sessions = yield* Session.Service
+    const agents = yield* Agent.Service
     const jobs = yield* Job.Service
     const access = yield* FileAccess.Service
     const environment = yield* Environment.Service
@@ -338,6 +340,11 @@ export const Plugin = {
         program: invocation.shell,
         target,
         local: target.environment.id === environment.id,
+        rules: Effect.gen(function* () {
+          const session = yield* sessions.get(context.sessionID)
+          const agent = yield* agents.resolve(context.agent)
+          return Permission.merge(agent?.permissions ?? [], session.permissions ?? [])
+        }),
       })
       yield* Effect.forEach(
         requests,
