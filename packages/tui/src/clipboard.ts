@@ -29,10 +29,18 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
       if (result.status !== "read") {
         if (result.status === "failed") throw result.error
         if (result.status === "timed-out") throw new Error("Clipboard read timed out")
-        if (result.status === "unsupported") throw new Error("Clipboard read is not supported on this system")
         if (result.status === "limit-exceeded") {
           throw new RangeError("Clipboard content exceeded configured read or image conversion limits")
         }
+        // WSL keeps the clipboard on the Windows side: Windows Terminal owns the selection and
+        // the native host clipboard has no bridge to it, so this read reports an empty or
+        // cancelled clipboard unless WSLg forwards Wayland. Without WSLg the host reports it as
+        // unsupported instead, so every non-error status tries the Windows clipboard through interop.
+        if (isWSL()) {
+          const interop = await readWindowsClipboard()
+          if (interop) return interop
+        }
+        if (result.status === "unsupported") throw new Error("Clipboard read is not supported on this system")
         return undefined
       }
 
@@ -64,5 +72,41 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
     dispose() {
       return clipboard.dispose()
     },
+  }
+}
+
+const WINDOWS_CLIPBOARD_IMAGE = [
+  "Add-Type -AssemblyName System.Windows.Forms",
+  "$image = [System.Windows.Forms.Clipboard]::GetImage()",
+  "if (-not $image) { exit 0 }",
+  "$stream = New-Object System.IO.MemoryStream",
+  "$image.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)",
+  "[System.Convert]::ToBase64String($stream.ToArray())",
+].join("; ")
+
+// Containers on Docker Desktop or devcontainers on Windows also run the WSL kernel but have no
+// interop, so detect WSL by the variables it sets instead of the kernel release.
+function isWSL() {
+  return process.platform === "linux" && Boolean(process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP)
+}
+
+async function readWindowsClipboard(): Promise<ClipboardContent | undefined> {
+  if (!Bun.which("powershell.exe")) {
+    throw new Error("Clipboard image paste under WSL needs powershell.exe interop, which is not available")
+  }
+  const child = Bun.spawn(["powershell.exe", "-NonInteractive", "-NoProfile", "-Command", WINDOWS_CLIPBOARD_IMAGE], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+  })
+  const timeout = setTimeout(() => child.kill(), 10_000)
+  try {
+    const output = await new Response(child.stdout).text()
+    if ((await child.exited) !== 0) throw new Error("Reading the Windows clipboard image failed")
+    const data = output.trim()
+    if (!data) return undefined
+    return { data, mime: "image/png" }
+  } finally {
+    clearTimeout(timeout)
   }
 }
