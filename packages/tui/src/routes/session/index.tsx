@@ -37,6 +37,7 @@ import {
   type SessionMessageUser,
   type SessionInfo,
   type ModelInfo,
+  isSessionNotFoundError,
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
@@ -351,7 +352,11 @@ export function Session(props: {
         .then(() => {
           if (controller.signal.aborted) return
           const info = data.session.get(sessionID)
-          if (!info) throw new Error(`Session not found: ${sessionID}`)
+          if (!info) {
+            toast.show({ message: `Session not found: ${sessionID}`, variant: "error", duration: 5000 })
+            sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
+            return
+          }
           editor.reconnect(info.location.directory)
           void data.job.sync(data.session.root(sessionID)).catch(() => undefined)
           setSynced(true)
@@ -359,7 +364,13 @@ export function Session(props: {
         .catch((error) => {
           if (controller.signal.aborted) return
           toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
-          sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
+          // An exhausted retry on a temporary error must not discard a session we can still show.
+          // The effect runs again on the next reconnect. Only an explicitly missing session leaves.
+          if (isSessionNotFoundError(error)) {
+            sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
+            return
+          }
+          if (data.session.get(sessionID)) setSynced(true)
         })
     }),
   )

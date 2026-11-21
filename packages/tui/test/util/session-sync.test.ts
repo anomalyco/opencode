@@ -2,6 +2,16 @@ import { expect, jest, test } from "bun:test"
 import { ClientError } from "@opencode/client"
 import { retrySessionSync } from "../../src/util/session-sync"
 
+// Wait for the backoff timer instead of assuming a fixed number of microtasks
+// inside retry(); cancellation and backoff details are covered in packages/util.
+async function waitForBackoff() {
+  for (let i = 0; i < 100; i++) {
+    if (jest.getTimerCount() > 0) return
+    await Promise.resolve()
+  }
+  throw new Error("retry backoff timer was never scheduled")
+}
+
 test.each([408, 429, 500, 502, 503, 504])("retries HTTP %s before recovering", async (status) => {
   jest.useFakeTimers()
   const controller = new AbortController()
@@ -10,13 +20,10 @@ test.each([408, 429, 500, 502, 503, 504])("retries HTTP %s before recovering", a
     const task = retrySessionSync(async () => {
       if (++calls === 1) throw new ClientError("UnexpectedStatus", { cause: { status } })
     }, controller.signal)
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(calls).toBe(1)
+    await waitForBackoff()
     jest.advanceTimersByTime(500)
     await task
     expect(calls).toBe(2)
-    expect(jest.getTimerCount()).toBe(0)
   } finally {
     controller.abort()
     jest.useRealTimers()
@@ -54,84 +61,10 @@ test.each([
     const task = retrySessionSync(async () => {
       if (++calls === 1) throw error
     }, controller.signal)
-    await Promise.resolve()
-    await Promise.resolve()
+    await waitForBackoff()
     jest.advanceTimersByTime(500)
     await task
     expect(calls).toBe(2)
-  } finally {
-    controller.abort()
-    jest.useRealTimers()
-  }
-})
-
-test("exhausts five reads after four delays without a final backoff", async () => {
-  jest.useFakeTimers()
-  const controller = new AbortController()
-  const error = new ClientError("UnexpectedStatus", { cause: { status: 503 } })
-  const attempts: number[] = []
-  try {
-    const task = retrySessionSync(async () => {
-      attempts.push(Date.now())
-      throw error
-    }, controller.signal).catch((error) => error)
-    await Promise.resolve()
-    await Promise.resolve()
-    for (const delay of [500, 1000, 2000, 4000]) {
-      jest.advanceTimersByTime(delay)
-      await Promise.resolve()
-      await Promise.resolve()
-    }
-    expect(await task).toBe(error)
-    expect(attempts.map((time) => time - attempts[0])).toEqual([0, 500, 1500, 3500, 7500])
-    expect(jest.getTimerCount()).toBe(0)
-  } finally {
-    controller.abort()
-    jest.useRealTimers()
-  }
-})
-
-test("cancelling a read clears its pending retry", async () => {
-  jest.useFakeTimers()
-  const controller = new AbortController()
-  const reason = new Error("session left")
-  let calls = 0
-  try {
-    const task = retrySessionSync(async () => {
-      calls++
-      throw new ClientError("UnexpectedStatus", { cause: { status: 503 } })
-    }, controller.signal).catch((error) => error)
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(jest.getTimerCount()).toBe(1)
-    controller.abort(reason)
-    expect(await task).toBe(reason)
-    expect(jest.getTimerCount()).toBe(0)
-    jest.runAllTimers()
-    expect(calls).toBe(1)
-  } finally {
-    controller.abort()
-    jest.useRealTimers()
-  }
-})
-
-test("leaving during an in-flight read prevents a stale retry", async () => {
-  jest.useFakeTimers()
-  const controller = new AbortController()
-  const response = Promise.withResolvers<void>()
-  const reason = new Error("session left")
-  let calls = 0
-  try {
-    const task = retrySessionSync(() => {
-      calls++
-      return response.promise
-    }, controller.signal).catch((error) => error)
-    controller.abort(reason)
-    response.reject(new ClientError("UnexpectedStatus", { cause: { status: 503 } }))
-    expect(await task).toBe(reason)
-    expect(jest.getTimerCount()).toBe(0)
-    jest.runAllTimers()
-    expect(calls).toBe(1)
   } finally {
     controller.abort()
     jest.useRealTimers()
