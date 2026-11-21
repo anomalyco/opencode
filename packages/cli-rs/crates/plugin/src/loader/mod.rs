@@ -243,16 +243,17 @@ impl Loader {
             && target.local.as_deref().is_some_and(|dir| dir.is_dir() && crate::luau::is_plugin(dir))
     }
 
-    /// Whether a walk, a copy or a compilation of a Luau plugin's files runs.
-    #[cfg(all(test, luau))]
-    pub(crate) fn luau_walking(&self) -> bool {
+    /// Whether a walk, a copy or a compilation of a Luau plugin's files runs. For a test that reconciles until the
+    /// loader settles; the host reconciles on each walk's wake instead ([`Loader::with_luau`]).
+    #[cfg(luau)]
+    pub fn luau_walking(&self) -> bool {
         self.luau.as_ref().is_some_and(crate::pipe::tree::Trees::walking)
             || self.luau_builds.as_ref().is_some_and(crate::luau::Builds::running)
     }
 
-    /// Whether a compiled Luau build waits for the next reconcile.
-    #[cfg(all(test, luau))]
-    pub(crate) fn luau_ready(&self) -> bool {
+    /// Whether a compiled Luau build waits for the next reconcile; for tests, as [`Loader::luau_walking`].
+    #[cfg(luau)]
+    pub fn luau_ready(&self) -> bool {
         self.luau_builds.as_ref().is_some_and(crate::luau::Builds::ready)
     }
 

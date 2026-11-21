@@ -332,7 +332,6 @@ impl Builds {
     }
 
     /// Whether a build is being made.
-    #[cfg(test)]
     pub(crate) fn running(&self) -> bool {
         self.running.load(Ordering::SeqCst) > 0
     }
@@ -344,7 +343,6 @@ impl Builds {
     }
 
     /// Whether a build is made and waits for its asker.
-    #[cfg(test)]
     pub(crate) fn ready(&self) -> bool {
         lock(&self.state).values().any(|build| build.built.is_some())
     }

@@ -312,6 +312,8 @@ const reads = `    themeMode: (self: Read) -> "dark" | "light",
     interactive: (self: Read) -> boolean,
     shortcut: (self: Read, name: string) -> string?,
     dialogOpen: (self: Read, key: string) -> boolean,
+    --- The pending key sequence, one entry a stroke; empty when none is pending.
+    keymapPending: (self: Read) -> { KeymapPending },
     composer: (self: Read) -> Composer?,
     tabs: (self: Read) -> { Tab },
     --- Whether session tabs are on in this TUI.

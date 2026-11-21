@@ -276,8 +276,8 @@ normalized transcripts differ. Transcripts are kept in `$TMPDIR/opencode-parity/
 `parity/machines/plugins.json` is a state machine of a plugin's life, read by both clients:
 `crates/tui/tests/all/plugin_machines.rs`, and `parity/machines/plugins.test.tsx`, which drives the TypeScript TUI.
 `bun run test` covers each edge once and the seeded walks; `bun run parity:machines` adds every path to the file's
-depth and the fault trials. The Rust side drives the diff viewer's machine: the drivers of the plugin's life, a
-project's plugin and the manager's keys ran a native plugin library, and went with it (O-192).
+depth and the fault trials. The Rust side runs the plugin as its Luau twin, `parity/plugins/life/init.luau`, beside
+the TypeScript `tui.tsx`.
 
 ## Generated files and drift
 
