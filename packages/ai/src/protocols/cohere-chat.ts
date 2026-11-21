@@ -190,7 +190,7 @@ const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMR
         calls.push({ id: part.id, type: "function", function: { name: part.name, arguments: args } })
         continue
       }
-      if (message.role === "user" && part.type === "media" && part.media.mediaType.startsWith("image/")) {
+      if (message.role === "user" && part.type === "media" && part.media.kind === "image") {
         const url =
           ProviderShared.mediaUrl(part.media) ??
           (yield* ProviderShared.requireInlineMedia("Cohere Chat", part.media)).dataUrl
