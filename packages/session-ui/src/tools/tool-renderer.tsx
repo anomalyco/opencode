@@ -1,5 +1,6 @@
 // Current Session tool presentation grouped by visual family.
 import {
+  type Accessor,
   Component,
   batch,
   createComputed,
@@ -254,6 +255,9 @@ export function displayDirectory(path: string | undefined) {
 }
 
 import { resolveFileDiff } from "../components/session-diff"
+import { factsOf, sameFileFact, summarize, type FileFact } from "../timeline/facts"
+import { contextGroupLabel, webSearchProviderLabel } from "./context-group-label"
+import type { FileRun } from "./file-runs"
 
 export function taskAgentName(raw: string | undefined, list?: readonly { name: string }[]) {
   if (!raw) return undefined
@@ -263,18 +267,6 @@ export function taskAgentName(raw: string | undefined, list?: readonly { name: s
     list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)?.name ??
     `${raw[0].toUpperCase()}${raw.slice(1)}`
   )
-}
-
-const webSearchProviderNames = new Map([
-  ["tinyfish", "TinyFish"],
-  ["opencode", "OpenCode"],
-])
-
-function webSearchProviderLabel(provider: string | undefined, i18n: ReturnType<typeof useI18n>) {
-  if (!provider) return i18n.t("ui.tool.websearch")
-  const name = webSearchProviderNames.get(provider) ?? `${provider[0].toUpperCase()}${provider.slice(1)}`
-
-  return i18n.t("ui.tool.websearch.provider", { provider: name })
 }
 
 function readArgs(input: ToolInput) {
@@ -290,44 +282,6 @@ function skillToolName(input: ToolInput, metadata: ToolMetadata) {
 
 export function currentSkillName(tool: SessionMessageAssistantTool) {
   return skillToolName(toolInput(currentToolInput(tool)), toolMetadata(currentToolMetadata(tool)))
-}
-
-// Context group labels name each tool once; detailed subtitles belong to the tool rows.
-function toolTitle(tool: SessionMessageAssistantTool, i18n: UiI18n) {
-  switch (tool.name) {
-    case "read":
-      return i18n.t("ui.tool.read")
-    case "list":
-      return i18n.t("ui.tool.list")
-    case "glob":
-      return i18n.t("ui.tool.glob")
-    case "grep":
-      return i18n.t("ui.tool.grep")
-    case "browser":
-      return i18n.t("ui.tool.browser")
-    case "webfetch":
-      return i18n.t("ui.tool.webfetch")
-    case "websearch":
-      return webSearchProviderLabel(toolMetadata(currentToolMetadata(tool)).provider, i18n)
-    case "subagent":
-      return i18n.t("ui.tool.agent.default")
-    case "shell":
-      return i18n.t("ui.tool.shell")
-    case "execute":
-      return i18n.t("ui.tool.execute")
-    case "edit":
-      return i18n.t("ui.messagePart.title.edit")
-    case "write":
-      return i18n.t("ui.messagePart.title.write")
-    case "patch":
-      return i18n.t("ui.tool.patch")
-    case "question":
-      return i18n.t("ui.tool.questions")
-    case "skill":
-      return i18n.t("ui.tool.skill")
-    default:
-      return tool.name
-  }
 }
 
 export function urls(text: string | undefined) {
@@ -418,6 +372,7 @@ export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
   | { type: "notice" | "shell" | "text"; id: string; render: () => JSX.Element }
+  | { type: "file"; id: string; file: FileFact; render: () => JSX.Element }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -440,18 +395,6 @@ export function CurrentContextToolGroup(props: {
 
   const pending = createMemo(
     () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
-  )
-
-  const names = createMemo(() =>
-    i18n.list([
-      ...new Set(
-        props.parts.flatMap((part) => {
-          if (part.type !== "tool" && part.type !== "shell") return []
-
-          return [part.type === "tool" ? toolTitle(part, i18n) : i18n.t("ui.tool.shell")]
-        }),
-      ),
-    ]),
   )
 
   const reasoning = createMemo(() => props.parts.flatMap((part) => (part.type === "reasoning" ? [part] : [])))
@@ -489,39 +432,13 @@ export function CurrentContextToolGroup(props: {
   })
 
   const label = createMemo(() => {
-    const thoughts = reasoning().length
-
     if (thinking()) {
       const text = i18n.t("ui.sessionTurn.status.thinking")
 
       return { text, title: text, before: "", count: undefined, between: "", after: "" }
     }
 
-    if (!names() && !thoughts) {
-      const text = i18n.t("ui.messagePart.context.updates")
-
-      return { text, title: "", before: text, count: undefined, between: "", after: "" }
-    }
-
-    const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
-    const count = props.parts.filter((part) => part.type === "tool" || part.type === "shell").length || thoughts
-    const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
-    const index = text.indexOf(title)
-    const before = text.slice(0, index).trim()
-    const countText = String(count)
-    const countIndex = before.indexOf(countText)
-    const after = text.slice(index + title.length).trim()
-
-    if (countIndex === -1) return { text, title, before, count: undefined, between: "", after }
-
-    return {
-      text,
-      title,
-      before: before.slice(0, countIndex).trim(),
-      count,
-      between: before.slice(countIndex + countText.length).trim(),
-      after,
-    }
+    return contextGroupLabel(props.parts, i18n)
   })
 
   const items = createMemo(() =>
@@ -663,6 +580,20 @@ export function CurrentContextToolGroup(props: {
                 return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
               })
 
+              // A change keeps its card while progress reports rebuild the list around it.
+              const file = createMemo(
+                () => {
+                  const value = item()
+
+                  return !Array.isArray(value) && value.type === "file" ? value : undefined
+                },
+                undefined,
+                {
+                  equals: (previous, next) =>
+                    previous === next || (!!previous && !!next && sameFileFact(previous.file, next.file)),
+                },
+              )
+
               const callback = createMemo(() => {
                 const value = item()
 
@@ -679,8 +610,16 @@ export function CurrentContextToolGroup(props: {
                     <Show
                       when={reasoning()}
                       fallback={
-                        <Show when={callback()}>
-                          {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                        <Show
+                          when={file()}
+                          keyed
+                          fallback={
+                            <Show when={callback()}>
+                              {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                            </Show>
+                          }
+                        >
+                          {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
                         </Show>
                       }
                     >
@@ -899,11 +838,13 @@ export function CurrentReadToolGroup(props: {
     ]
   })
 
-  const summary = createMemo(() =>
-    props.names !== undefined && !open() && files().length > props.names
-      ? i18n.plural("ui.timeline.activity.files", files().length)
-      : undefined,
-  )
+  const summary = createMemo(() => {
+    const count = summarize(factsOf(props.tools)).readFiles.length
+
+    return props.names !== undefined && !open() && count > props.names
+      ? i18n.plural("ui.timeline.activity.files", count)
+      : undefined
+  })
 
   const expandable = () => open() || state.truncated || !!summary()
 
@@ -1105,6 +1046,173 @@ export function CurrentFileToolGroup(props: {
     </div>
   )
 }
+
+/** A file group holding a script's changes: each run in order, direct calls drawn as their own group. */
+export function FileChangeRuns(props: {
+  runs: readonly FileRun[]
+  tools: (tools: Accessor<SessionMessageAssistantTool[]>) => JSX.Element
+  render: Component<ToolProps>
+  fileOpen?: (key: string) => boolean | undefined
+  onFileOpenChange?: (key: string, open: boolean) => void
+  onSizeChange?: () => void
+}) {
+  return (
+    <Index each={props.runs}>
+      {(run) => {
+        const tools = createMemo(() => {
+          const value = run()
+
+          return value.type === "tools" ? value.tools : undefined
+        })
+
+        const files = createMemo(() => {
+          const value = run()
+
+          return value.type === "script" ? value.files : undefined
+        })
+
+        return (
+          <Show
+            when={tools()}
+            fallback={
+              <Show when={files()}>
+                {(list) => (
+                  <ScriptChanges
+                    files={list()}
+                    render={props.render}
+                    fileOpen={props.fileOpen}
+                    onFileOpenChange={props.onFileOpenChange}
+                    onSizeChange={props.onSizeChange}
+                  />
+                )}
+              </Show>
+            }
+          >
+            {(list) => props.tools(list)}
+          </Show>
+        )
+      }}
+    </Index>
+  )
+}
+
+// A change's part id: the fact id less its message.
+function scriptChangePartID(file: FileFact) {
+  return file.id.slice(file.id.indexOf(":") + 1)
+}
+
+/**
+ * The changes a script made, in order, one card each: the same file changed twice is two cards. A change without a
+ * diff, past the size cap, to a binary file, a copy or a delete, shows what it did as a patch's file header does. Each
+ * card opens by the change's own id.
+ */
+export function ScriptChanges(props: {
+  files: readonly FileFact[]
+  render: Component<ToolProps>
+  fileOpen?: (key: string) => boolean | undefined
+  onFileOpenChange?: (key: string, open: boolean) => void
+  onSizeChange?: () => void
+}) {
+  const i18n = useI18n()
+
+  // One wrapper, as a direct patch's files share one, so the turn's gap falls around the list and not between changes.
+  return (
+    <div data-component="tool-part-wrapper" data-script-changes="">
+      <Index each={props.files}>
+        {(file) => {
+          const diff = createMemo(
+            () => {
+              const value = {
+                file: file().path,
+                patch: file().patch,
+                additions: file().additions ?? 0,
+                deletions: file().deletions ?? 0,
+                status: file().change ?? "modified",
+              }
+
+              return changedFileDiff(value) ? value : undefined
+            },
+            undefined,
+            // A progress report reads each change again; the same diff keeps its parsed view.
+            {
+              equals: (previous, next) =>
+                previous === next ||
+                (!!previous &&
+                  !!next &&
+                  previous.file === next.file &&
+                  previous.patch === next.patch &&
+                  previous.additions === next.additions &&
+                  previous.deletions === next.deletions &&
+                  previous.status === next.status),
+            },
+          )
+
+          return (
+            <Show
+              when={diff()}
+              fallback={
+                <div
+                  data-component="file-counts"
+                  data-type={file().change}
+                  data-timeline-part-id={scriptChangePartID(file())}
+                >
+                  <FileIcon node={{ path: file().path, type: "file" }} />
+                  <span data-slot="file-counts-name">
+                    <Show when={file().path.includes("/")}>
+                      <span data-slot="file-counts-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
+                    </Show>
+                    <span data-slot="file-counts-filename">{getFilename(file().path)}</span>
+                  </span>
+                  <Switch>
+                    <Match when={file().change === "added"}>
+                      <span data-component="diff-changes" data-appearance="standard">
+                        <span data-slot="diff-changes-additions">{i18n.t("ui.patch.action.created")}</span>
+                      </span>
+                    </Match>
+                    <Match when={file().change === "deleted"}>
+                      <span data-component="diff-changes" data-appearance="standard">
+                        <span data-slot="diff-changes-deletions">{i18n.t("ui.patch.action.deleted")}</span>
+                      </span>
+                    </Match>
+                    <Match when={(file().additions ?? 0) + (file().deletions ?? 0) > 0}>
+                      <DiffChanges
+                        appearance="standard"
+                        markEmpty
+                        changes={{ additions: file().additions ?? 0, deletions: file().deletions ?? 0 }}
+                      />
+                    </Match>
+                  </Switch>
+                </div>
+              }
+            >
+              {(value) => (
+                <div data-script-change="patch" data-timeline-part-id={scriptChangePartID(file())}>
+                  <Dynamic
+                    component={props.render}
+                    tool="patch"
+                    input={{}}
+                    metadata={{ files: [value()] }}
+                    status="completed"
+                    fileOpen={props.fileOpen && (() => props.fileOpen?.(file().id))}
+                    onFileOpenChange={
+                      props.onFileOpenChange &&
+                      ((_: string, open: boolean) => props.onFileOpenChange?.(file().id, open))
+                    }
+                    deferContent
+                    virtualizeDiff={false}
+                    onContentRendered={props.onSizeChange}
+                  />
+                </div>
+              )}
+            </Show>
+          )
+        }}
+      </Index>
+    </div>
+  )
+}
+
+export { fileRuns, runDisclosureKey, type FileRun } from "./file-runs"
 
 export function scrollParent(element: HTMLElement): HTMLElement | undefined {
   const parent = element.parentElement

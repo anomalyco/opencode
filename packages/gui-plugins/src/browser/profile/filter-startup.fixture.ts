@@ -1,4 +1,4 @@
-import { app, session, type Extension, type WebContents, WebContentsView } from "electron"
+import { app, session, type Extension, type WebContents } from "electron"
 import assert from "node:assert/strict"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -38,13 +38,16 @@ void app.whenReady().then(async () => {
   }
 
   const worker = await install("Worker", { background: { service_worker: "worker.js" }, permissions: ["webRequest"] })
-  const dnr = await install("Rules", { permissions: ["declarativeNetRequest"], declarative_net_request: { rule_resources: [{ id: "one", enabled: true, path: "rules.json" }] } })
-  const page = new WebContentsView({ webPreferences: { session: profile, sandbox: true } }).webContents
-  await page.loadURL(new URL("manifest.json", dnr.url).href)
-  await page.executeJavaScript("chrome.declarativeNetRequest.updateEnabledRulesets({disableRulesetIds:['one']})")
+  const dnr = await install("Rules", { permissions: ["declarativeNetRequest"], declarative_net_request: { rule_resources: [{ id: "one", enabled: false, path: "rules.json" }] } })
   const reported: string[] = []
   const fallback = { reported: new Set<string>(), log: (id: string) => reported.push(id) }
-  const result = { worker: await filterReady(profile, worker, signal, fallback), emptyRules: await filterReady(profile, dnr, signal, fallback) }
+  const unconfirmed: string[] = []
+  const gate = createFilterGate(signal, id => unconfirmed.push(id))
+  // Chromium can reject the first manifest navigation even after extension-ready fires.
+  gate.start(dnr.id, life => filterReady(profile, dnr, life, fallback))
+  await gate.wait("http://example.test/", signal)
+  const result = { worker: await filterReady(profile, worker, signal, fallback), emptyRules: !unconfirmed.includes(dnr.id) }
+  assert.deepEqual(unconfirmed, [])
 
   const loaded = Promise.withResolvers<WebContents>()
   app.on("web-contents-created", (_, contents) => {
@@ -53,8 +56,6 @@ void app.whenReady().then(async () => {
   const requests = await install("Unrelated name", { manifest_version: 2, background: { scripts: ["worker.js"] }, permissions: ["webRequest", "http://example.test/*"] })
   const background = await loaded.promise
   const set = (code: string) => background.executeJavaScript(code)
-  const unconfirmed: string[] = []
-  const gate = createFilterGate(signal, id => unconfirmed.push(id))
 
   const start = () => {
     const first = Promise.withResolvers<boolean>()

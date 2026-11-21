@@ -216,7 +216,7 @@ export const Plugin = {
               yield* permission.assert({
                 action: "edit",
                 resources: [target.resource],
-                save: ["*"],
+                save: [FileAccess.always(target)],
                 ...Permission.invocation(context),
               })
               yield* ctx.worktree
@@ -235,7 +235,7 @@ export const Plugin = {
         draft.add({
           name: "models",
           description:
-            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first.",
+            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first. Prefer the standard offering unless the user explicitly requests another tier. Use the listed pricing to compare costs when available; missing pricing does not mean free.",
           input: ModelsInput,
           output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },

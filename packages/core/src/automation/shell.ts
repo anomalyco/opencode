@@ -57,6 +57,7 @@ export const authorize = Effect.fnUntraced(function* (
   )
 })
 
+// Approved once at creation (see authorize); runs intentionally don't recheck permissions. Pause or delete to stop future runs.
 export const start = Effect.fnUntraced(function* (
   owner: SessionSchema.Info,
   action: Automation.ShellAction,

@@ -106,6 +106,8 @@ const selectionFromLines = (range: LineRange): FileSelection => ({
  * The routed session's review: its diffs, selection, and comments. Lives as long as the session screen; `view`
  * returns the screen's routed session, a new object on each switch.
  */
+const sendLabels = { send: "comment.send", steer: "comment.steer", queue: "comment.queue" } as const
+
 export function createReviewModel(input: {
   ctx: SetupContext<typeof Review>
   screen: SessionScreen
@@ -818,6 +820,8 @@ export function createReviewModel(input: {
       commentOrigin: "review",
       preview: comment.preview ?? selectionPreview(comment.file, selection),
     })
+
+    if (comment.send) screen.composer.send(saved.id)
   }
 
   const updateComment = (comment: {
@@ -826,6 +830,7 @@ export function createReviewModel(input: {
     selection: LineRange
     comment: string
     preview?: string
+    send?: boolean
   }) => {
     screen.comment.update(comment.id, comment.comment)
     // The composer keeps a chip's preview unless the update names a new one.
@@ -833,6 +838,8 @@ export function createReviewModel(input: {
       comment.id,
       comment.preview ? { comment: comment.comment, preview: comment.preview } : { comment: comment.comment },
     )
+
+    if (comment.send) screen.composer.send(comment.id)
   }
 
   const removeComment = (comment: { id: string; file: string }) => {
@@ -846,6 +853,18 @@ export function createReviewModel(input: {
     deleteLabel: ctx.t("common.delete"),
     saveLabel: ctx.t("common.save"),
   }))
+
+  const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
+
+  const commentSend = createMemo(() => {
+    const delivery = screen.composer.delivery()
+
+    return {
+      label: ctx.t(sendLabels[delivery ?? "send"]),
+      keys: [mac ? "⌘" : ctx.t("common.key.ctrl"), "⏎"],
+      disabled: delivery === undefined,
+    }
+  })
 
   const open = () => {
     if (!layout.side.opened(view())) layout.side.toggle(view())
@@ -989,6 +1008,7 @@ export function createReviewModel(input: {
     canReview: () => !!view().project && !!stored(),
     comments: {
       actions: commentActions,
+      send: commentSend,
       add: addComment,
       all: () => [...screen.comment.list()],
       focus: () => screen.comment.focus.current(),

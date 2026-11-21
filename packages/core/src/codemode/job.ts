@@ -1,7 +1,7 @@
 export * as CodeModeJob from "./job.js"
 
 import { Identifier } from "@opencode/schema/identifier"
-import { Cause, Context, Deferred, Effect, Exit, Option, type Scope, Semaphore } from "effect"
+import { Cause, Context, Deferred, Duration, Effect, Exit, Option, type Scope, Semaphore } from "effect"
 import { extension } from "mime-types"
 import { Flag } from "../flag.js"
 import { Job } from "../job.js"
@@ -23,7 +23,9 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
 const BLOCK_TIMEOUT = "2 minutes"
 
 type Execute = (context: Tool.Context) => Effect.Effect<Tool.NormalizedResult, Tool.Error>
-type Run = (context: Tool.Context, execute: Execute) => ReturnType<Execute>
+/** The execute call's own `timeout` and `background` inputs, which only exist with `full_codemode`. */
+export type Options = { readonly timeout?: number; readonly background?: boolean }
+type Run = (context: Tool.Context, execute: Execute, options?: Options) => ReturnType<Execute>
 
 /** Only a session drain can hand off work and report its result. */
 export const Current = Context.Reference<Run | undefined>("@opencode/CodeModeJob", { defaultValue: () => undefined })
@@ -45,7 +47,7 @@ export const make = Effect.fnUntraced(function* (
     return bounded.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
   })
 
-  return Effect.fn("CodeModeJob.execute")(function* (context: Tool.Context, execute: Execute) {
+  return Effect.fn("CodeModeJob.execute")(function* (context: Tool.Context, execute: Execute, options?: Options) {
     if (!(yield* flags.enabled("full_codemode"))) return yield* execute(context)
     const id = `cm_${Identifier.ascending()}`
     const sessionID = context.sessionID
@@ -81,9 +83,17 @@ export const make = Effect.fnUntraced(function* (
             return body
           }),
         })
-        const blocked = yield* restore(jobs.block({ id, sessionID }).pipe(Effect.timeoutOption(BLOCK_TIMEOUT))).pipe(
-          Effect.onInterrupt(() => jobs.cancel(id)),
-        )
+        const blocked = options?.background
+          ? Option.none()
+          : yield* restore(
+              jobs
+                .block({ id, sessionID })
+                .pipe(
+                  Effect.timeoutOption(
+                    options?.timeout === undefined ? BLOCK_TIMEOUT : Duration.millis(options.timeout),
+                  ),
+                ),
+            ).pipe(Effect.onInterrupt(() => jobs.cancel(id)))
         if (Option.isSome(blocked) && blocked.value?.type === "finished") return yield* Deferred.await(result)
         const job = yield* jobs.background(id)
         if (!job?.notificationID) return yield* Effect.interrupt
