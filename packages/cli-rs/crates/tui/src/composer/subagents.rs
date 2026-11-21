@@ -80,7 +80,7 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
         .data
         .read(|state| {
             let sessions = state.sessions();
-            let jobs = state.jobs(&state.root(&inner.session));
+            let jobs = state.jobs(&SessionID::from(state.root(&inner.session)));
             family(&sessions, &inner.session)
                 .into_iter()
                 .map(|(session, prefix)| Entry {

@@ -98,7 +98,7 @@ impl Session {
             synced.0.clone(),
             bind!(tui, |tui, _, session: Result<(), opencode_store::Error>| {
                 if session.is_ok() {
-                    let root = tui.data.read(|state| state.root(&read));
+                    let root = tui.data.read(|state| SessionID::from(state.root(&read)));
                     drop(tui.data.job_sync(&root));
                 }
             }),

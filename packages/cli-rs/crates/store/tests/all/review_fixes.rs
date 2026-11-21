@@ -273,6 +273,14 @@ async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
     let (_, changes) = data.changes_since(seen);
     assert!(changes.session(&root), "removing a child changes the root's family");
     assert_eq!(data.read(|state| state.family(&root).len()), 1);
+
+    // A parent cycle ends the walk at the last session before the first one seen twice.
+    data.remember(info(session("ses_b", Some("ses_c"), 0.0)));
+    data.remember(info(session("ses_c", Some("ses_d"), 0.0)));
+    data.remember(info(session("ses_d", Some("ses_b"), 0.0)));
+    data.remember(info(session("ses_a", Some("ses_b"), 0.0)));
+    let roots = data.read(|state| ["ses_a", "ses_b", "ses_c", "ses_d"].map(|id| state.root(id).to_owned()));
+    assert_eq!(roots, ["ses_d", "ses_d", "ses_b", "ses_c"]);
 }
 
 #[tokio::test]
