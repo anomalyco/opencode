@@ -163,6 +163,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
     (remote.capabilities.supports.vision ?? false) ||
     (remote.capabilities.limits.vision?.supported_media_types ?? []).some((item) => item.startsWith("image/"))
   const pdf =
+    route.endpoint !== "chat" &&
     (remote.capabilities.supports.vision ?? false) &&
     (remote.capabilities.limits.vision?.supported_media_types.includes("application/pdf") ?? false)
   const input = ["text"]

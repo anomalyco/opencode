@@ -294,6 +294,12 @@ export const GithubCopilotPlugin = define({
           )
           model.package = route.package
           model.settings = Provider.mergeOverlay(model.settings, { baseURL: route.baseURL })
+          if (route.endpoint === "chat" && model.capabilities.input.includes("pdf")) {
+            model.capabilities = {
+              ...model.capabilities,
+              input: model.capabilities.input.filter((modality) => modality !== "pdf"),
+            }
+          }
         })
       }
     })
