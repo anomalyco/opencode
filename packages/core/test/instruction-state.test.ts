@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
 import { and, asc, eq } from "drizzle-orm"
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { Database } from "@opencode/core/database/database"
+import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -22,10 +23,21 @@ import {
   SessionTable,
 } from "@opencode/core/session/sql"
 import { testEffect } from "./lib/effect"
+import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, InstructionDiscovery.node]), [
     Bus.node.replace(Bus.configured({ persist: true })),
+  ]),
+)
+
+// Durable Object SQLite, which rejects statements that bind more than 100 parameters.
+const durableIt = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, InstructionDiscovery.node]), [
+    Bus.node.replace(Bus.configured({ persist: true })),
+    Database.node.replace(
+      Database.configuredClient(Layer.suspend(() => sqliteLayer({ storage: makeDurableObjectStorage() }))),
+    ),
   ]),
 )
 
@@ -532,6 +544,21 @@ describe("InstructionState", () => {
           current_values: {},
         },
       ])
+    }),
+  )
+
+  durableIt.effect("initializes and renders more values than one statement may bind", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionSchema.ID.make("ses_instruction_many_values")
+      const { db, events } = yield* setup(sessionID)
+      // One source per key, so a session with many API entries reaches this size in practice.
+      const instructions = Instructions.combine(
+        Array.from({ length: 150 }, (_, index) => source(`test/many/${index}`, Effect.succeed(`value ${index}`))),
+      )
+      yield* InstructionState.prepare(db, events, instructions, sessionID)
+      const initial = yield* InstructionState.initial(db, sessionID, instructions)
+      expect(initial).toHaveLength(150)
+      expect(initial[149]).toEqual({ key: Instructions.Key.make("test/many/149"), text: "value 149" })
     }),
   )
 })
