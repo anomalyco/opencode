@@ -1609,6 +1609,51 @@ To use Kimi K2 from Moonshot AI:
 
 ---
 
+### NadirClaw
+
+You can route each request to a cheap or a strong model with [NadirClaw](https://github.com/NadirRouter/NadirClaw), a local router that runs an OpenAI-compatible server on your machine and calls the providers you configure.
+
+1. Install and start NadirClaw.
+
+   ```bash
+   pip install nadirclaw
+   nadirclaw setup
+   nadirclaw serve
+   ```
+
+2. Add it as a provider in your config.
+
+   ```json title="opencode.json" "nadirclaw" {5, 6, 8, 9}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "nadirclaw": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "NadirClaw (local)",
+         "options": {
+           "baseURL": "http://localhost:8856/v1",
+           "apiKey": "local"
+         },
+         "models": {
+           "auto": { "name": "NadirClaw Auto" },
+           "eco": { "name": "NadirClaw Eco" },
+           "premium": { "name": "NadirClaw Premium" }
+         }
+       }
+     }
+   }
+   ```
+
+3. Run the `/models` command and select _NadirClaw Auto_.
+
+   ```txt
+   /models
+   ```
+
+`auto` picks a model per request. `eco` always uses your cheap model and `premium` always uses your strong one. Requests that carry tool definitions, like OpenCode's agent turns, go to the strong model.
+
+---
+
 ### NVIDIA
 
 NVIDIA provides access to Nemotron models and many other open models through [build.nvidia.com](https://build.nvidia.com) for free.
