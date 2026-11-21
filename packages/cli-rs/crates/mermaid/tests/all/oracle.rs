@@ -10,9 +10,9 @@ fn hex(color: Option<Rgba>) -> String {
 }
 
 /// A case as the fixture stores it: lines and per-line [code points, style key] runs.
-pub type Case = (Vec<String>, Vec<Vec<(usize, String)>>);
+type Case = (Vec<String>, Vec<Vec<(usize, String)>>);
 
-pub fn rust_case(source: &str, width: u16, palette: &Palette) -> Option<Case> {
+fn rust_case(source: &str, width: u16, palette: &Palette) -> Option<Case> {
     let diagram = match render(source, width, palette) {
         Rendered::Diagram(diagram) => diagram,
         Rendered::Syntax { prefix: Some(diagram), .. } => diagram,
@@ -33,7 +33,7 @@ pub fn rust_case(source: &str, width: u16, palette: &Palette) -> Option<Case> {
 }
 
 /// Joins neighboring runs with the same style, as TS chunks of equal style may also be split.
-pub fn merged(runs: Vec<(usize, String)>) -> Vec<(usize, String)> {
+fn merged(runs: Vec<(usize, String)>) -> Vec<(usize, String)> {
     let mut out: Vec<(usize, String)> = Vec::new();
     for (count, style) in runs {
         match out.last_mut() {
