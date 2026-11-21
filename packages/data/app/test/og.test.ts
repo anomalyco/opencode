@@ -44,16 +44,16 @@ const inkling = {
     rank: 20,
     totals: { tokens: 357_956_989_789 },
     usage: [
-      { date: "Nov 4", tokens: 0 },
-      { date: "Nov 5", tokens: 12_000_000_000 },
-      { date: "Nov 6", tokens: 140_000_000_000 },
+      { start: "2026-11-04", tokens: 0 },
+      { start: "2026-11-05", tokens: 12_000_000_000 },
+      { start: "2026-11-06", tokens: 140_000_000_000 },
     ],
     updatedAt,
   },
 }
 const thinkingMachines = {
   lab: { id: "thinkingmachines", name: "Thinking Machines", models: [{}, {}, {}] },
-  stats: { totals: { tokens: 357_961_076_097 }, usage: [{ date: "Nov 5", tokens: 12_000_000_000 }], updatedAt },
+  stats: { totals: { tokens: 357_961_076_097 }, usage: [{ start: "2026-11-05", tokens: 12_000_000_000 }], updatedAt },
 }
 
 describe("og.png paths", () => {
