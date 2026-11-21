@@ -698,8 +698,8 @@ fn one(name: &str, kind: Kind, check: Check, what: &str, raw: &str) -> Result<Pa
         (Check::NonEmpty, Parsed::Text(text)) if text.is_empty() => {
             Err(schema("a value with a length of at least 1".into()))
         }
-        (Check::PairingUrl, Parsed::Text(text)) => {
-            pairing_url(text).map(Parsed::Text).map_err(|expected| invalid(raw, expected))
+        (Check::ServerUrl, Parsed::Text(text)) => {
+            server_url(text).map(Parsed::Text).map_err(|expected| invalid(raw, expected))
         }
         _ => Ok(parsed),
     }
@@ -747,7 +747,7 @@ fn parse_int(text: &str) -> Result<i64, &'static str> {
 
 // HTTP(S) URL without credentials, query, fragment or trailing slash. An empty `?` or `#` passes, as WHATWG's
 // `search` and `hash` are then empty.
-fn pairing_url(value: &str) -> Result<String, &'static str> {
+fn server_url(value: &str) -> Result<String, &'static str> {
     let error = "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment";
     let url = opencode_api::js::parse_url(value).map_err(|parse| match parse {
         opencode_api::js::UrlError::NonAsciiHost(_) => opencode_api::js::ASCII_HOST,
