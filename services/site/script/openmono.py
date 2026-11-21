@@ -47,7 +47,9 @@ keys = {0x2303, 0x2318, 0x2325, 0x232B, 0x238B, 0x23CE}
 cyrillic = [(0x0400, 0x052F), (0x1C80, 0x1C8F), (0x2DE0, 0x2DFF), (0xA640, 0xA69F)]
 # The stress marks, which the Cyrillic file has too: a stressed letter such as у́ has no code point of
 # its own, and a browser sets a letter and its mark from one file or falls back for both. (A Latin
-# letter with one of them has a code point of its own, which the Latin file has.)
+# letter with one of them has a code point of its own, which the Latin file has.) The "rest" file has
+# them too, so the Cyrillic rule must come after the rest rule in a stylesheet: a browser asks the
+# last rule that has a character first, and a stressed Russian word then fetches the small file only.
 stress = {0x0300, 0x0301}
 # Blocks where the font has most characters or a few scattered ones, and the ones it lacks are
 # unassigned or rare: Greek, Armenian, phonetic letters, superscripts, currency signs, letterlike

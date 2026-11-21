@@ -16,15 +16,6 @@
 
 @font-face {
   font-family: "OpenMono";
-  src: url("../asset/fonts/openmono-regular-cyrillic.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
-}
-
-@font-face {
-  font-family: "OpenMono";
   src: url("../asset/fonts/openmono-regular-rest.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
@@ -41,6 +32,15 @@
 
 @font-face {
   font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-regular-cyrillic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
+}
+
+@font-face {
+  font-family: "OpenMono";
   src: url("../asset/fonts/openmono-bold-latin.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
@@ -48,15 +48,6 @@
   unicode-range:
     U+0020-007E, U+00A0-017F, U+2000-200D, U+2010-2029, U+202F-2064, U+20AC, U+2122, U+2190-21FF, U+2212, U+2303,
     U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF;
-}
-
-@font-face {
-  font-family: "OpenMono";
-  src: url("../asset/fonts/openmono-bold-cyrillic.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
 }
 
 @font-face {
@@ -77,6 +68,15 @@
 
 @font-face {
   font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-bold-cyrillic.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
+}
+
+@font-face {
+  font-family: "OpenMono";
   src: url("../asset/fonts/openmono-italic-latin.woff2") format("woff2");
   font-weight: 400;
   font-style: italic;
@@ -84,15 +84,6 @@
   unicode-range:
     U+0020-007E, U+00A0-017F, U+2000-200D, U+2010-2029, U+202F-2064, U+20AC, U+2122, U+2190-21FF, U+2212, U+2303,
     U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF;
-}
-
-@font-face {
-  font-family: "OpenMono";
-  src: url("../asset/fonts/openmono-italic-cyrillic.woff2") format("woff2");
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
 }
 
 @font-face {
@@ -113,6 +104,15 @@
 
 @font-face {
   font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-italic-cyrillic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
+}
+
+@font-face {
+  font-family: "OpenMono";
   src: url("../asset/fonts/openmono-bold-italic-latin.woff2") format("woff2");
   font-weight: 700;
   font-style: italic;
@@ -120,15 +120,6 @@
   unicode-range:
     U+0020-007E, U+00A0-017F, U+2000-200D, U+2010-2029, U+202F-2064, U+20AC, U+2122, U+2190-21FF, U+2212, U+2303,
     U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF;
-}
-
-@font-face {
-  font-family: "OpenMono";
-  src: url("../asset/fonts/openmono-bold-italic-cyrillic.woff2") format("woff2");
-  font-weight: 700;
-  font-style: italic;
-  font-display: swap;
-  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
 }
 
 @font-face {
@@ -145,6 +136,15 @@
     U+2ADC, U+2AEE, U+2B0E-2B13, U+2B16, U+2B1D, U+2B25, U+2B29-2B2A, U+2B30, U+2C60-2C7F, U+A720-A7FF, U+AB30-AB6B,
     U+E0B8, U+E0BA, U+E0BC, U+E0BE, U+F882-F892, U+FB01-FB02, U+FFFD, U+10788-107B9, U+1CD06-1CEAB, U+1D538-1D56B,
     U+1DF05-1DF1D, U+1FB82-1FBE7;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-bold-italic-cyrillic.woff2") format("woff2");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
 }
 
 @font-face {
