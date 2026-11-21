@@ -286,6 +286,41 @@ describe("Patch", () => {
     expect(Patch.derive("no-newline.txt", [{ oldLines: ["old"], newLines: ["new"] }], "old").content).toBe("new\n")
   })
 
+  test("keeps a missing final newline when the patch does not touch the last line", () => {
+    expect(Patch.derive("f", [{ oldLines: ["line1"], newLines: ["LINE1"] }], "line1\nline2\nline3").content).toBe(
+      "LINE1\nline2\nline3",
+    )
+    expect(
+      Patch.derive(
+        "update.txt",
+        [
+          { oldLines: ["line 2"], newLines: ["LINE 2"] },
+          { oldLines: ["line 4"], newLines: ["LINE 4"] },
+        ],
+        "line 1\nline 2\nline 3\nline 4\nline 5",
+      ).content,
+    ).toBe("line 1\nLINE 2\nline 3\nLINE 4\nline 5")
+  })
+
+  test("keeps a trailing blank line when the patch does not touch the last line", () => {
+    expect(
+      Patch.derive("update.txt", [{ oldLines: ["line1"], newLines: ["LINE1"] }], "line1\nline2\n\n").content,
+    ).toBe("LINE1\nline2\n\n")
+  })
+
+  test("keeps CRLF endings and a missing final newline", () => {
+    expect(
+      Patch.derive("update.txt", [{ oldLines: ["line1\r"], newLines: ["LINE1\r"] }], "line1\r\nline2\r\nline3")
+        .content,
+    ).toBe("LINE1\r\nline2\r\nline3")
+  })
+
+  test("normalizes the ending when the patch rewrites the last line", () => {
+    expect(
+      Patch.derive("update.txt", [{ oldLines: ["line3"], newLines: ["LINE3"] }], "line1\nline2\nline3").content,
+    ).toBe("line1\nline2\nLINE3\n")
+  })
+
   test("disambiguates updates with change context", () => {
     expect(
       Patch.derive(

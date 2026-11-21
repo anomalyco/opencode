@@ -130,8 +130,11 @@ export function derive(path: string, chunks: ReadonlyArray<UpdateFileChunk>, ori
   const lines = source.text.split("\n")
   if (lines.at(-1) === "") lines.pop()
   const replacements = computeReplacements(lines, path, chunks)
+  const touchesEnd = replacements.some(([start, remove]) => start + remove === lines.length)
   for (const [start, remove, insert] of replacements.reverse()) lines.splice(start, remove, ...insert)
-  if (lines.at(-1) !== "") lines.push("")
+  // A patch that leaves the end of the file alone keeps the original ending.
+  // One that rewrites the last line keeps the normalized ending it has today.
+  if (touchesEnd ? lines.at(-1) !== "" : source.text.endsWith("\n")) lines.push("")
   const next = Bom.split(lines.join("\n"))
   return { content: next.text, bom: source.bom || next.bom }
 }
