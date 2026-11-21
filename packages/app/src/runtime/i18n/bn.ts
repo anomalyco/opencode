@@ -921,7 +921,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "সংযোগ",
   "provider.connect.breadcrumb.label": "সংযোগের ধাপ",
   "provider.connect.methods.description": "{{provider}} কীভাবে সংযুক্ত করবেন তা বেছে নিন।",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "আবার চেষ্টা করুন",
   "provider.connect.console.serviceKeyDescription":

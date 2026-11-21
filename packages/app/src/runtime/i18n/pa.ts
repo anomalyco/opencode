@@ -931,7 +931,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "جوڑو",
   "provider.connect.breadcrumb.label": "جوڑن دے قدم",
   "provider.connect.methods.description": "چنو کہ ⁨{{provider}}⁩ کیویں جوڑنا اے۔",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "فیر کوشش کرو",
   "provider.connect.console.serviceKeyDescription": "OpenCode Console دی سروس اکاؤنٹ API کلید نال جوڑو۔",

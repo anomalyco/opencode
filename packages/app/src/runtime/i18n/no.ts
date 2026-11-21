@@ -983,7 +983,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Koble til",
   "provider.connect.breadcrumb.label": "Tilkoblingstrinn",
   "provider.connect.methods.description": "Velg hvordan du vil koble til {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Prøv igjen",
   "provider.connect.console.serviceKeyDescription":

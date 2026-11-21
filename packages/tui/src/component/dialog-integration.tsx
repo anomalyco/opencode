@@ -66,13 +66,16 @@ const SUBMIT = Symbol("submit")
 // Device-flow codes such as "R283-GOUEO"; when present they are copied instead of the URL.
 const OAUTH_CODE = /[A-Z0-9]{4}-[A-Z0-9]{4,5}/
 
+// OpenCode Go connects through OpenCode, so it's only listed for people who already saved a Go key.
 export function integrationOptions(list: IntegrationInfo[]) {
-  return list.toSorted(
-    (a, b) =>
-      (INTEGRATION_PRIORITY[a.id] ?? 99) - (INTEGRATION_PRIORITY[b.id] ?? 99) ||
-      a.name.localeCompare(b.name) ||
-      a.id.localeCompare(b.id),
-  )
+  return list
+    .filter((integration) => integration.id !== "opencode-go" || credentialConnections(integration).length > 0)
+    .toSorted(
+      (a, b) =>
+        (INTEGRATION_PRIORITY[a.id] ?? 99) - (INTEGRATION_PRIORITY[b.id] ?? 99) ||
+        a.name.localeCompare(b.name) ||
+        a.id.localeCompare(b.id),
+    )
 }
 
 export function connectMethods(integration: IntegrationInfo): ConnectMethod[] {
