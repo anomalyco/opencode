@@ -430,6 +430,12 @@ export interface KeymapCommand {
     readonly aliases?: string[]
     /** Keeps the slash command in the prompt and passes its raw input to run. */
     readonly arguments?: true
+    /**
+     * The command also works without an argument, so choosing it from the prompt runs it right away instead of
+     * leaving the argument to be typed. A command that requires an argument leaves this unset, and choosing it
+     * rewrites the prompt to the command name.
+     */
+    readonly optional?: true
   }
   /** Promotes the command in discovery UI. */
   readonly suggested?: boolean | (() => boolean)

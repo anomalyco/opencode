@@ -785,7 +785,7 @@ function App() {
         title: "Switch session",
         category: "Session",
         suggested: data.session.list().length > 0,
-        slash: { name: "sessions", aliases: ["resume", "continue"], arguments: true as const },
+        slash: { name: "sessions", aliases: ["resume", "continue"], arguments: true as const, optional: true as const },
         run: (input?: string) => {
           const sessionID = input?.trim()
           if (!sessionID) {
