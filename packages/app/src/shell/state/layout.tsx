@@ -10,10 +10,11 @@ import type { Project } from "@/runtime/server/types"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { TabStorage } from "@/shell/tabs/schema"
+import { useTabs } from "@/shell/tabs/tabs"
 import { createScrollPersistence, type SessionScroll } from "./scroll"
 import type { ClosedSideTab } from "@/runtime/plugin/closed-tabs"
 import { SessionStateKey } from "@/runtime/server/scope"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
+import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys, sessionKeyOpen } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
 import {
   appendSessionTab,
@@ -256,6 +257,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
   init: () => {
     const servers = useServers()
     const platform = usePlatform()
+    const tabs = useTabs()
 
     const [store, setStore, _, ready] = persisted(
       { ...Persist.global("layout"), previousKey: "layout.v6" },
@@ -434,6 +436,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         used,
         view: Object.keys(store.sessionView),
         tabs: Object.keys(store.sessionTabs),
+        // A session open in a shell tab keeps its side tabs, however long ago the person looked at it.
+        open: (key) => sessionKeyOpen(key, untrack(() => tabs.store), servers.scope),
       })
 
       if (drop.length === 0) return
