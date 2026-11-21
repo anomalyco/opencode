@@ -7,7 +7,7 @@ import { createSessionBackground } from "@/session/requests/background"
 const tool = (
   id: string,
   name: string,
-  metadata: Record<string, string>,
+  metadata: Record<string, string | boolean>,
   input: Record<string, string> = {},
   status: "completed" | "running" = "completed",
   time: SessionMessageAssistantTool["time"] = { created: 0 },
@@ -249,6 +249,44 @@ describe("createSessionBackground", () => {
         { type: "shell", partID: "shell-part", id: undefined, label: "build", agent: undefined, started: 31 },
       ])
       expect(background.tasks()).toEqual([{ id: "serve", type: "shell", label: "serve", started: 50 }])
+      dispose()
+    })
+  })
+
+  test("counts a script only once its execute call has moved it to the background", () => {
+    createRoot((dispose) => {
+      const [store, setStore] = createStore<{ messages: ReturnType<typeof assistant>[] }>({
+        // Every script runs as a job, so a foreground script has a running job while its call blocks the turn.
+        messages: [
+          assistant("current", [
+            tool("script-part", "execute", { background: true }, { code: "await build()" }, "running", {
+              created: 10,
+              ran: 11,
+            }),
+          ]),
+        ],
+      })
+
+      const background = createSessionBackground({
+        sessionID: () => "root",
+        messages: () => store.messages,
+        sessions: () => [],
+        status: () => "idle",
+        shells: () => [],
+        jobs: () => [
+          { kind: "codemode", id: "cm_script", sessionID: "root", status: "running", time: { started: 11 } },
+          { kind: "codemode", id: "cm_other", sessionID: "other", status: "running", time: { started: 11 } },
+        ],
+      })
+
+      expect(background.scripts()).toEqual([])
+
+      setStore("messages", [
+        assistant("current", [tool("script-part", "execute", { jobID: "cm_script" }, { code: "await build()" })]),
+      ])
+      expect(background.scripts()).toEqual([
+        { id: "cm_script", type: "script", label: "await build()", started: 11 },
+      ])
       dispose()
     })
   })

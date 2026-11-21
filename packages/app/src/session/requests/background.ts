@@ -212,7 +212,8 @@ export function createSessionBackground(input: {
     return [...subagents(), ...shells]
   })
 
-  // The session's own scripts moved to the background, while their job runs.
+  // The session's own scripts moved to the background, while their job runs. Every script runs as a job, so a
+  // foreground one only counts once its execute call has ended with the job's id.
   const scripts = createMemo((): Script[] => {
     const id = input.sessionID()
 
@@ -220,7 +221,8 @@ export function createSessionBackground(input: {
     const current = history()
 
     return (input.jobs?.() ?? []).flatMap((job) => {
-      if (job.kind !== "codemode" || job.status !== "running" || job.sessionID !== id) return []
+      if (job.kind !== "codemode" || job.status !== "running" || job.sessionID !== id || !current.scripts.has(job.id))
+        return []
 
       return [
         {
