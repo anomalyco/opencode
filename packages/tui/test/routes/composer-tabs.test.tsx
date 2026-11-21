@@ -74,11 +74,31 @@ test("composer tabs switch to the requested tab once it registers, until the use
 })
 
 test("the picker opens on the first busy tab, else Subagents", () => {
+  // A script counts once its execute call has moved it to the background.
+  const moved = [
+    {
+      id: "msg",
+      type: "assistant",
+      content: [
+        {
+          type: "tool",
+          id: "part",
+          name: "execute",
+          state: { status: "completed", input: {}, metadata: { jobID: "job_1" } },
+        },
+      ],
+    },
+  ]
   const counts = (jobs: unknown[], shells: unknown[]) =>
     busyCounts({
       data: {
         job: { list: () => jobs },
-        session: { family: () => ["ses_root", "ses_child"], status: () => "idle", get: () => undefined },
+        session: {
+          family: () => ["ses_root", "ses_child"],
+          status: () => "idle",
+          get: () => undefined,
+          message: { list: () => moved },
+        },
         shell: { list: () => shells },
       } as unknown as Plugin.Context["data"],
       sessionID: "ses_root",
