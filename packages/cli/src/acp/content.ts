@@ -136,10 +136,11 @@ export function partsToContentChunks(parts: readonly ReplayPart[]): ContentChunk
 }
 
 function resourceLinkToPart(link: ResourceLink): PromptPart {
-  if (link.uri.startsWith("file://")) {
+  const url = link.uri.toLowerCase().startsWith("file:") && URL.canParse(link.uri) ? new URL(link.uri) : undefined
+  if (url?.protocol === "file:") {
     return {
       type: "file",
-      url: link.uri,
+      url: url.href,
       filename: link.name || filenameFromUri(link.uri) || "file",
       mime: link.mimeType ?? "text/plain",
     }
