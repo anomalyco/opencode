@@ -366,7 +366,12 @@ export function createTabMarquee(animations: () => boolean) {
   return { ...marquee, hovered, enter, leave, leaveHovered, reset }
 }
 
-function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsController; onClose: () => void }) {
+function TabContextMenu(props: {
+  state: TabContextMenuState
+  tabs: SessionTabsController
+  orientation: "horizontal" | "vertical"
+  onClose: () => void
+}) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const background = () => theme.background.raised.base
@@ -374,6 +379,12 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
   const dialog = useDialog()
   const clipboard = useClipboard()
   const toast = useToast()
+  const closeAfter = (sessionID: string) => {
+    const tabs = props.tabs.tabs()
+    const index = tabs.findIndex((tab) => tab.sessionID === sessionID)
+    if (index === -1) return
+    tabs.slice(index + 1).forEach((tab) => props.tabs.close(tab.sessionID))
+  }
   onCleanup(Keymap.use().mode.push("menu"))
   Keymap.createLayer(() => ({
     mode: "menu",
@@ -383,6 +394,8 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
     const sessionID = props.state.sessionID
     const title = props.state.title
     const closed = (props.tabs.recentlyClosed?.() ?? []).slice(0, 10)
+    const tabs = props.tabs.tabs()
+    const index = sessionID ? tabs.findIndex((tab) => tab.sessionID === sessionID) : -1
     return [
       ...(sessionID && props.tabs.add ? [{ title: NEW_SESSION_TAB_TITLE, run: () => props.tabs.add?.() }] : []),
       ...(sessionID
@@ -400,6 +413,14 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
                   .then(() => toast.show({ message: "Session ID copied to clipboard", variant: "info" }))
                   .catch(toast.error),
             },
+            ...(index >= 0 && index < tabs.length - 1
+              ? [
+                  {
+                    title: props.orientation === "vertical" ? "Close tabs below" : "Close tabs to the right",
+                    run: () => closeAfter(sessionID),
+                  },
+                ]
+              : []),
             { title: "Close", run: () => props.tabs.close(sessionID) },
           ]
         : []),
@@ -1265,7 +1286,14 @@ function VerticalSessionTabs(props: {
         )}
       </Show>
       <Show when={contextMenu()}>
-        {(state) => <TabContextMenu state={state()} tabs={tabs} onClose={() => setContextMenu(undefined)} />}
+        {(state) => (
+          <TabContextMenu
+            state={state()}
+            tabs={tabs}
+            orientation="vertical"
+            onClose={() => setContextMenu(undefined)}
+          />
+        )}
       </Show>
     </box>
   )
@@ -1782,7 +1810,14 @@ function HorizontalSessionTabs(props: {
         </text>
       </Show>
       <Show when={contextMenu()}>
-        {(state) => <TabContextMenu state={state()} tabs={tabs} onClose={() => setContextMenu(undefined)} />}
+        {(state) => (
+          <TabContextMenu
+            state={state()}
+            tabs={tabs}
+            orientation="horizontal"
+            onClose={() => setContextMenu(undefined)}
+          />
+        )}
       </Show>
     </box>
   )
