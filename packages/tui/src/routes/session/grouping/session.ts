@@ -176,9 +176,18 @@ export function partitionPending(rows: SessionRow[], pending: Set<string>) {
 }
 
 export function hasPart(rows: SessionRow[], ref: PartRef) {
-  return rows.some((row) => {
-    if (row.type === "part") return row.ref.messageID === ref.messageID && row.ref.partID === ref.partID
-    if (row.type !== "group") return false
-    return groupRefs(row, true).some((item) => item.messageID === ref.messageID && item.partID === ref.partID)
-  })
+  const same = (item: PartRef) => item.messageID === ref.messageID && item.partID === ref.partID
+  const visit = (nodes: readonly GroupNode<SessionEntry, GroupKind>[]): boolean => {
+    for (let index = nodes.length - 1; index >= 0; index--) {
+      const node = nodes[index]
+      if (node.type === "group" ? visit(node.children) : node.entry.type === "part" && same(node.entry.ref)) return true
+    }
+    return false
+  }
+  // Deltas land on the newest rows, so search from the end.
+  for (let index = rows.length - 1; index >= 0; index--) {
+    const row = rows[index]
+    if (row.type === "part" ? same(row.ref) : row.type === "group" && visit(row.children)) return true
+  }
+  return false
 }
