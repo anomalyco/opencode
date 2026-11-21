@@ -48,12 +48,12 @@ test("draws terminal characters whose font files arrive after the first paint", 
   const icons = await holdRoute(page, /OpenMono-icons[^/]*\.woff2/)
   const rest = await holdRoute(page, /OpenMono-Regular-rest[^/]*\.woff2/)
 
-  // A folder icon and a check mark on the first row, with the cursor, whose row the terminal redraws by itself, on
-  // the last one.
+  // A folder icon and a Greek letter (λ, in the "rest" file) on the first row, with the cursor, whose row the terminal
+  // redraws by itself, on the last one.
   const { persistentPty } = await openSession(page, {
     name: "Terminals",
     persistentPty: {
-      initial: [{ id: "pty_icons", sessionID: SESSION, title: "Build", output: "ls \uf07b \u2713\x1b[999;1H" }],
+      initial: [{ id: "pty_icons", sessionID: SESSION, title: "Build", output: "ls \uf07b \u03bb\x1b[999;1H" }],
     },
   })
 
@@ -84,7 +84,7 @@ test("draws terminal characters whose font files arrive after the first paint", 
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
   // The same text on the third row, first drawn with the files loaded, is what the first row must now show.
-  persistentPty.output("pty_icons", "\x1b[3;1Hls \uf07b \u2713\x1b[999;1H")
+  persistentPty.output("pty_icons", "\x1b[3;1Hls \uf07b \u03bb\x1b[999;1H")
   await expect.poll(() => row(2)).toBeDefined()
   const loaded = await row(2)
   expect(loaded).not.toBe(fallback)
