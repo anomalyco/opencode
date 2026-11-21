@@ -17,15 +17,19 @@ import {
   CurrentReadToolGroup,
   currentSkillName,
   displayDirectory,
+  joinScriptFileRun,
+  sameScriptFileRun,
   scrollParent,
   toolInput,
   toolMetadata,
   type ContextGroupPart,
+  type ScriptFilePart,
+  type ScriptFileRun,
 } from "../../tools/tool-renderer"
 import { TimelineEventRow } from "../event-row"
 import { toolEvent, workKey, type TimelineEvent } from "../events"
 import { toolRule } from "../rules"
-import { sameFileFact, toolStopped } from "../../timeline/facts"
+import { toolStopped } from "../../timeline/facts"
 import { activityLabel, activityText, usedLabel } from "./activity-label"
 import { FileGroup } from "./file-group"
 import { ThoughtRow } from "./thought"
@@ -73,8 +77,9 @@ export function ContextGroup(props: {
     (props.open ? props.parts : []).reduce<
       (
         | SessionMessageAssistantTool[]
-        | Exclude<ActivityGroupPart, SessionMessageAssistantTool | { type: "event" }>
+        | Exclude<ActivityGroupPart, SessionMessageAssistantTool | ScriptFilePart | { type: "event" }>
         | WorkRun
+        | ScriptFileRun
       )[]
     >((groups, tool) => {
       const previous = groups.at(-1)
@@ -90,6 +95,14 @@ export function ContextGroup(props: {
         }
 
         groups.push({ type: "work", id: tool.id, events: [event] })
+
+        return groups
+      }
+
+      if (tool.type === "file") {
+        const run = previous && !Array.isArray(previous) && previous.type === "files" ? previous : undefined
+
+        if (!joinScriptFileRun(run, tool)) groups.push({ type: "files", id: tool.id, parts: [tool] })
 
         return groups
       }
@@ -219,17 +232,17 @@ export function ContextGroup(props: {
                     return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
                   })
 
-                  // A change keeps its card while progress reports rebuild the list around it.
+                  // A script's changes keep their cards while progress reports rebuild the list around them.
                   const file = createMemo(
                     () => {
                       const value = item()
 
-                      return !Array.isArray(value) && value.type === "file" ? value : undefined
+                      return !Array.isArray(value) && value.type === "files" ? value : undefined
                     },
                     undefined,
                     {
                       equals: (previous, next) =>
-                        previous === next || (!!previous && !!next && sameFileFact(previous.file, next.file)),
+                        previous === next || (!!previous && !!next && sameScriptFileRun(previous, next)),
                     },
                   )
 
@@ -267,7 +280,11 @@ export function ContextGroup(props: {
                                     </Show>
                                   }
                                 >
-                                  {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
+                                  {(run) => (
+                                    <div data-slot="context-tool-group-item">
+                                      {run.parts[0]!.render(run.parts.map((part) => part.file))}
+                                    </div>
+                                  )}
                                 </Show>
                               }
                             >

@@ -403,9 +403,9 @@ export function createSessionTimelineRowRenderer(input: {
                 type: "file",
                 id: ref.partID,
                 file: script,
-                render: () => (
+                render: (files) => (
                   <ScriptChanges
-                    files={[script]}
+                    files={files}
                     render={ToolRegistry.render("patch") ?? GenericTool}
                     fileOpen={(path) =>
                       input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
