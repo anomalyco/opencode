@@ -380,8 +380,38 @@ const layer = Layer.effect(
                 cancel: input.cancel,
               }
               const initialName = input.definitions?.get(input.call.name)?.name ?? input.call.name
-              const initial = initialName === "execute" && codemode ? codemode.tool : direct.get(initialName)
-              const event = yield* beforeExecute(input.call.name, initial, input.call.input, context)
+              // Weaker models sometimes call a Code Mode tool at the top level, by its path or registry ID. When this
+              // request offered execute, resolve the call to that tool first, so it runs like any other call.
+              const program =
+                codemode &&
+                initialName !== "execute" &&
+                !direct.has(initialName) &&
+                (!input.definitions || input.definitions.has("execute"))
+                  ? CodeModeTool.find(codemode.inventory, initialName)
+                  : undefined
+              const callContext = program ? { ...context, codemode: true } : context
+              const initial =
+                program?.registration ??
+                (initialName === "execute" && codemode ? codemode.tool : direct.get(initialName))
+              const event = yield* beforeExecute(program?.id ?? input.call.name, initial, input.call.input, callContext)
+              if (program && event.tool === program.id) {
+                const path = CodeModeTool.qualifiedName(program.registration)
+                const note = `Note: ${path} is a Code Mode tool, so it is only callable inside execute. This call ran anyway; next time call it there, as \`await tools.${path}(input)\`.`
+                return yield* executeTool(program.registration, program.id, event.input, callContext).pipe(
+                  Effect.map((result) => ({
+                    ...result,
+                    content: [{ type: "text" as const, text: note }, ...result.content],
+                  })),
+                  Effect.mapError(
+                    (error) =>
+                      new Tool.Error({
+                        message: `${note}\n\n${error.message}`,
+                        error: error.error,
+                        ...(error.metadata === undefined ? {} : { metadata: error.metadata }),
+                      }),
+                  ),
+                )
+              }
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
               if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
@@ -394,29 +424,6 @@ const layer = Layer.effect(
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
-              // Weaker models sometimes call a Code Mode tool at the top level, by its path or registry ID. When this
-              // request offered execute, run it as a program would and say how to call it next time.
-              const inventory =
-                codemode && (!input.definitions || input.definitions.has("execute")) ? codemode.inventory : undefined
-              const found = inventory && CodeModeTool.find(inventory, name)
-              if (inventory && found) {
-                const path = CodeModeTool.qualifiedName(found.registration)
-                const note = `Note: ${path} is a Code Mode tool, so it is only callable inside execute. This call ran anyway; next time call it there, as \`await tools.${path}(input)\`.`
-                const result = yield* run(inventory.tools, found.registration, found.id, event.input, {
-                  ...context,
-                  codemode: true,
-                }).pipe(
-                  Effect.mapError(
-                    (error) =>
-                      new Tool.Error({
-                        message: `${note}\n\n${error.message}`,
-                        error: error.error,
-                        ...(error.metadata === undefined ? {} : { metadata: error.metadata }),
-                      }),
-                  ),
-                )
-                return { ...result, content: [{ type: "text" as const, text: note }, ...result.content] }
-              }
               return yield* new Tool.Error({
                 message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
               })

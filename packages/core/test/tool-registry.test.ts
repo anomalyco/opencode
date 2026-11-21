@@ -646,9 +646,8 @@ describe("Tool", () => {
           text: expect.stringContaining("call it there, as `await tools.acme.tools.echo(input)`"),
         })
       }
-      expect(seen.filter((event) => event.info)).toEqual(
-        Array.from({ length: 2 }, () => ({ tool: "acme_tools_echo", info: true, codemode: true })),
-      )
+      // execute.before fires once per call, with the tool that runs.
+      expect(seen).toEqual(Array.from({ length: 2 }, () => ({ tool: "acme_tools_echo", info: true, codemode: true })))
       // A tool this request doesn't offer stays unknown.
       const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
       expect((yield* denied.execute(call("acme.tools.echo")).pipe(Effect.flip)).message).toContain(
