@@ -32,10 +32,10 @@ export async function loadHomePage() {
   })
   return {
     updatedAt: stats.updatedAt,
-    usage: stats.usage.Go["2M"],
-    users: stats.users.Go["2M"],
+    usage: { daily: stats.usage.Go["2M"], weekly: stats.weekly.usage },
+    users: { daily: stats.users.Go["2M"], weekly: stats.weekly.users },
     leaderboard: { daily: stats.leaderboard.Go["1D"].map(link), weekly: stats.leaderboard.Go["1W"].map(link) },
-    market: stats.market["2M"],
+    market: { daily: stats.market["2M"], weekly: stats.weekly.market },
     tokenCost: priceTokenCostFromCatalog(stats.tokenCost.Go, catalog),
     cacheRatio: stats.cacheRatio.Go,
     sessionCost: stats.sessionCost.Go,
