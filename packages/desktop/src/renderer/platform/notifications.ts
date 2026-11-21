@@ -37,6 +37,7 @@ export function createDesktopNotify(
       toasts.delete(activation.tag)
 
       if (!activation.action) return toast?.onClick?.()
+
       if (!toast?.onAction) return fallBack(toast)
 
       toast.onAction(activation.action).catch(() => fallBack(toast))
