@@ -69,8 +69,15 @@ const modelID = (model: Model.Info) => model.modelID ?? model.id
 
 function claudeInfo(model: Model.Info) {
   const id = modelID(model)
-  const familyFirst = /(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d+)(?:[.-](\d+))?/i.exec(id)
-  const versionFirst = /claude-(\d+)(?:[.-](\d+))?-(opus|sonnet|haiku|fable|mythos)/i.exec(id)
+  const match = (text: string) => ({
+    familyFirst: /(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d+)(?:[.-](\d+))?/i.exec(text),
+    versionFirst: /claude-(\d+)(?:[.-](\d+))?-(opus|sonnet|haiku|fable|mythos)/i.exec(text),
+  })
+  // A Bedrock application inference profile ARN carries no Claude version, so fall back to
+  // model.family, which names the Claude model an ARN points at.
+  const idMatch = match(id)
+  const { familyFirst, versionFirst } =
+    idMatch.familyFirst ?? idMatch.versionFirst ? idMatch : match(model.family ?? "")
   const family = (familyFirst?.[1] ?? versionFirst?.[3])?.toLowerCase()
   const major = Number(familyFirst?.[2] ?? versionFirst?.[1])
   const minor = Number(familyFirst?.[3] ?? versionFirst?.[2] ?? 0)
@@ -448,7 +455,10 @@ const openrouter: Protocol = (model, support) => {
 
 const bedrockConverse: Protocol = (model, support) => {
   const id = modelID(model)
-  const claude = id.includes("anthropic")
+  const claude =
+    id.includes("anthropic") ||
+    claudeInfo(model).family !== undefined ||
+    Boolean(model.family?.toLowerCase().includes("claude"))
   const fields = (fields: Record<string, unknown>): Overlay => ({ body: { additionalModelRequestFields: fields } })
   switch (support.type) {
     case "effort":
