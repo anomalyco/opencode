@@ -735,6 +735,64 @@ describe("ChatGPTPlugin", () => {
   //   }),
   // )
 
+  it.effect("adds the models the account reports and keeps the ones it leaves out", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      const kv = yield* KV.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, (draft) => {
+          draft.package = "@opencode/ai/providers/openai"
+          draft.settings = { transport: "websocket" }
+        })
+        // A model the account's list names and the pinned fallback does not.
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.9"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+        // A model the pinned fallback names and the account's list leaves out.
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+        // A model neither of them names.
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-4.1"), () => {})
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { clientID: "oaiapp_issued" },
+        }),
+      })
+      // The account's own list, as the last sync cached it.
+      yield* PluginHost.storage(kv, ChatGPTPlugin.id).set("models:oaiapp_issued", [
+        {
+          slug: "gpt-5.9",
+          display_name: "GPT-5.9",
+          visibility: "list",
+          supported_in_api: true,
+          context_window: 272_000,
+          input_modalities: ["text", "image"],
+        },
+      ])
+      yield* addPlugin()
+
+      // The account's list adds a model the pinned fallback never names.
+      const reported = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.9")))
+      expect(reported.enabled).toBe(true)
+      expect(reported.limit).toEqual({ context: 272_000, output: 128_000 })
+      expect(reported.capabilities?.input).toEqual(["text", "image"])
+      // A model the account's list leaves out is still served.
+      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5"))).enabled).toBe(true)
+      // A model neither of them names is not.
+      expect(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).toBeUndefined()
+    }),
+  )
+
   it.effect("routes ChatGPT over HTTP with only the listed catalog fallback models", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
