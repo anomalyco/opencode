@@ -20,6 +20,7 @@ import { ProjectIcon } from "@/shell/layout/project-icon"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
 import { tabKey, useTabs, type SessionTab, type Tab } from "@/shell/tabs/tabs"
 import { ProjectSessionRow } from "./project-session-row"
+import { worktreeBadge } from "./sidebar-worktree"
 import { isSidebarSessionActivity, mergeSidebarSessions } from "./sidebar-sessions"
 import type { TabStripLeading, TabStripSection } from "./tab-strip"
 import { SidebarViewMenu } from "./sidebar-view-menu"
@@ -313,6 +314,13 @@ export function SidebarCustomized(props: {
   const projectOptions = () =>
     [...projectLabels().values()].map((project) => ({ id: project.id, label: displayName(project) }))
 
+  const worktreeOf = (row: Row) =>
+    worktreeBadge(
+      row.session?.location?.directory,
+      row.project ?? (row.projectID ? projectLabels().get(row.projectID) : undefined),
+      language.t("sidebar.worktree.local"),
+    )
+
   const showLabel = (row: Row, group: SidebarGroup<Row> | undefined) => {
     if (!view.show.serverLabels || !row.conn) return
 
@@ -379,6 +387,7 @@ export function SidebarCustomized(props: {
             openTab={false}
             active={value().row.active}
             label={showLabel(value().row, group())}
+            worktree={worktreeOf(value().row)}
             depth={rowProps.flat ? 0 : depthOf(value().row, rowByKey())}
             project={avatarOf(value().row, group())}
             onOpen={() => openSession(value().row)}
