@@ -112,6 +112,46 @@ describe("stats rendering", () => {
     expect(output.split(/\r?\n/).every((line) => line.length <= 48)).toBe(true)
   })
 
+  test("aligns detail rows by terminal cell width", () => {
+    const output = renderStats(
+      {
+        ...stats,
+        models: ["model", "模型", "e\u0301", "猫".repeat(30)].map((id) => ({
+          model: { providerID: "custom", id },
+          steps: 6,
+          tokens: stats.tokens,
+          cost: 12.34,
+        })),
+      },
+      options({ models: true }),
+    )
+    const starts = output
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("custom/"))
+      .map((line) => Bun.stringWidth(line.slice(0, line.search(/\d/))))
+    expect(starts.length).toBe(4)
+    expect(new Set(starts).size).toBe(1)
+  })
+
+  test("keeps a joined emoji intact when truncating compact rows", () => {
+    const output = renderStats(
+      {
+        ...stats,
+        models: [
+          {
+            model: { providerID: "custom", id: "xxxxxxxxxx👩‍💻suffix" },
+            steps: 6,
+            tokens: stats.tokens,
+            cost: 12.34,
+          },
+        ],
+      },
+      options({ models: true, width: 20 }),
+    )
+    expect(output).toContain("custom/xxxxxxxxxx👩‍💻…")
+    expect(output).not.toContain("👩…")
+  })
+
   test("renders a concise empty state", () => {
     const output = renderStats(
       { ...stats, sessions: 0, subagents: 0, prompts: 0, steps: 0, activeDays: 0, streak: 0, activity: [] },

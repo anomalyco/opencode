@@ -282,11 +282,26 @@ function tableHeader(label: string, second: string, third: string, fourth: strin
 }
 
 function tableRow(label: string, second: string, third: string, fourth: string) {
-  return `${truncate(label, 34).padEnd(34)}${second.padStart(10)}${third.padStart(12)}${fourth.padStart(12)}`
+  return `${padCells(truncate(label, 34), 34)}${second.padStart(10)}${third.padStart(12)}${fourth.padStart(12)}`
 }
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
 function truncate(value: string, width: number) {
-  return value.length <= width ? value : value.slice(0, width - 1) + "…"
+  if (Bun.stringWidth(value) <= width) return value
+  let kept = ""
+  let cells = 0
+  for (const { segment } of graphemes.segment(value)) {
+    const next = cells + Bun.stringWidth(segment)
+    if (next > width - 1) break
+    kept += segment
+    cells = next
+  }
+  return kept + "…"
+}
+
+function padCells(value: string, width: number) {
+  return value + " ".repeat(Math.max(0, width - Bun.stringWidth(value)))
 }
 
 function formatNumber(value: number) {
