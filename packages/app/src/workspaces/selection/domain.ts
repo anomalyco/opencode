@@ -125,9 +125,18 @@ export function pickerRelativePath(base: string | undefined, path: string) {
 
 export type PickerPolicy = ReturnType<typeof pickerMode>
 
-// The folder a typed or chosen path opens, or undefined when the mode does not allow it.
-export function resolvePickerTarget(policy: PickerPolicy, path: string, home: string, base: string) {
-  return policy.navigation(pickerAbsoluteInput(cleanPickerInput(path), home, base))
+// The folder a typed or chosen path opens, or undefined when the mode does not allow it. A resolved path
+// comes from a listing or suggestion, so its leading and trailing spaces are part of the name.
+export function resolvePickerTarget(
+  policy: PickerPolicy,
+  path: string,
+  home: string,
+  base: string,
+  options?: { readonly preserveWhitespace?: boolean },
+) {
+  return policy.navigation(
+    pickerAbsoluteInput(cleanPickerInput(path, { trim: !options?.preserveWhitespace }), home, base),
+  )
 }
 
 export function displayInputDirectory(path: string, home: string) {
@@ -269,10 +278,11 @@ import {
   type TaskPriority,
 } from "./queue-machine"
 
-export function cleanPickerInput(value: string) {
+export function cleanPickerInput(value: string, options?: { readonly trim?: boolean }) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
+  const cleaned = first.replace(/[\u0000-\u001F\u007F]/g, "")
 
-  return first.replace(/[\u0000-\u001F\u007F]/g, "").trim()
+  return options?.trim === false ? cleaned : cleaned.trim()
 }
 
 function normalizePickerPath(input: string) {

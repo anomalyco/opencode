@@ -192,11 +192,11 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
   function choose(directory: string) {
     dispatchCombobox({ type: "dismissed" })
-    dispatchTree({ type: "directory.chosen", ...navigation(directory), fromInput: false })
+    dispatchTree({ type: "directory.chosen", ...navigation(directory, true), fromInput: false })
   }
 
-  function navigation(path: string) {
-    return { path, home: home(), fallback: start() || home(), located: Boolean(location()) }
+  function navigation(path: string, resolved = false) {
+    return { path, home: home(), fallback: start() || home(), located: Boolean(location()), resolved }
   }
 
   function dispatchTree(event: PickerTreeEvent) {
@@ -377,7 +377,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     if (effect.type === "choose.directory") {
       return dispatchTree({
         type: "directory.chosen",
-        ...navigation(effect.path),
+        ...navigation(effect.path, effect.resolved),
         fromInput: true,
         submit: effect.submit,
       })

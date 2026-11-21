@@ -25,13 +25,14 @@ const navigate = (path: string, located = true): PickerTreeEvent => ({
   located,
 })
 
-const choose = (path: string, fromInput = false): PickerTreeEvent => ({
+const choose = (path: string, fromInput = false, resolved = false): PickerTreeEvent => ({
   type: "directory.chosen",
   path,
   home: HOME,
   fallback: HOME,
   located: true,
   fromInput,
+  resolved,
 })
 
 function run(events: PickerTreeEvent[], state = createPickerTreeState(), mode = policy) {
@@ -49,6 +50,14 @@ function ready(root: string, nodes: PickerNode[]) {
 function dirs(state: PickerTreeState) {
   return state.status === "ready" ? state.dirs : {}
 }
+
+test("a chosen path keeps its trailing space while typed navigation trims it", () => {
+  const chosen = run([choose("/home/user/work ", false, true)])
+  const typed = run([navigate("/home/user/work ")])
+
+  expect(chosen.state).toMatchObject({ status: "loading", root: HOME, selectChild: "/home/user/work " })
+  expect(typed.state).toMatchObject({ status: "loading", root: "/home/user/work" })
+})
 
 test("a child folder that fails leaves the root readable and retries on its next expand", () => {
   const state = ready(HOME, [folder("work")])
