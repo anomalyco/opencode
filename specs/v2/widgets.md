@@ -80,7 +80,7 @@ A handler gets the current state (and the event's value, see Events) and returns
 built with the prelude helpers `submit(value)` / `dismiss()` (final: the widget closes) or
 `send(value, { wake?, state? })` (a message to the agent; the widget stays open). Returning `undefined` keeps the
 state. Optional top-level **hooks** take the events that belong to no node: `onKey(state, key)`,
-`onFocus(state, focused)`, `onFullscreen(state, on)` and `onCapture(state, captured)` (`widgets-input.md`,
+`onFocus(state, focused)`, `onFullscreen(state, on, close)` and `onCapture(state, captured)` (`widgets-input.md`,
 `widgets-fullscreen.md`); a widget template without a hook never sees that event. State and data are plain JSON. Programs
 must be deterministic and must not rely on time or randomness. There is no `update` function: the lint rejects one.
 
@@ -242,6 +242,8 @@ type Frame = {
   width: number; height: number; scale: number   // logical size and device pixel ratio
   pointer: { x: number; y: number; down: boolean } | null
   dark: boolean
+  close?: { x: number; y: number; width: number; height: number } | null   // full screen: the close button's area
+                      // over this canvas, in its coordinates, or null (widgets-fullscreen.md)
 }
 type DrawOutput = { commands: Command[] }
 ```

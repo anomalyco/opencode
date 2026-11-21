@@ -23,6 +23,7 @@ export {
   Node,
   type Paint,
   type Pointer,
+  type Rect,
   type Row,
   type Segment,
   type Select,

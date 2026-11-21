@@ -504,3 +504,28 @@ test("table: a large table builds in linear time and lines up exactly", async ()
   expect(lines.at(-1)).toBe("item 299  " + count(299).padStart(5))
   expect(canvases(view!)).toHaveLength(rows)
 })
+
+test("in full screen, diagrams with content in the top-right corner lay out below the close button", async () => {
+  for (const name of ["heatmap", "treemap", "timeline", "sequence", "sankey"] as const) {
+    const plain = await start(name, examples[name])
+    const covered = await start(name, examples[name])
+    const canvas = canvases(plain.view)[0]!
+    const height = canvas.height
+    // The close button reaches 14 px into the canvas at its right end.
+    const close = { x: WIDTH - 52, y: -30, width: 44, height: 44 }
+    const without = (await plain.draw(frame(canvas, 10))).commands
+    const below = (await covered.draw({ ...frame(canvas, 10), height: height + 14, close })).commands
+    expect([name, below]).toEqual([name, [["translate", 0, 14], ...without]])
+    // Taps agree with the drawing: the same point, 14 px lower, picks the same thing.
+    const at = { x: WIDTH / 2, y: height / 2, width: WIDTH, height }
+    for (const kind of ["down", "up"] as const) {
+      await plain.dispatch({ id: canvas.id!, type: "pointer", value: { kind, ...at } })
+      await covered.dispatch({
+        id: canvas.id!,
+        type: "pointer",
+        value: { kind, ...at, y: at.y + 14, height: height + 14, close },
+      })
+    }
+    expect([name, covered.state]).toEqual([name, plain.state])
+  }
+})

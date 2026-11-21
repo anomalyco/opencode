@@ -113,18 +113,29 @@ function __widget_value(entry, value) {
   return undefined
 }
 
-// A pointer event's value: absolute `{ kind, x, y, width, height }`, or `{ kind, dx, dy, button }` under capture.
+// The full-screen close button's area a client reports (widgets-fullscreen.md), or null.
+function __widget_rect(value) {
+  if (!value || typeof value !== "object") return null
+  const fields = [value.x, value.y, value.width, value.height]
+  if (!fields.every((field) => typeof field === "number" && Number.isFinite(field))) return null
+  return { x: value.x, y: value.y, width: value.width, height: value.height }
+}
+
+// A pointer event's value: absolute `{ kind, x, y, width, height, close? }`, or `{ kind, dx, dy, button }` under
+// capture. `close` is the full-screen close button's area in the node's coordinates, when it overlaps the node.
 function __widget_pointer(value) {
   if (!value || typeof value !== "object" || !["down", "move", "up"].includes(value.kind)) return undefined
   const number = (field) => (typeof field === "number" && Number.isFinite(field) ? field : 0)
   if (typeof value.x !== "number" && (typeof value.dx === "number" || typeof value.button === "number"))
     return { kind: value.kind, dx: number(value.dx), dy: number(value.dy), button: number(value.button) }
+  const close = __widget_rect(value.close)
   return {
     kind: value.kind,
     x: number(value.x),
     y: number(value.y),
     width: number(value.width),
     height: number(value.height),
+    ...(close ? { close } : {}),
   }
 }
 
@@ -273,7 +284,9 @@ function __widget_dispatch(state, event, data) {
   }
   if (event.type === "focus") return typeof onFocus === "function" ? onFocus(state, event.value === true) : undefined
   if (event.type === "fullscreen")
-    return typeof onFullscreen === "function" ? onFullscreen(state, event.value === true) : undefined
+    return typeof onFullscreen === "function"
+      ? onFullscreen(state, event.value === true, __widget_rect(event.close))
+      : undefined
   if (event.type === "capture")
     return typeof onCapture === "function" ? onCapture(state, event.value === true) : undefined
   if (event.type !== "press" && event.type !== "change" && event.type !== "pointer") return undefined
@@ -315,7 +328,7 @@ const widget = (() => {
     const result = handler(...args)
     if (result && typeof result.then === "function") result.then(undefined, fail)
   }
-  const emit = (kind, value) => hooks[kind].slice().forEach((hook) => call(hook, value))
+  const emit = (kind, ...values) => hooks[kind].slice().forEach((hook) => call(hook, ...values))
   const dispatch = (event) => {
     if (event.type === "key") {
       const key = __widget_key(event.value)
@@ -328,7 +341,8 @@ const widget = (() => {
       if (event.value !== true) api.keys.clear()
       return emit("focus", event.value === true)
     }
-    if (event.type === "fullscreen" || event.type === "capture") return emit(event.type, event.value === true)
+    if (event.type === "fullscreen") return emit("fullscreen", event.value === true, __widget_rect(event.close))
+    if (event.type === "capture") return emit("capture", event.value === true)
     if (event.type === "pointer") api.pointer = __widget_pointer(event.value) ?? api.pointer
     const entry = live.handlers[event.id]
     if (!entry || entry.event !== event.type) return

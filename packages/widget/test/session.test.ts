@@ -104,7 +104,7 @@ test("system events reach only the hooks and control events only the handlers", 
     function init() { return { log: [] } }
     function onKey(state, key) { return { log: [...state.log, "key:" + key.kind + ":" + key.code] } }
     function onFocus(state, focused) { return { log: [...state.log, "focus:" + focused] } }
-    function onFullscreen(state, on) { return { log: [...state.log, "fullscreen:" + on] } }
+    function onFullscreen(state, on, close) { return { log: [...state.log, "fullscreen:" + on + ":" + JSON.stringify(close)] } }
     function onCapture(state, captured) { return { log: [...state.log, "capture:" + captured] } }
   `)
   const session = await WidgetSession.start(hooked, null)
@@ -124,7 +124,12 @@ test("system events reach only the hooks and control events only the handlers", 
   // System events carrying a control's id still go to the hooks, never the control's handler.
   await session.dispatch({ id: id(go), type: "focus", value: true })
   await session.dispatch({ id: id(check), type: "key", value: key as never })
-  await session.dispatch({ id: id(go), type: "fullscreen", value: true })
+  await session.dispatch({
+    id: id(go),
+    type: "fullscreen",
+    value: true,
+    close: { x: 300, y: 8, width: 44, height: 44 },
+  })
   await session.dispatch({ id: "", type: "capture", value: false })
   // Control events go to the node with that id only, and only with the type it takes.
   await session.dispatch({ id: "", type: "press" })
@@ -134,7 +139,14 @@ test("system events reach only the hooks and control events only the handlers", 
   await session.dispatch(press(id(go)))
   await session.dispatch({ id: id(check), type: "change", value: true })
   expect(session.state).toEqual({
-    log: ["focus:true", "key:down:KeyA", "fullscreen:true", "capture:false", "press", "check:true"],
+    log: [
+      "focus:true",
+      "key:down:KeyA",
+      "fullscreen:true:" + JSON.stringify({ x: 300, y: 8, width: 44, height: 44 }),
+      "capture:false",
+      "press",
+      "check:true",
+    ],
   })
   // Without hooks, system events change nothing.
   const plain = await WidgetSession.start(counter, data)
@@ -239,4 +251,20 @@ test("a session runs events in order and keeps its state when a step fails", asy
 
 test("a session whose init fails does not start", async () => {
   expect(await WidgetSession.start(counter, null).catch((error: unknown) => error)).toBeInstanceOf(StepError)
+})
+
+test("in full screen a canvas's pointer carries the close button's area; off screen it has none", async () => {
+  const canvas = program(`
+    function init() { return { seen: [] } }
+    function view(state) {
+      return ui.canvas({ height: 100, onPointer: (state, p) => ({ seen: [...state.seen, p.close ?? null] }) })
+    }
+  `)
+  const session = await WidgetSession.start(canvas, null)
+  const value = { kind: "down" as const, x: 10, y: 10, width: 200, height: 100 }
+  const close = { x: 148, y: -20, width: 44, height: 44 }
+  await session.dispatch({ id: "0", type: "pointer", value })
+  await session.dispatch({ id: "0", type: "pointer", value: { ...value, close } })
+  await session.dispatch({ id: "0", type: "pointer", value: { ...value, close: { x: "?" } as never } })
+  expect(session.state).toEqual({ seen: [null, close, null] })
 })

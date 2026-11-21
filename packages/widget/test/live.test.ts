@@ -127,6 +127,7 @@ test("system events go only to widget.on hooks, control events only to handlers"
       widget.capturePointer()
       widget.on("focus", (on) => seen.push("focus:" + on))
       widget.on("capture", (on) => seen.push("capture:" + on))
+      widget.on("fullscreen", (on, close) => seen.push("fullscreen:" + on + ":" + (close && close.width)))
       const off = widget.on("key", (key) => seen.push("key:" + key.code + ":" + [...widget.keys].join("+")))
       widget.render(ui.column([
         ui.shader("fn shade(p: vec2f) -> vec4f { return vec4f(1.0); }", {
@@ -143,6 +144,7 @@ test("system events go only to widget.on hooks, control events only to handlers"
   const button = idOf(widget, "button")
   widget.event({ id: button, type: "focus", value: true })
   widget.event({ id: "", type: "capture", value: true })
+  widget.event({ id: "", type: "fullscreen", value: true, close: { x: 300, y: 8, width: 44, height: 44 } })
   widget.event({ id: shader, type: "pointer", value: { kind: "move", dx: 3, dy: -2 } })
   widget.event(key("KeyA"))
   widget.event(key("KeyB"))
@@ -158,6 +160,7 @@ test("system events go only to widget.on hooks, control events only to handlers"
       seen: [
         "focus:true",
         "capture:true",
+        "fullscreen:true:44",
         'pointer:{"kind":"move","dx":3,"dy":-2,"button":0}',
         "key:KeyA:KeyA",
         "key:KeyB:KeyA+KeyB",

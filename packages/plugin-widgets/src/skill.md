@@ -12,7 +12,8 @@ The `widget` tool shows an interactive surface inline in the conversation, rende
 - **Live programs**: an `async main` running while the widget is open, with timers, frames, pointer input and HTTPS
   fetch: games, timers, simulations, animations, self-refreshing dashboards.
 - **Full screen**: `fullscreen: true` on the root node lets clients offer a full-screen button (games, big visuals);
-  `fill: true` on a canvas or shader grows it to the screen's height.
+  `fill: true` on a canvas or shader grows it to the screen's height. The close button then covers the top-right
+  corner: keep content out of the area in `close` (`onFullscreen`'s third argument; `frame.close` on a canvas).
 
 Decide in this order:
 
@@ -76,7 +77,7 @@ their identity. Keys, focus, full screen and pointer capture only reach hooks yo
 `view(state, data)` → node · `draw(state, data, frame)` → canvas commands (pure; `frame.key` is the canvas's `key`).
 Handlers get `(state, value)` and return the next state, `submit(value)` / `dismiss()` (final) or
 `send(value, { wake, state })` (a message to you; stays open; `wake: false` = next turn). Hooks: `onKey(state, key)`,
-`onFocus(state, focused)`, `onFullscreen(state, on)`, `onCapture(state, on)`.
+`onFocus(state, focused)`, `onFullscreen(state, on, close)`, `onCapture(state, on)`.
 
 ```js
 function view(state, data) {

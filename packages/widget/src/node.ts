@@ -139,6 +139,14 @@ export type Node =
   | Canvas
   | Shader
 
+/** A rectangle in a node's logical pixels. */
+export interface Rect {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
 /** Pointer input on a canvas or shader with an `id`: `move` only while down, at most once per frame. */
 export interface Pointer {
   readonly kind: "down" | "move" | "up"
@@ -147,6 +155,8 @@ export interface Pointer {
   /** The canvas's logical size, so a handler can hit-test a layout that follows the width. */
   readonly width: number
   readonly height: number
+  /** In full screen, the close button's area in this node's coordinates when it overlaps it (as in `Frame`). */
+  readonly close?: Rect
 }
 
 /** Pointer input while the widget holds pointer capture (widgets-input.md): relative movement, buttons on down/up. */
@@ -174,8 +184,8 @@ export type WidgetEvent =
   | { readonly id: string; readonly type: "focus"; readonly value: boolean }
   /** Pointer capture granted or released. */
   | { readonly id: string; readonly type: "capture"; readonly value: boolean }
-  /** Full screen entered or left (widgets-fullscreen.md). */
-  | { readonly id: string; readonly type: "fullscreen"; readonly value: boolean }
+  /** Full screen entered or left (widgets-fullscreen.md); `close` is the close button's area in the root's coordinates. */
+  | { readonly id: string; readonly type: "fullscreen"; readonly value: boolean; readonly close?: Rect | null }
 
 /** What `draw` gets: the canvas being drawn, the time, its size and the pointer over it. */
 export interface Frame {
@@ -192,6 +202,8 @@ export interface Frame {
   readonly scale: number
   readonly pointer: { readonly x: number; readonly y: number; readonly down: boolean } | null
   readonly dark: boolean
+  /** In full screen, the close button's area in this canvas's coordinates when it overlaps the canvas, else null. */
+  readonly close?: Rect | null
 }
 
 export type StepInput =

@@ -51,6 +51,7 @@ function choose(state, data) {
 }
 
 function tap(state, data, pointer) {
+  pointer = below(pointer)
   if (pointer.kind !== "up") return state
   const hit = locate(state, frameOf(state, pointer.width, pointer.height), pointer.x, pointer.y)
   const same = hit && state.selected && hit.kind === state.selected.kind && hit.index === state.selected.index
@@ -58,7 +59,9 @@ function tap(state, data, pointer) {
 }
 
 function draw(state, data, frame) {
+  frame = below(frame)
   const g = ui.draw()
+  if (frame.top) g.translate(0, frame.top)
   const box = frameOf(state, frame.width, frame.height)
   const hover = frame.pointer && !frame.pointer.down ? locate(state, box, frame.pointer.x, frame.pointer.y) : null
   const active = hover ?? state.selected
@@ -334,4 +337,18 @@ function fit(text, width, size) {
 function ease(p) {
   const clamped = Math.max(0, Math.min(1, p))
   return 1 - Math.pow(1 - clamped, 3)
+}
+
+// In full screen, the layout starts below the close button when it overlaps this canvas (widgets-fullscreen.md):
+// `close` comes with the frame and the pointer, so drawing and hit testing agree.
+function below(area) {
+  const top = area.close ? Math.max(0, area.close.y + area.close.height) : 0
+  if (top === 0) return area
+  return {
+    ...area,
+    top,
+    height: area.height - top,
+    ...(typeof area.y === "number" ? { y: area.y - top } : {}),
+    ...(area.pointer ? { pointer: { ...area.pointer, y: area.pointer.y - top } } : {}),
+  }
 }
