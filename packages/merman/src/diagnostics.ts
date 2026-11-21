@@ -14,3 +14,11 @@ export class MermaidSyntaxError extends Error {
     this.name = "MermaidSyntaxError"
   }
 }
+
+/** A cyclic hierarchy must show its full source rather than a cached partial diagram. */
+export class MermaidSubgraphCycleError extends Error {
+  constructor() {
+    super("Cyclic flowchart subgraphs are not supported")
+    this.name = "MermaidSubgraphCycleError"
+  }
+}
