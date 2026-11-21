@@ -49,6 +49,18 @@ export const WindowSetTrafficLightsPosition = Rpc.make("WindowSetTrafficLightsPo
   payload: { x: Schema.Number, y: Schema.Number },
 })
 
+export const WindowShowToast = Rpc.make("WindowShowToast", {
+  payload: {
+    tag: Schema.String,
+    title: Schema.String,
+    body: Schema.String,
+    actions: Schema.Array(Schema.Struct({ id: Schema.String, label: Schema.String })),
+  },
+  success: Schema.Boolean,
+})
+
+export const WindowDismissToast = Rpc.make("WindowDismissToast", { payload: { tag: Schema.String } })
+
 export const WindowRpcs = RpcGroup.make(
   WindowRequestMicrophone,
   WindowSetVoiceCallActive,
@@ -65,4 +77,6 @@ export const WindowRpcs = RpcGroup.make(
   WindowSetPinchZoomEnabled,
   WindowSetTitlebar,
   WindowSetTrafficLightsPosition,
+  WindowShowToast,
+  WindowDismissToast,
 )

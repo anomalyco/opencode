@@ -36,6 +36,15 @@ const requestTitles = {
   "websearch.provider": "notification.permission.title",
 } as const
 
+// A permission toast's buttons, the dock's primary answer first.
+const permissionDecisions = ["once", "always", "reject"] as const
+
+const decisionLabels = {
+  once: "ui.permission.allowOnce",
+  always: "ui.permission.allowAlways",
+  reject: "ui.permission.deny",
+} as const
+
 export function openNotificationSession(tabs: NotificationTabs, server: ServerConnection.Key, sessionID: string) {
   const tab = tabs.addSessionTab({ server, sessionId: sessionID })
 
@@ -435,12 +444,27 @@ export function createServerNotificationState(input: {
         { id: requestID, pending: () => !!pending() },
       ])
 
-      return platform.notify(
-        language.t(requestTitles[kind]),
-        session.title ?? sessionID,
-        () => openNotificationSession(tabs, input.key, target),
-        { tag: requestTag(requestID), detail: requestDetail(input.data, kind, sessionID, requestID) },
-      )
+      const open = () => openNotificationSession(tabs, input.key, target)
+
+      const tag = requestTag(requestID)
+
+      const detail = requestDetail(input.data, kind, sessionID, requestID)
+
+      if (kind !== "permission")
+        return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, open, { tag, detail })
+
+      // A permission's toast answers it as its dock does; an answer that fails opens the session to answer there.
+      return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, open, {
+        tag,
+        detail,
+        actions: permissionDecisions.map((decision) => ({ id: decision, label: language.t(decisionLabels[decision]) })),
+        onAction: (id) => {
+          const decision = permissionDecisions.find((item) => item === id)
+
+          if (!decision) return open()
+          void input.data.session.permission.reply({ sessionID, requestID, decision }).catch(open)
+        },
+      })
     })
   }
 

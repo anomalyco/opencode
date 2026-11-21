@@ -45,6 +45,13 @@ class FakeNotification extends EventTarget implements Notification {
   }
 }
 
+// Main posts no toast with buttons, as when `opencode://` opens another install.
+const plainToasts = {
+  showToast: async () => false,
+  dismissToast: async () => {},
+  onToastActivated: () => () => {},
+}
+
 afterEach(() => {
   created.length = 0
   events.length = 0
@@ -63,6 +70,7 @@ describe("desktop notifications", () => {
       setWindowFocus: async () => {
         events.push("api.setWindowFocus")
       },
+      ...plainToasts,
     }).notify
 
     await notify("Response ready", "Refactor auth flow", () => {
@@ -95,6 +103,7 @@ describe("desktop notifications", () => {
         getWindowFocused: async () => false,
         showWindow: async () => {},
         setWindowFocus: async () => {},
+        ...plainToasts,
       }).notify
 
       await notify("Session error")
@@ -121,6 +130,7 @@ describe("desktop notifications", () => {
       getWindowFocused: async () => true,
       showWindow: async () => {},
       setWindowFocus: async () => {},
+      ...plainToasts,
     }).notify
 
     await notify("Response ready", "Active session")
@@ -148,7 +158,12 @@ describe("desktop notifications", () => {
     globalThis.Notification = FakeNotification
 
     const desktop = createDesktopNotify(
-      { getWindowFocused: async () => false, showWindow: async () => {}, setWindowFocus: async () => {} },
+      {
+        getWindowFocused: async () => false,
+        showWindow: async () => {},
+        setWindowFocus: async () => {},
+        ...plainToasts,
+      },
       input.os,
     )
 
@@ -159,5 +174,111 @@ describe("desktop notifications", () => {
 
     expect(events).toEqual(input.events)
     expect(created.map((notification) => notification.icon)).toEqual([input.icon, input.icon])
+  })
+
+  test.each([
+    {
+      server: "s1",
+      name: "on windows a button answers through main's toast",
+      os: "windows" as const,
+      posts: true,
+      activations: [{ tag: "s1\0request:per_2", action: "once" }],
+      events: ["main.show:s1\0request:per_1", "main.show:s1\0request:per_2", "action:per_2:once"],
+    },
+    {
+      server: "s2",
+      name: "on windows a click on main's toast body opens the request",
+      os: "windows" as const,
+      posts: true,
+      activations: [{ tag: "s2\0request:per_1" }, { tag: "s2\0request:per_1", action: "once" }],
+      events: ["main.show:s2\0request:per_1", "main.show:s2\0request:per_2", "open:per_1"],
+    },
+    {
+      server: "s3",
+      name: "on windows a toast main can't post falls back to a plain notification",
+      os: "windows" as const,
+      posts: false,
+      activations: [{ tag: "s3\0request:per_1", action: "once" }],
+      events: [
+        "main.show:s3\0request:per_1",
+        "created:Permission required:Fix login\nbash: git status",
+        "main.show:s3\0request:per_2",
+        "created:Permission required:Fix login\nbash: git status",
+      ],
+    },
+    {
+      server: "s4",
+      name: "on macos buttons are ignored",
+      os: "macos" as const,
+      posts: true,
+      activations: [{ tag: "s4\0request:per_1", action: "once" }],
+      events: ["created:Permission required:Fix login", "created:Permission required:Fix login"],
+    },
+  ])("$name", async (input) => {
+    globalThis.Notification = FakeNotification
+    const listeners: Array<(activation: { tag: string; action?: string }) => void> = []
+
+    const desktop = createDesktopNotify(
+      {
+        getWindowFocused: async () => false,
+        showWindow: async () => {},
+        setWindowFocus: async () => {},
+        showToast: async (toast) => {
+          events.push(`main.show:${toast.tag}`)
+
+          return input.posts
+        },
+        dismissToast: async (tag) => {
+          events.push(`main.dismiss:${tag}`)
+        },
+        onToastActivated: (listener) => {
+          listeners.push(listener)
+
+          return () => {}
+        },
+      },
+      input.os,
+    )
+
+    const actions = [{ id: "once", label: "Allow once" }]
+
+    for (const id of ["per_1", "per_2"]) {
+      await desktop.notify("Permission required", "Fix login", () => events.push(`open:${id}`), {
+        tag: `${input.server}\0request:${id}`,
+        detail: "bash: git status",
+        actions,
+        onAction: (action) => events.push(`action:${id}:${action}`),
+      })
+    }
+
+    input.activations.forEach((activation) => listeners.forEach((listener) => listener(activation)))
+
+    expect(events).toEqual(input.events)
+  })
+
+  test("on windows dismissing an answered request takes main's toast back", async () => {
+    const desktop = createDesktopNotify(
+      {
+        getWindowFocused: async () => false,
+        showWindow: async () => {},
+        setWindowFocus: async () => {},
+        showToast: async () => true,
+        dismissToast: async (tag) => {
+          events.push(`main.dismiss:${tag}`)
+        },
+        onToastActivated: () => () => {},
+      },
+      "windows",
+    )
+
+    await desktop.notify("Permission required", "Fix login", undefined, {
+      tag: "server\0request:per_3",
+      actions: [{ id: "once", label: "Allow once" }],
+      onAction: () => {},
+    })
+    desktop.dismissNotification?.("server\0request:per_3")
+    desktop.dismissNotification?.("server\0request:per_3")
+
+    expect(events).toEqual(["main.dismiss:server\0request:per_3"])
   })
 })

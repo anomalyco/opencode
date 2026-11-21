@@ -8,6 +8,12 @@ export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("Deep
   urls: Schema.Array(Schema.String),
 }) {}
 
+// A toast this window posted was clicked: on a button when `action` is set, else on its body.
+export class ToastActivated extends Schema.TaggedClass<ToastActivated>()("ToastActivated", {
+  tag: Schema.String,
+  action: Schema.optional(Schema.String),
+}) {}
+
 export class MenuCommandTriggered extends Schema.TaggedClass<MenuCommandTriggered>()("MenuCommandTriggered", {
   id: Schema.String,
   /** A key equivalent chose the item, rather than a click on the menu. */
@@ -80,6 +86,7 @@ export class SidecarChanged extends Schema.TaggedClass<SidecarChanged>()("Sideca
 
 export const DesktopEvent = Schema.Union([
   DeepLinksOpened,
+  ToastActivated,
   SidecarChanged,
   MenuCommandTriggered,
   WindowFullscreenChanged,

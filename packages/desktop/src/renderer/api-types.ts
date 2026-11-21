@@ -60,6 +60,15 @@ export type ElectronAPI = {
   onWindowFullscreenChanged(cb: (fullscreen: boolean) => void): () => void
   setWindowFocus(): Promise<void>
   showWindow(): Promise<void>
+  /** Posts a Windows toast with buttons; false when it can't, so the caller posts a plain notification. */
+  showToast(toast: {
+    tag: string
+    title: string
+    body: string
+    actions: ReadonlyArray<{ id: string; label: string }>
+  }): Promise<boolean>
+  dismissToast(tag: string): Promise<void>
+  onToastActivated(cb: (activation: { tag: string; action?: string }) => void): () => void
   relaunch(): void
   getZoomFactor(): Promise<number>
   setZoomFactor(factor: number): Promise<void>

@@ -1,7 +1,10 @@
 import type { Platform } from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 
-type DesktopNotifyAPI = Pick<ElectronAPI, "getWindowFocused" | "showWindow" | "setWindowFocus">
+type DesktopNotifyAPI = Pick<
+  ElectronAPI,
+  "getWindowFocused" | "showWindow" | "setWindowFocus" | "showToast" | "dismissToast" | "onToastActivated"
+>
 
 const MAX_ACTIVE_NOTIFICATIONS = 40
 
@@ -13,11 +16,33 @@ const activeNotifications = new Set<Notification>()
 // Windows toasts by tag, so a repeat replaces its toast and an answer takes it out of the notification center.
 const tagged = new Map<string, Notification>()
 
+// What the toasts with buttons main posted for this window run when clicked, by tag.
+const answerable = new Map<string, { readonly onClick?: () => void; readonly onAction: (id: string) => void }>()
+
 export function createDesktopNotify(
   api: DesktopNotifyAPI,
   os?: "macos" | "windows" | "linux",
 ): Pick<Platform, "notify" | "dismissNotification"> {
   const windows = os === "windows"
+
+  const forget = (tag: string) => {
+    tagged.get(tag)?.close()
+
+    if (!answerable.delete(tag)) return
+    void api.dismissToast(tag).catch(() => undefined)
+  }
+
+  if (windows) {
+    api.onToastActivated((activation) => {
+      const toast = answerable.get(activation.tag)
+
+      if (!toast) return
+      answerable.delete(activation.tag)
+
+      if (activation.action) return toast.onAction(activation.action)
+      toast.onClick?.()
+    })
+  }
 
   return {
     notify: async (title, description, onClick, options) => {
@@ -27,10 +52,28 @@ export function createDesktopNotify(
       const tag = windows ? options?.tag : undefined
       const detail = windows ? clip(options?.detail) : undefined
 
-      if (tag) tagged.get(tag)?.close()
+      const body = [description, detail].filter(Boolean).join("\n")
+
+      if (tag) forget(tag)
+
+      if (tag && options?.actions?.length && options.onAction) {
+        const posted = await api.showToast({ tag, title, body, actions: options.actions }).catch(() => false)
+
+        if (posted) {
+          if (answerable.size >= MAX_ACTIVE_NOTIFICATIONS) {
+            const oldest = answerable.keys().next().value
+
+            if (oldest !== undefined) answerable.delete(oldest)
+          }
+
+          answerable.set(tag, { onClick, onAction: options.onAction })
+
+          return
+        }
+      }
 
       const init: NotificationOptions = {
-        body: [description, detail].filter(Boolean).join("\n"),
+        body,
         // On Windows the renderer's own icon, resolved against the page, so a toast needs no network to show it.
         icon: windows ? "favicon-96x96-v3.png" : "https://opencode.ai/favicon-96x96-v3.png",
         silent: true,
@@ -69,9 +112,7 @@ export function createDesktopNotify(
         notification.close()
       }
     },
-    dismissNotification: (tag) => {
-      tagged.get(tag)?.close()
-    },
+    dismissNotification: forget,
   }
 }
 

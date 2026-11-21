@@ -4,6 +4,7 @@ import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DeepLinks } from "../deep-links"
+import { Toasts } from "../notifications"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsOrigin } from "../windows/state"
@@ -103,14 +104,17 @@ const runtime = Layer.effect(
     const deepLinks = yield* DeepLinks.make(focusWindow)
 
     const secondInstance = (_event: Event, argv: string[]) => {
-      const urls = argv.filter((arg) => arg.startsWith("opencode://"))
+      const links = argv.filter((arg) => arg.startsWith("opencode://"))
+
+      // A toast's button answers where the person is, without bringing the app forward.
+      const urls = links.filter((url) => !Toasts.activate(url, () => focusWindow(getLastFocusedWindow())))
 
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
         deepLinks.receive(urls)
       }
 
-      if (!urls.length) focusWindow(getLastFocusedWindow())
+      if (!links.length) focusWindow(getLastFocusedWindow())
     }
 
     const openUrl = (event: Event, url: string) => {
