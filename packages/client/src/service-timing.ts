@@ -1,6 +1,10 @@
 export type EnsureTiming = {
   readonly pollInterval: number
   readonly requestTimeout: number
+  // How long a live but silent service stays registered before the client replaces it. A resume from sleep
+  // can leave probes unanswered while the process is healthy, so this window must outlast that recovery.
+  // The policy measures it on the monotonic clock, so a wall-clock jump cannot close it early.
+  readonly unresponsiveAfter: number
   readonly spawnDelay: number
   readonly maxSpawnDelay: number
   readonly promiseTimeout: number
@@ -16,6 +20,7 @@ const timings = new WeakMap<object, EnsureTiming>()
 export const defaultEnsureTiming: EnsureTiming = {
   pollInterval: 25,
   requestTimeout: 2_000,
+  unresponsiveAfter: 30_000,
   spawnDelay: 5_000,
   maxSpawnDelay: 30_000,
   promiseTimeout: 120_000,

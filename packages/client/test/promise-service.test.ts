@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { writeFile } from "node:fs/promises"
 import { Service, type EnsureReason } from "../src/promise/service"
 import {
   catchesSigterm,
@@ -203,25 +204,105 @@ test("reports a bounded contender stderr tail with native promises", async () =>
   expect(error.message.length).toBeLessThan(9_000)
 }, 10_000)
 
-test("evicts an unresponsive registered service before starting its replacement", async () => {
+test("replaces a registered service that stays unresponsive", async () => {
+  const ensureFast = accelerate(Service.ensure, { unresponsiveAfter: 300 })
   await using fixture = await serviceFixture()
   const registration = fixture.registration
   const existing = fixture.spawn("hanging")
   await fixture.waitForFile()
   const original = await Bun.file(registration).json()
 
-  const endpoint = await ensure({
+  const endpoint = await ensureFast({
     file: registration,
     version: "test",
-    command: fixture.command("delayed", "10"),
+    // Do not publish the replacement registration before the verdict, or terminate() correctly
+    // refuses to signal a process that no longer owns the registration.
+    command: fixture.command("delayed", "1000"),
   })
   const replacement = await Bun.file(registration).json()
   fixture.track(replacement.pid)
 
-  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n").length).toBeGreaterThanOrEqual(3)
   expect(await existing.exited).toBe(stoppedExitCode)
   expect(replacement.pid).not.toBe(original.pid)
   expect(endpoint.url).toBe(replacement.url)
+})
+
+test("keeps a registered service that answers again before the unresponsive deadline", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("recovering")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+
+  const pending = ensure({ file: registration, version: "test", command: fixture.command("delayed", "10") })
+  await fixture.waitForRequests(3)
+  await writeFile(registration + ".recover", "")
+
+  const endpoint = await pending
+  expect(endpoint.url).toBe(original.url)
+  expect((await Bun.file(registration).json()).pid).toBe(original.pid)
+  expect(existing.exitCode).toBe(null)
+  expect(await fixture.signal()).toBeUndefined()
+  // A live owner still holds its port, so no attempt may compete with it.
+  expect(await fixture.starts()).toEqual([])
+})
+
+test("replaces a registered service whose process is gone without waiting for the window", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("recovering")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+
+  existing.kill("SIGKILL")
+  await existing.exited
+
+  const startedAt = Date.now()
+  const endpoint = await ensure({ file: registration, version: "test", command: fixture.command("delayed", "10") })
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  // A gone owner leaves the port free, so it is replaced by an attempt long before the
+  // unresponsive window (2 s in the accelerated timing) closes.
+  expect(Date.now() - startedAt).toBeLessThan(2_000)
+  expect(replacement.pid).not.toBe(original.pid)
+  expect(endpoint.url).toBe(replacement.url)
+})
+
+test("replaces a registration whose PID belongs to another process", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  // What a registration looks like after a reboot: its URL answers as a different process, and the
+  // recorded PID was handed to something unrelated, so nothing in it describes a reachable service.
+  const unrelated = Bun.spawn([process.execPath, "-e", "setTimeout(() => {}, 30_000)"], {
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+  const stranger = Bun.serve({ port: 0, fetch: () => Response.json({ version: "test", pid: process.pid }) })
+  try {
+    await writeFile(
+      registration,
+      JSON.stringify({
+        id: crypto.randomUUID(),
+        version: "test",
+        url: stranger.url.toString(),
+        pid: unrelated.pid,
+        password: "private",
+      }),
+    )
+
+    const endpoint = await ensure({ file: registration, version: "test", command: fixture.command("delayed", "10") })
+    const replacement = await Bun.file(registration).json()
+    fixture.track(replacement.pid)
+
+    expect(replacement.pid).not.toBe(unrelated.pid)
+    expect(endpoint.url).toBe(replacement.url)
+  } finally {
+    stranger.stop(true)
+    unrelated.kill("SIGKILL")
+    await unrelated.exited
+  }
 })
 
 test("recovers when the starting service it waits for is stopped", async () => {
