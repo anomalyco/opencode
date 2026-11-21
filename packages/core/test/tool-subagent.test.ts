@@ -120,7 +120,11 @@ const subagentPluginSupervisor = makeLocationNode({
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
-      yield* registerToolPlugin(SubagentTool.Plugin, {}, (name, callback) => hooks.register("tool", name, callback))
+      yield* registerToolPlugin(
+        SubagentTool.Plugin,
+        { session: { hook: (name, callback) => hooks.register("session", name, callback) } },
+        (name, callback) => hooks.register("tool", name, callback),
+      )
     }),
   ),
   deps: [
@@ -735,6 +739,139 @@ describe("SubagentTool", () => {
             agent: "fallback",
             model: childModel,
           })
+        }),
+      ),
+    ),
+  )
+
+  it.live("applies session permissions to Available subagents in context hooks", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          yield* Agent.Service.use((agents) =>
+            agents.transform((editor) => {
+              editor.update(Agent.ID.make("restricted"), (agent) => {
+                agent.mode = "subagent"
+                agent.description = "Restricted specialist"
+              })
+              editor.update(toolIdentity.agent, (agent) => {
+                agent.permissions.push({ action: SubagentTool.name, resource: "restricted", effect: "deny" })
+              })
+            }),
+          ).pipe(Effect.provide(locations.get(parent.location)))
+
+          const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const describeTools = () =>
+            hooks
+              .trigger("session", "context", {
+                sessionID: parent.id,
+                agent: toolIdentity.agent,
+                model: parentModel,
+                system: [],
+                messages: [],
+                tools: { [SubagentTool.name]: { description: SubagentTool.description, input: {} } },
+                options: {},
+              })
+              .pipe(Effect.map((event) => event.tools[SubagentTool.name]?.description ?? ""))
+
+          const before = yield* describeTools()
+          expect(before).toContain("- reviewer:")
+          expect(before).not.toContain("- restricted:")
+
+          yield* sessions.setPermissions({
+            sessionID: parent.id,
+            permissions: [
+              { action: SubagentTool.name, resource: "reviewer", effect: "deny" },
+              { action: SubagentTool.name, resource: "restricted", effect: "allow" },
+            ],
+          })
+
+          const after = yield* describeTools()
+          expect(after).not.toContain("- reviewer:")
+          expect(after).toContain("- restricted: Restricted specialist")
+        }),
+      ),
+    ),
+  )
+
+  it.live("cascades parent setPermissions to inherited descendants while leaving custom children untouched", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const initialPermissions: Permission.Ruleset = [{ action: "bash", resource: "git *", effect: "allow" }]
+          const parent = yield* sessions.create({ location, model: parentModel, permissions: initialPermissions })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const permission = yield* Permission.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const first = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-perm-sync-1",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "review", prompt: "initial review" },
+            },
+          })
+          const childID = outputSessionID(first.metadata)
+          expect((yield* sessions.get(childID)).permissions).toEqual(initialPermissions)
+
+          const customPermissions: Permission.Ruleset = [{ action: "edit", resource: "*", effect: "deny" }]
+          const readOnlyChild = yield* sessions.create({
+            parentID: parent.id,
+            title: "readonly review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
+            permissions: customPermissions,
+          })
+
+          // Ordered parent rules (`bash * deny` followed by `bash git * allow`, plus `edit * ask`) propagate intact
+          // to the inherited child without loosening or altering `readOnlyChild`'s custom rules.
+          const updatedPermissions: Permission.Ruleset = [
+            { action: "edit", resource: "*", effect: "ask" },
+            { action: "bash", resource: "*", effect: "deny" },
+            { action: "bash", resource: "git *", effect: "allow" },
+          ]
+          yield* sessions.setPermissions({ sessionID: parent.id, permissions: updatedPermissions })
+
+          expect((yield* sessions.get(childID)).permissions).toEqual(updatedPermissions)
+          expect(
+            yield* permission
+              .assertNotDenied({
+                sessionID: childID,
+                agent: Agent.ID.make("reviewer"),
+                action: "bash",
+                resources: ["rm -rf /"],
+              })
+              .pipe(Effect.flip),
+          ).toBeInstanceOf(Permission.BlockedError)
+          yield* permission.assertNotDenied({
+            sessionID: childID,
+            agent: Agent.ID.make("reviewer"),
+            action: "bash",
+            resources: ["git status"],
+          })
+
+          expect((yield* sessions.get(readOnlyChild.id)).permissions).toEqual(customPermissions)
+          expect(
+            yield* permission
+              .assertNotDenied({
+                sessionID: readOnlyChild.id,
+                agent: Agent.ID.make("reviewer"),
+                action: "edit",
+                resources: ["src/index.ts"],
+              })
+              .pipe(Effect.flip),
+          ).toBeInstanceOf(Permission.BlockedError)
         }),
       ),
     ),
