@@ -22,7 +22,7 @@ export function mountTerminal(input: { url: string; ptyID: string }) {
   const strings: Record<string, string> = en
 
   const fake = {
-    appearance: { font: () => "monospace" },
+    appearance: { font: () => "monospace", fontSize: () => 14 },
     keybinds: { matches: () => false },
     system: { openExternal() {} },
     desktop: undefined,

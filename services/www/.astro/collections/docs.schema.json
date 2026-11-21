@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "tableOfContents": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "minHeadingLevel": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 6
+            },
+            "maxHeadingLevel": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 6
+            }
+          }
+        }
+      ]
+    },
+    "$schema": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title"
+  ]
+}
