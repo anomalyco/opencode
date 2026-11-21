@@ -3,7 +3,7 @@ export { CallID, Content, Error, FileContent, TextContent } from "@opencode/sche
 export type { Context, Info, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
-import type { CodeMode } from "@opencode/codemode"
+import { toolExpression, type CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
 import { isRecord } from "@opencode/util/record"
 import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
@@ -379,39 +379,26 @@ const layer = Layer.effect(
                 progress: input.progress ?? (() => Effect.void),
                 cancel: input.cancel,
               }
-              const initialName = input.definitions?.get(input.call.name)?.name ?? input.call.name
               // Weaker models sometimes call a Code Mode tool at the top level, by its path or registry ID. When this
-              // request offered execute, resolve the call to that tool first, so it runs like any other call.
+              // request offered execute, run the program the model should have written instead.
               const program =
                 codemode &&
-                initialName !== "execute" &&
-                !direct.has(initialName) &&
+                !direct.has(input.call.name) &&
+                input.call.name !== "execute" &&
                 (!input.definitions || input.definitions.has("execute"))
-                  ? CodeModeTool.find(codemode.inventory, initialName)
+                  ? CodeModeTool.find(codemode.inventory, input.call.name)
                   : undefined
-              const callContext = program ? { ...context, codemode: true } : context
-              const initial =
-                program?.registration ??
-                (initialName === "execute" && codemode ? codemode.tool : direct.get(initialName))
-              const event = yield* beforeExecute(program?.id ?? input.call.name, initial, input.call.input, callContext)
-              if (program && event.tool === program.id) {
-                const path = CodeModeTool.qualifiedName(program.registration)
-                const note = `Note: ${path} is a Code Mode tool, so it is only callable inside execute. This call ran anyway; next time call it there, as \`await tools.${path}(input)\`.`
-                return yield* executeTool(program.registration, program.id, event.input, callContext).pipe(
-                  Effect.map((result) => ({
-                    ...result,
-                    content: [{ type: "text" as const, text: note }, ...result.content],
-                  })),
-                  Effect.mapError(
-                    (error) =>
-                      new Tool.Error({
-                        message: `${note}\n\n${error.message}`,
-                        error: error.error,
-                        ...(error.metadata === undefined ? {} : { metadata: error.metadata }),
-                      }),
-                  ),
-                )
-              }
+              const expression = program && toolExpression(CodeModeTool.qualifiedName(program.registration))
+              const call = expression
+                ? {
+                    ...input.call,
+                    name: "execute",
+                    input: { code: `return await ${expression}(${JSON.stringify(input.call.input ?? {})})` },
+                  }
+                : input.call
+              const initialName = input.definitions?.get(call.name)?.name ?? call.name
+              const initial = initialName === "execute" && codemode ? codemode.tool : direct.get(initialName)
+              const event = yield* beforeExecute(call.name, initial, call.input, context)
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
               if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
@@ -420,7 +407,10 @@ const layer = Layer.effect(
               if (name === "execute" && codemode) {
                 const run = (ctx: Tool.Context) => executeTool(codemode.tool, name, event.input, ctx)
                 const background = yield* CodeModeJob.Current
-                return yield* background ? background(context, run) : run(context)
+                const result = yield* background ? background(context, run) : run(context)
+                if (!expression) return result
+                const note = `Note: ${expression} is a Code Mode tool, so this call ran inside execute as \`await ${expression}(input)\`. Call it there next time.`
+                return { ...result, content: [{ type: "text" as const, text: note }, ...result.content] }
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)

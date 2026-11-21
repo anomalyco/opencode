@@ -625,29 +625,33 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("runs a Code Mode tool called at the top level and says to call it inside execute", () =>
+  it.effect("runs a Code Mode tool called at the top level as an execute program and says so", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       const hooks = yield* PluginHooks.Service
-      yield* transform(service, { echo: make() }, { namespace: "acme.tools" })
-      // Plugins see the call as the tool that runs, inside Code Mode, like a program's call.
-      const seen: Array<{ tool: string; info: boolean; codemode: boolean }> = []
+      yield* transform(service, { echo: make(), "kebab-echo": make() }, { namespace: "acme.tools" })
+      const seen: Array<{ tool: string; codemode: boolean }> = []
       yield* hooks.register("tool", "execute.before", (event) =>
-        Effect.sync(
-          () => void seen.push({ tool: event.tool, info: event.info !== undefined, codemode: event.codemode }),
-        ),
+        Effect.sync(() => void seen.push({ tool: event.tool, codemode: event.codemode })),
       )
       const snapshot = yield* service.snapshot()
-      for (const name of ["acme.tools.echo", "acme_tools_echo"]) {
+      for (const [name, expression] of [
+        ["acme.tools.echo", "tools.acme.tools.echo"],
+        ["acme_tools_echo", "tools.acme.tools.echo"],
+        ["acme.tools.kebab-echo", 'tools.acme.tools["kebab-echo"]'],
+      ]) {
         const result = yield* snapshot.execute(call(name))
-        expect(result.output).toEqual({ text: name })
+        expect(result.output).toMatchObject({ output: JSON.stringify({ text: name }) })
         expect(result.content[0]).toEqual({
           type: "text",
-          text: expect.stringContaining("call it there, as `await tools.acme.tools.echo(input)`"),
+          text: expect.stringContaining(`ran inside execute as \`await ${expression}(input)\``),
         })
       }
-      // execute.before fires once per call, with the tool that runs.
-      expect(seen).toEqual(Array.from({ length: 2 }, () => ({ tool: "acme_tools_echo", info: true, codemode: true })))
+      // Plugins see an execute call, then the program's call to the tool, as for any program.
+      expect(seen.slice(0, 2)).toEqual([
+        { tool: "execute", codemode: false },
+        { tool: "acme_tools_echo", codemode: true },
+      ])
       // A tool this request doesn't offer stays unknown.
       const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
       expect((yield* denied.execute(call("acme.tools.echo")).pipe(Effect.flip)).message).toContain(
