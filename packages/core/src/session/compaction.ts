@@ -287,11 +287,7 @@ export const layer = Layer.effect(
             })
             .pipe(Effect.orElseSucceed(() => undefined)))) ??
         context.model
-      const ceiling = calculateCeiling(model.limit, buffer)
-      // An unknown window never triggers auto compaction, but the compaction request still needs a size to aim for.
-      const cap = Number.isFinite(ceiling)
-        ? ceiling
-        : calculateCeiling({ ...model.limit, context: UNKNOWN_WINDOW }, buffer)
+      const cap = capFor(model.limit, buffer)
       return { context: model === context.model ? context : { ...context, model }, cap }
     })
 
@@ -311,10 +307,11 @@ export const layer = Layer.effect(
       const native = context.model.compaction?.type === "native"
       const model = yield* selectModel(context, settings.buffer, native)
       // The provider just rejected this context, so the estimate ran low; the first attempt already aims below it.
-      const budget =
+      const aim = (cap: number) =>
         trigger.reason === "overflow"
-          ? Math.min(model.cap, Math.floor(total(trigger.estimate ?? estimatePrompt(context)) * SHRINK_STEPS[0]))
-          : model.cap
+          ? Math.min(cap, Math.floor(total(trigger.estimate ?? estimatePrompt(context)) * SHRINK_STEPS[0]))
+          : cap
+      const budget = aim(model.cap)
 
       const selected = model.context === context ? trigger : { ...trigger, context: model.context }
       // The runner opened the manual compaction's message when it delivered the `/compact` item. An automatic one
@@ -322,17 +319,29 @@ export const layer = Layer.effect(
       if (trigger.reason !== "manual")
         yield* bus.publish(SessionEvent.Compaction.Started, { sessionID: context.session.id, reason: "auto" })
       const swapped = held ? yield* usePrecomputed(selected, held, budget, native) : undefined
-      const compaction = swapped
-        ? Effect.succeed(swapped)
-        : native
-          ? compactNatively(selected, budget, settings.keep)
-          : summarize(selected, budget, settings.keep)
-      return yield* compaction.pipe(
-        Effect.matchEffect({
-          onSuccess: (result) => publish(selected, result),
-          onFailure: (failure) => publish(selected, failure),
-        }),
+      if (swapped) return yield* publish(selected, swapped)
+
+      const summarizeOn = (target: Trigger, cap: number) =>
+        native ? compactNatively(target, cap, settings.keep) : summarize(target, cap, settings.keep)
+      const first = yield* Effect.result(summarizeOn(selected, budget))
+      if (Result.isSuccess(first)) return yield* publish(selected, first.success)
+      // A dedicated compaction model can be unreachable while the session's own model still works. Retry once on the
+      // session model rather than failing every compaction until the conversation overflows the window.
+      const dedicated =
+        selected.context.model.ref.providerID !== context.model.ref.providerID ||
+        selected.context.model.ref.id !== context.model.ref.id
+      if (!dedicated || first.failure.error.type !== "provider.transport")
+        return yield* publish(selected, first.failure)
+      yield* Effect.logWarning("compaction model unreachable; using the session model", {
+        sessionID: context.session.id,
+        model: `${selected.context.model.ref.providerID}/${selected.context.model.ref.id}`,
+      })
+      const retried = yield* Effect.result(
+        summarizeOn(trigger, aim(capFor(context.model.limit, settings.buffer))),
       )
+      return yield* Result.isSuccess(retried)
+        ? publish(trigger, retried.success)
+        : publish(trigger, retried.failure)
     })
 
     /**
@@ -1156,6 +1165,12 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
   // A buffer that leaves no room, such as one set for a larger model, is ignored.
   if (tokens !== undefined && tokens < window) return window - tokens
   return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+}
+
+/** The size a summary request aims for; an unknown window uses UNKNOWN_WINDOW so it still has one. */
+const capFor = (limit: SessionContext.Loaded["model"]["limit"], buffer: Settings["buffer"]) => {
+  const ceiling = calculateCeiling(limit, buffer)
+  return Number.isFinite(ceiling) ? ceiling : calculateCeiling({ ...limit, context: UNKNOWN_WINDOW }, buffer)
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   LanguageModel,
   Message,
   ToolDefinition,
+  TransportError,
   type LLMRequest,
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
@@ -123,6 +124,78 @@ const it = testEffect(
       Bus.node.replace(Bus.configured({ persist: true })),
       llmClient.replace(client),
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+    ],
+  ),
+)
+
+/** A compaction model on a provider that refuses every request. */
+const unreachable = SessionRunnerModel.resolved(
+  LanguageModel.make({ id: "unreachable-compaction-model", provider: "test", route: OpenAIChat.route }),
+  {
+    capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+    cost,
+    limit: { context: 200_000, output: 32_000 },
+  },
+)
+
+const unreachableClient = Layer.mock(LLMClient.Service)({
+  stream: (request: LLMRequest) => {
+    requests.push(request)
+    if (request.model.id === "unreachable-compaction-model")
+      return Stream.fail(
+        new AIError({
+          reason: new TransportError({
+            message: "connect ECONNREFUSED",
+            transport: "http",
+            operation: "request",
+            phase: "connect",
+            code: "ECONNREFUSED",
+            delivery: "rejected",
+          }),
+        }),
+      )
+    return Stream.make(
+      LLMEvent.textDelta({ id: "summary", text: "## Objective\n- fallback summary" }),
+      LLMEvent.stepFinish({
+        index: 0,
+        reason: { normalized: "stop" },
+        usage: {
+          inputTokens: 15,
+          outputTokens: 6,
+          nonCachedInputTokens: 10,
+          cacheReadInputTokens: 3,
+          cacheWriteInputTokens: 2,
+          reasoningTokens: 2,
+        },
+      }),
+      LLMEvent.finish({ reason: { normalized: "stop" } }),
+    )
+  },
+  generate: () => Effect.die("unused"),
+})
+
+const itWithUnreachableModel = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Agent.node,
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      SessionCompaction.node,
+      SessionModelRequest.node,
+      PluginHooks.node,
+    ]),
+    [
+      Bus.node.replace(Bus.configured({ persist: true })),
+      llmClient.replace(unreachableClient),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      SessionRunnerModel.node.replace(
+        Layer.mock(SessionRunnerModel.Service, {
+          resolve: (session) =>
+            Effect.succeed(session.model?.id === "unreachable-compaction-model" ? unreachable : resolved),
+        }),
+      ),
     ],
   ),
 )
@@ -1568,5 +1641,33 @@ it.effect("a background summary waits for a response whose prompt is still cache
     expect(yield* summarizedAfterBreak("ses_precompute_cold")).toContain("Third question")
     // A model that keeps its cache for an hour summarizes the older response right away.
     expect(yield* summarizedAfterBreak("ses_precompute_hour", "1h")).not.toContain("Third question")
+  }),
+)
+
+itWithUnreachableModel.effect("a compaction model that cannot be reached falls back to the session model", () =>
+  Effect.gen(function* () {
+    requests = []
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) =>
+      editor.update(Agent.ID.make("compaction"), (info) => {
+        info.model = Model.Ref.make({
+          id: Model.ID.make("unreachable-compaction-model"),
+          providerID: Provider.ID.make("test"),
+        })
+      }),
+    )
+    const session = yield* insertSession(Session.ID.make("ses_compaction_unreachable_model"))
+    const messages = [textUser("First question"), textUser("Second question")]
+
+    expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
+    expect(requests.map((request) => String(request.model.id))).toEqual([
+      "unreachable-compaction-model",
+      "summary-model",
+    ])
+
+    const store = yield* SessionStore.Service
+    expect(yield* store.context(session.id)).toMatchObject([
+      { type: "compaction", model: { id: "summary-model", providerID: "test" } },
+    ])
   }),
 )
