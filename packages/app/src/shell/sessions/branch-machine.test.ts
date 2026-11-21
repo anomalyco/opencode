@@ -1,28 +1,28 @@
 import { describe, expect, test } from "bun:test"
 import {
   BRANCH_LOAD_TIMEOUT_MS,
-  INITIAL_INBOX_BRANCH_STATE,
+  INITIAL_BRANCH_STATE,
   selectBranchLoading,
-  transitionInboxBranch,
-  type InboxBranchEvent,
-  type InboxBranchState,
-} from "./inbox-branch-machine"
+  transitionBranch,
+  type BranchEvent,
+  type BranchState,
+} from "./branch-machine"
 
 const target = (key: string, server = "srv") => ({ key, server })
 
-const run = (state: InboxBranchState, ...events: InboxBranchEvent[]) =>
-  events.reduce((current, event) => transitionInboxBranch(current, event).state, state)
+const run = (state: BranchState, ...events: BranchEvent[]) =>
+  events.reduce((current, event) => transitionBranch(current, event).state, state)
 
-const entry = (state: InboxBranchState, key: string) => (state.status === "active" ? state.entries[key] : undefined)
+const entry = (state: BranchState, key: string) => (state.status === "active" ? state.entries[key] : undefined)
 
-describe("inbox branch machine", () => {
+describe("session branch machine", () => {
   test("retries a failed lookup instead of settling it for good", () => {
-    const queued = transitionInboxBranch(INITIAL_INBOX_BRANCH_STATE, { type: "enqueue", targets: [target("a")] })
+    const queued = transitionBranch(INITIAL_BRANCH_STATE, { type: "enqueue", targets: [target("a")] })
 
     expect(queued.effects).toEqual([{ type: "load.start", key: "a", attempt: 1, timeoutMs: BRANCH_LOAD_TIMEOUT_MS }])
     expect(selectBranchLoading(queued.state, "a")).toBe(true)
 
-    const failed = transitionInboxBranch(queued.state, { type: "load.failed", key: "a", attempt: 1 })
+    const failed = transitionBranch(queued.state, { type: "load.failed", key: "a", attempt: 1 })
 
     expect(failed.effects).toEqual([
       { type: "timer.clear", attempt: 1 },
@@ -31,9 +31,9 @@ describe("inbox branch machine", () => {
     expect(selectBranchLoading(failed.state, "a")).toBe(false)
 
     // The view re-enqueues shown rows on every change; that must not count as a fresh lookup or a settled one.
-    expect(transitionInboxBranch(failed.state, { type: "enqueue", targets: [target("a")] }).state).toBe(failed.state)
+    expect(transitionBranch(failed.state, { type: "enqueue", targets: [target("a")] }).state).toBe(failed.state)
 
-    const retried = transitionInboxBranch(failed.state, { type: "retry.due", key: "a", attempt: 2 })
+    const retried = transitionBranch(failed.state, { type: "retry.due", key: "a", attempt: 2 })
 
     expect(retried.effects).toEqual([{ type: "load.start", key: "a", attempt: 3, timeoutMs: BRANCH_LOAD_TIMEOUT_MS }])
     expect(selectBranchLoading(retried.state, "a")).toBe(false)
@@ -46,7 +46,7 @@ describe("inbox branch machine", () => {
   test("starts the next lookup as soon as one slot frees, even when another hangs", () => {
     const keys = ["k1", "k2", "k3", "k4", "k5", "k6"]
 
-    const started = transitionInboxBranch(INITIAL_INBOX_BRANCH_STATE, {
+    const started = transitionBranch(INITIAL_BRANCH_STATE, {
       type: "enqueue",
       targets: keys.map((key) => target(key)),
     })
@@ -58,7 +58,7 @@ describe("inbox branch machine", () => {
       "k4",
     ])
 
-    const failed = transitionInboxBranch(started.state, { type: "load.failed", key: "k1", attempt: 1 })
+    const failed = transitionBranch(started.state, { type: "load.failed", key: "k1", attempt: 1 })
 
     expect(failed.effects).toContainEqual({
       type: "load.start",
@@ -67,7 +67,7 @@ describe("inbox branch machine", () => {
       timeoutMs: BRANCH_LOAD_TIMEOUT_MS,
     })
 
-    const hung = transitionInboxBranch(failed.state, { type: "load.timed-out", key: "k2", attempt: 2 })
+    const hung = transitionBranch(failed.state, { type: "load.timed-out", key: "k2", attempt: 2 })
 
     expect(hung.effects).toEqual([
       { type: "retry.schedule", key: "k2", attempt: 7, delayMs: 1_000 },
@@ -76,11 +76,11 @@ describe("inbox branch machine", () => {
     expect(selectBranchLoading(hung.state, "k2")).toBe(false)
 
     // The hung request answering late belongs to an attempt that is no longer current.
-    expect(transitionInboxBranch(hung.state, { type: "load.succeeded", key: "k2", attempt: 2 }).state).toBe(hung.state)
+    expect(transitionBranch(hung.state, { type: "load.succeeded", key: "k2", attempt: 2 }).state).toBe(hung.state)
   })
 
   test("rests a location after its retries and wakes it when its server reconnects", () => {
-    const connected = run(INITIAL_INBOX_BRANCH_STATE, { type: "connections.changed", connected: ["srv", "other"] })
+    const connected = run(INITIAL_BRANCH_STATE, { type: "connections.changed", connected: ["srv", "other"] })
 
     const failed = run(
       connected,
@@ -97,10 +97,10 @@ describe("inbox branch machine", () => {
     expect(entry(failed, "a")).toEqual({ phase: "failed", server: "srv" })
     expect(entry(failed, "b")).toEqual({ phase: "retrying", server: "srv", attempt: 8, failures: 1 })
     expect(selectBranchLoading(failed, "a")).toBe(false)
-    expect(transitionInboxBranch(failed, { type: "enqueue", targets: [target("a")] }).state).toBe(failed)
+    expect(transitionBranch(failed, { type: "enqueue", targets: [target("a")] }).state).toBe(failed)
 
     const dropped = run(failed, { type: "connections.changed", connected: ["other"] })
-    const woken = transitionInboxBranch(dropped, { type: "connections.changed", connected: ["other", "srv"] })
+    const woken = transitionBranch(dropped, { type: "connections.changed", connected: ["other", "srv"] })
 
     expect(woken.effects).toEqual([
       { type: "timer.clear", attempt: 8 },
@@ -109,27 +109,27 @@ describe("inbox branch machine", () => {
     ])
     expect(entry(woken.state, "c")).toEqual(entry(failed, "c"))
     expect(selectBranchLoading(woken.state, "a")).toBe(false)
-    expect(transitionInboxBranch(woken.state, { type: "retry.due", key: "b", attempt: 8 }).state).toBe(woken.state)
-    expect(transitionInboxBranch(woken.state, { type: "connections.changed", connected: ["srv", "other"] }).state).toBe(
+    expect(transitionBranch(woken.state, { type: "retry.due", key: "b", attempt: 8 }).state).toBe(woken.state)
+    expect(transitionBranch(woken.state, { type: "connections.changed", connected: ["srv", "other"] }).state).toBe(
       woken.state,
     )
   })
 
   test("enqueues each location once", () => {
-    const state = run(INITIAL_INBOX_BRANCH_STATE, { type: "enqueue", targets: [target("a"), target("a")] })
+    const state = run(INITIAL_BRANCH_STATE, { type: "enqueue", targets: [target("a"), target("a")] })
 
     expect(state.status === "active" && state.issued).toBe(1)
-    expect(transitionInboxBranch(state, { type: "enqueue", targets: [target("a")] }).state).toBe(state)
+    expect(transitionBranch(state, { type: "enqueue", targets: [target("a")] }).state).toBe(state)
   })
 
   test("ignores every event after disposal", () => {
-    const loading = run(INITIAL_INBOX_BRANCH_STATE, { type: "enqueue", targets: [target("a")] })
-    const disposed = transitionInboxBranch(loading, { type: "disposed" })
+    const loading = run(INITIAL_BRANCH_STATE, { type: "enqueue", targets: [target("a")] })
+    const disposed = transitionBranch(loading, { type: "disposed" })
 
     expect(disposed.effects).toEqual([{ type: "timers.clear" }])
     expect(selectBranchLoading(disposed.state, "a")).toBe(false)
 
-    const events: InboxBranchEvent[] = [
+    const events: BranchEvent[] = [
       { type: "enqueue", targets: [target("b")] },
       { type: "load.succeeded", key: "a", attempt: 1 },
       { type: "load.failed", key: "a", attempt: 1 },
@@ -140,7 +140,7 @@ describe("inbox branch machine", () => {
     ]
 
     events.forEach((event) =>
-      expect(transitionInboxBranch(disposed.state, event)).toEqual({ state: disposed.state, effects: [] }),
+      expect(transitionBranch(disposed.state, event)).toEqual({ state: disposed.state, effects: [] }),
     )
   })
 })

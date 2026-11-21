@@ -11,7 +11,7 @@ export const BRANCH_RETRY_MAX_DELAY_MS = 4_000
 // Retries after the first failed lookup, before the location rests as failed until its server reconnects.
 export const BRANCH_RETRY_LIMIT = 2
 
-export type InboxBranchTarget = {
+export type BranchTarget = {
   readonly key: string
   readonly server: string
 }
@@ -25,7 +25,7 @@ export type InboxBranchTarget = {
  * - `ok`: loaded; live updates arrive through `vcs.branch.updated`.
  * - `failed`: retries exhausted; rests until `server` reconnects.
  */
-export type InboxBranchEntry =
+export type BranchEntry =
   | { readonly phase: "queued"; readonly server: string; readonly initial: boolean; readonly failures: number }
   | {
       readonly phase: "loading"
@@ -38,18 +38,18 @@ export type InboxBranchEntry =
   | { readonly phase: "ok"; readonly server: string }
   | { readonly phase: "failed"; readonly server: string }
 
-export type InboxBranchState =
+export type BranchState =
   | {
       readonly status: "active"
       readonly issued: number
       readonly connected: ReadonlySet<string>
       readonly queue: readonly string[]
-      readonly entries: Readonly<Record<string, InboxBranchEntry>>
+      readonly entries: Readonly<Record<string, BranchEntry>>
     }
   | { readonly status: "disposed" }
 
-export type InboxBranchEvent =
-  | { readonly type: "enqueue"; readonly targets: readonly InboxBranchTarget[] }
+export type BranchEvent =
+  | { readonly type: "enqueue"; readonly targets: readonly BranchTarget[] }
   | { readonly type: "load.succeeded"; readonly key: string; readonly attempt: number }
   | { readonly type: "load.failed"; readonly key: string; readonly attempt: number }
   | { readonly type: "load.timed-out"; readonly key: string; readonly attempt: number }
@@ -57,22 +57,22 @@ export type InboxBranchEvent =
   | { readonly type: "connections.changed"; readonly connected: readonly string[] }
   | { readonly type: "disposed" }
 
-export type InboxBranchEffect =
+export type BranchEffect =
   | { readonly type: "load.start"; readonly key: string; readonly attempt: number; readonly timeoutMs: number }
   | { readonly type: "retry.schedule"; readonly key: string; readonly attempt: number; readonly delayMs: number }
   | { readonly type: "timer.clear"; readonly attempt: number }
   | { readonly type: "timers.clear" }
 
-export type InboxBranchTransition = {
-  readonly state: InboxBranchState
-  readonly effects: readonly InboxBranchEffect[]
+export type BranchTransition = {
+  readonly state: BranchState
+  readonly effects: readonly BranchEffect[]
 }
 
-type ActiveState = Extract<InboxBranchState, { status: "active" }>
+type ActiveState = Extract<BranchState, { status: "active" }>
 
-const NONE: readonly InboxBranchEffect[] = Object.freeze([])
+const NONE: readonly BranchEffect[] = Object.freeze([])
 
-export const INITIAL_INBOX_BRANCH_STATE: InboxBranchState = Object.freeze({
+export const INITIAL_BRANCH_STATE: BranchState = Object.freeze({
   status: "active",
   issued: 0,
   connected: new Set<string>(),
@@ -80,16 +80,16 @@ export const INITIAL_INBOX_BRANCH_STATE: InboxBranchState = Object.freeze({
   entries: Object.freeze({}),
 })
 
-const DISPOSED_INBOX_BRANCH_STATE: InboxBranchState = Object.freeze({ status: "disposed" })
+const DISPOSED_BRANCH_STATE: BranchState = Object.freeze({ status: "disposed" })
 
 export function branchRetryDelay(failures: number) {
   return Math.min(BRANCH_RETRY_DELAY_MS * 2 ** (failures - 1), BRANCH_RETRY_MAX_DELAY_MS)
 }
 
-export function transitionInboxBranch(state: InboxBranchState, event: InboxBranchEvent): InboxBranchTransition {
+export function transitionBranch(state: BranchState, event: BranchEvent): BranchTransition {
   if (state.status === "disposed") return { state, effects: NONE }
 
-  if (event.type === "disposed") return { state: DISPOSED_INBOX_BRANCH_STATE, effects: [{ type: "timers.clear" }] }
+  if (event.type === "disposed") return { state: DISPOSED_BRANCH_STATE, effects: [{ type: "timers.clear" }] }
 
   if (event.type === "enqueue") {
     const added = [
@@ -109,7 +109,7 @@ export function transitionInboxBranch(state: InboxBranchState, event: InboxBranc
           ...Object.fromEntries(
             added.map((target) => [
               target.key,
-              { phase: "queued", server: target.server, initial: true, failures: 0 } satisfies InboxBranchEntry,
+              { phase: "queued", server: target.server, initial: true, failures: 0 } satisfies BranchEntry,
             ]),
           ),
         },
@@ -143,7 +143,7 @@ export function transitionInboxBranch(state: InboxBranchState, event: InboxBranc
   if (entry?.phase !== "loading" || entry.attempt !== event.attempt) return { state, effects: NONE }
 
   // A timeout fires from the attempt's own timer, so only the other results clear it.
-  const cleared: readonly InboxBranchEffect[] =
+  const cleared: readonly BranchEffect[] =
     event.type === "load.timed-out" ? NONE : [{ type: "timer.clear", attempt: entry.attempt }]
 
   if (event.type === "load.succeeded") {
@@ -174,7 +174,7 @@ export function transitionInboxBranch(state: InboxBranchState, event: InboxBranc
 }
 
 /** True while a location's first lookup has not settled. Background retries do not show a loader. */
-export function selectBranchLoading(state: InboxBranchState, key: string) {
+export function selectBranchLoading(state: BranchState, key: string) {
   if (state.status === "disposed") return false
   const entry = state.entries[key]
 
@@ -184,7 +184,7 @@ export function selectBranchLoading(state: InboxBranchState, key: string) {
 }
 
 // A server that connects again wakes its failed and backing-off locations with a fresh retry budget.
-function reconnect(state: ActiveState, connected: ReadonlySet<string>): InboxBranchTransition {
+function reconnect(state: ActiveState, connected: ReadonlySet<string>): BranchTransition {
   if (connected.size === state.connected.size && [...connected].every((server) => state.connected.has(server))) {
     return { state, effects: NONE }
   }
@@ -208,19 +208,19 @@ function reconnect(state: ActiveState, connected: ReadonlySet<string>): InboxBra
         ...Object.fromEntries(
           woken.map(([key, entry]) => [
             key,
-            { phase: "queued", server: entry.server, initial: false, failures: 0 } satisfies InboxBranchEntry,
+            { phase: "queued", server: entry.server, initial: false, failures: 0 } satisfies BranchEntry,
           ]),
         ),
       },
     },
     woken.flatMap(([, entry]) =>
-      entry.phase === "retrying" ? [{ type: "timer.clear", attempt: entry.attempt } satisfies InboxBranchEffect] : [],
+      entry.phase === "retrying" ? [{ type: "timer.clear", attempt: entry.attempt } satisfies BranchEffect] : [],
     ),
   )
 }
 
 // Fill free slots from the head of the queue, so each settled lookup starts the next one.
-function pump(state: ActiveState, prior: readonly InboxBranchEffect[]): InboxBranchTransition {
+function pump(state: ActiveState, prior: readonly BranchEffect[]): BranchTransition {
   const slots = BRANCH_BATCH - Object.values(state.entries).filter((entry) => entry.phase === "loading").length
 
   if (slots <= 0 || state.queue.length === 0) return { state, effects: prior }
@@ -247,19 +247,21 @@ function pump(state: ActiveState, prior: readonly InboxBranchEffect[]): InboxBra
               attempt: item.attempt,
               initial: item.entry.initial,
               failures: item.entry.failures,
-            } satisfies InboxBranchEntry,
+            } satisfies BranchEntry,
           ]),
         ),
       },
     },
     effects: [
       ...prior,
-      ...starting.map((item): InboxBranchEffect => ({
-        type: "load.start",
-        key: item.key,
-        attempt: item.attempt,
-        timeoutMs: BRANCH_LOAD_TIMEOUT_MS,
-      })),
+      ...starting.map(
+        (item): BranchEffect => ({
+          type: "load.start",
+          key: item.key,
+          attempt: item.attempt,
+          timeoutMs: BRANCH_LOAD_TIMEOUT_MS,
+        }),
+      ),
     ],
   }
 }
