@@ -270,10 +270,18 @@ describe("ShellParse", () => {
       ShellParse.scan("doas -u root git push origin", "/bin/bash", "/workspace"),
     )
     expect(doasUser.commands[0]?.save).toBe("doas -u root git push *")
+
+    const sudoAssign = await Effect.runPromise(
+      ShellParse.scan("sudo FOO=bar rm -rf /", "/bin/bash", "/workspace"),
+    )
+    expect(sudoAssign.commands[0]?.save).toBe("sudo FOO=bar rm *")
   })
 
   test("saves the exact command when a wrapper's options cannot be unwrapped", async () => {
     const su = await Effect.runPromise(ShellParse.scan("su -c 'rm -rf /'", "/bin/bash", "/workspace"))
     expect(su.commands).toEqual([{ resource: "su -c 'rm -rf /'", save: "su -c 'rm -rf /'" }])
+
+    const bash = await Effect.runPromise(ShellParse.scan('sudo bash -c "rm -rf /"', "/bin/bash", "/workspace"))
+    expect(bash.commands).toEqual([{ resource: 'sudo bash -c "rm -rf /"', save: 'sudo bash -c "rm -rf /"' }])
   })
 })

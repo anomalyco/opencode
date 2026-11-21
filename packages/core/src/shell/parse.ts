@@ -679,6 +679,28 @@ function doasOptionTokens(token: string): number | undefined {
   return undefined
 }
 
+// Interpreters and command runners execute arbitrary commands, so their own prefix would approve every
+// command run through them.
+const COMMAND_RUNNERS = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "ksh",
+  "dash",
+  "ash",
+  "csh",
+  "tcsh",
+  "fish",
+  "env",
+  "xargs",
+  "nohup",
+  "nice",
+  "time",
+  "timeout",
+  "setsid",
+  "stdbuf",
+])
+
 function prefix(tokens: string[]): string[] {
   const head = tokens[0]
   if (head && ESCALATION_WRAPPERS.has(head)) return escalationPrefix(tokens)
@@ -699,6 +721,11 @@ function escalationPrefix(tokens: string[]): string[] {
   let index = 1
   while (index < tokens.length) {
     const token = tokens[index]
+    // sudo takes VAR=value environment assignments before the command.
+    if (wrapper === "sudo" && /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
+      index++
+      continue
+    }
     if (!token.startsWith("-")) break
     if (token === "--") {
       index++
@@ -708,7 +735,7 @@ function escalationPrefix(tokens: string[]): string[] {
     if (consumed === undefined) return []
     index += consumed
   }
-  if (index >= tokens.length || tokens[index].startsWith("-")) return []
+  if (index >= tokens.length || tokens[index].startsWith("-") || COMMAND_RUNNERS.has(tokens[index])) return []
   const inner = prefix(tokens.slice(index))
   if (inner.length === 0) return []
   return [...tokens.slice(0, index), ...inner]
