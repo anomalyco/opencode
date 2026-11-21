@@ -32,6 +32,24 @@ describe("new session project selection", () => {
     })
   })
 
+  test("waits for the server to resolve a worktree outside the project root instead of guessing", () => {
+    const parent = { id: "parent", worktree: "/work", used: true, time: { active: 2 } }
+    const repo = { id: "repo", worktree: "/work/repo", used: true, time: { active: 1 } }
+    const controls = (projectID?: string): PromptProjectControls => ({
+      available: [parent, repo],
+      directory: "/work/repo-feature",
+      projectID,
+      select() {},
+      add() {},
+    })
+
+    createRoot((dispose) => {
+      expect(createPromptProjectController({ controls: () => controls() }).selected()).toBeUndefined()
+      expect(createPromptProjectController({ controls: () => controls("repo") }).selected()).toEqual(repo)
+      dispose()
+    })
+  })
+
   test("does not select a matching project ID from another server", () => {
     const remote = {
       id: "shared",
