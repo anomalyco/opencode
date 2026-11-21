@@ -25,3 +25,19 @@ test("without a logo setting the built-in home logo is shown", async () => {
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes(BUILT_IN_LOGO))
 })
+
+test("custom logo lines render as plain text", async () => {
+  await using setup = await createAppFixture({ config: { animations: false, logo: ["acme_code, v1 ^~"] } })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("acme_code, v1 ^~"))
+})
+
+test("a custom logo wider than the terminal is hidden", async () => {
+  const wide = "ACME".repeat(20)
+  await using setup = await createAppFixture({ width: 60, config: { animations: false, logo: [wide] } })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("ctrl+p"))
+  const frame = setup.captureCharFrame()
+  expect(frame).not.toContain("ACMEACME")
+  expect(frame).not.toContain(BUILT_IN_LOGO)
+})

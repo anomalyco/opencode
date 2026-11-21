@@ -1,7 +1,8 @@
 import { RGBA, TextAttributes } from "@opentui/core"
-import { For, type JSX } from "solid-js"
+import { For, Show, type JSX } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
+import { stringWidth } from "../util/string-width"
 import { useTheme } from "../context/theme"
 import { tint } from "../theme/color"
 import { go, logo } from "../logo"
@@ -9,8 +10,12 @@ import { go, logo } from "../logo"
 export function Logo() {
   const theme = useTheme()
   const config = useConfig()
-  // `false` hides the logo; an array of lines replaces it.
+  // `false` hides the logo; an array of lines replaces it. Custom lines render as
+  // plain text and are hidden when the widest one doesn't fit, as the built-in
+  // logo falls back on narrow terminals.
   const custom = () => config.data.logo
+  const customFits = (lines: readonly string[]) =>
+    Math.max(0, ...lines.map((line) => stringWidth(line))) <= dimensions().width - 4
   const dimensions = useTerminalDimensions()
 
   const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
@@ -56,9 +61,15 @@ export function Logo() {
   return (
     <box>
       {dimensions().height < 12 || custom() === false ? null : Array.isArray(custom()) ? (
-        <For each={custom() as readonly string[]}>
-          {(line) => <box flexDirection="row">{renderLine(line, theme.text.base, true)}</box>}
-        </For>
+        <Show when={customFits(custom() as readonly string[])}>
+          <For each={custom() as readonly string[]}>
+            {(line) => (
+              <text fg={theme.text.base} attributes={TextAttributes.BOLD} selectable={false}>
+                {line}
+              </text>
+            )}
+          </For>
+        </Show>
       ) : dimensions().width < 22 ? (
         <For each={go.right.slice(1)}>
           {(line) => <box flexDirection="row">{renderLine(line, theme.text.base, true)}</box>}

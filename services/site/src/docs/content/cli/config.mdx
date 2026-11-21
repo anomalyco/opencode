@@ -73,14 +73,14 @@ Choose a theme, control interface motion, and override the terminal cursor:
 | `animations`      | boolean                                 | Enables interface animations.                                           |
 | `cursor.style`    | `block`, `underline`, `line`, `default` | Sets the cursor shape. `default` preserves the terminal's cursor shape.  |
 | `cursor.blinking` | boolean                                 | Controls cursor blinking. It has no effect when the style is `default`. |
-| `logo`            | `false` or array of strings             | Hides the home screen logo, or replaces it with these lines of text.    |
+| `logo`            | `false` or array of strings             | Hides the logo on the home screen and `/stats`, or replaces it.         |
 
 </div>
 
 See [Theme](/cli/theme) for selecting and creating themes.
 
-To show your own logo on the home screen, list its lines. Lines may use the same shading marks as the built-in logo:
-`_` for a shaded space, `^` and `~` for upper half blocks, and `,` for a lower half block. Set `"logo": false` to hide it.
+To show your own logo on the home screen and `/stats`, list its lines. They render as plain text, and the logo is hidden
+when its widest line doesn't fit the terminal. Set `"logo": false` to hide it.
 
 ```json title="cli.json"
 {
