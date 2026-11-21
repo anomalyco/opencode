@@ -28,7 +28,8 @@ function validator(schema: McpClient.EventType["payloadSchema"]) {
   return (data: unknown) => Option.isSome(decode(data))
 }
 
-export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event, cursor?: string) {
+// `undefined` opens a new watch; `null` reopens a known one with no replay position from now.
+export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event, cursor?: string | null) {
   const mcp = yield* Mcp.Service
   const events = yield* mcp.events(trigger.server)
   if (!events) {
@@ -57,8 +58,6 @@ export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event, c
     Stream.filter((message) => message.type !== "error"),
     Stream.mapEffect((message) => {
       if (message.cursor && message.cursor.length > 4096) return Effect.fail(new Error("Oversized event cursor"))
-      if ((message.type === "active" && message.truncated) || (cursor !== undefined && message.cursor === null))
-        return Effect.fail(new Error("Server could not replay from the saved cursor; reconcile and recreate the watch"))
       if (
         message.type === "event" &&
         (message.name !== trigger.event ||

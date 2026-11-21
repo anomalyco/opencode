@@ -844,10 +844,6 @@ const layer = Layer.effect(
           return yield* new InvalidError({
             reason: "No authorized event watch",
           })
-        if (position.cursor === null)
-          return yield* new InvalidError({
-            reason: "No replay cursor; recreate the watch to start from now",
-          })
         const stream = yield* AutomationEvent.resolve(trigger, position.cursor).pipe(inDirectory(row.directory))
         // Even a crash before the first heartbeat must not silently turn a restart into a fresh watch.
         if (position.cursor === undefined) yield* settle(row, { event_position: { ...position, cursor: null } })
@@ -880,15 +876,10 @@ const layer = Layer.effect(
         )
       }).pipe(
         Stream.unwrap,
-        Stream.tapError(
-          Effect.fnUntraced(function* (error) {
-            if (error instanceof AutomationEvent.Disconnected && (yield* find(id)).event_position?.cursor == null)
-              return yield* new InvalidError({ reason: "No replay cursor; recreate the watch to start from now" })
-          }),
-        ),
         // Only a validated, processed message resets Stream.retry, never opening an empty stream.
         Stream.retry(
           Schedule.exponential("1 second").pipe(
+            Schedule.jittered,
             Schedule.while(({ input, attempt }) => input instanceof AutomationEvent.Disconnected && attempt <= 3),
           ),
         ),

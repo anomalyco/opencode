@@ -128,14 +128,14 @@ const types = [
       required: ["status"],
     },
   },
-  { name: "poll.only", delivery: ["poll"] },
+  { name: "poll.only", delivery: ["poll"], inputSchema: {}, payloadSchema: {} },
 ]
 
 const connect = Effect.fnUntraced(function* (directory: string) {
   const producer = yield* eventProducer(types)
   const connection = yield* McpClient.connect({
     server: "ci",
-    config: { type: "attached", transport: producer.client },
+    config: { type: "attached", transport: producer.client, protocol: "2026-07-28" },
     directory,
     events: true,
   }).pipe(Effect.provide(hostEnvironmentLayer))
@@ -289,7 +289,7 @@ it.effect("continues on the same stream after a nonterminal producer error", () 
 it.effect("retains the location only while its quiet subscription is open", () =>
   Effect.gen(function* () {
     const f = yield* setup()
-    const a = yield* f.create()
+    yield* f.create()
     const locations = yield* LocationServiceMap.Service
     const lifecycle = yield* LocationLifecycle.Service.pipe(Effect.provide(locations.get(f.location)))
     expect(lifecycle.isRetained()).toBe(false)
@@ -298,13 +298,12 @@ it.effect("retains the location only while its quiet subscription is open", () =
     // Cross two idle sweeps without tripping the MCP transport's missing-heartbeat timeout.
     for (let i = 0; i < 3; i++) {
       yield* TestClock.adjust("40 seconds")
-      yield* f.notify("active", stream.id, { cursor: null })
+      yield* f.notify("active", stream.id, { cursor: null, heartbeatMs: 30_000 })
     }
     expect(lifecycle.isClosed()).toBe(false)
     expect(lifecycle.isRetained()).toBe(true)
     yield* locations.invalidate(f.location)
     expect(yield* f.cancelled).toBe(stream.id)
-    expect((yield* f.settled(a.id, (row) => row.status === "paused")).lastOutput).toContain("No replay cursor")
     expect(lifecycle.isRetained()).toBe(false)
   }),
 )
@@ -519,7 +518,7 @@ it.effect("pause cancels a prompt still preparing without waiting for its hook o
     const hook = yield* hooks.register("session", "prompt", () => entered.open.pipe(Effect.andThen(release.await)))
     yield* f.start
     const stream = yield* f.opened
-    yield* f.notify("active", stream.id, { cursor: "before" })
+    yield* f.notify("active", stream.id, { cursor: "before", heartbeatMs: 30_000 })
     yield* f.event(stream.id, "first", "pending")
     yield* entered.await.pipe(Effect.timeout("5 seconds"), TestClock.withLive)
     const pausing = yield* Effect.forkChild(f.automations.pause(a.id), { startImmediately: true })
@@ -657,7 +656,7 @@ it.effect("rejects an oversized rendered event prompt before creating a child", 
   }),
 )
 
-for (const stop of ["malformed", "truncated", "terminated", "no replay", "permission revoked", "expired"]) {
+for (const stop of ["malformed", "terminated", "permission revoked", "expired"]) {
   it.effect(`stops the stream without a wake: ${stop}`, () =>
     Effect.gen(function* () {
       const f = yield* setup()
@@ -672,12 +671,6 @@ for (const stop of ["malformed", "truncated", "terminated", "no replay", "permis
             timestamp,
             data: { status: 2 },
             cursor: "bad",
-          })
-          break
-        case "truncated":
-          yield* f.notify("active", first.id, {
-            cursor: "past_gap",
-            truncated: true,
           })
           break
         case "terminated":
@@ -698,10 +691,6 @@ for (const stop of ["malformed", "truncated", "terminated", "no replay", "permis
           })
           yield* f.event(first.id, "private", "pending")
           break
-        case "no replay":
-          yield* f.notify("active", first.id, { cursor: null })
-          yield* f.close(first.id)
-          break
         case "expired":
           yield* TestClock.adjust("10 seconds")
           break
@@ -713,9 +702,8 @@ for (const stop of ["malformed", "truncated", "terminated", "no replay", "permis
         runCount: 0,
         state: undefined,
       })
-      if (stop === "no replay") expect(row.lastOutput).toContain("No replay cursor")
       if (stop === "malformed") expect(row.lastOutput).toContain("payloadSchema")
-      if (stop !== "no replay") expect(yield* f.cancelled).toBe(first.id)
+      expect(yield* f.cancelled).toBe(first.id)
       expect(f.state.streams).toHaveLength(1)
       expect(wakes).toEqual([])
     }),
