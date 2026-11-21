@@ -275,10 +275,27 @@ test("prompt footer counts scripts, subagents with jobs, and shells and opens th
         status: (id: string) => (id === "running" ? "running" : "idle"),
         get: (id: string) => sessions[id],
         cost: () => 0,
-        message: { list: () => [] },
+        // cm_main has moved to the background; cm_blocking still blocks the turn.
+        message: {
+          list: () => [
+            {
+              id: "msg",
+              type: "assistant",
+              content: [
+                {
+                  type: "tool",
+                  id: "part",
+                  name: "execute",
+                  state: { status: "completed", input: {}, metadata: { jobID: "cm_main" } },
+                },
+              ],
+            },
+          ],
+        },
       },
       job: {
         list: () => [
+          { kind: "codemode", id: "cm_blocking", sessionID: "session", status: "running", time: { started: 1 } },
           { kind: "codemode", id: "cm_main", sessionID: "session", status: "running", time: { started: 1 } },
           { kind: "codemode", id: "cm_child", sessionID: "child", status: "running", time: { started: 1 } },
         ],

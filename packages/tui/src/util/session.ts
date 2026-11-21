@@ -81,6 +81,30 @@ export function ownedJobs(jobs: readonly JobInfo[], sessionID: string, parentID:
   })
 }
 
+// Every script runs as a job, so a foreground script has a running job while its call blocks the turn. A script moved to
+// the background ends its execute call with the job's id.
+export function backgroundScripts(
+  messages: readonly SessionMessageInfo[],
+  jobs: readonly JobInfo[],
+  sessionID: string,
+) {
+  const scripts = jobs.filter((job) => job.kind === "codemode" && job.sessionID === sessionID)
+  if (scripts.length === 0) return []
+  const moved = new Set(
+    messages
+      .flatMap((message) => (message.type === "assistant" ? message.content : []))
+      .flatMap((part) =>
+        part.type === "tool" &&
+        part.name === "execute" &&
+        part.state.status === "completed" &&
+        typeof part.state.metadata?.jobID === "string"
+          ? [part.state.metadata.jobID]
+          : [],
+      ),
+  )
+  return scripts.filter((job) => moved.has(job.id))
+}
+
 // A script moved to the background ends its execute call with the job's id; its first line of code names it.
 export function scriptLabel(messages: readonly SessionMessageInfo[], job: JobInfo) {
   const code = messages
