@@ -198,6 +198,72 @@ describe("MCP OAuth", () => {
     expect(credential.access).toBe("access")
   })
 
+  test("completes with the browser's code after an error redirect and a callback for another sign-in", async () => {
+    const tokenRequests: URLSearchParams[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        if (request.method !== "POST" || new URL(request.url).pathname !== "/token")
+          return new Response(null, { status: 404 })
+        tokenRequests.push(new URLSearchParams(await request.text()))
+        return Response.json({ access_token: "access", token_type: "Bearer" })
+      },
+    })
+
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { authorization, url: authorizationUrl } = yield* start(server, { client_id: "client" })
+          const state = authorizationUrl.searchParams.get("state") ?? ""
+          const callback = (params: Record<string, string>) => {
+            const url = new URL(authorizationUrl.searchParams.get("redirect_uri") ?? "")
+            Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value))
+            return Effect.promise(() => fetch(url)).pipe(Effect.map((response) => response.status))
+          }
+          // A program replaying the browser's requests without its cookies uses up the authorization server's
+          // single-use verifier first, so the server sends it back with an error for this sign-in.
+          const replayed = yield* callback({
+            state,
+            error: "access_denied",
+            error_description: "The consent verifier has already been used.",
+          })
+          const other = yield* callback({ state: "another-sign-in", code: "other" })
+          const browser = yield* callback({ state, code: "accepted" })
+          return { replayed, other, browser, credential: yield* authorization.callback }
+        }),
+      ),
+    ).finally(() => server.stop(true))
+
+    expect(result.replayed).toBe(400)
+    expect(result.other).toBe(400)
+    expect(result.browser).toBe(200)
+    expect(result.credential.access).toBe("access")
+    expect(tokenRequests.map((request) => request.get("code"))).toEqual(["accepted"])
+  })
+
+  test.each([true, false])(
+    "ends the login with the authorization server's error when no code follows (state: %p)",
+    async (withState) => {
+      const exit = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { authorization, url: authorizationUrl } = yield* start(authServer, { client_id: "client" })
+            const callback = new URL(authorizationUrl.searchParams.get("redirect_uri") ?? "")
+            if (withState) callback.searchParams.set("state", authorizationUrl.searchParams.get("state") ?? "")
+            callback.searchParams.set("error", "access_denied")
+            callback.searchParams.set("error_description", "The user denied the request")
+            expect((yield* Effect.promise(() => fetch(callback))).status).toBe(400)
+            yield* TestClock.withLive(Effect.sleep("10 millis"))
+            yield* TestClock.adjust("10 seconds")
+            return yield* Effect.exit(authorization.callback)
+          }).pipe(Effect.provide(TestClock.layer())),
+        ),
+      )
+
+      expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toEqual(new Error("The user denied the request"))
+    },
+  )
+
   test("completes from a pasted redirect URL and keeps waiting after a wrong paste", async () => {
     const tokenRequests: URLSearchParams[] = []
     const server = Bun.serve({
