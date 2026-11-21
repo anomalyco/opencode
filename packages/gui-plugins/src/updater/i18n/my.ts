@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "နောက်တစ်ခု",
   "releaseNotes.action.hideFuture": "ဒါတွေကို အနာဂတ်မှာ မပြပါနဲ့။",
   "releaseNotes.media.alt": "ဖြန့်ချိမှု အကြိုကြည့်ရှုခြင်း။",
+  "action.reload": "အပ်ဒိတ်လုပ်ရန် ပြန်တင်ပါ",
+  "action.reloading": "ပြန်တင်နေသည်…",
+  "web.ready.title": "အပ်ဒိတ် အဆင်သင့်ဖြစ်ပါပြီ",
+  "web.ready.message": "OpenCode ဗားရှင်းအသစ် အဆင်သင့်ဖြစ်ပါပြီ။ ဖွင့်ထားသော ဝင်းဒိုးတိုင်းတွင် အသုံးပြုရန် ပြန်တင်ပါ။",
+  "web.reload": "ပြန်တင်ရန်",
+  "web.reset.title": "ဆာဗာမှ ပြန်တင်ရန်",
+  "web.reset.description": "အက်ပ်၏ သိမ်းထားသော မိတ္တူကို ရှင်းပြီး ဆာဗာ၏ လက်ရှိဗားရှင်းကို ဖွင့်ပါ",
+  "web.reset.action": "ဆာဗာမှ ပြန်တင်ရန်",
 }

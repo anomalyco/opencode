@@ -27,7 +27,7 @@ export function ServerHealthIndicator(props: { health?: ServerHealth }) {
           aria-label={language.t("server.status.authentication")}
           class="inline-flex h-3.5 w-1.5 shrink-0 items-center justify-center text-v2-icon-icon-muted"
         >
-          <Icon name="lock" size="small" class="shrink-0" />
+          <Icon name="lock" class="shrink-0" />
         </span>
       </Match>
       <Match when={indicator() === "connecting"}>

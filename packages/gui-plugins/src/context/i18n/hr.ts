@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Korištenje",
   "usage.cost": "trošak",
   "usage.view": "Pogledajte korištenje konteksta",
-  "systemPrompt.title": "Sustavski upit",
   "rawMessages.title": "Sirove poruke",
   "export.session": "Izvezi sesiju",
   "stats.session": "Sesija",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Spremljena sesija u {{filename}}",
   "export.failed.title": "Izvoz sesije nije uspio",
   "export.failed.description": "Došlo je do pogreške prilikom izvoza sesije",
+  "usage.toggle": "Prikaži ili sakrij kontekst sesije",
 }

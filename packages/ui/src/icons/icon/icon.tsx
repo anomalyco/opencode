@@ -1,34 +1,17 @@
-import { createSignal, onMount, type ComponentProps, splitProps } from "solid-js"
-import { iconNames, isIconName, getIcon, type IconName } from "../catalog"
-import { getNewIcon, newIconViewBox } from "../new-icons"
+import { createEffect, onCleanup, type ComponentProps, splitProps } from "solid-js"
+import { artworkNames, isIconName, getIcon, resolveIconName, type IconName } from "../catalog"
+import { isRegisteredIconName, mountRegisteredIcon, registeredIconSymbol, type RegisteredIconName } from "../registry"
 import "./icon.css"
 
 const spriteID = "opencode-v2-icon-sprite"
 
-const symbol = (name: IconName) => `opencode-v2-icon-${name}`
-
-const newSymbol = (name: IconName) => `opencode-v2-icon-new-${name}`
+const symbol = (name: string) => `opencode-v2-icon-${name}`
 
 let spriteInserted = false
 
-// The "New icons" experiment, set by the app from its settings.
-const [newIconsEnabled, setNewIconsEnabled] = createSignal(false)
-
-export function setNewIcons(enabled: boolean) {
-  setNewIconsEnabled(enabled)
-}
-
-/** Whether the "New icons" experiment is on, for call sites that pick a different icon under it. */
-export const newIcons = newIconsEnabled
-
 function spriteContent() {
-  return iconNames()
-    .map((name) => {
-      const current = `<symbol id="${symbol(name)}" viewBox="${getIcon(name).viewBox}">${getIcon(name).body}</symbol>`
-      const next = getNewIcon(name)
-
-      return next ? `${current}<symbol id="${newSymbol(name)}" viewBox="${newIconViewBox}">${next}</symbol>` : current
-    })
+  return artworkNames()
+    .map((name) => `<symbol id="${symbol(name)}" viewBox="${getIcon(name).viewBox}">${getIcon(name).body}</symbol>`)
     .join("")
 }
 
@@ -59,28 +42,38 @@ function ensureSprite() {
 }
 
 export interface IconProps extends ComponentProps<"svg"> {
-  name: IconName | (string & {})
+  /**
+   * A catalog name, or the name of registered artwork (`<owner>:<name>`, see `registerIcons`). An unknown catalog name
+   * draws a plus; a name whose artwork is not registered now draws nothing and keeps its box.
+   */
+  name: IconName | RegisteredIconName | (string & {})
   size?: "small" | "normal" | "large"
-  /** Preview a specific artwork set. By default the icon follows the app's New icons setting. */
-  artwork?: "current" | "experimental"
 }
 
 export function Icon(props: IconProps) {
-  const [split, rest] = splitProps(props, ["name", "size", "artwork"])
+  const [split, rest] = splitProps(props, ["name", "size"])
 
-  const iconName = (): IconName => {
-    return isIconName(split.name) ? split.name : "plus"
+  const registered = () => (isRegisteredIconName(split.name) ? split.name : undefined)
+  const iconName = () => resolveIconName(isIconName(split.name) ? split.name : "plus")
+
+  const pixelSize = () => (split.size === "large" ? 20 : split.size === "small" ? 14 : 16)
+
+  const reference = () => {
+    const name = registered()
+
+    return name ? registeredIconSymbol(name) : symbol(iconName())
   }
 
-  const icon = () => getIcon(iconName())
+  // Registered artwork brings its own frame on its symbol, which fills the icon's box.
+  const viewBox = () => (registered() ? undefined : getIcon(iconName()).viewBox)
 
-  // Names without new artwork keep today's under the experiment.
-  const next = () =>
-    (split.artwork ? split.artwork === "experimental" : newIconsEnabled()) && getNewIcon(iconName()) !== undefined
+  createEffect(() => {
+    ensureSprite()
 
-  // New artwork is drawn on a 16px grid, so it stays at 16px where today's small icons shrink to 14px.
-  const pixelSize = () => (split.size === "large" ? 20 : split.size === "small" && !next() ? 14 : 16)
-  onMount(ensureSprite)
+    const name = registered()
+
+    if (name) onCleanup(mountRegisteredIcon(name))
+  })
 
   return (
     <svg
@@ -89,9 +82,6 @@ export function Icon(props: IconProps) {
       data-directional={
         iconName() === "arrow-left" ||
         iconName() === "arrow-right" ||
-        iconName() === "outline-arrow-left" ||
-        iconName() === "outline-arrow-right" ||
-        iconName() === "outline-chevron-right" ||
         iconName() === "chevron-left" ||
         iconName() === "chevron-right"
           ? ""
@@ -99,12 +89,12 @@ export function Icon(props: IconProps) {
       }
       width={pixelSize()}
       height={pixelSize()}
-      viewBox={next() ? newIconViewBox : icon().viewBox}
+      viewBox={viewBox()}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden={rest["aria-hidden"] ?? "true"}
     >
-      <use href={`#${next() ? newSymbol(iconName()) : symbol(iconName())}`} />
+      <use href={`#${reference()}`} />
     </svg>
   )
 }

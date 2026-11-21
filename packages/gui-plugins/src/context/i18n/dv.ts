@@ -5,7 +5,6 @@ export default {
   "usage.usage": "ބޭނުންކުރުން",
   "usage.cost": "ހަރަދު",
   "usage.view": "ކޮންޓެކްސްޓް ބޭނުންކުރުން ބަލާށެވެ",
-  "systemPrompt.title": "ސިސްޓަމް ޕްރޮމްޕްޓް",
   "rawMessages.title": "ރޯ މެސެޖުތަކެވެ",
   "export.session": "އެކްސްޕޯޓް ސެޝަން",
   "stats.session": "ސެޝަން",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "ސެޝަން ސޭވްކޮށްފައިވަނީ ⁨{{filename}}⁩ އަށެވެ",
   "export.failed.title": "އެކްސްޕޯޓް ސެޝަން ނާކާމިޔާބުވެއްޖެ",
   "export.failed.description": "ސެޝަން އެކްސްޕޯޓް ކުރަމުން ދިޔައިރު ގޯހެއް ދިމާވިއެވެ",
+  "usage.toggle": "ސެޝަން ކޮންޓެކްސްޓް ޓޮގްލް ކުރާ",
 }

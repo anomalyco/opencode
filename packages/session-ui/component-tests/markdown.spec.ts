@@ -63,12 +63,263 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
 
   expect(result).toEqual([
     "<p><strong>Safe</strong> <em>formatting</em> <code>const x = 1</code></p>",
-    '<img data-local-image="safe.png"><a>unsafe</a>',
-    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
-    '<form name="user-content-document" id="user-content-location"><input name="user-content-cookie"></form>',
-    "<math><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow></math>",
-    '<svg viewBox="0 0 10 10"><path d="M0 0L10 10"></path></svg>',
+    '<img data-local-image="safe.png"><a data-app-link="javascript:alert(3)">unsafe</a>',
+    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer" class="external-link">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
+    '',
+    '<math data-markdown-contain=""><mrow data-markdown-contain=""><mi data-markdown-contain="">x</mi><mo data-markdown-contain="">+</mo><mn data-markdown-contain="">1</mn></mrow></math>',
+    '<svg viewBox="0 0 10 10" data-markdown-contain=""><path d="M0 0L10 10" data-markdown-contain=""></path></svg>',
   ])
+})
+
+story("authored HTML cannot supply application behavior attributes", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    const names = ["data-owns-keyboard", "data-owns-escape", "data-prevent-autofocus", "data-floating-overlay", "data-app-link", "data-local-link", "data-local-image", "data-slot", "data-component", "data-future-marker", "aria-owns", "aria-controls", "aria-modal", "aria-hidden", "role", "class", "tabindex", "contenteditable", "draggable", "inert", "hidden", "popover", "autofocus", "slot", "part", "exportparts", "for", "form", "formaction", "command", "commandfor", "accesskey"]
+    const box = document.createElement("div")
+    box.innerHTML = sanitizeMarkdown(`<a href="#sample" id="sample" name="legacy" ${names.map(n => `${n}="fixture"`).join(" ")}>sample</a><label for="sample">label</label>`)
+    const a = box.querySelector("a")!
+
+    return { retained: names.filter(n => a.hasAttribute(n)), id: a.id, name: a.name, labelFor: box.querySelector("label")?.htmlFor, custom: sanitizeMarkdown('<a is="fixture-link">custom label</a>') }
+  }, fixture)
+
+  expect(result).toEqual({ retained: [], id: "user-content-sample", name: "user-content-legacy", labelFor: undefined, custom: "custom label" })
+})
+
+story("limits authored presentation to text and keeps application link hit areas inline", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    const fragment = document.createElement("template")
+    fragment.innerHTML = sanitizeMarkdown([
+      '<p style="position:relative;transform:scale(2);pointer-events:none;color:teal;text-align:center">sample</p>',
+      '<span popover="manual">sample</span><button commandfor="unused" command="close" popovertarget="unused">sample</button><dialog>sample</dialog>',
+      '<a href="obsidian:fixture" style="font-weight:bold"><strong>Label</strong></a>',
+      '<a href="mailto:fixture@example.invalid"><div>Block label</div></a>',
+    ].join(""))
+    const anchors = [...fragment.content.querySelectorAll("a")]
+
+    return {
+      style: fragment.content.querySelector("p")?.style.cssText,
+      active: fragment.content.querySelectorAll("[popover], [commandfor], [command], [popovertarget], dialog").length,
+      links: anchors.map(a => [a.dataset.appLink, a.hasAttribute("href"), a.hasAttribute("style"), a.textContent]),
+    }
+  }, fixture)
+
+  expect(result).toEqual({ style: "color: teal; text-align: center;", active: 0, links: [["obsidian:fixture", false, false, "Label"], [undefined, false, false, "Block label"]] })
+})
+
+story("restores layout from the math renderer, never from markup claiming to be KaTeX", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: 'Real: $\\frac{x}{y}$.\n\n<span id="0123456789abcdef0123456789abcdef" class="katex" data-markdown-renderer="math" style="position:relative;top:2px">Authored</span>' })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.locator('.katex-html [style*="top:"]')).not.toHaveCount(0)
+  await expect(md.locator('.katex-html').getByText("x", { exact: true })).toBeVisible()
+  const authored = md.getByText("Authored", { exact: true })
+  await expect(authored).not.toHaveAttribute("style")
+  await expect(authored).not.toHaveAttribute("data-markdown-renderer")
+  await expect(authored).toHaveAttribute("data-markdown-contain", "")
+})
+
+story("renders task-list boxes but never authored form controls or embedded documents", async ({ page }) => {
+  await page.evaluate(async url => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({ text: '- [x] Complete\n- [ ] Pending\n\n<form><button>Sample label</button><input type="checkbox" checked disabled></form>\n\n<figure><figcaption>Caption</figcaption></figure>' })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.getByText("Sample label")).toBeVisible()
+  await expect(md.locator("form,button")).toHaveCount(0)
+  await expect(md.locator("input")).toHaveCount(2)
+  await expect(md.locator('li input[disabled][checked]')).toHaveCount(1)
+  await expect(md.locator('li input[disabled]:not([checked])')).toHaveCount(1)
+  await expect(md.locator("figcaption")).toHaveText("Caption")
+  // A submitted form would navigate the window to its own address and reload the app.
+  await page.evaluate(() => Object.assign(window, { notReloaded: true }))
+  await md.getByText("Sample label").click()
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)))
+  expect(await page.evaluate(() => "notReloaded" in window)).toBe(true)
+})
+
+story("keeps the document markup models write", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({
+      text: [
+        "<details open><summary>Summary</summary>Press <kbd>Enter</kbd>: H<sub>2</sub>O, x<sup>2</sup>, <mark>marked</mark>, <abbr title=\"HyperText\">HTML</abbr><br>next</details>",
+        "<center>Centred</center>\n\n<hr>\n\n<figure><img width=\"64\" alt=\"Figure\" src=\"https://example.invalid/figure.png\"><figcaption>Caption</figcaption></figure>",
+        "<div align=\"center\"><span style=\"color:teal\">Teal</span></div>",
+        "<table><caption>Rows</caption><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody><tfoot><tr><td>Sum</td></tr></tfoot></table>",
+      ].join("\n\n"),
+    })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.locator("details[open] > summary")).toHaveText("Summary")
+
+  for (const tag of ["kbd", "sub", "sup", "mark", "abbr[title]", "br", "hr", "center", "figure", "figcaption", "img[width]", "caption", "thead", "tbody", "tfoot", "div[align]"])
+    await expect(md.locator(tag), tag).toHaveCount(1)
+  await expect(md.getByText("Teal", { exact: true })).toHaveCSS("color", "rgb(0, 128, 128)")
+})
+
+// What chat rendered before its allow-list: text-level, legacy and sectioning tags, and their harmless attributes.
+story("keeps the text-level, legacy and sectioning markup chat rendered before", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({
+      text: [
+        '<p><u>under</u> <ins datetime="2026-01-01" cite="https://example.invalid/why">inserted</ins> <cite>Work</cite> <q cite="https://example.invalid/q">quoted</q> <var>n</var> <samp>out</samp> <dfn>term</dfn> <time datetime="2026-01-01">New year</time> <data value="7">seven</data> <bdi>isolated</bdi> <bdo dir="rtl">override</bdo> long<wbr>word <ruby>漢<rp>(</rp><rt>kan</rt><rp>)</rp></ruby></p>',
+        '<p><acronym title="Hypertext">HTML</acronym> <big>big</big> <tt>mono</tt> <strike>struck</strike> <nobr>no break</nobr> <font color="teal">font</font></p>',
+        '<section><header>Header</header><article>Article</article><aside>Aside</aside><nav>Nav</nav><main>Main</main><search>Search</search><address>Address</address><footer>Footer</footer></section>',
+      ].join("\n\n"),
+    })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+
+  for (const tag of ["u", "ins[datetime][cite]", "cite", "q[cite]", "var", "samp", "dfn", "time[datetime]", "data[value]", "bdi", 'bdo[dir="rtl"]', "wbr", "ruby", "rt", "rp", "acronym[title]", "big", "tt", "strike", "nobr", "font[color]", "section", "header", "article", "aside", "nav", "main", "search", "address", "footer"])
+    await expect(md.locator(tag).first(), tag).toBeAttached()
+  await expect(md.getByText("font", { exact: true })).toHaveCSS("color", "rgb(0, 128, 128)")
+})
+
+// Media renders as it did before the allow-list, sized and painted inside its message.
+story("keeps video and audio inside their message", async ({ page }) => {
+  await page.route("https://example.invalid/**", (route) => route.fulfill({ status: 404, body: "" }))
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({
+      text: '<video controls width="5000" height="3000" poster="https://example.invalid/poster.png" onplay="alert(1)"><source src="https://example.invalid/clip.mp4" type="video/mp4"><track kind="captions" src="https://example.invalid/clip.vtt" srclang="en" label="English"></video>\n\n<audio controls loop src="https://example.invalid/clip.mp3" style="position:fixed;inset:0"></audio>',
+    })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  const video = md.locator("video[controls]")
+  await expect(video).toHaveAttribute("width", "2048")
+  await expect(video).not.toHaveAttribute("onplay")
+  await expect(md.locator('video > source[type="video/mp4"]')).toHaveAttribute("src", "https://example.invalid/clip.mp4")
+  await expect(md.locator('video > track[kind="captions"]')).toHaveAttribute("srclang", "en")
+  await expect(md.locator("audio[controls][loop]")).not.toHaveAttribute("style")
+  await expect(md).toHaveCSS("contain", "paint")
+
+  const fits = await md.evaluate((root) => {
+    const bounds = root.getBoundingClientRect()
+
+    return Array.from(root.querySelectorAll("video, audio")).map((node) => {
+      const box = node.getBoundingClientRect()
+
+      return box.left >= bounds.left - 1 && box.right <= bounds.right + 1
+    })
+  })
+
+  expect(fits).toEqual([true, true])
+})
+
+story("keeps safe presentation and labels on inline SVG, images and links", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    const box = document.createElement("div")
+    box.innerHTML = sanitizeMarkdown([
+      '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" onload="alert(1)">',
+      '<path d="M5 12h14" fill="url(#paint)" stroke="#ff0000" opacity="0.5" stroke-dasharray="2 2"></path>',
+      '<use href="#paint"></use><image href="https://example.invalid/a.png"></image><foreignObject><p>embedded</p></foreignObject>',
+      '<a href="https://example.invalid/"><path d="M0 0"></path></a></svg>',
+      '<svg width="99999" height="10%"></svg>',
+      '<a href="https://example.invalid/" aria-label="Home" aria-describedby="x">home</a><img alt="" aria-label="Chart" src="https://example.invalid/b.png"><div aria-label="Region">text</div>',
+    ].join(""))
+    const [icon, large] = box.querySelectorAll("svg")
+    const attributes = (node: Element | null) => Object.fromEntries(Array.from(node?.attributes ?? [], (a) => [a.name, a.value]))
+
+    return {
+      icon: attributes(icon),
+      path: attributes(icon.querySelector("path")),
+      children: Array.from(icon.children, (child) => child.localName),
+      large: attributes(large),
+      link: attributes(box.querySelector("a")),
+      image: box.querySelector("img")?.getAttribute("aria-label"),
+      region: box.querySelector("div")?.hasAttribute("aria-label"),
+    }
+  }, fixture)
+
+  expect(result).toEqual({
+    icon: { width: "24", height: "24", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", "data-markdown-contain": "" },
+    path: { d: "M5 12h14", stroke: "#ff0000", opacity: "0.5", "stroke-dasharray": "2 2", "data-markdown-contain": "" },
+    children: ["path"],
+    large: { width: "2048", height: "10%", "data-markdown-contain": "" },
+    link: { href: "https://example.invalid/", "aria-label": "Home" },
+    image: "Chart",
+    region: false,
+  })
+})
+
+story("keeps a formula inside an application link label", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({ text: "[See $x^2$ <b>bold</b>](obsidian://open?file=a)" })
+  }, fixture)
+  const link = page.getByTestId("markdown-fixture").locator("a[data-app-link]")
+  await expect(link).toHaveAttribute("data-app-link", "obsidian://open?file=a")
+  await expect(link.locator(".katex")).toHaveCount(1)
+  await expect(link.locator("b")).toHaveCount(0)
+  await expect(link).toContainText("bold")
+})
+
+story("a display formula in an application link label disarms the link", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({
+      text: '<a href="obsidian://open?vault=a">$$\\rule{10em}{10em}$$</a> and <a href="obsidian://open?vault=b">$x^2$</a>',
+    })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  // Armed, the formula's box, up to 10 em high and a line wide, would be the link's hit area.
+  await expect(md.locator("a .katex-display")).toHaveCount(1)
+  await expect(md.locator("a[data-app-link]")).toHaveCount(1)
+  await expect(md.locator("a[data-app-link]")).toHaveAttribute("data-app-link", "obsidian://open?vault=b")
+  await expect(md.locator("a[data-app-link] .katex")).toHaveCount(1)
+  await expect(md.locator("[data-display]")).toHaveCount(0)
+})
+
+story("bounds author-sized math to its own line box", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({ text: "Before $\\raisebox{-40em}{\\colorbox{red}{\\rule{60em}{30em}}}$ after.\n\nNext paragraph." })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.locator(".katex")).toHaveCount(1)
+
+  const box = await md.evaluate((root) => ({
+    widest: Math.max(...Array.from(root.querySelectorAll(".katex-html *"), (node) => node.getBoundingClientRect().width)),
+    em: parseFloat(getComputedStyle(root.querySelector(".katex")!).fontSize),
+    overflow: getComputedStyle(root.querySelector(".katex .katex-base")!).overflow,
+  }))
+  // KaTeX caps every authored size at maxSize (10em, plus the colour box's padding), and each line box clips the ink
+  // that offsets and negative margins push out.
+
+  expect(box.widest).toBeLessThan(box.em * 11)
+  expect(box.overflow).toBe("clip")
+})
+
+story("retains local and download link routing and bounds untrusted application metadata", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+
+    return [
+      '<a href="file:///C:/workspace/a.ts">file</a>', '<a href="src/a.ts">relative</a>',
+      '<a download href="obsidian:fixture">download</a>', '<a href="opencode:fixture">deep link</a>',
+      '<a data-app-link="forged">text</a>', '<a href="DaTa:text/plain,test">data</a>',
+      `<a href="obsidian:${"a".repeat(2048)}">long</a>`, '<a href="obsidian:a&lt;b">angle</a>',
+      '<a download="report" href="mailto:fixture@example.invalid?attach=fixture">mail</a>',
+      '<a download href="https://example.invalid/report.csv">web download</a>',
+    ].map(html => {
+      const parent = document.createElement("div")
+      parent.innerHTML = sanitizeMarkdown(html)
+      const a = parent.querySelector("a")!
+
+      return [a.dataset.localLink, a.dataset.appLink, a.hasAttribute("href"), a.hasAttribute("download")]
+    })
+  }, fixture)
+
+  // Only a web link downloads. Another app's address loses `download` and is reviewed like every app link.
+  expect(result).toEqual([["C:/workspace/a.ts", undefined, false, false], ["src/a.ts", undefined, false, false],
+    [undefined, "obsidian:fixture", false, false], [undefined, "opencode:fixture", false, false], [undefined, undefined, false, false],
+    [undefined, "DaTa:text/plain,test", false, false], [undefined, undefined, false, false], [undefined, undefined, false, false],
+    [undefined, "mailto:fixture@example.invalid?attach=fixture", true, false], [undefined, undefined, true, true]])
 })
 
 story("keeps Markdown sanitization and link protections after Mermaid renders", async ({ page }) => {
@@ -110,7 +361,7 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
   }, fixture)
 
   expect(result.before).toBe(
-    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><img data-local-image="safe.png">',
+    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer" class="external-link">external</a><img data-local-image="safe.png">',
   )
   expect(result.renders).toEqual([
     { root: "svg", text: expect.stringContaining("Start"), unsafe: 0, links: [], markdown: result.before },
@@ -1038,6 +1289,24 @@ story("preserves streamed math through completion and a fresh render", async ({ 
   await expect(markdown.locator(".katex")).toHaveCount(3)
   await expect(markdown.locator(".katex-display")).toHaveCount(1)
   await expect(markdown.locator(".katex-error")).toHaveCount(0)
+})
+
+story("keeps an unchanged streamed formula, and a selection in it, while text after it streams", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Formula $x^2$ and", streaming: true })
+  }, fixture)
+  const harness = page.getByTestId("markdown-fixture")
+  const markdown = harness.locator('[data-component="markdown"]')
+  const math = await markdown.locator("math").elementHandle()
+  await markdown.locator("math").evaluate((node) => getSelection()?.selectAllChildren(node))
+  // Typing would move the selection into the field; the stream changes the text without focus.
+  await harness.getByLabel("Markdown text").evaluate((field: HTMLTextAreaElement) => {
+    field.value = "Formula $x^2$ and more words"
+    field.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  await expect(markdown).toContainText("more words")
+  expect(await markdown.locator("math").evaluate((node, kept) => [node === kept, getSelection()?.anchorNode === kept], math)).toEqual([true, true])
 })
 
 for (const theme of ["light", "dark"]) {

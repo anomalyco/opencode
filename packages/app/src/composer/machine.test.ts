@@ -8,7 +8,7 @@ import {
   type ComposerSubmitEvent,
   type ComposerSubmitState,
   type ComposerSubmitTransition,
-  type QuoteSnapshot,
+  type CommentSnapshot,
   type SubmitSnapshot,
 } from "./machine"
 import { retryFingerprint } from "./retry"
@@ -55,6 +55,7 @@ const session: ComposerSession = {
         payload: { text: value.text },
         delivery: value.delivery ?? "steer",
       }),
+      sequence: (_sessionID, send) => send(),
       setStatus() {},
       acceptSend() {},
     },
@@ -88,10 +89,10 @@ function snapshot(
   }
 }
 
-function quoteSnapshot(input: Partial<QuoteSnapshot> = {}): QuoteSnapshot {
+function commentSnapshot(input: Partial<CommentSnapshot> = {}): CommentSnapshot {
   return {
     key: "quote:c=selected",
-    quote: { key: "quote:c=selected", type: "quote", text: "Selected passage", commentID: "selected" },
+    item: { key: "quote:c=selected", type: "quote", text: "Selected passage", commentID: "selected" },
     comment: "Compare",
     selection,
     delivery: "steer",
@@ -128,6 +129,12 @@ const states = {
   running: replay([{ type: "submit", snapshot: snapshot({ clientCommand: () => undefined }), done }]).state,
   preparing: replay([{ type: "submit", snapshot: snapshot(), done }]).state,
   "handing-off": replay([{ type: "submit", snapshot: snapshot(), done }, started(1)]).state,
+  sending: replay([
+    { type: "submit", snapshot: snapshot(), done },
+    started(1),
+    { type: "handoff.ready", attempt: 1, prompt: undefined },
+  ]).state,
+  quoting: replay([{ type: "comment", snapshot: commentSnapshot(), done }]).state,
 }
 
 describe("composer submit machine", () => {
@@ -139,7 +146,7 @@ describe("composer submit machine", () => {
       // Enter, then a click on Send, Mod+Enter and a quote, all while the image's URL resolves.
       { type: "submit", snapshot: snapshot(), done },
       { type: "submit", snapshot: snapshot({ alternate: true }), done },
-      { type: "quote", snapshot: quoteSnapshot(), done },
+      { type: "comment", snapshot: commentSnapshot(), done },
       {
         type: "session.started",
         attempt: 1,
@@ -147,6 +154,7 @@ describe("composer submit machine", () => {
         session,
         ready,
       },
+      { type: "gate.settled", attempt: 1 },
       { type: "handoff.ready", attempt: 1, prompt: undefined },
     ])
 
@@ -192,12 +200,12 @@ describe("composer submit machine", () => {
     expect(sent({ ...shell, retry: { id: retry.id, fingerprint: fingerprint(shell) } })).toBe(shell.id)
   })
 
-  test.each(Object.entries(states))("ignores another submit or quote while %s", (_name, state) => {
+  test.each(Object.entries(states))("ignores another submit or comment while %s", (_name, state) => {
     expect(transitionComposerSubmit(state, { type: "submit", snapshot: snapshot(), done })).toEqual({
       state,
       effects: [{ type: "done", done, sent: false }],
     })
-    expect(transitionComposerSubmit(state, { type: "quote", snapshot: quoteSnapshot(), done })).toEqual({
+    expect(transitionComposerSubmit(state, { type: "comment", snapshot: commentSnapshot(), done })).toEqual({
       state,
       effects: [{ type: "done", done, sent: false }],
     })
@@ -253,6 +261,7 @@ describe("composer submit machine", () => {
       [
         { type: "hold.loaded", attempt: 1, selection, commands: [{ name: "review" }] },
         started(1),
+        { type: "gate.settled", attempt: 1 },
         { type: "handoff.ready", attempt: 1, prompt: undefined },
       ],
       shown.state,
@@ -303,6 +312,97 @@ describe("composer submit machine", () => {
       { type: "hold.cancel", session, snapshot: held, cleared: undefined },
       { type: "done", done, sent: false },
     ])
+  })
+
+  // What the plugins prepare for a prompt or a server command is part of sending it. Until it is ready nothing of the
+  // send has reached the server, the composer takes no other send, and Stop cancels this one.
+  test("a send whose gate is still pending when the composer clears keeps the composer until its request may leave", () => {
+    const handing = states["handing-off"]
+    expect(handing).toMatchObject({ type: "handing-off", gate: "pending" })
+
+    const cleared = transitionComposerSubmit(handing, { type: "handoff.ready", attempt: 1, prompt: undefined })
+    expect(cleared.state).toEqual({ type: "sending", attempt: 1, done })
+    // The composer clears, as the prompt already shows in its Session, and the submit has not settled yet.
+    expect(cleared.effects.map((effect) => effect.type)).toEqual(["composer.clear"])
+    expect(composerSubmitView(cleared.state)).toEqual({ held: true, busy: true, canSubmit: false })
+
+    expect(transitionComposerSubmit(cleared.state, { type: "gate.settled", attempt: 1 })).toEqual({
+      state: { type: "idle", attempt: 1 },
+      effects: [{ type: "done", done, sent: true }],
+    })
+  })
+
+  test("a gate that settles before the composer clears lets the send through as before", () => {
+    const settled = transitionComposerSubmit(states["handing-off"], { type: "gate.settled", attempt: 1 })
+    expect(settled).toMatchObject({ state: { type: "handing-off", gate: "settled" }, effects: [] })
+
+    const cleared = transitionComposerSubmit(settled.state, { type: "handoff.ready", attempt: 1, prompt: undefined })
+    expect(cleared.state).toEqual({ type: "idle", attempt: 1 })
+    expect(cleared.effects.map((effect) => effect.type)).toEqual(["composer.clear", "done"])
+  })
+
+  test.each([
+    { name: "a prompt", input: {}, gated: true },
+    { name: "a server command", input: { text: "/review", commands: [{ name: "review" }] }, gated: true },
+    { name: "a shell command", input: { mode: "shell" }, gated: false },
+  ] satisfies { name: string; input: Partial<SubmitSnapshot>; gated: boolean }[])("$name waits on the gate: $gated", (row) => {
+    const result = replay([{ type: "submit", snapshot: snapshot(row.input), done }, started(1)])
+
+    expect(result.effects.find((effect) => effect.type === "handoff")).toMatchObject({ gated: row.gated })
+    expect(result.state).toMatchObject({ type: "handing-off", gate: row.gated ? "pending" : "none" })
+    // A send with no gate settles as it always did.
+    expect(
+      transitionComposerSubmit(result.state, { type: "handoff.ready", attempt: 1, prompt: undefined }).state.type,
+    ).toBe(row.gated ? "sending" : "idle")
+  })
+
+  test("Stop cancels a send that still waits on the gate, and interrupts the Session only when none does", () => {
+    const cancel: ComposerSubmitTransition = {
+      state: { type: "idle", attempt: 1 },
+      effects: [
+        { type: "send.cancel", attempt: 1 },
+        { type: "done", done, sent: false },
+      ],
+    }
+
+    expect(transitionComposerSubmit(states.sending, { type: "stop" })).toEqual(cancel)
+    expect(transitionComposerSubmit(states["handing-off"], { type: "stop" })).toEqual(cancel)
+
+    // A quote's own send settles the run, once it fails as cancelled.
+    const quoting = transitionComposerSubmit(states.quoting, { type: "stop" })
+    expect(quoting).toEqual({ state: states.quoting, effects: [{ type: "send.cancel", attempt: 1 }] })
+    expect(transitionComposerSubmit(quoting.state, { type: "run.settled", attempt: 1, sent: false })).toEqual({
+      state: { type: "idle", attempt: 1 },
+      effects: [{ type: "done", done, sent: false }],
+    })
+
+    // Once the gate settled the request may have left: Stop is for the Session again, and never both.
+    for (const state of [states["handing-off"], states.quoting]) {
+      const settled = transitionComposerSubmit(state, { type: "gate.settled", attempt: 1 }).state
+      expect(transitionComposerSubmit(settled, { type: "stop" })).toEqual({ state: settled, effects: [{ type: "interrupt" }] })
+    }
+
+    expect(transitionComposerSubmit(states.running, { type: "stop" }).effects).toEqual([{ type: "interrupt" }])
+  })
+
+  test("a gate result for a cancelled or another send changes nothing", () => {
+    const cancelled = transitionComposerSubmit(states.sending, { type: "stop" }).state
+
+    for (const state of [cancelled, states.sending, states["handing-off"], states.quoting, states.preparing, states.running]) {
+      const attempt = state === cancelled ? 1 : 2
+      expect(transitionComposerSubmit(state, { type: "gate.settled", attempt }).state).toBe(state)
+    }
+
+    // The next send's gate is its own.
+    const next = replay([{ type: "submit", snapshot: snapshot(), done }, started(2), { type: "gate.settled", attempt: 1 }], cancelled)
+    expect(next.state).toMatchObject({ type: "handing-off", attempt: 2, gate: "pending" })
+  })
+
+  test("a composer that unmounts while its send waits on the gate leaves the send to finish", () => {
+    expect(transitionComposerSubmit(states.sending, { type: "unmounted" })).toEqual({
+      state: { type: "idle", attempt: 1 },
+      effects: [{ type: "done", done, sent: true }],
+    })
   })
 
   test.each([

@@ -585,8 +585,7 @@ export const layer = (options?: Options) =>
           attempt: { started, settled: Latch.makeUnsafe() },
           connection: (pooled ? share : McpConnection.make)({
             name,
-            // Pooling offers 2026-07-28, the only revision a connection can be shared on.
-            config: config.pool && config.protocol === undefined ? { ...config, protocol: "auto" } : config,
+            config,
             directory: location.directory,
             clientInfo: options?.clientInfo,
             mcpEvents,

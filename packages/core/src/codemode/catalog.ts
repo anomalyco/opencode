@@ -47,7 +47,7 @@ export type Options = {
   readonly budget?: number
 }
 
-const DESCRIPTION_LIMIT = 120
+const DESCRIPTION_LIMIT = 500
 const CHARACTERS_PER_TOKEN = 4
 const INLINE_BUDGET = 2_000
 

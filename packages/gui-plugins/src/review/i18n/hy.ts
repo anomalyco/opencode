@@ -12,4 +12,12 @@ export default {
   noChanges: "Ոչ փոփոխություններ",
   "settings.wrapLines.title": "Տողերը փաթաթել",
   "settings.wrapLines.description": "Բջջային diff-երում երկար տողերը փաթաթել՝ հորիզոնական ոլորելու փոխարեն",
+  "menu.count.one": "{{count}} ֆայլ է փոփոխվել",
+  "menu.count.other": "{{count}} ֆայլ է փոփոխվել",
+  "folder.more": "{{count}} · մնացածը ցուցադրված չէ",
+  "folder.failed": "Չհաջողվեց բեռնել փոփոխությունները",
+  "command.open": "Բացել վերանայումը",
+  "load.failed": "Չհաջողվեց բեռնել փոփոխությունները",
+  "load.timeout": "Սերվերը չափազանց երկար էր պատասխանում",
+  offline: "Այս սերվերը հասանելի չէ",
 }

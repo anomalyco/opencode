@@ -401,6 +401,24 @@ export function shortenPickerRecentPath(path: string, home: string) {
   return display
 }
 
+// The folders from the root down to `path`, with home shown as `~`.
+export function pickerBreadcrumbs(path: string, home: string) {
+  const value = trimPickerPath(path)
+  const root = pickerRoot(value)
+
+  if (!root) return []
+  const tilde = pickerTilde(value, home)
+  const base = tilde ? trimPickerPath(home) : root
+  const names = value.slice(base.length).split("/").filter(Boolean)
+  const first = [{ label: root === "/" ? "/" : trimPickerPath(root).replace(/\/$/, ""), path: root }]
+
+  return [
+    ...first,
+    ...(tilde && base !== root ? [{ label: "~", path: base }] : []),
+    ...names.map((label, index) => ({ label, path: joinPickerPath(base, names.slice(0, index + 1).join("/")) })),
+  ]
+}
+
 export async function listPickerDirectory(
   sdk: ServerSDK,
   location: { directory: string; workspace?: string },

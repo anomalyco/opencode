@@ -281,7 +281,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                             {props.children(item)}
                             <Show when={item === props.current}>
                               <span data-slot="list-item-selected-icon">
-                                <Icon name="check-small" />
+                                <Icon name="check" />
                               </span>
                             </Show>
                             <Show when={props.activeIcon}>
