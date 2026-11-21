@@ -1,4 +1,5 @@
 import { EOL } from "node:os"
+import { pipeline } from "node:stream/promises"
 import { Effect, Option } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -40,6 +41,12 @@ export default Runtime.handler(
         body,
       }),
     )
+    const mediaType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase()
+    if (response.ok && mediaType === "text/event-stream" && response.body) {
+      const stream = response.body
+      yield* Effect.tryPromise((signal) => pipeline(stream, process.stdout, { end: false, signal }))
+      return
+    }
     const output = yield* Effect.promise(() => response.text())
     if (output) process.stdout.write(output + (output.endsWith(EOL) ? "" : EOL))
     if (!response.ok) {
