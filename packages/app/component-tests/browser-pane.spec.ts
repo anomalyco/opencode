@@ -1777,6 +1777,8 @@ story("restores the full pane when the toolbar closes and keeps the selected dev
     "Laptop",
     "Desktop",
   ])
+  // The rows show before the menu has the keyboard: until its first row is focused, a key still goes to the trigger.
+  await expect(option("Responsive")).toBeFocused()
   await page.keyboard.press("End")
   await expect(moreDevices).toBeFocused()
   await page.keyboard.press("ArrowRight")
