@@ -86,9 +86,17 @@ function mark(id: string | undefined) {
 export function activeSection(ids: string[]) {
   const headings = ids.flatMap((id) => {
     const heading = document.getElementById(id)
-    return heading ? [{ id, top: heading.getBoundingClientRect().top }] : []
+    return heading
+    ? [
+        {
+          id,
+          top: heading.getBoundingClientRect().top,
+          offset: parseFloat(getComputedStyle(heading).scrollMarginTop) || 0,
+        },
+      ]
+    : []
   })
-  const passed = headings.filter((heading) => heading.top <= innerHeight / 3)
+  const passed = headings.filter((heading) => heading.top <= heading.offset + 1)
   const bottom = scrollY + innerHeight >= document.documentElement.scrollHeight - 2
   const visible = headings.filter((heading) => heading.top >= 0 && heading.top < innerHeight)
   const named = visible.find((heading) => `#${heading.id}` === decodeURIComponent(location.hash)) ?? visible.at(-1)
