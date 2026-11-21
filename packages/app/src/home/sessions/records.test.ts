@@ -37,6 +37,54 @@ describe("buildHomeSessionRecords", () => {
     expect(records.map((record) => record.session.id)).toEqual(["a"])
   })
 
+  test("includes sessions in a subfolder of the selected project", () => {
+    const records = buildHomeSessionRecords({
+      sessions: () => [
+        session("root", "/repo/a", "project-a"),
+        session("child", "/repo/a/android-app", "project-a"),
+        session("sibling", "/repo/ab", "project-ab"),
+      ],
+      projectDirectories: () => ["/repo/a"],
+      projects: () => [opened],
+    })
+
+    expect(records.map((record) => record.session.id).toSorted()).toEqual(["child", "root"])
+  })
+
+  test("matches Windows subfolders across separators and drive-letter case", () => {
+    const records = buildHomeSessionRecords({
+      sessions: () => [session("child", "c:/work/personal/android-app", "project-p")],
+      projectDirectories: () => ["C:\\work\\personal"],
+      projects: () => [{ id: "project-p", worktree: "C:\\work\\personal" }],
+    })
+
+    expect(records.map((record) => record.session.id)).toEqual(["child"])
+  })
+
+  test("leaves sessions of a separately added nested project to that project", () => {
+    const nested: LocalProject = { id: "project-app", worktree: "/repo/a/packages/app" }
+
+    const sessions = [
+      session("root", "/repo/a", "project-a"),
+      session("nested", "/repo/a/packages/app/src", "project-app"),
+    ]
+
+    const parent = buildHomeSessionRecords({
+      sessions: () => sessions,
+      projectDirectories: () => ["/repo/a"],
+      projects: () => [opened, nested],
+    })
+
+    const child = buildHomeSessionRecords({
+      sessions: () => sessions,
+      projectDirectories: () => ["/repo/a/packages/app"],
+      projects: () => [opened, nested],
+    })
+
+    expect(parent.map((record) => record.session.id)).toEqual(["root"])
+    expect(child.map((record) => record.session.id)).toEqual(["nested"])
+  })
+
   test("labels a worktree session with its project before that project's inventory has loaded", () => {
     const records = buildHomeSessionRecords({
       sessions: () => [session("w", "/repo/a/.worktrees/feature", "project-a")],

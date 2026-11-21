@@ -3,7 +3,7 @@ import type { LocalProject } from "@/shell/state/layout"
 import { displayName } from "@opencode/ui/project-avatar"
 import { compareSessionTime } from "@/shell/layout/helpers"
 import { pathKey } from "@/workspaces/path-key"
-import { getFilename } from "@opencode/util/path"
+import { containsDirectory, getFilename, sameDirectory } from "@opencode/util/path"
 
 export type HomeSessionRecord = {
   session: SessionInfo
@@ -22,10 +22,9 @@ export function buildHomeSessionRecords(input: {
   resolveProject?: (session: SessionInfo) => LocalProject | undefined
 }) {
   const selected = input.projectDirectories()
-  const directories = selected ? new Set(selected.map(pathKey)) : undefined
 
-  const sessions = directories
-    ? input.sessions().filter((session) => directories.has(pathKey(session.location.directory)))
+  const sessions = selected
+    ? input.sessions().filter((session) => inSelectedDirectories(session, selected, input.projects()))
     : input.sessions()
 
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
@@ -39,6 +38,22 @@ export function buildHomeSessionRecords(input: {
 
       return { session, project, projectName: displayName(project) }
     })
+}
+
+// A session runs in a selected directory or one of its subfolders, unless a separately added project
+// nested between them owns that subfolder.
+function inSelectedDirectories(session: SessionInfo, selected: string[], projects: readonly LocalProject[]) {
+  const directory = session.location.directory
+
+  const nested = projects
+    .flatMap((project) => [project.worktree, ...(project.sandboxes ?? [])])
+    .filter((root) => !selected.some((item) => sameDirectory(item, root)))
+
+  return selected.some(
+    (root) =>
+      containsDirectory(root, directory) &&
+      !nested.some((other) => containsDirectory(root, other) && containsDirectory(other, directory)),
+  )
 }
 
 // Worktree inventories load on demand, so a worktree session may not match any directory yet;
