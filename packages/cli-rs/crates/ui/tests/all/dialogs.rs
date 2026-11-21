@@ -162,16 +162,6 @@ fn confirm_keys_toggle_the_active_button() {
 }
 
 #[test]
-fn confirm_cancels_on_escape() {
-    let kit = kit(70, 16);
-    let log = Rc::default();
-    open_confirm(&kit, &log);
-    kit.app.press("escape");
-    assert_eq!(*log.borrow(), ["cancel"]);
-    assert!(!kit.dialogs.is_open());
-}
-
-#[test]
 fn escape_closes_the_dialog_and_calls_its_close_handler() {
     let kit = kit(70, 16);
     let log = Rc::new(RefCell::new(Vec::new()));
@@ -717,6 +707,17 @@ fn a_select_opens_and_resizes_in_a_twelve_row_terminal() {
     kit.app.resize(72, 12);
     kit.app.press("down");
     kit.app.render();
+    // A move while the list has no rows shows the selection once the terminal grows, not the list's end.
+    let kit = self::kit(72, 30);
+    open_select(&kit, numbered(30, |i| format!("Item {i:02}.")));
+    kit.app.resize(1, 1);
+    kit.app.render();
+    kit.app.press("pagedown");
+    kit.app.render();
+    kit.app.resize(40, 18);
+    kit.app.render();
+    let screen = kit.app.render().text();
+    assert!(screen.contains("Item 10."), "{screen}");
 }
 
 #[test]
