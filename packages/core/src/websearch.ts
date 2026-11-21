@@ -58,6 +58,8 @@ export interface Interface extends State.Transformable<Editor> {
   readonly available: () => Effect.Effect<boolean>
   readonly providers: () => Effect.Effect<readonly Provider[]>
   readonly default: () => Effect.Effect<Provider | undefined, DisabledError>
+  /** The saved choice: a provider id, `"random"`, `false` when disabled, or `undefined` before consent. */
+  readonly selection: () => Effect.Effect<Selection | undefined>
   readonly select: (selection: Selection) => Effect.Effect<void>
   readonly query: (
     input: Input,
@@ -183,11 +185,18 @@ const layer = Layer.effect(
         const provider = yield* defaultProvider(yield* selection())
         return provider && { id: provider.id, name: provider.name }
       }),
+      selection: Effect.fn("WebSearch.selectionValue")(function* () {
+        return yield* selection()
+      }),
       select: Effect.fn("WebSearch.select")(function* (selection) {
         yield* kv.set(ProviderKey, selection)
       }),
       query: Effect.fn("WebSearch.query")(function* (input, options) {
-        const choice = input.providerID ? undefined : yield* selection()
+        // The saved "disabled" choice outranks a per-call provider. An unset choice stays allowed, because
+        // asking for consent is the tool's job.
+        const saved = yield* selection()
+        if (saved === false) return yield* new DisabledError()
+        const choice = input.providerID ? undefined : saved
         let provider = input.providerID
           ? yield* requireProvider(state.get().providers, input.providerID)
           : yield* defaultProvider(choice)

@@ -33,6 +33,15 @@ $ TAVILY_API_KEY=your-key opencode
 
 Set a provider in `opencode.jsonc` to skip the selection prompt.
 
+The model can also pick the provider for a single search by passing `providerID`;
+the ids available in the current session are listed in that parameter's schema.
+A pinned search uses only that provider, does not fall back to another one when
+rate limited, and never changes your default.
+
+If you saved a specific provider, that choice wins: `providerID` must match it,
+and a different id is refused so a search never leaves the provider you chose.
+With `"random"` (or before you have chosen) the model is free to pick.
+
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
