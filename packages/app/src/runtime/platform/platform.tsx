@@ -72,6 +72,9 @@ type PlatformBase = {
   /** Observe native drag cancellation that does not reach the renderer event loop. */
   onDragCancel?(callback: () => void): () => void
 
+  /** Observe the machine waking from sleep, when server event streams may be dead without knowing it (desktop only) */
+  onSystemResume?(callback: () => void): () => void
+
   /** Open a native save file dialog and write content to the selected path (desktop only) */
   saveFile?(opts: SaveFilePickerOptions, content: string): Promise<boolean>
 
