@@ -696,12 +696,16 @@ fn a_kept_root_takes_a_new_theme() {
 }
 
 thread_local! {
+    /// The mounter's whole views. A change batch that lands while the route settles views it again, with the batch in
+    /// its input, so a count of every view would follow the box's load instead of the mount.
     static VIEWS: Cell<usize> = const { Cell::new(0) };
 }
 
 fn mounter(setup: &mut abi::Setup) -> Result<(), String> {
-    let page = Surface::new("mounter", Place::Route("mounter".into()), |_| {
-        VIEWS.set(VIEWS.get() + 1);
+    let page = Surface::new("mounter", Place::Route("mounter".into()), |view| {
+        if view.input.full {
+            VIEWS.set(VIEWS.get() + 1);
+        }
         Node::text([Span::new("MOUNTER")]).with_id("page")
     })
     .mounts()
@@ -726,6 +730,7 @@ fn what_a_mount_notice_opens_ends_with_the_plugin() {
         harness.tui.navigate(opencode_tui::Route::Plugin { id: "test.mounter".into(), name: "mounter".into() });
         harness.wait_for("POPPED");
         settle(&harness);
+        // The mount builds its whole tree once: the notice's opening does not, and no later view is a first one again.
         assert_eq!(VIEWS.get(), 1, "abi {abi}");
         let host = opencode_tui::plugins::host::host(&harness.tui);
         assert_eq!(harness.tui.plugins.toggle(&host, "test.mounter", false), Some(Ok(())));
