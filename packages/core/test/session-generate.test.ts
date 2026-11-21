@@ -28,7 +28,7 @@ import { Instructions } from "@opencode/core/instructions/index"
 import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
 import { Location } from "@opencode/core/location"
 import { McpInstructions } from "@opencode/core/mcp/instructions"
-import { ID } from "@opencode/core/model"
+import { ID, Ref } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
 import { ReferenceInstructions } from "@opencode/core/reference/instructions"
@@ -94,10 +94,12 @@ const client = Layer.mock(LLMClient.Service)({
       return response
     }),
 })
+const resolvedSessions: SessionSchema.Info[] = []
 const models = Layer.mock(SessionRunnerModel.Service)({
   select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
-  resolve: () =>
-    Effect.succeed(
+  resolve: (session) => {
+    resolvedSessions.push(session)
+    return Effect.succeed(
       SessionRunnerModel.resolved(model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         cost: [
@@ -109,7 +111,8 @@ const models = Layer.mock(SessionRunnerModel.Service)({
         ],
         limit: { context: 200_000, output: 32_000 },
       }),
-    ),
+    )
+  },
 })
 const builtins = Layer.mock(InstructionBuiltIns.Service, {
   load: () =>
@@ -401,6 +404,40 @@ it.effect(
         tokens_cache_read: (usageBefore.session?.tokens_cache_read ?? 0) + 30,
         tokens_cache_write: (usageBefore.session?.tokens_cache_write ?? 0) + 10,
       })
+    }),
+  { timeout: 15_000 },
+)
+
+it.effect(
+  "serves a generate call with a model from another provider and counts its usage",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      options.length = 0
+      resolvedSessions.length = 0
+      const { db, session, instances } = yield* setup
+      const override = Ref.make({ providerID: Provider.ID.make("other"), id: ID.make("other-model") })
+      const usageBefore = yield* usageState(db, sessionID)
+      const modelBefore = usageBefore.session?.model
+
+      const result = yield* SessionGenerate.generate({
+        session,
+        prompt: "Advise",
+        model: override,
+      }).pipe(Effect.provideService(Instance.Service, instances))
+
+      expect(result.text).toBe("Transient answer")
+      expect(resolvedSessions).toHaveLength(1)
+      expect(resolvedSessions[0]?.model).toEqual(override)
+      const usageAfter = yield* usageState(db, sessionID)
+      expect(usageAfter.session?.model).toEqual(modelBefore)
+      expect(recordedUsage(usageBefore, usageAfter)).toEqual([
+        {
+          type: Event.versionedType(SessionEvent.UsageRecorded.type, SessionEvent.UsageRecorded.durable.version),
+          data: { sessionID, source: "generate", cost: result.cost, tokens: result.tokens },
+        },
+      ])
+      expect(usageAfter.session?.cost).toBeCloseTo((usageBefore.session?.cost ?? 0) + result.cost)
     }),
   { timeout: 15_000 },
 )
