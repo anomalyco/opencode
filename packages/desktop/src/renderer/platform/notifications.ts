@@ -13,7 +13,7 @@ const DETAIL_LIMIT = 160
 
 const activeNotifications = new Set<Notification>()
 
-type Toast = { readonly onClick?: () => void; readonly onAction?: (id: string) => void }
+type Toast = { readonly onClick?: () => void; readonly onAction?: (id: string) => Promise<void> }
 
 // What each Windows toast main posted for this window runs when clicked, on its body or a button, by tag.
 const toasts = new Map<string, Toast>()
@@ -25,12 +25,21 @@ export function createDesktopNotify(
   const windows = os === "windows"
 
   if (windows) {
+    // A body click arrives with the window already brought forward by main. A button doesn't bring it forward, so a
+    // button that answers nothing (its answer failed, or this page lost the toast in a reload) does it here instead.
+    const fallBack = (toast: Toast | undefined) => {
+      void Promise.all([api.showWindow(), api.setWindowFocus()])
+      toast?.onClick?.()
+    }
+
     api.onToastActivated((activation) => {
       const toast = toasts.get(activation.tag)
       toasts.delete(activation.tag)
 
-      if (activation.action) return toast?.onAction?.(activation.action)
-      toast?.onClick?.()
+      if (!activation.action) return toast?.onClick?.()
+      if (!toast?.onAction) return fallBack(toast)
+
+      toast.onAction(activation.action).catch(() => fallBack(toast))
     })
   }
 

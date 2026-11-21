@@ -57,7 +57,8 @@ type PlatformBase = {
   /**
    * Send a system notification. `options.tag` names it so a later one with the same tag replaces it and
    * `dismissNotification` can take it back; `options.detail` is a second line saying what it is about. With a tag,
-   * `options.actions` are buttons where the system supports them, and `options.onAction` gets the clicked one's id.
+   * `options.actions` are buttons where the system supports them, and `options.onAction` gets the clicked one's id; when
+   * it rejects, the click counts as one on the notification's body.
    */
   notify(
     title: string,
@@ -67,7 +68,7 @@ type PlatformBase = {
       tag?: string
       detail?: string
       actions?: ReadonlyArray<{ id: string; label: string }>
-      onAction?: (id: string) => void
+      onAction?: (id: string) => Promise<void>
     },
   ): Promise<void>
 

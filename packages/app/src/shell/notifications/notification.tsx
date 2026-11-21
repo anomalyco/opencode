@@ -457,16 +457,17 @@ export function createServerNotificationState(input: {
       if (kind !== "permission")
         return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, open, { tag, detail })
 
-      // A permission's toast answers it as its dock does; an answer that fails opens the session to answer there.
+      // A permission's toast answers it as its dock does. An answer that fails (the request was answered elsewhere or
+      // expired) rejects, and the click then brings the session forward to answer there.
       return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, open, {
         tag,
         detail,
         actions: permissionDecisions.map((decision) => ({ id: decision, label: language.t(decisionLabels[decision]) })),
-        onAction: (id) => {
+        onAction: async (id) => {
           const decision = permissionDecisions.find((item) => item === id)
 
-          if (!decision) return open()
-          void input.data.session.permission.reply({ sessionID, requestID, decision }).catch(open)
+          if (!decision) throw new Error(`not a toast answer: ${id}`)
+          await input.data.session.permission.reply({ sessionID, requestID, decision })
         },
       })
     })

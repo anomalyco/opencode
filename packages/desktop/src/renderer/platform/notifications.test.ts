@@ -180,26 +180,62 @@ describe("desktop notifications", () => {
 
     expect(events).toEqual(["created:Response ready:Fix login"])
   })
-  test("on windows a toast's buttons answer through onAction, and only once", async () => {
-    const desktop = createDesktopNotify(api, "windows")
-    const tag = "server\0request:per_2"
+  test("on windows a toast's buttons answer through onAction, once; a button that answers nothing brings the window forward", async () => {
+    const desktop = createDesktopNotify(
+      {
+        ...api,
+        showWindow: async () => {
+          events.push("api.showWindow")
+        },
+        setWindowFocus: async () => {
+          events.push("api.setWindowFocus")
+        },
+      },
+      "windows",
+    )
 
     const actions = [
       { id: "once", label: "Allow once" },
       { id: "reject", label: "Deny" },
     ]
 
-    await desktop.notify("Permission required", "Fix login", () => events.push("session.select"), {
-      tag,
+    const answer = (fails: boolean) => async (id: string) => {
+      events.push(`answer:${id}`)
+
+      if (fails) throw new Error("already answered")
+    }
+
+    await desktop.notify("Permission required", "Fix login", () => events.push("open:per_2"), {
+      tag: "server\0request:per_2",
       actions,
-      onAction: (id) => events.push(`answer:${id}`),
+      onAction: answer(false),
     })
-    activations.forEach((activate) => activate({ tag, action: "reject" }))
-    activations.forEach((activate) => activate({ tag, action: "once" }))
+    await desktop.notify("Permission required", "Fix login", () => events.push("open:per_3"), {
+      tag: "server\0request:per_3",
+      actions,
+      onAction: answer(true),
+    })
+    events.length = 0
+    activations.forEach((activate) => activate({ tag: "server\0request:per_2", action: "reject" }))
+    activations.forEach((activate) => activate({ tag: "server\0request:per_2", action: "once" }))
+    activations.forEach((activate) => activate({ tag: "server\0request:per_3", action: "once" }))
+    // A toast this page no longer knows, as after a reload.
+    activations.forEach((activate) => activate({ tag: "server\0request:per_9", action: "once" }))
+    await Bun.sleep(0)
 
     expect(events).toEqual([
-      "api.showToast:server\0request:per_2:Permission required:Fix login:Allow once|Deny",
       "answer:reject",
+      // per_2 again: already answered, so this page no longer knows it.
+      "api.showWindow",
+      "api.setWindowFocus",
+      "answer:once",
+      // per_9.
+      "api.showWindow",
+      "api.setWindowFocus",
+      // per_3's answer failed: its session comes forward.
+      "api.showWindow",
+      "api.setWindowFocus",
+      "open:per_3",
     ])
   })
 })
