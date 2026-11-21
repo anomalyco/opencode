@@ -9,6 +9,7 @@ import {
   mergeDiagramLineGlyph,
 } from "../core/drawing.js"
 import { DIAGRAM_LABEL_PADDING_X, diagramTextWidth } from "../core/text.js"
+import { DiagramLayoutError } from "../diagnostics.js"
 import {
   createStateDiagramLayout,
   expandCompositeBoundsForFeedback,
@@ -210,20 +211,20 @@ export function createStateDiagramDrawing(sourceDiagram: StateDiagram, options: 
   if (direction !== "LR" && direction !== "RL") {
     return createStateDiagramDrawingWithDirection(sourceDiagram, options, direction)
   }
-  if (options.layoutMaxWidth === undefined || !Number.isFinite(options.layoutMaxWidth)) {
-    return createStateDiagramDrawingWithDirection(sourceDiagram, options, direction)
-  }
   const fallbackDirection = direction === "RL" ? "BT" : "TB"
-  const maxWidth = Math.max(1, Math.trunc(options.layoutMaxWidth))
   const drawing = (() => {
     try {
       return createStateDiagramDrawingWithDirection(sourceDiagram, options, direction)
     } catch (error) {
-      if (error instanceof DiagramCanvasSizeError) return undefined
+      if (error instanceof DiagramCanvasSizeError || error instanceof DiagramLayoutError) return undefined
       throw error
     }
   })()
   if (!drawing) return createStateDiagramDrawingWithDirection(sourceDiagram, options, fallbackDirection)
+  if (options.layoutMaxWidth === undefined || !Number.isFinite(options.layoutMaxWidth)) {
+    return drawing
+  }
+  const maxWidth = Math.max(1, Math.trunc(options.layoutMaxWidth))
   if (drawing.grid.getTextSize({ trimTop: true, trimBottom: true }).width <= maxWidth) {
     return drawing
   }
@@ -269,7 +270,7 @@ function createStateDiagramDrawingWithDirection(
     })
     expandCompositeBoundsForInternalTransitions(diagram, compositeBounds, transitionPlans)
     if (!separateExternalBoundsFromComposites(diagram, layout)) break
-    if (attempt === separationAttempts - 1) throw new Error("State composite separation did not converge")
+    if (attempt === separationAttempts - 1) throw new DiagramLayoutError("State composite separation did not converge")
   }
   const connectorPoints = noteBounds.flatMap((bound) => bound.connector?.points ?? [])
   const contentLeft = Math.min(
