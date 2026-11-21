@@ -195,6 +195,25 @@ describe("SessionSearch", () => {
     }),
   )
 
+  it.effect("limits search results by sessions even when one session has many matching messages", () =>
+    Effect.gen(function* () {
+      const { search, addSession, addMessages, buildIndex } = yield* setup
+      yield* addSession({ id: "dense" })
+      yield* addSession({ id: "sparse" })
+      yield* addMessages("dense", Array.from({ length: 125 }, (_, index) => user(`dense-${index}`, "zephyrmarker")))
+      yield* addMessages("sparse", [user("sparse-1", `Notes about zephyrmarker. ${"Background context. ".repeat(100)}`)])
+      yield* buildIndex
+
+      const result = yield* search.search({ query: "zephyrmarker" })
+      expect(result.results?.map((item) => item.sessionID)).toEqual([ses("dense"), ses("sparse")])
+      expect(result.results?.map((item) => item.matches.length)).toEqual([3, 1])
+
+      const first = yield* search.search({ query: "zephyrmarker", limit: 1 })
+      expect(first.results?.map((item) => item.sessionID)).toEqual([ses("dense")])
+      expect(first.results?.[0]?.matches.length).toBe(3)
+    }),
+  )
+
   it.effect("folds accents on query and centers snippets on accented and stemmed matches while preserving original text", () =>
     Effect.gen(function* () {
       const { search, addSession, addMessages, buildIndex } = yield* setup

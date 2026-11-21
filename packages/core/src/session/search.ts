@@ -217,17 +217,38 @@ const searchSessions = Effect.fnUntraced(function* (
     directory: input.directory,
     subagents: input.sessionID ? true : (input.subagents ?? true),
   })
-  const runMatch = (expression: string) =>
-    db.all<{ source_id: string; session_id: string; score: number }>(sql`
-      SELECT d.source_id AS source_id, d.session_id AS session_id,
+  type Hit = { source_id: string; session_id: string }
+  const runMatch = Effect.fnUntraced(function* (expression: string) {
+    const scored = sql`
+      SELECT d.source_id, d.session_id, d.id AS document_id,
         bm25(session_search, 3.0, 2.0, 1.5, 1.0) AS score
       FROM session_search
       JOIN session_search_document AS d ON d.id = session_search.rowid
       JOIN session_v2 ON session_v2.id = d.session_id
       WHERE session_search MATCH ${expression}${filters.length > 0 ? sql` AND ${and(...filters)}` : sql``}
-      ORDER BY score
-      LIMIT ${hitLimit}
+    `
+    const hits = yield* db.all<Hit>(sql`${scored} ORDER BY score LIMIT ${hitLimit}`)
+    if (input.sessionID || hits.length < hitLimit || new Set(hits.map((hit) => hit.session_id)).size >= limit) {
+      return hits
+    }
+
+    // The hit window can fill before the session limit. Rank each session's
+    // best snippets together so repeated hits can't crowd out other sessions.
+    return yield* db.all<Hit>(sql`
+      WITH scored AS MATERIALIZED (${scored}),
+      ranked AS (
+        SELECT source_id, session_id, row_number() OVER session_hits AS match_rank,
+          first_value(score) OVER session_hits AS best_score,
+          first_value(document_id) OVER session_hits AS best_document_id
+        FROM scored
+        WINDOW session_hits AS (PARTITION BY session_id ORDER BY score, document_id)
+      )
+      SELECT source_id, session_id FROM ranked
+      WHERE match_rank <= ${MAX_MATCHES_PER_SESSION}
+      ORDER BY best_score, best_document_id, match_rank
+      LIMIT ${limit * MAX_MATCHES_PER_SESSION}
     `)
+  })
 
   const raw = hasFtsSyntax(folded) ? folded : fallback
   const hits = yield* runMatch(raw).pipe(
