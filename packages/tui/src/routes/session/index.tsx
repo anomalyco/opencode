@@ -51,6 +51,7 @@ import { FilePath } from "../../ui/file-path"
 import {
   canonicalToolName,
   executeCalls,
+  executeCallsOmitted,
   executeCallSummary,
   finiteNumber,
   primitiveInputSummary,
@@ -3430,6 +3431,7 @@ function Execute(props: ToolProps) {
   const dialog = useDialog()
   const isLoading = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
   const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
+  const omitted = createMemo(() => executeCallsOmitted(props.metadata.toolCallsOmitted))
   // One block per change a script made, in order; a change past the size cap or to a binary file has no patch.
   const files = createMemo(() => parseScriptChanges(props.metadata.files))
   const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
@@ -3456,6 +3458,13 @@ function Execute(props: ToolProps) {
       >
         execute
       </InlineTool>
+      <Show when={omitted() > 0}>
+        <box paddingLeft={3}>
+          <text fg={theme.text.muted}>
+            … {omitted()} {omitted() === 1 ? "call" : "calls"} omitted
+          </text>
+        </box>
+      </Show>
       <Index each={calls()}>{(call) => <ExecuteCallView call={call} />}</Index>
       <Show when={showOutput()}>
         <box paddingLeft={3}>
