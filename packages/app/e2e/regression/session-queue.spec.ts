@@ -986,6 +986,27 @@ test("Undo cancels only the selected queued prompt and focuses the restored inpu
   expect(mock.prompts).toEqual([])
 })
 
+test("Undo keeps the draft when the queued prompt has already reached the session", async ({ page }) => {
+  const text = "Queued prompt delivered during Undo"
+  const mock = createQueueMock([text])
+  const view = await openQueue(page, mock)
+  const undo = view.rows.filter({ hasText: text }).getByRole("button", { name: "Undo", exact: true })
+  await expect(undo).toBeVisible()
+  await view.input.fill("My next draft")
+
+  // The server delivered the prompt, but the client has not received the event yet.
+  const [delivered] = mock.rows.splice(0, 1)
+  mock.messages.push({ id: delivered.id, type: "user", text, time: delivered.time })
+  await undo.click()
+
+  await expect(page.getByText("This prompt was already sent")).toBeVisible()
+  await expect(page.getByText("Request failed")).toHaveCount(0)
+  await expect(view.rows.filter({ hasText: text })).toHaveCount(0)
+  await expect(view.input).toHaveText("My next draft")
+  expect(mock.changes).toEqual([{ inboxID: delivered.id, action: "cancel" }])
+  expect(mock.prompts).toEqual([])
+})
+
 test("Undo appends to an existing draft and restores inline attachments", async ({ page }) => {
   const mock = createQueueMock(["queued with image"])
   mock.rows[0].payload.files = [
@@ -1180,6 +1201,32 @@ test("/undo withdraws a pending steer without interrupting the running session",
   await expect(view.input).toHaveText(text)
   expect(mock.changes).toEqual([{ inboxID, action: "cancel" }])
   expect(stops).toEqual([])
+})
+
+test("/undo rewinds a prompt that was delivered after it appeared pending", async ({ page }) => {
+  const mock = createQueueMock([])
+  const view = await openQueue(page, mock, "steer")
+  const text = "Steered prompt delivered during undo"
+  await view.input.fill(text)
+  await view.input.press("Enter")
+  await expect.poll(() => mock.rows.map((row) => row.delivery)).toEqual(["steer"])
+  await expect(view.input).toHaveText("")
+
+  const [delivered] = mock.rows
+  await expect(userRow(page, delivered.id)).toContainText(text)
+
+  // Move the input to history on the server before the client receives its delivery event.
+  mock.rows.splice(0, 1)
+  mock.messages.push({ id: delivered.id, type: "user", text, time: delivered.time })
+  const staged = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `/api/session/${sessionID}/revert/stage`,
+  )
+  await runSlash(page, view.input, "undo")
+
+  expect((await staged).request().postDataJSON()).toEqual({ messageID: delivered.id })
+  await expect(view.input).toHaveText(text)
+  expect(mock.changes).toEqual([{ inboxID: delivered.id, action: "cancel" }])
+  expect(mock.prompts).toHaveLength(1)
 })
 
 test("reverting a delivered prompt leaves queued prompts alone, as in the TUI", async ({ page }) => {

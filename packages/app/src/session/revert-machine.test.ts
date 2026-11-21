@@ -267,7 +267,7 @@ describe("transitionSessionRevert", () => {
       status: "running",
       attempt: 5,
       echoes: [],
-      operation: { type: "withdraw", message: m3 },
+      operation: { type: "withdraw", message: m3, prior: undefined },
       known: { boundary: undefined },
     })
 

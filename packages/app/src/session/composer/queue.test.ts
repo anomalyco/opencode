@@ -255,19 +255,22 @@ describe("queuedPromptAttachments", () => {
     })
 
     try {
-      const pinned = await undoQueuedPrompt({
+      const result = await undoQueuedPrompt({
         prompt: extracted,
         cancelInboxItem: async () => {
           events.push("cancelInboxItem")
           // The cancel releases the item's blob refs and sweeps the blob nothing else references.
           blobs.delete(hash)
+
+          return "withdrawn"
         },
       })
 
       expect(events).toEqual([`load:${mediaUri}`, "cancelInboxItem"])
       expect(blobs.has(hash)).toBe(false)
 
-      const imagePart = pinned.find((part) => part.type === "image")
+      expect(result.type).toBe("withdrawn")
+      const imagePart = result.type === "withdrawn" ? result.prompt.find((part) => part.type === "image") : undefined
       expect(imagePart?.type).toBe("image")
 
       if (imagePart?.type !== "image") return
@@ -282,6 +285,8 @@ describe("queuedPromptAttachments", () => {
           prompt: extracted,
           cancelInboxItem: async () => {
             events.push("cancelInboxItem")
+
+            return "withdrawn"
           },
         }),
       ).rejects.toBeInstanceOf(Error)
@@ -303,6 +308,8 @@ describe("queuedPromptAttachments", () => {
           signal: stopped.signal,
           cancelInboxItem: async () => {
             events.push("cancelInboxItem")
+
+            return "withdrawn"
           },
         }),
       ).rejects.toMatchObject({ name: "AbortError" })

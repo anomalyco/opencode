@@ -155,6 +155,7 @@ export type QueueEvent =
       readonly prompt: Prompt
       readonly context: readonly ContextItem[]
     }
+  | { readonly type: "mutation.delivered"; readonly attempt: number }
   // `hidden` lists the inbox IDs the failed operation already withdrew or cancelled.
   | { readonly type: "mutation.failed"; readonly attempt: number; readonly hidden: readonly string[] }
   // `hidden` as for a failure: what the operation withdrew or cancelled before the bound ran out.
@@ -167,7 +168,11 @@ export type QueueEvent =
   | { readonly type: "gone.expired"; readonly expiry: number }
   | { readonly type: "dispose" }
 
-export type QueueToastKey = "common.requestFailed" | "session.queue.reverted" | "session.queue.undoShell"
+export type QueueToastKey =
+  | "common.requestFailed"
+  | "session.queue.alreadySent"
+  | "session.queue.reverted"
+  | "session.queue.undoShell"
 
 export type QueueEffect =
   | { readonly type: "draft.load"; readonly prompt: Prompt; readonly cursor: number }
@@ -295,7 +300,8 @@ function settleDisposed(state: Extract<QueueState, { status: "disposed" }>, even
 
   if (!returning || !("attempt" in event) || event.attempt !== returning.attempt) return unchanged(state)
 
-  if (event.type === "mutation.admitted" || event.type === "mutation.succeeded") return changed({ status: "disposed" })
+  if (event.type === "mutation.admitted" || event.type === "mutation.succeeded" || event.type === "mutation.delivered")
+    return changed({ status: "disposed" })
 
   if (event.type === "mutation.undone")
     return changed({ status: "disposed" }, [
@@ -581,7 +587,15 @@ function settle(
   state: LiveQueueState,
   event: Extract<
     QueueEvent,
-    { type: "mutation.moved" | "mutation.admitted" | "mutation.succeeded" | "mutation.undone" | "mutation.failed" }
+    {
+      type:
+        | "mutation.moved"
+        | "mutation.admitted"
+        | "mutation.succeeded"
+        | "mutation.undone"
+        | "mutation.delivered"
+        | "mutation.failed"
+    }
   >,
 ): QueueTransition {
   // A result for an operation that is no longer in flight is stale, for example one that settles after unmount.
@@ -602,13 +616,15 @@ function settle(
     return changed(withActive(state, { ...active, phase: "cancelling" }))
   }
 
-  if (event.type === "mutation.undone") {
+  if (event.type === "mutation.undone" || event.type === "mutation.delivered") {
     if (active.type !== "undo") return unchanged(state)
     const hidden = hide(state, [active.item.id])
     const next = advance(hidden.state, {})
 
     return changed(next.state, [
-      { type: "draft.merge", prompt: event.prompt, context: event.context },
+      event.type === "mutation.undone"
+        ? { type: "draft.merge", prompt: event.prompt, context: event.context }
+        : { type: "toast", key: "session.queue.alreadySent" },
       ...hidden.effects,
       ...next.effects,
     ])
