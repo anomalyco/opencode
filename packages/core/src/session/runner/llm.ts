@@ -290,7 +290,7 @@ const layer = Layer.effect(
               options: prepared.options,
               retry: prepared.retry,
               executeTool: prepared.executeTool,
-              codeModeExpression: prepared.codeModeExpression,
+              codeModeCall: prepared.codeModeCall,
             })),
           )
         const outcome = yield* steps.attempt({

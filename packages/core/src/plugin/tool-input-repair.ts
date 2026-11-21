@@ -27,7 +27,7 @@ export const Plugin = define({
   id: "opencode.tool.input.repair",
   effect: (ctx) =>
     Effect.gen(function* () {
-      const aliased = new Map<string, string>()
+      const aliased = new Map<string, { readonly called: string; readonly tool: string }>()
       yield* ctx.tool.hook("execute.before", (event) =>
         Effect.gen(function* () {
           // The outer Code Mode tool is built per snapshot rather than registered; its `{ code }`
@@ -39,7 +39,7 @@ export const Plugin = define({
           const tool = event.info ?? aliasedTool
           if (!tool) return
           if (aliasedTool) {
-            aliased.set(event.id, event.tool)
+            aliased.set(event.id, { called: event.tool, tool: aliasedTool.id })
             event.tool = aliasedTool.id
           }
           const schema = definition(tool, event.codemode).inputSchema
@@ -49,10 +49,14 @@ export const Plugin = define({
       )
       yield* ctx.tool.hook("execute.after", (event) =>
         Effect.sync(() => {
-          const called = aliased.get(event.id)
-          if (called === undefined) return
+          const alias = aliased.get(event.id)
+          if (alias === undefined) return
           aliased.delete(event.id)
-          const note = `There is no "${called}" tool, so this ran as "${event.tool}". Call "${event.tool}" directly.`
+          // A tool this request only offers inside Code Mode ran as an execute program.
+          const note =
+            event.tool === alias.tool
+              ? `There is no "${alias.called}" tool, so this ran as "${alias.tool}". Call "${alias.tool}" directly.`
+              : `There is no "${alias.called}" tool, so this ran as "${alias.tool}" inside "${event.tool}". Call it there.`
           if (event.status === "error") {
             event.error = new ToolFailure({
               message: `${event.error.message}\n\n${note}`,

@@ -403,11 +403,25 @@ const layer = Layer.effect(
               if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codemode) {
-                const run = (ctx: Tool.Context) => executeTool(codemode.tool, name, event.input, ctx)
+              // A plugin may rename a call to a tool this request only offers inside Code Mode, as the input repair plugin
+              // does when `shell` lives there. Run it as the program that calls that tool.
+              const program =
+                codemode &&
+                name !== "execute" &&
+                !direct.has(name) &&
+                (!input.definitions || Array.from(input.definitions.values()).some((item) => item.name === "execute"))
+                  ? CodeModeTool.find(codemode.inventory, name)
+                  : undefined
+              if ((name === "execute" || program) && codemode) {
+                const programInput = program
+                  ? {
+                      code: `return await ${toolExpression(CodeModeTool.qualifiedName(program.registration))}(${JSON.stringify(event.input ?? {})})`,
+                    }
+                  : event.input
+                const run = (ctx: Tool.Context) => executeTool(codemode.tool, "execute", programInput, ctx)
                 const background = yield* CodeModeJob.Current
                 return yield* background
-                  ? background(context, run, full ? executeOptions(event.input) : undefined)
+                  ? background(context, run, full ? executeOptions(programInput) : undefined)
                   : run(context)
               }
               const tool = direct.get(name)

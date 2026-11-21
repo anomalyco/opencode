@@ -133,12 +133,12 @@ export const make = Effect.gen(function* () {
     // A local execution starts only after its Tool.Called publication completes.
     // Read to the end, not just the finish event, so the next request can reuse this response.
     // The span covers only the provider stream, so model time separates from tools, which run in this consumer.
-    const programs = new Map<string, string>()
+    const programs = new Map<string, { readonly name: string; readonly expression: string }>()
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
       Stream.withSpan("LLM.stream", { attributes: modelAttributes }),
       Stream.runForEach((streamed) =>
         Effect.gen(function* () {
-          const event = asProgram(streamed, programs, input.prepared.codeModeExpression)
+          const event = asProgram(streamed, programs, input.prepared.codeModeCall)
           if (event === undefined) return
           if (publisher.record().providerFailed) return
           // Wait here, where cancellation still works, rather than inside the uninterruptible publish.
@@ -352,32 +352,32 @@ const isInterruptedStream = (failure: AIError) => {
  */
 const asProgram = (
   event: LLMEvent,
-  programs: Map<string, string>,
-  expressionFor: ((name: string) => string | undefined) | undefined,
+  programs: Map<string, { readonly name: string; readonly expression: string }>,
+  programFor: SessionModelRequest.Prepared["codeModeCall"],
 ): LLMEvent | undefined => {
-  if (expressionFor === undefined) return event
+  if (programFor === undefined) return event
   if (event.type === "tool-input-start" && !event.providerExecuted) {
-    const expression = expressionFor(event.name)
-    if (expression === undefined) return event
-    programs.set(event.id, expression)
-    return { ...event, name: "execute", namespace: undefined }
+    const program = programFor(event.name)
+    if (program === undefined) return event
+    programs.set(event.id, program)
+    return { ...event, name: program.name, namespace: undefined }
   }
   if (event.type === "tool-input-delta") return programs.has(event.id) ? undefined : event
-  if (event.type === "tool-input-end")
-    return programs.has(event.id) ? { ...event, name: "execute", namespace: undefined } : event
-  if (event.type === "tool-input-error") {
-    if (!programs.delete(event.id)) return event
-    return { ...event, name: "execute", namespace: undefined }
+  if (event.type === "tool-input-end" || event.type === "tool-input-error") {
+    const program = programs.get(event.id)
+    if (program === undefined) return event
+    if (event.type === "tool-input-error") programs.delete(event.id)
+    return { ...event, name: program.name, namespace: undefined }
   }
   if (event.type !== "tool-call" || event.providerExecuted) return event
-  const expression = programs.get(event.id) ?? expressionFor(event.name)
-  if (expression === undefined) return event
+  const program = programs.get(event.id) ?? programFor(event.name)
+  if (program === undefined) return event
   programs.delete(event.id)
   return {
     ...event,
-    name: "execute",
+    name: program.name,
     namespace: undefined,
-    input: { code: `return await ${expression}(${JSON.stringify(event.input ?? {})})` },
+    input: { code: `return await ${program.expression}(${JSON.stringify(event.input ?? {})})` },
   }
 }
 

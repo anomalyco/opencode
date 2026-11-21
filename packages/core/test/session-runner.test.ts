@@ -5543,6 +5543,44 @@ describe("SessionRunnerLLM", () => {
     },
   )
 
+  scenario("records a top-level Code Mode call under the name a session context hook gave execute", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      {
+        echo: {
+          name: "echo",
+          description: "Echo text",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.Struct({ text: Schema.String }),
+          execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
+        },
+      },
+      { namespace: "acme" },
+    )
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        event.tools.run_code = event.tools.execute!
+        delete event.tools.execute
+      }),
+    )
+    yield* s.admit("Call echo directly")
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "acme.echo", { text: "hi" }), TestLLM.stop())
+    yield* s.resume
+
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Call echo directly"),
+      Expected.assistant({}, [
+        Expected.completedTool(
+          { id: "call-echo", name: "run_code" },
+          { input: { code: 'return await tools.acme.echo({"text":"hi"})' } },
+        ),
+      ]),
+      { type: "assistant", finish: "stop" },
+    ])
+  })
+
   scenario("durably settles local tool failures before continuing", function* (s) {
     yield* s.admit("Call missing")
 
