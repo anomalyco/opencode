@@ -77,7 +77,7 @@ full-screen GPU canvas can drive a game.
 Program → client (`post`): `{ type: "render", node }`, `{ type: "draw", id, commands }`, `{ type: "frame" }` (one
 frame wanted), `{ type: "submit", value }`, `{ type: "dismiss" }`, `{ type: "send", value, wake }`, `{ type: "capture", value: true |
 false }` (`capturePointer` / `releasePointer`; clients without capture ignore it), `{ type: "gpu", ops, bytes }` (a GPU
-canvas batch, `widgets-gpu.md`).
+canvas batch; a frame request may carry one as `{ type: "frame", gpu }`, `widgets-gpu.md`).
 
 Client → program (`receive`): `{ type: "event", event }` (`{ id, type, value }` for a prelude-assigned id, or `id: ""`
 for keys, focus, full screen and capture; the prelude routes it), `{ type: "frame", frame }` (only after a frame request, at

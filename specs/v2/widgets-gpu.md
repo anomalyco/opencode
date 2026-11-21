@@ -9,8 +9,8 @@ canvases are unaffected. Clients only: the server stores and validates nothing f
 | --- | --- |
 | Rune desktop | wgpu |
 | iOS | wgpu in `psychoscript-mobile` (Metal) |
-| Android | wgpu in `psychoscript-mobile` (Vulkan; the latest and the previous Android version only) |
-| Web host | the browser's WebGPU; no WebGL fallback |
+| Android | wgpu in `psychoscript-mobile` (Vulkan 1.1 or newer; Android 15 and 16, API 35 and 36, only) |
+| Web host | the browser's WebGPU; no WebGL fallback. It must produce the same program errors as wgpu for this subset; a difference is a client bug |
 | TUI | none for now (placeholder) |
 
 **Unavailable is not an error.** Where a client has no WebGPU, or creating the device fails, the canvas shows its
@@ -44,10 +44,12 @@ the resource (a handle):
 
 - `createBuffer({ size, usage })`: `usage` from `GPUBufferUsage` (`VERTEX`, `INDEX`, `UNIFORM`, `STORAGE`, `COPY_DST`,
   `COPY_SRC`), with WebGPU's numeric values. No `mappedAtCreation`, no `mapAsync`: data goes in with `writeBuffer`.
-- `createTexture({ size: [w, h], format, usage, mipLevelCount?, sampleCount? })`: 2D only. Formats: `rgba8unorm`,
-  `rgba8unorm-srgb`, `bgra8unorm`, `r8unorm`, `rgba16float`, `depth24plus`, `depth32float`. `usage` from
-  `GPUTextureUsage` (`COPY_SRC`, `COPY_DST`, `TEXTURE_BINDING`, `RENDER_ATTACHMENT`). `sampleCount` 1 or 4.
-  `texture.createView(descriptor?)` (2D views; `baseMipLevel`, `mipLevelCount`).
+- `createTexture({ size: [w, h, depthOrArrayLayers?], format, usage, mipLevelCount?, sampleCount? })`: 2D textures
+  and 2D texture arrays (`depthOrArrayLayers`, default 1). Formats: `rgba8unorm`, `rgba8unorm-srgb`, `bgra8unorm`,
+  `r8unorm`, `rgba16float`, `depth24plus`, `depth32float`. `usage` from `GPUTextureUsage` (`COPY_SRC`, `COPY_DST`,
+  `TEXTURE_BINDING`, `RENDER_ATTACHMENT`). `sampleCount` 1 or 4. `texture.createView(descriptor?)`: `dimension` `"2d"`,
+  `"2d-array"` or `"cube"` (6 layers of a square texture, from `baseArrayLayer`), `baseMipLevel`, `mipLevelCount`,
+  `baseArrayLayer`, `arrayLayerCount`.
 - `createSampler(descriptor)`, `createShaderModule({ code })` (WGSL).
 - `createBindGroupLayout`, `createPipelineLayout`, `createBindGroup` (entries: buffer bindings, samplers, texture
   views), and `pipeline.getBindGroupLayout(index)` for `layout: "auto"`.
@@ -55,10 +57,13 @@ the resource (a handle):
   `cullMode`, `frontFace`), `depthStencil` (depth format, `depthWriteEnabled`, `depthCompare`), per-target `blend` and
   `writeMask`, `multisample.count`. Synchronous only (no `createRenderPipelineAsync`).
 - `queue.writeBuffer(buffer, offset, data, dataOffset?, size?)` and `queue.writeTexture({ texture, mipLevel?, origin? },
-  data, { bytesPerRow, rowsPerImage? }, [w, h])`, with `data` an `ArrayBuffer` or typed array (`Float32Array`,
+  data, { bytesPerRow, rowsPerImage? }, [w, h, layers?])` (`origin` `[x, y, layer]`), with `data` an `ArrayBuffer` or typed array (`Float32Array`,
   `Uint8Array`, `Uint16Array`, `Uint32Array`, `Int32Array`; the interpreter hands their bytes to the host without
   copying).
-- `createCommandEncoder()` → `beginRenderPass({ colorAttachments: [{ view, resolveTarget?, clearValue, loadOp, storeOp
+- `createCommandEncoder()` → `copyBufferToBuffer(source, sourceOffset, destination, destinationOffset, size)`,
+  `copyBufferToTexture({ buffer, offset?, bytesPerRow, rowsPerImage? }, { texture, mipLevel?, origin? }, [w, h,
+  layers?])`, `copyTextureToTexture({ texture, mipLevel?, origin? }, { texture, mipLevel?, origin? }, [w, h, layers?])`,
+  and `beginRenderPass({ colorAttachments: [{ view, resolveTarget?, clearValue, loadOp, storeOp
   }], depthStencilAttachment?: { view, depthClearValue, depthLoadOp, depthStoreOp } })` → `setPipeline`,
   `setBindGroup(index, group, dynamicOffsets?)`, `setVertexBuffer(slot, buffer, offset?, size?)`,
   `setIndexBuffer(buffer, "uint16" | "uint32", offset?, size?)`, `setViewport`, `setScissorRect`, `draw`, `drawIndexed`,
@@ -67,8 +72,8 @@ the resource (a handle):
 
 `context.getCurrentTexture()` returns the canvas's texture (the same object every frame; it stands for whatever surface
 texture the client presents next). Render into `getCurrentTexture().createView()` to draw the canvas; render into your
-own textures and bind them for render-to-texture. Nothing else from WebGPU exists (no compute, no queries, no
-`copy*` commands, no 3D or array textures, no compressed formats, no optional features).
+own textures and bind them for render-to-texture. Nothing else from WebGPU exists (no compute, no queries, no error
+scopes, no 3D textures, no compressed formats, no optional features).
 
 ## Frames
 
@@ -89,24 +94,29 @@ while (true) {
 }
 ```
 
-Calls don't touch a GPU in the program. The prelude records them and posts them to the client in **batches**, in queue
-order: resource creation and `writeBuffer`/`writeTexture` at the point they are called, a command buffer's commands at
-the `submit` that takes it. It posts a batch at every `queue.submit` and before every `await` of a `widget` call
-(`frame`, `sleep`, `fetch`). The client replays each batch in order on its device, and presents every canvas whose
-texture a render pass in the batch wrote to. It may skip presents beyond one per display frame, never other ops.
+Calls don't touch a GPU in the program. The prelude records them into a **batch**, in queue order: resource creation
+and `writeBuffer`/`writeTexture` at the point they are called, a command buffer's commands at the `submit` that takes
+it. The pending batch goes out at the program's next `await` of a `widget` call: with `widget.frame()` it rides in the
+frame request itself, so a game posts once per frame (about 120 posts a second at 120 Hz); before `widget.sleep()` or
+`widget.fetch()` it is a post of its own (an intermediate batch, allowed, counted toward the post rate). The client
+replays each batch in order on its device and presents every canvas whose texture a render pass in the batch wrote to.
+It may skip presents beyond one per display frame, never other ops.
 
 ## Transport
 
-A batch is one post: `{ type: "gpu", ops: Op[], bytes: Uint8Array }`. `ops` are JSON arrays like draw commands;
-`bytes` holds all the batch's write data, which ops reference as `[byteOffset, byteLength]`. Handles are integers the
-prelude assigns per widget, from 1, never reused; a descriptor names resources by handle.
+A batch is `{ ops: Op[], bytes: ArrayBuffer }`, sent as the frame request `{ type: "frame", gpu: batch }` or on its own
+as `{ type: "gpu", ...batch }`. `ops` are JSON arrays like draw commands. `bytes` is one `ArrayBuffer` the prelude
+assembles from the batch's write data (the raw bytes of the typed arrays passed, in call order), never a JSON array of
+numbers; the host reads it through psychoscript's host bytes API as a borrowed slice, without copying. Ops reference it
+as `[byteOffset, byteLength]`. Handles are integers the prelude assigns per widget, from 1, never reused; a descriptor
+names resources by handle.
 
 ```ts
 type Op =
   | ["context", handle, canvasId, format, alphaMode]        // getContext + configure; handle is its current texture
   | ["buffer", handle, size, usage]
-  | ["texture", handle, width, height, format, usage, mipLevelCount, sampleCount]
-  | ["view", handle, texture, descriptor]                    // texture.createView
+  | ["texture", handle, width, height, depthOrArrayLayers, format, usage, mipLevelCount, sampleCount]
+  | ["view", handle, texture, descriptor]                    // texture.createView (dimension: "2d" | "2d-array" | "cube")
   | ["sampler", handle, descriptor]
   | ["shader", handle, code]
   | ["bindGroupLayout", handle, descriptor]
@@ -116,7 +126,13 @@ type Op =
   | ["bindGroup", handle, descriptor]
   | ["destroy", handle]
   | ["writeBuffer", buffer, offset, byteOffset, byteLength]
-  | ["writeTexture", texture, mipLevel, [x, y], byteOffset, byteLength, bytesPerRow, rowsPerImage, [width, height]]
+  | ["writeTexture", texture, mipLevel, [x, y, layer], byteOffset, byteLength, bytesPerRow, rowsPerImage,
+      [width, height, layers]]
+  | ["copyBufferToBuffer", source, sourceOffset, destination, destinationOffset, size]
+  | ["copyBufferToTexture", buffer, offset, bytesPerRow, rowsPerImage, texture, mipLevel, [x, y, layer],
+      [width, height, layers]]
+  | ["copyTextureToTexture", source, sourceMip, [x, y, layer], destination, destinationMip, [x, y, layer],
+      [width, height, layers]]
   | ["pass", descriptor]                                     // beginRenderPass; the commands up to "end" are its own
   | ["setPipeline", pipeline]
   | ["setBindGroup", index, bindGroup, dynamicOffsets]
@@ -137,7 +153,7 @@ the prelude updates `context.width`/`height`.
 
 ## Limits
 
-A program over a limit has a program error (`widgets.md`, Failures); the client stops that canvas (below).
+The numbers below are verified on wgpu on mobile during implementation. A program over a limit has a program error (`widgets.md`, Failures); the client stops that canvas (below).
 
 - Device limits: WebGPU's default limits, except `maxTextureDimension2D` 4096 and `maxBufferSize` 64 MB; the prelude
   reports them in `device.limits`.
@@ -145,14 +161,16 @@ A program over a limit has a program error (`widgets.md`, Failures); the client 
   samples, mip levels included), and 4,096 live handles.
 - Per batch: at most 4 MB of `bytes` and 20,000 ops; per frame (between two `widget.frame()`), at most 16 render passes
   and 10,000 draws.
-- Shaders: 256 KB of WGSL per module. Batches count as posts toward the 240 posts a second.
+- Shaders: 256 KB of WGSL per module. A batch in a frame request adds no post; intermediate batches count toward the
+  240 posts a second.
 
 ## Errors and device loss
 
 - **Program errors** (phase `gpu` in `report`): a WGSL module that fails validation, any WebGPU validation error in a
   replayed op (wgpu's and the browser's validation implement WebGPU's rules), an op the subset doesn't have, a handle
   that doesn't exist, and exceeding a limit. The client stops that canvas: it shows its placeholder with the error,
-  ignores later batches for it, and reports the error once. The program and the rest of the widget keep running.
+  ignores later batches for it, and reports the error once. The first uncaptured GPU error is enough (no error scopes
+  in v1). The program and the rest of the widget keep running.
 - **Client errors** (not reported, logged in dev mode): no WebGPU, device creation failure, a driver crash or reset,
   running out of GPU memory under the limits. The canvas shows its placeholder.
 - **Device loss.** When the client loses its device (a reset, the app backgrounded long enough, a live program
