@@ -1000,12 +1000,6 @@
   }
 }
 
-/* A script's changes are each their own card, set apart by the gap between a turn's items, so two changes to one file
-   read as two. The New timeline spaces them its own way. */
-[data-script-change="patch"] + [data-script-change="patch"] {
-  margin-top: 12px;
-}
-
 [data-component="execute-tool-calls"] {
   display: flex;
   flex-direction: column;

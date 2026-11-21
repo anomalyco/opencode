@@ -380,9 +380,9 @@ export function createNextTimelineRowRenderer(input: {
                 type: "file",
                 id: ref.partID,
                 file: script,
-                render: () => (
+                render: (files) => (
                   <ScriptChanges
-                    files={[script]}
+                    files={files}
                     render={PatchTool}
                     fileOpen={(path) => input.disclosure.value(`patch:${path}`) ?? diffOpens(input.timelineDetail())}
                     onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
