@@ -10,6 +10,7 @@ import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string; raw: string; unquotedTilde?: boolean }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
+const ESCALATION_WRAPPERS = new Set(["sudo", "su", "doas"])
 const POWERSHELL_LITERAL_FLAG_RE = /^-(?:lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 const POWERSHELL_STACK_FLAG_RE = /^-(?:stack(?:name|nam|na|n)?|st):?$/i
 
@@ -229,7 +230,7 @@ export function scan(
         output.directories.push(...resolved.directories)
         if (directoryCommand === parts && resolved.complete) continue
       }
-      const selected = prefix(words.slice(0, PREFIX_LENGTH))
+      const selected = prefix(words.slice(0, 1 + PREFIX_LENGTH))
       const conventional = `${selected.join(" ")} *`
       const end = item.wordEnds?.[selected.length - 1]
       // Keep existing grants stable unless normalized spacing loses the original source boundary.
@@ -629,7 +630,10 @@ function environment(key: string) {
   return name ? process.env[name] : undefined
 }
 
-function prefix(tokens: string[]) {
+function prefix(tokens: string[]): string[] {
+  if (tokens[0] && ESCALATION_WRAPPERS.has(tokens[0]) && tokens.length > 1) {
+    return [tokens[0], ...prefix(tokens.slice(1))]
+  }
   for (let length = tokens.length; length > 0; length--) {
     const arity = ARITY[tokens.slice(0, length).join(" ")]
     if (arity !== undefined) return tokens.slice(0, arity)

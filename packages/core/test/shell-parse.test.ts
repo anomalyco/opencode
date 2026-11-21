@@ -248,4 +248,14 @@ describe("ShellParse", () => {
     )
     expect(powershell.directories).toEqual(["/workspace/src", "/usr/local/bin"])
   })
+
+  test("derives reusable prefixes for escalation wrappers", async () => {
+    const dumpsys = await Effect.runPromise(
+      ShellParse.scan("sudo dumpsys service | grep -E pattern", "/bin/bash", "/workspace"),
+    )
+    expect(dumpsys.commands[0]?.save).toBe("sudo dumpsys *")
+
+    const ls = await Effect.runPromise(ShellParse.scan("sudo ls", "/bin/bash", "/workspace"))
+    expect(ls.commands[0]?.save).toBe("sudo ls *")
+  })
 })
