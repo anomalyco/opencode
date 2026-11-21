@@ -80,6 +80,7 @@ export const api: ElectronAPI = {
   onZoomChanged: (cb) => listen("WindowZoomChanged", (event) => cb({ factor: event.factor, level: event.level })),
   setTitlebar: (theme) => invoke("WindowSetTitlebar", { theme }),
   setTrafficLightsPosition: (position) => invoke("WindowSetTrafficLightsPosition", position),
+  setTaskbarBadge: (count, description) => invoke("WindowSetTaskbarBadge", { count, description }),
   setTaskbarProgress: (mode) => invoke("WindowSetTaskbarProgress", { mode }),
   runDesktopMenuAction: (action) => invoke("MenuRunAction", { action }),
   setBackgroundColor: (color) => invoke("AppSetBackgroundColor", { color }),

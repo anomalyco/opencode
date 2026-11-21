@@ -10,6 +10,7 @@ import {
   ServerConnection,
   useCommand,
   useCurrentRoute,
+  useLanguage,
   usePluginServers,
   useTabs,
   useWindowTabActivity,
@@ -277,6 +278,7 @@ function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "li
   const command = useCommand()
   onCleanup(bindDesktopMenu((id) => command.trigger(id)))
   const theme = useTheme()
+  const language = useLanguage()
   const activity = useWindowTabActivity()
 
   createEffect(() => {
@@ -293,8 +295,16 @@ function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "li
     void props.api.setTaskbarProgress(mode)
   })
 
+  createEffect(() => {
+    if (props.os !== "windows") return
+    const count = activity().needsYou
+    void props.api.setTaskbarBadge(count, count > 0 ? language.plural("notification.taskbar.badge", count) : "")
+  })
+
   onCleanup(() => {
-    if (props.os === "windows") void props.api.setTaskbarProgress("none")
+    if (props.os !== "windows") return
+    void props.api.setTaskbarProgress("none")
+    void props.api.setTaskbarBadge(0, "")
   })
 
   return null
