@@ -106,6 +106,23 @@
     );
   }
 
+  /* The fade mask also erases the viewport's own ring, and the header and composer cover its top and bottom edges.
+     Draw it on the visible area instead, above the header, rounded like the session frame that clips its corners. */
+  [data-slot="session-timeline-scroll"] > .scroll-view__viewport:focus-visible {
+    outline: none;
+  }
+
+  [data-slot="session-timeline-scroll"]:has(> .scroll-view__viewport:focus-visible)
+    ~ [data-slot="session-timeline-visible"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    border-radius: 10px;
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: -2px;
+  }
+
   [data-slot="session-timeline-scroll"] > .scroll-view__viewport:has(> [data-slot="session-header-inset"]) {
     scroll-padding-block-start: calc(var(--sticky-accordion-top, 0px) + 16px);
   }
@@ -118,7 +135,8 @@
   }
 
   /* Like the composer toolbar, fade only clipped content without reserving layout space.
-     The fade contracts as overflow clears; the second mask preserves the header divider. */
+     The fade contracts as overflow clears; the second mask preserves the header divider.
+     The third keeps the review toggle's slot at the bar's end. */
   #review-panel .session-review-v2-tabs-bar {
     --session-review-header-fade: clamp(0px, calc(100% - 100cqi), 24px);
     mask-image:
@@ -127,7 +145,7 @@
         #000 calc(100cqi - 40px - var(--session-review-header-fade)),
         transparent calc(100cqi - 40px)
       ),
-      linear-gradient(to top, #000 1px, transparent 1px);
+      linear-gradient(to top, #000 1px, transparent 1px), linear-gradient(to left, #000 40px, transparent 40px);
 
     &:dir(rtl) {
       mask-image:
@@ -136,7 +154,7 @@
           #000 calc(100cqi - 40px - var(--session-review-header-fade)),
           transparent calc(100cqi - 40px)
         ),
-        linear-gradient(to top, #000 1px, transparent 1px);
+        linear-gradient(to top, #000 1px, transparent 1px), linear-gradient(to right, #000 40px, transparent 40px);
     }
   }
 

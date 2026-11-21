@@ -192,7 +192,7 @@ function fitPath(value: string, width: number, font: string) {
 }
 
 const TRIGGER =
-  "flex h-7 items-center gap-1.5 rounded-[4px] text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base"
+  "flex h-7 items-center gap-1.5 rounded-[4px] text-start ps-1.5 pe-2 text-v2-text-text-muted transition-[background-color,color] hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base"
 
 function NewSessionLocation(props: {
   project: PromptProject

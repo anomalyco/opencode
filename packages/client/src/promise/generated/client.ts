@@ -279,6 +279,11 @@ import type {
   ExperimentalJobListOutput,
   ExperimentalJobCancelInput,
   ExperimentalJobCancelOutput,
+  ExperimentalMachineListOutput,
+  ExperimentalMachineAddInput,
+  ExperimentalMachineAddOutput,
+  ExperimentalMachineRemoveInput,
+  ExperimentalMachineRemoveOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1764,6 +1769,42 @@ export function make(options: ClientOptions) {
               path: `/api/experimental/job/${encodeURIComponent(input.id)}/cancel`,
               successStatus: 204,
               declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      machine: {
+        list: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalMachineListOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/machine`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        add: (input: ExperimentalMachineAddInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalMachineAddOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/machine`,
+              body: { name: input["name"], reach: input["reach"], replace: input["replace"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 409],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        remove: (input: ExperimentalMachineRemoveInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMachineRemoveOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/machine/${encodeURIComponent(input.name)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 403, 404],
               empty: true,
             },
             requestOptions,

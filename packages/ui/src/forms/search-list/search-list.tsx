@@ -2,6 +2,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createSelector,
   For,
   type JSX,
   on,
@@ -128,6 +129,9 @@ export function SearchList<T>(props: {
 
     return item === undefined ? undefined : props.key(item)
   })
+
+  // Moving the highlight updates the two rows it leaves and lands on, not every row.
+  const isActive = createSelector(activeKey)
 
   // The first row shows from the top, so its header is never hidden; any other row scrolls in only as far as needed.
   const reveal = () => {
@@ -272,11 +276,11 @@ export function SearchList<T>(props: {
     },
     role: "option",
     get "aria-selected"() {
-      return activeKey() === key
+      return isActive(key)
     },
     "data-slot": "search-list-row",
     get "data-active"() {
-      return activeKey() === key ? ("" as const) : undefined
+      return isActive(key) ? ("" as const) : undefined
     },
     onMouseMove: (event) => {
       // A static cursor must not take the active row while the keyboard scrolls rows beneath it.
@@ -289,8 +293,11 @@ export function SearchList<T>(props: {
     onClick: () => props.onSelect(item()),
   })
 
+  // Every highlighted row reads this, so the query is trimmed and lower-cased once per keystroke, not once per row.
+  const needle = createMemo(() => props.query.trim().toLowerCase())
+
   return (
-    <QueryContext.Provider value={() => props.query}>
+    <QueryContext.Provider value={needle}>
       <div data-component="search-list" data-popover={props.popover ? "" : undefined} class={props.class}>
         <Show
           when={props.field}
@@ -384,17 +391,16 @@ export function SearchList<T>(props: {
 
 /** Text with its first match for the list's query marked. One mark per row keeps short queries from speckling the list. */
 export function SearchHighlight(props: { text: string }) {
-  const query = useContext(QueryContext)
+  const needle = useContext(QueryContext)
+  const haystack = createMemo(() => props.text.toLowerCase())
 
   const match = createMemo(() => {
-    const needle = query().trim().toLowerCase()
-    const haystack = props.text.toLowerCase()
-    const at = needle ? haystack.indexOf(needle) : -1
+    const at = needle() ? haystack().indexOf(needle()) : -1
 
     // Lower-casing a few scripts changes the length, and then offsets no longer line up with the text.
-    if (at === -1 || haystack.length !== props.text.length) return
+    if (at === -1 || haystack().length !== props.text.length) return
 
-    return { at, end: at + needle.length }
+    return { at, end: at + needle().length }
   })
 
   return (

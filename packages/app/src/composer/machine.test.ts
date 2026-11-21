@@ -8,7 +8,7 @@ import {
   type ComposerSubmitEvent,
   type ComposerSubmitState,
   type ComposerSubmitTransition,
-  type QuoteSnapshot,
+  type CommentSnapshot,
   type SubmitSnapshot,
 } from "./machine"
 import { retryFingerprint } from "./retry"
@@ -89,10 +89,10 @@ function snapshot(
   }
 }
 
-function quoteSnapshot(input: Partial<QuoteSnapshot> = {}): QuoteSnapshot {
+function commentSnapshot(input: Partial<CommentSnapshot> = {}): CommentSnapshot {
   return {
     key: "quote:c=selected",
-    quote: { key: "quote:c=selected", type: "quote", text: "Selected passage", commentID: "selected" },
+    item: { key: "quote:c=selected", type: "quote", text: "Selected passage", commentID: "selected" },
     comment: "Compare",
     selection,
     delivery: "steer",
@@ -134,7 +134,7 @@ const states = {
     started(1),
     { type: "handoff.ready", attempt: 1, prompt: undefined },
   ]).state,
-  quoting: replay([{ type: "quote", snapshot: quoteSnapshot(), done }]).state,
+  quoting: replay([{ type: "comment", snapshot: commentSnapshot(), done }]).state,
 }
 
 describe("composer submit machine", () => {
@@ -146,7 +146,7 @@ describe("composer submit machine", () => {
       // Enter, then a click on Send, Mod+Enter and a quote, all while the image's URL resolves.
       { type: "submit", snapshot: snapshot(), done },
       { type: "submit", snapshot: snapshot({ alternate: true }), done },
-      { type: "quote", snapshot: quoteSnapshot(), done },
+      { type: "comment", snapshot: commentSnapshot(), done },
       {
         type: "session.started",
         attempt: 1,
@@ -200,12 +200,12 @@ describe("composer submit machine", () => {
     expect(sent({ ...shell, retry: { id: retry.id, fingerprint: fingerprint(shell) } })).toBe(shell.id)
   })
 
-  test.each(Object.entries(states))("ignores another submit or quote while %s", (_name, state) => {
+  test.each(Object.entries(states))("ignores another submit or comment while %s", (_name, state) => {
     expect(transitionComposerSubmit(state, { type: "submit", snapshot: snapshot(), done })).toEqual({
       state,
       effects: [{ type: "done", done, sent: false }],
     })
-    expect(transitionComposerSubmit(state, { type: "quote", snapshot: quoteSnapshot(), done })).toEqual({
+    expect(transitionComposerSubmit(state, { type: "comment", snapshot: commentSnapshot(), done })).toEqual({
       state,
       effects: [{ type: "done", done, sent: false }],
     })

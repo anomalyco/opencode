@@ -39,7 +39,6 @@ type Direction = "home" | "worker"
  * connections are served in the caller's scope.
  */
 export const makeWorker = (host: {
-  readonly environment: { readonly id: Environment.ID }
   readonly connect: (connection: Machine.Connection) => Effect.Effect<void, unknown>
 }) =>
   Effect.gen(function* () {
@@ -200,7 +199,7 @@ export const makeWorker = (host: {
       const current: Link = { open: true, queue: yield* Queue.unbounded<Message, Cause.Done>() }
       const hello: Machine.Hello = {
         type: "hello",
-        name: host.environment.id,
+        protocol: 1,
         os: "linux",
         arch: "x64",
         home: "/home/worker",

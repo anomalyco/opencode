@@ -51,6 +51,7 @@ const instances = Layer.effect(
             resolve: (name) => Effect.succeed({ directory: "", name }),
             check: () => Effect.succeed(false),
             update: unexpected,
+            follows: () => Effect.succeed(false),
             reject: () => Effect.succeed(false),
             which: () => Effect.undefined,
           }),
@@ -96,9 +97,21 @@ describe("HomeMemoryPlugin", () => {
       const directory = memory?.path ?? ""
       expect(directory.endsWith(path.join("data", "memory", result.project))).toBe(true)
       expect(memory?.description).toContain(path.join(directory, "scripts"))
+      expect(memory?.description).toContain(
+        path.join("config", "project", result.project, "skills", "<name>", "SKILL.md"),
+      )
       const folders = yield* Effect.promise(() => fs.readdir(directory))
       expect(folders.toSorted()).toEqual(["docs", "memory", "scripts"])
     }).pipe(Effect.provideService(Flag.Overrides, undefined)),
+  )
+
+  it.live("leaves skills out of the description without project_overlay", () =>
+    Effect.gen(function* () {
+      const result = yield* references(Global.Path.home)
+      const memory = result.list.find((reference) => reference.name === "memory")
+      expect(memory?.description).toContain(path.join(memory?.path ?? "", "scripts"))
+      expect(memory?.description).not.toContain("SKILL.md")
+    }).pipe(Effect.provideService(Flag.Overrides, "-project_overlay")),
   )
 
   it.live("leaves other folders alone", () =>

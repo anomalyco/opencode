@@ -20,7 +20,7 @@ const client = (handler: (request: Request) => Promise<Response>) =>
 const hourly = { type: "every" as const, every: "1 hour" }
 
 it.live(
-  "manages automations through the experimental API when enabled and honors experimental.automations: false",
+  "manages automations through the experimental API when enabled and honors a project automations override",
   () =>
     Effect.gen(function* () {
       const dir = (yield* tmpdirScoped("opencode-automation-api-")).path
@@ -29,16 +29,14 @@ it.live(
       const ask = path.join(dir, "ask")
       yield* Effect.promise(async () => {
         await Promise.all([global, enabled, ask].map((item) => fs.mkdir(item, { recursive: true })))
+        await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ automations: true }))
         await fs.writeFile(
           path.join(enabled, "opencode.json"),
           JSON.stringify({
-            experimental: { automations: true, mcp_events: true },
+            experimental: { mcp_events: true },
           }),
         )
-        await fs.writeFile(
-          path.join(ask, "opencode.json"),
-          JSON.stringify({ experimental: { automations: true }, permission: { execute: "ask" } }),
-        )
+        await fs.writeFile(path.join(ask, "opencode.json"), JSON.stringify({ permission: { execute: "ask" } }))
       })
       const handler = yield* ServerFetch.make({
         app: { version: "test" },
@@ -179,10 +177,7 @@ it.live(
         expect(await api.experimental.automation.list({ sessionID: session.id })).toEqual([])
 
         // Turn off the directory that still owns the standalone automation. Even unfiltered lists must hide it.
-        await fs.writeFile(
-          path.join(enabled, "opencode.json"),
-          JSON.stringify({ experimental: { automations: false } }),
-        )
+        await fs.writeFile(path.join(enabled, "opencode.json"), JSON.stringify({ automations: false }))
         await api.location.reload()
         expect(await api.experimental.automation.list({})).toEqual([])
         await expect(api.experimental.automation.get({ automationID: standalone.id })).rejects.toMatchObject({
@@ -224,7 +219,6 @@ it.live("runs due automations in standalone ServerProcess.start without lifecycl
     const api = OpenCode.make({ baseUrl: server.base, headers: server.headers })
 
     yield* Effect.promise(async () => {
-      await fs.writeFile(path.join(dir, "opencode.json"), JSON.stringify({ experimental: { automations: true } }))
       const session = await api.session.create({ location: { directory: dir } })
       const created = await api.experimental.automation.create({
         sessionID: session.id,
@@ -262,7 +256,6 @@ it.live("starts one child for a due automation when two servers share a database
       fs.writeFile(
         path.join(dir, "opencode.json"),
         JSON.stringify({
-          experimental: { automations: true },
           // Exercise the child's durable prompt and wake, not inference through a default provider.
           policies: [{ action: "provider.use", resource: "*", effect: "deny" }],
         }),

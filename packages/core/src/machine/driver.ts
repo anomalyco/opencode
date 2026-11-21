@@ -32,8 +32,16 @@ export class ProcessLost extends Schema.TaggedError<ProcessLost>()("Machine.Proc
   }
 }
 
+export const ConnectionInfo = Schema.Struct({
+  kind: Schema.Literals(["websocket", "iroh"]),
+  path: Schema.optionalKey(Schema.Literals(["direct", "relayed"])),
+  /** Round-trip time in milliseconds. */
+  rtt: Schema.optionalKey(Schema.Number),
+})
+
 /** One connection from the worker, as the endpoint that accepted it hands it over. */
 export interface Connection {
+  readonly describe?: () => typeof ConnectionInfo.Type
   readonly hello: Hello
   /** Queues the message and returns. A message queued on a connection that is lost is dropped. */
   readonly send: (message: ToWorker) => void
@@ -55,11 +63,13 @@ export interface Interface {
   readonly close: (error: Error) => void
   /** The hello of the connection being served, if there is one. */
   readonly hello: () => Hello | undefined
+  readonly describe: () => typeof ConnectionInfo.Type | undefined
 }
 
 type Reply = Extract<FromWorker, { type: "fs" }>
 
 interface Link {
+  readonly describe: Connection["describe"]
   readonly hello: Hello
   readonly send: Connection["send"]
   readonly lost: Deferred.Deferred<void>
@@ -120,6 +130,7 @@ export const make = (id: Environment.ID): Interface => {
     Effect.suspend(() => {
       if (link) lose(link)
       const current: Link = {
+        describe: connection.describe,
         hello: connection.hello,
         send: connection.send,
         lost: Deferred.makeUnsafe(),
@@ -128,9 +139,13 @@ export const make = (id: Environment.ID): Interface => {
       const restarted = connection.hello.instance !== instance
       instance = connection.hello.instance
       const listed = new Map(connection.hello.processes.map((entry) => [entry.id, entry]))
-      // A release is safe to repeat, so one lost with an earlier connection is sent again. Running ones are left alone.
-      for (const entry of connection.hello.processes)
-        if (entry.state === "exited" && !processes.has(entry.id)) current.send({ type: "release", id: entry.id })
+      // Nothing here will ever read a process this home does not know, so it is stopped and forgotten. The worker
+      // signals at once and the release drops it, so its exit is never reported. A release is safe to repeat.
+      for (const entry of connection.hello.processes) {
+        if (processes.has(entry.id)) continue
+        if (entry.state === "running") current.send({ type: "kill", id: entry.id, signal: "SIGKILL" })
+        current.send({ type: "release", id: entry.id })
+      }
       for (const [processID, process] of processes) {
         const entry = listed.get(processID)
         if (entry && !restarted) {
@@ -258,7 +273,7 @@ export const make = (id: Environment.ID): Interface => {
       }
       // Registered and sent in one step, on the connection that is current in that step. Stopped like a local process
       // when the scope that spawned it closes, a start still unanswered included, but never waiting for a machine that
-      // is away: a process still there is forgotten, so nothing collects output no one will read.
+      // is away: a process still there is forgotten, and stopped when the machine's next hello lists it.
       const live = yield* Effect.acquireRelease(
         Effect.suspend(() => {
           if (!link) return Effect.fail(platform("spawn")(new NotSent({ machine: id })))
@@ -335,6 +350,7 @@ export const make = (id: Environment.ID): Interface => {
     connect,
     close,
     hello: () => link?.hello,
+    describe: () => link?.describe?.(),
     environment: Environment.make(id, {
       spawner,
       overrides: {

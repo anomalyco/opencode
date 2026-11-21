@@ -334,6 +334,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     comments: {
       capture: historyComments,
       clear: comments.clear,
+      remove: comments.remove,
       restore: restoreHistoryComments,
     },
     clientCommand: (text) => {
@@ -349,6 +350,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   })
 
   const submitView = createMemo(() => composerSubmitView(submission.state()))
+
+  const commentSendable = () =>
+    available() && !adapter.controls().model.loading && submitView().canSubmit && !options?.queue?.undoing()
 
   const controller = createComposerEditor({
     store: prompt.store,
@@ -540,13 +544,18 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         quote:
           adapter.kind === "active-session"
             ? {
-                available: () =>
-                  available() &&
-                  !adapter.controls().model.loading &&
-                  submitView().canSubmit &&
-                  !options?.queue?.undoing(),
+                available: commentSendable,
                 delivery: () => (adapter.working() ? (options?.queue?.alternate() ?? "steer") : undefined),
-                onSubmit: submission.submitQuote,
+                onSubmit: submission.submitComment,
+              }
+            : undefined,
+        comment:
+          adapter.kind === "active-session"
+            ? {
+                available: commentSendable,
+                delivery: () => (adapter.working() ? (options?.queue?.delivery() ?? "steer") : undefined),
+                onSubmit: (key: string, comment: string) =>
+                  submission.submitComment(key, comment, { alternate: false }),
               }
             : undefined,
         onSubmit: (submitOptions) => {

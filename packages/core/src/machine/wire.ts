@@ -24,10 +24,14 @@ const exit = { type: Schema.Literal("exit"), id: ProcessID, bytes: Schema.Number
 /** A file call and its reply carry the same `req`. */
 const fs = { type: Schema.Literal("fs"), req: Schema.Number }
 
-/** The first message of every connection, reconnects included. */
+/**
+ * The first message of every connection, reconnects included. It names no machine: which machine sent it is the link's
+ * to prove, never the worker's to say.
+ */
 export const Hello = Schema.Struct({
   type: Schema.Literal("hello"),
-  name: Schema.String,
+  /** The version of the messages after the handshake: a home that does not know a worker's version ends the connection. */
+  protocol: Schema.Literal(1),
   os: Schema.String,
   arch: Schema.String,
   /** The worker's home directory, an absolute POSIX path: where `~` in a path on this machine starts. */

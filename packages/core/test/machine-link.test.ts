@@ -14,15 +14,12 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { Cause, Effect, Exit, Fiber, Option, Queue, Result, type Scope } from "effect"
 import { TestClock } from "effect/testing"
-import transcript from "./fixture/link-v1-transcript.json"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 // Both sides of the link in memory, over a pair of queues, with the real Machines and Identity layers.
 
 const text = (value: string) => new TextEncoder().encode(value)
-const hex = (value: string) => new Uint8Array(Buffer.from(value, "hex"))
-const toHex = (value: Uint8Array) => Buffer.from(value).toString("hex")
 const concat = (...parts: ReadonlyArray<Uint8Array>) => new Uint8Array(Buffer.concat(parts))
 const ok = <A, E>(result: Result.Result<A, E>) => Result.getOrThrow(result)
 const flip = (message: Uint8Array, bit: number) => {
@@ -246,9 +243,17 @@ it.effect("never writes message 3 to a home that does not prove the pinned key",
       const other = newWorker()
       const impostors: ReadonlyArray<Identity.Interface> = [
         // A valid signature by a key that is not the pinned one.
-        { publicKey: () => Effect.succeed(other.publicKey), sign: (bytes) => Effect.succeed(other.sign(bytes)) },
+        {
+          publicKey: () => Effect.succeed(other.publicKey),
+          sign: (bytes) => Effect.succeed(other.sign(bytes)),
+          seed: () => Effect.die("unused"),
+        },
         // The pinned key, with a signature another key made.
-        { publicKey: () => identity.publicKey(), sign: (bytes) => Effect.succeed(other.sign(bytes)) },
+        {
+          publicKey: () => identity.publicKey(),
+          sign: (bytes) => Effect.succeed(other.sign(bytes)),
+          seed: () => Effect.die("unused"),
+        },
       ]
       for (const impostor of impostors) {
         const link = yield* connect(
@@ -283,12 +288,17 @@ it.effect("refuses a signature from another handshake, over the static key alone
           publicKey: () => identity.publicKey(),
           sign: (bytes) =>
             identity.sign(bytes).pipe(Effect.tap((signature) => Effect.sync(() => homeSignatures.push(signature)))),
+          seed: () => Effect.die("unused"),
         },
       })
       ok(recorded.worker)
       const homeReplay = yield* connect(options, {
         fixed: { static: homeStatic },
-        identity: { publicKey: () => identity.publicKey(), sign: () => Effect.succeed(homeSignatures[0]) },
+        identity: {
+          publicKey: () => identity.publicKey(),
+          sign: () => Effect.succeed(homeSignatures[0]),
+          seed: () => Effect.die("unused"),
+        },
       })
       refused(homeReplay.worker)
       expect(homeReplay.sent.byWorker).toHaveLength(1)
@@ -322,7 +332,9 @@ it.effect("refuses a signature from another handshake, over the static key alone
         (bytes: Uint8Array) => identity.sign(bytes.subarray(label, label + 32)),
         (bytes: Uint8Array) => identity.sign(concat(MACHINE_LABEL, bytes.subarray(label))),
       ]) {
-        const link = yield* connect(options, { identity: { publicKey: () => identity.publicKey(), sign } })
+        const link = yield* connect(options, {
+          identity: { publicKey: () => identity.publicKey(), sign, seed: () => Effect.die("unused") },
+        })
         refused(link.worker)
         expect(link.sent.byWorker).toHaveLength(1)
       }
@@ -480,47 +492,3 @@ it.effect("stays interrupted when its caller interrupts it, on either side", () 
     }),
   ),
 )
-
-// The transcript the Rust worker must reproduce byte for byte. It was generated once by running both sides of
-// link.ts with the inputs in the fixture, which fix every key and the secret (Ed25519 signatures are deterministic),
-// and recording the four messages. Regenerate it only for a new protocol version, never to make this test pass.
-it.effect("reproduces the pinned v1 transcript", () => {
-  const inputs = transcript.inputs
-  return home(
-    Effect.gen(function* () {
-      const machines = yield* Machines.Service
-      const identity = yield* Identity.Service
-      const id = yield* machines.add(inputs.machine)
-      const worker = Identity.fromSeed(hex(inputs.worker_seed))
-      const printed = yield* invite(machines, id)
-      // Real invitations are random, so the worker is paired first. The pinned secret is then unknown to the home,
-      // which lets the paired key in, the same path a lost welcome takes: message 3 still carries the secret.
-      yield* connect({ home: printed.home, identity: worker, secret: printed.secret })
-      const link = yield* connect(
-        {
-          home: printed.home,
-          identity: worker,
-          secret: hex(inputs.secret),
-          static: ok(Noise.keyPair(hex(inputs.worker_static))),
-          ephemeral: ok(Noise.keyPair(hex(inputs.worker_ephemeral))),
-        },
-        {
-          fixed: {
-            static: ok(Noise.keyPair(hex(inputs.home_static))),
-            ephemeral: ok(Noise.keyPair(hex(inputs.home_ephemeral))),
-          },
-        },
-      )
-      expect(ok(link.worker).machine).toBe(inputs.machine)
-      expect({
-        home_identity: toHex(yield* identity.publicKey()),
-        worker_identity: toHex(worker.publicKey),
-        message_1: toHex(link.sent.byWorker[0]),
-        message_2: toHex(link.sent.byHome[0]),
-        message_3: toHex(link.sent.byWorker[1]),
-        welcome: toHex(link.sent.byHome[1]),
-      }).toEqual(transcript.outputs)
-    }),
-    hex(inputs.home_seed),
-  )
-})

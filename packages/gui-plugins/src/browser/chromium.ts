@@ -255,6 +255,11 @@ export function createBrowserPage(
     zoomed?: () => void
     /** Whether the build offers the device toolbar, which owns ⇧⌘M. */
     toolbar: boolean
+    /**
+     * How long a `navigate` command waits for its page to load before it stops waiting, while the page goes on
+     * loading. Defaults to `NAVIGATION_DEADLINE_MS`.
+     */
+    navigationDeadlineMs?: number
     /** Hands a browser or shell shortcut to the app window. */
     shortcut?: (shortcut: PageShortcut) => void
     /** The page took keyboard focus. */
@@ -307,6 +312,10 @@ export function createBrowserPage(
     sites: SitePermissions
     /** The page browses in a remote server's partition, not the profile. */
     serverPartition?: boolean
+    /**
+     * What a load waits for before it is issued, if anything: in the profile its content filters, in a remote
+     * server's partition the first copy of the sign-ins.
+     */
     waitForFilters?: (url: string, signal: AbortSignal) => Promise<void> | undefined
     /** Reports what the tab waits on the user for, to the window only. */
     prompt?: (view: PromptView | null) => void
@@ -1297,16 +1306,16 @@ export function createBrowserPage(
 
   const begin = (signal = options.signal, keepAddress = false) => navigation.begin(AbortSignal.any([pageLifetime.signal, signal, options.signal]), keepAddress)
 
-  const load = async (url: string, retry = false, commandSignal = options.signal, keepAddress = true) => {
+  const load = async (url: string, retry = false, commandSignal = options.signal, keepAddress = true, deadlineMs?: number) => {
     const visit = begin(commandSignal, keepAddress)
     const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, () => notices.show({ reason: "browser.preview.restricted" }), retry ? contents.getURL() : undefined) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
 
-    return visit(destination, () => loadDestination(destination, url))
+    return visit(destination, () => loadDestination(destination, url, deadlineMs))
   }
 
-  const loadDestination = (destination: string, url: string) => {
+  const loadDestination = (destination: string, url: string, deadlineMs?: number) => {
     if (options.artifacts?.display(destination)) {
       artifactHost = new URL(destination).host
       contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp")
@@ -1344,7 +1353,7 @@ export function createBrowserPage(
       if (!committed && "errno" in error && (error.errno === -2 || error.errno === -3))
         throw new CodedError("navigation_failed", "No page committed. The navigation was cancelled, failed, or became a download. Check the tab and its downloads before navigating again.")
       throw error
-    })).finally(() => {
+    }), deadlineMs).finally(() => {
       next.stop()
       contents.off("destroyed", next.stop)
       contents.off("did-stop-loading", next.stop)
@@ -1700,7 +1709,7 @@ export function createBrowserPage(
         signal.addEventListener("abort", cancel, { once: true })
 
         try {
-          await load(url, false, signal, origin === "user")
+          await load(url, false, signal, origin === "user", options.navigationDeadlineMs)
         } finally {
           signal.removeEventListener("abort", cancel)
         }

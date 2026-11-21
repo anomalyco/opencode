@@ -5,6 +5,8 @@ import { IpcPortHandoff } from "../ipc-transport"
 import {
   getPinchZoomEnabled,
   setPinchZoomEnabled,
+  setTaskbarBadge,
+  setTaskbarProgress,
   setTitlebar,
   setTrafficLightsPosition,
   setWindowThemeReady,
@@ -12,6 +14,7 @@ import {
   updateTitlebar,
 } from "../windows"
 import { storedZoomLevel } from "../windows/defaults"
+import { requestAttention } from "../windows/attention"
 import { focusWindow, showWindow } from "../windows/focus"
 import { sender } from "./context"
 
@@ -20,6 +23,8 @@ export const windowHandlers = WindowRpcs.toLayer(
     const handoff = yield* IpcPortHandoff
 
     return WindowRpcs.of({
+      WindowRequestAttention: (_args, context) =>
+        Effect.promise(() => requestAttention(BrowserWindow.fromWebContents(sender(handoff, context)))),
       WindowRequestMicrophone: () =>
         Effect.promise(() =>
           process.platform === "darwin" ? systemPreferences.askForMediaAccess("microphone") : Promise.resolve(true),
@@ -67,6 +72,18 @@ export const windowHandlers = WindowRpcs.toLayer(
           const win = BrowserWindow.fromWebContents(sender(handoff, context))
 
           if (win) setTrafficLightsPosition(win, position)
+        }),
+      WindowSetTaskbarBadge: ({ count, description }, context) =>
+        Effect.sync(() => {
+          const win = BrowserWindow.fromWebContents(sender(handoff, context))
+
+          if (win) setTaskbarBadge(win, count, description)
+        }),
+      WindowSetTaskbarProgress: ({ mode }, context) =>
+        Effect.sync(() => {
+          const win = BrowserWindow.fromWebContents(sender(handoff, context))
+
+          if (win) setTaskbarProgress(win, mode)
         }),
     })
   }),

@@ -595,6 +595,8 @@ export const dict = {
   "notification.session.responseReady.title": "Response ready",
   "notification.session.error.title": "Session error",
   "notification.session.error.fallbackDescription": "An error occurred",
+  "notification.taskbar.badge.one": "{{count}} session needs you",
+  "notification.taskbar.badge.other": "{{count}} sessions need you",
 
   "home.title": "Home",
   "home.projects": "Projects",
@@ -611,6 +613,7 @@ export const dict = {
   "home.sessions.search.placeholder.scoped": "Search sessions in {{scope}}",
   "home.sessions.search.sessions": "Sessions",
   "home.sessions.search.noResults": "No sessions found for {{query}}",
+  "home.sessions.openInBackground": "Open in background",
   "home.sessions.empty": "Nothing here yet",
   "home.sessions.empty.description": "Create a session to get started",
   "home.sessions.load.failed": "Couldn't load sessions",

@@ -4,7 +4,8 @@ import { For, Show, createMemo } from "solid-js"
 import { BasicTool } from "../components/basic-tool"
 import { useData } from "../context/data"
 import { taskAgentName } from "../tools/tool-renderer"
-import { summarizeShells, verbKeys, type TimelineEvent } from "./events"
+import { factsOf, summarize } from "../timeline/facts"
+import { verbKeys, type TimelineEvent } from "./events"
 
 /**
  * A run of background shells. Opening its summary lists each command and links back to its call.
@@ -16,7 +17,20 @@ export function TimelineEventRow(props: {
   onRevealShell?: (shellID: string) => void
 }) {
   const i18n = useI18n()
-  const summary = createMemo(() => summarizeShells(props.events))
+
+  const summary = createMemo(
+    () =>
+      summarize(
+        factsOf(
+          props.events.map(({ kind, verb, failed }, index) => ({
+            type: "outcome" as const,
+            id: String(index),
+            outcome: { kind, verb, failed },
+          })),
+        ),
+      ).background,
+  )
+
   const items = createMemo(() => props.events.filter((event) => event.title))
 
   return (

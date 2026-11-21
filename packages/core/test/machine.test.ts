@@ -23,7 +23,7 @@ const text = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
 const cause = (error: PlatformError.PlatformError) => error.reason.cause
 const hello = (processes: Machine.Hello["processes"] = []): Machine.Hello => ({
   type: "hello",
-  name: "gpu",
+  protocol: 1,
   os: "linux",
   arch: "x64",
   home: "/home/worker",
@@ -311,15 +311,34 @@ describe("machine driver", () => {
     }),
   )
 
-  it.effect("leaves an untracked process that is still running alone", () =>
+  it.effect("stops and releases a process whose scope closed while the machine was away", () =>
     Effect.gen(function* () {
-      const { worker, environment } = yield* connected
+      const machine = Machine.make(Environment.ID.make("gpu"))
+      const worker = yield* makeWorker(machine)
+      yield* worker.restore
       const scope = yield* Scope.make()
-      yield* environment.spawner.spawn(command).pipe(Scope.provide(scope))
+      yield* machine.environment.spawner.spawn(command).pipe(Scope.provide(scope))
       yield* worker.cut
       yield* Scope.close(scope, Exit.void)
       yield* worker.restore
-      expect(worker.received.map((message) => message.type)).toEqual(["start"])
+      const id = worker.runs[0].id
+      expect(worker.received.slice(1)).toEqual([
+        { type: "kill", id, signal: "SIGKILL" },
+        { type: "release", id },
+      ])
+      yield* worker.cut
+      yield* worker.restore
+      expect(machine.hello()?.processes).toEqual([])
+    }),
+  )
+
+  it.effect("attaches to a running process it still tracks, without stopping it", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      yield* environment.spawner.spawn(command)
+      yield* worker.cut
+      yield* worker.restore
+      expect(worker.received.map((message) => message.type)).toEqual(["start", "attach"])
     }),
   )
 
@@ -421,19 +440,6 @@ describe("machine driver", () => {
       yield* Fiber.join(closing)
       const signals = worker.received.flatMap((message) => (message.type === "kill" ? [message.signal] : []))
       expect(signals).toEqual(["SIGTERM", "SIGKILL"])
-    }),
-  )
-
-  it.effect("forgets a process whose scope closed while the machine was away", () =>
-    Effect.gen(function* () {
-      const { worker, environment } = yield* connected
-      const scope = yield* Scope.make()
-      yield* environment.spawner.spawn(command).pipe(Scope.provide(scope))
-      yield* worker.cut
-      yield* Scope.close(scope, Exit.void)
-      yield* worker.restore
-      expect(count(worker.received, "attach")).toBe(0)
-      expect(count(worker.received, "kill")).toBe(0)
     }),
   )
 

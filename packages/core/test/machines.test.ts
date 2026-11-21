@@ -25,13 +25,13 @@ const text = (value: Uint8Array) => new TextDecoder().decode(value)
 const cause = (error: PlatformError.PlatformError) => error.reason.cause
 
 const dial = (machines: Machines.Interface, id: Environment.ID) =>
-  makeWorker({ environment: { id }, connect: machines.connect })
+  makeWorker({ connect: (connection) => machines.connect(id, connection) })
 
-const connection = (name: string, os: string, arch: string) =>
+const connection = (os: string, arch: string) =>
   Effect.map(Queue.unbounded<Exclude<Machine.FromWorker, Machine.Hello>, Cause.Done>(), (queue) => ({
     hello: {
       type: "hello" as const,
-      name,
+      protocol: 1 as const,
       os,
       arch,
       home: "/home/worker",
@@ -127,6 +127,7 @@ const gatedIdentity = (key: Uint8Array, gate: Deferred.Deferred<void>, entered: 
         )
       }),
     sign: () => Effect.die("unused"),
+    seed: () => Effect.die("unused"),
   })
 }
 
@@ -187,13 +188,13 @@ service.effect("serves the newer of two connections and keeps it when the first 
   Effect.gen(function* () {
     const machines = yield* Machines.Service
     const id = yield* machines.add("gpu")
-    const first = yield* Effect.forkChild(machines.connect(yield* connection("gpu", "darwin", "arm64")), {
+    const first = yield* Effect.forkChild(machines.connect(id, yield* connection("darwin", "arm64")), {
       startImmediately: true,
     })
     expect(yield* machines.list()).toEqual([
       new Machines.Info({ id, online: true, paired: false, os: "darwin", arch: "arm64" }),
     ])
-    const second = yield* Effect.forkChild(machines.connect(yield* connection("gpu", "linux", "x64")), {
+    const second = yield* Effect.forkChild(machines.connect(id, yield* connection("linux", "x64")), {
       startImmediately: true,
     })
     expect(yield* machines.list()).toEqual([
@@ -214,10 +215,10 @@ service.effect("refuses a connection for a machine it does not know and serves n
     const id = yield* machines.add("gpu")
     const sent: Machine.ToWorker[] = []
     const error = yield* machines
-      .connect({
+      .connect(machineID("ghost"), {
         hello: {
           type: "hello",
-          name: "ghost",
+          protocol: 1,
           os: "linux",
           arch: "x64",
           home: "/home/ghost",
