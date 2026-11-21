@@ -32,6 +32,7 @@ import { windowRecovery } from "./recovery"
 import { createRevealDriver } from "./reveal-machine"
 import { restoreEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
+import { setTaskbarProgress } from "./taskbar-progress"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
 const revealDrivers = new WeakMap<BrowserWindow, ReturnType<typeof createRevealDriver>>()
@@ -57,6 +58,7 @@ export {
   setBackgroundColor,
   setDockIcon,
   setPinchZoomEnabled,
+  setTaskbarProgress,
   setTitlebar,
   setTrafficLightsPosition,
   setZoomLevel,

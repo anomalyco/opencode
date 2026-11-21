@@ -737,6 +737,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       layout: {
         narrow: () => false,
         fitsSide: () => true,
+        // The stored layout has not loaded, so the pane's model reads no strip from it.
+        ready: () => false,
         stored: () => [],
         // The open pane shows each session's current tab; its other tab is in the strip behind it.
         state: (key: string) => (tabs.some((tab) => key === `browser:${tab.id}` && tab !== current(tab.owner)) ? "open" : "visible"),
@@ -1307,6 +1309,8 @@ type RegionHost = {
   Contribution: Component<{ plugin: string; children: () => JSX.Element }>
   /** The host's own placement of a tab it adds without selecting it: after `after` when the strip has it, else last. */
   appendTab(strip: { all: string[] }, tab: string, after?: string): { all: string[] }
+  /** The host's own choice of the sessions whose stored strips it forgets: all but the `max` used last, and never `keep`. */
+  pruneKeys(input: { keep?: string; max: number; used: Map<string, number>; view: string[]; tabs: string[] }): string[]
 }
 
 type RegionFixtureState = {
@@ -1793,33 +1797,39 @@ export function mountBrowserRegion(input: RegionHost) {
           <p data-testid="selected">{region.active() ?? "none"}</p>
           <p data-testid="side-new-tab">{region.newTab("side") ? "shown" : "none"}</p>
           <Show when={browser()}>
-            {(entry) => (
-              <PanelContext.Provider
-                value={{
-                  visible: () => true,
-                  present: () => true,
-                  placement: () => "side",
-                  reserve: () => false,
-                  animate: () => false,
-                  sidebar: { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} },
-                  open: () => [tabID],
-                }}
-              >
-                <input.Contribution plugin={entry().plugin}>
-                  {() =>
-                    entry().provider.render({
-                      get tab() {
-                        return entry().tab
-                      },
-                      get session() {
-                        return view()
-                      },
-                      screen,
-                    })
-                  }
-                </input.Contribution>
-              </PanelContext.Provider>
-            )}
+            {(shown) => {
+              // The pane's last reads come after the route has left its tab: they get the entry it mounted with.
+              const mounted = shown()
+              const entry = () => browser() ?? mounted
+
+              return (
+                <PanelContext.Provider
+                  value={{
+                    visible: () => true,
+                    present: () => true,
+                    placement: () => "side",
+                    reserve: () => false,
+                    animate: () => false,
+                    sidebar: { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} },
+                    open: () => [tabID],
+                  }}
+                >
+                  <input.Contribution plugin={entry().plugin}>
+                    {() =>
+                      entry().provider.render({
+                        get tab() {
+                          return entry().tab
+                        },
+                        get session() {
+                          return view()
+                        },
+                        screen,
+                      })
+                    }
+                  </input.Contribution>
+                </PanelContext.Provider>
+              )
+            }}
           </Show>
         </aside>
       )
@@ -1918,6 +1928,22 @@ export function mountBrowserRegion(input: RegionHost) {
                 </button>
                 <textarea aria-label="Main event" ref={setMainEvent} />
                 <button onClick={sendMainEvent}>Send main event</button>
+                <button onClick={() => setStore("session", alpha)}>Alpha</button>
+                {/* As the host's layout does (`prune` in layout.tsx): it stores the strips of the 50 sessions used last. Fifty
+                    other sessions were used since Beta, so it forgets Beta's, whose shell tab is still open. No plugin
+                    hears of it. */}
+                <button
+                  onClick={() => {
+                    const others = Array.from({ length: 50 }, (_, index) => `browser-test\nses_other${index}`)
+                    const used = new Map([[beta, 1], ...others.map((key, index): [string, number] => [key, index + 2])])
+
+                    input
+                      .pruneKeys({ keep: store.session, max: 50, used, view: [], tabs: [alpha, beta, ...others] })
+                      .forEach((key) => setStore("strips", key, { all: [], active: undefined }))
+                  }}
+                >
+                  Fifty other sessions used
+                </button>
               </div>
               <button onClick={() => setStore("away", true)}>Pane away</button>
               <button onClick={() => setStore("away", false)}>Pane back</button>

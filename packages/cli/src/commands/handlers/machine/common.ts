@@ -8,20 +8,28 @@ import {
 } from "@opencode/client/promise"
 import { Service } from "@opencode/client/effect/service"
 import { MACHINE_LINK_PATH, type MachineReach } from "@opencode/protocol/groups/machine"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { EOL } from "node:os"
+import { Server, Standalone } from "../../commands"
+import { ServerConnection } from "../../../services/server-connection"
 import { ServiceConfig } from "../../../services/service-config"
 import { isLoopback } from "../../../services/service-urls"
 import { errorMessage } from "../../../util/error"
 
 export const ensureMachineClient = Effect.fn("cli.machine.client")(function* () {
+  const standalone = yield* Effect.serviceOption(Standalone)
+  if (Option.getOrElse(standalone, () => false))
+    return yield* Effect.fail(
+      new Error("--standalone starts a server for this command only; a machine needs one that keeps running."),
+    )
+  const serverFlag = yield* Effect.serviceOption(Server).pipe(Effect.map(Option.flatten))
   const config = yield* ServiceConfig.read()
-  if (config.disabled === true)
+  if (Option.isNone(serverFlag) && config.disabled === true)
     return yield* Effect.fail(
       new Error("Managing machines requires the background service; run `opencode service unset disabled` first."),
     )
-  const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
-  return OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+  const server = yield* ServerConnection.resolve()
+  return OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
 })
 
 export function machineReach(urls: ReadonlyArray<string>): Array<MachineReach> {

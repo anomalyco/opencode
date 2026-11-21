@@ -78,6 +78,20 @@ export function pageReports(error: Error) {
   return "errno" in error && "code" in error && String(error.code).startsWith("ERR_")
 }
 
+/**
+ * Whether the tab that a `tabs.open` or a preview just made stays when its first load rejects. A tab that shows a page
+ * closes only for the person, the agent's close tool or the page itself, so:
+ * - a page still loading when the command's deadline passed goes on loading, and its tab stays whoever opened it;
+ * - a load Chromium failed says why in the tab, where the person can try again, so their tab stays. The agent hears
+ *   the failure instead, and its open leaves no tab behind;
+ * - a navigation that committed no page (cancelled, or it became a download) and any other failure leave no tab.
+ */
+export function keepsOpenedTab(error: Error, origin: "agent" | "user") {
+  if (error instanceof NavigationDeadlineError) return true
+
+  return origin === "user" && !(error instanceof CodedError) && pageReports(error)
+}
+
 export function missingArtifact() {
   return new CodedError(Browser.FailureCode.previewUnavailable, "This artifact is no longer available on this session’s server.")
 }

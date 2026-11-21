@@ -51,6 +51,10 @@ export const WindowSetTrafficLightsPosition = Rpc.make("WindowSetTrafficLightsPo
 
 export const WindowRequestAttention = Rpc.make("WindowRequestAttention")
 
+export const WindowSetTaskbarProgress = Rpc.make("WindowSetTaskbarProgress", {
+  payload: { mode: Schema.Literals(["none", "indeterminate", "paused", "error"]) },
+})
+
 export const WindowRpcs = RpcGroup.make(
   WindowRequestAttention,
   WindowRequestMicrophone,
@@ -68,4 +72,5 @@ export const WindowRpcs = RpcGroup.make(
   WindowSetPinchZoomEnabled,
   WindowSetTitlebar,
   WindowSetTrafficLightsPosition,
+  WindowSetTaskbarProgress,
 )
