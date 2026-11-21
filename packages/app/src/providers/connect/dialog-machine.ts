@@ -720,7 +720,7 @@ function connectTransition(
     ...next,
     chatgptWelcome:
       state.chatgptWelcome ||
-      (state.provider === "openai" && method.type === "oauth" && method.id === "chatgpt-token-sharing"),
+      (state.provider === "openai" && method.type === "oauth" && method.id.startsWith("chatgpt-token-sharing")),
   }
 
   const notify: ProviderDialogEffect[] = [...effects, { type: "connected.notify", provider: state.provider }]
