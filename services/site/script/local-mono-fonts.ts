@@ -3,7 +3,7 @@
 // fontkit) and writes their names to src/lib/local-mono-fonts.json, for Settings › Mono font's
 // "Installed on this Mac" group. Only the names are kept; the fonts are never copied. fontkit
 // installs into a temporary folder, so the app takes no dependency on it.
-// Run from packages/console/app: bun script/local-mono-fonts.ts
+// Run from services/site: bun script/local-mono-fonts.ts
 import { mkdtemp, readdir, rm } from "fs/promises"
 import { homedir, tmpdir } from "os"
 import { dirname, join } from "path"
@@ -22,7 +22,7 @@ const fontkit: { openSync: (path: string) => Face & { fonts?: Face[] } } = await
   join(tmp, "node_modules/fontkit/dist/main.cjs")
 )
 // The families the site offers on their own, and Apple's hidden UI faces.
-const skipped = ["IBM Plex Mono", "OpenTUI Mono", "Apple Color Emoji", "LastResort", "GB18030 Bitmap"]
+const skipped = ["IBM Plex Mono", "OpenMono", "Apple Color Emoji", "LastResort", "GB18030 Bitmap"]
 const ascii = Array.from({ length: 95 }, (_, index) => String.fromCharCode(32 + index)).join("")
 const folders = [join(homedir(), "Library/Fonts"), "/Library/Fonts", "/System/Library/Fonts"]
 const files = (

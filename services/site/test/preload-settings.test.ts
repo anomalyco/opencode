@@ -145,16 +145,19 @@ describe("pre-paint settings script", () => {
   })
 
   test("puts a saved mono font ahead of the stack and preloads a web font", () => {
-    const web = run(preloadSettings, { monoFont: "IBM Plex Mono", monoFontRevision: 2 })
+    const web = run(preloadSettings, { monoFont: "IBM Plex Mono", monoFontRevision: 3 })
     expect(web.errors.map(String)).toEqual([])
     expect(web.root.style.values.get("--mono-choice")).toBe(`"IBM Plex Mono",`)
     expect(web.head.children.some((child) => (child as Element).tagName === "LINK")).toBe(true)
-    const local = run(preloadSettings, { monoFont: 'Geist Mono"', monoFontRevision: 2 })
+    const local = run(preloadSettings, { monoFont: 'Geist Mono"', monoFontRevision: 3 })
     expect(local.root.style.values.get("--mono-choice")).toBe(`"Geist Mono",`)
     expect(local.head.children.some((child) => (child as Element).tagName === "LINK")).toBe(false)
-    expect(run(preloadSettings, { monoFont: "OpenTUI Mono" }).root.style.values.has("--mono-choice")).toBe(false)
-    // A mono font saved before OpenTUI Mono became the default resets to it once.
+    expect(run(preloadSettings, { monoFont: "OpenMono" }).root.style.values.has("--mono-choice")).toBe(false)
+    // A mono font saved before OpenMono became the default resets to it once.
     expect(run(preloadSettings, { monoFont: "Geist Mono" }).root.style.values.has("--mono-choice")).toBe(false)
+    expect(
+      run(preloadSettings, { monoFont: "Geist Mono", monoFontRevision: 2 }).root.style.values.has("--mono-choice"),
+    ).toBe(false)
   })
 
   test("migrates old settings without an error", () => {

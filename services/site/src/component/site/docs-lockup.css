@@ -1,5 +1,5 @@
 /* The docs section word after the site's logo, set like the Data and Console header lockups
-   (public/nav-demo/switcher.css): OpenTUI Mono Bold 15px caps, 12px after the logo's box and cap-centred
+   (public/nav-demo/switcher.css): OpenMono Bold 15px caps, 12px after the logo's box and cap-centred
    on it. It is placed in the sidebar, beside the logo, so the two always move together. */
 [data-site] [data-component="docs-lockup"] {
   --lockup-logo: var(--logo-box, calc(var(--logo-height) * 4 / 5));
@@ -59,7 +59,7 @@
     /* Label and chevron are one button, so the chevron sits close, as in the product navs. */
     gap: 4px;
 
-    /* OpenTUI Mono's caps sit 0.325px below its line box's centre; this puts them on the logo's centre. */
+    /* OpenMono's caps sit 0.325px below its line box's centre; this puts them on the logo's centre. */
     padding: 0 6px 0.65px;
     font: 700 15px/1 var(--font-mono);
     text-transform: uppercase;

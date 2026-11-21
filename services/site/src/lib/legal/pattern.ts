@@ -195,7 +195,7 @@ export const cover = {
   /** Inter 34pt, weight 500, line-height 1, −0.03em. */
   titleSize: 34,
   titleBaseline: 222.25,
-  /** "OpenCode legal": OpenTUI Mono 8pt × 1.05, 11px (2.910mm) above the title. */
+  /** "OpenCode legal": OpenMono 8pt × 1.05, 11px (2.910mm) above the title. */
   labelSize: 8,
   labelCapTop: 205.359,
   form: { x: 15, y: 240, w: 90, h: 42 },

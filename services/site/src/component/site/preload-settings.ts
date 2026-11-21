@@ -34,7 +34,7 @@ const preloadRules: [string, string, (s: SiteSettings, el: HTMLElement, d: SiteS
   [
     "",
     "--mono-choice",
-    (s) => (s.monoFont === "OpenTUI Mono" ? undefined : `"${String(s.monoFont).replace(/["\\]/g, "")}",`),
+    (s) => (s.monoFont === "OpenMono" ? undefined : `"${String(s.monoFont).replace(/["\\]/g, "")}",`),
   ],
   ["", "--selection-alpha", (s) => `${s.selectionOpacity}%`],
   ["", "--voice-orb-shadow", (s) => s.voiceOrbShadow / 100],

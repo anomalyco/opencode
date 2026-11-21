@@ -1,7 +1,7 @@
 // Captures the flat stills script/og.ts angles into the link preview cards: real pages rendered
 // headless in the dark theme, and a frame of the terminal feature clip with the blue themes dialog.
 // The rest of the cards use files already in public/ (the product card covers and clips).
-// Run by hand when a page's look changes, with the dev server up, from packages/console/app:
+// Run by hand when a page's look changes, with the dev server up, from services/site:
 //   bun script/og-stills.ts [http://localhost:3011]
 // Needs Playwright's Chromium (bunx playwright-core install chromium) and ffmpeg.
 import path from "node:path"

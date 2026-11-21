@@ -335,7 +335,7 @@ export const content = {
       badges: {
         body: "在 README、文件或網站中放上徽章，並連結到 opencode.ai。依背景選擇淺色或深色檔案（HTML 會自動切換），不要更改顏色或文字。",
         sizes: "每種樣式都提供 20、32 和 44px（Shields 僅有 20px），格式為 SVG 和 2 倍 PNG。",
-        mono: "每個檔案也有使用 OpenTUI Mono 字型的版本，在副檔名前加上 -mono，例如 opencode-works-with-a-light-20-mono.svg；加上 -mono-caps 則為大寫 OpenTUI Mono。",
+        mono: "每個檔案也有使用 OpenMono 字型的版本，在副檔名前加上 -mono，例如 opencode-works-with-a-light-20-mono.svg；加上 -mono-caps 則為大寫 OpenMono。",
         groups: {
           "works-with": { title: "相容", alt: "相容 OpenCode", body: "適用於搭配 OpenCode 執行的外掛、供應商和工具。" },
           "built-with": { title: "打造於", alt: "以 OpenCode 打造", body: "適用於用 OpenCode 製作的專案。" },
