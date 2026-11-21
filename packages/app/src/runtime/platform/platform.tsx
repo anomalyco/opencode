@@ -69,6 +69,12 @@ type PlatformBase = {
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
 
+  /**
+   * Start a system drag of a local file, so it drops into other apps as the file itself (Windows desktop only).
+   * Resolves once the drag ends; false when none started.
+   */
+  startFileDrag?(path: string): Promise<boolean>
+
   /** Observe native drag cancellation that does not reach the renderer event loop. */
   onDragCancel?(callback: () => void): () => void
 

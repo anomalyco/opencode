@@ -186,6 +186,22 @@ function make(
 
       return true
     }),
+    // Windows runs the drag in a nested loop, so this returns once the file was dropped or the drag was cancelled.
+    startDrag: Effect.fn("DesktopFiles.startDrag")(function* (contents: Electron.WebContents, target: string) {
+      if (process.platform !== "win32" || !path.isAbsolute(target)) return false
+      const exists = yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
+
+      if (!exists) return false
+
+      const icon = yield* Effect.promise(() =>
+        app.getFileIcon(target, { size: "normal" }).catch(() => nativeImage.createEmpty()),
+      )
+
+      if (contents.isDestroyed()) return false
+      contents.startDrag({ file: target, icon })
+
+      return true
+    }),
     readClipboardImage: Effect.fn("DesktopFiles.readClipboardImage")(function* () {
       const items = yield* Effect.promise(() => clipboard.read())
 
