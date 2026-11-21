@@ -10788,6 +10788,29 @@ pub struct ExperimentalJobCancelInput {
     pub id: String,
 }
 
+literal_enum! {
+MachineInfoConnectionKind {
+    Websocket => "websocket",
+    Iroh => "iroh",
+}
+}
+
+literal_enum! {
+MachineInfoConnectionPath {
+    Direct => "direct",
+    Relayed => "relayed",
+}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MachineInfoConnection {
+    pub kind: MachineInfoConnectionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<MachineInfoConnectionPath>,
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
+    pub rtt: Option<f64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct MachineInfo {
     pub id: String,
@@ -10797,6 +10820,8 @@ pub struct MachineInfo {
     pub os: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub arch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection: Option<MachineInfoConnection>,
 }
 
 /// Output of `Client::experimental_machine_list`.
@@ -10817,10 +10842,52 @@ pub struct ExperimentalMachineAddInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MachineInviteReachItemIroh {
+    pub r#type: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum MachineInviteReachItem {
+    Url(MachineReach),
+    Iroh(MachineInviteReachItemIroh),
+    /// A member this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for MachineInviteReachItem {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl MachineInviteReachItem {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        match raw.field("type").as_str() {
+            Some("url") => raw.variant().map(Self::Url),
+            Some("iroh") => raw.variant().map(Self::Iroh),
+            _ => raw.unknown().map(Self::Unknown),
+        }
+    }
+}
+
+impl MachineInviteReachItem {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Url(value) => value.r#type.as_str(),
+            Self::Iroh(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct MachineInvite {
     pub name: String,
     pub join: String,
     pub expires: i64,
+    pub reach: Vec<MachineInviteReachItem>,
 }
 
 /// Output of `Client::experimental_machine_add`.
