@@ -1,12 +1,15 @@
+import { NodeServices } from "@effect/platform-node"
 import { describe, expect, test } from "bun:test"
-import { Effect, Option } from "effect"
+import { Console, Effect, Option, Stdio } from "effect"
 import { EOL } from "node:os"
+import { Commands, Server } from "../src/commands/commands"
 import {
   formatMachineAdd,
   formatMachineError,
   formatMachineList,
   machineReach,
 } from "../src/commands/handlers/machine/common"
+import { Runtime } from "../src/framework/runtime"
 import { parseServerURL, serverURLs } from "../src/services/service-urls"
 
 describe("machine reach", () => {
@@ -55,6 +58,24 @@ describe("machine reach", () => {
   })
 })
 
+describe("machine commands", () => {
+  test("accept the global --server flag in any position", async () => {
+    const url = "http://127.0.0.1:4096"
+    const cases: ReadonlyArray<readonly [ReadonlyArray<string>, string, Option.Option<string>]> = [
+      [["machine", "list", "--server", url], "list", Option.some(url)],
+      [["machine", "--server", url, "add", "gpu"], "add", Option.some(url)],
+      [["--server", url, "machine", "remove", "gpu"], "remove", Option.some(url)],
+      [["machine", "list"], "list", Option.none()],
+    ]
+
+    for (const [args, command, server] of cases) {
+      const result = await runMachine(args)
+      expect(result.ran).toEqual([command])
+      expect(result.servers).toEqual([server])
+    }
+  })
+})
+
 describe("machine output formatting", () => {
   test("prints only the join string when stdout is not a terminal, and full details on a terminal", () => {
     const reach = [{ type: "url" as const, url: "wss://example.com/api/experimental/machine/link" }]
@@ -98,3 +119,28 @@ describe("machine output formatting", () => {
     )
   })
 })
+
+async function runMachine(args: ReadonlyArray<string>) {
+  const ran: Array<string> = []
+  const servers: Array<Option.Option<string>> = []
+  const load = (name: string) => async () => ({
+    default: () =>
+      Effect.gen(function* () {
+        ran.push(name)
+        servers.push(yield* Effect.serviceOption(Server).pipe(Effect.map(Option.flatten)))
+      }),
+  })
+  const machine = Commands.commands.machine.commands
+  await Effect.runPromise(
+    Runtime.run(
+      Commands,
+      [machine.add, machine.list, machine.remove].map((node) => ({ spec: node.spec, load: load(node.name) })),
+      { version: "test" },
+    ).pipe(
+      Effect.provideService(Console.Console, Object.assign(Object.create(console), { log: () => {}, error: () => {} })),
+      Effect.provide(Stdio.layerTest({ args: Effect.succeed(args) })),
+      Effect.provide(NodeServices.layer),
+    ),
+  )
+  return { ran, servers }
+}
