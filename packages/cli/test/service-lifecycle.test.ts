@@ -134,6 +134,68 @@ serviceTest(
 )
 
 serviceTest(
+  "an occupied configured port can be bypassed for one start",
+  async () => {
+    await using home = await serviceHome()
+    using listener = Bun.serve({ hostname: "127.0.0.1", port: home.port, fetch: () => new Response("unrelated") })
+
+    const plain = await cliFailure(home, "service", "start")
+    expect(plain.message).toContain("already in use")
+    expect(plain.message).not.toContain("OPENCODE_SERVICE_PORT_OWNER=")
+
+    await expect(cliWithEnv(home, { OPENCODE_SERVICE_PORT_OWNER_MARKER: "1" }, "service", "start")).rejects.toThrow(
+      /OPENCODE_SERVICE_PORT_OWNER=foreign[\s\S]*already in use/,
+    )
+
+    const url = await cli(home, "service", "start", "--port", "0")
+    const info = await Bun.file(home.registration).json()
+    expect(url).toBe(info.url)
+    expect(info.url).not.toBe(`http://127.0.0.1:${home.port}`)
+    const answer = await fetch(new URL("/api/info", info.url), {
+      headers: Service.headers({
+        url: info.url,
+        auth: { type: "basic", username: "opencode", password: info.password },
+      }),
+    })
+    expect(answer.ok).toBe(true)
+
+    await listener.stop(true)
+    await stopped(home)
+  },
+  120_000,
+)
+
+serviceTest(
+  "a start leaves an OpenCode service that already owns the port alone",
+  async () => {
+    await using owner = await serviceHome()
+    await using contender = await serviceHome({ port: owner.port })
+    const server = Bun.spawn([process.execPath, owner.entry, "serve", "--service"], {
+      env: owner.env,
+      stdout: "ignore",
+      stderr: "ignore",
+    })
+    const before = await settled(owner)
+
+    // The contender cannot see the owner's registration, so it must not start a second service.
+    await expect(
+      cliWithEnv(contender, { OPENCODE_SERVICE_PORT_OWNER_MARKER: "1" }, "service", "start"),
+    ).rejects.toThrow(
+      new RegExp(
+        `OPENCODE_SERVICE_PORT_OWNER=opencode\\nOPENCODE_SERVICE_PORT_OWNER_PID=${before.pid}[\\s\\S]*already in use`,
+      ),
+    )
+    expect(await servers(owner)).toEqual([before.pid])
+    await until(async () => ((await servers(contender)).length === 0 ? true : undefined))
+    expect(await servers(contender)).toEqual([])
+
+    await stopped(owner)
+    await server.exited
+  },
+  120_000,
+)
+
+serviceTest(
   "a damaged registration and then a crash each end with one replacement server",
   async () => {
     await using home = await serviceHome()
@@ -175,10 +237,10 @@ serviceTest(
 type Home = Awaited<ReturnType<typeof serviceHome>>
 type Snapshot = Awaited<ReturnType<typeof snapshot>>
 
-async function serviceHome(options: { readonly failBoot?: boolean } = {}) {
+async function serviceHome(options: { readonly failBoot?: boolean; readonly port?: number } = {}) {
   // Bun resolves symlinks in the entry path, so process command lines carry the real directory.
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-lifecycle-")))
-  const port = await availablePort()
+  const port = options.port ?? (await availablePort())
   await fs.mkdir(path.join(root, "config"), { recursive: true })
   await fs.writeFile(path.join(root, "config", "service-local.json"), JSON.stringify({ port }))
   // A directory where the database file belongs makes boot fail after the server registers.
@@ -207,7 +269,29 @@ async function serviceHome(options: { readonly failBoot?: boolean } = {}) {
 }
 
 async function cli(home: Home, ...args: string[]) {
-  const child = Bun.spawn([process.execPath, home.entry, ...args], { env: home.env, stdout: "pipe", stderr: "pipe" })
+  return runCli(home, {}, ...args)
+}
+
+async function cliWithEnv(home: Home, env: Record<string, string>, ...args: string[]) {
+  return runCli(home, env, ...args)
+}
+
+async function cliFailure(home: Home, ...args: string[]) {
+  try {
+    await cli(home, ...args)
+  } catch (error) {
+    if (error instanceof Error) return error
+    throw error
+  }
+  throw new Error(`opencode ${args.join(" ")} succeeded`)
+}
+
+async function runCli(home: Home, env: Record<string, string>, ...args: string[]) {
+  const child = Bun.spawn([process.execPath, home.entry, ...args], {
+    env: { ...home.env, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),

@@ -16,15 +16,71 @@ for file in "\${XDG_STATE_HOME:-$HOME/.local/state}"/opencode/service*.json; do
 done
 `
 
-export const discoverScript = `set -eu
+export function discoverScript(version: string) {
+  const own = binaryPath(version)
+
+  return `set -eu
 ${RemoteCli.discoverScript({ fromPath: true, cache: { directory: ".opencode/desktop-ssh", prefix: "0.0.0-beta-" } })}
+if [ -z "$cli" ] && [ -x "${own}" ]; then cli="${own}"; fi
 if [ -z "$cli" ]; then exit 0; fi
 ${registrationScript}`
+}
 
 export function startScript(version: string, replace = false) {
+  const command = replace ? "restart" : "start"
+
+  // A conflict keeps its fixed port when the holder is an OpenCode service recorded by
+  // a registration in this state directory, for example one left behind by a dropped
+  // connection: stop it and start again on the configured port. A foreign or absent
+  // listener (the default port sits inside the Linux ephemeral range) falls back to a
+  // free port. Any other OpenCode service belongs to another profile, so it is left
+  // untouched and the failure is reported.
   return `set -eu
+export OPENCODE_SERVICE_PORT_OWNER_MARKER=1
 cli="${binaryPath(version)}"
-"$cli" service ${replace ? "restart" : "start"}
+start() { "$cli" service ${command} "$@"; }
+if ! output=$(start 2>&1); then
+  case "$output" in
+    *"OPENCODE_SERVICE_PORT_OWNER=opencode"*)
+      pid=$(printf '%s\\n' "$output" | sed -n 's/^OPENCODE_SERVICE_PORT_OWNER_PID=//p')
+      own=
+      for file in "\${XDG_STATE_HOME:-$HOME/.local/state}"/opencode/service*.json; do
+        if [ -f "$file" ] && grep -Eq "\\"pid\\"[[:space:]]*:[[:space:]]*$pid([^0-9]|$)" "$file"; then
+          own=1
+          break
+        fi
+      done
+      if [ "$own" = 1 ]; then
+        verify=$(ps -o command= -p "$pid" 2>/dev/null || true)
+        case "$verify" in
+          *opencode*serve*--service*)
+            kill "$pid" 2>/dev/null || true
+            i=0
+            while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
+              sleep 1
+              i=$((i + 1))
+            done
+            kill -9 "$pid" 2>/dev/null || true
+            ;;
+        esac
+        if ! retry=$(start 2>&1); then
+          printf '%s\\n%s\\n' "$output" "$retry" >&2
+          exit 1
+        fi
+      else
+        printf '%s\\n' "$output" >&2
+        exit 1
+      fi
+      ;;
+    *"OPENCODE_SERVICE_PORT_OWNER=foreign"*|*"OPENCODE_SERVICE_PORT_OWNER=none"*)
+      if ! retry=$(start --port 0 2>&1); then
+        printf '%s\\n%s\\n' "$output" "$retry" >&2
+        exit 1
+      fi
+      ;;
+    *) printf '%s\\n' "$output" >&2; exit 1 ;;
+  esac
+fi
 ${registrationScript}`
 }
 
@@ -80,14 +136,16 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   env: NodeJS.ProcessEnv
   replace?: boolean
 }) {
-  const run = (script: string) =>
+  const run = (script: string, remoteFailure?: SshFailure["code"]) =>
     runSsh({
       args: [...sshArgs(input.target), input.target.host, "sh -l -s"],
       env: input.env,
       stdin: script,
+      remoteFailure,
     })
 
-  const registered = parseRegistration(yield* run(discoverScript))
+  const discover = yield* Effect.try({ try: () => discoverScript(input.version), catch: SshFailure.from })
+  const registered = parseRegistration(yield* run(discover))
 
   if (registered && (input.development || registered.version === input.version))
     return yield* Effect.try({
@@ -108,7 +166,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   const setup = { version, directory: `.opencode/desktop-ssh/${version}` }
 
   if (!staged) {
-    const output = yield* run(RemoteCli.probeScript).pipe(Effect.mapError(() => new SshFailure("platform")))
+    const output = yield* run(RemoteCli.probeScript, "platform")
 
     const target = output
       .split(/\r?\n/)
@@ -146,7 +204,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
     )
   }
 
-  const registration = parseRegistration(yield* run(startScript(version, input.replace)))
+  const registration = parseRegistration(yield* run(startScript(version, input.replace), "service"))
 
   if (!registration) return yield* Effect.fail(new SshFailure("service"))
 

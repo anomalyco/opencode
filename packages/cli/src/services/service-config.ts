@@ -140,14 +140,22 @@ export function processEnv(env: Info["env"]) {
   return rest
 }
 
-export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
+export const options = Effect.fnUntraced(function* (
+  input: { readonly checkVersion?: boolean; readonly port?: number } = {},
+) {
   const { file, legacyRegistrationFiles } = yield* paths
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
   return {
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
     env: processEnv((yield* read()).env),
-    command: [...selfCommand(), "serve", "--service"],
+    command: [
+      ...selfCommand(),
+      "serve",
+      "--service",
+      // Only the spawned process gets the override; the user's saved port stays untouched.
+      ...(input.port === undefined ? [] : ["--port", String(input.port)]),
+    ],
   }
 })
 
