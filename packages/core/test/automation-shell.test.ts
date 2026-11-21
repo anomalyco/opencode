@@ -73,7 +73,8 @@ it.live("approves the fixed command once and records a failed exit without wakin
       expect(asks).toMatchObject([
         {
           action: "shell",
-          resources: ["echo automation-output", "exit 7"],
+          // PowerShell treats `exit` as a language statement, not a separate permission resource.
+          resources: expect.arrayContaining(["echo automation-output"]),
           metadata: { automation: "shell test", trigger, unattended: true, command },
           source: invocation.source,
         },
