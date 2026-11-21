@@ -8,7 +8,6 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
-import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Permission } from "../../permission.js"
@@ -50,7 +49,7 @@ export const Plugin = {
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const environment = yield* Environment.Service
-    const location = yield* Location.Service
+    const workingDirectory = yield* Environment.workingDirectory
     const config = yield* Config.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
@@ -148,7 +147,7 @@ export const Plugin = {
               yield* Effect.gen(function* () {
                 if (result.target.externalDirectory !== undefined) return
                 const resolved = yield* fs.resolve(result.target.absolute)
-                const root = yield* fs.resolve(location.directory)
+                const root = yield* fs.resolve(workingDirectory.absolute)
                 // The Location and its ancestors are already supplied by initial instructions,
                 // even when an upward walk from elsewhere in the project cannot reach root.
                 const discovered = yield* fs.up({
@@ -221,7 +220,7 @@ export const Plugin = {
     // A path written from the wrong root, such as /Users/me/src/a.ts for a location at /Users/me/repo,
     // usually means <location>/src/a.ts, so check that one path and nothing else.
     const reroot = Effect.fn("ReadTool.reroot")(function* (miss: Missing) {
-      const root = location.directory
+      const root = workingDirectory.absolute
       // A machine's path is not this server's path to reroot, even when the text happens to sit under the Location.
       if (miss.requested.environment.id !== environment.id) return []
       if (FSUtil.contains(root, miss.requested.absolute) || !FSUtil.contains(dirname(root), miss.requested.absolute))

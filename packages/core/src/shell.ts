@@ -606,6 +606,7 @@ const layer = () =>
       const fs = yield* FSUtil.Service
       const shell = yield* ShellSelect.Service
       const environment = yield* Environment.Service
+      const workingDirectory = yield* Environment.workingDirectory
       const hooks = yield* PluginHooks.Service
       const environments = yield* SessionEnvironment.Service
       const config = yield* Config.Service
@@ -905,7 +906,7 @@ const layer = () =>
           target.id === environment.id ? (input.shell ?? (yield* shell.resolve({ priority: "config" }))) : "sh"
         const invocation: ShellCreateBefore = {
           command: input.command,
-          cwd: input.cwd ?? location.directory,
+          cwd: input.cwd ?? workingDirectory.absolute,
           timeout: input.timeout ?? 0,
           shell: program,
           env: {
@@ -917,7 +918,7 @@ const layer = () =>
         yield* hooks.trigger("shell", "create.before", invocation)
         const launch = before ? yield* before(invocation) : undefined
         // Absolute for local commands, so the command reports the same cwd wherever it runs.
-        if (local) invocation.cwd = path.resolve(location.directory, invocation.cwd)
+        if (local) invocation.cwd = path.resolve(workingDirectory.absolute, invocation.cwd)
 
         // Created per command: the directory can be removed while the Location stays open.
         yield* fs
