@@ -517,7 +517,7 @@ context.keymap.layer(() => ({
 
 ## Slots
 
-Slots insert or replace JSX at `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`,
+Slots insert or replace JSX at `app`, `home.logo`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`,
 `prompt.footer.file`, `session.composer.top`, `sidebar.content`, or `sidebar.footer`.
 
 ```tsx
@@ -535,6 +535,12 @@ context.ui.slot({ append: "home.footer", render: () => <text>After footer conten
 context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
 context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
 context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+Use `home.logo` to replace the home screen logo. The built-in logo renders when no plugin replaces it.
+
+```tsx
+context.ui.slot({ replace: "home.logo", render: () => <text>ACME CODE</text> })
 ```
 
 Use `home.footer.status` to add content to the built-in footer row without replacing it. Status contributions appear

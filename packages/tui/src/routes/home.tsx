@@ -94,7 +94,9 @@ export function Home() {
             setLogoWidth(this.width)
           }}
         >
-          <Logo />
+          <Slot path="home.logo">
+            <Logo />
+          </Slot>
         </box>
         <box height={1} flexShrink={0} />
         <UpdateNotification width={logoWidth()} />
