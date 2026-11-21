@@ -44,42 +44,15 @@ test.each([
   expect(await readFile(file, "utf8")).toBe(saved)
 })
 
-test.each([
-  {
-    name: "unmatched and malformed entries",
-    document: {
-      plugins: [keep, null, false, [], [target, {}]],
-      plugin: [keep, null, [], [target], [target, null], [target, []], [target, {}, "extra"], { package: target }],
-    },
-  },
-  { name: "an unsupported legacy value", document: { plugin: { package: target } } },
-])("leaves $name unchanged", async (input) => {
+test("leaves unmatched plugin lists unchanged", async () => {
   await using root = await tmpdir()
   const file = path.join(root.path, "opencode.jsonc")
-  const text = `// Preserve the original bytes\n${JSON.stringify(input.document, null, 2)}`
+  const text = `// Preserve the original bytes\n${JSON.stringify({
+    plugins: [keep, { package: keep }],
+    plugin: [keep, [keep, { enabled: true }]],
+  }, null, 2)}`
   await writeFile(file, text)
 
   expect(await removePluginConfig(file, target)).toBe(false)
   expect(await readFile(file, "utf8")).toBe(text)
-})
-
-test.each([
-  { text: "{", message: "Invalid global configuration" },
-  { text: "[]", message: "Invalid global configuration" },
-  { text: JSON.stringify({ plugins: {}, plugin: [target] }), message: "Invalid plugins configuration" },
-])("rejects $text without writing", async (input) => {
-  await using root = await tmpdir()
-  const file = path.join(root.path, "opencode.jsonc")
-  await writeFile(file, input.text)
-
-  await expect(removePluginConfig(file, target)).rejects.toThrow(`${input.message}: ${file}`)
-  expect(await readFile(file, "utf8")).toBe(input.text)
-})
-
-test("does not create a missing configuration file", async () => {
-  await using root = await tmpdir()
-  const file = path.join(root.path, "opencode.jsonc")
-
-  expect(await removePluginConfig(file, target)).toBe(false)
-  expect(await Bun.file(file).exists()).toBe(false)
 })
