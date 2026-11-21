@@ -228,25 +228,15 @@ mod tests {
     }
 
     #[test]
-    fn a_text_with_many_occurrences_aligns_without_recursing() {
-        let mention = Mention { start: 299_997, end: 299_999, text: "@x".to_owned() };
-        let aligned = realign_mentions(&"@x ".repeat(100_000), &[Some(mention.clone())], |index| index as u32);
-        assert_eq!(aligned, [Some(mention)]);
-    }
-
-    #[test]
-    fn the_longer_text_in_utf16_claims_an_overlap() {
-        let mention = |text: &str| Some(Mention { start: 0, end: 0, text: text.to_owned() });
-        let aligned = realign_mentions("@abc日日", &[mention("@abc"), mention("c日日")], |index| index as u32);
-        assert_eq!(aligned, [Some(Mention { start: 0, end: 4, text: "@abc".to_owned() }), None]);
-    }
-
-    #[test]
-    fn a_mention_without_text_stays() {
-        let empty = Mention { start: 3, end: 3, text: String::new() };
-        let moved = Mention { start: 0, end: 2, text: "@a".to_owned() };
-        let aligned = realign_mentions("x @a", &[Some(empty.clone()), Some(moved), None], |index| index as u32);
-        assert_eq!(aligned, [Some(empty), Some(Mention { start: 2, end: 4, text: "@a".to_owned() }), None]);
+    fn mentions_realign_as_typescript_does() {
+        let at = |start, end, text: &str| Some(Mention { start, end, text: text.to_owned() });
+        let realign = |text: &str, mentions: &[Option<Mention>]| realign_mentions(text, mentions, |index| index as u32);
+        // Many occurrences align without a deep recursion.
+        assert_eq!(realign(&"@x ".repeat(100_000), &[at(299_997, 299_999, "@x")]), [at(299_997, 299_999, "@x")]);
+        // The longer text in UTF-16 claims an overlap.
+        assert_eq!(realign("@abc日日", &[at(0, 0, "@abc"), at(0, 0, "c日日")]), [at(0, 4, "@abc"), None]);
+        // A mention without text stays.
+        assert_eq!(realign("x @a", &[at(3, 3, ""), at(0, 2, "@a"), None]), [at(3, 3, ""), at(2, 4, "@a"), None]);
     }
 
     #[test]
