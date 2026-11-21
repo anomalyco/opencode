@@ -534,6 +534,28 @@ it.effect("normalizes Promise plugin API inputs through JSON", () =>
   }),
 )
 
+it.effect("forwards a plugin interrupt reason to the session", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const outcomes: Array<{ interrupted: boolean }> = []
+    yield* plugins.activate([
+      {
+        ...fromPromise({
+          id: "interrupt-reason",
+          async setup(ctx) {
+            const session = await ctx.session.create({ title: "Plugin interrupt", agent: undefined })
+            outcomes.push(await ctx.session.interrupt({ sessionID: session.id, reason: "inactivity" }))
+          },
+        }),
+        revision: "1",
+      },
+    ])
+    yield* plugins.awaitActivation
+
+    expect(outcomes).toEqual([{ interrupted: false }])
+  }),
+)
+
 it.effect("creates child sessions from a plugin at the parent's location", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service

@@ -1,6 +1,7 @@
 export * as SubagentReport from "./subagent-report.js"
 
 import { Automation } from "@opencode/schema/automation"
+import { SessionEvent } from "@opencode/schema/session-event"
 import { Effect, Result } from "effect"
 import type { Job } from "../../job.js"
 import { SessionBackground } from "../background.js"
@@ -13,7 +14,7 @@ import { SubagentCompletion } from "../subagent-completion.js"
 export type Outcome =
   | { readonly type: "succeeded" }
   | { readonly type: "failed"; readonly error: { readonly message: string } }
-  | { readonly type: "interrupted"; readonly reason: "user" | "shutdown" }
+  | { readonly type: "interrupted"; readonly reason: SessionEvent.Execution.Interrupted["data"]["reason"] }
 
 export type Period = {
   readonly startedSeq: number

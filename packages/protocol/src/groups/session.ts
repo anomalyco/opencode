@@ -679,6 +679,12 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.post("session.interrupt", "/api/session/:sessionID/interrupt", {
         params: { sessionID: Session.ID },
         query: { resume: BooleanFromString.pipe(Schema.optional) },
+        payload: Schema.Struct({
+          reason: SessionEvent.Execution.Interrupted.fields.data.fields.reason.pipe(Schema.optional).annotate({
+            description:
+              'Why the execution is being interrupted. Defaults to "user" when omitted. Only "user" lets tools awaiting cancellation stop and settle their own call; any other reason interrupts them at once.',
+          }),
+        }),
         success: Schema.Struct({
           interrupted: Schema.Boolean.annotate({
             description: "Whether an active execution owned by this OpenCode process was interrupted.",
