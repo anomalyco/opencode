@@ -102,6 +102,39 @@ it.effect("rejects native provider compaction rather than silently dropping repl
   }),
 )
 
+it.effect("preserves explicit and automatic cache markers through a pinned Anthropic SDK", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const spec = "@ai-sdk/anthropic@ai-v6"
+    yield* aisdk.hook.sdk((event) => {
+      expect(event.package).toBe(spec)
+      event.sdk = { languageModel: () => streamModel([]) }
+    })
+    const automatic = { type: "ephemeral" } as const
+    const manual = { type: "ephemeral", ttl: "1h" } as const
+    const resolved = yield* aisdk.model(model(spec, { cacheControl: automatic }))
+    const prepared = yield* compileRequest(
+      ai.request({
+        model: resolved,
+        system: [
+          { type: "text", text: "base", cache: manual },
+          { type: "text", text: "project" },
+        ],
+        tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object" } }],
+        prompt: "hello",
+      }),
+    )
+    const options = { anthropic: { cacheControl: automatic } }
+    expect(prepared.body.providerOptions).toEqual(options)
+    expect(prepared.body.prompt).toEqual([
+      { role: "system", content: "base", providerOptions: { anthropic: { cacheControl: manual } } },
+      { role: "system", content: "project", providerOptions: options },
+      { role: "user", content: [{ type: "text", text: "hello", providerOptions: options }] },
+    ])
+    expect(prepared.body.tools).toMatchObject([{ name: "lookup", providerOptions: options }])
+  }),
+)
+
 it.effect("keys language models by package and flattened overlays", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
@@ -501,6 +534,7 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
     const prepared = yield* compileRequest(
       ai.request({
         model: resolved,
+        cache: "none",
         messages: [
           Message.assistant([
             { type: "text", text: "Answer", providerMetadata: { anthropic: { cacheControl: { type: "ephemeral" } } } },
