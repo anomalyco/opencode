@@ -487,7 +487,10 @@ export function Autocomplete(props: {
       return [slash.name, ...(slash.aliases ?? [])].map((name) => ({
         display: `/${name}`,
         description: command.description ?? command.title,
-        onSelect: slash.arguments ? () => insertSlash(name) : command.run,
+        // A command that takes an argument normally rewrites the prompt to its name so the argument can be typed.
+        // One that also works without an argument runs right away, so choosing it does not leave the user to submit
+        // the prompt a second time.
+        onSelect: slash.arguments && !slash.optional ? () => insertSlash(name) : command.run,
       }))
     })
     const commandNames = new Set<string>()

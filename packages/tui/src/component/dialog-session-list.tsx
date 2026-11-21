@@ -21,6 +21,7 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
 import { useConfig, useNewDesigns } from "../config"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
+import { looksLikeSessionID, isSessionID } from "@opencode/schema/session-id"
 import { projectName } from "../util/project"
 import { useLocation } from "../context/location"
 
@@ -98,17 +99,38 @@ export function DialogSessionList() {
       )
     if (!query) return sessions
     return sessions.filter(
-      (session) => !session.parentID && withTimestampedFallback(session).toLowerCase().includes(query),
+      (session) =>
+        !session.parentID &&
+        (withTimestampedFallback(session).toLowerCase().includes(query) ||
+          (looksLikeSessionID(query) && session.id.toLowerCase().startsWith(query))),
     )
   })
+  // A session ID identifies one session, so it resolves directly instead of through the project-scoped list. The
+  // lookup waits for a full ID: a prefix is already answered by the list, and a partial ID would only 404.
+  const [matched] = createResource(
+    () => {
+      const value = search().trim()
+      return isSessionID(value) ? value : undefined
+    },
+    (sessionID) =>
+      client.api.session
+        .get({ sessionID })
+        .then((session) => (session.id === sessionID ? session : undefined))
+        .catch(() => undefined),
+  )
   const sessions = createMemo(() => {
     const query = filter().trim()
     const local = localSessions()
-    if (query !== search().trim()) return searchResults.latest?.sessions ?? local
-    if (searchResults.loading) return searchResults.latest?.sessions ?? []
-    const result = searchResults()
-    if (result?.query !== query || result.allProjects !== allProjects() || result.error) return local
-    return result.sessions
+    const match = matched()
+    const list = (() => {
+      if (query !== search().trim()) return searchResults.latest?.sessions ?? local
+      if (searchResults.loading) return searchResults.latest?.sessions ?? []
+      const result = searchResults()
+      if (result?.query !== query || result.allProjects !== allProjects() || result.error) return local
+      return result.sessions
+    })()
+    if (!match || list.some((session) => session.id === match.id)) return list
+    return [match, ...list]
   })
   const searchState = createMemo(() => {
     const query = filter().trim()
