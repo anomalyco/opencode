@@ -828,7 +828,10 @@ describe("shell scanner permission impact", () => {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
-      grants: [["printf *"], ["FOO=bar > *", "printf *"]],
+      grants: [
+        ["printf *"],
+        ["FOO=bar > *", "printf *"],
+      ],
       repeat: [
         ["ask", "allow"],
         ["ask", "allow"],
@@ -840,7 +843,10 @@ describe("shell scanner permission impact", () => {
       name: "PowerShell method prefix",
       shell: "pwsh",
       command: '[IO.File]::Delete("C:\\first")',
-      grants: [["[IO.File]::Delete(*"], ["[IO.File]::Delete(*"]],
+      grants: [
+        ["[IO.File]::Delete(*"],
+        ["[IO.File]::Delete(*"],
+      ],
       repeat: [
         ["allow", "allow"],
         ["allow", "allow"],

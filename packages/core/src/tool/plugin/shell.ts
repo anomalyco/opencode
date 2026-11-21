@@ -551,7 +551,7 @@ export const Plugin = {
         if (!tool) return
         tool.description = description(
           ShellSelect.name(yield* compatibleShell),
-          flags.resolve(loaded.entries).full_codemode.enabled,
+          false,
           sandbox.enabled,
           sandbox.fullDiskRead,
         )
