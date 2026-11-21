@@ -41,6 +41,30 @@ test("loads and validates a Drive manifest through Effect services", async () =>
   })
 })
 
+test("accepts an explicit port 0, which asks the endpoint for a port of its own", async () => {
+  const manifest = await Effect.runPromise(
+    DriveManifest.resolve().pipe(
+      Effect.provide(
+        Layer.merge(
+          FileSystem.layerNoop({
+            readFileString: () =>
+              Effect.succeed(
+                JSON.stringify({
+                  endpoints: { ui: "ws://127.0.0.1:0", backend: "ws://127.0.0.1:41050" },
+                }),
+              ),
+          }),
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({ OPENCODE_DRIVE: "test-instance", DRIVE_REGISTRY_DIR: "/tmp/drive" }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  expect(manifest.endpoints.ui).toBe("ws://127.0.0.1:0")
+})
+
 test("reports schema-invalid manifests as typed decode failures", async () => {
   const error = await Effect.runPromise(
     DriveManifest.resolve().pipe(

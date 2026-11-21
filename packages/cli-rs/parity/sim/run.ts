@@ -189,16 +189,18 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
     const cmd = command(side, args)
     return side === "ts" && scenario.now !== undefined ? [cmd[0]!, `--preload=${CLOCK}`, ...cmd.slice(1)] : cmd
   }
-  const [serverPort, backendPort, serverUiPort, uiPort] = Array.from({ length: 4 }, freePort)
+  const [serverPort, backendPort, serverUiPort] = Array.from({ length: 3 }, freePort)
   const backendUrl = `ws://127.0.0.1:${backendPort}`
   const viewport = { cols: scenario.width ?? 100, rows: scenario.height ?? 30 }
   await Bun.write(
     path.join(registry, "server.json"),
     JSON.stringify({ endpoints: { ui: `ws://127.0.0.1:${serverUiPort}`, backend: backendUrl } }),
   )
+  // The client binds its own drive endpoint: port 0 asks the kernel for one, so no other process can take it between
+  // this side's choice and the bind, which happens seconds later, after the server and its sessions (flakes-n).
   await Bun.write(
     path.join(registry, `${side}.json`),
-    JSON.stringify({ endpoints: { ui: `ws://127.0.0.1:${uiPort}`, backend: backendUrl }, viewport }),
+    JSON.stringify({ endpoints: { ui: "ws://127.0.0.1:0", backend: backendUrl }, viewport }),
   )
   const log = (file: string) => path.join(box.root, `${label}.${file}`)
   const stopped: (() => void)[] = []
@@ -256,12 +258,16 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
       TERM: "xterm-256color",
     })
     stopped.push(() => client.kill(9))
-    await waitFor(
+    // Both clients print the endpoint they bound, which is the kernel's port now that the manifest asks for 0.
+    const driveUrl = await waitFor(
       `${label} drive endpoint`,
-      async () => (await readText(log("client.stderr"))).includes("opencode drive ui websocket:"),
+      async () => {
+        const match = /opencode drive ui websocket: (ws:\/\/\S+)/.exec(await readText(log("client.stderr")))
+        return match?.[1] ?? false
+      },
       60_000,
     )
-    const drive = await connectDrive(`ws://127.0.0.1:${uiPort}`, label)
+    const drive = await connectDrive(driveUrl, label)
     stopped.push(drive.close)
     const result = async (method: string, params?: unknown) => {
       const response = await drive.call(method, params)
@@ -278,18 +284,20 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
         optionalCapabilities: [],
       }),
     )
-    const until = (needle: string) =>
-      waitFor(
+    const until = async (needle: string) => {
+      await waitFor(
         `${label} screen to show ${JSON.stringify(needle)}`,
         async () => (await result("ui.matches", { text: needle })) === true,
         WAIT,
       )
-    const gone = (needle: string) =>
-      waitFor(
+    }
+    const gone = async (needle: string) => {
+      await waitFor(
         `${label} screen to stop showing ${JSON.stringify(needle)}`,
         async () => (await result("ui.matches", { text: needle })) === false,
         WAIT,
       )
+    }
     const capture = async () => toFixture(Schema.decodeUnknownSync(Frontend.CapturedFrame)(await result("ui.capture")))
     const captures: Record<string, Fixture> = {}
     debug.screen = capture
@@ -458,10 +466,11 @@ function spawn(cmd: string[], box: Sandbox, stderr: string, env: Record<string, 
   return child
 }
 
-async function waitFor(what: string, check: () => Promise<boolean>, ms: number) {
+async function waitFor<T>(what: string, check: () => Promise<T | false | undefined>, ms: number): Promise<T> {
   const deadline = Date.now() + ms
   while (Date.now() < deadline) {
-    if (await check()) return
+    const value = await check()
+    if (value) return value
     await Bun.sleep(100)
   }
   throw new Error(`timed out waiting for ${what}`)
