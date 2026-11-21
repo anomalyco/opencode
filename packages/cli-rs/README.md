@@ -4,24 +4,19 @@ The OpenCode CLI and TUI in Rust, on OpenTUI's Rust crates. It is a client: it f
 `opencode` server and talks to it over HTTP. Until it replaces `packages/cli` and `packages/tui` as `opencode`, its
 command is `opencode-native`.
 
-## Try a preview build
+There are no official builds yet; they will come from `anomalyco` once the client ships. Until then, unofficial
+personal preview builds are published at
+[`simonklee/opencode-native-preview`](https://github.com/simonklee/opencode-native-preview); see its README for what
+they contain and how to install them. To run the client from source, see [Build](#build) and [Run](#run).
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/simonklee/opencode-native-preview/main/install.sh | bash
-```
-
-This installs the newest nightly from
-[`simonklee/opencode-native-preview`](https://github.com/simonklee/opencode-native-preview): `opencode-native` and the
-TypeScript `opencode` server of the same commit, in `~/.local/lib/opencode-native/`, with a link in `~/.local/bin`.
-The bundled `opencode` stays off `PATH`, so your own is untouched. Run the script again to update both;
-`opencode-native upgrade` only says how.
+## How it runs
 
 - **Which server it runs.** `OPENCODE_TS_BIN`, else the `opencode` beside its own executable (through links), else
   `opencode` on `PATH`. That binary is the background service and the standalone server; `serve`, `plugin` and
   remote access are delegated to it, and TypeScript TUI plugins run on its Bun.
-- **Shared state.** It uses your real sessions, service and `cli.json`. The bundled server is built for the channel
-  `latest`, the default when `OPENCODE_CHANNEL` is unset, so it shares `service.json` with a TypeScript release.
-  When the TUI or `mini` finds a service of another version there, it restarts it on its own binary and says
+- **Shared state.** It uses your real sessions, service and `cli.json`. Without `OPENCODE_CHANNEL` it uses the
+  channel `latest`, so it shares `service.json` with a TypeScript release. When the TUI or `mini` finds a service of
+  another version there, it restarts it on the server binary above and says
   `Restarting background server (version mismatch)...`, as the TypeScript TUI does. Under another `OPENCODE_CHANNEL`
   it never restarts one.
 - **Separate TUI state.** `OPENCODE_TUI_CHANNEL=native-preview` keeps tabs and other client-local state apart from
