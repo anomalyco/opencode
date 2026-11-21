@@ -9,6 +9,23 @@ import { Flag } from "../flag.js"
 import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
 
+// Key prefixes the provider issues for its own API, by Models.dev provider ID. Every other integration stays
+// opaque. Declared only while the `api_key_format` flag is on; a configured custom baseURL clears the declaration
+// in ConfigProviderPlugin, because a gateway hands out its own tokens.
+const API_KEY_VALIDATION: Record<string, Integration.KeyMethod["validation"]> = {
+  alibaba: { prefixes: ["sk-"] },
+  "alibaba-coding-plan-cn": { prefixes: ["sk-"] },
+  anthropic: { prefixes: ["sk-ant-"] },
+  deepseek: { prefixes: ["sk-"] },
+  // AI Studio issues "AQ." keys; "AIza" keys issued earlier remain in use.
+  google: { prefixes: ["AQ.", "AIza"] },
+  openai: { prefixes: ["sk-"] },
+  groq: { prefixes: ["gsk_"] },
+  huggingface: { prefixes: ["hf_"] },
+  openrouter: { prefixes: ["sk-or-"] },
+  xai: { prefixes: ["xai-"] },
+}
+
 // These catalog entries require inference profiles on Bedrock Runtime.
 // Opus/Sonnet 4.6 and Opus 5.5 support in-region calls in eu-west-2 and must remain available.
 const BEDROCK_PROFILE_ONLY_IDS = [
@@ -40,12 +57,16 @@ export const ModelsDevPlugin = define({
     const bus = yield* Bus.Service
     const config = yield* Config.Service
     const flags = yield* Flag.Service
-    const get = Effect.flatMap(config.entries(), (entries) =>
-      modelsDev.get(flags.resolve(entries).recommended_api.enabled),
-    )
+    const get = Effect.gen(function* () {
+      const resolved = flags.resolve(yield* config.entries())
+      return {
+        data: snapshots(yield* modelsDev.get(resolved.recommended_api.enabled)),
+        keyFormat: resolved.api_key_format.enabled,
+      }
+    })
     // Filtering and definition indexes are shared across Locations. Only Model materialization
     // makes mutable copies, after provider configuration and access have been resolved.
-    const loaded = { data: snapshots(yield* get) }
+    const loaded = yield* get
     yield* ctx.integration.transform((integrations) => {
       for (const provider of loaded.data) {
         if (provider.environment.length === 0) continue
@@ -53,7 +74,12 @@ export const ModelsDevPlugin = define({
         integrations.update(integrationID, (integration) => (integration.name = provider.info.name))
         integrations.method.update({
           integrationID,
-          method: { type: "key" },
+          method: {
+            type: "key",
+            ...(loaded.keyFormat && API_KEY_VALIDATION[integrationID]
+              ? { validation: API_KEY_VALIDATION[integrationID] }
+              : {}),
+          },
         })
         integrations.method.update({
           integrationID,
@@ -73,10 +99,9 @@ export const ModelsDevPlugin = define({
         })
       }
     })
-    const apply = (data: readonly ModelsDev.Snapshot[]) => {
-      const latest = snapshots(data)
-      if (latest === loaded.data) return Effect.void
-      loaded.data = latest
+    const apply = (latest: typeof loaded) => {
+      if (latest.data === loaded.data && latest.keyFormat === loaded.keyFormat) return Effect.void
+      Object.assign(loaded, latest)
       return ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload()))
     }
     yield* bus.subscribe([ModelsDev.Event.Refreshed, Event.Updated]).pipe(

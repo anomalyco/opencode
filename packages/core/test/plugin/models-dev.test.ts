@@ -1016,6 +1016,66 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
+  for (const enabled of [true, false]) {
+    it.effect(
+      `${enabled ? "declares" : "leaves out"} key formats when api_key_format is ${enabled ? "on" : "off"}`,
+      () =>
+        Effect.gen(function* () {
+          const integrations = yield* Integration.Service
+          const providers = yield* Provider.Service
+          const catalog = (id: string, name: string, environment: string) => ({
+            info: {
+              id: Provider.ID.make(id),
+              name,
+              activation: "auto" as const,
+              package: "@opencode/ai/providers/openai",
+            },
+            environment: [environment],
+            models: [],
+          })
+
+          yield* ModelsDevPlugin.effect(
+            host({
+              provider: providerHost(providers),
+              integration: integrationHost(integrations),
+            }),
+          ).pipe(
+            Effect.provideService(
+              ModelsDev.Service,
+              ModelsDev.Service.of({
+                get: () =>
+                  Effect.succeed([
+                    catalog("anthropic", "Anthropic", "ANTHROPIC_API_KEY"),
+                    catalog("google", "Google", "GOOGLE_GENERATIVE_AI_API_KEY"),
+                    catalog("digitalocean", "DigitalOcean", "DIGITALOCEAN_ACCESS_TOKEN"),
+                  ] satisfies readonly ModelsDev.Snapshot[]),
+                refresh: () => Effect.void,
+              }),
+            ),
+            Effect.provide(Flag.testLayer([], { overrides: enabled ? "api_key_format" : "-api_key_format" })),
+          )
+
+          const key = (id: string) =>
+            integrations
+              .get(Integration.ID.make(id))
+              .pipe(Effect.map((integration) => required(integration).methods.find((method) => method.type === "key")))
+          expect(yield* key("anthropic")).toEqual(
+            enabled ? { type: "key", validation: { prefixes: ["sk-ant-"] } } : { type: "key" },
+          )
+          expect(yield* key("google")).toEqual(
+            enabled ? { type: "key", validation: { prefixes: ["AQ.", "AIza"] } } : { type: "key" },
+          )
+          // No declared format: its inference keys and account tokens share no prefix.
+          expect(yield* key("digitalocean")).toEqual({ type: "key" })
+
+          const rejected = yield* integrations.connection
+            .key({ integrationID: Integration.ID.make("anthropic"), key: "proxy-token" })
+            .pipe(Effect.exit)
+          expect(Exit.isFailure(rejected)).toBe(enabled)
+        }),
+    )
+  }
+
   it.effect("registers every listed environment variable for provider plugins to narrow", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

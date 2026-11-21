@@ -17734,6 +17734,9 @@
               "project_overlay": {
                 "type": "boolean"
               },
+              "api_key_format": {
+                "type": "boolean"
+              },
               "sqlite_fts": {
                 "type": "boolean"
               },
@@ -21045,6 +21048,19 @@
           },
           "form": {
             "$ref": "#/components/schemas/Form.Fields"
+          },
+          "validation": {
+            "type": "object",
+            "properties": {
+              "prefixes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["prefixes"],
+            "additionalProperties": false
           }
         },
         "required": ["type"],

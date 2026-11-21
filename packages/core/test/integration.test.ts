@@ -185,6 +185,52 @@ describe("Integration", () => {
     }),
   )
 
+  it.effect("trims API keys and validates documented prefixes before persisting credentials", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const constrainedID = Integration.ID.make("anthropic")
+      const opaqueID = Integration.ID.make("custom")
+
+      yield* integrations.transform((editor) => {
+        editor.method.update({
+          integrationID: constrainedID,
+          method: { type: "key", validation: { prefixes: ["sk-ant-"] } },
+        })
+        editor.method.update({
+          integrationID: opaqueID,
+          method: { type: "key" },
+        })
+      })
+
+      yield* integrations.connection.key({
+        integrationID: constrainedID,
+        key: " \tsk-ant-valid-fixture \n",
+      })
+      const saved = yield* credentials.list(constrainedID)
+      expect(saved[0]?.value).toEqual(Credential.Key.make({ type: "key", key: "sk-ant-valid-fixture" }))
+
+      for (const key of ["1", "sk-ant-", "sk-ant-  \t "]) {
+        const invalid = yield* integrations.connection.key({ integrationID: constrainedID, key }).pipe(Effect.flip)
+        expect(invalid.cause).toMatchObject({
+          message: "API key must start with one of the supported prefixes: sk-ant-.",
+        })
+        expect(yield* credentials.list(constrainedID)).toEqual(saved)
+      }
+
+      const empty = yield* integrations.connection
+        .key({ integrationID: opaqueID, key: "  \t " })
+        .pipe(Effect.flip)
+      expect(empty.cause).toMatchObject({ message: "API key cannot be empty." })
+      expect(yield* credentials.list(opaqueID)).toEqual([])
+
+      // Providers without a documented stable format keep accepting opaque deployment-specific tokens.
+      yield* integrations.connection.key({ integrationID: opaqueID, key: "  opaque-token \n" })
+      const opaque = yield* credentials.list(opaqueID)
+      expect(opaque[0]?.value).toEqual(Credential.Key.make({ type: "key", key: "opaque-token" }))
+    }),
+  )
+
   it.effect("names unlabeled credentials after the integration", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

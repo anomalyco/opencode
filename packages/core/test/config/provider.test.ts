@@ -1,13 +1,16 @@
 import { describe, expect } from "bun:test"
 import { Money } from "@opencode/schema/money"
 import { Document, Info, type Entry } from "@opencode/schema/config"
-import { Effect, Schema } from "effect"
+import { Effect, Exit, Schema, Scope } from "effect"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
+import { ModelsDev } from "@opencode/core/models-dev"
+import { ModelsDevPlugin } from "@opencode/core/plugin/models-dev"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { AzurePlugin } from "@opencode/core/plugin/provider/azure"
@@ -367,6 +370,70 @@ describe("ConfigProviderPlugin.Plugin", () => {
         name: "litellm",
         methods: [{ type: "key", label: "Manually enter API Key" }],
       })
+    }),
+  )
+
+  it.live("clears a declared key format while the provider has a custom baseURL", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin, "test")
+      const catalog = (id: string, name: string, environment: string) => ({
+        info: { id: Provider.ID.make(id), name, activation: "auto" as const, package: "@opencode/ai/providers/openai" },
+        environment: [environment],
+        models: [],
+      })
+      yield* ModelsDevPlugin.effect(host).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({
+            get: () =>
+              Effect.succeed([
+                catalog("anthropic", "Anthropic", "ANTHROPIC_API_KEY"),
+                catalog("openai", "OpenAI", "OPENAI_API_KEY"),
+                catalog("xai", "xAI", "XAI_API_KEY"),
+              ] satisfies readonly ModelsDev.Snapshot[]),
+            refresh: () => Effect.void,
+          }),
+        ),
+        Effect.provide(Flag.testLayer([], { overrides: "api_key_format" })),
+      )
+      yield* XAIPlugin.effect(host)
+      const gateway = (settings?: { baseURL: string }) =>
+        Config.testLayer([
+          new Document({ type: "document", info: decode({ providers: { anthropic: settings ? { settings } : {} } }) }),
+        ])
+      const key = (id: string) =>
+        integrations
+          .get(Integration.ID.make(id))
+          .pipe(Effect.map((integration) => required(integration).methods.find((method) => method.type === "key")))
+      const connect = (id: string, value: string) =>
+        integrations.connection.key({ integrationID: Integration.ID.make(id), key: value }).pipe(Effect.exit)
+
+      // A provider plugin that relabels the catalog's key method keeps the declared format.
+      expect(yield* key("xai")).toEqual({
+        type: "key",
+        label: "Manually enter API Key",
+        validation: { prefixes: ["xai-"] },
+      })
+      expect(Exit.isFailure(yield* connect("anthropic", "gateway-token"))).toBe(true)
+
+      const scope = yield* Scope.make()
+      yield* ConfigProviderPlugin.Plugin.effect(host).pipe(
+        Effect.provide(gateway({ baseURL: "https://gateway.test/v1" })),
+        Scope.provide(scope),
+      )
+      expect(yield* key("anthropic")).toEqual({ type: "key", validation: { prefixes: [] } })
+      expect(Exit.isSuccess(yield* connect("anthropic", "gateway-token"))).toBe(true)
+      // Only the provider behind the gateway is exempt.
+      expect(Exit.isFailure(yield* connect("openai", "gateway-token"))).toBe(true)
+
+      // Without the baseURL the provider's own format applies again.
+      yield* Scope.close(scope, Exit.void)
+      yield* ConfigProviderPlugin.Plugin.effect(host).pipe(Effect.provide(gateway()))
+      expect(yield* key("anthropic")).toEqual({ type: "key", validation: { prefixes: ["sk-ant-"] } })
+      expect(Exit.isFailure(yield* connect("anthropic", "gateway-token"))).toBe(true)
+      expect(Exit.isSuccess(yield* connect("anthropic", "sk-ant-fixture"))).toBe(true)
     }),
   )
 

@@ -720,6 +720,16 @@ const layer = Layer.effect(
             .integrations.get(input.integrationID)
             ?.methods.find((method) => method.type === "key")
           if (!method) return yield* Effect.die(new Error(`Key method not found: ${input.integrationID}`))
+          const key = input.key.trim()
+          if (!key) {
+            return yield* new AuthorizationError({ cause: new Error("API key cannot be empty.") })
+          }
+          const prefixes = method.validation?.prefixes
+          if (prefixes?.length && !prefixes.some((prefix) => key.startsWith(prefix) && key.length > prefix.length)) {
+            return yield* new AuthorizationError({
+              cause: new Error(`API key must start with one of the supported prefixes: ${prefixes.join(", ")}.`),
+            })
+          }
           const answer = input.answer ?? {}
           const invalid = answerError(method.form, answer, "Key")
           if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
@@ -728,7 +738,7 @@ const layer = Layer.effect(
             label: input.label,
             value: Credential.Key.make({
               type: "key",
-              key: input.key,
+              key,
               ...(Object.keys(answer).length > 0 ? { metadata: answer } : {}),
             }),
           })
