@@ -24,15 +24,13 @@ type Catalog = typeof Catalog.Type
 const CATALOG_KEY = "models"
 
 /**
- * Register the provider and the account's models.
- *
- * The models come from the account: the CLI names the models it may use, so
- * the list is never written down, and a model Google adds shows up without a
- * change here.
+ * The models come from the account, so a model Google adds shows up without a
+ * change here. Transforms are replayed on every reload, so this one reads the
+ * current list instead of capturing it.
  */
 export const register = Effect.fn("AntigravityProvider.register")(function* (
   ctx: Context,
-  groups: readonly AntigravityCatalog.Group[],
+  groups: () => readonly AntigravityCatalog.Group[],
 ) {
   yield* ctx.provider.transform((editor) => {
     if (editor.get(ID)) return
@@ -43,18 +41,16 @@ export const register = Effect.fn("AntigravityProvider.register")(function* (
         activation: "auto",
         package: Provider.aisdk(PACKAGE),
       },
-      models: groups.map((group) => AntigravityCatalog.toModel(group)),
+      models: groups().map((group) => AntigravityCatalog.toModel(group)),
     })
   })
 })
 
-/** The catalog opencode kept from the last time the CLI reported its models. */
 export const cached = Effect.fn("AntigravityProvider.cached")(function* (ctx: Context) {
   const saved = Schema.decodeUnknownOption(Catalog)(yield* ctx.storage.get(CATALOG_KEY))
   return Option.getOrElse(saved, (): Catalog => ({ models: [] })).models
 })
 
-/** Keep the catalog, so the next start can list the models without the CLI. */
 export const remember = Effect.fn("AntigravityProvider.remember")(function* (
   ctx: Context,
   groups: readonly AntigravityCatalog.Group[],
@@ -74,7 +70,6 @@ export const remember = Effect.fn("AntigravityProvider.remember")(function* (
   yield* ctx.storage.set(CATALOG_KEY, catalog)
 })
 
-/** The groups the catalog holds. */
 export const groups = (models: readonly CatalogModel[]): AntigravityCatalog.Group[] =>
   models.map((model) => ({
     id: model.id,

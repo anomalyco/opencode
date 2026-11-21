@@ -33,8 +33,10 @@ The agent calls the model, and OpenCode does everything else.
 
 - The agent runs with the Antigravity CLI's own system prompt, tools and instruction files.
 - The agent's tool calls are shown in OpenCode as provider-executed calls. OpenCode does not run them.
-- The agent's own permission rules govern what it may change on the machine; a permission request is refused unless the
-  host answers it.
+- When the agent asks for permission, OpenCode checks the request against your permission rules for the current agent
+  and asks you when a rule says to. Edits map to `edit`, shell commands to `bash`, reads to `read`.
+- Each OpenCode session has its own Antigravity conversation, and the model and effort level you pick are used for
+  each turn.
 - Your Antigravity settings are not loaded into OpenCode.
 
 ## Cost
@@ -45,7 +47,8 @@ A consumer Antigravity subscription covers the usage, so no cost is shown.
 
 - The Antigravity CLI must be installed on the same machine as the OpenCode server. The provider is not available in
   remote workspaces.
-- The agent's tools are the CLI's own, so OpenCode's tool permissions and policies do not apply to them.
+- The agent's tools are the CLI's own. OpenCode's permission rules apply only to what the agent asks permission for,
+  and the CLI's own permission settings decide what that is.
 - Temperature, top-p, top-k, seed, and stop sequences are not supported.
 - The agent cannot be steered mid-turn.
 
@@ -59,5 +62,5 @@ supported for third-party agents on consumer plans.
 
 | Error or symptom | Check |
 | --- | --- |
-| `Antigravity: could not start agy` | Install the Antigravity CLI, or set `OPENCODE_ANTIGRAVITY_PATH` to its path. |
-| `Antigravity: the CLI reported no models for this account` | Run `agy` once and sign in. |
+| `Could not start the Antigravity CLI` | Install the Antigravity CLI so `agy` is on `PATH`. |
+| No Antigravity models listed | Run `agy` once and sign in, then restart OpenCode. |

@@ -17,38 +17,29 @@ import type { ChildProcess } from "node:child_process"
 import { Readable, Writable } from "node:stream"
 import { Schema } from "effect"
 
-/**
- * One model as the Antigravity CLI lists it.
- *
- * The CLI lists one entry per effort level, so the same model appears several times.
- */
+/** The CLI lists one entry per effort level, so the same model appears several times. */
 export const Model = Schema.Struct({
-  /** The id the CLI accepts for the model. */
   slug: Schema.String,
-  /** The name the CLI shows for the model. */
   name: Schema.String,
 })
 export type Model = typeof Model.Type
 
-/** A tool call the agent made. */
+/** Updates carry only the fields that changed, so every field but the id may be missing. */
 export interface ToolCall {
   readonly toolCallId: string
-  readonly toolName: string
-  /** The call's input, as the agent sent it. */
+  readonly toolName?: string
   readonly args?: unknown
   /** Where the call stands: "pending", "in_progress", "completed" or "failed". */
-  readonly status: string
+  readonly status?: string
   readonly title?: string
 }
 
-/** What the agent reported while a turn ran. */
 export type Update =
   | { readonly kind: "message"; readonly text: string }
   | { readonly kind: "thought"; readonly text: string }
   | { readonly kind: "tool-call"; readonly call: ToolCall }
   | { readonly kind: "tool-call-update"; readonly call: ToolCall }
 
-/** The tokens a turn used. */
 export interface Usage {
   readonly input: number
   readonly output: number
@@ -58,36 +49,29 @@ export interface Usage {
   readonly total: number
 }
 
-/** The result of one turn. */
 export interface Turn {
   /** Why the agent stopped: "end_turn", "max_tokens", "max_turn_requests", "refusal" or "cancelled". */
   readonly stopReason: string
   readonly usage: Usage | undefined
 }
 
-/** What the CLI reported when the connection opened. */
 export interface AgentInfo {
   readonly name: string
   readonly version: string
 }
 
-/** One conversation with the CLI. */
 export interface Session {
-  /** The id the CLI gave the session. */
   readonly sessionId: string
-  /** The models this account may use, as the CLI lists them. */
   readonly models: readonly Model[]
+  readonly currentModel: string | undefined
 }
 
-/** How the client is started. */
 export interface Options {
   /** The Antigravity CLI to run. Defaults to "agy" on PATH. */
   readonly command?: string
   /** The arguments for the CLI. Defaults to ["acp"], the CLI's ACP server. */
   readonly args?: readonly string[]
-  /** Where the CLI runs. */
   readonly cwd?: string
-  /** The name and version the CLI is told about. */
   readonly clientInfo?: { readonly name: string; readonly version: string }
   /**
    * Answers the agent's permission requests.
@@ -98,16 +82,11 @@ export interface Options {
     request: RequestPermissionRequest,
   ) => RequestPermissionResponse | Promise<RequestPermissionResponse>
   /** Reads a file for the agent. The agent may only ask when this is set. */
-  readonly readTextFile?: (
-    request: ReadTextFileRequest,
-  ) => ReadTextFileResponse | Promise<ReadTextFileResponse>
+  readonly readTextFile?: (request: ReadTextFileRequest) => ReadTextFileResponse | Promise<ReadTextFileResponse>
   /** Writes a file for the agent. The agent may only ask when this is set. */
-  readonly writeTextFile?: (
-    request: WriteTextFileRequest,
-  ) => WriteTextFileResponse | Promise<WriteTextFileResponse>
+  readonly writeTextFile?: (request: WriteTextFileRequest) => WriteTextFileResponse | Promise<WriteTextFileResponse>
 }
 
-/** A failed ACP call. */
 export class Failed extends Schema.TaggedError<Failed>()("AntigravityACP.Failed", {
   message: Schema.String,
   cause: Schema.Defect(),
@@ -124,23 +103,23 @@ const SessionPayload = Schema.Struct({
   ),
 })
 
-/**
- * A connection to the Antigravity CLI's ACP runtime.
- *
- * The CLI runs as a child process and speaks JSON-RPC over its standard streams, so the client owns
- * that process until it is closed.
- */
+/** Owns the `agy acp` child process, which speaks JSON-RPC over stdio, until it is closed. */
 export class Client {
   private constructor(
     private readonly connection: ClientSideConnection,
     private readonly child: ChildProcess,
     private readonly listeners: Map<string, (update: Update) => void>,
     private readonly info: AgentInfo,
+    readonly closed: Promise<void>,
   ) {}
 
-  /** Starts the CLI's ACP server and connects to it. */
   static async start(options: Options = {}): Promise<Client> {
     const child = await spawnCLI(options)
+    const closed = new Promise<void>((resolve) => {
+      if (child.exitCode !== null || child.signalCode !== null) return resolve()
+      child.once("exit", () => resolve())
+      child.once("error", () => resolve())
+    })
     const listeners = new Map<string, (update: Update) => void>()
     const connection = new ClientSideConnection(
       () => ({
@@ -174,35 +153,41 @@ export class Client {
       child.kill("SIGTERM")
       throw new Failed({ message: message(cause), cause })
     }
-    return new Client(connection, child, listeners, {
-      name: initialize.agentInfo?.name ?? "Antigravity",
-      version: initialize.agentInfo?.version ?? "unknown",
-    })
+    return new Client(
+      connection,
+      child,
+      listeners,
+      {
+        name: initialize.agentInfo?.name ?? "Antigravity",
+        version: initialize.agentInfo?.version ?? "unknown",
+      },
+      closed,
+    )
   }
 
-  /** What the CLI reported when the connection opened. */
   get agent(): AgentInfo {
     return this.info
   }
 
-  /** Opens a session in a directory. The CLI reports the account's models with it. */
   async newSession(cwd: string): Promise<Session> {
     const response = await this.connection.newSession({ cwd, mcpServers: [] })
     return toSession(response)
   }
 
-  /** Resumes a session the CLI already knows. */
   async resume(sessionId: string, cwd: string): Promise<Session> {
     const response = await this.connection.resumeSession({ sessionId, cwd })
     return toSession(response)
   }
 
-  /**
-   * Runs one turn in a session.
-   *
-   * The agent's updates arrive through `onUpdate` while the turn runs, and the turn ends when the CLI
-   * answers. A signal cancels the turn on the CLI.
-   */
+  /** Takes the CLI's own model id, which includes the effort level, such as "gemini-3.8-flash-low". */
+  async setModel(sessionId: string, modelId: string): Promise<void> {
+    await this.connection.extMethod("session/set_model", { sessionId, modelId })
+  }
+
+  async closeSession(sessionId: string): Promise<void> {
+    await this.connection.closeSession({ sessionId })
+  }
+
   async prompt(
     sessionId: string,
     prompt: string,
@@ -223,9 +208,15 @@ export class Client {
             else signal.addEventListener("abort", onAbort, { once: true })
           })
         : undefined
-      const response = await (cancelled
-        ? Promise.race([this.connection.prompt({ sessionId, prompt: [{ type: "text", text: prompt }] }), cancelled])
-        : this.connection.prompt({ sessionId, prompt: [{ type: "text", text: prompt }] }))
+      // A turn in flight when the CLI dies would otherwise never be answered.
+      const died = this.closed.then((): never => {
+        throw new Failed({ message: "Antigravity: the CLI exited during the turn", cause: "exited" })
+      })
+      const response = await Promise.race([
+        this.connection.prompt({ sessionId, prompt: [{ type: "text", text: prompt }] }),
+        died,
+        ...(cancelled ? [cancelled] : []),
+      ])
       return {
         stopReason: response.stopReason,
         usage: response.usage
@@ -244,14 +235,12 @@ export class Client {
     }
   }
 
-  /** Closes the connection and stops the CLI. */
   async close(): Promise<void> {
     this.child.stdin?.end()
     this.child.kill("SIGTERM")
   }
 }
 
-/** Runs the CLI's ACP server. */
 function spawnCLI(options: Options): Promise<ChildProcess> {
   return new Promise<ChildProcess>((resolve, reject) => {
     const proc = spawn(options.command ?? "agy", options.args ?? ["acp"], {
@@ -279,7 +268,6 @@ function spawnCLI(options: Options): Promise<ChildProcess> {
   })
 }
 
-/** Answers the agent's permission requests. */
 function answer(
   options: Options,
   params: RequestPermissionRequest,
@@ -292,16 +280,15 @@ function answer(
     : { outcome: { outcome: "cancelled" } }
 }
 
-/** The session and the models the CLI reported. */
 function toSession(payload: unknown): Session {
   const session = Schema.decodeUnknownSync(SessionPayload)(payload)
   return {
     sessionId: session.sessionId,
     models: (session.models?.availableModels ?? []).map((model) => ({ slug: model.modelId, name: model.name })),
+    currentModel: session.models?.currentModelId,
   }
 }
 
-/** The update an agent report means, or nothing when it is not one the host shows. */
 function toUpdate(update: SessionUpdate): Update | undefined {
   if (update.sessionUpdate === "agent_message_chunk") {
     const text = textOf(update.content)
@@ -311,9 +298,9 @@ function toUpdate(update: SessionUpdate): Update | undefined {
     const text = textOf(update.content)
     return text === undefined ? undefined : { kind: "thought", text }
   }
-  if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
+  if (update.sessionUpdate === "tool_call") {
     return {
-      kind: update.sessionUpdate === "tool_call" ? "tool-call" : "tool-call-update",
+      kind: "tool-call",
       call: {
         toolCallId: update.toolCallId,
         toolName: update.name ?? update.title ?? "unknown",
@@ -323,10 +310,22 @@ function toUpdate(update: SessionUpdate): Update | undefined {
       },
     }
   }
+  if (update.sessionUpdate === "tool_call_update") {
+    // An update carries only what changed, so a missing field keeps the value the call already has.
+    return {
+      kind: "tool-call-update",
+      call: {
+        toolCallId: update.toolCallId,
+        toolName: update.name ?? update.title ?? undefined,
+        args: update.rawInput ?? undefined,
+        status: update.status ?? undefined,
+        title: update.title ?? undefined,
+      },
+    }
+  }
   return undefined
 }
 
-/** The text of a content block, when it is text. */
 function textOf(content: ContentBlock) {
   return content.type === "text" ? content.text : undefined
 }

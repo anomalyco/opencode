@@ -52,17 +52,25 @@ and keeps the CLI's own name.
 
 ## Sessions
 
-One CLI session is opened per working directory, and every turn continues it, so the conversation the agent holds is the
-conversation the user is having. The CLI can resume a session it already knows, which is what happens after the server
-restarts.
+One CLI process runs per OpenCode server, started on the first turn. Each OpenCode session gets its own CLI session, so
+two OpenCode sessions never continue each other's conversation, and the CLI session is closed when the OpenCode session
+is deleted. Requests outside a session's conversation, such as titles, run in a CLI session that is closed after the
+turn. Before each turn the CLI session is switched to the model and effort level the user picked. If the CLI exits, the
+next turn starts a new one.
+
+The model list is kept between starts. With a kept list the CLI is not started until the first turn; without one it is
+asked for the list at startup, and only when `agy` is on `PATH`.
 
 ## Tools
 
 The agent runs its own tools, and reports them as tool calls. OpenCode surfaces them as provider-executed tool calls,
 so the run shows what the agent did, but OpenCode does not run them and does not have tools with those names.
 
-Permission requests the agent makes are refused by default: the agent may not act on the machine on its own unless the
-host answers them.
+When the agent asks for permission, OpenCode checks the request against the session's permission rules for the agent that
+runs the turn, and asks the user when a rule says to. The agent's kind of tool maps onto OpenCode's actions: `edit`,
+`delete` and `move` to `edit`, `execute` to `bash`, `read` to `read`, `search` to `grep`, `fetch` to `webfetch`, and
+anything else to `antigravity`. A request is refused when the rules deny it, when the user rejects it, or when it comes
+from a request outside a session.
 
 ## Cost
 
@@ -70,8 +78,8 @@ A consumer Antigravity subscription covers the usage, so no cost is shown.
 
 ## Capability limits
 
-- The agent's tool calls are provider executed, so OpenCode's permissions and tool policies do not gate them.
-- The agent's own permission model governs what it may change on the machine.
+- The agent's tool calls are provider executed. OpenCode's permission rules gate only what the agent asks permission
+  for, and the CLI's own permission settings decide what it asks about.
 - The agent cannot be steered mid-turn.
 - The provider is skipped where OpenCode cannot start local programs, such as remote workspaces.
 

@@ -1,8 +1,10 @@
 import { define } from "@opencode/plugin/effect/plugin"
-import { Effect, Option } from "effect"
+import type { AssertInput } from "@opencode/plugin/permission"
+import { Effect, Exit, Option, Stream } from "effect"
 import { AntigravityAISDK } from "./aisdk.js"
 import { AntigravitySession } from "./antigravity/session.js"
 import { AntigravityProvider } from "./provider.js"
+import { AntigravitySessionHooks } from "./session-hooks.js"
 import { Environment } from "../../../environment/index.js"
 import { EnvironmentUnavailable } from "../../../environment/unavailable.js"
 import { Location } from "../../../location.js"
@@ -19,32 +21,38 @@ export const make = define({
     if (Option.isSome(location) && location.value.workspaceID !== undefined) return
     if (Option.isSome(environment) && environment.value.spawner === EnvironmentUnavailable.spawner) return
 
-    // The models come from the account, and the CLI is only run to ask it. The
-    // list opencode kept from last time is registered first, so the picker has
-    // the models before the CLI answers, and the CLI is asked in the background.
-    const session = AntigravitySession.make({ directory: ctx.location.directory })
+    const context = yield* Effect.context<never>()
+    const run = Effect.runPromiseWith(context)
     const known = AntigravityProvider.groups(yield* AntigravityProvider.cached(ctx))
-    yield* AntigravityProvider.register(ctx, known.length > 0 ? known : session.groups())
-    yield* AntigravityAISDK.register(ctx, session)
-
-    yield* Effect.forkScoped(
-      Effect.tryPromise({
-        try: () => session.refresh(),
-        catch: (cause) => new Error(cause instanceof Error ? cause.message : String(cause)),
-      }).pipe(
-        Effect.flatMap((groups) =>
+    const session = AntigravitySession.make({
+      directory: ctx.location.directory,
+      initial: known,
+      assert: (check) =>
+        run(Effect.exit(ctx.permission.assert(check as AssertInput))).then(Exit.isSuccess, () => false),
+      onModels: (groups) =>
+        void run(
           Effect.gen(function* () {
-            if (groups.length === 0) {
-              yield* Effect.logWarning("Antigravity: the CLI reported no models for this account")
-              return
-            }
             yield* AntigravityProvider.remember(ctx, groups)
-            yield* AntigravityProvider.register(ctx, groups)
             yield* ctx.provider.reload()
-          }),
+          }).pipe(Effect.catchCause((cause) => Effect.logWarning("Antigravity: could not update the models", cause))),
         ),
-        Effect.catch((cause) => Effect.logWarning(`Antigravity: ${cause.message}`)),
-      ),
+    })
+    yield* Effect.addFinalizer(() => Effect.promise(() => session.close()))
+
+    yield* AntigravityProvider.register(ctx, session.groups)
+    yield* AntigravityAISDK.register(ctx, session)
+    yield* AntigravitySessionHooks.register(ctx)
+    yield* ctx.event.subscribe({ types: ["session.deleted"] }).pipe(
+      Stream.runForEach((event) => Effect.promise(() => session.remove(event.data.sessionID))),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+
+    // With a cached model list the CLI waits for the first turn. Without one it is asked now, and only
+    // when it is installed, so a machine without it logs nothing.
+    if (known.length > 0 || !Bun.which("agy")) return
+    yield* Effect.tryPromise(() => session.refresh()).pipe(
+      Effect.catch((error) => Effect.logWarning("Antigravity: could not list the models", error)),
+      Effect.forkScoped,
     )
   }),
 } satisfies PluginInternal.InternalPlugin)

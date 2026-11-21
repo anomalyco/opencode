@@ -4,28 +4,22 @@ import { Model } from "../../../../model.js"
 import { Provider } from "../../../../provider.js"
 import { AntigravityACP } from "./acp.js"
 
-/** The provider the catalog registers its models for. */
 export const ID = Provider.ID.make("antigravity")
 
-/** One effort level of a model. */
 export interface Variant {
   /** The effort level, such as "low", "medium", "high" or "thinking". */
   readonly id: string
   /** The CLI's model id for this effort level. */
   readonly slug: string
-  /** The CLI's name for this effort level. */
   readonly name: string
 }
 
-/** One model, with the effort levels it offers. */
 export interface Group {
   /** The model's id: the CLI's model id without its effort suffix. */
   readonly id: string
   /** The model's name: the CLI's name without its effort suffix. */
   readonly name: string
-  /** The model family, for opencode's grouping. */
   readonly family: string
-  /** The effort levels the model offers. */
   readonly variants: readonly Variant[]
 }
 
@@ -98,25 +92,25 @@ export function resolveSlug(groups: readonly Group[], modelID: string, effortID?
   return (named ?? defaultVariant(model))?.slug
 }
 
-/** Splits "Gemini 3.8 Flash (High)" into its name and its effort level. */
 function splitName(name: string) {
   const match = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(name)
   if (!match) return { name, effort: undefined }
   return { name: match[1].trim(), effort: match[2].trim() }
 }
 
-/** Normalizes an effort label into the id the CLI uses for it. */
 function effortId(label: string) {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
 }
 
-/** The model id without its effort suffix, when the id ends with it. */
 function withoutSuffix(slug: string, effort: string) {
   const suffix = `-${effort}`
   return slug.endsWith(suffix) ? slug.slice(0, -suffix.length) : slug
 }
 
-/** The effort a model runs with when none is named. The CLI's own default is the highest effort. */
+/** The CLI's own default is the highest effort. */
 function defaultVariant(model: Group) {
   return (
     model.variants.find((variant) => variant.id === "high") ??
@@ -125,7 +119,6 @@ function defaultVariant(model: Group) {
   )
 }
 
-/** The model family, for opencode's grouping. */
 function familyOf(id: string) {
   if (id.startsWith("gemini")) return "gemini"
   if (id.startsWith("claude")) return "claude"

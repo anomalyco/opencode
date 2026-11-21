@@ -3,28 +3,28 @@ export * as AntigravityLanguageModel from "./antigravity-language-model.js"
 import type {
   LanguageModelV3,
   LanguageModelV3CallOptions,
+  LanguageModelV3FinishReason,
   LanguageModelV3StreamPart,
   LanguageModelV3StreamResult,
 } from "@ai-sdk/provider"
 import { Provider } from "@opencode/schema/provider"
 import type { AntigravityACP } from "../antigravity/acp.js"
+import type { AntigravitySession } from "../antigravity/session.js"
+
+/** OpenCode names the session of every request in this header. */
+export const SESSION_HEADER = "x-opencode-session-id"
+/** Set by the session hook. */
+export const KIND_HEADER = "x-opencode-antigravity-kind"
+export const AGENT_HEADER = "x-opencode-antigravity-agent"
 
 export interface Dependencies {
   readonly run: (
-    request: { readonly model: string; readonly prompt: string },
+    request: AntigravitySession.Request,
     onUpdate: (update: AntigravityACP.Update) => void,
     signal: AbortSignal,
   ) => Promise<AntigravityACP.Turn>
 }
 
-/**
- * The language model for the Antigravity provider.
- *
- * The agent runs the turn and reports it as session updates; this renders them
- * as the stream parts OpenCode expects. The agent's own tools are provider
- * executed, so a tool call is reported with its result rather than dispatched
- * to the host, which has no such tools.
- */
 export class Model implements LanguageModelV3 {
   readonly specificationVersion = "v3"
   readonly provider = Provider.ID.antigravity
@@ -42,28 +42,50 @@ export class Model implements LanguageModelV3 {
   async doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> {
     const abort = new AbortController()
     const signal = options.abortSignal ? AbortSignal.any([abort.signal, options.abortSignal]) : abort.signal
+    const headers = options.headers ?? {}
+    const settings = options.providerOptions?.[Provider.ID.antigravity]
+    const request: AntigravitySession.Request = {
+      sessionID: headers[SESSION_HEADER],
+      agent: headers[AGENT_HEADER],
+      kind: headers[KIND_HEADER],
+      model: this.modelId,
+      slug: typeof settings?.slug === "string" ? settings.slug : undefined,
+      effort: typeof settings?.effort === "string" ? settings.effort : undefined,
+      prompt: readPrompt(options),
+    }
+    const renderer = makeRenderer()
     let cancelled = false
     let task: Promise<void>
     const stream = new ReadableStream<LanguageModelV3StreamPart>({
       start: (controller) => {
         controller.enqueue({ type: "stream-start", warnings: [] })
+        const flush = () => {
+          for (const part of renderer.end()) controller.enqueue(part)
+        }
         task = this.dependencies
-          .run({ model: this.modelId, prompt: readPrompt(options) }, (update) => {
-            if (cancelled) return
-            for (const part of render(update)) controller.enqueue(part)
-          }, signal)
+          .run(
+            request,
+            (update) => {
+              if (cancelled) return
+              for (const part of renderer.push(update)) controller.enqueue(part)
+            },
+            signal,
+          )
           .then(
             (turn) => {
               if (cancelled) return
+              flush()
               controller.enqueue({
                 type: "finish",
                 usage: usage(turn.usage),
-                finishReason: { unified: "stop", raw: turn.stopReason },
+                finishReason: finishReason(turn.stopReason),
               })
               controller.close()
             },
             (error) => {
-              if (!cancelled) controller.error(error)
+              if (cancelled) return
+              flush()
+              controller.error(error)
             },
           )
       },
@@ -78,11 +100,8 @@ export class Model implements LanguageModelV3 {
 }
 
 /**
- * The text the user sent.
- *
- * The agent reads the project's own instruction files, so the host's system
- * prompt is not forwarded: it describes OpenCode's tools, which the agent does
- * not have.
+ * The host's system prompt is not forwarded: it describes OpenCode's tools, which the agent does
+ * not have, and the agent reads the project's instruction files itself.
  */
 export function readPrompt(options: LanguageModelV3CallOptions): string {
   for (let index = options.prompt.length - 1; index >= 0; index -= 1) {
@@ -98,42 +117,85 @@ export function readPrompt(options: LanguageModelV3CallOptions): string {
   return "[continue]"
 }
 
+export interface Renderer {
+  readonly push: (update: AntigravityACP.Update) => LanguageModelV3StreamPart[]
+  /** The stream parts that settle the tool calls still running when the turn ends. */
+  readonly end: () => LanguageModelV3StreamPart[]
+}
+
+interface Call {
+  readonly toolName: string
+  args: unknown
+  title: string | undefined
+  settled: boolean
+}
+
 /**
- * Render an agent update as the stream parts the host expects.
- *
- * The agent's tool calls keep their own names, so they are reported as the
- * agent ran them rather than dispatched to the host, which has no such tools.
+ * The agent updates a tool call until it finishes, but OpenCode rejects a repeated call or result id.
+ * So a call keeps the name it first had and is emitted with its result once, when it completes or
+ * fails. The calls are provider executed: OpenCode has no tools with these names to run.
  */
-export function render(update: AntigravityACP.Update): LanguageModelV3StreamPart[] {
-  if (update.kind === "message") {
-    return [{ type: "text-delta", id: "text", delta: update.text }]
-  }
-  if (update.kind === "thought") {
-    return [{ type: "reasoning-delta", id: "reasoning", delta: update.text }]
-  }
-  if (update.kind === "tool-call" || update.kind === "tool-call-update") {
-    const call = update.call
+export function makeRenderer(): Renderer {
+  const calls = new Map<string, Call>()
+  const settle = (id: string, call: Call, status: string, isError: boolean): LanguageModelV3StreamPart[] => {
+    call.settled = true
     return [
       {
         type: "tool-call",
-        toolCallId: call.toolCallId,
+        toolCallId: id,
         toolName: call.toolName,
         input: JSON.stringify(call.args ?? {}),
         providerExecuted: true,
       },
       {
         type: "tool-result",
-        toolCallId: call.toolCallId,
+        toolCallId: id,
         toolName: call.toolName,
-        result: { status: call.status, title: call.title ?? call.toolName },
-        isError: call.status === "failed",
+        result: { status, title: call.title ?? call.toolName },
+        isError,
       },
     ]
   }
-  return []
+  return {
+    push: (update) => {
+      if (update.kind === "message") return [{ type: "text-delta", id: "text", delta: update.text }]
+      if (update.kind === "thought") return [{ type: "reasoning-delta", id: "reasoning", delta: update.text }]
+      const reported = update.call
+      let call = calls.get(reported.toolCallId)
+      if (!call) {
+        call = {
+          toolName: reported.toolName ?? reported.title ?? "unknown",
+          args: reported.args,
+          title: reported.title,
+          settled: false,
+        }
+        calls.set(reported.toolCallId, call)
+      } else if (!call.settled) {
+        if (reported.args !== undefined) call.args = reported.args
+        if (reported.title !== undefined) call.title = reported.title
+      }
+      if (call.settled) return []
+      if (reported.status === "completed") return settle(reported.toolCallId, call, "completed", false)
+      if (reported.status === "failed") return settle(reported.toolCallId, call, "failed", true)
+      return []
+    },
+    end: () => [...calls].flatMap(([id, call]) => (call.settled ? [] : settle(id, call, "incomplete", true))),
+  }
 }
 
-/** The usage the agent reported for the turn. */
+/** A turn cut off by its budget, or refused, must not look like a normal finish. */
+export function finishReason(stopReason: string): LanguageModelV3FinishReason {
+  const unified =
+    stopReason === "end_turn"
+      ? "stop"
+      : stopReason === "max_tokens" || stopReason === "max_turn_requests"
+        ? "length"
+        : stopReason === "refusal"
+          ? "content-filter"
+          : "other"
+  return { unified, raw: stopReason }
+}
+
 function usage(reported: AntigravityACP.Usage | undefined) {
   return {
     inputTokens: {
