@@ -310,6 +310,41 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("keeps ignored files when undoing a change that stopped ignoring them", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const project = path.join(tmp.path, "project")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(project)
+          await fs.writeFile(path.join(project, ".gitignore"), ".env\nbuild/\n")
+          await initGit(project, true)
+          await fs.mkdir(path.join(project, "build"))
+          await fs.writeFile(path.join(project, ".env"), "SECRET=1\n")
+          await fs.writeFile(path.join(project, "build", "out.js"), "built\n")
+        })
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          const before = yield* snapshot.capture()
+          yield* Effect.promise(async () => {
+            await fs.writeFile(path.join(project, ".gitignore"), "node_modules/\n")
+            await fs.writeFile(path.join(project, "new.txt"), "new\n")
+          })
+          const after = yield* snapshot.capture()
+          if (!before || !after) throw new globalThis.Error("capture failed")
+
+          // A session undo restores every file its step changed from the snapshot taken before the step.
+          const changed = yield* snapshot.files({ from: before, to: after })
+          yield* snapshot.restore({ files: new Map(changed.map((file) => [file, before])) })
+
+          expect(yield* read(path.join(project, ".gitignore"))).toBe(".env\nbuild/\n")
+          expect(yield* exists(path.join(project, "new.txt"))).toBe(false)
+          expect(yield* exists(path.join(project, ".env"))).toBe(true)
+          expect(yield* exists(path.join(project, "build", "out.js"))).toBe(true)
+        }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+      }),
+    ),
+  )
+
   testEffect(Layer.empty).live("restores and diffs a selection too long for one command line", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {

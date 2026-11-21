@@ -212,7 +212,11 @@ const layer = Layer.effect(
       if (!enabled()) return yield* new Error({ operation: "restore", message: "Snapshots are disabled" })
       const repo = yield* repository.pipe(Effect.mapError((cause) => failure("restore", cause)))
       yield* git.tree
-        .restore({ repository: repo.snapshotRepository, files: yield* plan(repo.worktree, input) })
+        .restore({
+          repository: repo.snapshotRepository,
+          files: yield* plan(repo.worktree, input),
+          ignores: repo.source,
+        })
         .pipe(Effect.mapError((cause) => failure("restore", cause)))
     })
 
