@@ -638,7 +638,7 @@ describe("Tool", () => {
         ),
       )
       const snapshot = yield* service.snapshot()
-      for (const name of ["acme.tools.echo", "tools.acme.tools.echo", "acme_tools_echo"]) {
+      for (const name of ["acme.tools.echo", "acme_tools_echo"]) {
         const result = yield* snapshot.execute(call(name))
         expect(result.output).toEqual({ text: name })
         expect(result.content[0]).toEqual({
@@ -647,7 +647,7 @@ describe("Tool", () => {
         })
       }
       expect(seen.filter((event) => event.info)).toEqual(
-        Array.from({ length: 3 }, () => ({ tool: "acme_tools_echo", info: true, codemode: true })),
+        Array.from({ length: 2 }, () => ({ tool: "acme_tools_echo", info: true, codemode: true })),
       )
       // A tool this request doesn't offer stays unknown.
       const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])

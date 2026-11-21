@@ -360,7 +360,7 @@ const layer = Layer.effect(
                   }
                   catalogs.set(key, entry)
                 }
-                return { tool, tools: inventory.tools, catalog: entry.value, definition: entry.definition }
+                return { tool, inventory, catalog: entry.value, definition: entry.definition }
               })()
           return {
             ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog }),
@@ -394,16 +394,18 @@ const layer = Layer.effect(
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
-              // Weaker models sometimes call a Code Mode tool at the top level, by its path or flattened name. When
-              // this request offered execute, run it as a program would and say how to call it next time.
-              const programs =
-                codemode && (!input.definitions || input.definitions.has("execute")) ? codemode.tools : undefined
-              const id = name.replace(/^tools\./, "").replace(/[^a-zA-Z0-9_-]/g, "_")
-              const fallback = programs?.get(id)
-              if (programs && fallback) {
-                const path = CodeModeTool.qualifiedName(fallback)
+              // Weaker models sometimes call a Code Mode tool at the top level, by its path or registry ID. When this
+              // request offered execute, run it as a program would and say how to call it next time.
+              const inventory =
+                codemode && (!input.definitions || input.definitions.has("execute")) ? codemode.inventory : undefined
+              const found = inventory && CodeModeTool.find(inventory, name)
+              if (inventory && found) {
+                const path = CodeModeTool.qualifiedName(found.registration)
                 const note = `Note: ${path} is a Code Mode tool, so it is only callable inside execute. This call ran anyway; next time call it there, as \`await tools.${path}(input)\`.`
-                const result = yield* run(programs, fallback, id, event.input, { ...context, codemode: true }).pipe(
+                const result = yield* run(inventory.tools, found.registration, found.id, event.input, {
+                  ...context,
+                  codemode: true,
+                }).pipe(
                   Effect.mapError(
                     (error) =>
                       new Tool.Error({
