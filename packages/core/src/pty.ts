@@ -218,8 +218,11 @@ const layer = Layer.effect(
           if (session.buffer.length <= BUFFER_LIMIT) return
           session.buffer = session.buffer.slice(session.buffer.length - BUFFER_LIMIT)
         }),
-        proc.onExit(({ exitCode }) => {
+        proc.onExit((event) => {
           if (session.info.status === "exited") return
+          // Windows exit codes are 32-bit DWORDs; the PTY reports those from 0x80000000 up (NTSTATUS codes such as
+          // 0xC0000005) as negative numbers, which the NonNegativeInt schema rejects. POSIX codes are unchanged.
+          const exitCode = event.exitCode >>> 0
           session.info.status = "exited"
           session.info.exitCode = exitCode
           notifyEnd(session, { exitCode })
