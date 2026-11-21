@@ -888,18 +888,13 @@ test("a border draws as OpenTUI's box draws it", () => {
 
 test("a box layout the contract has no value for is reported", () => {
   const fake = host()
-  const ctx = plugin("t.layout", fake)
-  const box = (props: Json) => h("box", props)
-  ctx.ui.slot({
+  plugin("t.layout", fake).ui.slot({
     append: "home.footer",
-    render: () =>
-      h("box", {
-        children: [
-          box({ flexDirection: "row-reverse" }),
-          box({ flexDirection: "column-reverse", justifyContent: "space-evenly", alignItems: "baseline" }),
-          box({ flexDirection: "row", justifyContent: "space-around", alignItems: "center" }),
-        ],
-      }),
+    render: () => [
+      h("box", { flexDirection: "row-reverse" }),
+      h("box", { flexDirection: "column-reverse", justifyContent: "space-evenly", alignItems: "baseline" }),
+      h("box", { flexDirection: "row", justifyContent: "space-around", alignItems: "center" }),
+    ],
   })
   view(fake, 0, "a").draw()
   expect(fake.warnings()).toEqual([
