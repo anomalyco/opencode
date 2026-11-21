@@ -21,6 +21,28 @@ describe("linkSegments", () => {
     ])
   })
 
+  test("keeps closing brackets that belong to the URL", () => {
+    expect(linkSegments("see https://en.wikipedia.org/wiki/Mercury_(planet) now")).toEqual([
+      { text: "see " },
+      {
+        text: "https://en.wikipedia.org/wiki/Mercury_(planet)",
+        href: "https://en.wikipedia.org/wiki/Mercury_(planet)",
+      },
+      { text: " now" },
+    ])
+    expect(linkSegments("(see https://en.wikipedia.org/wiki/Mercury_(planet)).")).toEqual([
+      { text: "(see " },
+      {
+        text: "https://en.wikipedia.org/wiki/Mercury_(planet)",
+        href: "https://en.wikipedia.org/wiki/Mercury_(planet)",
+      },
+      { text: ")." },
+    ])
+    expect(linkSegments("https://example.com/list[0]")).toEqual([
+      { text: "https://example.com/list[0]", href: "https://example.com/list[0]" },
+    ])
+  })
+
   test("returns text without URLs as one run", () => {
     expect(linkSegments("no links here")).toEqual([{ text: "no links here" }])
     expect(linkSegments("")).toEqual([])
