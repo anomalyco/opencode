@@ -17,6 +17,7 @@ export const ID = Schema.String.pipe(
     googleVertex: schema.make("google-vertex"),
     githubCopilot: schema.make("github-copilot"),
     claudeAgent: schema.make("claude-agent"),
+    antigravity: schema.make("antigravity"),
     amazonBedrock: schema.make("amazon-bedrock"),
     azure: schema.make("azure"),
     openrouter: schema.make("openrouter"),

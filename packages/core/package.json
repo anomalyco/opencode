@@ -106,6 +106,7 @@
     "fast-check": "catalog:"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "1.6.0",
     "@ai-sdk/provider": "3.0.19",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
