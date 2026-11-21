@@ -254,6 +254,13 @@ export function displayDirectory(path: string | undefined) {
   return relativizeProjectPath(getDirectory(path), data.directory)
 }
 
+/** A folder a tool searched or listed, relative to the project; `/` for the project itself. */
+export function displayFolder(path: string | undefined) {
+  const data = useData()
+
+  return relativizeProjectPath(path ?? "/", data.directory) || "/"
+}
+
 import { resolveFileDiff } from "../components/session-diff"
 import { factsOf, sameFileFact, summarize, type FileFact } from "../timeline/facts"
 import { contextGroupLabel, webSearchProviderLabel } from "./context-group-label"
@@ -1242,7 +1249,7 @@ export function samePatchFile(a: FileDiffInfo, b: FileDiffInfo) {
 function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: ReturnType<typeof useI18n>) {
   const input = toolInput(currentToolInput(tool))
   const metadata = toolMetadata(currentToolMetadata(tool))
-  const subtitle = displayDirectory(input.path ?? "/")
+  const subtitle = displayFolder(input.path)
 
   const matches = (count: number | undefined) =>
     count ? i18n.plural("ui.messagePart.context.match", count) : undefined
@@ -1638,7 +1645,7 @@ export function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   if (props.tool === "read" || props.tool === "edit" || props.tool === "write") return getFilename(input.path ?? "")
 
   if (props.tool === "list" || props.tool === "glob" || props.tool === "grep")
-    return displayDirectory(input.path || "/")
+    return displayFolder(input.path)
 
   if (props.tool === "webfetch") return input.url || undefined
 
@@ -1782,7 +1789,7 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.list"),
-          subtitle: displayDirectory(toolInput(props.input).path ?? "/"),
+          subtitle: displayFolder(toolInput(props.input).path),
         }}
       >
         <Show when={props.output}>
@@ -1814,7 +1821,7 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.glob"),
-          subtitle: displayDirectory(input().path ?? "/"),
+          subtitle: displayFolder(input().path),
           args: input().pattern === undefined ? [] : ["pattern=" + input().pattern],
         }}
       >
@@ -1852,7 +1859,7 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.grep"),
-          subtitle: displayDirectory(input().path ?? "/"),
+          subtitle: displayFolder(input().path),
           args: args(),
         }}
       >
