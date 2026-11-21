@@ -5,6 +5,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Option, Schema, Stream, SubscriptionRef } from "effect"
 import { Model } from "../../../model.js"
 import { Provider } from "../../../provider.js"
+import { storedCredential } from "../credential-settings.js"
 import type { ClaudeIO } from "./claude/io.js"
 import type { ClaudeProbe } from "./claude/probe.js"
 import { ClaudeQueryOptions } from "./claude/query-options.js"
@@ -12,6 +13,8 @@ import type { ClaudeStatus } from "./claude/status.js"
 
 export const ID = Provider.ID.claudeAgent
 export const PACKAGE = "@opencode/claude-agent"
+// The login form's answer, kept as credential metadata
+export const CONFIG_DIR_KEY = "configDir"
 
 // The model list we keep between starts, so opencode can list models without running `claude`
 const CatalogModel = Schema.Struct({
@@ -102,7 +105,22 @@ export const connection = Effect.fn("ClaudeProvider.connection")(function* (ctx:
   const provider = yield* ctx.provider.get({ providerID: ID }).pipe(Effect.option)
   if (Option.isNone(provider)) return {}
   const info = provider.value.data
-  return ClaudeQueryOptions.connectionEnv({ settings: info.settings, headers: info.headers, body: info.body })
+  const env = ClaudeQueryOptions.connectionEnv({ settings: info.settings, headers: info.headers, body: info.body })
+  if (env.CLAUDE_CONFIG_DIR) return env
+  const dir = yield* accountConfigDir(ctx)
+  return dir ? { ...env, CLAUDE_CONFIG_DIR: dir } : env
+})
+
+// The folder the active account named when it was connected. opencode holds no token for Claude, so this folder is
+// what makes switching accounts change the login. Read on every use, not cached, so a request that follows a switch
+// already runs on the new account. A configured `settings.configDir` wins over it.
+export const accountConfigDir = Effect.fn("ClaudeProvider.accountConfigDir")(function* (ctx: Context) {
+  const { credential } = yield* storedCredential(ctx, ID)
+  if (credential?.type !== "external") return
+  const answer = credential.metadata?.[CONFIG_DIR_KEY]
+  // The form field is optional, and an empty answer would resolve to the folder opencode runs in.
+  if (typeof answer !== "string" || answer.trim() === "") return
+  return ClaudeQueryOptions.configDirs(answer.trim())[0]
 })
 
 export const configDirs = Effect.fn("ClaudeProvider.configDirs")(function* (ctx: Context) {

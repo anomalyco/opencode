@@ -121,6 +121,19 @@ Then add models that use that folder:
 To use one account for every model in a project, set `settings.configDir` on the provider in that project's config
 instead.
 
+## Switch between Claude accounts
+
+To switch every model at once, give each connected account its own folder instead. Connect Claude Agent once per
+account and enter the folder that account is signed in to; leave it empty for Claude Code's default login.
+
+```bash
+opencode auth login claude-agent
+```
+
+The active account's folder is then used for the login check, the model list and chats, so switching accounts in
+`/connect` or with `auth switch claude-agent` changes the Claude login. A `settings.configDir` in config wins over the
+account's folder.
+
 ## Rotate between accounts
 
 If you have several interchangeable accounts, OpenCode can move to the next one when an account hits its usage limit.
