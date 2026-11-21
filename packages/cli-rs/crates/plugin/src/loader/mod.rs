@@ -151,6 +151,8 @@ pub struct Loader {
     /// A Luau plugin's sources, read and compiled on threads of their own.
     #[cfg(luau)]
     luau_builds: Option<crate::luau::Builds>,
+    /// Lists every target as skipped and loads none ([`Loader::without_plugins`]).
+    off: bool,
 }
 
 /// The path `realpath` gives: `canonicalize`, without the verbatim prefix it gives on Windows (`\\?\C:\x` is `C:\x`),
@@ -209,7 +211,14 @@ impl Loader {
             luau: None,
             #[cfg(luau)]
             luau_builds: None,
+            off: false,
         }
+    }
+
+    /// Loads no target, of any carrier: each is listed as skipped ([`crate::SKIPPED_NO_PLUGINS`]), and a project's is
+    /// not asked about. The client's `--no-plugins`, the way out of a plugin that keeps it from starting.
+    pub fn without_plugins(self) -> Self {
+        Self { off: true, ..self }
     }
 
     /// Runs the directories with a `plugin.toml` and no native build as Luau plugins. `walked` runs on a walk's thread
@@ -604,6 +613,9 @@ impl Loader {
             registry.set_unloaded(name, status);
             changed
         };
+        if self.off {
+            return skip(crate::SKIPPED_NO_PLUGINS);
+        }
         #[cfg(luau)]
         if self.luau_target(target)
             && let Some(dir) = &target.local

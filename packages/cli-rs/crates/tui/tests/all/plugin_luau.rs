@@ -163,6 +163,47 @@ fn a_spinning_luau_plugin_is_failed_and_the_tui_keeps_drawing() {
     h.wait_for("still here");
 }
 
+// `--no-plugins` (D01-no-plugins): the quick start, in the global `plugins` directory and named in `cli.json`, loads and
+// draws its footer line; with the flag it does not, and `/plugins` lists its target as skipped, with why.
+#[test]
+fn a_configured_luau_plugin_does_not_load_with_no_plugins() {
+    for no_plugins in [false, true] {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let config = root.path().join("config");
+        let dir = config.join("plugins").join("hello");
+        std::fs::create_dir_all(&dir).unwrap();
+        let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau/hello");
+        for file in ["plugin.toml", "init.luau"] {
+            std::fs::copy(example.join(file), dir.join(file)).unwrap();
+        }
+        let target = dir.to_string_lossy().into_owned();
+        let deps = Deps {
+            route: Route::Home,
+            config: support::config(support::decode(&serde_json::json!({ "plugins": [target] }).to_string())),
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let args = opencode_tui::Args { no_plugins, ..opencode_tui::Args::default() };
+        let h = support::mount_on(opentui::testing::TestApp::new(80, 24), deps, args);
+        let external = opencode_tui::plugins::host::External { config_dir: config, cwd: root.path().to_path_buf() };
+        opencode_tui::plugins::host::external(&h.tui, external);
+        let status = || {
+            let entries = h.tui.plugins.entries();
+            entries.into_iter().find(|entry| entry.target.as_deref() == Some(&*target)).map(|entry| entry.status)
+        };
+        let expected = match no_plugins {
+            false => opencode_plugin::Status::Active,
+            true => opencode_plugin::Status::Skipped(opencode_plugin::SKIPPED_NO_PLUGINS.to_owned()),
+        };
+        h.wait("the plugin's status", || {
+            frames(&h);
+            status() == Some(expected.clone())
+        });
+        frames(&h);
+        let footer = h.app.text().lines().any(|line| line.trim_end().ends_with("hello"));
+        assert_eq!(footer, !no_plugins, "no_plugins {no_plugins}:\n{}", h.app.text());
+    }
+}
+
 #[test]
 fn a_dialog_the_host_keeps_out_answers_its_task_nil() {
     let init = r#"

@@ -2453,6 +2453,8 @@ pub const SKIPPED_NO_LUAU: &str =
 pub const SKIPPED_OFF: &str = if cfg!(feature = "ts") { SKIPPED_JS_OFF } else { SKIPPED_NO_TS };
 /// Why a native plugin library (`plugin.so`, `plugin.dylib`, `plugin.dll`) is not loaded.
 pub const SKIPPED_NATIVE: &str = "opencode-native does not load native plugin libraries";
+/// Why an external plugin is not loaded in a run started with `--no-plugins` ([`loader::Loader::without_plugins`]).
+pub const SKIPPED_NO_PLUGINS: &str = "opencode-native started with --no-plugins, which loads no external plugin";
 /// Why a TypeScript plugin is not loaded when no Bun runs the JS host: neither the local server's opencode binary nor
 /// `bun` on the path.
 pub const SKIPPED_NO_BUN: &str = "TypeScript TUI plugins run on the JS host, which needs Bun: neither the server's opencode nor bun on the path runs it; install Bun 1.4 or newer, or set OPENCODE_BUN to its absolute path";

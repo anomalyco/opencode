@@ -1364,7 +1364,8 @@ fn tell_skipped(tui: &Tui) {
         return;
     }
     let lines: Vec<String> = reasons.iter().map(|(reason, names)| format!("{}: {reason}.", names.join(", "))).collect();
-    let other = [opencode_plugin::SKIPPED_NATIVE, opencode_plugin::SKIPPED_NO_LUAU];
+    let other =
+        [opencode_plugin::SKIPPED_NATIVE, opencode_plugin::SKIPPED_NO_LUAU, opencode_plugin::SKIPPED_NO_PLUGINS];
     let kind = match reasons.iter().any(|(reason, _)| other.contains(&reason.as_str())) {
         true => "",
         false => "TypeScript ",
@@ -1496,8 +1497,14 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
     let entries = configured(tui, tui.plugins.skipped());
     let project = opencode_plugin::loader::project_root(&external.cwd);
     let loader = Loader::new(external.config_dir, external.cwd, entries);
+    // `--no-plugins`: no carrier starts, and every target is listed as skipped.
+    let off = tui.startup.args.no_plugins;
+    let (loader, scripts) = match off {
+        true => (loader.without_plugins(), None),
+        false => (loader, scripts),
+    };
     #[cfg(luau)]
-    let loader = match opencode_plugin::luau::enabled() {
+    let loader = match opencode_plugin::luau::enabled() && !off {
         true => {
             let proxy = tui.app.proxy();
             loader.with_luau(move || {
