@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
 import type { Endpoint } from "@opencode/client/service"
-import { CHANNEL } from "../constants"
+import { CHANNEL, serviceChannel } from "../constants"
 
 // The main thread idles between showing the first window and evaluating the main bundle, waiting
 // for the renderer's asset requests. That slot is long enough to find out whether a compatible
@@ -10,21 +10,32 @@ import { CHANNEL } from "../constants"
 // moment anyone asks. The probe only looks; a service that has to be started waits for the layers,
 // which set the environment the CLI expects.
 let probe: Promise<Endpoint | undefined> | undefined
+let probeFile: string | undefined
 
 export function startSidecarProbe() {
   if (!app.isPackaged) return
   const version = CHANNEL === "beta" ? undefined : bundledVersion()
 
   if (version === "") return
-  probe = import("@opencode/client/service").then(({ Service }) => Service.discover({ version })).catch(() => undefined)
+  probe = import("@opencode/client/service")
+    .then((client) => {
+      const file = client.fallback(serviceChannel())
+      probeFile = file
+      return client.Service.discover({ file, version })
+    })
+    .catch(() => undefined)
 }
 
 /** The probe's result, once: a later connect must not adopt a service that may have exited since boot. */
-export function takeSidecarProbe() {
-  const result = probe ?? Promise.resolve(undefined)
+export async function takeSidecarProbe() {
+  if (!probe) return undefined
+  const result = probe
   probe = undefined
+  const service = await result
+  const file = probeFile
+  probeFile = undefined
 
-  return result
+  return service && file ? { service, file } : undefined
 }
 
 function bundledVersion() {
