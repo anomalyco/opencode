@@ -2149,6 +2149,22 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("normalizes a server error frame without losing the provider payload", () =>
+    Effect.gen(function* () {
+      const frame = { type: "error", error: { type: "server_error", message: "Internal server error" } }
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(frame))),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({
+        message: "Server error",
+        isRetryable: true,
+        reason: { _tag: "ProviderInternal", body: JSON.stringify(frame) },
+      })
+    }),
+  )
+
   it.effect("ignores untyped stream frames but reads untyped error envelopes as errors", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

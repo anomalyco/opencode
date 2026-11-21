@@ -1470,6 +1470,7 @@ const onMessageStop = Effect.fnUntraced(function* (state: ParserState) {
 // even when the provider message is generic or empty.
 const providerErrorMessage = (event: AnthropicEvent): string => {
   const type = event.error?.type
+  if (event.type === "error" && type === "server_error") return "Server error"
   const message = event.error?.message
   if (type && message) return `${type}: ${message}`
   return message || type || "Anthropic Messages stream error"
