@@ -19,6 +19,8 @@ export const registry = {
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
+  widgets:
+    "Let agents show interactive widgets in a session (option cards, forms, confirmations) with the widget and widget_template tools. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=widgets or experimental.widgets: true.",
   recommended_api: "Use each model's recommended API from models.dev instead of the first API it lists.",
   full_codemode: "Enable the full Code Mode work in progress.",
   machines: "Let a tool path name a machine, as in gpu:/work/train.py, and act on that machine's files and processes.",
@@ -31,7 +33,7 @@ export const registry = {
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
-export const optInOnly: ReadonlySet<Key> = new Set(["todo", "sqlite_fts"])
+export const optInOnly: ReadonlySet<Key> = new Set(["todo", "sqlite_fts", "widgets"])
 
 /** Earlier names of a flag, still read from `experimental.<name>` and `OPENCODE_FLAGS` when the new key is unset. */
 export const aliases = {

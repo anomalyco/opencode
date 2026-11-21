@@ -34,6 +34,8 @@ const toolDisplays = new Set([
   "todowrite",
   "question",
   "skill",
+  "widget",
+  "widget_template",
 ])
 
 export function toolDisplay(tool: string) {

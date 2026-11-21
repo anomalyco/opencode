@@ -1,0 +1,187 @@
+import { expect, test } from "bun:test"
+import { draw, type Frame, MAX_COMMANDS, program, step, WidgetSession } from "../src/index.js"
+
+const frame: Frame = { id: "0/:c", t: 0.5, dt: 1 / 60, width: 200, height: 100, scale: 2, pointer: null, dark: true }
+
+const drawn = (body: string) =>
+  draw(
+    program(
+      `function view() { return ui.canvas({ key: "c", height: 100 }) }\nfunction draw(state, data, frame) {${body}}`,
+    ),
+    {
+      data: null,
+      state: {},
+      frame,
+    },
+  )
+
+const failure = (body: string) => drawn(body).catch((error: unknown) => error)
+
+test("canvas and shader builders build their nodes", async () => {
+  const output = await step(
+    program(`
+      function view() {
+        return ui.column([
+          ui.canvas({ key: "c", height: 120, width: 300, fps: 30, duration: 0.6, alt: "A chart" }),
+          ui.shader("fn shade(frag: vec2f) -> vec4f { return vec4f(1.0); }", { height: 80, values: [1, 2], poster: "p.png", alt: "Glow" }),
+          ui.canvas({ height: 40, type: "image" }),
+        ])
+      }
+    `),
+    { phase: "init", data: null },
+  )
+  expect(output.view).toEqual({
+    type: "column",
+    children: [
+      { type: "canvas", id: "0/:c", height: 120, width: 300, fps: 30, duration: 0.6, alt: "A chart" },
+      {
+        type: "shader",
+        wgsl: "fn shade(frag: vec2f) -> vec4f { return vec4f(1.0); }",
+        height: 80,
+        values: [1, 2],
+        poster: "p.png",
+        alt: "Glow",
+      },
+      { type: "canvas", height: 40 },
+    ],
+  })
+})
+
+test("canvas and shader nodes are validated", async () => {
+  const invalid = (node: string) =>
+    step(program(`function view() { return ${node} }`), { phase: "init", data: null }).catch((error: unknown) => error)
+  expect(await invalid(`ui.canvas({})`)).toMatchObject({ kind: "invalid" })
+  expect(await invalid(`ui.canvas({ height: 10, fps: 120 })`)).toMatchObject({ kind: "invalid" })
+  expect(await invalid(`ui.shader("x", { height: 10, values: Array(17).fill(0) })`)).toMatchObject({ kind: "invalid" })
+  expect(await invalid(`ui.shader("é".repeat(8193), { height: 10 })`)).toMatchObject({
+    kind: "invalid",
+    message: expect.stringContaining("16 KB"),
+  })
+  expect(await invalid(`ui.shader("x".repeat(16384), { height: 10 })`)).toMatchObject({ view: { type: "shader" } })
+})
+
+test("the draw builder emits the spec's compact commands", async () => {
+  const output = await drawn(`
+    const g = ui.draw()
+    g.save().translate(1, 2).rotate(0.5).scale(2).scale(1, 3).alpha(0.5)
+    g.rect(0, 0, 10, 10, "accent").rrect(0, 0, 10, 10, 3, { fill: { linear: [0, 0, 1, 1], stops: [[0, "#fff"], [1, "accent"]] } })
+    g.circle(5, 5, 2).circle(5, 5, 2, { fill: { radial: [5, 5, 2], stops: [[0, "#ff000080"], [1, "bg"]] }, stroke: "border", width: 1 })
+    g.line(0, 0, 1, 1).line(0, 0, 1, 1, "border").line(0, 0, 1, 1, { stroke: "#123456", width: 2, cap: "round" })
+    g.path([["M", 0, 0], ["L", 1, 1], ["Q", 1, 2, 3, 4], ["C", 1, 2, 3, 4, 5, 6], ["Z"]], { stroke: "error" })
+    g.text(1, 2, 42).text(1, 2, "hi", { size: 12, weight: 600, align: "center", color: "muted", mono: true })
+    g.image("a.png", 0, 0, 4, 4).restore()
+    return g.commands
+  `)
+  expect(output.commands).toEqual([
+    ["save"],
+    ["translate", 1, 2],
+    ["rotate", 0.5],
+    ["scale", 2, 2],
+    ["scale", 1, 3],
+    ["alpha", 0.5],
+    ["rect", 0, 0, 10, 10, { fill: "accent" }],
+    [
+      "rrect",
+      0,
+      0,
+      10,
+      10,
+      3,
+      {
+        fill: {
+          linear: [0, 0, 1, 1],
+          stops: [
+            [0, "#fff"],
+            [1, "accent"],
+          ],
+        },
+      },
+    ],
+    ["circle", 5, 5, 2, { fill: "text" }],
+    [
+      "circle",
+      5,
+      5,
+      2,
+      {
+        fill: {
+          radial: [5, 5, 2],
+          stops: [
+            [0, "#ff000080"],
+            [1, "bg"],
+          ],
+        },
+        stroke: "border",
+        width: 1,
+      },
+    ],
+    ["line", 0, 0, 1, 1, { stroke: "text" }],
+    ["line", 0, 0, 1, 1, { stroke: "border" }],
+    ["line", 0, 0, 1, 1, { stroke: "#123456", width: 2, cap: "round" }],
+    ["path", [["M", 0, 0], ["L", 1, 1], ["Q", 1, 2, 3, 4], ["C", 1, 2, 3, 4, 5, 6], ["Z"]], { stroke: "error" }],
+    ["text", 1, 2, "42", {}],
+    ["text", 1, 2, "hi", { size: 12, weight: 600, align: "center", color: "muted", mono: true }],
+    ["image", "a.png", 0, 0, 4, 4],
+    ["restore"],
+  ])
+})
+
+test("draw gets state, data and frame; it may return the builder; no draw draws nothing", async () => {
+  const source = program(`
+    function view() { return ui.canvas({ key: "c", height: 100 }) }
+    function draw(state, data, frame) {
+      return ui.draw().text(0, 0, [state.n, data.label, frame.key, frame.t, frame.width, frame.dark].join(" "))
+    }
+  `)
+  expect(await draw(source, { data: { label: "x" }, state: { n: 3 }, frame })).toEqual({
+    commands: [["text", 0, 0, "3 x c 0.5 200 true", {}]],
+  })
+  expect(await draw(program(`function view() { return ui.text("a") }`), { data: null, state: {}, frame })).toEqual({
+    commands: [],
+  })
+  expect((await drawn(`return undefined`)).commands).toEqual([])
+})
+
+test("invalid draw output is rejected", async () => {
+  expect(await failure(`return ui.draw().rect(0, 0, 1, 1, "red")`)).toMatchObject({ kind: "invalid" })
+  expect(await failure(`return ui.draw().rect(0, 0, 1, 1, "#12345")`)).toMatchObject({ kind: "invalid" })
+  expect(await failure(`return ui.draw().alpha(2)`)).toMatchObject({ kind: "invalid" })
+  expect(await failure(`return ui.draw().rect(0, 0, "1", 1)`)).toMatchObject({ kind: "invalid" })
+  expect(await failure(`return ui.draw().path([["A", 1]])`)).toMatchObject({ kind: "invalid" })
+  expect(await failure(`return ui.draw().text(0, 0, "x", { weight: 450 })`)).toMatchObject({ kind: "invalid" })
+  expect(await failure(`return [["sparkle"]]`)).toMatchObject({ kind: "invalid" })
+  expect(await failure(`return "rect"`)).toMatchObject({ kind: "invalid" })
+  expect(await failure(`throw new Error("no")`)).toMatchObject({ kind: "error", message: "Error: no" })
+  const cap = `const g = ui.draw(); for (let i = 0; i < N; i++) g.save(); return g`
+  expect((await drawn(cap.replace("N", String(MAX_COMMANDS)))).commands).toHaveLength(MAX_COMMANDS)
+  expect(await failure(cap.replace("N", String(MAX_COMMANDS + 1)))).toMatchObject({
+    kind: "invalid",
+    message: expect.stringContaining(`at most ${MAX_COMMANDS} commands`),
+  })
+})
+
+test("a session draws with its current state and draw never changes it", async () => {
+  const session = await WidgetSession.start(
+    program(`
+      function init() { return { x: 0 } }
+      function view(state) {
+        return ui.canvas({
+          key: "c",
+          height: 100,
+          fps: state.down ? 60 : 0,
+          onPointer: (state, p) => ({ x: p.x / p.width, down: p.kind !== "up" }),
+        })
+      }
+      function draw(state, data, frame) {
+        state.x = 99
+        if (frame.key !== "c" || "id" in frame) throw new Error("draw gets the canvas key, not its id")
+        return ui.draw().circle(state.x * frame.width, 50, 4)
+      }
+    `),
+    null,
+  )
+  await session.dispatch({ id: ":c", type: "pointer", value: { kind: "down", x: 50, y: 10, width: 200, height: 100 } })
+  expect(session.view).toEqual({ type: "canvas", id: ":c", height: 100, fps: 60 })
+  expect((await session.draw({ ...frame, id: ":c" })).commands).toEqual([["circle", 19800, 50, 4, { fill: "text" }]])
+  expect(session.state).toEqual({ x: 0.25, down: true })
+})

@@ -6,7 +6,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import type { Generation } from "./service.js"
 import { httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
-import { Context, Effect, Scope } from "effect"
+import { Context, Effect, Exit, Scope, Semaphore, Stream } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
 import { Agent } from "../agent.js"
 import { App } from "../app.js"
@@ -106,6 +106,7 @@ import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
+import WidgetsPlugin from "@opencode/plugin-widgets"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
 import { ForkNoticePlugin } from "./fork-notice.js"
@@ -257,6 +258,35 @@ export const requirements = LayerNode.group([
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
+// Experimental and opt-in only: the plugin runs only while the location has the `widgets` flag on. A config edit doesn't
+// reactivate unchanged built-ins, so this follows `config.updated` itself and starts or stops the plugin in its own
+// scope, the way `experimental.widgets: true` in a config file takes effect without a restart.
+const Widgets: InternalPlugin = {
+  id: WidgetsPlugin.id,
+  effect: Effect.fn("PluginInternal.widgets")(function* (host) {
+    const parent = yield* Effect.scope
+    const lock = Semaphore.makeUnsafe(1)
+    const running: { scope?: Scope.Closeable } = {}
+    const apply = Effect.gen(function* () {
+      const on = yield* Flag.enabled("widgets")
+      if (on === (running.scope !== undefined)) return
+      if (running.scope) {
+        const scope = running.scope
+        running.scope = undefined
+        return yield* Scope.close(scope, Exit.void)
+      }
+      const scope = yield* Scope.fork(parent)
+      running.scope = scope
+      yield* WidgetsPlugin.effect(host).pipe(Scope.provide(scope))
+    }).pipe(Semaphore.withPermit(lock))
+    yield* host.event.subscribe({ types: ["config.updated"] }).pipe(
+      Stream.runForEach(() => apply),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* apply
+  }),
+}
+
 const pre = [
   ToolInputRepairPlugin.Plugin,
   ConfigWorktreePlugin.Plugin,
@@ -300,6 +330,7 @@ const pre = [
   WebSearchTool.Plugin,
   WriteTool.Plugin,
   WarmingPlugin.Plugin,
+  Widgets,
 ] as const satisfies readonly InternalPlugin[]
 
 const post = [
