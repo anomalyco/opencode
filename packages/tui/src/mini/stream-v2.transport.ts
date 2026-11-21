@@ -219,23 +219,33 @@ function wait(delay: number, signal: AbortSignal) {
   })
 }
 
-function nextEvent(stream: AsyncIterator<RunV2Event>, signal: AbortSignal) {
+/**
+ * How long a fresh subscription may stay silent. A proxy or tunnel that holds the response open
+ * answers the subscribe request and never forwards anything, so the wait is reported instead.
+ */
+const CONNECT_TIMEOUT = 10_000
+
+const STALLED_MESSAGE = `The OpenCode server accepted the event stream but sent nothing within ${CONNECT_TIMEOUT / 1000}s. Something between this client and the server, such as a proxy, tunnel or VPN, is probably buffering it.`
+
+class StreamStalledError extends Error {}
+
+function nextEvent(stream: AsyncIterator<RunV2Event>, signal: AbortSignal, stall?: string) {
   if (signal.aborted) return Promise.reject(signal.reason ?? new Error("Event stream aborted"))
   return new Promise<IteratorResult<RunV2Event>>((resolve, reject) => {
-    const abort = () => {
+    // A proxy can answer the subscribe request and hold the response open, which leaves next()
+    // pending forever, so a fresh subscription gets a deadline.
+    const timer =
+      stall === undefined ? undefined : setTimeout(() => finish(reject, new StreamStalledError(stall)), CONNECT_TIMEOUT)
+    const abort = () => finish(reject, signal.reason ?? new Error("Event stream aborted"))
+    function finish<T>(settle: (value: T) => void, value: T) {
+      if (timer !== undefined) clearTimeout(timer)
       signal.removeEventListener("abort", abort)
-      reject(signal.reason ?? new Error("Event stream aborted"))
+      settle(value)
     }
     signal.addEventListener("abort", abort, { once: true })
     void stream.next().then(
-      (next) => {
-        signal.removeEventListener("abort", abort)
-        resolve(next)
-      },
-      (error) => {
-        signal.removeEventListener("abort", abort)
-        reject(error)
-      },
+      (next) => finish(resolve, next),
+      (error) => finish(reject, error),
     )
   })
 }
@@ -1026,8 +1036,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (!current(attempt)) return
     const client = attempt.client
     if (catalogEvents.has(event.type)) {
-      if (input.location && event.location && event.location.directory !== input.location.directory)
-        return
+      if (input.location && event.location && event.location.directory !== input.location.directory) return
       void refreshCatalog(attempt)
       return
     }
@@ -1504,7 +1513,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         const stream = client.event.subscribe({ signal: connection.signal })[Symbol.asyncIterator]()
         activeAttempt = attempt
         try {
-          const first = await nextEvent(stream, connection.signal)
+          const first = await nextEvent(stream, connection.signal, STALLED_MESSAGE)
           if (first.done || first.value.type !== "server.connected") throw new Error("Event stream disconnected")
           const buffered: RunV2Event[] = []
           let booting = true
@@ -1545,6 +1554,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       })().catch((error) => error)
       state.connected = false
       if (controller.signal.aborted || input.footer.isClosed) return
+      // A stream that never opened is not a dropped connection: reconnecting would only hide the
+      // buffering proxy behind a reconnect loop that never settles. Once the session is running, a
+      // stall is a dropped connection, so it goes through the reconnect path below.
+      if (error instanceof StreamStalledError && state.initial) return readyReject(error)
       input.trace?.write("recv.reconnect", { error: formatUnknownError(error) })
       write([], { phase: "running", status: "reconnecting" })
       if (input.reconnect) {

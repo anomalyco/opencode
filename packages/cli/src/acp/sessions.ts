@@ -101,11 +101,13 @@ export const make = Effect.fnUntraced(function* (input: {
             const config = mcpConfig(server)
             if (isDeepStrictEqual(registered.get(server.name), config)) return Effect.void
             registered.set(server.name, config)
-            return input.client.experimental.mcp.add({ server: server.name, location: { directory: attached.cwd }, config }).pipe(
-              Effect.catch(ACPClient.classify),
-              Effect.onError(() => Effect.sync(() => registered.delete(server.name))),
-              Effect.uninterruptible,
-            )
+            return input.client.experimental.mcp
+              .add({ server: server.name, location: { directory: attached.cwd }, config })
+              .pipe(
+                Effect.catch(ACPClient.classify),
+                Effect.onError(() => Effect.sync(() => registered.delete(server.name))),
+                Effect.uninterruptible,
+              )
           }),
         { concurrency: "unbounded", discard: true },
       )
@@ -122,7 +124,9 @@ export const make = Effect.fnUntraced(function* (input: {
 
   return {
     attach: Effect.fn("cli.acp.sessions.attach")(function* (session, cwd, mcpServers) {
-      yield* Deferred.await(connected)
+      // A client whose event stream never opened cannot be served, so attaching reports that once
+      // instead of leaving every later request to wait for the same silent stream.
+      yield* ACPConnection.awaitConnected(connected)
       const current = yield* input.catalog.get(cwd)
       const entry: Entry = {
         attached: {

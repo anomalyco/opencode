@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, jest, mock, spyOn, test } from "bun:test"
 import {
   ClientError,
   OpenCode,
@@ -269,13 +269,25 @@ async function run(input: {
   active?: () => SessionActiveOutput
   terminalDelay?: number
   signal?: AbortSignal
+  // Closes the stream when the subscription signal aborts, like the real client does.
+  honorSignal?: boolean
+  // Receives a function that queues an event for the live turn, as a server would send it.
+  register?: (push: (event: V2Event) => void) => void
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
   let wake: (() => void) | undefined
+  let closed = false
+  const push = (event: V2Event) => {
+    values.push(event)
+    wake?.()
+    wake = undefined
+  }
+  input.register?.(push)
   const wait = Promise.withResolvers<void>()
   const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
     while (true) {
+      if (closed) return
       const value = values.shift()
       if (!value) {
         await new Promise<void>((resolve) => {
@@ -290,7 +302,19 @@ async function run(input: {
       yield value
     }
   })()
-  spyOn(sdk.event, "subscribe").mockImplementation((() => stream) as typeof sdk.event.subscribe)
+  spyOn(sdk.event, "subscribe").mockImplementation(((request?: { signal?: AbortSignal }) => {
+    request?.signal?.addEventListener(
+      "abort",
+      () => {
+        if (!input.honorSignal) return
+        closed = true
+        wake?.()
+        wake = undefined
+      },
+      { once: true },
+    )
+    return stream
+  }) as typeof sdk.event.subscribe)
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.session.form, "list").mockImplementation(
     (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
@@ -882,6 +906,113 @@ describe("runNonInteractivePrompt", () => {
     expect(sdk.session.interrupt).toHaveBeenCalledWith({ sessionID: "ses_child" })
     expect(sdk.shell.remove).toHaveBeenCalledWith({ id: "sh_train", location: { directory: "/work tree" } })
     expect(sdk.shell.remove).not.toHaveBeenCalledWith(expect.objectContaining({ id: "sh_dev" }))
+  })
+
+  test("a cancelled run keeps the stream open so the jobs it stopped can finish", async () => {
+    const controller = new AbortController()
+    let finished = false
+    let push: ((event: V2Event) => void) | undefined
+    // Started after this prompt was admitted, so cancel() owns it and has to see it end.
+    const job = { ...shellJob("sh_train", "python train.py"), time: { started: 2 } }
+    const running = run({
+      signal: controller.signal,
+      honorSignal: true,
+      register: (value) => (push = value),
+      turn: (id) => [prompted(id), settled()],
+      jobs: () => (finished ? [] : [job]),
+    })
+    expect(await Promise.race([running.then(() => "exited"), Bun.sleep(20).then(() => "waiting")])).toBe("waiting")
+    controller.abort()
+    // Closing the stream here would hide the terminal event the cancel is still waiting for.
+    expect(await Promise.race([running.then(() => "exited"), Bun.sleep(20).then(() => "waiting")])).toBe("waiting")
+    finished = true
+    push!(settled())
+    expect(await Promise.race([running.then(() => "exited"), Bun.sleep(2_000).then(() => "hung")])).toBe("exited")
+  })
+
+  test("a stream that never sends anything fails the run instead of hanging", async () => {
+    // A proxy that answers the subscribe request and holds the body open: next() never settles.
+    let closed = false
+    const client = {
+      event: {
+        subscribe: () => ({
+          [Symbol.asyncIterator]: () => ({
+            next: () => new Promise<never>(() => {}),
+            return: async () => {
+              closed = true
+              return { done: true, value: undefined }
+            },
+          }),
+        }),
+      },
+    } as unknown as Parameters<typeof runNonInteractivePrompt>[0]["client"]
+    const realSetTimeout = globalThis.setTimeout
+    jest.useFakeTimers()
+    try {
+      const pending = runNonInteractivePrompt({
+        client,
+        sessionID: "ses_1",
+        location,
+        message: "hello",
+        files: [],
+        thinking: false,
+        format: "default",
+        auto: false,
+        standalone: false,
+        signal: new AbortController().signal,
+        renderTool: () => Promise.resolve(),
+        renderToolError: () => Promise.resolve(),
+      })
+      const outcome = pending.then(
+        () => "resolved",
+        (error: Error) => error.message,
+      )
+      jest.advanceTimersByTime(10_000)
+      const guard = new Promise<string>((resolve) => realSetTimeout(() => resolve("still waiting"), 2_000))
+      expect(await Promise.race([outcome, guard])).toContain("accepted the event stream but sent nothing within 10s")
+      // The subscription is closed rather than left open behind the error.
+      expect(closed).toBe(true)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test("cancelling before the first event closes the subscription instead of waiting", async () => {
+    const controller = new AbortController()
+    let closed = false
+    const client = {
+      event: {
+        subscribe: () => ({
+          [Symbol.asyncIterator]: () => ({
+            next: () => new Promise<never>(() => {}),
+            return: async () => {
+              closed = true
+              return { done: true, value: undefined }
+            },
+          }),
+        }),
+      },
+    } as unknown as Parameters<typeof runNonInteractivePrompt>[0]["client"]
+    const pending = runNonInteractivePrompt({
+      client,
+      sessionID: "ses_1",
+      location,
+      message: "hello",
+      files: [],
+      thinking: false,
+      format: "default",
+      auto: false,
+      standalone: false,
+      signal: controller.signal,
+      renderTool: () => Promise.resolve(),
+      renderToolError: () => Promise.resolve(),
+    })
+    await Bun.sleep(5)
+    controller.abort()
+    const started = performance.now()
+    expect(await pending).toBeUndefined()
+    expect(performance.now() - started).toBeLessThan(500)
+    expect(closed).toBe(true)
   })
 
   test("cancelling mid-turn interrupts the Session and ignores the transport errors that follow", async () => {
