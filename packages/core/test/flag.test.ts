@@ -29,11 +29,28 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
 // todo and sqlite_fts are opt-in only, so the build defaults and both wildcards leave them off.
 const every = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
   ...Record.map(ConfigFlag.registry, () => state),
+  automations: state.source === "default" ? { enabled: true, source: "default" } : state,
   todo: { enabled: false, source: "default" },
   sqlite_fts: { enabled: false, source: "default" },
 })
 
 describe("Flag.resolve", () => {
+  test("automations default to on in releases and retain explicit opt-outs", () => {
+    expect(Flag.resolve({ entries: [], channel: "latest" }).automations).toEqual({ enabled: true, source: "default" })
+    expect(Flag.resolve({ entries: [document({ automations: false })], channel: "latest" }).automations).toEqual({
+      enabled: false,
+      source: "config",
+    })
+    expect(Flag.resolve({ entries: [document({ schedules: false })], channel: "latest" }).automations).toEqual({
+      enabled: false,
+      source: "config",
+    })
+    expect(Flag.resolve({ entries: [], channel: "latest", overrides: "-automations" }).automations).toEqual({
+      enabled: false,
+      source: "env",
+    })
+  })
+
   test.each([
     ["local", true],
     ["dev", true],

@@ -18,7 +18,7 @@ export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/O
   defaultValue: () => process.env.OPENCODE_FLAGS,
 })
 
-// Any other channel, such as a release or a branch preview build, keeps flags off so none turns on by accident.
+// Experimental flags stay off on other channels unless they are explicitly default-on.
 const onByDefault = (channel: string) => channel === "local" || channel === "dev"
 
 /**
@@ -26,7 +26,7 @@ const onByDefault = (channel: string) => channel === "local" || channel === "dev
  * document that sets `experimental` (the same document every other `experimental` setting reads), then `all_flags: true`
  * from the highest-priority document that sets `all_flags`, so a global switch survives a project's own `experimental`
  * block, then on for local and dev builds. `all_flags: false` falls through rather than turning flags off.
- * Opt-in-only flags skip both wildcards and default to off on every channel.
+ * Default-on flags are enabled on every channel. Opt-in-only flags skip both wildcards and default to off everywhere.
  * A remote kill switch belongs above `OPENCODE_FLAGS` here.
  */
 export function resolve(input: {
@@ -63,7 +63,7 @@ export function resolve(input: {
         ? [override, "env"]
         : configured !== undefined
           ? [configured, "config"]
-          : [!optInOnly && onByDefault(input.channel), "default"]
+          : [!optInOnly && (ConfigFlag.defaultOn.has(key) || onByDefault(input.channel)), "default"]
     return { enabled, source }
   })
 }

@@ -21,7 +21,9 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     Schema.Boolean.pipe(optional).annotate({
       description: ConfigFlag.optInOnly.has(key)
         ? description
-        : `${description} Defaults to on in local and dev builds and off in releases.`,
+        : ConfigFlag.defaultOn.has(key)
+          ? `${description} Defaults to on in every build; set false to disable.`
+          : `${description} Defaults to on in local and dev builds and off in releases.`,
     }),
   ),
   // The flag also takes settings; an object turns it on.
