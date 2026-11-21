@@ -36,12 +36,12 @@ const requestTitles = {
   "websearch.provider": "notification.permission.title",
 } as const
 
-// A permission toast's buttons, the dock's primary answer first.
-const permissionDecisions = ["once", "always", "reject"] as const
+// A permission toast's buttons. Not "always": a click outside the app approves this one request at most, and a lasting
+// rule is made in the app, where its pattern shows.
+const permissionDecisions = ["once", "reject"] as const
 
 const decisionLabels = {
   once: "ui.permission.allowOnce",
-  always: "ui.permission.allowAlways",
   reject: "ui.permission.deny",
 } as const
 

@@ -90,6 +90,12 @@ type PlatformBase = {
   getPathForFile?(file: File): string
 
   /**
+   * Start a system drag of a local file, so it drops into other apps as the file itself (Windows desktop only).
+   * Resolves once the drag ends; false when none started.
+   */
+  startFileDrag?(path: string): Promise<boolean>
+
+  /**
    * Observe `opencode://` links opened with the app (desktop only). Links that arrived before the first listener
    * are delivered to it at once.
    */

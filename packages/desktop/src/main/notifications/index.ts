@@ -37,10 +37,16 @@ export function show(sender: WebContents, tag: string, input: ToastInput) {
     focus(sender, tag)
   })
 
+  // Past the cap the oldest goes from the notification center too, so none stays there that an answer can't take back.
+  // Windows keeps far fewer per app anyway. A toast dismissed by hand stays listed: Windows reports a timeout the same
+  // way, and one that timed out must still be taken back.
   if (posted.size >= MAX_POSTED) {
     const oldest = posted.keys().next().value
 
-    if (oldest) posted.delete(oldest)
+    if (oldest) {
+      posted.get(oldest)?.notification.close()
+      posted.delete(oldest)
+    }
   }
 
   posted.set(token, { tag, contents: sender.id, notification })
