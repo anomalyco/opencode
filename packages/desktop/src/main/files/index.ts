@@ -198,7 +198,8 @@ function make(
       )
 
       if (contents.isDestroyed()) return false
-      contents.startDrag({ file: target, icon })
+      // The tree's paths use `/`; the app that takes the drop gets the file's Windows path.
+      contents.startDrag({ file: path.normalize(target), icon })
 
       return true
     }),
