@@ -53,6 +53,7 @@ import { providerIconId } from "../lib/provider-icon"
 import { runStatsEffect } from "../stats-runtime"
 import { breadcrumbList, FormatLinks, JsonLd } from "./agent-meta"
 import { NotFoundMeta } from "./not-found-meta"
+import { DEFAULT_PERIOD, PeriodToggle, type Period } from "./period-toggle"
 
 const compareHeaderLinks: readonly HeaderLink[] = [
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
@@ -102,7 +103,7 @@ type ComparisonDetailSection = {
   title: string
   badge?: string
   rows: ComparisonDetailRow[]
-  usage?: ModelUsagePoint[][]
+  usage?: Record<Period, ModelUsagePoint[]>[]
 }
 type ComparisonModelRequest = {
   lab: string
@@ -639,6 +640,7 @@ function ComparisonDetailMatrix(props: {
   highlightBest: boolean
   modelCount: number
 }) {
+  const [period, setPeriod] = createSignal(DEFAULT_PERIOD)
   return (
     <section id="comparison" data-section="compare-detail-matrix" aria-label="Model comparison">
       <div data-component="compare-detail-matrix">
@@ -684,11 +686,13 @@ function ComparisonDetailMatrix(props: {
               <Show when={section.usage}>
                 {(usage) => (
                   <>
-                    <div data-slot="compare-detail-label" data-empty="true" />
+                    <div data-slot="compare-detail-label">
+                      <PeriodToggle value={period()} onChange={setPeriod} label={section.title} />
+                    </div>
                     <For each={usage()}>
                       {(modelUsage, index) => (
                         <ComparisonUsageBars
-                          data={modelUsage}
+                          data={modelUsage[period()]}
                           column={index()}
                           last={index() === props.modelCount - 1}
                         />
@@ -797,8 +801,8 @@ function ComparisonUsageBars(props: { data: ModelUsagePoint[]; column: number; l
           </For>
         </span>
         <span data-slot="compare-detail-bar-dates">
-          <span>{formatUsageDate(points()[0]?.date)}</span>
-          <span>{formatUsageDate(points()[points().length - 1]?.date)}</span>
+          <span>{formatUsageDate(points()[0]?.start)}</span>
+          <span>{formatUsageDate(points()[points().length - 1]?.end)}</span>
         </span>
       </Show>
     </div>
@@ -970,7 +974,7 @@ function buildComparisonDetailSections(models: readonly ComparisonModel[]): Comp
           "higher",
         ),
       ],
-      usage: models.map((model) => model.stats?.usage ?? []),
+      usage: models.map((model) => ({ daily: model.stats?.usage ?? [], weekly: model.stats?.weeklyUsage ?? [] })),
     },
     {
       title: "Retention",

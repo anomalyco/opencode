@@ -31,18 +31,15 @@ export function fromFirstUsage<T extends { tokens: number }>(points: T[]) {
   return start < 0 ? [] : points.slice(start)
 }
 
-// Stats series label days like "Aug 7"; resolve the year from the latest update so dates stay correct across New Year.
-export function isoDay(label: string, updatedAt: string | null) {
-  const match = /^([A-Za-z]{3})[A-Za-z]*\.?\s+(\d{1,2})$/.exec(label.trim())
-  const month = match ? months.indexOf(match[1].toLowerCase()) : -1
-  if (!match || month < 0) return label
-  const end = updatedAt ? new Date(updatedAt) : new Date()
-  const date = new Date(Date.UTC(end.getUTCFullYear(), month, Number(match[2])))
-  if (date.getTime() > end.getTime() + 86_400_000) date.setUTCFullYear(date.getUTCFullYear() - 1)
-  return date.toISOString().slice(0, 10)
+// A chart bar's dates, both inclusive: "Nov 9, 2026" for one day, "Nov 9 – 15, 2026" for a week.
+export function formatPeriodDate(start: string, end: string) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).formatRange(new Date(start), new Date(end))
 }
-
-const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
 
 function trim(value: number, digits: number) {
   return Number(value.toFixed(digits)).toLocaleString("en")
