@@ -379,7 +379,9 @@ The contracts `file`, `review` and `browser` publish with the SDK as `@opencode/
 
 The desktop `Browser` contract (`@opencode/plugin/gui/browser`) can return a handle to a new tab in the session on screen:
 `const id = await browser.experimental.open(session, url)`, then `await browser.experimental.close(id)` from the same
-plugin instance. Experimental: may change without compatibility guarantees. The branded handle survives a session rebind.
+plugin instance. Experimental: may change without compatibility guarantees. `experimental.open` resolves once the tab
+exists, also while its page still loads or after its load failed, which the tab itself shows; it rejects, and leaves no
+tab, when the address opened no page. The branded handle survives a session rebind.
 It ends with the plugin instance or the window, when the person clicks or types in the tab or runs a command on it, and
 when the agent uses the tab. `close` returns true only for a tab closed now; a page that asks "Leave site?" stays open.
 `open(session, url)` stays fire-and-forget.

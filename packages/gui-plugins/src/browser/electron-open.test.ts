@@ -28,7 +28,7 @@ test(
       const root = path.join(base, "workspace")
       await mkdir(root)
       // Shows, then keeps the page busy past the deadline before its load ends.
-      await writeFile(path.join(root, "report.html"), "<!doctype html><title>Report</title><p>report</p><script>const end = Date.now() + 1500; while (Date.now() < end) {}</script>")
+      await writeFile(path.join(root, "report.html"), "<!doctype html><title>Report</title><p>report</p><script>const end = Date.now() + 800; while (Date.now() < end) {}</script>")
 
       const result: {
         origin: string
