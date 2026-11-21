@@ -127,6 +127,7 @@ const gatedIdentity = (key: Uint8Array, gate: Deferred.Deferred<void>, entered: 
         )
       }),
     sign: () => Effect.die("unused"),
+    seed: () => Effect.die("unused"),
   })
 }
 
