@@ -86,6 +86,7 @@ export interface SessionModelRequest {
   readonly agent: Agent.ID
   readonly model: Model.Ref
   readonly kind: SessionRequestKind
+  readonly assistantMessageID?: SessionMessage.ID
   baseURL?: string
   headers: Record<string, string>
 }
