@@ -101,6 +101,9 @@ test.each([false, true])("selecting a workspace opens Home without moving a sess
       () => fixture.route.data.type === "home" && fixture.route.data.location?.directory === linked,
     )
     expect(fixture.route.data).toEqual({ type: "home", location: { directory: linked } })
+    // The footer label reads the destination branch from VCS info, so the selection must seed
+    // it before Home mounts or the first frames show the bare path.
+    expect(fixture.data.location.vcs.info({ directory: linked })?.branch.current).toBe("sophia-project")
     expect(fixture.moves).toEqual([])
     expect(fixture.requests).toEqual([])
     expect(fixture.move.pending()).toBe(false)
@@ -329,6 +332,13 @@ async function renderMove(input: {
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 1, updated: 1 },
         },
+      })
+    }
+    if (url.pathname === "/api/vcs") {
+      const directory = url.searchParams.get("location[directory]") ?? launch
+      return json({
+        location: { directory, project: { id: "proj_test", directory: clone, canonical: clone } },
+        data: { branch: { current: directory === linked ? "sophia-project" : "main", default: "main" } },
       })
     }
     if (url.pathname === "/api/worktree") {

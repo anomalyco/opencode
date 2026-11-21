@@ -109,6 +109,9 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       return
     }
     finishSubmit()
+    // The prompt footer reads the destination branch from VCS info; seed it before navigating or
+    // the first frames after the picker show the bare path until Home's location sync lands.
+    await data.location.vcs.sync({ directory }).catch(() => undefined)
     route.navigate({ type: "home", location: { directory } })
   }
 
