@@ -39,7 +39,7 @@ export const AutomationTable = sqliteTable(
       agent: Agent.ID
       cursor?: string | null
       /** The latest event IDs it ran, oldest first, to skip a replayed duplicate. */
-      seen?: string[]
+      seen?: ReadonlyArray<string>
     }>(),
     ...Timestamps,
   },

@@ -55,6 +55,15 @@ const it = testEffect(
       Mcp.node.replace(
         Layer.mock(Mcp.Service, {
           events: (name) => Effect.sync(() => (name === "ci" ? current() : undefined)),
+          follow: (server, input) =>
+            Mcp.followEvents(
+              Mcp.ServerName.make(server),
+              input,
+              Effect.suspend(() => {
+                const events = current()
+                return events ? Effect.succeed(events) : Effect.fail(new Error("not connected"))
+              }),
+            ),
           tools: () => Effect.succeed([]),
         }),
       ),
@@ -342,7 +351,7 @@ for (const outcome of ["continue", "done", "reject"]) {
       const position = (yield* db.select().from(AutomationTable).get())?.event_position
       if (outcome === "reject") {
         expect(row).toMatchObject({ status: "paused", lastOutcome: "failed", lastOutput: "Wake failed", runCount: 0 })
-        expect(position?.cursor).toBeNull()
+        expect(position?.cursor ?? null).toBeNull()
       } else {
         expect(row).toMatchObject({
           status: "done",
@@ -407,29 +416,6 @@ it.effect("reopens after four healthy streams disconnect, each from its last com
     }
     yield* f.event(stream.id, "final", "success")
     expect(yield* f.settled(a.id, (row) => row.status !== "active")).toMatchObject({ status: "done", runCount: 5 })
-  }),
-)
-
-it.effect("pauses after three consecutive reconnects without confirmed stream output", () =>
-  Effect.gen(function* () {
-    const f = yield* setup()
-    const a = yield* f.create()
-    yield* f.start
-    const first = yield* f.opened
-    yield* f.event(first.id, "saved", "pending")
-    yield* f.settled(a.id, (row) => row.runCount === 1)
-    yield* f.close(first.id)
-    for (const attempt of [1, 2, 3]) {
-      yield* advance(() => f.state.streams.length > attempt)
-      const stream = yield* f.opened
-      expect(stream.params.cursor).toBe("saved")
-      yield* f.close(stream.id)
-    }
-    expect(yield* f.settled(a.id, (row) => row.status !== "active")).toMatchObject({
-      status: "paused",
-      runCount: 1,
-      lastOutcome: "failed",
-    })
   }),
 )
 

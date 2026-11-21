@@ -137,8 +137,6 @@ const FAILED_RETRY = 5 * MINUTE
 /** How long an automation whose code failed waits before trying again, up to MAX_CODE_FAILURES. */
 const CODE_FAILED_RETRY = MINUTE
 const MAX_CODE_FAILURES = 3
-// Event IDs a watch remembers to skip a duplicate the server replays.
-const SEEN_EVENTS = 100
 const TICK_CONCURRENCY = 4
 
 const duration = (value: string) =>
@@ -367,12 +365,7 @@ const layer = Layer.effect(
       if (event && row.event_position)
         return {
           ...(done ? { status: "done" as const } : {}),
-          event_position: {
-            ...row.event_position,
-            cursor: event.cursor,
-            // A server replaying from an older cursor can send an event again; the last ones are remembered.
-            seen: [...(row.event_position.seen ?? []), event.eventId].slice(-SEEN_EVENTS),
-          },
+          event_position: { ...row.event_position, ...event.position },
         }
       const next = following(row, ended)
       return done || finished(row, next) ? { status: "done" as const, next_due_at: null } : { next_due_at: next }
@@ -847,12 +840,14 @@ const layer = Layer.effect(
           return yield* new InvalidError({
             reason: "No authorized event watch",
           })
-        const stream = yield* AutomationEvent.resolve(trigger, position.cursor).pipe(inDirectory(row.directory))
-        // Even a crash before the first heartbeat must not silently turn a restart into a fresh watch.
-        if (position.cursor === undefined) yield* settle(row, { event_position: { ...position, cursor: null } })
+        const stream = yield* AutomationEvent.follow(trigger, {
+          cursor: position.cursor ?? null,
+          seen: position.seen ?? [],
+        }).pipe(inDirectory(row.directory))
         return stream.pipe(
           Stream.takeWhileEffect(
-            Effect.fnUntraced(function* (message) {
+            Effect.fnUntraced(function* (update) {
+              if (update.type === "pending") return true
               const current = yield* find(id)
               const at = yield* Clock.currentTimeMillis
               if (current.status !== "active" || !(yield* claimLeader(at))) return false
@@ -861,33 +856,18 @@ const layer = Layer.effect(
                 return false
               }
               yield* checkWatch(current, trigger.server)
-              if (message.type !== "event") {
+              if (update.type === "position") {
                 yield* settle(current, {
-                  event_position: {
-                    ...position,
-                    ...current.event_position,
-                    cursor: message.cursor,
-                  },
+                  event_position: { ...position, ...current.event_position, ...update.position },
                 })
                 return true
               }
-              if (current.event_position?.seen?.includes(message.eventId)) return true
-              yield* runAction(current, at, message)
+              yield* runAction(current, at, update)
               return (yield* find(id)).status === "active"
             }, delivery.withPermit),
           ),
         )
-      }).pipe(
-        Stream.unwrap,
-        // Only a validated, processed message resets Stream.retry, never opening an empty stream.
-        Stream.retry(
-          Schedule.exponential("1 second").pipe(
-            Schedule.jittered,
-            Schedule.while(({ input, attempt }) => input instanceof AutomationEvent.Disconnected && attempt <= 3),
-          ),
-        ),
-        Stream.runDrain,
-      )
+      }).pipe(Stream.unwrap, Stream.runDrain)
       const run =
         expires === null
           ? open
@@ -1103,7 +1083,7 @@ const layer = Layer.effect(
               resources: [trigger.server],
               metadata: { automation: input.name, trigger },
             })
-            yield* AutomationEvent.resolve(trigger).pipe(
+            yield* AutomationEvent.check(trigger).pipe(
               Effect.mapError((error) => new InvalidError({ reason: error.message })),
             )
           }).pipe(inDirectory(directory), Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory))

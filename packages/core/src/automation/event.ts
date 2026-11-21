@@ -1,49 +1,39 @@
 export * as AutomationEvent from "./event.js"
 
 import type { Automation } from "@opencode/schema/automation"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import { LocationLifecycle } from "../location-lifecycle.js"
-import { McpClient } from "../mcp/client.js"
 import { Mcp } from "../mcp/index.js"
 
-export type Message = Extract<McpClient.EventMessage, { type: "event" }>
-export class Disconnected extends Schema.TaggedError<Disconnected>()("Automation.EventDisconnected", {
-  message: Schema.String,
-}) {}
+export type Message = Extract<Mcp.EventUpdate, { type: "event" }>
 export const input = (message: Message) => ({
-  id: message.eventId,
-  timestamp: message.timestamp,
-  data: message.data,
+  id: message.event.eventId,
+  timestamp: message.event.timestamp,
+  data: message.event.data,
 })
 
-// `undefined` opens a new watch; `null` reopens a known one with no replay position from now.
-export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event, cursor?: string | null) {
+/** Fails unless the server is connected and offers this event type for push with these arguments. */
+export const check = Effect.fnUntraced(function* (trigger: Automation.Event) {
   const mcp = yield* Mcp.Service
   const events = yield* mcp.events(trigger.server)
-  if (!events) {
-    const message = `MCP server ${trigger.server} is not connected or offers no events`
-    // A known watch may have to wait for its replacement connection; a new watch needs a producer now.
-    return yield* Effect.fail(cursor === undefined ? new Error(message) : new Disconnected({ message }))
-  }
+  if (!events) return yield* Effect.fail(new Error(`MCP server ${trigger.server} is not connected or offers no events`))
   yield* events.check({ name: trigger.event, arguments: trigger.args })
+})
+
+export const follow = Effect.fnUntraced(function* (trigger: Automation.Event, position?: Mcp.EventPosition) {
+  const mcp = yield* Mcp.Service
   const lifecycle = yield* LocationLifecycle.Service
-  return events.stream({ name: trigger.event, arguments: trigger.args, cursor }).pipe(
+  return mcp.follow(trigger.server, { name: trigger.event, arguments: trigger.args, position }).pipe(
     Stream.onStart(lifecycle.retain),
     Stream.scoped,
     Stream.interruptWhen(lifecycle.awaitShutdown),
-    Stream.concat(Stream.fail(new Error("MCP event stream closed"))),
-    Stream.mapError((error) =>
-      error instanceof McpClient.EventStreamRejectedError || error instanceof McpClient.EventStreamTerminatedError
-        ? error
-        : new Disconnected({ message: error.message }),
-    ),
-    Stream.filter((message) => message.type !== "error"),
-    Stream.mapEffect((message) => {
-      if (message.cursor && message.cursor.length > 4096) return Effect.fail(new Error("Oversized event cursor"))
+    Stream.mapEffect((update) => {
+      if (update.type !== "pending" && (update.position.cursor?.length ?? 0) > 4096)
+        return Effect.fail(new Error("Oversized event cursor"))
       // A prompt carries the event, so its size is bounded here; the MCP client already checked its shape.
-      if (message.type === "event" && Buffer.byteLength(JSON.stringify(input(message))) > 16_384)
+      if (update.type === "event" && Buffer.byteLength(JSON.stringify(input(update))) > 16_384)
         return Effect.fail(new Error("Oversized MCP event"))
-      return Effect.succeed(message)
+      return Effect.succeed(update)
     }),
   )
 })
