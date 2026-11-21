@@ -119,6 +119,18 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | GPT Image 2.5 Sunburst      | gpt-image-2.5-sunburst      | `https://opencode.ai/inference/openai/v1/images/generations`                                | `@ai-sdk/openai`            |
 | Nano Banana 2.1             | gemini-nano-banana-2.1      | `https://opencode.ai/inference/google/v1beta/models/gemini-nano-banana-2.1:generateContent` | `@ai-sdk/google`            |
 | Grok Imagine Image 2.0      | grok-imagine-image-2.0      | `https://opencode.ai/inference/xai/v1/images/generations`                                   | `@ai-sdk/xai`               |
+| text-embedding-3-small      | text-embedding-3-small      | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| text-embedding-3-large      | text-embedding-3-large      | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Gemini Embedding 2          | gemini-embedding-2          | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Gemini Embedding 001        | gemini-embedding-001        | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Codestral Embed             | codestral-embed             | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Mistral Embed               | mistral-embed               | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Embed 5 Pro                 | cohere-embed-v5-pro         | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Embed 5 Fast                | cohere-embed-v5-fast        | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| voyage-4                    | voyage-4                    | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| voyage-code-4               | voyage-code-4               | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Qwen3 Embedding 8B          | qwen3-embedding-8b          | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| BGE M3                      | bge-m3                      | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
 | Big Pickle                  | big-pickle                  | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Tidepool Alpha Free         | tidepool-alpha-free         | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Iceman Free                 | iceman-free                 | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
@@ -246,6 +258,31 @@ curl https://opencode.ai/inference/openai/v1/images/generations \
 
 Google takes its native `contents` and `generationConfig`, and xAI its native options such as `resolution` and
 `quality`. OpenAI Images and xAI Images also accept edits at `/images/edits`.
+
+### Embedding models
+
+`text-embedding-3-small`, `qwen3-embedding-8b`, and the other embedding models in the table above turn text into
+vectors. OpenCode doesn't use them for chat, so they never appear in `/models`, and Go and the free tier don't include
+them. Call them on OpenAI's Embeddings API with a Console key.
+
+```bash
+curl https://opencode.ai/inference/openai/v1/embeddings \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": ["hello world", "goodbye"]
+  }'
+```
+
+- `input` takes a string or an array of strings. `data` returns one vector per input, in the same order.
+- `dimensions` shortens the vectors on models that support it, such as `text-embedding-3-small`.
+- `encoding_format: "base64"` returns the vectors base64-encoded instead of as floats.
+- Each input must fit in the model's context window.
+- The response reports `usage.cost` like any inference request. See [Cost](/console/api/inference#cost).
+
+Vectors from different models aren't comparable, so embed your documents and your queries with the same model. A
+[connected provider](/console/api/providers#endpoints) serves its own embedding models at `/embeddings`.
 
 ## Pricing
 
@@ -384,6 +421,25 @@ models to generate session titles.
 | GPT Image 2.5 Sunburst | $1.00 / image               | Plus $8 / $30 per 1M input / output tokens, and $2 per 1M cached input tokens.      |
 | Nano Banana 2.1        | $1.50 / $7.50 / $30.00 per 1M tokens | Input / text output / image output. About $0.034 per 1K image, $0.050 per 2K, $0.113 per 4K. |
 | Grok Imagine Image 2.0 | $0.04 / image               | $0.01 per input image; quality and resolution can raise the output price to $0.05–$0.08. |
+
+### Embedding pricing
+
+Embedding models charge for input tokens only. Prices are **per 1M tokens**.
+
+| Model                  | Input |
+| ---------------------- | ----- |
+| text-embedding-3-small | $0.02 |
+| text-embedding-3-large | $0.13 |
+| Gemini Embedding 2     | $0.20 |
+| Gemini Embedding 001   | $0.15 |
+| Codestral Embed        | $0.15 |
+| Mistral Embed          | $0.10 |
+| Embed 5 Pro            | $0.12 |
+| Embed 5 Fast           | $0.08 |
+| voyage-4               | $0.06 |
+| voyage-code-4          | $0.12 |
+| Qwen3 Embedding 8B     | $0.01 |
+| BGE M3                 | $0.01 |
 
 ### Free models
 
