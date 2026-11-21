@@ -131,6 +131,7 @@ export interface Transport {
 export const carrier = (reader: Socket.Reader, transport: Transport): Link.Carrier => {
   const waiting: Array<Uint8Array | string> = []
   return {
+    describe: () => ({ kind: "websocket" }),
     send: (message) =>
       Effect.gen(function* () {
         const taken = Latch.makeUnsafe()
@@ -322,7 +323,7 @@ export const makeMachine = Effect.gen(function* () {
       )
       const decoded = Option.getOrUndefined(Join.decode(join))
       if (!decoded) return yield* Effect.die(new Error("Server produced an unreadable join string"))
-      return { data: { name: id, join, expires: decoded.expires } }
+      return { data: { name: id, join, expires: decoded.expires, reach: decoded.reach } }
     }),
     remove: Effect.fn("MachineHandler.remove")(function* (name: string) {
       yield* requireEnabled

@@ -32,6 +32,7 @@ import { windowRecovery } from "./recovery"
 import { createRevealDriver } from "./reveal-machine"
 import { restoreEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
+import { refreshTaskbarBadge, setTaskbarBadge } from "./taskbar-badge"
 import { setTaskbarProgress } from "./taskbar-progress"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
@@ -58,6 +59,7 @@ export {
   setBackgroundColor,
   setDockIcon,
   setPinchZoomEnabled,
+  setTaskbarBadge,
   setTaskbarProgress,
   setTitlebar,
   setTrafficLightsPosition,
@@ -199,6 +201,9 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
     win.once("ready-to-show", contentReady)
 
     if (process.platform === "linux") win.webContents.once("did-finish-load", contentReady)
+
+    // A window moved to a display with another scale draws its badge again at that scale.
+    if (process.platform === "win32") win.on("moved", () => refreshTaskbarBadge(win))
     win.once("closed", () => {
       reveal.dispatch({ type: "window.closed" })
       revealDrivers.delete(win)

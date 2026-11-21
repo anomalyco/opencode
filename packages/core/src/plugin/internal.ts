@@ -59,6 +59,7 @@ import { Integration } from "../integration.js"
 import { Job } from "../job.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
+import { Machines } from "../machine/machines.js"
 import { ModelsDev } from "../models-dev.js"
 import { Mcp } from "../mcp/index.js"
 import { Npm } from "@opencode/util/npm"
@@ -86,6 +87,7 @@ import { GlobTool } from "../tool/plugin/glob.js"
 import { GrepTool } from "../tool/plugin/grep.js"
 import { ImageGenerateTool } from "../tool/plugin/image-generate.js"
 import { VideoGenerateTool } from "../tool/plugin/video-generate.js"
+import { MachineTools } from "../tool/plugin/machine.js"
 import { McpEventTools } from "../tool/plugin/mcp-events.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
 import { OpenCodeTools } from "../tool/plugin/opencode.js"
@@ -160,6 +162,7 @@ const services = [
   KV.Service,
   LLMClient.Service,
   Location.Service,
+  Machines.Service,
   ModelsDev.Service,
   Mcp.Service,
   Npm.Service,
@@ -225,6 +228,7 @@ export const requirements = LayerNode.group([
   KV.node,
   llmClient,
   Location.node,
+  Machines.node,
   ModelsDev.node,
   Mcp.node,
   Npm.node,
@@ -291,6 +295,7 @@ const pre = [
   ReadTool.Plugin,
   ArtifactTools.Plugin,
   AutomationTools.Plugin,
+  MachineTools.Plugin,
   SessionSearchTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,

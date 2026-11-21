@@ -2567,6 +2567,11 @@ export type ExperimentalMachineListOutput = ReadonlyArray<{
   readonly paired: boolean
   readonly os?: string
   readonly arch?: string
+  readonly connection?: {
+    readonly kind: "websocket" | "iroh"
+    readonly path?: "direct" | "relayed"
+    readonly rtt?: number
+  }
 }>
 export type ExperimentalMachineListOperation<E = never> = () => Effect.Effect<ExperimentalMachineListOutput, E>
 
@@ -2575,7 +2580,12 @@ export type ExperimentalMachineAddInput = {
   readonly reach: ReadonlyArray<{ readonly type: "url"; readonly url: string }>
   readonly replace?: boolean | undefined
 }
-export type ExperimentalMachineAddOutput = { readonly name: string; readonly join: string; readonly expires: number }
+export type ExperimentalMachineAddOutput = {
+  readonly name: string
+  readonly join: string
+  readonly expires: number
+  readonly reach: ReadonlyArray<{ readonly type: "url"; readonly url: string } | { readonly type: "iroh" }>
+}
 export type ExperimentalMachineAddOperation<E = never> = (
   input: ExperimentalMachineAddInput,
 ) => Effect.Effect<ExperimentalMachineAddOutput, E>
