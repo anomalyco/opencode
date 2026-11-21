@@ -151,6 +151,9 @@ describe("MCP events", () => {
       expect(server.state.listens[0].params).toEqual({ notifications: { eventsListChanged: true } })
       yield* server.notify("list_changed", server.state.listens[0].id)
       yield* until(() => server.state.lists.length === 4)
+      // A listen the server ends is reopened.
+      yield* server.close(server.state.listens[0].id)
+      yield* until(() => server.state.listens.length === 2)
     }),
   )
 
