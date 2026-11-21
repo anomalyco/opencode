@@ -199,7 +199,11 @@ export function transitionWslMachine(state: WslMachineState, event: WslMachineEv
   }
 
   if (event.type === "distros.listed") {
-    return hostSettled(state, event.attempt, { installed: event.installed, online: event.online })
+    return hostSettled(state, event.attempt, {
+      installed: event.installed,
+      online: event.online,
+      opencodeChecks: forgetAddableChecks(state),
+    })
   }
 
   if (event.type === "host.failed") return hostFailed(state, event.attempt, event.message)
@@ -619,6 +623,16 @@ function needsCliCheck(state: OpenState, distro: string) {
 
 function configuredDistro(state: OpenState, distro: string) {
   return state.configured.some((item) => item.distro === distro)
+}
+
+// Listing distros is the add dialog's "check again": forget the CLI verdicts of distros without a server, so the
+// dialog inspects them anew. Added servers keep theirs until their own check runs.
+function forgetAddableChecks(state: OpenState) {
+  const checks = Object.entries(state.opencodeChecks).filter(([distro]) => configuredDistro(state, distro))
+
+  if (checks.length === Object.keys(state.opencodeChecks).length) return state.opencodeChecks
+
+  return Object.fromEntries(checks)
 }
 
 function put(state: OpenState, distro: string, job: WslDistro): OpenState {

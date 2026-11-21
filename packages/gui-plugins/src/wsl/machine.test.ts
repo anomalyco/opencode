@@ -25,6 +25,17 @@ function check(distro: string, version: string): WslOpencodeCheck {
   }
 }
 
+function missing(distro: string): WslOpencodeCheck {
+  return {
+    distro,
+    resolvedPath: null,
+    version: null,
+    expectedVersion: "2",
+    matchesDesktop: null,
+    error: "opencode is not installed in this distro",
+  }
+}
+
 // Replays events through the pure machine and collects every effect it asked for, in order.
 function play(state: WslMachineState, ...events: WslMachineEvent[]) {
   return events.reduce<{ state: WslMachineState; effects: readonly WslMachineEffect[] }>(
@@ -310,6 +321,35 @@ describe("host jobs", () => {
 
     expect(settled.effects).toEqual([{ type: "resolve", attempt: "h1" }])
     expect(toServersState(settled.state)).toMatchObject({ hostJob: "idle", runtime })
+  })
+
+  // "Check again" re-lists the distros; the dialog then trusted a verdict it could not refresh, so a CLI installed
+  // outside the app after the first check kept reporting "OpenCode not installed" until the app restarted.
+  test("listing distros again forgets the CLI verdicts of distros without a server", () => {
+    const inspected = play(
+      createWslMachineState([ubuntu]),
+      { type: "probe", distro: "Ubuntu", attempt: "p0" },
+      { type: "distro.probed", distro: "Ubuntu", attempt: "p0", probe: readyProbe },
+      { type: "cli.inspected", distro: "Ubuntu", attempt: "p0", check: check("Ubuntu", "2") },
+      { type: "probe", distro: "Debian", attempt: "p1" },
+      { type: "distro.probed", distro: "Debian", attempt: "p1", probe: readyProbe },
+      { type: "cli.inspected", distro: "Debian", attempt: "p1", check: missing("Debian") },
+    )
+
+    expect(Object.keys(toServersState(inspected.state).opencodeChecks).sort()).toEqual(["Debian", "Ubuntu"])
+
+    const listed = play(
+      inspected.state,
+      { type: "host", attempt: "h1", job: "refresh-distros" },
+      { type: "distros.listed", attempt: "h1", installed: [], online: [] },
+    )
+
+    // Ubuntu has a server and keeps its verdict; Debian is only addable, so it is inspected again.
+    expect(Object.keys(toServersState(listed.state).opencodeChecks)).toEqual(["Ubuntu"])
+
+    const probed = play(listed.state, { type: "probe", distro: "Debian", attempt: "p2" })
+
+    expect(probed.effects).toContainEqual({ type: "inspect-cli", distro: "Debian", attempt: "p2" })
   })
 })
 
