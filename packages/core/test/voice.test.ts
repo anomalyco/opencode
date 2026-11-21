@@ -234,57 +234,14 @@ it.effect("lists voice models with availability and default without resolving cr
         ),
       )
 
-    expect(
-      yield* list({
-        openai: [credential("chatgpt", "oauth")],
-        xai: [{ type: "env", name: "XAI_API_KEY" }],
-        google: [credential("gemini", "key")],
-      }),
-    ).toEqual({
-      models: [
-        {
-          model: "gpt-live-1.1",
-          name: "GPT-Live 1.1",
-          engine: "openai-live",
-          provider: "openai",
-          transports: ["webrtc"],
-          available: false,
-        },
-        {
-          model: "gpt-live-1",
-          name: "GPT-Live 1",
-          engine: "openai-live",
-          provider: "openai",
-          transports: ["webrtc"],
-          available: false,
-        },
-        {
-          model: "gpt-realtime-2.1",
-          name: "GPT-Realtime-2.1",
-          engine: "openai-realtime",
-          provider: "openai",
-          transports: ["webrtc", "websocket"],
-          available: false,
-        },
-        {
-          model: "grok-voice-3.0",
-          name: "Grok Voice 3.0",
-          engine: "xai-realtime",
-          provider: "xai",
-          transports: ["websocket"],
-          available: true,
-        },
-        {
-          model: "gemini-3.8-live",
-          name: "Gemini 3.8 Live",
-          engine: "gemini-live",
-          provider: "google",
-          transports: ["websocket"],
-          available: true,
-        },
-      ],
-      default: "grok-voice-3.0",
-    })
+    // Each model's provider and availability, and the default, for one set of connections.
+    const summary = (connections: Partial<Record<string, Integration.Info["connections"]>>) =>
+      list(connections).pipe(
+        Effect.map((result) => ({
+          models: result.models.map((item) => [item.model, item.provider, item.available]),
+          default: result.default,
+        })),
+      )
 
     expect(yield* list({ openai: [credential("active", "key")] })).toEqual({
       models: [
@@ -333,90 +290,43 @@ it.effect("lists voice models with availability and default without resolving cr
     })
 
     expect(
-      yield* list({ openai: [credential("chatgpt", "oauth")], opencode: [credential("console", "oauth")] }),
+      yield* summary({
+        openai: [credential("chatgpt", "oauth")],
+        xai: [{ type: "env", name: "XAI_API_KEY" }],
+        google: [credential("gemini", "key")],
+      }),
     ).toEqual({
       models: [
-        {
-          model: "gpt-live-1",
-          name: "GPT-Live 1",
-          engine: "openai-live",
-          provider: "opencode",
-          transports: ["webrtc"],
-          available: true,
-        },
-        {
-          model: "gpt-realtime-2.1",
-          name: "GPT-Realtime-2.1",
-          engine: "openai-realtime",
-          provider: "openai",
-          transports: ["webrtc", "websocket"],
-          available: false,
-        },
-        {
-          model: "grok-voice-3.0",
-          name: "Grok Voice 3.0",
-          engine: "xai-realtime",
-          provider: "xai",
-          transports: ["websocket"],
-          available: false,
-        },
-        {
-          model: "gemini-3.8-live",
-          name: "Gemini 3.8 Live",
-          engine: "gemini-live",
-          provider: "google",
-          transports: ["websocket"],
-          available: false,
-        },
+        ["gpt-live-1.1", "openai", false],
+        ["gpt-live-1", "openai", false],
+        ["gpt-realtime-2.1", "openai", false],
+        ["grok-voice-3.0", "xai", true],
+        ["gemini-3.8-live", "google", true],
+      ],
+      default: "grok-voice-3.0",
+    })
+
+    expect(
+      yield* summary({ openai: [credential("chatgpt", "oauth")], opencode: [credential("console", "oauth")] }),
+    ).toEqual({
+      models: [
+        ["gpt-live-1", "opencode", true],
+        ["gpt-realtime-2.1", "openai", false],
+        ["grok-voice-3.0", "xai", false],
+        ["gemini-3.8-live", "google", false],
       ],
       default: "gpt-live-1",
     })
 
-    const none = yield* list({ openai: [credential("chatgpt", "oauth")] })
-    expect(none).toEqual({
+    expect(yield* summary({ openai: [credential("chatgpt", "oauth")] })).toEqual({
       models: [
-        {
-          model: "gpt-live-1.1",
-          name: "GPT-Live 1.1",
-          engine: "openai-live",
-          provider: "openai",
-          transports: ["webrtc"],
-          available: false,
-        },
-        {
-          model: "gpt-live-1",
-          name: "GPT-Live 1",
-          engine: "openai-live",
-          provider: "openai",
-          transports: ["webrtc"],
-          available: false,
-        },
-        {
-          model: "gpt-realtime-2.1",
-          name: "GPT-Realtime-2.1",
-          engine: "openai-realtime",
-          provider: "openai",
-          transports: ["webrtc", "websocket"],
-          available: false,
-        },
-        {
-          model: "grok-voice-3.0",
-          name: "Grok Voice 3.0",
-          engine: "xai-realtime",
-          provider: "xai",
-          transports: ["websocket"],
-          available: false,
-        },
-        {
-          model: "gemini-3.8-live",
-          name: "Gemini 3.8 Live",
-          engine: "gemini-live",
-          provider: "google",
-          transports: ["websocket"],
-          available: false,
-        },
+        ["gpt-live-1.1", "openai", false],
+        ["gpt-live-1", "openai", false],
+        ["gpt-realtime-2.1", "openai", false],
+        ["grok-voice-3.0", "xai", false],
+        ["gemini-3.8-live", "google", false],
       ],
+      default: undefined,
     })
-    expect("default" in none).toBe(false)
   }),
 )

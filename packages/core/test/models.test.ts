@@ -15,7 +15,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
-const cacheKey = "models-dev:v2:catalog"
+const cacheKey = "models-dev:v3:catalog"
 const metaKey = `${cacheKey}:meta`
 
 test("normalizes permissive interleaved values to compatibility", () => {
@@ -1104,6 +1104,24 @@ describe("ModelsDev Service", () => {
       if (unrequested304?.status._tag === "Ended") {
         expect(Exit.isFailure(unrequested304.status.exit)).toBe(true)
       }
+    }),
+  )
+
+  it.live("frees and ignores catalogs cached under earlier keys", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      for (const old of ["models-dev:catalog", "models-dev:v2:catalog"]) {
+        cache.values.set(old, { updatedAt: Date.now(), digest: "old", body: "{}" })
+        cache.values.set(`${old}:meta`, { updatedAt: Date.now(), digest: "old" })
+      }
+      const state = yield* Ref.make(initialState)
+      const snapshots = yield* provided(
+        state,
+        cache,
+        Effect.flatMap(ModelsDev.Service, (svc) => svc.get()),
+      )
+      expect(snapshots.length).toBeGreaterThan(0)
+      expect([...cache.values.keys()]).toEqual([])
     }),
   )
 

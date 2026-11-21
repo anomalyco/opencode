@@ -561,10 +561,10 @@ const bundledSnapshot = (recommended: boolean) =>
         )
   })
 
-// Versioned so an entry cached from the v1 API is never read as v2.
+// Versioned so an entry cached for another catalog query is never read: v1 was the v1 API, v2 had no realtime models.
 function cacheKey(source: string) {
-  if (source === defaultSource) return "models-dev:v2:catalog"
-  return `models-dev:v2:catalog:${Hash.fast(source)}`
+  if (source === defaultSource) return "models-dev:v3:catalog"
+  return `models-dev:v3:catalog:${Hash.fast(source)}`
 }
 
 export function bodyDigest(text: string) {
@@ -594,9 +594,12 @@ export const layer = (options?: Options) =>
       const metaKey = `${key}:meta`
       const ttl = Duration.minutes(5)
       const lock = Semaphore.makeUnsafe(1)
-      // The v1 catalog was cached under unversioned keys; free that multi-MB row.
-      yield* kv.remove(key.replace("models-dev:v2:", "models-dev:"))
-      yield* kv.remove(`${key.replace("models-dev:v2:", "models-dev:")}:meta`)
+      // Free the multi-MB rows cached under earlier keys.
+      yield* Effect.forEach(
+        ["models-dev:", "models-dev:v2:"].map((prefix) => key.replace("models-dev:v3:", prefix)),
+        (old) => Effect.andThen(kv.remove(old), kv.remove(`${old}:meta`)),
+        { discard: true },
+      )
 
       const loadFromCache = Effect.fnUntraced(function* () {
         const value = yield* kv.get(key)
