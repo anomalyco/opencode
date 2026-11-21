@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { OpenCodeEvent, type OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Global } from "@opencode/util/global"
 import { Schema } from "effect"
 import path from "node:path"
 import { ACPReplay } from "../../src/acp/replay"
@@ -294,6 +295,26 @@ const rows: Row[] = [
     expected: {
       updates: [{}, { locations: [{ path: "/workspace/b.ts" }] }, { locations: [{ path: "/workspace/b.ts" }] }],
     },
+  },
+  {
+    name: "locates a ~/ path in the home directory",
+    events: live(
+      toolStarted(root, "call_home", "write"),
+      toolCalled(root, "call_home", { path: "~/notes.md", content: "b" }),
+      toolSucceeded(root, "call_home", {}, "written"),
+    ),
+    expected: {
+      updates: [
+        {},
+        { locations: [{ path: path.join(Global.Path.home, "notes.md") }] },
+        { locations: [{ path: path.join(Global.Path.home, "notes.md") }] },
+      ],
+    },
+  },
+  {
+    name: "keeps a path that only starts with ~ relative to the cwd",
+    events: live(toolStarted(root, "call_draft", "read"), toolCalled(root, "call_draft", { path: "~draft.md" })),
+    expected: { updates: [{}, { locations: [{ path: `${path.resolve("/workspace")}${path.sep}~draft.md` }] }] },
   },
   {
     name: "locates the files of a patch tool",
