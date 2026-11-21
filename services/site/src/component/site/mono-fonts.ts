@@ -51,10 +51,12 @@ export const monoFontFaces = [
     [italicLatin, italicCyrillic, italicRest, 400, "italic"],
     [boldItalicLatin, boldItalicCyrillic, boldItalicRest, 700, "italic"],
   ].flatMap(([latin, cyrillic, rest, weight, style]) =>
+    // The Cyrillic rule comes after the rest rule: both files have the stress marks, and a browser asks the last
+    // rule that has a character first, so a stressed Russian word fetches the small file only.
     [
       [latin, ranges.latin],
-      [cyrillic, ranges.cyrillic],
       [rest, ranges.rest],
+      [cyrillic, ranges.cyrillic],
     ].map(
       ([url, range]) =>
         `@font-face { font-family: "OpenMono"; src: url(${url}) format("woff2"); font-weight: ${weight}; font-style: ${style}; font-display: swap; unicode-range: ${range}; }`,
