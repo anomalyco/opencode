@@ -198,7 +198,21 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
 
     const browser = yield* pair
     expect(browser.expires_in).toBe(300)
-    const redirect = yield* request(`/auth/connect/${browser.code}`, { headers: { accept: "text/html" } })
+    // Link checkers (wslview's `curl --head`), chat previews and the browser's own page load must not spend the code.
+    for (const init of [{ method: "HEAD" }, { headers: { accept: "text/html" } }]) {
+      const page = yield* request(`/auth/connect/${browser.code}`, init)
+      expect(page.status).toBe(200)
+      expect(page.headers.get("content-type")).toContain("text/html")
+      expect(page.headers.get("set-cookie")).toBeNull()
+      yield* Effect.promise(() => page.arrayBuffer())
+    }
+    const page = yield* request(`/auth/connect/${browser.code}`, { headers: { accept: "text/html" } })
+    expect(yield* Effect.promise(() => page.text())).toContain('<form method="post">')
+    const redirect = yield* request(`/auth/connect/${browser.code}`, {
+      method: "POST",
+      headers: { accept: "text/html", "content-type": "application/x-www-form-urlencoded" },
+      body: "",
+    })
     expect(redirect.status).toBe(302)
     expect(redirect.headers.get("location")).toBe("/")
     const setCookie = redirect.headers.get("set-cookie") ?? ""
@@ -207,7 +221,7 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     expect(setCookie).toContain("SameSite=Lax")
     const cookie = setCookie.split(";")[0]
 
-    const reused = yield* request(`/auth/connect/${browser.code}`, { headers: { accept: "text/html" } })
+    const reused = yield* request(`/auth/connect/${browser.code}`, { method: "POST", headers: { accept: "text/html" } })
     expect(reused.status).toBe(401)
     expect(yield* Effect.promise(() => reused.text())).toContain("opencode pair")
 
@@ -217,15 +231,22 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     expect((yield* request("/api/info", { headers: { cookie: `${cookie}x` } })).status).toBe(401)
 
     const client = yield* pair
-    const redeemed = yield* request(`/auth/connect/${client.code}`)
+    const redeemed = yield* request(`/auth/connect/${client.code}`, { method: "POST" })
     expect(redeemed.status).toBe(200)
     const session = (yield* Effect.promise(() => redeemed.json())) as { token: string }
     expect(
       (yield* request("/api/info", { headers: { authorization: `Basic ${btoa(`opencode:${session.token}`)}` } }))
         .status,
     ).toBe(200)
-    expect((yield* request(`/auth/connect/${client.code}`)).status).toBe(401)
-    expect((yield* request("/auth/connect/unknown")).status).toBe(401)
+    expect((yield* request(`/auth/connect/${client.code}`, { method: "POST" })).status).toBe(401)
+    expect((yield* request("/auth/connect/unknown", { method: "POST" })).status).toBe(401)
+
+    // Clients built before POST redeem with a plain GET.
+    const legacy = yield* pair
+    const legacyRedeemed = yield* request(`/auth/connect/${legacy.code}`)
+    expect(legacyRedeemed.status).toBe(200)
+    expect(yield* Effect.promise(() => legacyRedeemed.json())).toHaveProperty("token")
+    expect((yield* request(`/auth/connect/${legacy.code}`)).status).toBe(401)
   }),
 )
 

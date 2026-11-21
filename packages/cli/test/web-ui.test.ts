@@ -78,6 +78,7 @@ describe("web UI", () => {
       )
       const redirect = yield* Effect.promise(() =>
         fetch(new URL(`/auth/connect/${pairing.code}`, origin), {
+          method: "POST",
           redirect: "manual",
           headers: { accept: "text/html" },
         }),
