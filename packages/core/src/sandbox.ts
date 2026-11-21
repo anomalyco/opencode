@@ -15,6 +15,7 @@ import { SandboxPolicy } from "./sandbox/policy.js"
 export const Options = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   fullDiskRead: Schema.optional(Schema.Boolean),
+  allowGitWrites: Schema.optional(Schema.Boolean),
   readableRoots: Schema.optional(Schema.Array(Schema.String)),
   writableRoots: Schema.optional(Schema.Array(Schema.String)),
 })

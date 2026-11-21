@@ -221,7 +221,7 @@ kernel.each([false, true])(
   async (fullDiskRead) => {
     const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-seatbelt-")))
     try {
-      const workspace = path.join(root, "workspace")
+      const workspace = path.join(root, "workspace [git]+")
       const scratch = path.join(root, "scratch")
       const outside = path.join(root, "outside")
       const host = {
@@ -235,6 +235,15 @@ kernel.each([false, true])(
       await Promise.all([...Object.values(host), outside].map((value) => fs.mkdir(value)))
       await fs.mkdir(path.join(workspace, ".opencode"))
       await fs.mkdir(path.join(workspace, ".git"))
+      const nested = path.join(workspace, "nested")
+      const submodule = path.join(workspace, "submodule")
+      const extra = path.join(root, "extra")
+      await Promise.all([nested, submodule, extra].map((directory) => fs.mkdir(directory)))
+      const nestedGit = path.join(nested, ".git")
+      const submoduleGit = path.join(submodule, ".git")
+      const extraGit = path.join(extra, ".git")
+      await Promise.all([nestedGit, extraGit].map((directory) => fs.mkdir(directory)))
+      await fs.writeFile(submoduleGit, "gitdir: ../.git/modules/submodule")
       const credentials = path.join(host.home, ".ssh")
       await fs.mkdir(credentials)
       await fs.writeFile(path.join(credentials, "key"), "credential-secret")
@@ -243,9 +252,9 @@ kernel.each([false, true])(
       const readOnly = path.join(workspace, "read-only")
       await fs.mkdir(readOnly)
       const confined = await MacSandbox.policy(host, { fullDiskRead, readableRoots: [readOnly] })
-      const run = (command: string) => {
+      const run = (command: string, policy = confined) => {
         const launch = MacSandbox.launch(
-          confined,
+          policy,
           "/bin/sh",
           ["-c", command],
           SandboxPolicy.environment(process.env, scratch),
@@ -264,6 +273,19 @@ kernel.each([false, true])(
       expect(run(`cat '${host.config}/secret'`).exitCode).not.toBe(0)
       expect(run("printf config > opencode.json").exitCode).not.toBe(0)
       expect(run("printf index > .git/index").exitCode).not.toBe(0)
+      expect(run("printf index > nested/.git/index").exitCode).not.toBe(0)
+      expect(run("printf metadata > submodule/.git").exitCode).not.toBe(0)
+      expect(run("printf ignore > nested/.gitignore").exitCode).toBe(0)
+      const gitWrites = await MacSandbox.policy(host, {
+        fullDiskRead,
+        allowGitWrites: true,
+        writableRoots: [nested, extra],
+      })
+      expect(run("printf index > .git/index", gitWrites).exitCode).toBe(0)
+      expect(run("printf index > nested/.git/index", gitWrites).exitCode).toBe(0)
+      expect(run("printf metadata > submodule/.git", gitWrites).exitCode).toBe(0)
+      expect(run(`printf index > '${extraGit}/index'`, gitWrites).exitCode).not.toBe(0)
+      expect(run("printf config > opencode.json", gitWrites).exitCode).not.toBe(0)
       expect(run("printf plugin > .opencode/plugin.ts").exitCode).not.toBe(0)
       expect(await fs.readdir(outside)).toEqual(["secret"])
     } finally {

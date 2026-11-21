@@ -6,6 +6,7 @@ import path from "node:path"
 export interface Options {
   readonly enabled?: boolean
   readonly fullDiskRead?: boolean
+  readonly allowGitWrites?: boolean
   readonly readableRoots?: readonly string[]
   readonly writableRoots?: readonly string[]
 }
@@ -13,6 +14,7 @@ export interface Options {
 export interface Policy {
   readonly directory: string
   readonly fullDiskRead: boolean
+  readonly allowGitWrites?: boolean
   readonly readableRoots: readonly string[]
   readonly writableRoots: readonly string[]
   readonly protectedPaths: readonly string[]

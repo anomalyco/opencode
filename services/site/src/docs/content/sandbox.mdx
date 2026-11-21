@@ -24,6 +24,7 @@ Settings are read when the server starts. Restart the background service with `o
 | --- | --- | --- |
 | `enabled` | `false` | Enable the shell sandbox on a local macOS host. |
 | `full_disk_read` | `false` | Allow broad reads, subject to protected-path exclusions. |
+| `allow_git_writes` | `false` | Allow writes to `.git` metadata inside the workspace, including nested repositories and submodules. |
 | `readable_roots` | `[]` | Additional existing absolute paths shell commands may read. |
 | `writable_roots` | `[]` | Additional existing absolute paths shell commands may write. |
 
@@ -33,7 +34,17 @@ Sandboxed shell commands and their descendants can write to the workspace, a ded
 
 Shell commands skip the default approval prompt when no rule matches. Explicit shell and external-directory rules still apply, including rules that ask for approval or deny a command. The sandbox does not currently support requesting an unsandboxed shell command. Commands that need access outside the sandbox must be run separately by the user, or the server must be restarted with the sandbox disabled.
 
-Repository `.git` metadata is write-protected. Commands that update it, such as `git add`, `git commit`, and branch checkouts, cannot complete inside the sandbox. Read-only Git commands can still run if their configuration and dependencies are readable.
+By default, the sandbox protects `.git` metadata at every level of the workspace. Set `allow_git_writes` to `true` to allow commands such as `git add`, `git commit`, and branch checkouts to update that metadata.
+
+```jsonc
+{
+  "experimental": { "sandbox": { "enabled": true, "allow_git_writes": true } },
+}
+```
+
+Other filesystem and network rules still apply. If a linked worktree stores Git metadata outside the workspace, this setting does not grant write access to it. Enable this only for workspaces you trust with changes to Git configuration and hooks, which can affect later Git commands you run outside the sandbox.
+
+Read-only Git commands can run if their configuration and dependencies are readable.
 
 Git configuration and runtime dependencies outside the default readable paths may need explicit readable roots.
 

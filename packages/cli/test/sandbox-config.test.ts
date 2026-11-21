@@ -12,12 +12,13 @@ test("reads and merges sandbox options from global JSONC files", async () => {
   )
   await Bun.write(
     path.join(root.path, "opencode.jsonc"),
-    '{ // user preference\n "experimental": { "sandbox": { "full_disk_read": true, }, }, }',
+    '{ // user preference\n "experimental": { "sandbox": { "full_disk_read": true, "allow_git_writes": true, }, }, }',
   )
   expect(await Effect.runPromise(SandboxConfig.read(root.path))).toEqual({
     enabled: true,
     readable_roots: ["/usr"],
     full_disk_read: true,
+    allow_git_writes: true,
   })
 })
 

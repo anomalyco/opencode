@@ -126,7 +126,8 @@ export async function policy(
     : []
   const protectedPaths = [
     ...writableRoots.flatMap((root) => [
-      ...[".git", ".opencode", ".agents", ".codex", ".aws", ".ssh"].map((name) => path.join(root, name)),
+      ...(options.allowGitWrites && contains(directory, root) ? [] : [path.join(root, ".git")]),
+      ...[".opencode", ".agents", ".codex", ".aws", ".ssh"].map((name) => path.join(root, name)),
       ...["opencode.json", "opencode.jsonc"].map((name) => path.join(root, name)),
     ]),
     ...hostPaths,
@@ -145,6 +146,7 @@ export async function policy(
   return {
     directory,
     fullDiskRead: options.fullDiskRead ?? false,
+    ...(options.allowGitWrites ? { allowGitWrites: true } : {}),
     readableRoots,
     writableRoots,
     protectedPaths: [...new Set([...protectedPaths, ...aliases])],
@@ -178,7 +180,10 @@ export function launch(
       }),
     ),
   ]
+  // Match whole path components under the canonical workspace, including .git files used by submodules.
+  const workspace = policy.directory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
   const parameters = [
+    ...(policy.allowGitWrites ? [] : [`-DWORKSPACE_GIT=^${workspace}/([^/]+/)*[.]git(/|$)`]),
     ...readable.map((value, index) => `-DREAD_${index}=${value}`),
     ...policy.writableRoots.map((value, index) => `-DWRITE_${index}=${value}`),
     ...policy.protectedPaths.map((value, index) => `-DPROTECTED_${index}=${value}`),
@@ -205,6 +210,7 @@ export function launch(
       : readable.map((_, index) => `(allow file-read* file-map-executable (subpath (param \"READ_${index}\")))`)),
     ...policy.writableRoots.map((_, index) => `(allow file-write* (subpath (param \"WRITE_${index}\")))`),
     ...policy.writableRoots.map((_, index) => `(deny file-write-unlink (literal (param \"WRITE_${index}\")))`),
+    ...(policy.allowGitWrites ? [] : ['(deny file-write* (regex (param "WORKSPACE_GIT")))']),
     ...policy.protectedPaths.map((_, index) => `(deny file-write* (subpath (param \"PROTECTED_${index}\")))`),
     ...policy.unreadablePaths.map(
       (_, index) => `(deny file-read* file-write* file-map-executable (subpath (param \"UNREADABLE_${index}\")))`,
