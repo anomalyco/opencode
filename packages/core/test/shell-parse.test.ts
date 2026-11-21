@@ -258,4 +258,22 @@ describe("ShellParse", () => {
     const ls = await Effect.runPromise(ShellParse.scan("sudo ls", "/bin/bash", "/workspace"))
     expect(ls.commands[0]?.save).toBe("sudo ls *")
   })
+
+  test("unwraps sudo and doas options before the wrapped command's prefix", async () => {
+    const sudoUser = await Effect.runPromise(ShellParse.scan("sudo -u root rm -rf /", "/bin/bash", "/workspace"))
+    expect(sudoUser.commands[0]?.save).toBe("sudo -u root rm *")
+
+    const sudoEnv = await Effect.runPromise(ShellParse.scan("sudo -E apt install x", "/bin/bash", "/workspace"))
+    expect(sudoEnv.commands[0]?.save).toBe("sudo -E apt install *")
+
+    const doasUser = await Effect.runPromise(
+      ShellParse.scan("doas -u root git push origin", "/bin/bash", "/workspace"),
+    )
+    expect(doasUser.commands[0]?.save).toBe("doas -u root git push *")
+  })
+
+  test("saves the exact command when a wrapper's options cannot be unwrapped", async () => {
+    const su = await Effect.runPromise(ShellParse.scan("su -c 'rm -rf /'", "/bin/bash", "/workspace"))
+    expect(su.commands).toEqual([{ resource: "su -c 'rm -rf /'", save: "su -c 'rm -rf /'" }])
+  })
 })
