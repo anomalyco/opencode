@@ -105,6 +105,49 @@ test.each([false, true])("update choices are keyboard-navigable buttons with new
   }
 })
 
+test("releases for copies a package manager installed point there instead of offering an install", async () => {
+  await using temporary = await tmpdir()
+  const [state] = createSignal<UpdateState>({ type: "external", version: "2.0.0" })
+  const ran: string[] = []
+  const app = await testRender(
+    () => (
+      <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
+        <ConfigProvider config={createTuiResolvedConfig()}>
+          <ThemeProvider mode="dark" source={emptyThemeSource}>
+            <Keymap.Provider>
+              <ToastProvider>
+                <DialogProvider>
+                  <ModalUpdate
+                    state={state}
+                    skip={() => ran.push("skip")}
+                    install={async () => void ran.push("install")}
+                    restart={() => {}}
+                  />
+                </DialogProvider>
+              </ToastProvider>
+            </Keymap.Provider>
+          </ThemeProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 80, height: 24, kittyKeyboard: true },
+  )
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Update available") && frame.includes("package manager"))
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("OpenCode 2.0.0 is available")
+    expect(frame).not.toMatch(/Skip\s+Update/)
+
+    app.mockInput.pressEnter()
+    await app.waitFor(() => ran.length > 0)
+    expect(ran).toEqual(["skip"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 function ModalUpdate(props: Parameters<typeof DialogUpdate>[0]) {
   onCleanup(Keymap.use().mode.push("modal"))
   return <DialogUpdate {...props} />
