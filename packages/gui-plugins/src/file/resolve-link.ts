@@ -139,7 +139,7 @@ function normalizeRelativeSegments(input: string, decode: boolean): string {
   return `${prefix}${out.join("/")}`
 }
 
-function decodePathSafely(value: string): string {
+export function decodePathSafely(value: string): string {
   try {
     return decodeURIComponent(value)
   } catch {

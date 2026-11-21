@@ -1,5 +1,7 @@
+import { artifactKind } from "@opencode/util/artifact"
 import { base64ToBytes } from "@opencode/util/base64"
 import type { FileContent } from "@opencode/plugin/gui"
+import { decodePathSafely } from "./resolve-link"
 
 /** Approximate on-disk size of loaded content. */
 export function contentBytes(content: FileContent) {
@@ -140,6 +142,33 @@ export function resolveArtifactPath(base: string, href: string) {
   }
 
   return `${dir.startsWith("/") ? "/" : ""}${segments.join("/")}`
+}
+
+/**
+ * The file a relative image, audio or video reference in an HTML preview names. The page's scripts can ask for any
+ * path, so only media inside the page's own folder is answered; undefined for anything else.
+ */
+export function frameMediaPath(file: string, href: string) {
+  // No base to climb out of, so a path that leaves the page's folder is refused.
+  const inside = resolveArtifactPath("", decodePathSafely(href.split(/[?#]/)[0]))
+
+  if (!inside) return undefined
+  const kind = artifactKind(inside)
+
+  if (kind !== "image" && kind !== "svg" && kind !== "audio" && kind !== "video") return undefined
+
+  return resolveArtifactPath(file, `../${inside}`)
+}
+
+/**
+ * HTML content with a script that runs first, after any doctype so the page keeps its rendering mode. It runs before
+ * the page's own scripts, so a Content-Security-Policy the page declares later does not block it.
+ */
+export function htmlWithScript(content: FileContent, script: string): FileContent {
+  if (content.type !== "text" || content.url || content.bytes) return content
+  const doctype = /^(?:\s|<!--[\s\S]*?-->)*<!doctype[^>]*>/i.exec(content.content)?.[0] ?? ""
+
+  return { ...content, content: `${doctype}<script>${script}</script>${content.content.slice(doctype.length)}` }
 }
 
 const frontmatter = /^\uFEFF?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)??---[ \t]*(?:\r?\n|$)/
