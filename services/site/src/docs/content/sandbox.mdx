@@ -33,6 +33,8 @@ Sandboxed shell commands and their descendants can write to the workspace, a ded
 
 Shell commands skip the default approval prompt when no rule matches. Explicit shell and external-directory rules still apply, including rules that ask for approval or deny a command. The sandbox does not currently support requesting an unsandboxed shell command. Commands that need access outside the sandbox must be run separately by the user, or the server must be restarted with the sandbox disabled.
 
+Repository `.git` metadata is write-protected. Commands that update it, such as `git add`, `git commit`, and branch checkouts, cannot complete inside the sandbox. Read-only Git commands can still run if their configuration and dependencies are readable.
+
 Git configuration and runtime dependencies outside the default readable paths may need explicit readable roots.
 
 ```jsonc
