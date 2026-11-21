@@ -17,6 +17,9 @@ export function detectMedia(bytes: Uint8Array) {
     if ([12, 16, 40, 52, 56, 64, 108, 124].includes(dib) && pixels >= 14 + dib) return "image/bmp"
   }
   if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf"
+  // Matroska shares EBML's signature; only WebM's header names its DocType `webm`.
+  if (startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3]) && ascii(bytes, 0, Math.min(bytes.length, 64)).includes("webm"))
+    return "video/webm"
   if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50]))
     return "image/webp"
   if (bytes.length >= 12 && ascii(bytes, 4, 8) === "ftyp") {

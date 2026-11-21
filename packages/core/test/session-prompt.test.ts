@@ -547,6 +547,44 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("materializes local and inline video attachments before admission", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const directory = yield* tmpdirScoped("opencode-session-prompt-")
+      const mp4 = Buffer.from("000000206674797069736f6d0000020069736f6d69736f32617663316d703431", "hex")
+      const webm = Buffer.from("1a45dfa39f4286810142f7810142f2810442f381084282847765626d4287810442858102", "hex")
+      const mov = Buffer.from("00000014667479707174202000000200717420200000000877696465", "hex")
+      const source = path.join(directory.path, "clip.webm")
+      yield* Effect.promise(() => Bun.write(source, webm))
+      const uri = pathToFileURL(source).href
+
+      const message = yield* session.prompt({
+        sessionID,
+        text: "Inspect these videos",
+        files: [
+          { uri: `data:video/mp4;base64,${mp4.toString("base64")}`, name: "clip.mp4" },
+          { uri },
+          { uri: `data:video/quicktime;base64,${mov.toString("base64")}`, name: "clip.mov" },
+        ],
+        resume: false,
+      })
+
+      expect(message.payload.files).toEqual([
+        { data: mp4.toString("base64"), mime: "video/mp4", source: { type: "inline" }, name: "clip.mp4" },
+        {
+          data: Buffer.from(webm).toString("base64"),
+          mime: "video/webm",
+          source: { type: "uri", uri },
+          name: "clip.webm",
+        },
+        { data: mov.toString("base64"), mime: "video/quicktime", source: { type: "inline" }, name: "clip.mov" },
+      ])
+      const stored = yield* admitted(message.id)
+      expect(stored?.type === "user" ? stored.payload.files : undefined).toEqual(message.payload.files)
+    }),
+  )
+
   it.live("admits captured image bytes with their source path after the source disappears", () =>
     Effect.gen(function* () {
       yield* setup
