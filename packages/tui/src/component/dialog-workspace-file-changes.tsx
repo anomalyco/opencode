@@ -5,6 +5,7 @@ import { createStore } from "solid-js/store"
 import { FilePath } from "../ui/file-path"
 import { useTheme } from "../context/theme"
 import { useConfig, useNewDesigns } from "../config"
+import { keypadKeyName } from "../util/keypad"
 import {
   DIALOG_INSET,
   DialogBleed,
@@ -66,28 +67,29 @@ export function DialogWorkspaceFileChanges(props: {
   const confirmAction = () => props.confirm ?? { title: "confirm", key: "enter" }
 
   useKeyboard((evt) => {
+    const name = keypadKeyName(evt.name)
     // Escape needs no handling here: the dialog closes on escape, which resolves as a cancel.
     if (newDesigns()) {
-      if (evt.name !== (confirmAction().key === "enter" ? "return" : confirmAction().key)) return
+      if (name !== (confirmAction().key === "enter" ? "return" : confirmAction().key)) return
       evt.preventDefault()
       evt.stopPropagation()
       choose("yes")
       return
     }
-    if (evt.name === "return") {
+    if (name === "return") {
       evt.preventDefault()
       evt.stopPropagation()
       choose(store.active)
       return
     }
-    if (evt.name === "left") {
+    if (name === "left") {
       evt.preventDefault()
       evt.stopPropagation()
       const index = options.indexOf(store.active)
       setStore("active", options[Math.max(index - 1, 0)])
       return
     }
-    if (evt.name === "right") {
+    if (name === "right") {
       evt.preventDefault()
       evt.stopPropagation()
       const index = options.indexOf(store.active)
