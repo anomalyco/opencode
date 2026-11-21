@@ -229,7 +229,13 @@ export function createHomeSessionsController(home: HomeController) {
   })
 
   const scoped = useQuery(() =>
-    projectSessionsQuery(home.server.focused(), home.server.focusedContext(), projectDirectories()),
+    projectSessionsQuery(
+      home.server.focused(),
+      home.server.focusedContext(),
+      projectDirectories(),
+      "",
+      home.project.selected()?.id,
+    ),
   )
 
   const indexedSessions = createMemo(() => {
