@@ -8,8 +8,10 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Integration } from "@opencode/core/integration"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
-import { Cause, Effect, Exit, ManagedRuntime } from "effect"
+import { Cause, Clock, Deferred, Effect, Exit, Layer, ManagedRuntime } from "effect"
+import { FetchHttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
+import { testEffect } from "./lib/effect"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { tmpdir } from "./fixture/tmpdir"
 
@@ -18,6 +20,122 @@ afterAll(() => authServer.stop(true))
 
 const integrationID = Integration.ID.make("mcp_test")
 const methodID = Integration.MethodID.make("oauth")
+
+const it = testEffect(Layer.empty)
+
+it.effect("aborts a cancelled refresh and releases the authorization server queue", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>()
+    let aborted = false
+    const fetch: typeof globalThis.fetch = Object.assign(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        if (!(init?.body instanceof URLSearchParams) || init.body.get("refresh_token") !== "hung")
+          return Response.json({ access_token: "next", token_type: "Bearer" })
+        return new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener(
+            "abort",
+            () => {
+              aborted = true
+              reject(init.signal?.reason)
+            },
+            { once: true },
+          )
+          Deferred.doneUnsafe(entered, Exit.void)
+        })
+      },
+      { preconnect: globalThis.fetch.preconnect },
+    )
+    const fetchFn = yield* McpOAuth.loggedFetch({ server: "test" }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, fetch),
+    )
+    const request = (token: string, signal?: AbortSignal) =>
+      fetchFn("https://timeout.example.test/token", {
+        method: "POST",
+        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: token }),
+        signal,
+      })
+    const controller = new AbortController()
+    yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()))
+    const first = request("hung", controller.signal).catch((error: unknown) => error)
+    yield* Deferred.await(entered)
+    const second = request("queued")
+    controller.abort()
+    expect(yield* Effect.promise(() => first)).toBeInstanceOf(Error)
+    expect(aborted).toBe(true)
+    expect((yield* Effect.promise(() => second)).status).toBe(200)
+  }),
+)
+
+for (const format of ["seconds", "date", "invalid"] as const) {
+  it.effect(`respects refresh Retry-After in ${format} form`, () =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis
+      const header = format === "seconds" ? "30" : format === "date" ? new Date(now + 30_000).toUTCString() : "invalid"
+      const fetch: typeof globalThis.fetch = Object.assign(
+        async () =>
+          Response.json({ error: "temporarily_unavailable" }, { status: 503, headers: { "Retry-After": header } }),
+        { preconnect: globalThis.fetch.preconnect },
+      )
+      const fetchFn = yield* McpOAuth.loggedFetch({ server: "test" }).pipe(
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
+      )
+      const error = yield* Effect.tryPromise({
+        try: () =>
+          fetchFn("https://auth.example.test/token", {
+            method: "POST",
+            body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "test" }),
+          }),
+        catch: (error) => error,
+      }).pipe(Effect.flip)
+      expect(error).toMatchObject({
+        code: "temporarily_unavailable",
+        retryAfter: format === "invalid" ? undefined : 30_000,
+      })
+    }),
+  )
+}
+
+it.effect("serializes refreshes per origin across callers without blocking other origins", () =>
+  Effect.gen(function* () {
+    const release = Promise.withResolvers<Response>()
+    const entered = Promise.withResolvers<void>()
+    const requests: string[] = []
+    const response = () => Response.json({ access_token: "next", token_type: "Bearer" })
+    yield* Effect.addFinalizer(() => Effect.sync(() => release.resolve(response())))
+    const fetch: typeof globalThis.fetch = Object.assign(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const token = init?.body instanceof URLSearchParams ? init.body.get("refresh_token") : undefined
+        requests.push(`${new URL(String(url)).hostname}:${token}`)
+        if (token !== "first") return response()
+        entered.resolve()
+        return release.promise
+      },
+      { preconnect: globalThis.fetch.preconnect },
+    )
+    const firstFetch = yield* McpOAuth.loggedFetch({ server: "first" }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, fetch),
+    )
+    const secondFetch = yield* McpOAuth.loggedFetch({ server: "second" }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, fetch),
+    )
+    const options = (token: string) => ({
+      method: "POST",
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: token }),
+    })
+    const first = firstFetch("https://auth.example.test/token", options("first"))
+    const second = secondFetch("https://auth.example.test/token", options("second"))
+    const other = firstFetch("https://other.example.test/token", options("other"))
+    yield* Effect.promise(() => Promise.all([entered.promise, other]))
+    expect(requests).toEqual(["auth.example.test:first", "other.example.test:other"])
+    release.resolve(response())
+    const responses = yield* Effect.promise(() => Promise.all([first, second]))
+    expect(yield* Effect.promise(() => Promise.all(responses.map((response) => response.json())))).toEqual([
+      { access_token: "next", token_type: "Bearer" },
+      { access_token: "next", token_type: "Bearer" },
+    ])
+    expect(requests).toEqual(["auth.example.test:first", "other.example.test:other", "auth.example.test:second"])
+  }),
+)
 
 const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: { client_id: "client" } })
 
@@ -267,6 +385,20 @@ describe("MCP OAuth", () => {
     expect(result.page).toContain("Authorization failed")
     expect(result.page).toContain("bad_client_secret")
     expect(result.exit._tag).toBe("Failure")
+  })
+
+  test("stays anonymous when made without a credential, even after one is signed in", async () => {
+    const store = memoryCredentials([])
+    const oauthProvider = await Effect.runPromise(
+      McpOAuth.connectProvider({ server: "test", config: remote(authServer.url.href), credential: undefined }).pipe(
+        Effect.provideService(Credential.Service, store.service),
+      ),
+    )
+    store.rows.set(
+      Credential.ID.make("cred_test"),
+      credential({ access: "late", refresh: "late", url: authServer.url.href }),
+    )
+    expect(await oauthProvider.token()).toBeUndefined()
   })
 
   test("generates a loopback redirect URL when none is configured", async () => {
