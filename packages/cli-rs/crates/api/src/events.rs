@@ -427,6 +427,7 @@ mod tests {
     struct Upstream {
         sender: Mutex<Option<mpsc::UnboundedSender<Result<Ev, Failure>>>>,
         dropped: Arc<AtomicBool>,
+        activity: Activity,
     }
 
     impl Upstream {
@@ -440,6 +441,10 @@ mod tests {
             if let Some(sender) = lock(&self.sender).take() {
                 let _ = sender.send(Err(Failure(failure)));
             }
+        }
+
+        fn close(&self) {
+            lock(&self.sender).take();
         }
 
         fn dropped(&self) -> bool {
@@ -463,11 +468,11 @@ mod tests {
     impl Source<Ev> for Fake {
         type Error = Failure;
 
-        fn open(&mut self, _activity: Activity) -> BoxStream<'static, Result<Ev, Failure>> {
+        fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<Ev, Failure>> {
             let (sender, receiver) = mpsc::unbounded_channel();
             let dropped = Arc::new(AtomicBool::new(false));
             let flag = DropFlag(dropped.clone());
-            lock(&self.opened).push(Arc::new(Upstream { sender: Mutex::new(Some(sender)), dropped }));
+            lock(&self.opened).push(Arc::new(Upstream { sender: Mutex::new(Some(sender)), dropped, activity }));
             futures_util::stream::unfold((receiver, flag), |(mut receiver, flag)| async move {
                 receiver.recv().await.map(|item| (item, (receiver, flag)))
             })
@@ -547,6 +552,76 @@ mod tests {
         until(|| fake.count() == 2).await;
         assert!(silent.elapsed() >= Duration::from_millis(60) + STALL_GRACE);
         assert!(records(&connection).contains(&disconnected(1, "Event stream stalled")));
+    }
+
+    // Each failed stream is recorded and replaced after the delay; a stream that stayed up resets the attempt count.
+    #[tokio::test(start_paused = true)]
+    async fn failed_streams_reconnect_after_the_delay_and_record_why() {
+        let fake = Fake::default();
+        let (connection, _batches) = connect(fake.clone(), options(10_000));
+        until(|| fake.count() == 2).await;
+        fake.at(1).push(ev("session.updated", 0));
+        until(|| fake.count() == 3).await;
+        fake.at(2).push(ev(CONNECTED, 1));
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        fake.at(2).close();
+        let closed = Instant::now();
+        until(|| fake.count() == 4).await;
+        assert!(closed.elapsed() >= Duration::from_secs(1));
+        fake.at(3).push(ev(CONNECTED, 2));
+        fake.at(3).fail("Transport: contract failure");
+        until(|| fake.count() == 5).await;
+        let records = records(&connection);
+        for (attempt, error) in [
+            (1, "Timed out connecting to server"),
+            (2, "Event stream did not start with server.connected"),
+            (1, "Event stream disconnected"),
+            (2, "Transport: contract failure"),
+        ] {
+            assert!(records.contains(&disconnected(attempt, error)), "{error}: {records:?}");
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn keepalives_hold_a_quiet_stream_and_dropping_the_connection_closes_it() {
+        let fake = Fake::default();
+        let (connection, _batches) = connect(fake.clone(), options(60));
+        until(|| fake.count() == 1).await;
+        fake.at(0).push(ev(CONNECTED, 1));
+        // Past the idle timeout and its stall grace.
+        for _ in 0..100 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            (fake.at(0).activity)();
+        }
+        assert_eq!((fake.count(), connection.state().status), (1, Status::Connected));
+        drop(connection);
+        until(|| fake.at(0).dropped()).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        assert_eq!(fake.count(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_resolved_server_reconnects_without_the_delay() {
+        #[derive(Clone)]
+        struct Resolving(Fake);
+        impl Source<Ev> for Resolving {
+            type Error = Failure;
+            fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<Ev, Failure>> {
+                self.0.open(activity)
+            }
+            fn reconnect(&mut self) -> BoxFuture<'_, bool> {
+                Box::pin(async { true })
+            }
+        }
+        let fake = Fake::default();
+        let (_connection, _batches) = connect(Resolving(fake.clone()), options(10_000));
+        until(|| fake.count() == 1).await;
+        fake.at(0).push(ev(CONNECTED, 0));
+        settle().await;
+        fake.at(0).close();
+        let closed = Instant::now();
+        until(|| fake.count() == 2).await;
+        assert!(closed.elapsed() < Duration::from_millis(100));
     }
 
     #[tokio::test(start_paused = true)]

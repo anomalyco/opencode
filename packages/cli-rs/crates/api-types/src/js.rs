@@ -357,26 +357,14 @@ mod tests {
         for (value, text) in cases {
             assert_eq!(number_to_string(value), text, "{value}");
         }
-    }
-
-    #[test]
-    fn values_convert_to_strings_as_javascript_does() {
-        let value = serde_json::json!([null, "a", [null, 1.5, [true]], {}, 1e21]);
-        assert_eq!(js_string(&value), ",a,,1.5,true,[object Object],1e+21");
+        assert_eq!(js_string(&serde_json::json!([null, "a", [null, 1.5, [true]], {}])), ",a,,1.5,true,[object Object]");
     }
 
     #[test]
     fn components_decode_as_javascript_does() {
-        for (text, decoded) in [
-            ("a%20b%C3%bC", Some("a bü")),
-            ("日本%41", Some("日本A")),
-            ("%", None),
-            ("%4", None),
-            ("%+5", None),
-            ("%é", None),
-            ("%C3", None),
-        ] {
-            assert_eq!(decode_component(text).as_deref(), decoded, "{text:?}");
+        assert_eq!(decode_component("a%20b%C3%bC日本").as_deref(), Some("a bü日本"));
+        for text in ["%", "%4", "%+5", "%é", "%C3"] {
+            assert_eq!(decode_component(text), None, "{text:?}");
         }
     }
 

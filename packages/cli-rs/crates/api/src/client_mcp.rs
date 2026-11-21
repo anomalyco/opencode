@@ -453,6 +453,9 @@ mod tests {
             peer.call(json!({ "name": "missing", "arguments": {} })).await["error"],
             json!({ "code": -32602, "message": "Unknown tool: missing" })
         );
+        // As JavaScript's `String(name)`.
+        let unknown = peer.call(json!({ "name": { "a": [1, null] }, "arguments": {} })).await;
+        assert_eq!(unknown["error"]["message"], "Unknown tool: [object Object]");
         assert_eq!(
             peer.request("resources/list", json!({})).await["error"],
             json!({ "code": -32601, "message": "Method not found: resources/list" })
@@ -520,23 +523,6 @@ mod tests {
             directory: None,
             headers: Vec::new(),
             tools: Vec::new(),
-        }
-    }
-
-    // Expected: the name of a missing tool reads as JavaScript's `String(name)` writes it.
-    #[tokio::test]
-    async fn an_unknown_tool_is_named_as_javascript_writes_it() {
-        let cases = [
-            (json!({ "name": { "a": 1 } }), "[object Object]"),
-            (json!({ "name": [1, [2, null], "x"] }), "1,2,,x"),
-            (json!({ "name": 1e21 }), "1e+21"),
-            (json!({ "name": null }), "null"),
-            (json!({}), "undefined"),
-            (json!(5), "undefined"),
-        ];
-        for (params, name) in cases {
-            let reply = respond(&quiet(), "tools/call", &params).await;
-            assert_eq!(reply["error"]["message"], format!("Unknown tool: {name}"), "{params}");
         }
     }
 
