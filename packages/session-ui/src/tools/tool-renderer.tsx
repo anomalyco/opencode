@@ -254,6 +254,13 @@ export function displayDirectory(path: string | undefined) {
   return relativizeProjectPath(getDirectory(path), data.directory)
 }
 
+/** A folder a tool searched or listed, relative to the project; `/` for the project itself. */
+export function displayFolder(path: string | undefined) {
+  const data = useData()
+
+  return relativizeProjectPath(path ?? "/", data.directory) || "/"
+}
+
 import { resolveFileDiff } from "../components/session-diff"
 import { factsOf, sameFileFact, summarize, type FileFact } from "../timeline/facts"
 import { contextGroupLabel, webSearchProviderLabel } from "./context-group-label"
