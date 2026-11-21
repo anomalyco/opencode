@@ -113,6 +113,7 @@ type ComposerSubmitInput = {
   comments: {
     capture: () => PromptHistoryComment[]
     clear: () => void
+    remove: (path: string, id: string) => void
     restore: (comments: PromptHistoryComment[]) => void
   }
 }
@@ -244,19 +245,22 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       return
     }
 
-    if (effect.type === "quote.send") {
+    if (effect.type === "comment.send") {
       input.adapter.beforeSubmit?.()
       const target = input.adapter.state
+      const item = effect.item
 
       void dispatchPrompt(input, effect.session, effect.value, openGate(effect.attempt, effect.session))
         .settled(() => {
-          target.context.updateComment(effect.quote.commentID, { comment: effect.comment })
+          if (item.commentID) target.context.updateComment(item.commentID, { comment: effect.comment })
 
           return true
         })
         .then((sent) => {
           if (sent) {
             target.context.remove(effect.key)
+
+            if (item.type === "file" && item.commentID) input.comments.remove(item.path, item.commentID)
 
             if (target.quoteComment.key() === effect.key) target.quoteComment.set()
             input.adapter.submitted()
@@ -372,21 +376,25 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         }),
       )
     },
-    submitQuote(key: string, comment: string) {
+    /**
+     * Sends one attached quote, note or file comment as its own prompt, with `comment` as its comment. It takes the
+     * Mod+Enter delivery unless `alternate` is false, which takes Enter's.
+     */
+    submitComment(key: string, comment: string, options?: { alternate?: boolean }) {
       const adapter = input.adapter
 
       if (adapter.kind !== "active-session") return Promise.resolve(false)
-      const quote = adapter.state.context.items().find((item) => item.key === key)
+      const item = adapter.state.context.items().find((entry) => entry.key === key)
 
       return new Promise<boolean>((resolve) =>
         dispatch({
-          type: "quote",
+          type: "comment",
           snapshot: {
             key,
-            quote: quote?.type === "quote" ? quote : undefined,
+            item: item && cloneContextItem(item),
             comment,
             selection: currentSelection(input),
-            delivery: input.delivery?.(true) ?? "steer",
+            delivery: input.delivery?.(options?.alternate ?? true) ?? "steer",
             id: SessionMessage.ID.create(),
             session: adapter.session(),
           },
@@ -402,6 +410,14 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
   }
 }
 
+function cloneContextItem(item: ComposerSubmission["context"][number]): ComposerSubmission["context"][number] {
+  if (item.type === "note") return { ...item, live: item.live ? { ...item.live } : undefined }
+
+  if (item.type === "quote") return { ...item, source: item.source ? { ...item.source } : undefined }
+
+  return { ...item, selection: item.selection ? { ...item.selection } : undefined }
+}
+
 function snapshot(input: ComposerSubmitInput, alternate: boolean, first = false): SubmitSnapshot {
   const target = input.adapter.state
   const prompt = clonePrompt(target.current())
@@ -410,13 +426,7 @@ function snapshot(input: ComposerSubmitInput, alternate: boolean, first = false)
 
   const queueFirst = first && mode === "normal" && input.adapter.kind === "active-session" && input.adapter.working()
 
-  const context = target.context.items().map((item) => {
-    if (item.type === "note") return { ...item, live: item.live ? { ...item.live } : undefined }
-
-    if (item.type === "quote") return { ...item, source: item.source ? { ...item.source } : undefined }
-
-    return { ...item, selection: item.selection ? { ...item.selection } : undefined }
-  })
+  const context = target.context.items().map(cloneContextItem)
 
   return {
     draft: {

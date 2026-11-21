@@ -355,6 +355,10 @@ export type ArtifactID = string
 
 export type ArtifactTime = { created: number; updated: number }
 
+export type MachineInfo = { id: string; online: boolean; paired: boolean; os?: string; arch?: string }
+
+export type MachineInvite = { name: string; join: string; expires: number }
+
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
 export type VcsBranch = { current?: string; default?: string }
@@ -2461,6 +2465,7 @@ export type ConfigEntry =
         enterprise?: { url?: string }
         username?: string
         timezone?: string
+        automations?: boolean
         permissions?: PermissionRuleset
         policies?: Array<{
           action:
@@ -2637,7 +2642,6 @@ export type ConfigEntry =
           all_flags?: boolean
           todo?: boolean
           media_blob?: boolean
-          automations?: boolean
           artifacts?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           console_watches?: boolean
@@ -2648,7 +2652,6 @@ export type ConfigEntry =
           home_memory?: boolean
           project_overlay?: boolean
           sqlite_fts?: boolean
-          schedules?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
@@ -3371,6 +3374,14 @@ export type ArtifactNotFoundError = {
 }
 export const isArtifactNotFoundError = (value: unknown): value is ArtifactNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ArtifactNotFoundError"
+
+export type MachineNotFoundError = {
+  readonly _tag: "MachineNotFoundError"
+  readonly machine: string
+  readonly message: string
+}
+export const isMachineNotFoundError = (value: unknown): value is MachineNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MachineNotFoundError"
 
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
@@ -4826,6 +4837,20 @@ export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
 export type ExperimentalJobCancelInput = { readonly id: string }
 
 export type ExperimentalJobCancelOutput = void
+
+export type ExperimentalMachineListOutput = { data: Array<MachineInfo> }["data"]
+
+export type ExperimentalMachineAddInput = {
+  readonly name: string
+  readonly reach: ReadonlyArray<{ readonly type: "url"; readonly url: string }>
+  readonly replace?: boolean | undefined
+}
+
+export type ExperimentalMachineAddOutput = { data: MachineInvite }["data"]
+
+export type ExperimentalMachineRemoveInput = { readonly name: string }
+
+export type ExperimentalMachineRemoveOutput = void
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

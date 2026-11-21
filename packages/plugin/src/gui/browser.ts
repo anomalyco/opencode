@@ -32,7 +32,7 @@ export interface Browser {
   /** Experimental: may change without compatibility guarantees. */
   readonly experimental: {
     /**
-     * Opens a new tab and returns an opaque handle for this plugin instance. Rejects if the pane is unavailable or the session is not on screen.
+     * Opens a new tab and returns an opaque handle for this plugin instance. Resolves once the tab exists, also while its page still loads or after its load failed, which the tab itself shows. Rejects if the pane is unavailable, the session is not on screen, or the address opened no page (as a download does), which leaves no tab.
      * @param session - The session whose pane opens it.
      * @param url - The URL to open.
      */

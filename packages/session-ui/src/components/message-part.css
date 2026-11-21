@@ -970,6 +970,42 @@
   justify-content: center;
 }
 
+[data-component="file-counts"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--v2-text-text-base);
+
+  [data-slot="file-counts-name"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot="file-counts-directory"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-component="diff-changes"] {
+    flex-shrink: 0;
+  }
+
+  [data-component="diff-changes"] [data-empty] {
+    display: none;
+  }
+}
+
+/* A script's changes are each their own card, set apart by the gap between a turn's items, so two changes to one file
+   read as two. The New timeline spaces them its own way. */
+[data-script-change="patch"] + [data-script-change="patch"] {
+  margin-top: 12px;
+}
+
 [data-component="execute-tool-calls"] {
   display: flex;
   flex-direction: column;

@@ -551,6 +551,8 @@ describe("MCP OAuth connections", () => {
             return new Response(null, { status: 401 })
           }
           const body = (await request.json()) as { id: number; method: string; params?: { protocolVersion?: string } }
+          if (body.method === "server/discover")
+            return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32601, message: "Method not found" } })
           if (body.method !== "initialize") return new Response(null, { status: 202 })
           return Response.json({
             jsonrpc: "2.0",

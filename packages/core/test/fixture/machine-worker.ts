@@ -199,6 +199,7 @@ export const makeWorker = (host: {
       const current: Link = { open: true, queue: yield* Queue.unbounded<Message, Cause.Done>() }
       const hello: Machine.Hello = {
         type: "hello",
+        protocol: 1,
         os: "linux",
         arch: "x64",
         home: "/home/worker",
