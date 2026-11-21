@@ -1591,6 +1591,34 @@ story("copies mixed text, inline and display math, and session references as sou
   expect(copied.html).not.toMatch(/style=|class=|<button|<svg/)
 })
 
+story("preserves selected boundary spaces around mixed math without changing line breaks", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Before **nested  $x$ middle** after.\n\nNext $y$ end." })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator(".katex")).toHaveCount(2)
+
+  const select = async (start: string, end: string, startOffset: number, endOffset: number) => {
+    await markdown.evaluate((root, { start, end, startOffset, endOffset }) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      const nodes: Node[] = []
+      while (walker.nextNode()) nodes.push(walker.currentNode)
+      const range = document.createRange()
+      range.setStart(nodes.find((node) => node.textContent === start)!, startOffset)
+      range.setEnd(nodes.find((node) => node.textContent === end)!, endOffset)
+      getSelection()!.removeAllRanges()
+      getSelection()!.addRange(range)
+    }, { start, end, startOffset, endOffset })
+    return (await copySelection(page, "existing")).text
+  }
+
+  expect(await select("Before ", " middle", 6, 1)).toBe(" nested $x$ ")
+  expect(await select("Before ", " end.", 6, 1)).toBe(" nested $x$ middle after.\n\nNext $y$ ")
+  expect(await select("nested  ", " middle", 6, 1)).toBe(" $x$ ")
+  expect(await select("nested  ", " middle", 0, 7)).toBe("nested $x$ middle")
+})
+
 story("copies selected Markdown as semantic HTML without theme or highlight colours", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     document.body.style.color = "rgb(237, 237, 237)"

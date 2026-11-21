@@ -106,7 +106,12 @@ export function markdownMathClipboardText(root: HTMLElement, ranges: readonly Ra
   const text = container.innerText
   container.remove()
 
-  return text
+  // Layout drops spaces at the edges of the cloned fragment, even when the original selection rendered them.
+  const selected = getSelection()?.toString() ?? ""
+  const leading = Math.max(0, (selected.match(/^ */)?.[0].length ?? 0) - (text.match(/^ */)?.[0].length ?? 0))
+  const trailing = Math.max(0, (selected.match(/ *$/)?.[0].length ?? 0) - (text.match(/ *$/)?.[0].length ?? 0))
+
+  return " ".repeat(leading) + text + " ".repeat(trailing)
 }
 
 function sanitizeAttributes(element: Element) {
