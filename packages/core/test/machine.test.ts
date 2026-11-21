@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Fiber, PlatformError, Queue, Scheduler, Schema, Scope, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, PlatformError, Queue, Scheduler, Schema, Scope, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { TestClock } from "effect/testing"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
@@ -556,11 +556,19 @@ describe("machine stdio", () => {
   it.effect("supports configured streams without closing on done", () =>
     Effect.gen(function* () {
       const { worker, environment } = yield* ready
+      const writer = yield* Deferred.make<Fiber.Fiber<unknown, unknown>>()
       const handle = yield* environment.spawner.spawn(
-        ChildProcess.make("cat", { cwd: "/work", stdin: { stream: Stream.make(bytes("stream")), endOnDone: false } }),
+        ChildProcess.make("cat", {
+          cwd: "/work",
+          stdin: {
+            stream: Stream.make(bytes("stream")).pipe(
+              Stream.onStart(Effect.withFiber((fiber) => Deferred.succeed(writer, fiber))),
+            ),
+            endOnDone: false,
+          },
+        }),
       )
-      // Let the scoped source finish its write.
-      yield* Effect.yieldNow
+      yield* Fiber.join(yield* Deferred.await(writer))
       expect(worker.runs[0].input).toEqual([bytes("stream")])
       expect(worker.runs[0].inputClosed).toBe(false)
       yield* worker.runs[0].exit(0)
@@ -599,7 +607,7 @@ describe("machine stdio", () => {
       const handle = yield* environment.spawner.spawn(
         ChildProcess.make("cat", { cwd: "/work", stdin: Stream.make(bytes("once"), bytes("never")) }),
       )
-      yield* Effect.yieldNow
+      yield* Deferred.await(worker.runs[0].inputReceived)
       expect(worker.runs[0].input).toEqual([bytes("once")])
       yield* worker.cut
       yield* worker.restore
@@ -613,6 +621,50 @@ describe("machine stdio", () => {
       expect(count(worker.received, "stdin")).toBe(1)
     }),
   )
+
+  for (const failure of ["closed input", "source failure"]) {
+    it.effect(`keeps a process running after ${failure}`, () =>
+      Effect.gen(function* () {
+        const { worker, environment } = yield* ready
+        const release = yield* Deferred.make<void>()
+        const writer = yield* Deferred.make<Fiber.Fiber<unknown, unknown>>()
+        const sourceError = PlatformError.systemError({
+          _tag: "Unknown",
+          module: "Test",
+          method: "source",
+          description: "source failed",
+        })
+        const handle = yield* environment.spawner.spawn(
+          ChildProcess.make("cat", {
+            cwd: "/work",
+            stdin: Stream.fromEffect(
+              Deferred.await(release).pipe(
+                Effect.andThen(
+                  failure === "source failure" ? Effect.fail(sourceError) : Effect.succeed(bytes("input")),
+                ),
+              ),
+            ).pipe(Stream.onStart(Effect.withFiber((fiber) => Deferred.succeed(writer, fiber)))),
+          }),
+        )
+        if (failure === "closed input") worker.runs[0].inputClosed = true
+        yield* Deferred.succeed(release, undefined)
+        const error = yield* Fiber.join(yield* Deferred.await(writer)).pipe(Effect.flip)
+        if (failure === "closed input") {
+          expect(error).toBeInstanceOf(PlatformError.PlatformError)
+          expect(String(error)).toContain("Broken pipe")
+          expect(count(worker.received, "stdin")).toBe(1)
+        }
+        if (failure === "source failure") expect(error).toBe(sourceError)
+        expect(count(worker.received, "kill")).toBe(0)
+        expect(yield* handle.isRunning).toBe(true)
+        yield* worker.runs[0].print("still running")
+        yield* worker.runs[0].exit(0)
+        expect(yield* text(handle.stdout)).toBe("still running")
+        expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(count(worker.received, "kill")).toBe(0)
+      }),
+    )
+  }
 
   it.effect("the first output view allows its streams and rejects the other view", () =>
     Effect.gen(function* () {

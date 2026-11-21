@@ -369,9 +369,15 @@ export const make = (id: Environment.ID): Interface => {
             ),
           ).pipe(Sink.mapEffect(() => (input.endOnDone === false ? Effect.void : write(null))))
         : Sink.fail(unsupported("stdin is"))
-      // Failed input cannot be replayed, so stop the process rather than leave it waiting for more.
+      // Stop only when delivery was lost: unsent or unacknowledged input cannot be replayed.
       if (Stream.isStream(input.stream))
-        yield* Effect.forkScoped(Stream.run(input.stream, stdin).pipe(Effect.tapError(() => stop())))
+        yield* Effect.forkScoped(
+          Stream.run(input.stream, stdin).pipe(
+            Effect.tapError((error) =>
+              error.reason.cause instanceof NotSent || error.reason.cause instanceof Unknown ? stop() : Effect.void,
+            ),
+          ),
+        )
       // As with local pipes, consume either all or stdout/stderr. Drop the unused view,
       // so a long-lived stdio server does not retain a second, unread copy forever.
       const output = (stream: keyof Process["output"]) =>

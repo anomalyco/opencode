@@ -1,6 +1,6 @@
 import { Environment } from "@opencode/core/environment/index"
 import { Machine } from "@opencode/core/machine/index"
-import { Cause, Effect, Fiber, Queue, Stream } from "effect"
+import { Cause, Deferred, Effect, Fiber, Queue, Stream } from "effect"
 
 /** A process the fake worker ran. The test decides what it prints and when it exits. */
 export interface Run {
@@ -12,6 +12,8 @@ export interface Run {
   /** Signals the process ignores. */
   readonly traps: Set<string>
   readonly input: Uint8Array[]
+  /** Settles after the first accepted stdin request has been recorded. */
+  readonly inputReceived: Deferred.Deferred<void>
   inputClosed: boolean
   readonly print: (output: string | Uint8Array, stream?: "stderr") => Effect.Effect<void>
   readonly exit: (code: number) => Effect.Effect<void>
@@ -103,6 +105,7 @@ export const makeWorker = (host: {
           env: message.env,
           traps: new Set(),
           input: [],
+          inputReceived: Deferred.makeUnsafe(),
           inputClosed: !message.stdin,
           print: (output, stream) =>
             Effect.sync(() => {
@@ -189,6 +192,7 @@ export const makeWorker = (host: {
         if (message.data === null) process.run.inputClosed = true
         else process.run.input.push(message.data)
         emit({ type: "stdin", id: message.id, req: message.req, ok: true })
+        Deferred.doneUnsafe(process.run.inputReceived, Effect.void)
         return
       }
       if (!process) return emit({ type: "failed", id: message.id, request: message.type, message: "unknown process" })
