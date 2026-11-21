@@ -1442,6 +1442,20 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("reports a repeated message_stop as a finish after the terminal event", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "message_stop" }, { type: "message_stop" }))),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({
+        reason: { _tag: "InvalidProviderOutput" },
+        message: "Provider emitted finish after the terminal event",
+      })
+    }),
+  )
+
   it.effect("ignores unknown named SSE events", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
