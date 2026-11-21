@@ -10,6 +10,9 @@ export type ServiceContender = {
 }
 
 const stderrLimit = 8 * 1024
+// Keep live handles referenced until the child exits so the runtime's process watcher still
+// reaps detached contenders after `ensure()` returns, while `unref()` lets this client exit.
+const liveContenders = new Set<ChildProcess>()
 
 export function spawnServiceContender(
   command: string,
@@ -22,6 +25,10 @@ export function spawnServiceContender(
     stdio: ["ignore", "ignore", "pipe"],
     env: { ...process.env, ...env },
   })
+  liveContenders.add(child)
+  const forget = () => {
+    liveContenders.delete(child)
+  }
   let error: Error | undefined
   let closed = false
   let stderr = Buffer.alloc(0)
@@ -35,9 +42,12 @@ export function spawnServiceContender(
   child.stderr?.on("data", onStderr)
   if (child.stderr !== null && "unref" in child.stderr && typeof child.stderr.unref === "function") child.stderr.unref()
   child.once("error", (cause) => {
+    forget()
     error = new Error("Failed to start server", { cause })
   })
+  child.once("exit", forget)
   child.once("close", () => {
+    forget()
     closed = true
   })
   child.unref()
