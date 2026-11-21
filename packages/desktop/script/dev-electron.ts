@@ -1,6 +1,7 @@
 import { $ } from "bun"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { DESKTOP_NATIVE_ENGLISH } from "@opencode/app/i18n/desktop-native"
 
 export async function prepareDevElectron() {
   const electron = dirname(fileURLToPath(import.meta.resolve("electron/package.json")))
@@ -33,6 +34,8 @@ export async function prepareDevElectron() {
 
   await $`plutil -replace CFBundleIdentifier -string ai.opencode.desktop.dev ${plist}`
   await $`plutil -insert NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac -bool true ${plist}`
+  // Mirror the packaged app so a LAN server or SSH host prompts for the Local Network privilege in development too.
+  await $`plutil -insert NSLocalNetworkUsageDescription -string ${DESKTOP_NATIVE_ENGLISH["desktop.localNetworkUsage"]} ${plist}`
   await Bun.write(join(bundle, "Contents/Resources/electron.icns"), icon)
   // Changing the bundle resources invalidates Electron's signature.
   await $`codesign --force --deep --sign - ${bundle}`

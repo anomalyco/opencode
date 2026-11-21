@@ -168,6 +168,9 @@ const getBase = (appId: string): Configuration => {
         NSDownloadsFolderUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.downloadsFolderUsage"],
         NSNetworkVolumesUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.networkVolumesUsage"],
         NSRemovableVolumesUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.removableVolumesUsage"],
+        // A self-hosted server or an SSH host on the LAN is a local network address (#63815). The string lets macOS
+        // name OpenCode in the Local Network alert and list it under Privacy & Security.
+        NSLocalNetworkUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.localNetworkUsage"],
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
       },
       target: ["dmg", "zip"],
