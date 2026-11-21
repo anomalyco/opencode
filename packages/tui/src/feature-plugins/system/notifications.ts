@@ -31,6 +31,14 @@ function hasRunningChild(context: Plugin.Context, sessionID: string) {
     )
 }
 
+function willAutoApprove(context: Plugin.Context, sessionID: string) {
+  if (context.ui.permission.mode() !== "autoaccept") return false
+  const route = context.ui.router.current()
+  if (route.type !== "session") return false
+  if (context.data.session.get(route.sessionID)?.parentID !== undefined) return false
+  return context.data.session.family(route.sessionID).includes(sessionID)
+}
+
 export default Plugin.define({
   id: "opencode.notifications",
   setup(context) {
@@ -65,6 +73,7 @@ export default Plugin.define({
       context.data.on("permission.asked", (event) => {
         if (permissions.has(event.data.id)) return
         permissions.add(event.data.id)
+        if (willAutoApprove(context, event.data.sessionID)) return
         notify(context, event.data.sessionID, "Permission needs input", "permission")
       }),
       context.data.on("permission.replied", (event) => permissions.delete(event.data.requestID)),
