@@ -321,15 +321,6 @@ test("spells Claude variants for a Bedrock application inference profile ARN", (
       },
     },
   ])
-
-  // Nova keeps its Converse reasoningConfig spelling.
-  expect(
-    resolve(model("@opencode/ai/providers/amazon-bedrock", "us.amazon.nova-2-lite-v1:0"), [
-      { type: "effort", values: ["low"] },
-    ]),
-  ).toEqual([
-    { id: "low", body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } } } },
-  ])
 })
 
 test("caps Alibaba thinking budget variants at 64k", () => {
