@@ -21,7 +21,12 @@ afterEach(() => {
   process.off("unhandledRejection", recordUnhandled)
 })
 
-function setup(options: { readClipboardImage?: () => Promise<File | null> } = {}) {
+function setup(
+  options: {
+    readClipboardImage?: () => Promise<File | null>
+    addPart?: (part: ComposerPrompt[number]) => boolean
+  } = {},
+) {
   const [store, setStore] = createStore<{ prompt: ComposerPrompt; cursor: number }>({
     prompt: [{ type: "text", content: "", start: 0, end: 0 }],
     cursor: 0,
@@ -40,7 +45,7 @@ function setup(options: { readClipboardImage?: () => Promise<File | null> } = {}
       }),
       editor: () => document.createElement("div"),
       focusEditor() {},
-      addPart: () => false,
+      addPart: options.addPart ?? (() => false),
       setDraggingType() {},
       directory: () => "/repo",
       destination: () => ({
@@ -112,6 +117,29 @@ describe("Composer attachment persistence failures", () => {
 
     expect(errors).toEqual([failure])
     expect(unhandled).toEqual([])
+    dispose()
+  })
+
+  test("dropping selected text inserts it into the composer", async () => {
+    const parts: ComposerPrompt = []
+
+    const { dispose } = setup({
+      addPart: (part) => {
+        parts.push(part)
+
+        return true
+      },
+    })
+
+    await Promise.resolve()
+    const data = new DataTransfer()
+    data.setData("text/plain", "dropped words")
+    const event = new DragEvent("drop", { cancelable: true })
+    Object.defineProperty(event, "dataTransfer", { value: data })
+
+    document.dispatchEvent(event)
+
+    expect(parts).toEqual([{ type: "text", content: "dropped words", start: 0, end: 0 }])
     dispose()
   })
 
