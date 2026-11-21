@@ -150,6 +150,24 @@ test("export reports a missing session without a stack trace", async () => {
   }
 })
 
+test("import explains how to export JSON when given Markdown", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-import-markdown-"))
+  const file = path.join(root, "session.md")
+  try {
+    await fs.writeFile(file, "# Exported session\n\n## User\n\nHello\n")
+    const [stdout, stderr, exitCode] = await run(["session", "import", file, "--server", "http://127.0.0.1:1"])
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe("")
+    expect(stderr).toBe(
+      "Expected a JSON session export. Run opencode session export <session-id> or select JSON in the TUI's /export dialog." +
+        os.EOL,
+    )
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("import sends the file unchanged to the resolved location", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-import-"))
   const file = path.join(root, "session.json")
