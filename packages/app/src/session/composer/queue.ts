@@ -14,6 +14,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
+import { withdrawPrompt } from "../withdraw-prompt"
 import {
   createQueueState,
   editingID,
@@ -240,10 +241,12 @@ export function createSessionQueue(input: {
           sessionTitle: (id) => data.session.get(id)?.title,
         }),
         signal: progress.controller.signal,
-        cancelInboxItem: () => {
+        cancelInboxItem: async () => {
           progress.stage = "committed"
-
-          return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: operation.item.id })
+          const result = await data.session.sequence(input.sessionID, () =>
+            withdrawPrompt(server.api, input.sessionID, operation.item.id),
+          )
+          if (result === "delivered") throw new Error("Queued prompt was already delivered")
         },
       }).then(
         (prompt) =>
