@@ -30,6 +30,9 @@ export function useDeepLinks() {
     next.effects.forEach(run)
   }
 
+  // Each link opens after the one before it, so the tabs open in the order the links came and the last one is in front.
+  const opening = { last: Promise.resolve() }
+
   // A project that can't be added shows the server's error (`projects.add`); one that can opens in a new session.
   const run = (effect: DeepLinkEffect) => {
     const conn = untrack(own)
@@ -38,13 +41,17 @@ export function useDeepLinks() {
     if (!conn || !ctx) return
     const server = ServerConnection.key(conn)
 
-    void ctx.projects.add(effect.link.directory).then((project) => {
+    opening.last = opening.last.then(async () => {
+      const project = await ctx.projects.add(effect.link.directory)
+
       if (!project) return
 
       const prompt = effect.link.type === "new-session" ? effect.link.prompt : undefined
 
-      void tabs.newDraft({ server, directory: project.worktree }, prompt)
+      await tabs.newDraft({ server, directory: project.worktree }, prompt)
     })
+    // A tab that failed to open must not stop the links after it.
+    opening.last = opening.last.catch(() => undefined)
   }
 
   createEffect(() => {
