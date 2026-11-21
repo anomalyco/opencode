@@ -31,9 +31,13 @@ import launch from "cross-spawn"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem, path } from "./effect/app-node-platform.js"
 import { Teardown } from "./teardown.js"
+import { WindowsJob } from "./windows-job.js"
 
 /** Closing a child's scope escalates to SIGKILL after this, unless the command sets its own `forceKillAfter`. */
 export const RELEASE_FORCE_KILL_AFTER = "3 seconds"
+
+// On Windows each child runs in its own job object, the counterpart of a process group, until its scope closes.
+const jobs = new WeakMap<NodeChildProcess.ChildProcess, WindowsJob.Job>()
 
 // Process groups of running children. Exiting without stopping them (a shutdown deadline, a second signal, a
 // crash) would orphan them, so a synchronous exit hook kills whatever is left.
@@ -387,6 +391,9 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(file, command.args.map(unwrap), opts)
+      // Assign before the child gets far enough to start processes of its own.
+      const job = proc.pid === undefined || opts.detached ? undefined : WindowsJob.attach(proc.pid)
+      if (job) jobs.set(proc, job)
       let settle = () => {}
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
@@ -471,9 +478,17 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   ) => {
     if (globalThis.process.platform === "win32") {
       return Effect.callback<void, PlatformError.PlatformError>((resume) => {
+        // The kill takes over the job, so releasing the child cannot close it while taskkill runs.
+        const job = jobs.get(proc)
+        jobs.delete(proc)
+        // taskkill follows parent links. That reaches the children of a Microsoft Store app such as Store PowerShell
+        // 7, which Windows starts outside any job, so it runs first, while those links are intact. The job then
+        // ends the rest, including processes whose parent already exited.
         NodeChildProcess.exec(`taskkill /pid ${proc.pid} /T /F`, { windowsHide: true }, (err) => {
-          if (err) return resume(Effect.fail(toPlatformError("kill", toError(err), command)))
-          resume(Effect.void)
+          const killed = job?.kill()
+          job?.release()
+          if (killed || !err) return resume(Effect.void)
+          resume(Effect.fail(toPlatformError("kill", toError(err), command)))
         })
       })
     }
@@ -587,6 +602,9 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
                     Effect.gen(function* () {
                       // A detached descendant holding the pipes can keep "close" from ever firing.
                       settle()
+                      // As with a process group, what the command left running after it ended keeps running.
+                      jobs.get(proc)?.release()
+                      jobs.delete(proc)
                       yield* Deferred.succeed(stopOutput, undefined)
                       proc.stdout?.destroy()
                       proc.stderr?.destroy()

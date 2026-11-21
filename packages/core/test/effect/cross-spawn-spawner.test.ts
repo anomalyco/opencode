@@ -595,5 +595,94 @@ describe("cross-spawn spawner", () => {
         expect(out.trim().split(/\r?\n/)).toEqual(["one", "two"])
       }),
     )
+
+    // taskkill /T finds descendants through parent links, so it misses an orphan whose parent already exited.
+    const windows = process.platform === "win32" ? fx.live : fx.live.skip
+
+    windows(
+      "kills a descendant whose parent already exited",
+      Effect.gen(function* () {
+        // As the shell service does on a timeout: the kill runs on its own, and the exit ends the handle's scope.
+        const pid = yield* orphan("stay", (handle) =>
+          handle.kill().pipe(Effect.forkDetach, Effect.andThen(handle.exitCode)),
+        )
+        expect(yield* Effect.promise(() => gone(pid))).toBe(true)
+      }),
+      15_000,
+    )
+
+    windows(
+      "leaves a descendant running after the command exits",
+      Effect.gen(function* () {
+        const pid = yield* orphan("exit", (handle) => handle.exitCode)
+        expect(alive(pid)).toBe(true)
+      }),
+      15_000,
+    )
+
+    windows(
+      "kills a running command's descendants when its owner exits abruptly",
+      Effect.gen(function* () {
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const pidFile = path.join(tmp.path, "orphan.pid")
+        yield* Effect.addFinalizer(() => killFromFile(pidFile))
+        const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "../fixture/orphan-owner.ts"), pidFile], {
+          stdout: "pipe",
+          stderr: "inherit",
+        })
+        yield* Effect.promise(async () => {
+          const lines = owner.stdout.pipeThrough(new TextDecoderStream()).values()
+          for await (const text of lines) if (text.includes("ready")) return
+        })
+        const pid = Number(yield* Effect.promise(() => fs.readFile(pidFile, "utf8")))
+        expect(alive(pid)).toBe(true)
+        // TerminateProcess, as when opencode crashes or is ended from Task Manager: no exit hook runs.
+        owner.kill()
+        yield* Effect.promise(() => owner.exited)
+        expect(yield* Effect.promise(() => gone(pid))).toBe(true)
+      }),
+      15_000,
+    )
   })
 })
+
+// Runs orphan.cjs through cmd, then `finish` on its handle once its middle process has exited; returns the orphan's
+// PID after the handle's scope has closed.
+function orphan(
+  mode: "stay" | "exit",
+  finish: (handle: ChildProcessSpawner.ChildProcessHandle) => Effect.Effect<unknown, PlatformError.PlatformError>,
+) {
+  return Effect.gen(function* () {
+    const tmp = yield* Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    )
+    const pidFile = path.join(tmp.path, "orphan.pid")
+    yield* Effect.addFinalizer(() => killFromFile(pidFile))
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        // Through cmd, like a shell command: cmd exits as soon as taskkill reaches it.
+        const handle = yield* ChildProcess.make("cmd.exe", [
+          "/d",
+          "/c",
+          "node",
+          path.join(import.meta.dir, "../fixture/orphan.cjs"),
+          pidFile,
+          mode,
+        ])
+        yield* handle.stdout.pipe(Stream.take(1), Stream.runDrain)
+        yield* finish(handle)
+      }),
+    )
+    return Number(yield* Effect.promise(() => fs.readFile(pidFile, "utf8")))
+  })
+}
+
+function killFromFile(file: string) {
+  return Effect.tryPromise(async () => process.kill(Number(await fs.readFile(file, "utf8")), "SIGKILL")).pipe(
+    Effect.ignore,
+  )
+}
