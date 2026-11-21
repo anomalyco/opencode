@@ -85,7 +85,8 @@ pub enum Check {
     AtLeast(i64),
     Between(i64, i64),
     NonEmpty,
-    PairingUrl,
+    /// `parseServerURL`: an HTTP(S) URL without credentials, query or fragment, without trailing slashes.
+    ServerUrl,
 }
 
 impl Flag {
@@ -287,6 +288,7 @@ const LOGIN: &[Param] = &[
     Param::Flag(string("answer", "Provider form answer (key=value; repeat for multiple fields)").count(AT_MOST_100)),
 ];
 const MCP_NAME: &str = "Name of the MCP server";
+const MACHINE_NAME: &str = "Name of the machine";
 const KEY: &str = "Service setting or env";
 
 pub static ROOT: Spec = Spec::new("opencode", "OpenCode command line interface")
@@ -480,8 +482,17 @@ pub static ROOT: Spec = Spec::new("opencode", "OpenCode command line interface")
                 .params(&[Param::Arg(arg("key", KEY)), Param::Arg(optional("name", "Environment variable name"))]),
         ]),
         Spec::new("reload", "Reload configuration").globals(SERVER_FLAGS),
+        Spec::new("machine", "Manage remote machines").commands(&[
+            Spec::new("add", "Add a machine and print a one-time join string").params(&[
+                Param::Arg(arg("name", MACHINE_NAME)),
+                Param::Flag(string("url", "Use an external HTTP(S) server URL in the join string").check(Check::ServerUrl)),
+                Param::Flag(boolean("replace", "Replace the key of an already-paired machine")),
+            ]),
+            Spec::new("list", "List machines"),
+            Spec::new("remove", "Remove a machine").params(&[Param::Arg(arg("name", MACHINE_NAME))]),
+        ]),
         Spec::new("pair", "Print one-time links to connect a browser or app").params(&[
-            Param::Flag(string("url", "Use an external HTTP(S) server URL in pairing links").check(Check::PairingUrl)),
+            Param::Flag(string("url", "Use an external HTTP(S) server URL in pairing links").check(Check::ServerUrl)),
             Param::Flag(boolean(
                 "remote",
                 "Pair through the OpenTunnel remote address, enabling remote access if needed (exposes the server to the internet)",
@@ -623,6 +634,7 @@ pub enum Command {
     Session(SessionArgs),
     Service(ServiceArgs),
     Reload,
+    Machine(MachineArgs),
     Pair(PairArgs),
     Serve(ServeArgs),
 }
@@ -896,6 +908,30 @@ pub struct ServiceUnsetArgs {
 }
 
 #[derive(Debug)]
+pub struct MachineArgs {
+    pub command: Option<MachineCommand>,
+}
+
+#[derive(Debug)]
+pub enum MachineCommand {
+    Add(MachineAddArgs),
+    List,
+    Remove(MachineRemoveArgs),
+}
+
+#[derive(Debug)]
+pub struct MachineAddArgs {
+    pub name: String,
+    pub url: Option<String>,
+    pub replace: bool,
+}
+
+#[derive(Debug)]
+pub struct MachineRemoveArgs {
+    pub name: String,
+}
+
+#[derive(Debug)]
 pub struct PairArgs {
     pub url: Option<String>,
     pub remote: bool,
@@ -1083,6 +1119,18 @@ fn command(path: &[&str], v: &mut Values) -> Option<Command> {
             },
         }),
         ["reload"] => Command::Reload,
+        ["machine", rest @ ..] => Command::Machine(MachineArgs {
+            command: match rest {
+                [] => None,
+                ["add"] => Some(MachineCommand::Add(MachineAddArgs {
+                    name: v.text("name"),
+                    url: v.string("url"),
+                    replace: v.flag("replace"),
+                })),
+                ["list"] => Some(MachineCommand::List),
+                _ => Some(MachineCommand::Remove(MachineRemoveArgs { name: v.text("name") })),
+            },
+        }),
         ["pair"] => Command::Pair(PairArgs { url: v.string("url"), remote: v.flag("remote"), yes: v.flag("yes") }),
         _ => Command::Serve(ServeArgs),
     })

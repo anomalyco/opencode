@@ -39,5 +39,6 @@
   [36msession[0m            Manage sessions
   [36mservice[0m            Manage the background server
   [36mreload[0m             Reload configuration
+  [36mmachine[0m            Manage remote machines
   [36mpair[0m               Print one-time links to connect a browser or app
   [36mserve[0m              Start the v2 API and web server

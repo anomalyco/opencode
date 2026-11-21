@@ -130,6 +130,11 @@ impl DateTime {
         format!("{}:{:02} {}", self.hour12(), self.minute, self.meridiem())
     }
 
+    /// `%I:%M %p`: `toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })` in en-US.
+    pub fn two_digit_time(&self) -> String {
+        format!("{:02}:{:02} {}", self.hour12(), self.minute, self.meridiem())
+    }
+
     /// `%-m/%-d/%Y, %-I:%M:%S %p`.
     pub fn locale_string(&self) -> String {
         let (hour, minute, second) = (self.hour12(), self.minute, self.second);

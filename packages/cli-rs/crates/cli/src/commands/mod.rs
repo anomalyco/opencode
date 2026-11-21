@@ -4,6 +4,7 @@ pub mod auth;
 pub mod client;
 pub mod debug;
 pub mod default;
+pub mod machine;
 pub mod mcp;
 pub mod mini;
 pub mod models;
@@ -50,6 +51,7 @@ pub fn run(context: &Context, cli: &Cli) -> error::Result<()> {
         Command::Session(args) => session::run(context, args),
         Command::Service(args) => service::run(context, args),
         Command::Reload => reload::run(context),
+        Command::Machine(args) => machine::run(context, args),
         Command::Pair(args) => pair::run(context, args),
         Command::Serve(args) => serve::run(context, args),
     }

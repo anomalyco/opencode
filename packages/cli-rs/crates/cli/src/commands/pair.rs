@@ -48,10 +48,9 @@ async fn pair(local: &Local, args: &PairArgs) -> error::Result<()> {
     let found = local.ensure().await?;
     let endpoint = found.service.endpoint;
     let client = endpoint.client(local.transport())?;
-    let urls = match &args.url {
-        _ if args.remote => vec![remote_url(local, &client).await?],
-        Some(url) => vec![url.clone()],
-        None => client.server_info().await?.urls,
+    let urls = match args.remote {
+        true => vec![remote_url(local, &client).await?],
+        false => server_urls(&client, args.url.as_deref()).await?,
     };
     let pairing = client.server_pair().await?;
     print(&links(&urls, &pairing.code, pairing.expires_in))?;
@@ -62,6 +61,14 @@ async fn pair(local: &Local, args: &PairArgs) -> error::Result<()> {
         eprint!("{hint}");
     }
     Ok(())
+}
+
+/// `serverURLs`: the `--url` given, else the server's own URLs.
+pub(crate) async fn server_urls(client: &Client, url: Option<&str>) -> error::Result<Vec<String>> {
+    match url {
+        Some(url) => Ok(vec![url.to_owned()]),
+        None => Ok(client.server_info().await?.urls),
+    }
 }
 
 /// The links, and a QR code of the reachable ones, as TS prints them to stdout.
@@ -129,7 +136,7 @@ fn ssh_hint(endpoint: &str) -> Option<String> {
     )
 }
 
-fn is_loopback(hostname: &str) -> bool {
+pub(crate) fn is_loopback(hostname: &str) -> bool {
     hostname == "localhost" || hostname.ends_with(".localhost") || hostname.starts_with("127.") || hostname == "[::1]"
 }
 

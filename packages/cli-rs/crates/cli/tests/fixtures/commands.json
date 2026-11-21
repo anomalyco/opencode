@@ -115,6 +115,19 @@
     ]
    },
    {"name":"reload","aliases":[],"description":"Reload configuration","globalFlags":["standalone","server"],"arguments":[],"flags":[],"commands":[]},
+   {
+    "name": "machine",
+    "aliases": [],
+    "description": "Manage remote machines",
+    "globalFlags": [],
+    "arguments": [],
+    "flags": [],
+    "commands": [
+     {"name":"add","aliases":[],"description":"Add a machine and print a one-time join string","globalFlags":[],"arguments":[{"name":"name","type":"String","choices":[],"description":"Name of the machine","optional":false,"variadic":false}],"flags":[{"name":"url","aliases":[],"type":"String","choices":[],"description":"Use an external HTTP(S) server URL in the join string","hidden":false,"optional":true,"repeated":false,"optionalValue":false},{"name":"replace","aliases":[],"type":"Boolean","choices":[],"description":"Replace the key of an already-paired machine","hidden":false,"optional":true,"repeated":false,"optionalValue":false,"default":false}],"commands":[]},
+     {"name":"list","aliases":[],"description":"List machines","globalFlags":[],"arguments":[],"flags":[],"commands":[]},
+     {"name":"remove","aliases":[],"description":"Remove a machine","globalFlags":[],"arguments":[{"name":"name","type":"String","choices":[],"description":"Name of the machine","optional":false,"variadic":false}],"flags":[],"commands":[]}
+    ]
+   },
    {"name":"pair","aliases":[],"description":"Print one-time links to connect a browser or app","globalFlags":[],"arguments":[],"flags":[{"name":"url","aliases":[],"type":"String","choices":[],"description":"Use an external HTTP(S) server URL in pairing links","hidden":false,"optional":true,"repeated":false,"optionalValue":false},{"name":"remote","aliases":[],"type":"Boolean","choices":[],"description":"Pair through the OpenTunnel remote address, enabling remote access if needed (exposes the server to the internet)","hidden":false,"optional":true,"repeated":false,"optionalValue":false,"default":false},{"name":"yes","aliases":["y"],"type":"Boolean","choices":[],"description":"Accept exposing the server to the internet when --remote enables remote access for the first time (required without an interactive terminal)","hidden":false,"optional":true,"repeated":false,"optionalValue":false,"default":false}],"commands":[]},
    {"name":"serve","aliases":[],"description":"Start the v2 API and web server","globalFlags":[],"arguments":[],"flags":[{"name":"hostname","aliases":[],"type":"String","choices":[],"description":"","hidden":false,"optional":true,"repeated":false,"optionalValue":false},{"name":"port","aliases":[],"type":"Int","choices":[],"description":"","hidden":false,"optional":true,"repeated":false,"optionalValue":false},{"name":"cors","aliases":[],"type":"String","choices":[],"description":"Additional allowed CORS origin (repeat for multiple origins)","hidden":false,"optional":true,"repeated":true,"min":0,"optionalValue":false},{"name":"service","aliases":[],"type":"Boolean","choices":[],"description":"","hidden":false,"optional":true,"repeated":false,"optionalValue":false,"default":false},{"name":"stdio","aliases":[],"type":"Boolean","choices":[],"description":"","hidden":false,"optional":true,"repeated":false,"optionalValue":false,"default":false}],"commands":[]}
   ]

@@ -31,7 +31,7 @@ fn every_command() -> Vec<Vec<&'static Spec>> {
 #[test]
 fn help_matches_the_typescript_cli() {
     let paths = every_command();
-    assert_eq!(paths.len(), 49);
+    assert_eq!(paths.len(), 53);
     for path in paths {
         let name = parse::command_path(&path, PROGRAM).join(" ");
         let expected = std::fs::read_to_string(fixtures().join(format!("help/{name}.txt"))).unwrap();
