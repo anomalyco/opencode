@@ -222,6 +222,10 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
   const register = (win: BrowserWindow, id: string) => {
     registry.register(id, win)
     win.on("focus", () => registry.focused(id))
+
+    // The first window is created and shown focused before it is registered, so its focus event has already passed.
+    if (win.isFocused()) registry.focused(id)
+
     // Windows emits session-end, but not before-quit, during shutdown and logoff.
     win.on("session-end", input.sessionEnding)
     win.on("closed", () => {
