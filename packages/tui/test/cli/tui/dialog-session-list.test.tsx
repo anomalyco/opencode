@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
+import path from "node:path"
 import { DialogSessionList } from "../../../src/component/dialog-session-list"
 import { ConfigProvider } from "../../../src/config"
 import { ArgsProvider } from "../../../src/context/args"
@@ -23,7 +24,7 @@ import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
-test("scopes sessions to the active session location", async () => {
+test.each([false, true])("scopes sessions to the active session location (pinned: %s)", async (withPins) => {
   const active = "/tmp/opencode/project-b"
   const events = createEventStream()
   const requestedProjects: string[] = []
@@ -32,6 +33,21 @@ test("scopes sessions to the active session location", async () => {
       const directory = url.searchParams.get("location[directory]") ?? process.cwd()
       const project = directory === active ? "proj_b" : "proj_a"
       return json({ directory, project: { id: project, directory, canonical: directory } })
+    }
+    if (url.pathname === "/api/session/ses_older" || url.pathname === "/api/session/ses_other") {
+      const id = url.pathname.split("/").at(-1)
+      const inProject = id === "ses_older"
+      return json({
+        data: {
+          id,
+          projectID: inProject ? "proj_b" : "proj_a",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 1 },
+          title: inProject ? "Older pinned session" : "Other project pin",
+          location: { directory: inProject ? active : process.cwd() },
+        },
+      })
     }
     if (url.pathname !== "/api/session") return undefined
     // Family syncs list children by parentID; only project-scoped list requests matter here.
@@ -55,6 +71,9 @@ test("scopes sessions to the active session location", async () => {
     })
   }, events)
   const temporary = await tmpdir()
+  if (withPins) {
+    await Bun.write(path.join(temporary.path, "session.json"), JSON.stringify({ pinned: ["ses_older", "ses_other"] }))
+  }
   let storage!: ReturnType<typeof useStorage>
 
   function Probe() {
@@ -84,7 +103,7 @@ test("scopes sessions to the active session location", async () => {
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
           <StorageProvider>
             <ArgsProvider>
-              <ConfigProvider config={createTuiResolvedConfig()}>
+              <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: false } })}>
                 <Keymap.Provider>
                   <ToastProvider>
                     <RouteProvider>
@@ -119,8 +138,11 @@ test("scopes sessions to the active session location", async () => {
   app.renderer.start()
 
   try {
-    const frame = await app.waitForFrame((value) => value.includes("Project B session"))
+    const frame = await app.waitForFrame(
+      (value) => value.includes("Project B session") && (!withPins || value.includes("Older pinned session")),
+    )
     expect(frame).not.toContain("Project A session")
+    expect(frame).not.toContain("Other project pin")
     expect(requestedProjects.at(-1)).toBe("proj_b")
   } finally {
     app.renderer.destroy()
