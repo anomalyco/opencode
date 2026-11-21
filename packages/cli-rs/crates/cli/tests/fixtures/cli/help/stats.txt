@@ -1,0 +1,27 @@
+[1mDESCRIPTION[0m
+  Show shareable usage statistics
+
+[1mUSAGE[0m
+  [36mopencode stats [flags][0m
+
+[1mFLAGS[0m
+  [32m--days[0m [2minteger[0m      Show the last N days; 0 means today
+  [32m--year[0m [2minteger[0m      Show a calendar year
+  [32m--all[0m               Show lifetime statistics
+  [32m--project[0m [2mstring[0m    Filter by project ID, or use "." for the current project
+  [32m--models[0m            Show model usage
+  [32m--tools[0m             Show tool reliability
+  [32m--cost[0m              Show cost and token details
+  [32m--full[0m              Show every detailed section
+  [32m--limit[0m [2minteger[0m     Number of rows in detailed sections
+  [32m--json[0m              Output statistics as JSON
+
+[1mGLOBAL FLAGS[0m
+  [32m--help[0m, [32m-h[0m                                                          Show help information
+  [32m--version[0m, [32m-v[0m                                                       Show version information
+  [32m--wizard[0m                                                            Start wizard mode for a command
+  [32m--completions[0m [2m<bash|zsh|fish|powershell|sh|pwsh>[0m                    Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)
+  [32m--log-level[0m [2m<all|trace|debug|info|warn|warning|error|fatal|none>[0m    Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)
+  [32m--print-logs[0m                                                        Print logs to stderr (server logs require --standalone)
+  [32m--standalone[0m                                                        Run with a private server instead of the background service
+  [32m--server[0m [2mstring[0m                                                     Connect to a server URL instead of the background service

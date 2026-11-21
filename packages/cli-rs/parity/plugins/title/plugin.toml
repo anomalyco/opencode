@@ -1,0 +1,7 @@
+# The P0b title plugin's opencode-native side, which parity/scenarios/P.0b/fixture.ts installs beside `tui.ts`: the TS
+# client loads `tui.ts`, opencode-native this Luau plugin.
+id = "parity.title"
+name = "P0b title"
+version = "0.1.0"
+contract = "2.0"
+description = "Sets the terminal title, and runs programs in the foreground"
