@@ -52,11 +52,12 @@ export const Plugin = define({
           const alias = aliased.get(event.id)
           if (alias === undefined) return
           aliased.delete(event.id)
-          // A tool this request only offers inside Code Mode ran as an execute program.
+          // A tool this request only offers inside Code Mode ran as an execute program. Hooks see execute by its registry
+          // name, which a session context hook may advertise under another, so the note doesn't name it.
           const note =
             event.tool === alias.tool
               ? `There is no "${alias.called}" tool, so this ran as "${alias.tool}". Call "${alias.tool}" directly.`
-              : `There is no "${alias.called}" tool, so this ran as "${alias.tool}" inside "${event.tool}". Call it there.`
+              : `There is no "${alias.called}" tool, so this ran as "${alias.tool}" inside a Code Mode program. Call it there.`
           if (event.status === "error") {
             event.error = new ToolFailure({
               message: `${event.error.message}\n\n${note}`,

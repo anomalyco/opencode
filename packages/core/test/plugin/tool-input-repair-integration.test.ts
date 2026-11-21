@@ -113,7 +113,7 @@ it.effect("runs a call to another harness's tool name as the matching Code Mode 
     expect(executed).toEqual([{ command: "ls", timeout: 5000 }])
     expect(result.content.at(-1)).toEqual({
       type: "text",
-      text: 'There is no "bash" tool, so this ran as "shell" inside "execute". Call it there.',
+      text: 'There is no "bash" tool, so this ran as "shell" inside a Code Mode program. Call it there.',
     })
   }),
 )
