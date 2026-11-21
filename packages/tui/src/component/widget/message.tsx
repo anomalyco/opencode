@@ -6,6 +6,7 @@ import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Swi
 import { createStore } from "solid-js/store"
 import { Keymap } from "../../context/keymap"
 import { useLog } from "../../context/log"
+import { useTuiDevMode } from "../../context/runtime"
 import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
 import { SplitBorder } from "../../ui/border"
@@ -54,6 +55,7 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
   const keymap = Keymap.use()
   const renderer = useRenderer()
   const log = useLog({ component: "widget" })
+  const dev = useTuiDevMode()
   const dismissShortcut = Keymap.useShortcut("app.exit")
   const [store, setStore] = createStore<{
     view?: Node
@@ -98,7 +100,8 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
         .catch((error) => {
           if (!current) return
           setStore("failure", stepMessage(error))
-          report("init", error)
+          if (error instanceof StepError) report("init", error)
+          else clientError("failed to load a widget program", error)
         })
     }),
   )
@@ -129,12 +132,35 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
       })
   }
 
-  // The server never runs templates, so a failing step goes back to the agent, which can fix the template.
+  // The server never runs templates, so a program error (a StepError: the template's code failed or broke a contract)
+  // goes back to the server, which tells the agent when the template is this Session's. Anything else is a client
+  // error: logged in dev builds, never reported (widgets.md, Failures).
   function report(phase: "init" | "event", error: unknown) {
-    if (!(error instanceof StepError) || status() !== "open") return
+    if (!(error instanceof StepError)) return clientError("a widget step failed", error)
+    if (status() !== "open") return
     void backend
       .report({ widget: props.message, error: { phase, ...stepPosition(error.message, source.lines) } })
-      .catch((cause) => log.warn("failed to report a widget error", { cause: errorMessage(cause) }))
+      .catch((cause) => clientError("failed to report a widget error", cause))
+  }
+
+  const failure = () => (status() === "open" ? props.message.failure : undefined)
+  const [asking, setAsking] = createSignal(false)
+  function ask() {
+    const recorded = failure()
+    if (!recorded || recorded.sent || asking()) return
+    const { client: _, sent: __, ...error } = recorded
+    setAsking(true)
+    void backend
+      .report({ widget: props.message, error, ask: true })
+      .catch((cause) => {
+        clientError("failed to ask the agent about a widget error", cause)
+        setStore("error", errorMessage(cause))
+      })
+      .finally(() => setAsking(false))
+  }
+
+  function clientError(message: string, cause: unknown) {
+    if (dev) log.warn(message, { template: props.message.template.name, cause: errorMessage(cause) })
   }
 
   function send(value: JsonValue, wake: boolean) {
@@ -224,6 +250,31 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
             </text>
           )}
         </Show>
+        <Show when={failure()}>
+          {(recorded) => (
+            <>
+              <Show when={!store.failure && !store.error}>
+                <text fg={theme.text.feedback.error.base} wrapMode="word">
+                  Failed on {recorded().client}: {failureText(recorded())}
+                </text>
+              </Show>
+              <Show
+                when={!recorded().sent}
+                fallback={<text fg={theme.text.muted}>The agent was told about this error.</text>}
+              >
+                <text
+                  fg={theme.text.action.secondary.base}
+                  onMouseUp={(event) => {
+                    event.stopPropagation()
+                    ask()
+                  }}
+                >
+                  {asking() ? "Asking the agent…" : "▸ Ask agent to fix it"}
+                </text>
+              </Show>
+            </>
+          )}
+        </Show>
         <Switch>
           <Match when={status() === "submitted"}>
             <text fg={theme.text.feedback.success.base} wrapMode="word">
@@ -271,6 +322,19 @@ function liveAlt(data: unknown) {
 
 // The interpreter counts lines in the whole program, prelude included; reports count them in the template source.
 const preludeLines = program("").split("\n").length - 1
+
+function failureText(failure: {
+  readonly phase: string
+  readonly message: string
+  readonly line?: number
+  readonly column?: number
+}) {
+  const position =
+    failure.line === undefined
+      ? ""
+      : ` (line ${failure.line}${failure.column === undefined ? "" : `, col ${failure.column}`})`
+  return `${failure.phase}: ${failure.message}${position}`
+}
 
 function stepPosition(message: string, lines: number) {
   const position = /\(line (\d+), col (\d+)\)$/.exec(message)

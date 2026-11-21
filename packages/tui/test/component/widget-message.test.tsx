@@ -33,6 +33,7 @@ async function render(
 ) {
   const responses: WidgetResponse[] = []
   const reports: Parameters<WidgetBackend["report"]>[0]["error"][] = []
+  const asks: Parameters<WidgetBackend["report"]>[0]["error"][] = []
   const [message, setMessage] = createSignal({ ...widgetFixtureMessage(name, options.status), ...options.widget })
   const backend: WidgetBackend = {
     program: options.program ?? ((template) => cached(template, () => Promise.reject(new Error("not a built-in")))),
@@ -46,6 +47,13 @@ async function render(
     },
     async send() {},
     async report(input) {
+      if (input.ask) {
+        asks.push(input.error)
+        setMessage((current) =>
+          current.failure ? { ...current, failure: { ...current.failure, sent: true } } : current,
+        )
+        return
+      }
       reports.push(input.error)
     },
   }
@@ -73,7 +81,7 @@ async function render(
     ),
     { width: options.width ?? 100, height: 48, kittyKeyboard: true },
   )
-  return { ...setup, responses, reports, message, [Symbol.dispose]: () => setup.renderer.destroy() }
+  return { ...setup, responses, reports, asks, message, [Symbol.dispose]: () => setup.renderer.destroy() }
 }
 
 async function frame(setup: Awaited<ReturnType<typeof render>>, matches: (frame: string) => boolean) {
@@ -98,6 +106,22 @@ test("a superseded widget is one line pointing to its replacement", async () => 
   using setup = await render("confirm", { status: "superseded" })
   const current = await frame(setup, (current) => current.includes("Updated below"))
   expect(current).not.toContain("Confirm")
+})
+
+test("a failure the agent wasn't told about offers to ask it, once", async () => {
+  using setup = await render("confirm", {
+    widget: {
+      failure: { phase: "view", message: "data.items is undefined", line: 3, column: 7, client: "rune", sent: false },
+    },
+  })
+  const shown = await frame(setup, (current) => current.includes("Ask agent to fix it"))
+  expect(shown).toContain("Failed on rune: view: data.items is undefined (line 3, col 7)")
+  const lines = shown.split("\n")
+  const y = lines.findIndex((line) => line.includes("Ask agent to fix it"))
+  await setup.mockMouse.click(lines[y]!.indexOf("Ask agent"), y)
+  await frame(setup, (current) => current.includes("The agent was told about this error."))
+  expect(setup.asks).toEqual([{ phase: "view", message: "data.items is undefined", line: 3, column: 7 }])
+  expect(setup.reports).toEqual([])
 })
 
 test("a live widget points to desktop and mobile instead of running", async () => {

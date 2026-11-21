@@ -27,6 +27,8 @@ export type WidgetInfo = {
   readonly status: Widget.Status
   readonly response?: unknown
   readonly wait: boolean
+  /** The program error the server recorded (widgets.md, Failures). */
+  readonly failure?: Widget.Failure
 }
 
 export type WidgetResponse = { value: JsonValue } | { dismiss: true }
@@ -39,8 +41,11 @@ export type WidgetBackend = {
   respond: (input: { widget: WidgetInfo; response: WidgetResponse }) => Promise<void>
   /** Sends a non-final value from `send(...)`; the widget stays open. */
   send: (input: { widget: WidgetInfo; value: JsonValue; wake: boolean }) => Promise<void>
-  /** Tells the agent this client failed running the widget (client name "tui"). */
-  report: (input: { widget: WidgetInfo; error: Widget.RuntimeError }) => Promise<void>
+  /**
+   * Reports a program error (client name "tui"); `ask` sends it to the agent when the server didn't (the user's
+   * "Ask agent to fix it").
+   */
+  report: (input: { widget: WidgetInfo; error: Widget.RuntimeError; ask?: boolean }) => Promise<void>
 }
 
 export const widgetKey = (messageID: string, callID: string) => `${messageID}:${callID}`
@@ -64,6 +69,7 @@ export function widgetInfo(
     status: state.status,
     response: state.response,
     wait: state.wait,
+    ...(state.failure === undefined ? {} : { failure: state.failure }),
   }
 }
 
@@ -193,6 +199,7 @@ export function useWidgetBackend(): WidgetBackend {
             callID: input.widget.callID,
             error: input.error,
             client: "tui",
+            ...(input.ask ? { ask: true } : {}),
           },
           options(input.widget),
         )
