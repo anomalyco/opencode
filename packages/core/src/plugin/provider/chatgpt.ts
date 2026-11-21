@@ -91,6 +91,9 @@ type RemoteModel = typeof RemoteModel.Type
 const RemoteModels = Schema.Struct({ models: Schema.Array(RemoteModel) })
 const decodeCachedModels = Schema.decodeUnknownOption(Schema.Array(RemoteModel))
 
+const decodeInvalidGrant = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ error: Schema.Literal("invalid_grant") })),
+)
 const decodeMetadata = Schema.decodeUnknownOption(
   Schema.Struct({
     clientID: Schema.String,
@@ -399,21 +402,25 @@ function exchange(code: string, clientID: string, redirect: string, pkce: Pkce, 
   })
 }
 
-function refresh(value: Credential.OAuth, app: App.Info) {
+export function refresh(value: Credential.OAuth, app: App.Info, url = tokenURL) {
   return Effect.gen(function* () {
     const metadata = Option.getOrUndefined(decodeMetadata(value.metadata))
     if (!metadata)
       return yield* Effect.fail(new Error("This ChatGPT connection has no registered client ID. Connect again."))
-    const tokens = yield* request<TokenResponse>(tokenURL, {
-      method: "POST",
-      headers: headers(app),
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        client_id: metadata.clientID,
-        refresh_token: value.refresh,
-        resource,
-      }).toString(),
-    })
+    const tokens = yield* request<TokenResponse>(
+      url,
+      {
+        method: "POST",
+        headers: headers(app),
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: metadata.clientID,
+          refresh_token: value.refresh,
+          resource,
+        }).toString(),
+      },
+      "This ChatGPT sign-in has expired or was revoked. Connect again.",
+    )
     return credential(tokens, metadata.clientID, metadata.scopes)
   })
 }
@@ -519,12 +526,14 @@ export function verifyIDToken(
   })
 }
 
-function request<A>(url: string, init: RequestInit) {
+// `rejected` replaces the error when OpenAI answers invalid_grant, which means different things per grant type.
+function request<A>(url: string, init: RequestInit, rejected?: string) {
   return Effect.tryPromise({
     try: async (signal) => {
       const response = await fetch(url, { ...init, signal })
-      if (!response.ok) throw new Error(`Request failed: ${response.status}`)
-      return response.json() as Promise<A>
+      if (response.ok) return response.json() as Promise<A>
+      if (rejected && Option.isSome(decodeInvalidGrant(await response.text()))) throw new Error(rejected)
+      throw new Error(`Request failed: ${response.status}`)
     },
     catch: (cause) => cause,
   })
