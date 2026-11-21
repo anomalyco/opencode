@@ -303,6 +303,20 @@ describe("ShellParse", () => {
     expect(direct.commands[0]?.save).toBe("/usr/bin/sudo rm *")
   })
 
+  test("normalizes a quoted escalation wrapper before the wrapper check", async () => {
+    const quotedPath = await Effect.runPromise(ShellParse.scan('"/usr/bin/sudo" rm -rf /', "/bin/bash", "/workspace"))
+    expect(quotedPath.commands[0]?.save).toBe('"/usr/bin/sudo" rm *')
+
+    const quotedBare = await Effect.runPromise(ShellParse.scan('"sudo" rm -rf /', "/bin/bash", "/workspace"))
+    expect(quotedBare.commands[0]?.save).toBe('"sudo" rm *')
+
+    const trailingSlash = await Effect.runPromise(ShellParse.scan("/usr/bin/sudo/ rm -rf /", "/bin/bash", "/workspace"))
+    expect(trailingSlash.commands[0]?.save).toBe("/usr/bin/sudo/ rm *")
+
+    const quotedArity = await Effect.runPromise(ShellParse.scan('"git" status', "/bin/bash", "/workspace"))
+    expect(quotedArity.commands[0]?.save).toBe('"git" status *')
+  })
+
   test("saves nothing when the exact command contains a wildcard character", async () => {
     // Wildcard.match has no escape for `*` or `?`, so an exact save containing them would still match other
     // commands; the caller persists no rule when the save is empty.

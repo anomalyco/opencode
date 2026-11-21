@@ -95,7 +95,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       "bash",
       'npm "run" test',
       {},
-      { commands: [{ resource: 'npm "run" test', save: 'npm "run" *' }], directories: [] },
+      { commands: [{ resource: 'npm "run" test', save: 'npm "run" test *' }], directories: [] },
     ],
     ["bash", "git '*'", {}, { commands: [{ resource: "git '*'", save: "git '*' *" }], directories: [] }],
     [

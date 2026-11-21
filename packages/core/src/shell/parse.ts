@@ -750,16 +750,23 @@ const COMMAND_RUNNERS = new Set([
 ])
 
 // Path-qualified and version-qualified tokens (`/bin/bash`, `python3.13`) resolve to the same command as
-// their bare names, so callers normalize before set membership checks.
+// their bare names, so callers normalize before set membership checks. Raw words keep shell quoting, so a
+// fully quoted token (`"/usr/bin/sudo"`) loses its quotes here, and a trailing slash (`/usr/bin/sudo/`)
+// would otherwise leave an empty final segment.
 function commandBase(token: string): string {
-  return (token.split(/[\\/]/).pop() ?? "").toLowerCase().replace(/\.exe$/, "")
+  const quoted =
+    token.length >= 2 &&
+    ((token.startsWith(`"`) && token.endsWith(`"`)) || (token.startsWith(`'`) && token.endsWith(`'`)))
+      ? token.slice(1, -1)
+      : token
+  return (quoted.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "").toLowerCase().replace(/\.exe$/, "")
 }
 
 function prefix(tokens: string[]): string[] {
   const head = tokens[0] ? commandBase(tokens[0]) : undefined
   if (head && ESCALATION_WRAPPERS.has(head)) return escalationPrefix(tokens, head)
   for (let length = Math.min(tokens.length, PREFIX_LENGTH); length > 0; length--) {
-    const arity = ARITY[tokens.slice(0, length).join(" ")]
+    const arity = ARITY[tokens.slice(0, length).map(commandBase).join(" ")]
     if (arity !== undefined) return tokens.slice(0, arity)
   }
   return tokens.slice(0, 1)
