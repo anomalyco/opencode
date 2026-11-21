@@ -61,11 +61,14 @@ export type HomeSelectionState =
       readonly status: "verifying"
       readonly server: ServerConnection.Key
       readonly directory: string
+      readonly projectID: string | undefined
     })
   | (HomeSelectionBase & {
       readonly status: "ready"
       readonly server: ServerConnection.Key
       readonly project: HomeProjectItem | undefined
+      /** The directory the user chose, which may be a sibling clone the server lists only under its canonical path. */
+      readonly directory: string | undefined
     })
   | { readonly status: "disposed" }
 
@@ -132,7 +135,10 @@ export function transitionHomeSelection(state: HomeSelectionState, event: HomeSe
 
     if (!entry || !project) return { state, effects: NONE }
 
-    return choose(state, toggleHomeProjectSelection(selectHomeSelection(state), entry.key, project.worktree))
+    return choose(
+      state,
+      toggleHomeProjectSelection(selectHomeSelection(state), entry.key, project.worktree, project.id),
+    )
   }
 
   if (event.type === "project.add") {
@@ -150,7 +156,11 @@ export function transitionHomeSelection(state: HomeSelectionState, event: HomeSe
 
     if (!event.project) return { state: { ...state, adding: undefined }, effects: NONE }
 
-    return choose(state, { server: state.adding.server, directory: event.project.worktree })
+    return choose(state, {
+      server: state.adding.server,
+      directory: event.project.worktree,
+      projectID: event.project.id,
+    })
   }
 
   const sync = state.worktrees
@@ -167,10 +177,13 @@ export function transitionHomeSelection(state: HomeSelectionState, event: HomeSe
 export function selectHomeSelection(state: HomeSelectionState): HomeProjectSelection {
   if (state.status === "disposed") return {}
 
-  if (state.status === "verifying") return { server: state.server, directory: state.directory }
+  if (state.status === "verifying") return selection(state.server, state.directory, state.projectID)
 
-  if (state.status === "ready")
-    return state.project ? { server: state.server, directory: state.project.worktree } : { server: state.server }
+  if (state.status === "ready") {
+    const canonical = !!state.directory && !!state.project && pathKey(state.directory) === pathKey(state.project.worktree)
+
+    return selection(state.server, state.directory, canonical ? undefined : state.project?.id)
+  }
 
   const target = state.override ?? state.stored
   const entry = state.servers.find((server) => server.key === target.server)
@@ -179,18 +192,24 @@ export function selectHomeSelection(state: HomeSelectionState): HomeProjectSelec
 
   if (!target.directory) return { server: entry.key }
 
-  return { server: entry.key, directory: findProject(entry, target.directory)?.worktree ?? target.directory }
+  const project = findProject(entry, target.directory)
+
+  return selection(entry.key, project?.worktree ?? target.directory, target.projectID)
 }
 
 export function sameHomeSelection(a: HomeProjectSelection | undefined, b: HomeProjectSelection | undefined) {
-  return a?.server === b?.server && a?.directory === b?.directory
+  return a?.server === b?.server && a?.directory === b?.directory && a?.projectID === b?.projectID
 }
 
 function synced(state: LiveState, env: HomeEnvSnapshot): HomeSelectionTransition {
   const servers = sameServers(state.servers, env.servers) ? state.servers : env.servers
 
   if (state.status === "hydrating") {
-    const next = { ...state, servers, stored: selection(env.stored.server, env.stored.directory) }
+    const next = {
+      ...state,
+      servers,
+      stored: selection(env.stored.server, env.stored.directory, env.stored.projectID),
+    }
 
     // Until everything loaded, the stored server may be missing only because its source has not reported yet.
     if (!env.hydrated) return finish(state, next, NONE)
@@ -204,7 +223,9 @@ function synced(state: LiveState, env: HomeEnvSnapshot): HomeSelectionTransition
   const next = {
     ...state,
     servers,
-    stored: external ? selection(env.stored.server, env.stored.directory) : state.stored,
+    stored: external
+      ? selection(env.stored.server, env.stored.directory, env.stored.projectID)
+      : state.stored,
     adding: external ? undefined : state.adding,
   }
 
@@ -214,7 +235,11 @@ function synced(state: LiveState, env: HomeEnvSnapshot): HomeSelectionTransition
 // A selection the user made: it wins over a project add still running.
 function choose(state: LiveState, target: HomeProjectSelection): HomeSelectionTransition {
   if (state.status === "hydrating")
-    return finish(state, { ...state, adding: undefined, override: selection(target.server, target.directory) }, NONE)
+    return finish(
+      state,
+      { ...state, adding: undefined, override: selection(target.server, target.directory, target.projectID) },
+      NONE,
+    )
 
   return place(state, { ...state, adding: undefined }, target)
 }
@@ -237,13 +262,33 @@ function place(prev: LiveState, base: HomeSelectionBase, target: HomeProjectSele
 
   const next: LiveState = (() => {
     // The selected server is gone: its directory belonged to it, so only the first server is kept.
-    if (!entry) return { ...fields, status: "ready", server: first.key, project: undefined }
+    if (!entry) return { ...fields, status: "ready", server: first.key, project: undefined, directory: undefined }
 
-    if (!target.directory) return { ...fields, status: "ready", server: entry.key, project: undefined }
+    if (!target.directory)
+      return { ...fields, status: "ready", server: entry.key, project: undefined, directory: undefined }
 
-    if (!entry.projectsReady) return { ...fields, status: "verifying", server: entry.key, directory: target.directory }
+    if (!entry.projectsReady)
+      return {
+        ...fields,
+        status: "verifying",
+        server: entry.key,
+        directory: target.directory,
+        projectID: target.projectID,
+      }
 
-    return { ...fields, status: "ready", server: entry.key, project: findProject(entry, target.directory) }
+    const byPath = findProject(entry, target.directory)
+    const project = byPath ?? entry.usedProjects.find((item) => item.id === target.projectID)
+
+    // A directory without a used project is not selectable, even when other projects remain.
+    if (!project) return { ...fields, status: "ready", server: entry.key, project: undefined, directory: undefined }
+
+    return {
+      ...fields,
+      status: "ready",
+      server: entry.key,
+      project,
+      directory: byPath ? project.worktree : target.directory,
+    }
   })()
 
   const persisted = selectHomeSelection(next)
@@ -280,7 +325,9 @@ function worktreeTarget(state: LiveState) {
   const entry = state.servers.find((server) => server.key === current.server)
 
   if (!entry?.connected || !current.directory) return
-  const project = findProject(entry, current.directory)
+
+  const project =
+    findProject(entry, current.directory) ?? entry.usedProjects.find((item) => item.id === current.projectID)
 
   if (!project) return
 
@@ -301,10 +348,16 @@ function sameState(a: LiveState, b: LiveState) {
   if (a.status === "hydrating" && b.status === "hydrating")
     return a.override === b.override || (!!a.override && !!b.override && sameHomeSelection(a.override, b.override))
 
-  if (a.status === "verifying" && b.status === "verifying") return a.server === b.server && a.directory === b.directory
+  if (a.status === "verifying" && b.status === "verifying")
+    return a.server === b.server && a.directory === b.directory && a.projectID === b.projectID
 
   if (a.status === "ready" && b.status === "ready")
-    return a.server === b.server && a.project?.id === b.project?.id && a.project?.worktree === b.project?.worktree
+    return (
+      a.server === b.server &&
+      a.directory === b.directory &&
+      a.project?.id === b.project?.id &&
+      a.project?.worktree === b.project?.worktree
+    )
 
   return false
 }
@@ -337,8 +390,14 @@ function findProject(server: HomeServerSnapshot, directory: string) {
 }
 
 // A new object every time: `layout.home.setSelection` reconciles it into the layout store.
-function selection(server: ServerConnection.Key | undefined, directory: string | undefined): HomeProjectSelection {
+function selection(
+  server: ServerConnection.Key | undefined,
+  directory: string | undefined,
+  projectID: string | undefined,
+): HomeProjectSelection {
   if (!server) return {}
 
-  return directory ? { server, directory } : { server }
+  if (!directory) return { server }
+
+  return projectID ? { server, directory, projectID } : { server, directory }
 }

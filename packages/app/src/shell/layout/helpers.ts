@@ -16,10 +16,11 @@ export function toggleHomeProjectSelection(
   current: HomeProjectSelection | undefined,
   server: ServerConnection.Key,
   directory: string,
+  projectID?: string,
 ): HomeProjectSelection {
   if (current?.server === server && current.directory === directory) return { server }
 
-  return { server, directory }
+  return projectID ? { server, directory, projectID } : { server, directory }
 }
 
 export function homeProjectDirectories(result: string | string[] | null) {
