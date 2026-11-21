@@ -304,10 +304,13 @@ test("spells Bedrock Converse effort for Grok and Nova", () => {
 
 test("spells Claude variants for a Bedrock application inference profile ARN", () => {
   const arn = "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123"
-  const arnModel = (family: string, output?: number) =>
-    model("@opencode/ai/providers/amazon-bedrock", arn, output, "test", family)
-
-  expect(resolve(arnModel("claude-opus-4-6"), [{ type: "effort", values: ["low", "high"] }])).toEqual([
+  // The ARN carries no Anthropic marker, so model.family detects Claude; the ARN carries no
+  // Claude version either, so the effort spelling is adaptive rather than budget thinking.
+  expect(
+    resolve(model("@opencode/ai/providers/amazon-bedrock", arn, undefined, "test", "claude-sonnet"), [
+      { type: "effort", values: ["low"] },
+    ]),
+  ).toEqual([
     {
       id: "low",
       body: {
@@ -317,33 +320,6 @@ test("spells Claude variants for a Bedrock application inference profile ARN", (
         },
       },
     },
-    {
-      id: "high",
-      body: {
-        additionalModelRequestFields: {
-          thinking: { type: "adaptive", display: "summarized" },
-          output_config: { effort: "high" },
-        },
-      },
-    },
-  ])
-
-  // The family names Claude Sonnet 4.5, which spells manual thinking rather than adaptive.
-  expect(resolve(arnModel("claude-sonnet-4-5"), [{ type: "effort", values: ["low"] }])).toEqual([
-    { id: "low", body: { additionalModelRequestFields: { output_config: { effort: "low" } } } },
-  ])
-
-  expect(resolve(arnModel("claude"), [{ type: "toggle" }])).toEqual([
-    { id: "none", body: { additionalModelRequestFields: { thinking: { type: "disabled" } } } },
-    {
-      id: "thinking",
-      body: { additionalModelRequestFields: { thinking: { type: "adaptive", display: "summarized" } } },
-    },
-  ])
-
-  expect(resolve(arnModel("claude", 64_000), [{ type: "budget_tokens", min: 1024 }])).toEqual([
-    { id: "high", settings: { thinking: { type: "enabled", budgetTokens: 16_000 } } },
-    { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 31_999 } } },
   ])
 
   // Nova keeps its Converse reasoningConfig spelling.

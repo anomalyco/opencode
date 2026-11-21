@@ -69,15 +69,8 @@ const modelID = (model: Model.Info) => model.modelID ?? model.id
 
 function claudeInfo(model: Model.Info) {
   const id = modelID(model)
-  const match = (text: string) => ({
-    familyFirst: /(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d+)(?:[.-](\d+))?/i.exec(text),
-    versionFirst: /claude-(\d+)(?:[.-](\d+))?-(opus|sonnet|haiku|fable|mythos)/i.exec(text),
-  })
-  // A Bedrock application inference profile ARN carries no Claude version, so fall back to
-  // model.family, which names the Claude model an ARN points at.
-  const idMatch = match(id)
-  const { familyFirst, versionFirst } =
-    idMatch.familyFirst ?? idMatch.versionFirst ? idMatch : match(model.family ?? "")
+  const familyFirst = /(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d+)(?:[.-](\d+))?/i.exec(id)
+  const versionFirst = /claude-(\d+)(?:[.-](\d+))?-(opus|sonnet|haiku|fable|mythos)/i.exec(id)
   const family = (familyFirst?.[1] ?? versionFirst?.[3])?.toLowerCase()
   const major = Number(familyFirst?.[2] ?? versionFirst?.[1])
   const minor = Number(familyFirst?.[3] ?? versionFirst?.[2] ?? 0)
@@ -455,6 +448,8 @@ const openrouter: Protocol = (model, support) => {
 
 const bedrockConverse: Protocol = (model, support) => {
   const id = modelID(model)
+  // An application inference profile ARN carries no Anthropic marker and no Claude version,
+  // so model.family only detects Claude here; the family's version is never parsed.
   const claude =
     id.includes("anthropic") ||
     claudeInfo(model).family !== undefined ||
