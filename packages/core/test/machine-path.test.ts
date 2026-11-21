@@ -514,14 +514,34 @@ on.effect("runs a shell command on the machine in its working directory", () =>
       yield* worker.runs[0].print("NVIDIA-SMI 550.54\n")
       yield* worker.runs[0].exit(0)
 
-      expect(yield* Fiber.join(running)).toMatchObject({
+      const result = yield* Fiber.join(running)
+      expect(result).toMatchObject({
         status: "completed",
         output: { exitCode: 0, output: "NVIDIA-SMI 550.54\n" },
       })
+      // A command the machine finished has nothing to say about its connection.
+      expect(result.output).not.toHaveProperty("killed")
       expect(worker.runs[0].argv).toEqual(["sh", "-c", "nvidia-smi"])
       expect(worker.runs[0].cwd).toBe("/work")
       expect(worker.runs[0].env.OPENCODE_SESSION_ID).toBe(sessionID)
       expect(tools.assertions[0]).toMatchObject({ action: "external_directory", resources: ["gpu:/work/*"] })
+    }).pipe(Effect.provide(graph(tools)))
+  }),
+)
+
+on.effect("leaves a local command's result without a connection notice", () =>
+  withTempDir((tmp) => {
+    const tools = fixture(tmp.path)
+    return Effect.gen(function* () {
+      const result = yield* executeTool(
+        yield* Tool.Service,
+        call("shell", { command: "echo local", workdir: tmp.path }),
+      )
+      expect(result).toMatchObject({ status: "completed", output: { exitCode: 0 } })
+      expect(result.output).not.toHaveProperty("killed")
+      expect(result.content?.map((part) => (part.type === "text" ? part.text : "")).join("\n")).not.toContain(
+        "connection was lost",
+      )
     }).pipe(Effect.provide(graph(tools)))
   }),
 )
@@ -1010,6 +1030,10 @@ on.effect("reports the machine's own sentence when its worker restarts mid-comma
       const content = (result.content ?? []).map((part) => ("text" in part ? part.text : "")).join("\n")
       expect(content).toContain("gpu's worker restarted, the process was lost")
       expect(content).toContain("partial")
+      // Code Mode sees only the structured output, which now carries the same reason.
+      expect(result).toMatchObject({
+        output: { exitCode: null, killed: "gpu's worker restarted, the process was lost" },
+      })
     }).pipe(Effect.provide(graph(tools)))
   }),
 )
@@ -1036,6 +1060,10 @@ on.effect("reports a process a machine forgot mid-command as no longer there", (
       expect(result.status).toBe("completed")
       const content = (result.content ?? []).map((part) => ("text" in part ? part.text : "")).join("\n")
       expect(content).toContain("gpu's worker no longer has the process")
+      // Code Mode sees only the structured output, which now carries the same reason.
+      expect(result).toMatchObject({
+        output: { exitCode: null, killed: "gpu's worker no longer has the process" },
+      })
     }).pipe(Effect.provide(graph(tools)))
   }),
 )

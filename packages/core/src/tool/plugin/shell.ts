@@ -98,6 +98,10 @@ const StructuredOutput = Schema.Struct({
   pid: Schema.optionalKey(NonNegativeInt).annotate({
     description: "Process ID while the command is running in the background",
   }),
+  killed: Schema.optionalKey(Schema.String).annotate({
+    description:
+      "Why the command ended without an exit code, when the reason is known: the machine's worker restarted or lost the process, or the local process daemon stopped",
+  }),
   wallTimeSeconds: Schema.Number.annotate({ description: "Seconds since the command started" }),
 })
 
@@ -117,7 +121,7 @@ const resultMessages = (output: Output, timeout?: number) => {
 const toolResult = (output: Output, timeout?: number) => {
   return {
     output: {
-      ...Struct.omit(output, ["exit", "status", "truncated", "timeout", "killed"]),
+      ...Struct.omit(output, ["exit", "status", "truncated", "timeout"]),
       exitCode: output.exit ?? null,
     },
     content: resultMessages(output, timeout).map((text) => ({
