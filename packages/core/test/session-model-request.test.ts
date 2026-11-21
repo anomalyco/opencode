@@ -225,11 +225,10 @@ describe("SessionModelRequest.boundImages", () => {
     const messages = [image("1.png"), image("2.png"), image("3.png"), image("4.png")]
     const result = boundImages(messages, 2)
 
-    // Hysteresis: going over the cap drops back to a lower target, so with cap 2 a fourth image
-    // prunes down to a single retained image instead of walking the cut one image at a time.
+    // The third image triggers a batch of two removals; the fourth fills the cap without moving the cut.
     expect(result[0]?.content).toEqual([Message.text(expect.stringContaining('"1.png" was removed'))])
     expect(result[1]?.content).toEqual([Message.text(expect.stringContaining('"2.png" was removed'))])
-    expect(result[2]?.content).toEqual([Message.text(expect.stringContaining('"3.png" was removed'))])
+    expect(result[2]).toBe(messages[2])
     expect(result[3]).toBe(messages[3])
   })
 
@@ -253,19 +252,28 @@ describe("SessionModelRequest.boundImages", () => {
     expect(removed(boundImages(messages, 1))).toBe(7)
   })
 
-  test("prunes with hysteresis so the replaced prefix stays stable between prunes", () => {
+  test.each([
+    { cap: 1, cuts: [0, 0, 1, 2, 3, 4, 5] },
+    { cap: 2, cuts: [0, 0, 0, 2, 2, 4, 4, 6] },
+    { cap: 3, cuts: [0, 0, 0, 0, 2, 2, 4, 4, 6] },
+    { cap: 4, cuts: [0, 0, 0, 0, 0, 3, 3, 3, 6, 6, 6, 9] },
+    { cap: 30, cuts: [...Array<number>(31).fill(0), ...Array<number>(11).fill(11), 22] },
+  ])("keeps the prefix stable between count cuts with cap $cap", ({ cap, cuts }) => {
     const image = (name: string) =>
       Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: name })
-    const messages = Array.from({ length: 8 }, (_, i) => image(`${i + 1}.png`))
-    const removed = (result: ReturnType<typeof boundImages>) =>
-      result.filter((message) => message.content[0]?.type === "text").length
-
-    // At the cap nothing is pruned; crossing it drops back to the target (cap 4, target 2), and the
-    // replaced prefix then holds until the count crosses the cap again.
-    expect(removed(boundImages(messages.slice(0, 4), 4))).toBe(0)
-    expect(removed(boundImages(messages.slice(0, 5), 4))).toBe(3)
-    expect(removed(boundImages(messages.slice(0, 7), 4))).toBe(5)
-    expect(removed(boundImages(messages, 4))).toBe(6)
+    const messages = Array.from({ length: cuts.length - 1 }, (_, i) => image(`${i + 1}.png`))
+    // Recompute from the original history on every request, not the already-pruned output.
+    const results = cuts.map((_, count) => boundImages(messages.slice(0, count), cap))
+    results.forEach((result, count) => {
+      expect(result.filter((message) => message.content[0]?.type === "text")).toHaveLength(cuts[count]!)
+      expect(result.filter((message) => message.content[0]?.type === "media").length).toBeLessThanOrEqual(cap)
+      expect(result.slice(cuts[count])).toEqual(messages.slice(cuts[count], count))
+      expect(boundImages(messages.slice(0, count), cap)).toEqual(result)
+      if (count > 0 && cuts[count] === cuts[count - 1]) {
+        expect(result.slice(0, count - 1)).toEqual(results[count - 1]!.slice())
+      }
+    })
+    expect(messages.every((message) => message.content[0]?.type === "media")).toBe(true)
   })
 
   test("the newest document that sets max_images wins, regardless of other media fields", () => {

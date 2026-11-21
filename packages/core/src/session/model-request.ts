@@ -266,12 +266,13 @@ export const boundImages = (messages: LLMRequest["messages"], maxImages?: number
     if (kept <= IMAGE_BYTES_TRIGGER) continue
     while (kept > IMAGE_BYTES_TARGET) kept -= sizes[cut++]!
   }
-  // The count cap uses the same hysteresis: going over the cap drops back to a lower target, so a single
-  // new image does not move the replaced prefix on every request.
+  // Replaying the count drops (cap + 1 - target) images each time it crosses the cap.
+  // Round up to whole batches so stateless recomputation keeps the prefix stable between crossings.
   if (maxImages !== undefined && sizes.length > maxImages) {
     const slack = Math.min(10, Math.floor(maxImages / 2))
     const target = Math.max(1, maxImages - slack)
-    cut = Math.max(cut, sizes.length - target)
+    const batch = maxImages + 1 - target
+    cut = Math.max(cut, Math.ceil((sizes.length - maxImages) / batch) * batch)
   }
   if (cut === 0) return messages
 
