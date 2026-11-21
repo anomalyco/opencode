@@ -1051,7 +1051,7 @@ test("a mount a reload begins again with another session's input builds whole", 
   const fake = host()
   const ctx = plugin("t.otherinput", fake)
   const runs: string[] = []
-  // The body runs once per mount, as the force-input plugin's does: it reads its slot's session there.
+  // The body runs once per mount: it reads its slot's session there.
   const Child = (props: Json) => (runs.push(props.slot.sessionID), h("text", { children: props.slot.sessionID }))
   ctx.ui.slot({ append: "sidebar.content", render: (slot: Json) => h(Child, { slot }) })
   const cx = (generation: number, session: string) => ({

@@ -11,7 +11,7 @@ interrupt of that session has its answer, as a prompt's requests do (`Shared::af
 the composer's session, and to a palette command with a slash name, for the session in view. Without a pending
 interrupt the command runs at once, as in TS.
 
-**Reach.** Only a slash command chosen right after a second Escape (or `ctrl+⏎` of force-input) on a running
+**Reach.** Only a slash command chosen right after a second Escape (or a plugin's interrupting `ctrl+⏎`) on a running
 session, before the server answers the interrupt. The command's dialog or toast shows after that answer.
 
 **Reason.** Defects the TS client shares are fixed in Rust and recorded as deviations.

@@ -128,8 +128,7 @@ export default Plugin.define({
             log({ alerted: true })
           },
         },
-        // A select, then an alert, each sized and centered by `dialog.set` right after, as opencode-session-time's
-        // `/time`.
+        // A select, then an alert, each sized and centered by `dialog.set` right after.
         {
           id: "v2probe.centered",
           run: async () => {
@@ -247,8 +246,7 @@ export default Plugin.define({
         )
       },
     })
-    // A page whose command shows a field that asks for the focus as it is created (`focused`), as file-browser's editor
-    // does: the focus comes to the host with the handler's effects, the field with the next revision. What it hears is
+    // A page whose command shows a field that asks for the focus as it is created (`focused`): the focus comes to the host with the handler's effects, the field with the next revision. What it hears is
     // logged.
     const [finding, setFinding] = createSignal(false)
     context.ui.router.register({

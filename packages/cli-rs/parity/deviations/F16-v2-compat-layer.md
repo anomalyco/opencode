@@ -1,4 +1,4 @@
-# F16: a V2 TUI plugin on the JS host, through the compatibility layer (P8)
+# F16: a V2 TUI plugin on the JS host, through the compatibility layer
 
 **TypeScript.** A `{ id, setup }` module's setup gets the V2 context (`packages/tui/src/plugin/api.tsx`), and its JSX
 renders through `@opentui/solid` into the TUI's own renderables, in the TUI's process. Its reads are the TUI's store,
@@ -8,9 +8,7 @@ read once as the component is created; a local module compiles with Solid's comp
 
 **Rust.** The JS host gives the module the same context and the modules TS gives it (`@opencode/plugin/tui`, Solid,
 `@opentui/solid`, `@opentui/core`), from the compatibility layer (`crates/plugin/src/pipe/compat`). Its JSX renders with
-Solid's universal renderer into plain nodes, which each view reads into a contract 2.0 tree for the host to draw. The
-four published packages P8 runs draw cell for cell as TS draws them at the checkpoints of `parity/scenarios/P.8`
-(settled pictures, not every state or the first frame after each event). The JS host is on unless
+Solid's universal renderer into plain nodes, which each view reads into a contract 2.0 tree for the host to draw. The JS host is on unless
 `OPENCODE_PLUGIN_JS` is `0`, `false` or `off`. What differs:
 
 - **Every module compiles as an installed one**, with Bun's JSX transform: a local TSX plugin that relies on Solid's
@@ -33,19 +31,19 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
 - **A command a component registers** (`keymap.layer` in a render) runs nothing once the component ended, but the
   host lists it 250 ms longer, unless a new mount registered it again. A registration after setup (such a layer, a
   store made late, the scroll keys a dialog with a `<scrollbox>` registers) reloads the plugin's registrations: its
-  open dialog stays and acts, as in TS (`P.8/sidebar-prompt` `kept`), and so does its session panel, which mounts again from the new registrations (CT-29: opencode-self-improvement's `/memory` panel registers keys as it renders, and the reload closed it; `plugin_compat::a_session_panel_stays_open_across_a_reload`). Each mount the
+  open dialog stays and acts, as in TS, and so does its session panel, which mounts again from the new registrations (CT-29: opencode-self-improvement's `/memory` panel registers keys as it renders, and the reload closed it; `plugin_compat::a_session_panel_stays_open_across_a_reload`). Each mount the
   reload ends and begins again keeps its components, which do not run again, as TS takes a registration without a
-  remount (CT-21: opencode-navigator named a binding anew on each mount, `P.8/navigator`), and the field the plugin
+  remount (CT-21: a plugin that named a binding anew on each mount), and the field the plugin
   focused in it takes the host's focus again;
   a mount begun 250 ms after its end renders anew. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
   next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`; a
   mode of the plugin's own, such as `modal` or one it pushes, binds its commands everywhere, and they decline unless it
-  is the input mode, CT-31: opencode-usage-report's `r`, `P.8/usage-report-keys`) and
-  a command's `enabled` and slash `aliases` are kept (`P.8/file-browser` and `P.8/context-grid` `slash`); its
+  is the input mode, CT-31) and
+  a command's `enabled` and slash `aliases` are kept; its
   `priority` and `bindings` are not mapped. A layer's and a command's `enabled` are the command's state on the host
   (contract ergonomics 2.5): a disabled command stays registered, binds no key and is in neither the palette nor the
   slash list, as TS binds no disabled command, and the layer follows what they read, telling the host each change
-  with no reload (opencode-command-hotkeys' palette entries off a session). Its `target` holds
+  with no reload (a palette entry off a session). Its `target` holds
   its commands to the plugin's focus in that node, elsewhere they decline (CT-20: @slkiser/opencode-quota's window
   Escape kept Goal's select open), but the focus is the layer's record of what the plugin focused or the user edited:
   the host's focus by a click or Tab does not reach it, so a target the user clicks into still declines. A command
@@ -59,11 +57,11 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
 - **A key a command declines** goes on, as in TS. The JS host answers after the frame, so a key that runs a plugin's
   command holds the keys after it until the JS host answered, as TS runs a command before the next key. A command
   that returned `false`, whose `enabled` says no, or whose layer ended declines, and its key is routed again first,
-  past that command and any that declined it before, to the host's own keys and the composer (CT-8: linear's `r`,
-  `P.8/linear-keys`; CT-19: rundev's space and Enter, `P.8/rundev-keys`; `P.8/host-keys` has the same keys with no
-  plugin). The key reaches the composer a round trip to the JS host later than TS's. A disabled command binds no key,
-  so its key is never held (linear's `r` while its dialog is closed; `plugin_compat::a_disabled_commands_key_is_not_held`);
-  the hold stays for a command that is enabled and declines as it runs (rundev's keys, which return `false`), and for
+  past that command and any that declined it before, to the host's own keys and the composer (CT-8, CT-19;
+  `P.8/host-keys` has the host's keys with no plugin). The key reaches the composer a round trip to the JS host later
+  than TS's. A disabled command binds no key, so its key is never held
+  (`plugin_compat::a_disabled_commands_key_is_not_held`); the hold stays for a command that is enabled and declines as
+  it runs (one that returns `false`), and for
   an `enabled` that reads what the layer does not follow, which it asks again as the command runs. Keys no JS command
   binds are never held. A command the palette or a slash runs declines nothing.
 - **The hold's bound**: a hold lasts at most 50 ms (`Config::hold`). If the JS host has not answered by then, the
@@ -106,8 +104,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   - **The room rule**: before the host laid a node out, a top node of the mount answers its own width, `"100%"` of the
     room or a number; any other node answers zero, as OpenTUI's do before their first pass. It is exact where the
     slot's container is a column; in a row (`prompt.footer.status`, `home.footer.status`) a `100%` top node answers
-    the container's width, and the push corrects it a frame later. opencode-tokscope's sidebar measures itself within
-    ten timer ticks and drew nothing (`P.8/tokscope-sidebar`).
+    the container's width, and the push corrects it a frame later. A sidebar section that measures itself within ten
+    timer ticks drew nothing without it.
   - **A fixed size**: once laid out, a node's own numeric `width` or `height` is what it answers, as the host lays it
     out at that (it does not shrink); the host's rect is of the tree before the plugin set it, a frame late.
   - **R2**: the rects the plugin watches are compared and pushed when a frame's geometry is final, after each solve
@@ -122,10 +120,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `onSubmit` its submit, and `value` is what was typed. An edit gives it the plugin's focus. A field's `focus()` and
   its `focused` prop (one microtask after it changes) are the contract's focus of the field (contract 2.x,
   `focus-input`), as the request of the mount whose render holds it, whichever call runs: what the user types goes
-  into it, as in TS (`P.8/file-browser`'s `typed`). A field the mount's tree does not hold yet takes the focus if the
+  into it, as in TS. A field the mount's tree does not hold yet takes the focus if the
   mount's next revision shows it, and the focus is dropped if that revision does not (nor does a later one apply it);
   a mount that closed takes nothing. A field in a dialog of the plugin's own is in that dialog's mount and takes the
-  focus as in TS (CT-37, `P.8/sensitive-encrypt`'s `typed`); a field in no mount (removed from its mount, or never
+  focus as in TS (CT-37); a field in no mount (removed from its mount, or never
   added) has no focus on the host, which is reported once. While the plugin's focused
   field sits in a route, a panel or its dialog,
   each key there is its `onKeyDown`, through a listener layer of the surface, which takes it with `preventDefault`
@@ -133,10 +131,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   Only an `onKeyDown` that can take a key holds one for the JS host's answer (below); a field without one, or with one
   that only hears keys, holds none, and its typing goes to the host's field at once (cg2-1). A key it declines goes past
   the plugin's own commands, which TS's keymap ran before the field's `onKeyDown`, in the state before it ran. A
-  `<scrollbox>` draws its scrollbar while its content overflows, in OpenTUI's colors, as TS's does
-  (`P.8/sidebar-prompt`), and its `focused` prop gives it the host's focus, so the arrows scroll it. A field draws its
-  placeholder and its colors as the host's (`P.8/file-browser`), and the plugin's text without a color is the host's
-  white-ish text, where TS's is white (`P.8/sensitive-encrypt`'s panel).
+  `<scrollbox>` draws its scrollbar while its content overflows, in OpenTUI's colors, as TS's does, and its `focused`
+  prop gives it the host's focus, so the arrows scroll it. A field draws its placeholder and its colors as the host's,
+  and the plugin's text without a color is the host's white-ish text, where TS's is white.
   Other field events (`onPaste`, `onKeyUp` and the rest) are reported once.
 - **Keys** (CT-11): `renderer.keyInput` is an emitter whose `keypress` listeners hear each key as an OpenTUI key event,
   through one global listener layer the plugin registers with its first listener (a listener after setup reloads its
@@ -156,14 +153,14 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `undefined` on escape, the backdrop, another plugin's dialog, `clear()` or the plugin's end). A select's `search`
   lists its rows for each query as TS's does (flat, in its order, the category as the footer), but the rows change
   once the JS host answered the query, not in the keystroke's own frame (`P.8/select-search`). A `dialog.set` right
-  after `dialog.select`, `alert` or `confirm` sizes and centers it as in TS (contract 2.x, addition 4,
-  `P.8/session-time`); one after the dialog showed is reported once. A prompt's `value` and `description` are the
-  contract's (`P.8/session-manager` `rename`). A select's `actions` are the contract's footer actions, with their
-  keys, side and selection, and the select stays open as one runs (`P.8/session-time`'s timeline); past 4 the rest are
+  after `dialog.select`, `alert` or `confirm` sizes and centers it as in TS (contract 2.x, addition 4); one after the
+  dialog showed is reported once. A prompt's `value` and `description` are the contract's. A select's `actions` are
+  the contract's footer actions, with their keys, side and selection, and the select stays open as one runs; past 4
+  the rest are
   reported. `ui.dialog.show` shows the plugin's JSX
   as the body of the host's dialog (contract ergonomics 2.7): a mount of the plugin's dialog surface, with only the
   dialog's frame around it, as TS's, in the size and place `ui.dialog.set` gives, which changes it in place. Its
-  `<scrollbox>` scrolls and its `<input>` is a field (`P.8/sidebar-prompt`, `P.8/sensitive-encrypt`); a reload of the
+  `<scrollbox>` scrolls and its `<input>` is a field; a reload of the
   plugin's registrations mounts it again and keeps it open, and a render that throws closes it.
 - **Pointer**: `onMouseDown`, `onMouseUp` and `onClick` on a box or a text run as a click of the node, with an event
   that has its kind and the left button but no position; a node with both a press and a release handler keeps the
@@ -173,10 +170,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   of the claim is in the flow.
 - **Not mapped**, each reported once a plugin in the client's log, by the plugin's name (`plugin <id>: <id>: <feature>
   is not supported by opencode-native yet`), and doing nothing (a list answers empty). The report is no toast: a toast
-  covered the plugin's own surface until it timed out (`P.8/file-browser`'s field focus, navigator's `minWidth`), which
-  TS never shows and a checkpoint saw or not by the machine's speed. Not mapped: `data.project.permission`, the location's `mcp.resource` list, `renderer` members other than
+  covered the plugin's own surface until it timed out, which TS never shows and a checkpoint saw or not by the machine's speed. Not mapped: `data.project.permission`, the location's `mcp.resource` list, `renderer` members other than
   `requestRender`, `width`, `height` and `keyInput` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's
-  returns the renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS),
+  returns the renderer and an async one a resolved promise),
   `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `alignSelf`,
   `flexBasis`, and a box's `flexDirection` of `row-reverse` or `column-reverse` (it draws as `row` or `column`),
   `justifyContent` of `space-evenly` (as `flex-start`) and `alignItems` of `baseline` (as `stretch`). `minWidth` and `maxWidth` are the layout's `min_width` and `max_width`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
@@ -188,7 +184,7 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `data.project.permission` has no client call to load it through and would need a contract read; the location's
   `mcp.resource` list is not mapped yet, though it could load through `client.mcp.resource.catalog` as those below.
   A `<select>` draws as OpenTUI's renderable draws it, rows of the options that fit with the selected one marked
-  `▶ ` on its background (CT-14: @cleocode/goal's sidebar, `P.8/goal-select`); its keys, `onChange`, `font` and
+  `▶ ` on its background (CT-14); its keys, `onChange`, `font` and
   scroll indicator are not mapped, as the contract's focus does not reach it. The intrinsics without a contract node
   (`tab_select`, `ascii_font`, `diff`, `line_number`, `image`, `video`) throw as they are created, which the plugin's boundary reports as TS reports a crash in a render
   (`<id> crashed in slot <path>: …`). `<Portal>` draws its children in a box that fills the room of the mount that
@@ -207,17 +203,17 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
 - **Code-block renderers** (contract 2.x, addition 3, step D): `markdown.registerCodeBlockRenderer(language, render)`
   is a fence claim of the host's, registered by the filetype the language resolves to (OpenTUI's own maps and
   `infoStringToFiletype`); a second registration of a filetype by the plugin throws, as in TS, and across plugins the
-  last wins, an external plugin after the built-ins (good-fences takes `latex` from the built-in LaTeX, as in TS).
+  last wins, an external plugin after the built-ins (a plugin's `latex` takes it from the built-in LaTeX, as in TS).
   `render` gets the fence as OpenTUI's Markdown gives it (`lang`, `text`, `raw`) and a context whose `defaultRender()`
   is the host's own code view of the fence (`Node::Fence`), whose `bg` it may set, also its code's; any other write to
   it is reported. It returns a renderable built with `new` (below), or nothing to keep the host's view.
   - **After the frame**: the renderer runs on the JS host, so a fence shows the host's code view in the frame it
     first shows, and the plugin's tree once the JS host answered, a frame or more later; the transcript may shift
-    once a fence (good-fences adds the label's row). TS draws the plugin's from the start. While the fence streams its
-    code follows in the frame, and a tree that drew the code itself is a round trip behind (`P.8/good-fences`).
+    once a fence (a renderer that adds a label's row). TS draws the plugin's from the start. While the fence streams
+    its code follows in the frame, and a tree that drew the code itself is a round trip behind.
   - **A renderer that throws** falls its part back to the host's code view for the part's mount, with one toast
     (`<id> crashed in code block <language>: …`); the plugin stays active, where TS throws on out of Markdown's build.
-  - **Bounds** (host policy): a plugin holds 256 claims (good-fences registers about 60; TS has none); a fence whose
+  - **Bounds** (host policy): a plugin holds 256 claims (TS has no bound); a fence whose
     code is over 256 KiB keeps the host's code view, logged once a plugin; a part waits, the host's view showing,
     while the queue to the JS host is backed up, and is sent as it drains. What a renderer asks the host for as it
     draws (a toast, a fetch) is dropped, logged once: a claim's view reads only, on every carrier.
@@ -228,7 +224,7 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `client` over the host's fetch: as the plugin first lists or syncs one, on `invalidate`, and on each event that
   changes it (`agent.updated`, `permission.asked`, `form.replied`, …); `form.reply` and `cancel` go through
   `client.session.form` and load the list again. A list answers `undefined` until its load came, where TS's store
-  answers what it holds, and nothing keeps it live between events (`P.8/skills-data`: opencode-skills-tui's skills).
+  answers what it holds, and nothing keeps it live between events.
   At most 4 loads of a collection run at once and at most 256 keys wait, each once: a key asked for while it loads loads
   once more after it, so an older answer never comes after a newer one, and a waiting key past the 256 gives up its
   turn until it is listed again. An event that names a session reloads only that session's permissions, and a
@@ -248,7 +244,7 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   opencode-quick-quote returns one as its slot's element, opencode-gpt-live and opencode-task-completion-loop the same,
   not checked one by one). What OpenTUI does with the renderer it is given is the host's. A call of a method any of OpenTUI's
   declarations returns a promise from answers a resolved promise of an inert value, so a chain such as
-  `getTreeSitterClient().initialize().then(…)` runs on (CT-16, `P.8/shell-highlighting`): the grammar it registers is
+  `getTreeSitterClient().initialize().then(…)` runs on (CT-16): the grammar it registers is
   not the host's, which would need the contract to take a plugin's tree-sitter grammar. The `effect` package is not
   served: the layer serves what the TUI plugin API defines, not libraries a plugin expects the host to happen
   to have. TS's runtime provides its own, so a plugin that imports it (opencode-plugboard and
@@ -258,22 +254,19 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   OpenTUI's renderables (CT-25: @wpro-eng/opencode-config's 14-cell agent names shrank to their text; its tarball is
   unlicensed, so a layer test pins it). Where a long word breaks is the host's text wrap: TS's breaks
   `github-copilot/gemini-3.8-flash` after the `/`, the host's after `gemini-`, which is OpenTUI's Rust wrap, not the
-  layer's. A panel sized by its box's width (CT-28: opencode-tui-context's gauges and legend, `P.8/context-gauge`)
-  draws as TS once the host's layout reaches it (above).
+  layer's. A panel sized by its box's width (CT-28) draws as TS once the host's layout reaches it (above).
 - **Dialog size**: `dialog.set({ size, centered })` sizes a `ui.dialog.show` dialog, and an `alert`, a `confirm` or a
   `select` it follows right away (above; CT-35's joe-broadhead status alerts are `large`, as in TS).
 - **Border titles**: a box's `title`, `titleAlignment`, `bottomTitle` and `bottomTitleAlignment` are the contract
-  border's (CT-26: @juliuskb/opencode-voice's CPU and memory line, `P.8/voice-title`). An `onSizeChange` a plugin sets on the
-  renderable by its ref runs as one set as a prop does, so voice spreads its top title across the panel's width as
-  in TS. That row's requests differ: the plugin polls its status RPC on a timer, which runs in real time on the JS
-  host, so the replay sends more polls.
+  border's (CT-26). An `onSizeChange` a plugin sets on the renderable by its ref runs as one set as a prop does, so a
+  plugin can spread its top title across the panel's width as in TS.
 - **Colors**: the context's `theme` leaves are colors that carry their token, so a node the plugin colors from the
   theme follows a theme change without a call, where an installed package's node keeps the color it read in TS. Its
   `hue` scales and `categorical` list are the page theme's, each step carrying the contract's token of it
-  (`accent.500`, `categorical.3.300`), and a stateful color has TS's `state` (CT-9, `P.8/context-hue`). `source`,
+  (`accent.500`, `categorical.3.300`), and a stateful color has TS's `state` (CT-9). `source`,
   `increase` and `decrease` find a color's step by its token, else by its value among the named hues, where TS matches
   the object a token was read from; a color that two steps share is the first hue's. Its `surface("dialog")` and
-  `surface("dialog.footer")` are the host's raised surfaces (CT-8, CT-22, `P.8/tavily-surface`): a color the surface
+  `surface("dialog.footer")` are the host's raised surfaces (CT-8, CT-22): a color the surface
   gives differently from the page is that color, carrying no token, as the contract names none of a raised surface,
   so it keeps that color across a theme change; the others keep their page token. Another name is the page's theme,
   which the JS host's log says once. Neither `theme` nor `themeMode` is a signal.

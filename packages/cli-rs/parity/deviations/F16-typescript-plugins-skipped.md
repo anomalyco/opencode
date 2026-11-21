@@ -116,9 +116,7 @@ refolds them at once.
 
 `F16-project-plugin-approval` covers the approval itself. With the JS host turned off, an npm entry and a server part are listed as a directory is,
 with the JS-host reason, each server part by its package target or path beside the server plugin's own row.
-`scenarios/P.8/cache-cli.app.ts` and `cache-server.app.ts` drive both on each side from one cache holding a pinned
-tarball: equal screens and requests. `crates/tui/tests/all/plugin_npm.rs` checks the keys of 34 spec forms against
-TS's `Npm.cacheKey`, and the not-installed reason and notice.
+`crates/tui/tests/all/plugin_npm.rs` checks the keys of the spec forms against TS's `Npm.cacheKey`.
 
 Where TS draws these plugins, the Rust client tells the user once a run, in the host's notice lane (a warning toast that
 stays, with "Open plugins", as its "Plugin failed" toast is told; no plugin's toast hides it): "N TypeScript plugins

@@ -1,5 +1,5 @@
-// What the key rows of P.8 share (`host-keys`, `linear-keys`, `rundev-keys`): a session whose prompt can be sent, as a
-// primary agent and a model are loaded, and the keys that type into it and send it.
+// The session of `host-keys`: a session whose prompt can be sent, as a primary agent and a model are loaded, and the
+// keys that type into it and send it.
 import { assistant, session, user } from "../../lib/app"
 
 const id = "ses_d"

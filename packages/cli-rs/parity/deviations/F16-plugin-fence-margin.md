@@ -11,11 +11,10 @@ formula or a diagram that follows a block, and everything below moves down a row
 **Rust.** opentui-rust's `Markdown` puts one blank row between any two blocks and none before the first, and the
 LaTeX and Mermaid fences add none of their own. So a formula or a diagram after a block has one blank row above it.
 
-**A renderer that wraps the default view** (contract 2.x, step D: `opencode-good-fences@0.1.0`, which boxes
-`defaultRender()` under a label). Its rows are equal now. In TS 0.9.4 the default code view paints its glyphs on the
-Markdown's `bg` (the page, `#0a0a0a`), so inside the plugin's box each line of code sits on a strip of the page color;
-in Rust the code's glyphs keep the box's background. About 44 cells differ in color only (75 after the theme change):
-`P.8/good-fences`.
+**A renderer that wraps the default view** (contract 2.x, step D: one that boxes `defaultRender()` under a label).
+Its rows are equal now. In TS 0.9.4 the default code view paints its glyphs on the Markdown's `bg` (the page,
+`#0a0a0a`), so inside the plugin's box each line of code sits on a strip of the page color; in Rust the code's glyphs
+keep the box's background, which differs in color only.
 
 **Reason.** A TS defect, fixed in Rust: Rust keeps the spacing Core means, one row between blocks. The second row is TS's leftover
 margin, not a design: once the built-in renderers drop `marginTop: 1`, `P.2/fence-margin` is equal again. Drives:

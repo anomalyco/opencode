@@ -53,7 +53,7 @@ Where the two differ beyond that:
 A TS plugin's code-block renderer runs on the JS host as a fence claim (contract 2.x, step D), whose view answers
 after the frame: the host's code view shows until its tree comes, and a renderer that throws falls back that part
 alone, with a toast, where a Rust or Luau view's panic fails the plugin (`F16-v2-compat-layer`, "Code-block
-renderers"; `P.8/good-fences` draws the same package in both clients). A Rust or Luau claim, and a JS one, take the
+renderers"). A Rust or Luau claim, and a JS one, take the
 rules above otherwise; `parity/scenarios/Pr/fence.app.ts` compares a TS renderer with its Rust twin, a linked claim.
 
 ## Reason

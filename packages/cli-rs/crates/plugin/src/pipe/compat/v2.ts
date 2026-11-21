@@ -1229,7 +1229,7 @@ export function context(base: Base, carrier: Carrier) {
   const registrations = new Map<string, Registration[]>()
   // The modes the plugin pushed (`keymap.mode.push`), latest last. The host answers `input-mode` for the running call's
   // owner, and a mode a component pushes as it mounts is its mount's: a command, which runs as the plugin, reads `base`
-  // there (oc-context-grid's escape never left its page). TS has one input mode.
+  // there (an escape bound in such a mode never left its page). TS has one input mode.
   const modes: string[] = []
   const living = (name: string) => (registrations.get(name) ?? []).filter((at) => !at.retired && at.commands.has(name))
   const dispatch = (name: string, input?: string) => {

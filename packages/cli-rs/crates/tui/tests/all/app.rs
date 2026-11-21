@@ -14,7 +14,6 @@ use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_api::pty;
 use opencode_local::cli_config;
-use opencode_local::paths::Paths;
 use opencode_parity::Fixture;
 use opencode_parity::app::{self, Recording, Sent, Step};
 use opencode_plugin::abi::{self, Node, Placement, Render, Span};
@@ -77,10 +76,6 @@ fn run(recording: &Recording) -> (bool, String) {
     #[cfg(not(feature = "ts"))]
     let config_text = recording.config.to_string();
     let config = cli_config::decode_text(&config_text).unwrap_or_default();
-    #[cfg(feature = "ts")]
-    let cache = (!recording.cache.is_empty()).then(|| cache(&recording.cache));
-    #[cfg(not(feature = "ts"))]
-    let cache: Option<opencode_util::temp::TempDir> = None;
     let args = &recording.args;
     let session = args.session_id.clone().map(SessionID);
     let tui = opencode_tui::mount_with(
@@ -98,9 +93,6 @@ fn run(recording: &Recording) -> (bool, String) {
             },
             continue_: args.continue_,
             events: true,
-            roots: cache.as_ref().and_then(|cache| {
-                support::roots(Paths { cache: cache.path().to_owned(), ..support::paths(cache.path()) }, "test")
-            }),
             ..support::deps(Arc::new(memory.clone()))
         },
         Args {
@@ -137,11 +129,6 @@ fn run(recording: &Recording) -> (bool, String) {
             ..opencode_plugin::pipe::Config::new(bun)
         };
         let root = opencode_util::temp::tempdir().expect("plugin root");
-        // Global config vouches for cached server plugins so the replay does not require interactive approval.
-        let user: Vec<&String> = recording.cache.keys().collect();
-        std::fs::create_dir_all(root.path().join("config")).expect("config directory");
-        let global = serde_json::json!({ "plugins": user }).to_string();
-        std::fs::write(root.path().join("config").join("opencode.json"), global).expect("the global opencode config");
         let external = opencode_tui::plugins::host::External {
             config_dir: root.path().join("config"),
             cwd: root.path().to_path_buf(),
@@ -503,9 +490,9 @@ fn fence_margin_plugin() -> abi::Plugin {
     abi::Plugin { id: "parity.fence-margin", setup }
 }
 
+/// The scenario's config with each local `./plugins/<dir>` entry made absolute, for the JS host.
 #[cfg(feature = "ts")]
 fn npm_config(config: &serde_json::Value) -> String {
-    const PREFIX: &str = "./out/npm/node_modules/";
     let parity = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("parity");
     let mut config = config.clone();
     let entries = config.get_mut("plugins").and_then(serde_json::Value::as_array_mut).into_iter().flatten();
@@ -521,43 +508,9 @@ fn npm_config(config: &serde_json::Value) -> String {
         if target.starts_with("./plugins/") {
             let local = target.split('/').skip(1).fold(parity.clone(), |path, part| path.join(part));
             *target = local.to_string_lossy().into_owned();
-            continue;
         }
-        let Some(name) = target.strip_prefix(PREFIX).map(str::to_owned) else { continue };
-        let into = parity.join(&target[2..]);
-        let _ = std::fs::remove_dir_all(&into);
-        std::fs::create_dir_all(&into).expect("the npm package's directory");
-        let tarball = parity.join("plugins/npm").join(format!("{}.tgz", name.replace('/', "__")));
-        crate::plugin_published::pinned(&tarball);
-        let status = std::process::Command::new("tar")
-            .arg("-xzf")
-            .arg(&tarball)
-            .arg("-C")
-            .arg(&into)
-            .arg("--strip-components=1")
-            .status()
-            .expect("tar");
-        assert!(status.success(), "cannot unpack {}", tarball.display());
-        *target = into.to_string_lossy().into_owned();
     }
     config.to_string()
-}
-
-/// Build the npm cache layout for the pinned packages in an isolated directory.
-#[cfg(feature = "ts")]
-fn cache(packages: &BTreeMap<String, String>) -> opencode_util::temp::TempDir {
-    let cache = opencode_util::temp::tempdir().expect("npm cache");
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis();
-    for (spec, name) in packages {
-        let generation =
-            cache.path().join("npm").join(opencode_plugin::loader::npm::cache_key(spec)).join(now.to_string());
-        let version = spec.rsplit_once('@').map_or(spec.as_str(), |(_, version)| version);
-        std::fs::create_dir_all(&generation).expect("the generation");
-        let manifest = serde_json::json!({ "dependencies": { name: version } });
-        std::fs::write(generation.join("package.json"), manifest.to_string()).expect("the generation's package.json");
-        crate::plugin_published::unpack(name, &generation.join("node_modules").join(name));
-    }
-    cache
 }
 
 /// The scenario routes first, then each recorded read by its exact query, then by path alone.

@@ -54,8 +54,6 @@ mod plugin_p0a;
 mod plugin_pending_focus;
 #[cfg(feature = "ts")]
 mod plugin_pipe;
-#[cfg(feature = "ts")]
-mod plugin_published;
 mod plugin_reads;
 mod plugin_reconcile;
 mod plugin_routing;

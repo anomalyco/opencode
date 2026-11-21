@@ -1,6 +1,5 @@
-// A V2 `{ id, setup }` plugin (FT-12): `/find` opens a select whose own search matches the options' descriptions, as
-// opencode-session-time's `/time` does. TS loads it as a local plugin; the Rust client runs it unmodified on the JS host
-// through the V2 compatibility layer. A picked row's value shows as a toast; a line in the home footer says it loaded.
+// A V2 `{ id, setup }` plugin (FT-12): `/find` opens a select whose own search matches the options' descriptions. TS
+// loads it as a local plugin; the Rust client runs it unmodified on the JS host through the V2 compatibility layer. A picked row's value shows as a toast; a line in the home footer says it loaded.
 import { createElement, insert, setProp } from "@opentui/solid"
 
 const turns = [
@@ -38,7 +37,7 @@ export default {
                   `${option.title} ${option.description}`.toLowerCase().includes(query.toLowerCase()),
                 ),
             })
-            // As session-time's `/time`: the select is sized right after it opens.
+            // The select is sized right after it opens.
             context.ui.dialog.set({ size: "xlarge" })
             const picked = await selection
             context.ui.toast.show({ message: `picked ${picked}` })

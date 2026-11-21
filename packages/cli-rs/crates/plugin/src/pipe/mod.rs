@@ -858,8 +858,8 @@ pub(crate) struct Keyed {
 impl Keyed {
     /// The key a listener took, which `heard` heard, the listener last; `mount` is the listener's, if a mount's.
     /// `field` is the plugin whose field's listener it is: TS's keymap saw the key before the field's `onKeyDown`, in
-    /// the state before the handler ran, so the key it declines goes past that plugin's own commands (file-browser's
-    /// `escape` blurs its field, which enables its `escape` command, and TS's browser stays open).
+    /// the state before the handler ran, so the key it declines goes past that plugin's own commands (an `escape` that
+    /// blurs its field, which enables its `escape` command, leaves TS's page open).
     pub(crate) fn new(
         key: KeyEvent,
         scripts: &Scripts,

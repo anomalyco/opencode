@@ -670,8 +670,6 @@ The loader's unit tests are in `crates/plugin/src/loader/tests.rs` and `crates/p
 TUI's in `crates/tui/tests/all/plugins.rs` and the `plugin_*.rs` files beside it:
 
 - `plugin_ownership.rs` runs one table of request ownership on all three carriers.
-- `plugin_published.rs` and the P-APP scenarios under `parity/scenarios/P.8` run published TypeScript plugins (pinned
-  in `parity/plugins/npm`) unmodified on the JS host, and compare their cells and requests with TypeScript's.
 - `crates/plugin-abi/tests/sdk.rs` checks that [`plugins.md`](plugins.md) shows the examples as they are.
 - `parity/machines/plugins.json` is a state machine of a plugin's life that both clients read
   ([`testing.md`](testing.md#the-plugin-state-machine)).

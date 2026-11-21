@@ -11,5 +11,4 @@ the host's own prompt descriptions (`text.muted`), over at most eight rows, so t
 
 **Reason.** The field is the host's one-row field, which scrolled a value with a line break off its only row and
 showed nothing; a value on one line is what the user can see and edit. White is invisible on a light dialog, and an
-unbounded description pushed the field off screen. `parity/scenarios/P.8/session-manager.app.ts` drives it: its
-`rename` checkpoint differs by the 26 cells of the directory above the field, in color only.
+unbounded description pushed the field off screen.

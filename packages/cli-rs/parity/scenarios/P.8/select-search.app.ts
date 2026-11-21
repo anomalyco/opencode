@@ -1,5 +1,4 @@
-// FT-12: a V2 plugin's `ui.dialog.select` with its own `search` (parity/plugins/v2search, as opencode-session-time's
-// `/time`): the rows are the search's for each query, flat and in its order, so a query that only a description
+// FT-12: a V2 plugin's `ui.dialog.select` with its own `search` (parity/plugins/v2search): the rows are the search's for each query, flat and in its order, so a query that only a description
 // holds ("one") lists the rows the search keeps; Enter picks the first. TS loads the plugin as a local one; the Rust
 // client runs the same file on the JS host through the V2 compatibility layer.
 import { defineApp } from "../../lib/app"

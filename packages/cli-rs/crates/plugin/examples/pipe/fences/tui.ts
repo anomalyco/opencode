@@ -1,7 +1,7 @@
 // Tests code-block renderers through the public V2 plugin context. Each language selects a distinct renderer
 // behavior.
 //
-// - `probe`: good-fences' shape, a box of a label (`| <lang> (<n>)`, numbered by render) and the host's own code
+// - `probe`: a box of a label (`| <lang> (<n>)`, numbered by render) and the host's own code
 //   view in the raised color;
 // - `boom`: throws; `nope`: declines; `asks`: asks the host for a toast as it draws, then shows the code view alone;
 // - `twice`: a tree with two fence nodes, which the host refuses;

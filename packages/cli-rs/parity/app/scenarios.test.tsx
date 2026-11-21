@@ -6,13 +6,8 @@ import { CodeRenderable, type Renderable } from "@opentui/core"
 import { Database } from "bun:sqlite"
 import type { ServerWebSocket } from "bun"
 import { mkdtemp, rm } from "node:fs/promises"
-import { mkdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { Effect } from "effect"
-import { AppNodeBuilder } from "../../../core/src/effect/app-node-builder"
-import { Global } from "../../../util/src/global"
-import { Npm } from "../../../util/src/npm"
 import { createAppFixture } from "../../../tui/test/fixture/app"
 import { createFetch, directory } from "../../../tui/test/fixture/tui-client"
 import { applyMasks, recordingText, withNewDesigns, type AppScenario, type Route, type Step } from "../lib/app"
@@ -72,8 +67,6 @@ async function record(name: string, file: string) {
         value === undefined ? delete process.env[key] : (process.env[key] = value),
       ),
   }
-  unpackNpm(config)
-  await using cache = scenario.cache ? await npmCache(scenario.cache) : undefined
   let index = 0
   const pty = scenario.pty ? installFakePty(scenario.pty, () => index) : undefined
   await using _pty = { [Symbol.asyncDispose]: async () => pty?.restore() }
@@ -82,7 +75,6 @@ async function record(name: string, file: string) {
     height: scenario.height ?? 30,
     config,
     args: scenario.args ?? {},
-    ...(cache ? { packages: cache.packages } : {}),
     fetch: async (url, request) => {
       // The fixture serves its own event stream.
       if (url.pathname === "/api/event") return undefined
@@ -159,7 +151,6 @@ async function record(name: string, file: string) {
     config,
     args: scenario.args ?? {},
     ...(scenario.env ? { env: scenario.env } : {}),
-    ...(scenario.cache ? { cache: scenario.cache } : {}),
     routes,
     ...(ide ? { ide: ide.received } : {}),
     ...(scenario.zed ? { zed: scenario.zed } : {}),
@@ -172,59 +163,6 @@ async function record(name: string, file: string) {
     },
   }
   await Bun.write(`${parity}fixtures/${name}.app.json`, recordingText(recording))
-}
-
-// P8: each `plugins` entry `./out/npm/node_modules/<name>` is the published tarball `plugins/npm/<name>.tgz` (a scope's
-// `/` as `__`), unpacked there afresh, as an install puts a package under `node_modules`; the Rust replay does the same
-// (`npm` in crates/tui/tests/all/app.rs).
-function unpackNpm(config: Record<string, unknown>) {
-  const prefix = "./out/npm/node_modules/"
-  const entries = (config.plugins as unknown[] | undefined) ?? []
-  for (const entry of entries) {
-    const target = typeof entry === "string" ? entry : (entry as { package: string }).package
-    if (!target.startsWith(prefix)) continue
-    const name = target.slice(prefix.length)
-    unpackPinned(name, `${parity}${target.slice(2)}`)
-  }
-}
-
-// Unpacks the published tarball of package `name` into `into`, afresh.
-function unpackPinned(name: string, into: string) {
-  rmSync(into, { recursive: true, force: true })
-  mkdirSync(into, { recursive: true })
-  const tarball = `${parity}plugins/npm/${name.replace("/", "__")}.tgz`
-  // What runs is what was checked against the registry: the pin in `integrity.json`.
-  const pins = JSON.parse(readFileSync(`${parity}plugins/npm/integrity.json`, "utf8"))
-  const digest = `sha512-${new Bun.CryptoHasher("sha512").update(readFileSync(tarball)).digest("base64")}`
-  if (pins[`${name.replace("/", "__")}.tgz`] !== digest) throw new Error(`${tarball} is not the pinned tarball`)
-  const tar = Bun.spawnSync(["tar", "-xzf", tarball, "-C", into, "--strip-components=1"])
-  if (tar.exitCode !== 0) throw new Error(`cannot unpack ${tarball}: ${tar.stderr.toString()}`)
-}
-
-// js-npm: an npm cache in a temporary directory holding each package of `packages` (spec to tarball name) as `Npm.add`
-// leaves it, `<cache>/npm/<key>/<generation>/node_modules/<name>` beside a `package.json` naming it; the Rust replay
-// lays out the same (`cache` in crates/tui/tests/all/app.rs). The TUI's packages resolve there as the TS CLI resolves
-// them (`default.ts:143`), with the real `Npm`: an installed package is found, and nothing is fetched.
-async function npmCache(packages: Record<string, string>) {
-  const cache = await mkdtemp(path.join(tmpdir(), "parity-npm-"))
-  for (const [spec, name] of Object.entries(packages)) {
-    const generation = path.join(cache, "npm", await Npm.cacheKey(spec), String(Date.now()))
-    const version = spec.slice(spec.lastIndexOf("@") + 1)
-    mkdirSync(generation, { recursive: true })
-    await Bun.write(path.join(generation, "package.json"), JSON.stringify({ dependencies: { [name]: version } }))
-    unpackPinned(name, path.join(generation, "node_modules", name))
-  }
-  const layer = AppNodeBuilder.build(Npm.node, [
-    Global.node.replace(Global.layerWith({ cache, state: path.join(cache, "state") })),
-  ])
-  const prepare = (spec: string, install = true) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const npm = yield* Npm.Service
-        return yield* install ? npm.add(spec) : npm.resolve(spec)
-      }).pipe(Effect.provide(layer)),
-    )
-  return { packages: { prepare }, [Symbol.asyncDispose]: () => rm(cache, { recursive: true, force: true }) }
 }
 
 // A fake IDE MCP server (E.5): it answers `initialize`, keeps every message a client sends, and pushes
