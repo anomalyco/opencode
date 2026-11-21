@@ -283,5 +283,15 @@ describe("ShellParse", () => {
 
     const bash = await Effect.runPromise(ShellParse.scan('sudo bash -c "rm -rf /"', "/bin/bash", "/workspace"))
     expect(bash.commands).toEqual([{ resource: 'sudo bash -c "rm -rf /"', save: 'sudo bash -c "rm -rf /"' }])
+
+    const bashPath = await Effect.runPromise(ShellParse.scan('sudo /bin/bash -c "rm -rf /"', "/bin/bash", "/workspace"))
+    expect(bashPath.commands).toEqual([{ resource: 'sudo /bin/bash -c "rm -rf /"', save: 'sudo /bin/bash -c "rm -rf /"' }])
+
+    const pythonVersion = await Effect.runPromise(
+      ShellParse.scan('sudo python3.13 -c "print(1)"', "/bin/bash", "/workspace"),
+    )
+    expect(pythonVersion.commands).toEqual([
+      { resource: 'sudo python3.13 -c "print(1)"', save: 'sudo python3.13 -c "print(1)"' },
+    ])
   })
 })

@@ -780,7 +780,11 @@ function escalationPrefix(tokens: string[]): string[] {
     if (consumed === undefined) return []
     index += consumed
   }
-  if (index >= tokens.length || tokens[index].startsWith("-") || COMMAND_RUNNERS.has(tokens[index])) return []
+  if (index >= tokens.length || tokens[index].startsWith("-")) return []
+  // Path-qualified and version-qualified runners (`/bin/bash`, `python3.13`) run the same wrapped commands
+  // as their bare names, so normalize the token before the COMMAND_RUNNERS check.
+  const base = (tokens[index].split(/[\\/]/).pop() ?? "").toLowerCase().replace(/\.exe$/, "")
+  if (COMMAND_RUNNERS.has(base) || COMMAND_RUNNERS.has(base.replace(/\d+(?:\.\d+)*$/, ""))) return []
   const inner = prefix(tokens.slice(index))
   if (inner.length === 0) return []
   return [...tokens.slice(0, index), ...inner]
