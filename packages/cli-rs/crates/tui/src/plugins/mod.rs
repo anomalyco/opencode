@@ -1,6 +1,5 @@
 pub mod approve;
 pub mod btw;
-pub mod contain;
 pub mod diffs;
 pub mod fallback;
 pub mod fetch;

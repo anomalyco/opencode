@@ -891,8 +891,6 @@ dependencies = [
  "log",
  "mlua",
  "opencode-api-types",
- "opencode-latex",
- "opencode-mermaid",
  "opencode-plugin-abi",
  "opencode-ui",
  "opencode-util",

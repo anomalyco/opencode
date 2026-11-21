@@ -53,6 +53,9 @@
 //!
 //! A plugin that never calls [`crate::Setup::tasks`] registers none of this and pays nothing.
 
+// A task borrows the host of the call that polls it through a pointer: each `unsafe` below says why it is sound.
+#![allow(unsafe_code)]
+
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::future::Future;

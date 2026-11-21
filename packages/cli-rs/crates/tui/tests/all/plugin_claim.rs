@@ -1,7 +1,6 @@
-//! Exercise renderer claims on a streaming transcript. Compare claimed rows with a fresh mount and a second carrier; a
+//! Exercise renderer claims on a streaming transcript. Compare claimed rows with a fresh mount; a
 //! failed claim must hand the row back to the host.
 
-use crate::plugin_surface::{CARRIERS, Carrier, builtin};
 use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
 
@@ -280,10 +279,10 @@ fn messages() -> Value {
 
 impl World {
     /// The two claiming plugins on `carrier`.
-    fn open(carrier: Carrier) -> Self {
+    fn open() -> Self {
         Self::with(vec![
-            builtin(carrier, abi::Plugin { id: "claim.a", setup: plugin_a }),
-            builtin(carrier, abi::Plugin { id: "claim.b", setup: plugin_b }),
+            abi::Plugin { id: "claim.a", setup: plugin_a }.into(),
+            abi::Plugin { id: "claim.b", setup: plugin_b }.into(),
         ])
     }
 
@@ -658,7 +657,7 @@ struct Step {
     /// The model says `claim.a` draws a part.
     a_draws: bool,
     witness: Vec<(String, Vec<String>)>,
-    #[cfg_attr(not(native), allow(dead_code))]
+    #[allow(dead_code)]
     views: Views,
 }
 
@@ -681,10 +680,8 @@ fn frame_diff(a: &Step, b: &Step) -> Option<String> {
     })
 }
 
-/// The model on one carrier.
-pub struct ClaimModel {
-    carrier: Carrier,
-}
+/// The model.
+pub struct ClaimModel;
 
 /// The faults `claim.a`'s log says fired, a list a step.
 type Fired = Vec<Vec<(String, Fault)>>;
@@ -693,7 +690,7 @@ impl ClaimModel {
     /// Runs `commands` in the world with faults, or in the twin that takes `fired`'s faults its own way. Returns each
     /// step, the faults that fired at each step, and the first `stream-whole` failure.
     fn world(&self, commands: &[Command], fired: Option<&Fired>) -> (Vec<Step>, Fired, Option<Failure>) {
-        let world = World::open(self.carrier);
+        let world = World::open();
         let mut expected = Expected::new();
         let (mut steps, mut log, mut failure) = (Vec::new(), Vec::new(), None);
         VIEWS.with_borrow_mut(Vec::clear);
@@ -767,7 +764,7 @@ impl ClaimModel {
 impl ClaimModel {
     /// Runs `commands` in a TUI with `claim.b` alone: the host's rows of every part `claim.a` would claim.
     fn bare(&self, commands: &[Command]) -> Vec<Step> {
-        let world = World::with(vec![builtin(self.carrier, abi::Plugin { id: "claim.b", setup: plugin_b })]);
+        let world = World::with(vec![abi::Plugin { id: "claim.b", setup: plugin_b }.into()]);
         let mut expected = Expected::new();
         commands
             .iter()
@@ -779,9 +776,9 @@ impl ClaimModel {
             .collect()
     }
 
-    /// Panics fail the plugin on both carriers. A time overrun fails a library but falls back for a linked claim.
+    /// Panics fail the plugin. A time overrun falls back for a linked claim.
     fn fails(&self, fault: Fault) -> bool {
-        fault == Fault::Panic || (fault == Fault::Overrun && self.carrier == Carrier::Abi)
+        fault == Fault::Panic
     }
 }
 
@@ -868,68 +865,9 @@ impl Model for ClaimModel {
 
 #[test]
 fn claimed_parts_stream_into_what_a_fresh_mount_draws() {
-    // A seed costs about 0.6 s debug (two worlds of 40 commands), so 3 on each carrier keep the model near 3 s; deep
+    // A seed costs about 0.6 s debug (two worlds of 40 commands), so 3 keep the model short; deep
     // runs take more.
-    for carrier in CARRIERS {
-        model::check(&ClaimModel { carrier }, 3, 40);
-    }
-}
-
-/// Compare frame cells, fault reports, and view delivery for one trace on both native carriers.
-#[cfg(native)]
-pub struct ClaimCarriers;
-
-#[cfg(native)]
-impl Model for ClaimCarriers {
-    type Command = Command;
-
-    fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Command> {
-        let commands = ClaimModel { carrier: Carrier::Linked }.generate(rng, steps);
-        commands
-            .into_iter()
-            .map(|command| match command {
-                Command::Arm(Fault::Overrun, slot) => Command::Arm(Fault::Bad, slot),
-                command => command,
-            })
-            .collect()
-    }
-
-    fn run(&self, commands: &[Command]) -> Option<Failure> {
-        let (linked, linked_fired, failure) = ClaimModel { carrier: Carrier::Linked }.world(commands, None);
-        if failure.is_some() {
-            return failure;
-        }
-        let (carried, carried_fired, failure) = ClaimModel { carrier: Carrier::Abi }.world(commands, None);
-        if let Some(failure) = failure {
-            return Some(Failure { site: "abi", ..failure });
-        }
-        if model::skipped("carrier-equal") {
-            return None;
-        }
-        let steps = linked.iter().zip(&carried).zip(linked_fired.iter().zip(&carried_fired)).enumerate();
-        steps.into_iter().find_map(|(step, ((linked, carried), (linked_fired, carried_fired)))| {
-            let failure = |site, detail| Some(Failure { property: "carrier-equal", site, step, detail });
-            if let Some(diff) = frame_diff(linked, carried) {
-                return failure("cells", diff.replace("fault", "linked").replace("twin ", "abi   "));
-            }
-            if linked.views != carried.views {
-                return failure("views", format!("linked\n  {:?}\nabi\n  {:?}", linked.views, carried.views));
-            }
-            (linked_fired != carried_fired)
-                .then(|| failure("faults", format!("linked {linked_fired:?}, abi {carried_fired:?}")))
-                .flatten()
-        })
-    }
-
-    fn simplify(&self, command: &Command) -> Vec<Command> {
-        ClaimModel { carrier: Carrier::Linked }.simplify(command)
-    }
-}
-
-#[test]
-#[cfg(native)]
-fn a_claim_is_equal_linked_and_through_the_c_abi() {
-    model::check(&ClaimCarriers, 3, 40);
+    model::check(&ClaimModel, 3, 40);
 }
 
 /// The commands that stream every call and the fence to their end, with `faults` before them.
@@ -945,154 +883,117 @@ fn whole_stream(faults: &[Command]) -> Vec<Command> {
 
 #[test]
 fn each_revision_of_a_claimed_part_equals_a_fresh_mount() {
-    for carrier in CARRIERS {
-        let mut commands = whole_stream(&[]);
-        commands.insert(10, Command::Theme(false));
-        assert_eq!(ClaimModel { carrier }.run(&commands), None);
-        let world = World::open(carrier);
-        let mut expected = Expected::new();
-        for command in &commands {
-            world.send(command, &mut expected);
-        }
-        let screen = world.frame().text();
-        for shows in ["probe call_1 Completed", "witness call_3 Completed", "done call_2", "| beta gamma", "After."] {
-            assert!(screen.contains(shows), "{shows:?} is not on screen:\n{screen}");
-        }
-        assert!(!screen.contains("read call_4"), "a claim drew the host's read call:\n{screen}");
-        assert_eq!(stream_whole(&world, &expected), Ok(4));
-        expected.calls[0] = Call::Streaming("wrong input".into());
-        assert!(stream_whole(&world, &expected).is_err());
+    let mut commands = whole_stream(&[]);
+    commands.insert(10, Command::Theme(false));
+    assert_eq!(ClaimModel.run(&commands), None);
+    let world = World::open();
+    let mut expected = Expected::new();
+    for command in &commands {
+        world.send(command, &mut expected);
     }
+    let screen = world.frame().text();
+    for shows in ["probe call_1 Completed", "witness call_3 Completed", "done call_2", "| beta gamma", "After."] {
+        assert!(screen.contains(shows), "{shows:?} is not on screen:\n{screen}");
+    }
+    assert!(!screen.contains("read call_4"), "a claim drew the host's read call:\n{screen}");
+    assert_eq!(stream_whole(&world, &expected), Ok(4));
+    expected.calls[0] = Call::Streaming("wrong input".into());
+    assert!(stream_whole(&world, &expected).is_err());
 }
 
 #[test]
 fn a_fault_in_a_claim_falls_back_for_what_it_claims_alone() {
-    for carrier in CARRIERS {
-        for (fault, slot) in
-            [(Fault::Panic, 0), (Fault::Overrun, 1), (Fault::Bad, 0), (Fault::Overrun, FENCE), (Fault::Bad, FENCE)]
-        {
-            let mut commands = whole_stream(&[Command::Arm(fault, slot)]);
-            // Mid stream, so the fallback lands between revisions.
-            let at = commands.iter().position(|command| *command == Command::Call(slot)).unwrap_or(26);
-            commands.insert(at, Command::Arm(fault, slot));
-            let (_, fired, _) = ClaimModel { carrier }.world(&commands, None);
-            assert!(fired.iter().flatten().any(|(_, fired)| *fired == fault), "{fault:?} on {slot} never fired");
-            assert_eq!(ClaimModel { carrier }.run(&commands), None, "{fault:?} on slot {slot}");
-        }
+    for (fault, slot) in
+        [(Fault::Panic, 0), (Fault::Overrun, 1), (Fault::Bad, 0), (Fault::Overrun, FENCE), (Fault::Bad, FENCE)]
+    {
+        let mut commands = whole_stream(&[Command::Arm(fault, slot)]);
+        // Mid stream, so the fallback lands between revisions.
+        let at = commands.iter().position(|command| *command == Command::Call(slot)).unwrap_or(26);
+        commands.insert(at, Command::Arm(fault, slot));
+        let (_, fired, _) = ClaimModel.world(&commands, None);
+        assert!(fired.iter().flatten().any(|(_, fired)| *fired == fault), "{fault:?} on {slot} never fired");
+        assert_eq!(ClaimModel.run(&commands), None, "{fault:?} on slot {slot}");
     }
 }
 
 #[test]
 fn a_streaming_part_gets_one_view_a_frame() {
-    for carrier in CARRIERS {
-        let world = World::open(carrier);
-        let mut expected = Expected::new();
-        world.send(&Command::Start(0), &mut expected);
-        VIEWS.with_borrow_mut(Vec::clear);
-        let views = || VIEWS.with_borrow(|views| views.iter().filter(|(plugin, _, _)| *plugin == 'a').count());
-        for delta in TOKENS {
-            if let Call::Streaming(text) = &mut expected.calls[0] {
-                text.push_str(delta);
-            }
-            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
+    let world = World::open();
+    let mut expected = Expected::new();
+    world.send(&Command::Start(0), &mut expected);
+    VIEWS.with_borrow_mut(Vec::clear);
+    let views = || VIEWS.with_borrow(|views| views.iter().filter(|(plugin, _, _)| *plugin == 'a').count());
+    for delta in TOKENS {
+        if let Call::Streaming(text) = &mut expected.calls[0] {
+            text.push_str(delta);
         }
-        assert_eq!(views(), 0, "a streaming revision is viewed as the paint starts");
-        world.harness.app.render();
-        assert_eq!(views(), 1, "the paint views the newest content once");
-        world.harness.app.render();
-        assert_eq!(views(), 1, "the paint after views nothing");
-        assert_eq!(stream_whole(&world, &expected), Ok(1));
-        world.send(&Command::Delta(0, 0), &mut expected);
-        world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": TOKENS[1] }));
-        let before = views();
-        world.emit("session.tool.called", json!({ "id": "call_1", "input": { "q": "aa aa bb" }, "executed": true }));
-        assert_eq!(views(), before + 1, "a phase change waited for the paint");
+        world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
     }
+    assert_eq!(views(), 0, "a streaming revision is viewed as the paint starts");
+    world.harness.app.render();
+    assert_eq!(views(), 1, "the paint views the newest content once");
+    world.harness.app.render();
+    assert_eq!(views(), 1, "the paint after views nothing");
+    assert_eq!(stream_whole(&world, &expected), Ok(1));
+    world.send(&Command::Delta(0, 0), &mut expected);
+    world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": TOKENS[1] }));
+    let before = views();
+    world.emit("session.tool.called", json!({ "id": "call_1", "input": { "q": "aa aa bb" }, "executed": true }));
+    assert_eq!(views(), before + 1, "a phase change waited for the paint");
 }
 
 #[test]
 fn a_declined_part_shows_the_host_row() {
-    for carrier in CARRIERS {
-        let world = World::open(carrier);
-        let mut expected = Expected::new();
-        DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
-        world.send(&Command::Start(0), &mut expected);
-        world.send(&Command::Delta(0, 0), &mut expected);
-        let screen = world.frame().text();
-        assert!(!screen.contains("probe call_1"), "{screen}");
-        assert!(mounted().iter().all(|shown| !shown.shows));
-        assert!(screen.contains("⋯ probe"), "the host's row does not show:\n{screen}");
-        DECLINE.with_borrow_mut(HashSet::clear);
-        world.send(&Command::Call(0), &mut expected);
-        assert_eq!(stream_whole(&world, &expected), Ok(1));
-        let screen = world.frame().text();
-        assert!(!screen.contains("⋯ probe"), "the host's row stayed beside the claim's tree:\n{screen}");
-        // Declined again: the host's row comes back, built again, and the claim's tree goes.
-        DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
-        expected.off.insert("call_1".to_owned());
-        world.send(&Command::Progress(0, 1), &mut expected);
-        let screen = world.frame().text();
-        assert!(screen.contains("⋯ probe"), "the host's row is not back:\n{screen}");
-        assert_eq!(stream_whole(&world, &expected), Ok(0));
-        DECLINE.with_borrow_mut(HashSet::clear);
-    }
+    let world = World::open();
+    let mut expected = Expected::new();
+    DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
+    world.send(&Command::Start(0), &mut expected);
+    world.send(&Command::Delta(0, 0), &mut expected);
+    let screen = world.frame().text();
+    assert!(!screen.contains("probe call_1"), "{screen}");
+    assert!(mounted().iter().all(|shown| !shown.shows));
+    assert!(screen.contains("⋯ probe"), "the host's row does not show:\n{screen}");
+    DECLINE.with_borrow_mut(HashSet::clear);
+    world.send(&Command::Call(0), &mut expected);
+    assert_eq!(stream_whole(&world, &expected), Ok(1));
+    let screen = world.frame().text();
+    assert!(!screen.contains("⋯ probe"), "the host's row stayed beside the claim's tree:\n{screen}");
+    // Declined again: the host's row comes back, built again, and the claim's tree goes.
+    DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
+    expected.off.insert("call_1".to_owned());
+    world.send(&Command::Progress(0, 1), &mut expected);
+    let screen = world.frame().text();
+    assert!(screen.contains("⋯ probe"), "the host's row is not back:\n{screen}");
+    assert_eq!(stream_whole(&world, &expected), Ok(0));
+    DECLINE.with_borrow_mut(HashSet::clear);
 }
 
 #[test]
 fn a_streaming_fence_keeps_its_mount() {
-    for carrier in CARRIERS {
-        let world = World::open(carrier);
-        let mut expected = Expected::new();
-        let mut generations = Vec::new();
-        for _ in 0..5 {
-            world.send(&Command::Text, &mut expected);
-            generations
-                .extend(mounted().into_iter().filter(|shown| shown.id.key.starts_with("fence-")).map(|shown| shown.id));
-        }
-        assert_eq!(generations.len(), 3, "{generations:?}");
-        assert!(generations.windows(2).all(|pair| pair[0] == pair[1]), "{generations:?}");
+    let world = World::open();
+    let mut expected = Expected::new();
+    let mut generations = Vec::new();
+    for _ in 0..5 {
+        world.send(&Command::Text, &mut expected);
+        generations
+            .extend(mounted().into_iter().filter(|shown| shown.id.key.starts_with("fence-")).map(|shown| shown.id));
     }
-}
-
-#[test]
-#[cfg(native)]
-fn leaving_the_session_frees_every_claimed_part() {
-    for carrier in CARRIERS {
-        let world = World::open(carrier);
-        let mut expected = Expected::new();
-        for command in whole_stream(&[]) {
-            world.send(&command, &mut expected);
-        }
-        assert_eq!(ledger().mounts, 4);
-        // Each claimed part is a mount of its own generation (4.2), which a library keeps its memo table by.
-        let generations: HashSet<u64> = mounted().iter().map(|shown| shown.id.generation).collect();
-        assert_eq!(generations.len(), 4, "{:?}", mounted());
-        let before = opencode_plugin::loader::native::crossed();
-        world.harness.tui.navigate(opencode_tui::Route::Home);
-        world.settle();
-        let ledger = ledger();
-        assert_eq!((ledger.mounts, ledger.content, ledger.memo_entries), (0, 0, 0), "{ledger:?}");
-        assert!(mounted().is_empty());
-        // A library hears that each part's mount ended, once, and nothing else crosses.
-        let unmounts = opencode_plugin::loader::native::crossed().since(before).calls;
-        assert_eq!(unmounts, if carrier == Carrier::Abi { 4 } else { 0 }, "{carrier:?}");
-    }
+    assert_eq!(generations.len(), 3, "{generations:?}");
+    assert!(generations.windows(2).all(|pair| pair[0] == pair[1]), "{generations:?}");
 }
 
 // Expected: a tree refused once is asked for again whole, in the same revision, and the part keeps its claim.
 #[test]
 fn a_tree_refused_once_is_asked_again_whole() {
-    for carrier in CARRIERS {
-        let world = World::open(carrier);
-        let mut expected = Expected::new();
-        world.send(&Command::Start(0), &mut expected);
-        ONCE.with_borrow_mut(|once| once.insert("call_1".to_owned()));
-        FULL.with_borrow_mut(Vec::clear);
-        world.send(&Command::Delta(0, 0), &mut expected);
-        assert_eq!(FULL.with_borrow(Vec::clone), [false, true], "a refusal asks once more, for a whole tree");
-        assert_eq!(stream_whole(&world, &expected), Ok(1));
-        ONCE.with_borrow_mut(HashSet::clear);
-    }
+    let world = World::open();
+    let mut expected = Expected::new();
+    world.send(&Command::Start(0), &mut expected);
+    ONCE.with_borrow_mut(|once| once.insert("call_1".to_owned()));
+    FULL.with_borrow_mut(Vec::clear);
+    world.send(&Command::Delta(0, 0), &mut expected);
+    assert_eq!(FULL.with_borrow(Vec::clone), [false, true], "a refusal asks once more, for a whole tree");
+    assert_eq!(stream_whole(&world, &expected), Ok(1));
+    ONCE.with_borrow_mut(HashSet::clear);
 }
 
 thread_local! {
@@ -1109,57 +1010,6 @@ fn probe(plugin: char) -> impl Fn(&mut v2::View<'_>, &Part) -> Option<v2::Node> 
             id: Some("text".into()),
             source: v2::Source::Content(handle),
         }]))
-    }
-}
-
-#[cfg(native)]
-fn shell_first(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.claim(Claim::tool("shell", probe('f')));
-    Ok(())
-}
-
-#[cfg(native)]
-fn shell_last(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.claim(Claim::tool("shell", probe('l')));
-    Ok(())
-}
-
-#[test]
-#[cfg(native)]
-fn the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width() {
-    for carrier in CARRIERS {
-        SEEN.with_borrow_mut(Vec::clear);
-        let world = World::with(vec![
-            builtin(carrier, abi::Plugin { id: "claim.first", setup: shell_first }),
-            builtin(carrier, abi::Plugin { id: "claim.last", setup: shell_last }),
-        ]);
-        let before = opencode_plugin::loader::native::crossed();
-        world.emit("session.tool.input.started", json!({ "id": "call_9", "name": "bash" }));
-        world.settle();
-        world.harness.wait_for("l drew call_9");
-        // The view and its content cross the C ABI on that carrier, and nothing crosses linked.
-        let crossed = opencode_plugin::loader::native::crossed().since(before);
-        match carrier {
-            Carrier::Linked => assert_eq!(crossed.calls, 0, "{crossed:?}"),
-            // A claim that does not declare the palette is sent none: a request stays small.
-            Carrier::Abi => assert!(crossed.calls >= 1 && crossed.received > 13 && crossed.sent < 2048, "{crossed:?}"),
-        }
-        assert!(
-            SEEN.with_borrow(|seen| seen.iter().all(|(plugin, _)| *plugin == 'l')),
-            "{:?}",
-            SEEN.with_borrow(Vec::clone)
-        );
-        let content = ledger().content;
-        assert_eq!(content, 1, "{:?}", ledger());
-        let width = SEEN.with_borrow(|seen| seen.last().map(|(_, width)| *width)).unwrap();
-        world.harness.app.resize(WIDTH - 20, HEIGHT);
-        world.settle();
-        world.settle();
-        let resized = SEEN.with_borrow(|seen| seen.last().map(|(_, width)| *width)).unwrap();
-        assert_eq!(resized, width - 20, "the view saw {width} columns, then {resized}");
-        world.harness.tui.navigate(opencode_tui::Route::Home);
-        world.settle();
-        assert_eq!((ledger().mounts, ledger().content, ledger().content_bytes), (0, 0, 0));
     }
 }
 
@@ -1183,20 +1033,18 @@ fn two_claims(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn each_claim_draws_with_its_own_view_and_releases_hold() {
-    for carrier in CARRIERS {
-        SEEN.with_borrow_mut(Vec::clear);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.two", setup: two_claims })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "first" }));
-        world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "second" }));
-        world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "x" }));
-        world.emit("session.tool.called", json!({ "id": "call_2", "input": {}, "executed": true }));
-        world.settle();
-        world.harness.wait_for("2 drew call_2 Running");
-        assert!(world.harness.app.text().contains("1 drew call_1"), "{carrier:?}:\n{}", world.harness.app.text());
-        let content = ledger().content;
-        assert_eq!(content, 2, "{carrier:?}: one handle each part, the released ones gone: {:?}", ledger());
-        drop(world);
-    }
+    SEEN.with_borrow_mut(Vec::clear);
+    let world = World::with(vec![abi::Plugin { id: "claim.two", setup: two_claims }.into()]);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "first" }));
+    world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "second" }));
+    world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "x" }));
+    world.emit("session.tool.called", json!({ "id": "call_2", "input": {}, "executed": true }));
+    world.settle();
+    world.harness.wait_for("2 drew call_2 Running");
+    assert!(world.harness.app.text().contains("1 drew call_1"), "{}", world.harness.app.text());
+    let content = ledger().content;
+    assert_eq!(content, 2, "one handle each part, the released ones gone: {:?}", ledger());
+    drop(world);
 }
 
 thread_local! {
@@ -1249,27 +1097,9 @@ fn plugin_rules(setup: &mut abi::Setup) -> Result<(), String> {
 
 impl World {
     /// `plugin_rules` on `carrier`, with the transcript settings `session` and image previews on or off.
-    fn rules(carrier: Carrier, session: Session, images: bool) -> Self {
+    fn rules(session: Session, images: bool) -> Self {
         DREW.with_borrow_mut(Vec::clear);
-        Self::configured(
-            vec![builtin(carrier, abi::Plugin { id: "claim.rules", setup: plugin_rules })],
-            session,
-            images,
-        )
-    }
-
-    /// Clicks the first cell of the first `text` on screen, a second after the last click so none is a double click.
-    #[cfg(native)]
-    fn click(&self, text: &str) {
-        let app = &self.harness.app;
-        app.advance(Duration::from_secs(1));
-        let screen = app.text();
-        let (y, line) = screen.lines().enumerate().find(|(_, line)| line.contains(text)).unwrap_or_else(|| {
-            panic!("no {text:?} on screen:\n{screen}");
-        });
-        let x = line[..line.find(text).unwrap()].chars().count();
-        app.click(x as u16, y as u16);
-        self.settle();
+        Self::configured(vec![abi::Plugin { id: "claim.rules", setup: plugin_rules }.into()], session, images)
     }
 
     /// A call of `name` that streams its input, runs and finishes with the text `done {id}` and `files`.
@@ -1310,68 +1140,6 @@ fn grouped() -> Session {
     Session { verbosity: Some(Verbosity::Low), ..Session::default() }
 }
 
-#[test]
-#[cfg(native)]
-fn a_claimed_call_in_a_group_draws_while_the_group_is_open() {
-    for carrier in CARRIERS {
-        let world = World::rules(carrier, grouped(), false);
-        world.finished_call("call_1", "probe", &[]);
-        world.finished_call("call_2", "probe", &[]);
-        let screen = world.frame().text();
-        assert!(!screen.contains("probe call_1"), "{carrier:?}: a folded group shows its calls:\n{screen}");
-        assert!(mounted().is_empty() && DREW.with_borrow(Vec::is_empty), "{carrier:?}: {:?}", mounted());
-        let line = |id: &str, state: &str| format!("probe {id} {state} permission false base -");
-        world.click(" tools");
-        world.draws("call_1", &line("call_1", "Completed"), Some("done call_1"));
-        world.draws("call_2", &line("call_2", "Completed"), Some("done call_2"));
-        assert_eq!(DREW.with_borrow(Vec::len), 2, "{carrier:?}: one view a call");
-
-        // A call that streams into the open group: declined, the host's row; accepted, the claim's.
-        DECLINE.with_borrow_mut(|decline| decline.insert("call_3".to_owned()));
-        world.emit("session.tool.input.started", json!({ "id": "call_3", "name": "probe" }));
-        world.settle();
-        let screen = world.frame().text();
-        assert!(screen.contains("⋯ probe") && !screen.contains("probe call_3"), "{carrier:?}:\n{screen}");
-        DECLINE.with_borrow_mut(HashSet::clear);
-        world.emit("session.tool.called", json!({ "id": "call_3", "input": {}, "executed": true }));
-        world.settle();
-        world.draws("call_3", &line("call_3", "Running"), None);
-
-        // Refused twice: the host's row for the rest of the mount; folding the group ends the mount.
-        ARMED.set(Some(("call_3".to_owned(), Fault::Bad)));
-        world.emit("session.tool.progress", json!({ "id": "call_3", "metadata": { "n": 1 } }));
-        world.settle();
-        let screen = world.frame().text();
-        assert!(!screen.contains("probe call_3"), "{carrier:?}: the refused tree shows:\n{screen}");
-        assert_eq!(world.mount_of("call_3").map(|shown| shown.shows), Some(false), "{carrier:?}");
-        ARMED.set(None);
-        world.emit("session.tool.progress", json!({ "id": "call_3", "metadata": { "n": 2 } }));
-        world.settle();
-        assert!(!world.frame().text().contains("probe call_3"), "{carrier:?}: a fallen call came back in its mount");
-        let generation = world.mount_of("call_3").map(|shown| shown.id.generation);
-        let before = opencode_plugin::loader::native::crossed();
-        world.click(" tools");
-        let screen = world.frame().text();
-        assert!(mounted().is_empty() && !screen.contains("probe call_"), "{carrier:?}: {:?}\n{screen}", mounted());
-        let ledger = ledger();
-        assert_eq!((ledger.mounts, ledger.content, ledger.memo_entries), (0, 0, 0), "{carrier:?}: {ledger:?}");
-        let unmounts = opencode_plugin::loader::native::crossed().since(before).calls;
-        assert_eq!(unmounts, if carrier == Carrier::Abi { 3 } else { 0 }, "{carrier:?}: a library hears each fold");
-        world.click(" tools");
-        world.draws("call_3", &line("call_3", "Running"), None);
-        assert_ne!(world.mount_of("call_3").map(|shown| shown.id.generation), generation, "{carrier:?}");
-
-        // A panic fails the plugin: every call in the open group shows the host's row.
-        ARMED.set(Some(("call_3".to_owned(), Fault::Panic)));
-        world.emit("session.tool.progress", json!({ "id": "call_3", "metadata": { "n": 3 } }));
-        world.settle();
-        let screen = world.frame().text();
-        assert!(mounted().is_empty() && !screen.contains("probe call_"), "{carrier:?}: {:?}\n{screen}", mounted());
-        assert!(screen.contains("− "), "{carrier:?}: the group stays open:\n{screen}");
-        assert_eq!(screen.matches("probe").count(), 3, "{carrier:?}: three host rows:\n{screen}");
-    }
-}
-
 impl World {
     /// Switches to the dark default theme or another one, as the theme dialog does.
     fn switch_theme(&self, dark: bool) {
@@ -1390,46 +1158,44 @@ fn base(world: &World) -> String {
 
 #[test]
 fn a_claim_that_reads_the_palette_is_viewed_again_in_a_new_theme() {
-    for carrier in CARRIERS {
-        let world = World::rules(carrier, ungrouped(), false);
-        world.finished_call("call_1", "paint", &[]);
-        world.finished_call("call_2", "probe", &[]);
-        // A claim that does not read the palette is not asked again about a revision it declined.
-        DECLINE.with_borrow_mut(|decline| decline.insert("call_3".to_owned()));
-        world.finished_call("call_3", "probe", &[]);
-        DECLINE.with_borrow_mut(HashSet::clear);
-        let paint = |base: &str| format!("paint call_1 Completed permission false base {base}");
-        let probe = "probe call_2 Completed permission false base -";
-        world.draws("call_1", &paint(&base(&world)), Some("done call_1"));
-        let dark = base(&world);
-        let views = DREW.with_borrow(Vec::len);
-        world.switch_theme(false);
-        assert_ne!(base(&world), dark);
-        world.draws("call_1", &paint(&base(&world)), Some("done call_1"));
-        // The probe's tree takes the new theme with no view.
-        world.draws("call_2", probe, Some("done call_2"));
-        assert_eq!(DREW.with_borrow(|drew| drew[views..].to_vec()), [paint(&base(&world))], "{carrier:?}");
+    let world = World::rules(ungrouped(), false);
+    world.finished_call("call_1", "paint", &[]);
+    world.finished_call("call_2", "probe", &[]);
+    // A claim that does not read the palette is not asked again about a revision it declined.
+    DECLINE.with_borrow_mut(|decline| decline.insert("call_3".to_owned()));
+    world.finished_call("call_3", "probe", &[]);
+    DECLINE.with_borrow_mut(HashSet::clear);
+    let paint = |base: &str| format!("paint call_1 Completed permission false base {base}");
+    let probe = "probe call_2 Completed permission false base -";
+    world.draws("call_1", &paint(&base(&world)), Some("done call_1"));
+    let dark = base(&world);
+    let views = DREW.with_borrow(Vec::len);
+    world.switch_theme(false);
+    assert_ne!(base(&world), dark);
+    world.draws("call_1", &paint(&base(&world)), Some("done call_1"));
+    // The probe's tree takes the new theme with no view.
+    world.draws("call_2", probe, Some("done call_2"));
+    assert_eq!(DREW.with_borrow(|drew| drew[views..].to_vec()), [paint(&base(&world))]);
 
-        DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
-        world.switch_theme(true);
-        let screen = world.frame().text();
-        assert!(!screen.contains("paint call_1"), "{carrier:?}: a declined tree stays:\n{screen}");
-        assert!(screen.contains("✓ paint"), "{carrier:?}: no host row:\n{screen}");
-        DECLINE.with_borrow_mut(HashSet::clear);
-        world.switch_theme(false);
-        world.draws("call_1", &paint(&base(&world)), Some("done call_1"));
+    DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
+    world.switch_theme(true);
+    let screen = world.frame().text();
+    assert!(!screen.contains("paint call_1"), "a declined tree stays:\n{screen}");
+    assert!(screen.contains("✓ paint"), "no host row:\n{screen}");
+    DECLINE.with_borrow_mut(HashSet::clear);
+    world.switch_theme(false);
+    world.draws("call_1", &paint(&base(&world)), Some("done call_1"));
 
-        ARMED.set(Some(("call_1".to_owned(), Fault::Bad)));
-        world.switch_theme(true);
-        ARMED.set(None);
-        let screen = world.frame().text();
-        assert!(!screen.contains("paint call_1"), "{carrier:?}: a refused tree shows:\n{screen}");
-        assert!(screen.contains("✓ paint"), "{carrier:?}: no host row:\n{screen}");
-        let views = DREW.with_borrow(Vec::len);
-        world.switch_theme(false);
-        assert!(!world.frame().text().contains("paint call_1"), "{carrier:?}: a fallen call came back in its mount");
-        assert_eq!(DREW.with_borrow(Vec::len), views, "{carrier:?}: a fallen call is asked again");
-    }
+    ARMED.set(Some(("call_1".to_owned(), Fault::Bad)));
+    world.switch_theme(true);
+    ARMED.set(None);
+    let screen = world.frame().text();
+    assert!(!screen.contains("paint call_1"), "a refused tree shows:\n{screen}");
+    assert!(screen.contains("✓ paint"), "no host row:\n{screen}");
+    let views = DREW.with_borrow(Vec::len);
+    world.switch_theme(false);
+    assert!(!world.frame().text().contains("paint call_1"), "a fallen call came back in its mount");
+    assert_eq!(DREW.with_borrow(Vec::len), views, "a fallen call is asked again");
 }
 
 impl World {
@@ -1459,34 +1225,32 @@ impl World {
 
 #[test]
 fn a_claimed_call_waiting_on_a_permission_is_viewed_with_it() {
-    for carrier in CARRIERS {
-        for session in [ungrouped(), grouped()] {
-            let world = World::rules(carrier, session.clone(), false);
-            world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "shell" }));
-            world.emit("session.tool.called", json!({ "id": "call_1", "input": {}, "executed": true }));
-            world.settle();
-            let line = |waits: bool| format!("shell call_1 Running permission {waits} base -");
-            let folded = session.verbosity == Some(Verbosity::Low);
-            match folded {
-                true => assert!(mounted().is_empty(), "{carrier:?}: {:?}", mounted()),
-                false => world.draws("call_1", &line(false), None),
-            }
-            if !folded {
-                world.emit("session.tool.progress", json!({ "id": "call_1", "metadata": { "n": 1 } }));
-            }
-            let views = DREW.with_borrow(Vec::len);
-            world.ask("per_1", "call_1");
-            if !folded {
-                assert_eq!(DREW.with_borrow(|drew| drew[views..].to_vec()), [line(true)], "{carrier:?}: it waited");
-            }
-            world.harness.wait_for("Permission required");
-            world.draws("call_1", &line(true), None);
-            assert_eq!(DREW.with_borrow(|drew| drew[views..].to_vec()), [line(true)], "{carrier:?} {session:?}");
-            world.reply("per_1");
-            match folded {
-                true => assert!(mounted().is_empty(), "{carrier:?}: it stays outside its group: {:?}", mounted()),
-                false => world.draws("call_1", &line(false), None),
-            }
+    for session in [ungrouped(), grouped()] {
+        let world = World::rules(session.clone(), false);
+        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "shell" }));
+        world.emit("session.tool.called", json!({ "id": "call_1", "input": {}, "executed": true }));
+        world.settle();
+        let line = |waits: bool| format!("shell call_1 Running permission {waits} base -");
+        let folded = session.verbosity == Some(Verbosity::Low);
+        match folded {
+            true => assert!(mounted().is_empty(), "{:?}", mounted()),
+            false => world.draws("call_1", &line(false), None),
+        }
+        if !folded {
+            world.emit("session.tool.progress", json!({ "id": "call_1", "metadata": { "n": 1 } }));
+        }
+        let views = DREW.with_borrow(Vec::len);
+        world.ask("per_1", "call_1");
+        if !folded {
+            assert_eq!(DREW.with_borrow(|drew| drew[views..].to_vec()), [line(true)], "it waited");
+        }
+        world.harness.wait_for("Permission required");
+        world.draws("call_1", &line(true), None);
+        assert_eq!(DREW.with_borrow(|drew| drew[views..].to_vec()), [line(true)], "{session:?}");
+        world.reply("per_1");
+        match folded {
+            true => assert!(mounted().is_empty(), "it stays outside its group: {:?}", mounted()),
+            false => world.draws("call_1", &line(false), None),
         }
     }
 }
@@ -1498,33 +1262,31 @@ fn a_claimed_call_keeps_its_images_below_the_claim() {
     let shot = |name: &str| json!({ "type": "file", "uri": format!("data:image/png;base64,{png}"), "mime": "image/png", "name": name });
     let shots = [shot("a.png"), shot("b.png"), shot("c.png"), shot("d.png")];
     let line = "probe call_1 Completed permission false base -";
-    for carrier in CARRIERS {
-        let world = World::rules(carrier, ungrouped(), true);
-        // The output by reference names the files after the text (`part_output`).
-        let output = "done call_1\na.png\nb.png\nc.png\nd.png";
-        world.finished_call("call_1", "probe", &shots);
-        world.draws("call_1", line, Some(output));
-        let screen = world.frame().text();
-        let below = |screen: &str, row: &str| {
-            let at = |text: &str| screen.lines().position(|line| line.contains(text));
-            matches!((at(row), at("+1 more")), (Some(row), Some(more)) if more > row)
-        };
-        assert!(below(&screen, line), "{carrier:?}: no images below the claim's tree:\n{screen}");
-        assert_eq!(screen.matches("+1 more").count(), 1, "{carrier:?}:\n{screen}");
+    let world = World::rules(ungrouped(), true);
+    // The output by reference names the files after the text (`part_output`).
+    let output = "done call_1\na.png\nb.png\nc.png\nd.png";
+    world.finished_call("call_1", "probe", &shots);
+    world.draws("call_1", line, Some(output));
+    let screen = world.frame().text();
+    let below = |screen: &str, row: &str| {
+        let at = |text: &str| screen.lines().position(|line| line.contains(text));
+        matches!((at(row), at("+1 more")), (Some(row), Some(more)) if more > row)
+    };
+    assert!(below(&screen, line), "no images below the claim's tree:\n{screen}");
+    assert_eq!(screen.matches("+1 more").count(), 1, "{screen}");
 
-        DECLINE.with_borrow_mut(|decline| decline.insert("call_2".to_owned()));
-        world.finished_call("call_2", "probe", &shots);
-        DECLINE.with_borrow_mut(HashSet::clear);
-        let screen = world.frame().text();
-        let host = screen.lines().skip_while(|row| !row.contains("+1 more")).skip(1).collect::<Vec<_>>().join("\n");
-        assert!(below(&host, "✓ probe") && !host.contains("call_2"), "{carrier:?}: declined:\n{screen}");
-        assert_eq!(screen.matches("+1 more").count(), 2, "{carrier:?}: once each call:\n{screen}");
+    DECLINE.with_borrow_mut(|decline| decline.insert("call_2".to_owned()));
+    world.finished_call("call_2", "probe", &shots);
+    DECLINE.with_borrow_mut(HashSet::clear);
+    let screen = world.frame().text();
+    let host = screen.lines().skip_while(|row| !row.contains("+1 more")).skip(1).collect::<Vec<_>>().join("\n");
+    assert!(below(&host, "✓ probe") && !host.contains("call_2"), "declined:\n{screen}");
+    assert_eq!(screen.matches("+1 more").count(), 2, "once each call:\n{screen}");
 
-        let world = World::rules(carrier, ungrouped(), false);
-        world.finished_call("call_1", "probe", &shots);
-        world.draws("call_1", line, Some(output));
-        assert!(!world.frame().text().contains("more"), "{carrier:?}:\n{}", world.frame().text());
-    }
+    let world = World::rules(ungrouped(), false);
+    world.finished_call("call_1", "probe", &shots);
+    world.draws("call_1", line, Some(output));
+    assert!(!world.frame().text().contains("more"), "{}", world.frame().text());
 }
 
 /// Claims `nest` calls with a card whose body is a memo holding a memo, and `sibling` calls with [`probe`].
@@ -1544,91 +1306,83 @@ fn plugin_nest(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_kept_memo_that_holds_a_memo_is_valid_on_every_carrier() {
-    for carrier in CARRIERS {
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.nest", setup: plugin_nest })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "sibling" }));
-        world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "nest" }));
-        world.settle();
-        world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "{\"q\":" }));
-        world.settle();
-        world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "1}" }));
-        world.settle();
-        let screen = world.frame().text();
-        assert!(screen.contains("in {\\\"q\\\":1}") && screen.contains("kept"), "{carrier:?}:\n{screen}");
-        assert!(screen.contains("s drew call_1"), "{carrier:?}: the plugin failed:\n{screen}");
-        assert!(mounted().iter().all(|shown| shown.shows), "{carrier:?}: {:?}", mounted());
-        assert_eq!(ledger().memo_entries, 2, "{carrier:?}: {:?}", ledger());
-    }
+    let world = World::with(vec![abi::Plugin { id: "claim.nest", setup: plugin_nest }.into()]);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "sibling" }));
+    world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "nest" }));
+    world.settle();
+    world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "{\"q\":" }));
+    world.settle();
+    world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "1}" }));
+    world.settle();
+    let screen = world.frame().text();
+    assert!(screen.contains("in {\\\"q\\\":1}") && screen.contains("kept"), "{screen}");
+    assert!(screen.contains("s drew call_1"), "the plugin failed:\n{screen}");
+    assert!(mounted().iter().all(|shown| shown.shows), "{:?}", mounted());
+    assert_eq!(ledger().memo_entries, 2, "{:?}", ledger());
 }
 
 #[test]
 fn a_view_at_the_paint_that_does_not_draw_hands_the_row_back() {
-    for carrier in CARRIERS {
-        for fault in [None, Some(Fault::Bad), Some(Fault::Overrun)] {
-            let world = World::open(carrier);
-            let mut expected = Expected::new();
-            world.send(&Command::Start(0), &mut expected);
-            world.send(&Command::Delta(0, 0), &mut expected);
-            COLD.set(false);
-            assert!(world.frame().text().contains("probe call_1"), "{carrier:?} {fault:?}: no tree before the paint");
-            // Two revisions before a paint: both are viewed once, as the paint starts.
-            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": "x" }));
-            match fault {
-                None => drop(DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()))),
-                Some(fault) => ARMED.set(Some(("call_1".to_owned(), fault))),
-            }
-            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": "y" }));
-            for _ in 0..3 {
-                world.settle();
-            }
-            let screen = world.frame().text();
-            assert!(!screen.contains("probe call_1"), "{carrier:?} {fault:?}: the tree stayed:\n{screen}");
-            assert!(screen.contains("⋯ probe"), "{carrier:?} {fault:?}: no host row:\n{screen}");
-            assert!(mounted().iter().all(|shown| !shown.shows), "{carrier:?} {fault:?}: {:?}", mounted());
+    for fault in [None, Some(Fault::Bad), Some(Fault::Overrun)] {
+        let world = World::open();
+        let mut expected = Expected::new();
+        world.send(&Command::Start(0), &mut expected);
+        world.send(&Command::Delta(0, 0), &mut expected);
+        COLD.set(false);
+        assert!(world.frame().text().contains("probe call_1"), "{fault:?}: no tree before the paint");
+        // Two revisions before a paint: both are viewed once, as the paint starts.
+        world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": "x" }));
+        match fault {
+            None => drop(DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()))),
+            Some(fault) => ARMED.set(Some(("call_1".to_owned(), fault))),
         }
+        world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": "y" }));
+        for _ in 0..3 {
+            world.settle();
+        }
+        let screen = world.frame().text();
+        assert!(!screen.contains("probe call_1"), "{fault:?}: the tree stayed:\n{screen}");
+        assert!(screen.contains("⋯ probe"), "{fault:?}: no host row:\n{screen}");
+        assert!(mounted().iter().all(|shown| !shown.shows), "{fault:?}: {:?}", mounted());
     }
 }
 
 #[test]
 fn a_fence_view_at_the_paint_that_declines_shows_the_host_code() {
-    for carrier in CARRIERS {
-        let world = World::open(carrier);
-        let mut expected = Expected::new();
-        for _ in 0..3 {
-            world.send(&Command::Text, &mut expected);
-        }
-        world.harness.wait_for("| alpha");
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "beta " }));
-        DECLINE.with_borrow_mut(|decline| decline.insert("fence".to_owned()));
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "gamma\n" }));
-        for _ in 0..3 {
-            world.settle();
-        }
-        let screen = world.frame().text();
-        assert!(!screen.contains("| "), "{carrier:?}: the claim's tree stayed:\n{screen}");
-        assert!(screen.contains("beta gamma"), "{carrier:?}: no host code of the newest revision:\n{screen}");
+    let world = World::open();
+    let mut expected = Expected::new();
+    for _ in 0..3 {
+        world.send(&Command::Text, &mut expected);
     }
+    world.harness.wait_for("| alpha");
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "beta " }));
+    DECLINE.with_borrow_mut(|decline| decline.insert("fence".to_owned()));
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "gamma\n" }));
+    for _ in 0..3 {
+        world.settle();
+    }
+    let screen = world.frame().text();
+    assert!(!screen.contains("| "), "the claim's tree stayed:\n{screen}");
+    assert!(screen.contains("beta gamma"), "no host code of the newest revision:\n{screen}");
 }
 
 #[test]
 fn a_declined_part_gets_one_view_a_frame_and_the_paint_takes_it_back() {
-    for carrier in CARRIERS {
-        let world = World::open(carrier);
-        let mut expected = Expected::new();
-        DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
-        world.send(&Command::Start(0), &mut expected);
-        assert!(world.frame().text().contains("⋯ probe"), "{carrier:?}");
-        VIEWS.with_borrow_mut(Vec::clear);
-        let views = || VIEWS.with_borrow(|views| views.iter().filter(|(plugin, _, _)| *plugin == 'a').count());
-        for delta in TOKENS {
-            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
-        }
-        assert_eq!(views(), 0, "{carrier:?}: a streaming revision is viewed as the paint starts");
-        DECLINE.with_borrow_mut(HashSet::clear);
-        let screen = world.harness.app.render().text();
-        assert_eq!(views(), 1, "{carrier:?}: the paint views the newest revision once");
-        assert!(screen.contains("probe call_1 Pending") && !screen.contains("⋯ probe"), "{carrier:?}:\n{screen}");
+    let world = World::open();
+    let mut expected = Expected::new();
+    DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
+    world.send(&Command::Start(0), &mut expected);
+    assert!(world.frame().text().contains("⋯ probe"));
+    VIEWS.with_borrow_mut(Vec::clear);
+    let views = || VIEWS.with_borrow(|views| views.iter().filter(|(plugin, _, _)| *plugin == 'a').count());
+    for delta in TOKENS {
+        world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
     }
+    assert_eq!(views(), 0, "a streaming revision is viewed as the paint starts");
+    DECLINE.with_borrow_mut(HashSet::clear);
+    let screen = world.harness.app.render().text();
+    assert_eq!(views(), 1, "the paint views the newest revision once");
+    assert!(screen.contains("probe call_1 Pending") && !screen.contains("⋯ probe"), "{screen}");
 }
 
 thread_local! {
@@ -1651,23 +1405,21 @@ fn plugin_twice(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_fence_that_falls_back_leaves_one_of_the_same_text_claimed() {
-    for carrier in CARRIERS {
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.twice", setup: plugin_twice })]);
-        // The first fence's first view is whole, so its refusal falls it back at once.
-        REFUSE.set(1);
-        world.emit("session.text.started", json!({ "ordinal": 0 }));
-        let text = "```probe\nsame\n```\n\nBetween.\n\n```probe\nsame\n```\n\nAfter.\n";
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
-        world.settle();
-        let screen = world.frame().text();
-        assert_eq!(screen.matches("| same").count(), 1, "{carrier:?}: one fence claimed:\n{screen}");
-        assert_eq!(screen.matches("same").count(), 2, "{carrier:?}: the other the host's:\n{screen}");
-        let (shows, fallen) = mounted().iter().fold((0, 0), |(shows, fallen), shown| match shown.shows {
-            true => (shows + 1, fallen),
-            false => (shows, fallen + 1),
-        });
-        assert_eq!((shows, fallen), (1, 1), "{carrier:?}: {:?}", mounted());
-    }
+    let world = World::with(vec![abi::Plugin { id: "claim.twice", setup: plugin_twice }.into()]);
+    // The first fence's first view is whole, so its refusal falls it back at once.
+    REFUSE.set(1);
+    world.emit("session.text.started", json!({ "ordinal": 0 }));
+    let text = "```probe\nsame\n```\n\nBetween.\n\n```probe\nsame\n```\n\nAfter.\n";
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
+    world.settle();
+    let screen = world.frame().text();
+    assert_eq!(screen.matches("| same").count(), 1, "one fence claimed:\n{screen}");
+    assert_eq!(screen.matches("same").count(), 2, "the other the host's:\n{screen}");
+    let (shows, fallen) = mounted().iter().fold((0, 0), |(shows, fallen), shown| match shown.shows {
+        true => (shows + 1, fallen),
+        false => (shows, fallen + 1),
+    });
+    assert_eq!((shows, fallen), (1, 1), "{:?}", mounted());
 }
 
 /// Claims `memo` calls with one memoized line, and declines what [`DECLINE`] names.
@@ -1684,92 +1436,28 @@ fn plugin_memo(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn the_ledger_counts_what_a_declined_part_keeps_and_what_went() {
-    for carrier in CARRIERS {
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.memo", setup: plugin_memo })]);
-        for index in 0..30 {
-            world.emit("session.tool.input.started", json!({ "id": format!("call_{index}"), "name": "memo" }));
-        }
-        world.settle();
-        world.harness.wait_for("memo call_29");
-        assert_eq!(ledger().memo_entries, 30, "{carrier:?}: {:?}", ledger());
-        DECLINE.with_borrow_mut(|decline| decline.insert("call_0".to_owned()));
-        world.emit("session.tool.input.delta", json!({ "id": "call_0", "delta": "x" }));
-        world.settle();
-        assert!(!world.frame().text().contains("memo call_0"), "{carrier:?}");
-        assert_eq!(ledger().memo_entries, 30, "{carrier:?}: the declined part's value went: {:?}", ledger());
-        world.harness.tui.navigate(opencode_tui::Route::Home);
-        world.settle();
-        assert_eq!((ledger().mounts, ledger().memo_entries), (0, 0), "{carrier:?}");
-        assert_eq!(opencode_plugin::claim::registered(), 0, "{carrier:?}: the registry keeps parts that went");
-        DECLINE.with_borrow_mut(HashSet::clear);
+    let world = World::with(vec![abi::Plugin { id: "claim.memo", setup: plugin_memo }.into()]);
+    for index in 0..30 {
+        world.emit("session.tool.input.started", json!({ "id": format!("call_{index}"), "name": "memo" }));
     }
+    world.settle();
+    world.harness.wait_for("memo call_29");
+    assert_eq!(ledger().memo_entries, 30, "{:?}", ledger());
+    DECLINE.with_borrow_mut(|decline| decline.insert("call_0".to_owned()));
+    world.emit("session.tool.input.delta", json!({ "id": "call_0", "delta": "x" }));
+    world.settle();
+    assert!(!world.frame().text().contains("memo call_0"));
+    assert_eq!(ledger().memo_entries, 30, "the declined part's value went: {:?}", ledger());
+    world.harness.tui.navigate(opencode_tui::Route::Home);
+    world.settle();
+    assert_eq!((ledger().mounts, ledger().memo_entries), (0, 0));
+    assert_eq!(opencode_plugin::claim::registered(), 0, "the registry keeps parts that went");
+    DECLINE.with_borrow_mut(HashSet::clear);
 }
 
 thread_local! {
     /// What `claim.label`'s views saw of each call: its id, the content items and the bytes of metadata.
     static RESULTS: RefCell<Vec<(String, usize, usize)>> = const { RefCell::new(Vec::new()) };
-}
-
-/// Claims `label` calls with a one-line label of the call's state, and logs what each view saw of the result.
-#[cfg(native)]
-fn plugin_label(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.claim(Claim::tool("label", |_, part| {
-        let Part::Tool(tool) = part else { return None };
-        let (content, metadata) = match &tool.tool.state {
-            SessionMessageAssistantToolState::Running(state) => (0, json!(state.metadata).to_string().len()),
-            SessionMessageAssistantToolState::Completed(state) => {
-                (state.content.len(), state.metadata.as_ref().map_or(0, |metadata| json!(metadata).to_string().len()))
-            }
-            _ => (0, 0),
-        };
-        RESULTS.with_borrow_mut(|results| results.push((tool.tool.id.clone(), content, metadata)));
-        Some(v2::Node::text(vec![abi::Span::new(format!("label {} {:?}", tool.tool.id, tool.state))]))
-    }));
-    Ok(())
-}
-
-#[test]
-#[cfg(native)]
-fn a_claimed_call_sends_its_view_no_result() {
-    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
-    let line = format!("{}\n", "word ".repeat(16));
-    let text = line.repeat(102_400 / line.len());
-    for carrier in CARRIERS {
-        RESULTS.with_borrow_mut(Vec::clear);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.label", setup: plugin_label })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "label" }));
-        world.emit("session.tool.called", json!({ "id": "call_1", "input": {}, "executed": true }));
-        world.emit("session.tool.progress", json!({ "id": "call_1", "metadata": { "n": 1 } }));
-        world.settle();
-        world.emit("session.tool.progress", json!({ "id": "call_1", "metadata": { "log": "x".repeat(10_000) } }));
-        world.settle();
-        let content = json!([
-            { "type": "text", "text": text },
-            { "type": "file", "uri": format!("data:image/png;base64,{png}"), "mime": "image/png", "name": "a.png" },
-        ]);
-        let before = opencode_plugin::loader::native::crossed();
-        world.emit("session.tool.success", json!({ "id": "call_1", "content": content, "executed": true }));
-        world.settle();
-        world.harness.wait_for("label call_1 Completed");
-        let finished = opencode_plugin::loader::native::crossed().since(before);
-        let before = opencode_plugin::loader::native::crossed();
-        world.harness.app.resize(WIDTH - 10, HEIGHT);
-        world.settle();
-        world.settle();
-        let resized = opencode_plugin::loader::native::crossed().since(before);
-        if carrier == Carrier::Abi {
-            assert!(finished.calls >= 1 && finished.sent < 4096, "{finished:?}");
-            assert!(resized.calls >= 1 && resized.sent < 4096, "{resized:?}");
-        }
-        let results = RESULTS.with_borrow(Vec::clone);
-        let progress: Vec<usize> = results.iter().map(|(_, _, metadata)| *metadata).collect();
-        assert!(
-            progress.contains(&json!({ "n": 1 }).to_string().len()),
-            "{carrier:?}: small metadata goes: {results:?}"
-        );
-        assert!(progress.iter().all(|bytes| *bytes <= 4096), "{carrier:?}: {results:?}");
-        assert!(results.iter().all(|(_, content, _)| *content == 0), "{carrier:?}: a view saw the result: {results:?}");
-    }
 }
 
 thread_local! {
@@ -1792,39 +1480,37 @@ fn plugin_narrow(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_part_is_viewed_again_at_a_new_width_and_gets_no_height() {
-    for carrier in CARRIERS {
-        INPUTS.with_borrow_mut(Vec::clear);
-        NARROW.set(90);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.narrow", setup: plugin_narrow })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "narrow" }));
-        world.emit("session.text.started", json!({ "ordinal": 0 }));
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```narrow\nfits\n```\n\nAfter.\n" }));
+    INPUTS.with_borrow_mut(Vec::clear);
+    NARROW.set(90);
+    let world = World::with(vec![abi::Plugin { id: "claim.narrow", setup: plugin_narrow }.into()]);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "narrow" }));
+    world.emit("session.text.started", json!({ "ordinal": 0 }));
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```narrow\nfits\n```\n\nAfter.\n" }));
+    world.settle();
+    let screen = world.frame().text();
+    assert!(!screen.contains("narrow call_1") && screen.contains("fits"), "drew wide:\n{screen}");
+    world.harness.app.resize(WIDTH - 20, HEIGHT);
+    for _ in 0..3 {
         world.settle();
-        let screen = world.frame().text();
-        assert!(!screen.contains("narrow call_1") && screen.contains("fits"), "{carrier:?}: drew wide:\n{screen}");
-        world.harness.app.resize(WIDTH - 20, HEIGHT);
-        for _ in 0..3 {
-            world.settle();
-        }
-        let screen = world.frame().text();
-        assert!(screen.contains("narrow call_1 at"), "{carrier:?}: the call was not asked again:\n{screen}");
-        assert!(screen.contains("narrow fence at"), "{carrier:?}: the fence was not asked again:\n{screen}");
-        // Wide again, the claim declines both, which shows the host's rows at that paint.
-        world.harness.app.resize(WIDTH, HEIGHT);
-        for _ in 0..3 {
-            world.settle();
-        }
-        let screen = world.frame().text();
-        assert!(!screen.contains("narrow call_1") && !screen.contains("narrow fence"), "{carrier:?}:\n{screen}");
-        assert!(screen.contains("fits"), "{carrier:?}: no host code:\n{screen}");
-        world.harness.app.resize(WIDTH - 20, HEIGHT);
-        for _ in 0..3 {
-            world.settle();
-        }
-        world.harness.app.resize(WIDTH - 20, HEIGHT - 9);
-        world.settle();
-        assert!(INPUTS.with_borrow(|inputs| inputs.iter().all(|(_, height)| *height == 0)), "{carrier:?}");
     }
+    let screen = world.frame().text();
+    assert!(screen.contains("narrow call_1 at"), "the call was not asked again:\n{screen}");
+    assert!(screen.contains("narrow fence at"), "the fence was not asked again:\n{screen}");
+    // Wide again, the claim declines both, which shows the host's rows at that paint.
+    world.harness.app.resize(WIDTH, HEIGHT);
+    for _ in 0..3 {
+        world.settle();
+    }
+    let screen = world.frame().text();
+    assert!(!screen.contains("narrow call_1") && !screen.contains("narrow fence"), "{screen}");
+    assert!(screen.contains("fits"), "no host code:\n{screen}");
+    world.harness.app.resize(WIDTH - 20, HEIGHT);
+    for _ in 0..3 {
+        world.settle();
+    }
+    world.harness.app.resize(WIDTH - 20, HEIGHT - 9);
+    world.settle();
+    assert!(INPUTS.with_borrow(|inputs| inputs.iter().all(|(_, height)| *height == 0)));
 }
 
 /// Claims `tall` calls with twelve lines, `{id}:{line}`; refuses the tree of what [`ARMED`] names with [`Fault::Bad`].
@@ -1843,84 +1529,71 @@ fn plugin_tall(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_part_that_falls_back_above_the_reader_leaves_the_reader_in_place() {
-    for carrier in CARRIERS {
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.tall", setup: plugin_tall })]);
-        world.harness.app.resize(WIDTH, 30);
-        for index in 0..9 {
-            world.emit("session.tool.input.started", json!({ "id": format!("call_{index}"), "name": "tall" }));
-            world.emit("session.tool.called", json!({ "id": format!("call_{index}"), "input": {}, "executed": true }));
-        }
-        world.settle();
-        for _ in 0..4 {
-            world.harness.app.mouse(MouseEventKind::ScrollUp, WIDTH / 2, 10);
-            world.settle();
-        }
-        let rows = |screen: String| -> Vec<String> {
-            screen.lines().map(str::trim).filter(|line| line.starts_with("call_")).map(str::to_owned).collect()
-        };
-        let before = rows(world.frame().text());
-        assert!(!before.iter().any(|row| row.starts_with("call_0:")), "{carrier:?}: call_0 is on screen: {before:?}");
-        ARMED.set(Some(("call_0".to_owned(), Fault::Bad)));
-        world.emit("session.tool.progress", json!({ "id": "call_0", "metadata": { "n": 1 } }));
-        world.settle();
-        ARMED.set(None);
-        assert!(world.mount_of("call_0").is_some_and(|shown| !shown.shows), "{carrier:?}: call_0 did not fall back");
-        let after = rows(world.frame().text());
-        assert_eq!(after, before, "{carrier:?}: the reader moved");
-        // A part below the reader's rows changes nothing above it.
-        assert!(!before.iter().any(|row| row.starts_with("call_8:")), "{carrier:?}: call_8 is on screen: {before:?}");
-        ARMED.set(Some(("call_8".to_owned(), Fault::Bad)));
-        world.emit("session.tool.progress", json!({ "id": "call_8", "metadata": { "n": 1 } }));
-        world.settle();
-        ARMED.set(None);
-        assert!(world.mount_of("call_8").is_some_and(|shown| !shown.shows), "{carrier:?}: call_8 did not fall back");
-        assert_eq!(rows(world.frame().text()), before, "{carrier:?}: a part below moved the reader");
-
-        // At the tail, the transcript stays at its bottom.
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.tall", setup: plugin_tall })]);
-        world.harness.app.resize(WIDTH, 30);
-        for index in 0..9 {
-            world.emit("session.tool.input.started", json!({ "id": format!("call_{index}"), "name": "tall" }));
-            world.emit("session.tool.called", json!({ "id": format!("call_{index}"), "input": {}, "executed": true }));
-        }
-        world.settle();
-        ARMED.set(Some(("call_0".to_owned(), Fault::Bad)));
-        world.emit("session.tool.progress", json!({ "id": "call_0", "metadata": { "n": 1 } }));
-        world.settle();
-        ARMED.set(None);
-        let screen = rows(world.frame().text());
-        assert_eq!(screen.last().map(String::as_str), Some("call_8:11"), "{carrier:?}: left the tail: {screen:?}");
+    let world = World::with(vec![abi::Plugin { id: "claim.tall", setup: plugin_tall }.into()]);
+    world.harness.app.resize(WIDTH, 30);
+    for index in 0..9 {
+        world.emit("session.tool.input.started", json!({ "id": format!("call_{index}"), "name": "tall" }));
+        world.emit("session.tool.called", json!({ "id": format!("call_{index}"), "input": {}, "executed": true }));
     }
+    world.settle();
+    for _ in 0..4 {
+        world.harness.app.mouse(MouseEventKind::ScrollUp, WIDTH / 2, 10);
+        world.settle();
+    }
+    let rows = |screen: String| -> Vec<String> {
+        screen.lines().map(str::trim).filter(|line| line.starts_with("call_")).map(str::to_owned).collect()
+    };
+    let before = rows(world.frame().text());
+    assert!(!before.iter().any(|row| row.starts_with("call_0:")), "call_0 is on screen: {before:?}");
+    ARMED.set(Some(("call_0".to_owned(), Fault::Bad)));
+    world.emit("session.tool.progress", json!({ "id": "call_0", "metadata": { "n": 1 } }));
+    world.settle();
+    ARMED.set(None);
+    assert!(world.mount_of("call_0").is_some_and(|shown| !shown.shows), "call_0 did not fall back");
+    let after = rows(world.frame().text());
+    assert_eq!(after, before, "the reader moved");
+    // A part below the reader's rows changes nothing above it.
+    assert!(!before.iter().any(|row| row.starts_with("call_8:")), "call_8 is on screen: {before:?}");
+    ARMED.set(Some(("call_8".to_owned(), Fault::Bad)));
+    world.emit("session.tool.progress", json!({ "id": "call_8", "metadata": { "n": 1 } }));
+    world.settle();
+    ARMED.set(None);
+    assert!(world.mount_of("call_8").is_some_and(|shown| !shown.shows), "call_8 did not fall back");
+    assert_eq!(rows(world.frame().text()), before, "a part below moved the reader");
+
+    // At the tail, the transcript stays at its bottom.
+    let world = World::with(vec![abi::Plugin { id: "claim.tall", setup: plugin_tall }.into()]);
+    world.harness.app.resize(WIDTH, 30);
+    for index in 0..9 {
+        world.emit("session.tool.input.started", json!({ "id": format!("call_{index}"), "name": "tall" }));
+        world.emit("session.tool.called", json!({ "id": format!("call_{index}"), "input": {}, "executed": true }));
+    }
+    world.settle();
+    ARMED.set(Some(("call_0".to_owned(), Fault::Bad)));
+    world.emit("session.tool.progress", json!({ "id": "call_0", "metadata": { "n": 1 } }));
+    world.settle();
+    ARMED.set(None);
+    let screen = rows(world.frame().text());
+    assert_eq!(screen.last().map(String::as_str), Some("call_8:11"), "left the tail: {screen:?}");
 }
 
 #[test]
-fn an_overrun_falls_back_in_process_and_fails_a_library() {
-    for carrier in CARRIERS {
-        let world = World::open(carrier);
-        let mut expected = Expected::new();
-        for slot in [0, 1, 2] {
-            world.send(&Command::Start(slot), &mut expected);
-        }
-        COLD.set(false);
-        ARMED.set(Some(("call_1".to_owned(), Fault::Overrun)));
-        world.send(&Command::Delta(0, 0), &mut expected);
-        let status =
-            world.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "claim.a").unwrap().status;
-        let screen = world.frame().text();
-        let failed = world.toasts.borrow().iter().any(|toast| toast == "Plugin failed: claim.a");
-        assert!(!screen.contains("probe call_1") && screen.contains("witness call_3"), "{carrier:?}:\n{screen}");
-        match carrier {
-            Carrier::Linked => {
-                assert_eq!(status, opencode_plugin::Status::Active, "{carrier:?}");
-                assert_eq!(world.harness.tui.plugins.monitor().host_overruns(), 1, "{carrier:?}");
-                assert!(screen.contains("probe call_2") && !failed, "{carrier:?}:\n{screen}");
-            }
-            Carrier::Abi => {
-                assert!(matches!(status, opencode_plugin::Status::Failed(_)), "{carrier:?}: {status:?}");
-                assert!(!screen.contains("probe call_2") && failed, "{carrier:?}:\n{screen}");
-            }
-        }
+fn an_overrun_falls_back_in_process() {
+    let world = World::open();
+    let mut expected = Expected::new();
+    for slot in [0, 1, 2] {
+        world.send(&Command::Start(slot), &mut expected);
     }
+    COLD.set(false);
+    ARMED.set(Some(("call_1".to_owned(), Fault::Overrun)));
+    world.send(&Command::Delta(0, 0), &mut expected);
+    let status = world.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "claim.a").unwrap().status;
+    let screen = world.frame().text();
+    let failed = world.toasts.borrow().iter().any(|toast| toast == "Plugin failed: claim.a");
+    assert!(!screen.contains("probe call_1") && screen.contains("witness call_3"), "{screen}");
+    assert_eq!(status, opencode_plugin::Status::Active);
+    assert_eq!(world.harness.tui.plugins.monitor().host_overruns(), 1);
+    assert!(screen.contains("probe call_2") && !failed, "{screen}");
 }
 
 thread_local! {
@@ -1940,25 +1613,23 @@ fn plugin_closed(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_claimed_fence_learns_it_closed_once_markdown_decides_it() {
-    for carrier in CARRIERS {
-        FLAGS.with_borrow_mut(Vec::clear);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.closed", setup: plugin_closed })]);
-        let last = || FLAGS.with_borrow(|flags| flags.last().copied());
-        world.emit("session.text.started", json!({ "ordinal": 0 }));
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```probe\nx\n" }));
-        world.settle();
-        assert_eq!(last(), Some((true, false)), "{carrier:?}");
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```\n" }));
-        world.settle();
-        assert_eq!(last(), Some((true, false)), "{carrier:?}: a closing line that ends the text is pending");
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "\nAfter.\n" }));
-        world.settle();
-        assert_eq!(last(), Some((true, true)), "{carrier:?}: text after the closing line decides it");
-        let tokens = json!({ "input": 1, "output": 1, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
-        world.emit("session.step.ended", json!({ "finish": "stop", "cost": 0, "tokens": tokens }));
-        world.settle();
-        assert_eq!(last(), Some((false, true)), "{carrier:?}: the message completed");
-    }
+    FLAGS.with_borrow_mut(Vec::clear);
+    let world = World::with(vec![abi::Plugin { id: "claim.closed", setup: plugin_closed }.into()]);
+    let last = || FLAGS.with_borrow(|flags| flags.last().copied());
+    world.emit("session.text.started", json!({ "ordinal": 0 }));
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```probe\nx\n" }));
+    world.settle();
+    assert_eq!(last(), Some((true, false)));
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```\n" }));
+    world.settle();
+    assert_eq!(last(), Some((true, false)), "a closing line that ends the text is pending");
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "\nAfter.\n" }));
+    world.settle();
+    assert_eq!(last(), Some((true, true)), "text after the closing line decides it");
+    let tokens = json!({ "input": 1, "output": 1, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
+    world.emit("session.step.ended", json!({ "finish": "stop", "cost": 0, "tokens": tokens }));
+    world.settle();
+    assert_eq!(last(), Some((false, true)), "the message completed");
 }
 
 /// A plugin that renders its own fence syntax must not recursively reclaim it.
@@ -1973,16 +1644,14 @@ fn plugin_nested(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_fence_in_a_claimed_part_is_not_claimed_again() {
-    for carrier in CARRIERS {
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.nested", setup: plugin_nested })]);
-        world.emit("session.text.started", json!({ "ordinal": 0 }));
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```probe\ncode\n```\n\nAfter.\n" }));
-        world.settle();
-        let screen = world.frame().text();
-        assert_eq!(screen.matches("nested").count(), 1, "{carrier:?}:\n{screen}");
-        assert_eq!(screen.matches("code").count(), 1, "{carrier:?}:\n{screen}");
-        assert_eq!(mounted().len(), 1, "{carrier:?}: {:?}", mounted());
-    }
+    let world = World::with(vec![abi::Plugin { id: "claim.nested", setup: plugin_nested }.into()]);
+    world.emit("session.text.started", json!({ "ordinal": 0 }));
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```probe\ncode\n```\n\nAfter.\n" }));
+    world.settle();
+    let screen = world.frame().text();
+    assert_eq!(screen.matches("nested").count(), 1, "{screen}");
+    assert_eq!(screen.matches("code").count(), 1, "{screen}");
+    assert_eq!(mounted().len(), 1, "{:?}", mounted());
 }
 
 /// Claims `cache` calls: gives the host its text once, as content, and names that handle in every later view; declines
@@ -2007,41 +1676,39 @@ fn plugin_cache(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_declined_part_keeps_its_content_and_a_bad_tree_gets_one_view() {
-    for carrier in CARRIERS {
-        DREW.with_borrow_mut(Vec::clear);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.cache", setup: plugin_cache })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "cache" }));
-        world.settle();
-        world.harness.wait_for("cached body");
-        world.emit("session.tool.called", json!({ "id": "call_1", "input": {}, "executed": true }));
-        world.settle();
-        assert!(!world.frame().text().contains("cached body"), "{carrier:?}: declined, the tree stays");
-        assert_eq!(ledger().content, 1, "{carrier:?}: the declined part's handle went: {:?}", ledger());
-        let done = json!([{ "type": "text", "text": "done" }]);
-        world.emit("session.tool.success", json!({ "id": "call_1", "content": done, "executed": true }));
-        world.settle();
-        let screen = world.frame().text();
-        assert!(screen.contains("cached body"), "{carrier:?}: the handle is gone:\n{screen}");
-        assert!(world.mount_of("call_1").is_some_and(|shown| shown.shows), "{carrier:?}");
+    DREW.with_borrow_mut(Vec::clear);
+    let world = World::with(vec![abi::Plugin { id: "claim.cache", setup: plugin_cache }.into()]);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "cache" }));
+    world.settle();
+    world.harness.wait_for("cached body");
+    world.emit("session.tool.called", json!({ "id": "call_1", "input": {}, "executed": true }));
+    world.settle();
+    assert!(!world.frame().text().contains("cached body"), "declined, the tree stays");
+    assert_eq!(ledger().content, 1, "the declined part's handle went: {:?}", ledger());
+    let done = json!([{ "type": "text", "text": "done" }]);
+    world.emit("session.tool.success", json!({ "id": "call_1", "content": done, "executed": true }));
+    world.settle();
+    let screen = world.frame().text();
+    assert!(screen.contains("cached body"), "the handle is gone:\n{screen}");
+    assert!(world.mount_of("call_1").is_some_and(|shown| shown.shows));
 
-        // A duplicate id is the plugin's error: one view, and the part falls back.
-        let world = World::rules(carrier, ungrouped(), false);
-        world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "probe" }));
-        world.settle();
-        ARMED.set(Some(("call_2".to_owned(), Fault::Bad)));
-        let views = DREW.with_borrow(Vec::len);
-        world.emit("session.tool.called", json!({ "id": "call_2", "input": {}, "executed": true }));
-        world.settle();
-        ARMED.set(None);
-        assert_eq!(DREW.with_borrow(Vec::len) - views, 1, "{carrier:?}: a bad tree was asked again");
-        assert!(world.mount_of("call_2").is_some_and(|shown| !shown.shows), "{carrier:?}");
-        let views = DREW.with_borrow(Vec::len);
-        ARMED.set(Some(("call_3".to_owned(), Fault::Bad)));
-        world.emit("session.tool.input.started", json!({ "id": "call_3", "name": "probe" }));
-        world.settle();
-        ARMED.set(None);
-        assert_eq!(DREW.with_borrow(Vec::len) - views, 1, "{carrier:?}: a first, whole view was asked again");
-    }
+    // A duplicate id is the plugin's error: one view, and the part falls back.
+    let world = World::rules(ungrouped(), false);
+    world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "probe" }));
+    world.settle();
+    ARMED.set(Some(("call_2".to_owned(), Fault::Bad)));
+    let views = DREW.with_borrow(Vec::len);
+    world.emit("session.tool.called", json!({ "id": "call_2", "input": {}, "executed": true }));
+    world.settle();
+    ARMED.set(None);
+    assert_eq!(DREW.with_borrow(Vec::len) - views, 1, "a bad tree was asked again");
+    assert!(world.mount_of("call_2").is_some_and(|shown| !shown.shows));
+    let views = DREW.with_borrow(Vec::len);
+    ARMED.set(Some(("call_3".to_owned(), Fault::Bad)));
+    world.emit("session.tool.input.started", json!({ "id": "call_3", "name": "probe" }));
+    world.settle();
+    ARMED.set(None);
+    assert_eq!(DREW.with_borrow(Vec::len) - views, 1, "a first, whole view was asked again");
 }
 
 thread_local! {
@@ -2062,23 +1729,21 @@ fn plugin_bump(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_claimed_part_draws_again_after_its_plugin_runs_a_command() {
-    for carrier in CARRIERS {
-        BUMPS.set(0);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.bump", setup: plugin_bump })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "bump" }));
-        world.settle();
-        let screen = world.harness.wait_for("call_1 bumped 0");
-        let y = screen.lines().position(|line| line.contains("call_1 bumped")).unwrap() as u16;
-        world.harness.app.click(4, y);
-        world.settle();
-        world.settle();
-        assert_eq!(BUMPS.get(), 1, "{carrier:?}: the click ran no command");
-        assert!(world.frame().text().contains("call_1 bumped 1"), "{carrier:?}:\n{}", world.frame().text());
-        world.harness.tui.keymap.dispatch("claim.bump", None);
-        world.settle();
-        world.settle();
-        assert!(world.frame().text().contains("call_1 bumped 2"), "{carrier:?}:\n{}", world.frame().text());
-    }
+    BUMPS.set(0);
+    let world = World::with(vec![abi::Plugin { id: "claim.bump", setup: plugin_bump }.into()]);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "bump" }));
+    world.settle();
+    let screen = world.harness.wait_for("call_1 bumped 0");
+    let y = screen.lines().position(|line| line.contains("call_1 bumped")).unwrap() as u16;
+    world.harness.app.click(4, y);
+    world.settle();
+    world.settle();
+    assert_eq!(BUMPS.get(), 1, "the click ran no command");
+    assert!(world.frame().text().contains("call_1 bumped 1"), "{}", world.frame().text());
+    world.harness.tui.keymap.dispatch("claim.bump", None);
+    world.settle();
+    world.settle();
+    assert!(world.frame().text().contains("call_1 bumped 2"), "{}", world.frame().text());
 }
 
 fn bash_claim(setup: &mut abi::Setup) -> Result<(), String> {
@@ -2088,30 +1753,26 @@ fn bash_claim(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_claim_of_a_tool_takes_its_calls_by_either_name() {
-    for carrier in CARRIERS {
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.bash", setup: bash_claim })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "shell" }));
-        world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "bash" }));
-        world.settle();
-        let screen = world.frame().text();
-        assert!(screen.contains("b drew call_1") && screen.contains("b drew call_2"), "{carrier:?}:\n{screen}");
-    }
+    let world = World::with(vec![abi::Plugin { id: "claim.bash", setup: bash_claim }.into()]);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "shell" }));
+    world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "bash" }));
+    world.settle();
+    let screen = world.frame().text();
+    assert!(screen.contains("b drew call_1") && screen.contains("b drew call_2"), "{screen}");
 }
 
 #[test]
 fn a_fence_is_viewed_first_at_its_own_width() {
-    for carrier in CARRIERS {
-        INPUTS.with_borrow_mut(Vec::clear);
-        NARROW.set(u16::MAX);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.narrow", setup: plugin_narrow })]);
-        world.emit("session.text.started", json!({ "ordinal": 0 }));
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```narrow\nfits\n```\n\nAfter.\n" }));
-        world.settle();
-        world.settle();
-        let width = mounted().first().map(|shown| shown.rect.width as u16);
-        let inputs = INPUTS.with_borrow(Vec::clone);
-        assert_eq!(inputs.iter().map(|(width, _)| Some(*width)).collect::<Vec<_>>(), [width], "{carrier:?}");
-    }
+    INPUTS.with_borrow_mut(Vec::clear);
+    NARROW.set(u16::MAX);
+    let world = World::with(vec![abi::Plugin { id: "claim.narrow", setup: plugin_narrow }.into()]);
+    world.emit("session.text.started", json!({ "ordinal": 0 }));
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```narrow\nfits\n```\n\nAfter.\n" }));
+    world.settle();
+    world.settle();
+    let width = mounted().first().map(|shown| shown.rect.width as u16);
+    let inputs = INPUTS.with_borrow(Vec::clone);
+    assert_eq!(inputs.iter().map(|(width, _)| Some(*width)).collect::<Vec<_>>(), [width]);
 }
 
 /// Claims `given` calls: gives the host content and releases it in the same view, then draws a line.
@@ -2126,20 +1787,18 @@ fn plugin_given(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_claim_keeps_no_content_it_released_and_is_not_asked_of_an_unknown_state() {
-    for carrier in CARRIERS {
-        CONTENT.set(vec![json!({
-            "type": "tool", "id": "call_9", "name": "given", "time": { "created": 1600 },
-            "state": { "status": "paused", "input": {} },
-        })]);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.given", setup: plugin_given })]);
-        CONTENT.set(Vec::new());
-        assert!(!world.frame().text().contains("given call_9"), "{carrier:?}:\n{}", world.frame().text());
-        assert!(mounted().iter().all(|shown| !shown.shows), "{carrier:?}: {:?}", mounted());
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "given" }));
-        world.settle();
-        world.harness.wait_for("given call_1");
-        assert_eq!((ledger().content, ledger().content_bytes), (0, 0), "{carrier:?}: {:?}", ledger());
-    }
+    CONTENT.set(vec![json!({
+        "type": "tool", "id": "call_9", "name": "given", "time": { "created": 1600 },
+        "state": { "status": "paused", "input": {} },
+    })]);
+    let world = World::with(vec![abi::Plugin { id: "claim.given", setup: plugin_given }.into()]);
+    CONTENT.set(Vec::new());
+    assert!(!world.frame().text().contains("given call_9"), "{}", world.frame().text());
+    assert!(mounted().iter().all(|shown| !shown.shows), "{:?}", mounted());
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "given" }));
+    world.settle();
+    world.harness.wait_for("given call_1");
+    assert_eq!((ledger().content, ledger().content_bytes), (0, 0), "{:?}", ledger());
 }
 
 thread_local! {
@@ -2164,80 +1823,70 @@ fn plugin_keeper(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_refused_keep_is_asked_once_whole_and_a_decline_after_it_stays_within_bounds() {
-    for carrier in CARRIERS {
-        DREW.with_borrow_mut(Vec::clear);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.keeper", setup: plugin_keeper })]);
-        KEEPER.set(vec!["keep"]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "keeper" }));
-        world.settle();
-        assert_eq!(DREW.with_borrow(Vec::clone), ["keep full true"], "{carrier:?}: a whole view was asked again");
-        assert!(world.mount_of("call_1").is_some_and(|shown| !shown.shows), "{carrier:?}");
-        // The host's own table forgets a refused view; a library took the tree as it answered, and holds its card's
-        // value until the mount ends, which the ledger books.
-        let held = if carrier == Carrier::Abi { 1 } else { 0 };
-        assert_eq!(ledger().memo_entries, held, "{carrier:?}: {:?}", ledger());
+    DREW.with_borrow_mut(Vec::clear);
+    let world = World::with(vec![abi::Plugin { id: "claim.keeper", setup: plugin_keeper }.into()]);
+    KEEPER.set(vec!["keep"]);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "keeper" }));
+    world.settle();
+    assert_eq!(DREW.with_borrow(Vec::clone), ["keep full true"], "a whole view was asked again");
+    assert!(world.mount_of("call_1").is_some_and(|shown| !shown.shows));
+    // The host's own table forgets a refused view.
+    assert_eq!(ledger().memo_entries, 0, "{:?}", ledger());
 
-        DREW.with_borrow_mut(Vec::clear);
-        world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "keeper" }));
-        world.settle();
-        KEEPER.set(vec!["keep", "decline"]);
-        world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "x" }));
-        world.settle();
-        let drew = DREW.with_borrow(Vec::clone);
-        assert_eq!(drew, ["tree full true", "keep full false", "decline full true"], "{carrier:?}");
-        let status = world.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "claim.keeper");
-        assert_eq!(status.map(|entry| entry.status), Some(opencode_plugin::Status::Active), "{carrier:?}");
-        assert!(world.frame().text().contains("⋯ keeper"), "{carrier:?}:\n{}", world.frame().text());
-    }
+    DREW.with_borrow_mut(Vec::clear);
+    world.emit("session.tool.input.started", json!({ "id": "call_2", "name": "keeper" }));
+    world.settle();
+    KEEPER.set(vec!["keep", "decline"]);
+    world.emit("session.tool.input.delta", json!({ "id": "call_2", "delta": "x" }));
+    world.settle();
+    let drew = DREW.with_borrow(Vec::clone);
+    assert_eq!(drew, ["tree full true", "keep full false", "decline full true"]);
+    let status = world.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "claim.keeper");
+    assert_eq!(status.map(|entry| entry.status), Some(opencode_plugin::Status::Active));
+    assert!(world.frame().text().contains("⋯ keeper"), "{}", world.frame().text());
 }
 
 #[test]
 fn a_resize_views_a_claimed_part_once() {
-    for carrier in CARRIERS {
-        INPUTS.with_borrow_mut(Vec::clear);
-        NARROW.set(u16::MAX);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.narrow", setup: plugin_narrow })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "narrow" }));
-        world.emit("session.text.started", json!({ "ordinal": 0 }));
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```narrow\nfits\n```\n\nAfter.\n" }));
+    INPUTS.with_borrow_mut(Vec::clear);
+    NARROW.set(u16::MAX);
+    let world = World::with(vec![abi::Plugin { id: "claim.narrow", setup: plugin_narrow }.into()]);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "narrow" }));
+    world.emit("session.text.started", json!({ "ordinal": 0 }));
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```narrow\nfits\n```\n\nAfter.\n" }));
+    world.settle();
+    world.settle();
+    let before = INPUTS.with_borrow(Vec::len);
+    world.harness.app.resize(WIDTH - 20, HEIGHT);
+    for _ in 0..3 {
         world.settle();
-        world.settle();
-        let before = INPUTS.with_borrow(Vec::len);
-        world.harness.app.resize(WIDTH - 20, HEIGHT);
-        for _ in 0..3 {
-            world.settle();
-        }
-        let views = INPUTS.with_borrow(|inputs| inputs[before..].to_vec());
-        assert_eq!(views.len(), 2, "{carrier:?}: {views:?}");
     }
+    let views = INPUTS.with_borrow(|inputs| inputs[before..].to_vec());
+    assert_eq!(views.len(), 2, "{views:?}");
 }
 
 #[test]
 fn a_theme_change_views_a_claimed_fence_once() {
-    for carrier in CARRIERS {
-        let world = World::open(carrier);
-        let mut expected = Expected::new();
-        for command in [Command::Start(0), Command::Text, Command::Text, Command::Text] {
-            world.send(&command, &mut expected);
-        }
-        let views = ledger().views;
-        let before = mounted().iter().filter(|shown| shown.id.key.starts_with("fence-")).count();
-        let generations = mounted().len();
-        world.send(&Command::Theme(false), &mut expected);
-        assert_eq!(ledger().views - views, 1, "{carrier:?}: claim views for one theme change");
-        let after: Vec<_> = mounted().into_iter().filter(|shown| shown.id.key.starts_with("fence-")).collect();
-        assert_eq!((before, after.len(), generations), (1, 1, 2), "{carrier:?}: {after:?}");
-        assert_eq!(stream_whole(&world, &expected), Ok(2), "{carrier:?}");
+    let world = World::open();
+    let mut expected = Expected::new();
+    for command in [Command::Start(0), Command::Text, Command::Text, Command::Text] {
+        world.send(&command, &mut expected);
     }
+    let views = ledger().views;
+    let before = mounted().iter().filter(|shown| shown.id.key.starts_with("fence-")).count();
+    let generations = mounted().len();
+    world.send(&Command::Theme(false), &mut expected);
+    assert_eq!(ledger().views - views, 1, "claim views for one theme change");
+    let after: Vec<_> = mounted().into_iter().filter(|shown| shown.id.key.starts_with("fence-")).collect();
+    assert_eq!((before, after.len(), generations), (1, 1, 2), "{after:?}");
+    assert_eq!(stream_whole(&world, &expected), Ok(2));
 }
 
 #[test]
 fn an_overrun_at_a_theme_change_falls_the_fence_back() {
     let commands =
         [Command::Text, Command::Text, Command::Text, Command::Arm(Fault::Overrun, FENCE), Command::Theme(false)];
-    for carrier in CARRIERS {
-        assert_eq!(ClaimModel { carrier }.run(&commands), None, "{carrier:?}");
-    }
+    assert_eq!(ClaimModel.run(&commands), None);
 }
 
 fn plugin_code(setup: &mut abi::Setup) -> Result<(), String> {
@@ -2256,23 +1905,21 @@ fn plugin_code(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_fence_claim_draws_its_code_in_p3s_code_view() {
-    for carrier in CARRIERS {
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.code", setup: plugin_code })]);
-        world.emit("session.text.started", json!({ "ordinal": 0 }));
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```probe\nlet a = 1;\n" }));
-        world.settle();
-        let screen = world.frame().text();
-        let numbered = |screen: &str, n: usize, text: &str| {
-            screen.lines().any(|line| line.trim_start().starts_with(&n.to_string()) && line.contains(text))
-        };
-        assert!(numbered(&screen, 1, "let a = 1;"), "{carrier:?}: no numbered code:\n{screen}");
-        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "let b = 2;\n```\n\nAfter.\n" }));
-        world.settle();
-        let screen = world.frame().text();
-        assert!(numbered(&screen, 2, "let b = 2;") && screen.contains("After."), "{carrier:?}:\n{screen}");
-        assert!(!screen.contains("```"), "{carrier:?}: the host's view shows:\n{screen}");
-        assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{carrier:?}: {:?}", mounted());
-    }
+    let world = World::with(vec![abi::Plugin { id: "claim.code", setup: plugin_code }.into()]);
+    world.emit("session.text.started", json!({ "ordinal": 0 }));
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "```probe\nlet a = 1;\n" }));
+    world.settle();
+    let screen = world.frame().text();
+    let numbered = |screen: &str, n: usize, text: &str| {
+        screen.lines().any(|line| line.trim_start().starts_with(&n.to_string()) && line.contains(text))
+    };
+    assert!(numbered(&screen, 1, "let a = 1;"), "no numbered code:\n{screen}");
+    world.emit("session.text.delta", json!({ "ordinal": 0, "delta": "let b = 2;\n```\n\nAfter.\n" }));
+    world.settle();
+    let screen = world.frame().text();
+    assert!(numbered(&screen, 2, "let b = 2;") && screen.contains("After."), "{screen}");
+    assert!(!screen.contains("```"), "the host's view shows:\n{screen}");
+    assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{:?}", mounted());
 }
 
 thread_local! {
@@ -2311,10 +1958,10 @@ fn plugin_fenced(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 /// A world of `claim.fenced` on `carrier` that shows the Markdown `text` as an answer, and its frame.
-fn fenced(carrier: Carrier, how: Fenced, text: &str) -> (World, Capture) {
+fn fenced(how: Fenced, text: &str) -> (World, Capture) {
     FENCED.set(how);
     FENCED_VIEWS.set(0);
-    let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.fenced", setup: plugin_fenced })]);
+    let world = World::with(vec![abi::Plugin { id: "claim.fenced", setup: plugin_fenced }.into()]);
     world.emit("session.text.started", json!({ "ordinal": 0 }));
     world.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
     world.settle();
@@ -2325,13 +1972,11 @@ fn fenced(carrier: Carrier, how: Fenced, text: &str) -> (World, Capture) {
 #[test]
 fn a_fence_node_alone_draws_as_the_host_code_view() {
     let text = "```probe\nlet a = 1;\nlet b = 2;\n```\n\nAfter.\n";
-    for carrier in CARRIERS {
-        let (_world, declined) = fenced(carrier, Fenced::Declined, text);
-        let (_world, alone) = fenced(carrier, Fenced::Alone, text);
-        assert!(alone.text().contains("let b = 2;"), "{carrier:?}:\n{}", alone.text());
-        assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{carrier:?}: {:?}", mounted());
-        assert!(alone.cells == declined.cells, "{carrier:?}: the fence node is not the host's view:\n{}", alone.text());
-    }
+    let (_world, declined) = fenced(Fenced::Declined, text);
+    let (_world, alone) = fenced(Fenced::Alone, text);
+    assert!(alone.text().contains("let b = 2;"), "{}", alone.text());
+    assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{:?}", mounted());
+    assert!(alone.cells == declined.cells, "the fence node is not the host's view:\n{}", alone.text());
 }
 
 #[test]
@@ -2340,91 +1985,77 @@ fn a_fence_node_keeps_a_fence_in_its_code() {
         "````probe\nbefore\n```\n# NOT A HEADING\n````\n\nAfter.\n",
         "~~~probe\nbefore\n```\n# NOT A HEADING\n~~~\n\nAfter.\n",
     ] {
-        for carrier in CARRIERS {
-            let bare = World::with(Vec::new());
-            bare.emit("session.text.started", json!({ "ordinal": 0 }));
-            bare.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
-            bare.settle();
-            let bare = bare.frame();
-            assert!(bare.text().contains("# NOT A HEADING"), "{text:?}: the host's own view:\n{}", bare.text());
-            for how in [Fenced::Alone, Fenced::Declined] {
-                let (_world, frame) = fenced(carrier, how, text);
-                assert!(frame.cells == bare.cells, "{carrier:?} {how:?} {text:?}:\n{}", frame.text());
-            }
+        let bare = World::with(Vec::new());
+        bare.emit("session.text.started", json!({ "ordinal": 0 }));
+        bare.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
+        bare.settle();
+        let bare = bare.frame();
+        assert!(bare.text().contains("# NOT A HEADING"), "{text:?}: the host's own view:\n{}", bare.text());
+        for how in [Fenced::Alone, Fenced::Declined] {
+            let (_world, frame) = fenced(how, text);
+            assert!(frame.cells == bare.cells, "{how:?} {text:?}:\n{}", frame.text());
         }
     }
 }
 
 #[test]
 fn a_fence_node_follows_the_stream() {
-    for carrier in CARRIERS {
-        let (world, frame) = fenced(carrier, Fenced::Card, "```probe\nalpha\n");
-        assert!(frame.text().contains("| probe") && frame.text().contains("alpha"), "{carrier:?}:\n{}", frame.text());
-        for delta in ["beta\n", "gamma\n", "```\n\nAfter.\n"] {
-            world.emit("session.text.delta", json!({ "ordinal": 0, "delta": delta }));
-            world.settle();
-            let screen = world.frame().text();
-            assert!(screen.contains("| probe"), "{carrier:?}: the card went:\n{screen}");
-            assert!(!screen.contains("```"), "{carrier:?}: the host's row shows:\n{screen}");
-        }
+    let (world, frame) = fenced(Fenced::Card, "```probe\nalpha\n");
+    assert!(frame.text().contains("| probe") && frame.text().contains("alpha"), "{}", frame.text());
+    for delta in ["beta\n", "gamma\n", "```\n\nAfter.\n"] {
+        world.emit("session.text.delta", json!({ "ordinal": 0, "delta": delta }));
+        world.settle();
         let screen = world.frame().text();
-        assert!(
-            screen.contains("beta") && screen.contains("gamma") && screen.contains("After."),
-            "{carrier:?}:\n{screen}"
-        );
-        assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{carrier:?}: {:?}", mounted());
+        assert!(screen.contains("| probe"), "the card went:\n{screen}");
+        assert!(!screen.contains("```"), "the host's row shows:\n{screen}");
     }
+    let screen = world.frame().text();
+    assert!(screen.contains("beta") && screen.contains("gamma") && screen.contains("After."), "{screen}");
+    assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{:?}", mounted());
 }
 
 #[test]
 fn a_fence_nodes_code_is_on_its_background() {
     let text = "```probe\nlet a = 1;\n```\n\nAfter.\n";
-    for carrier in CARRIERS {
-        let bg_of = |frame: &Capture| {
-            let screen = frame.text();
-            let (y, line) =
-                screen.lines().enumerate().find(|(_, line)| line.contains("let a")).expect("the code shows");
-            let x = line[..line.find("let a").unwrap()].chars().count();
-            frame.cell(x as u32, y as u32).unwrap().bg
-        };
-        let (world, card) = fenced(carrier, Fenced::Card, text);
-        let raised = opencode_plugin::node::theme_color(&world.harness.tui.page(), "background.raised.base").unwrap();
-        let bg = bg_of(&card);
-        assert_eq!((bg.r, bg.g, bg.b), (raised.r, raised.g, raised.b), "{carrier:?}: the code is not on the card's");
-        let (world, declined) = fenced(carrier, Fenced::Declined, text);
-        let page = world.harness.tui.page().background.base;
-        assert_eq!(bg_of(&declined), page, "{carrier:?}: the host's row is not on the transcript's background");
-    }
+    let bg_of = |frame: &Capture| {
+        let screen = frame.text();
+        let (y, line) = screen.lines().enumerate().find(|(_, line)| line.contains("let a")).expect("the code shows");
+        let x = line[..line.find("let a").unwrap()].chars().count();
+        frame.cell(x as u32, y as u32).unwrap().bg
+    };
+    let (world, card) = fenced(Fenced::Card, text);
+    let raised = opencode_plugin::node::theme_color(&world.harness.tui.page(), "background.raised.base").unwrap();
+    let bg = bg_of(&card);
+    assert_eq!((bg.r, bg.g, bg.b), (raised.r, raised.g, raised.b), "the code is not on the card's");
+    let (world, declined) = fenced(Fenced::Declined, text);
+    let page = world.harness.tui.page().background.base;
+    assert_eq!(bg_of(&declined), page, "the host's row is not on the transcript's background");
 }
 
 #[test]
 fn a_long_fence_in_a_card_draws_whole() {
     let code: String = (0..2_000).map(|line| format!("line {line}\n")).collect();
     let text = format!("```probe\n{code}```\n");
-    for carrier in CARRIERS {
-        let (_world, frame) = fenced(carrier, Fenced::Card, &text);
-        // The transcript follows the answer's end: the fence's last line shows, under the claim's card.
-        let screen = frame.text();
-        assert!(screen.contains("line 1999") && !screen.contains("⋯"), "{carrier:?}:\n{screen}");
-        assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{carrier:?}: {:?}", mounted());
-        let (_world, frame) = fenced(carrier, Fenced::Code, &text);
-        assert!(frame.text().contains("⋯"), "{carrier:?}: the control drew whole:\n{}", frame.text());
-    }
+    let (_world, frame) = fenced(Fenced::Card, &text);
+    // The transcript follows the answer's end: the fence's last line shows, under the claim's card.
+    let screen = frame.text();
+    assert!(screen.contains("line 1999") && !screen.contains("⋯"), "{screen}");
+    assert_eq!(mounted().iter().filter(|shown| shown.shows).count(), 1, "{:?}", mounted());
+    let (_world, frame) = fenced(Fenced::Code, &text);
+    assert!(frame.text().contains("⋯"), "the control drew whole:\n{}", frame.text());
 }
 
 #[test]
 fn a_fence_node_where_it_may_not_be_shows_the_host_row() {
-    for carrier in CARRIERS {
-        let (world, frame) = fenced(carrier, Fenced::Twice, "```probe\nonce\n```\n");
-        assert_eq!(frame.text().matches("once").count(), 1, "{carrier:?}:\n{}", frame.text());
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "probe" }));
-        world.settle();
-        let screen = world.frame().text();
-        assert!(screen.contains("⋯ probe"), "{carrier:?}: no host row for the call:\n{screen}");
-        assert!(mounted().iter().all(|shown| !shown.shows), "{carrier:?}: {:?}", mounted());
-        let status = world.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "claim.fenced");
-        assert_eq!(status.map(|entry| entry.status), Some(opencode_plugin::Status::Active), "{carrier:?}");
-    }
+    let (world, frame) = fenced(Fenced::Twice, "```probe\nonce\n```\n");
+    assert_eq!(frame.text().matches("once").count(), 1, "{}", frame.text());
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "probe" }));
+    world.settle();
+    let screen = world.frame().text();
+    assert!(screen.contains("⋯ probe"), "no host row for the call:\n{screen}");
+    assert!(mounted().iter().all(|shown| !shown.shows), "{:?}", mounted());
+    let status = world.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "claim.fenced");
+    assert_eq!(status.map(|entry| entry.status), Some(opencode_plugin::Status::Active));
 }
 
 const SHARE: &str = "claim.share";
@@ -2477,60 +2108,58 @@ fn plugin_rival(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_claimed_part_holds_its_plugins_share_beside_its_surface_and_the_total() {
-    for carrier in CARRIERS {
-        GAVE.with_borrow_mut(std::collections::HashMap::clear);
-        let world = World::with(vec![
-            builtin(carrier, abi::Plugin { id: SHARE, setup: plugin_share }),
-            builtin(carrier, abi::Plugin { id: RIVAL, setup: plugin_rival }),
-        ]);
-        let surface = opencode_plugin::limits::held(SHARE);
-        assert_eq!(surface.content, 1_000, "{carrier:?}: the surface's own content");
-        // The plugin may hold its surface's and two parts'; all plugins one more part.
-        let total = opencode_plugin::limits::total().content;
-        // Each read of the monitor's clock moves it on: the host's work for a part takes time.
-        let tick = Rc::new(Cell::new(Duration::ZERO));
-        let (base, now) = (Instant::now(), tick.clone());
-        world.harness.tui.plugins.monitor().set_clock(move || {
-            now.set(now.get() + Duration::from_micros(10));
-            base + now.get()
-        });
-        let _limits = opencode_plugin::limits::set(opencode_plugin::limits::Limits {
-            plugin_content: 3_000,
-            all_content: total + 3_000,
-            ..opencode_plugin::limits::Limits::default()
-        });
-        for (id, name) in [("call_1", "share"), ("call_2", "share"), ("call_3", "share")] {
-            world.emit("session.tool.input.started", json!({ "id": id, "name": name }));
-        }
-        for (id, name) in [("call_4", "rival"), ("call_5", "rival")] {
-            world.emit("session.tool.input.started", json!({ "id": id, "name": name }));
-        }
-        world.settle();
-        let screen = world.frame().text();
-        for id in ["call_1", "call_2", "call_3"] {
-            assert!(screen.contains(&format!("s holds {id}")), "{carrier:?}: {id} is not drawn:\n{screen}");
-        }
-        assert!(screen.contains("r holds call_4") && screen.contains("r holds call_5"), "{carrier:?}:\n{screen}");
-        assert_eq!(
-            screen.matches("⋯ its content is past what the plugin may hold").count(),
-            2,
-            "{carrier:?}: the third part past its plugin's share, the rival's second past the total:\n{screen}"
-        );
-        assert!(mounted().iter().all(|shown| shown.shows), "{carrier:?}: a part fell back: {:?}", mounted());
-        let (share, rival) = (opencode_plugin::limits::held(SHARE), opencode_plugin::limits::held(RIVAL));
-        assert_eq!((share.content, rival.content), (3_000, 1_000), "{carrier:?}: {share:?} {rival:?}");
-        assert!(share.nodes > surface.nodes && rival.nodes > 0, "{carrier:?}: nodes {surface:?} {share:?} {rival:?}");
-        assert!(opencode_plugin::limits::total().content <= total + 3_000, "{carrier:?}: past the total");
-        assert_eq!(ledger().content, 3, "{carrier:?}: the content the parts hold: {:?}", ledger());
-        // The rival has claims alone, and no image: its host time is its parts' adoptions.
-        let host = world.harness.tui.plugins.monitor().host_time(RIVAL);
-        assert!(host > Duration::ZERO, "{carrier:?}: no host time for the rival's parts");
-        world.harness.tui.navigate(opencode_tui::Route::Home);
-        world.settle();
-        let left = (opencode_plugin::limits::held(SHARE), opencode_plugin::limits::held(RIVAL));
-        assert_eq!(left.0.content, 1_000, "{carrier:?}: held once the session left: {left:?}");
-        assert_eq!(left.1, opencode_plugin::limits::Held::default(), "{carrier:?}: held once the session left");
+    GAVE.with_borrow_mut(std::collections::HashMap::clear);
+    let world = World::with(vec![
+        abi::Plugin { id: SHARE, setup: plugin_share }.into(),
+        abi::Plugin { id: RIVAL, setup: plugin_rival }.into(),
+    ]);
+    let surface = opencode_plugin::limits::held(SHARE);
+    assert_eq!(surface.content, 1_000, "the surface's own content");
+    // The plugin may hold its surface's and two parts'; all plugins one more part.
+    let total = opencode_plugin::limits::total().content;
+    // Each read of the monitor's clock moves it on: the host's work for a part takes time.
+    let tick = Rc::new(Cell::new(Duration::ZERO));
+    let (base, now) = (Instant::now(), tick.clone());
+    world.harness.tui.plugins.monitor().set_clock(move || {
+        now.set(now.get() + Duration::from_micros(10));
+        base + now.get()
+    });
+    let _limits = opencode_plugin::limits::set(opencode_plugin::limits::Limits {
+        plugin_content: 3_000,
+        all_content: total + 3_000,
+        ..opencode_plugin::limits::Limits::default()
+    });
+    for (id, name) in [("call_1", "share"), ("call_2", "share"), ("call_3", "share")] {
+        world.emit("session.tool.input.started", json!({ "id": id, "name": name }));
     }
+    for (id, name) in [("call_4", "rival"), ("call_5", "rival")] {
+        world.emit("session.tool.input.started", json!({ "id": id, "name": name }));
+    }
+    world.settle();
+    let screen = world.frame().text();
+    for id in ["call_1", "call_2", "call_3"] {
+        assert!(screen.contains(&format!("s holds {id}")), "{id} is not drawn:\n{screen}");
+    }
+    assert!(screen.contains("r holds call_4") && screen.contains("r holds call_5"), "{screen}");
+    assert_eq!(
+        screen.matches("⋯ its content is past what the plugin may hold").count(),
+        2,
+        "the third part past its plugin's share, the rival's second past the total:\n{screen}"
+    );
+    assert!(mounted().iter().all(|shown| shown.shows), "a part fell back: {:?}", mounted());
+    let (share, rival) = (opencode_plugin::limits::held(SHARE), opencode_plugin::limits::held(RIVAL));
+    assert_eq!((share.content, rival.content), (3_000, 1_000), "{share:?} {rival:?}");
+    assert!(share.nodes > surface.nodes && rival.nodes > 0, "nodes {surface:?} {share:?} {rival:?}");
+    assert!(opencode_plugin::limits::total().content <= total + 3_000, "past the total");
+    assert_eq!(ledger().content, 3, "the content the parts hold: {:?}", ledger());
+    // The rival has claims alone, and no image: its host time is its parts' adoptions.
+    let host = world.harness.tui.plugins.monitor().host_time(RIVAL);
+    assert!(host > Duration::ZERO, "no host time for the rival's parts");
+    world.harness.tui.navigate(opencode_tui::Route::Home);
+    world.settle();
+    let left = (opencode_plugin::limits::held(SHARE), opencode_plugin::limits::held(RIVAL));
+    assert_eq!(left.0.content, 1_000, "held once the session left: {left:?}");
+    assert_eq!(left.1, opencode_plugin::limits::Held::default(), "held once the session left");
 }
 
 /// Claims `pics` calls with a 16x16 picture of a color of its own each view, given as content, and releases the one
@@ -2554,38 +2183,36 @@ fn plugin_pics(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_claimed_part_that_replaces_its_picture_holds_only_the_one_it_shows() {
-    for carrier in CARRIERS {
-        GAVE.with_borrow_mut(std::collections::HashMap::clear);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: PICS, setup: plugin_pics })]);
-        // Each read of the monitor's clock moves it on: the host's work for the part takes time.
-        let tick = Rc::new(Cell::new(Duration::ZERO));
-        let (base, now) = (Instant::now(), tick.clone());
-        world.harness.tui.plugins.monitor().set_clock(move || {
-            now.set(now.get() + Duration::from_micros(10));
-            base + now.get()
-        });
-        let app = &world.harness.app;
-        let done = || app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(PICS) == 0);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "pics" }));
+    GAVE.with_borrow_mut(std::collections::HashMap::clear);
+    let world = World::with(vec![abi::Plugin { id: PICS, setup: plugin_pics }.into()]);
+    // Each read of the monitor's clock moves it on: the host's work for the part takes time.
+    let tick = Rc::new(Cell::new(Duration::ZERO));
+    let (base, now) = (Instant::now(), tick.clone());
+    world.harness.tui.plugins.monitor().set_clock(move || {
+        now.set(now.get() + Duration::from_micros(10));
+        base + now.get()
+    });
+    let app = &world.harness.app;
+    let done = || app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(PICS) == 0);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "pics" }));
+    world.settle();
+    for delta in ["{", "\"q\"", ":", "1", "}"] {
+        world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
         world.settle();
-        for delta in ["{", "\"q\"", ":", "1", "}"] {
-            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
-            world.settle();
-            assert!(done(), "{carrier:?}: a decode never ended");
-            world.settle();
-            let held = (opencode_plugin::surface::pictures(PICS), opencode_plugin::limits::held(PICS).images);
-            assert_eq!(held, (1, 16 * 16 * 4), "{carrier:?}: after {delta:?}");
-        }
-        assert!(PICTURES.get() >= 6, "{carrier:?}: the part was viewed {} times", PICTURES.get());
-        assert!(world.frame().text().contains("pics call_1"), "{carrier:?}:\n{}", world.frame().text());
-        let host = world.harness.tui.plugins.monitor().host_time(PICS);
-        assert!(host > Duration::ZERO, "{carrier:?}: no host time for the part");
-        world.harness.tui.navigate(opencode_tui::Route::Home);
+        assert!(done(), "a decode never ended");
         world.settle();
-        assert!(done(), "{carrier:?}");
-        let held = (opencode_plugin::surface::pictures(PICS), opencode_plugin::limits::held(PICS));
-        assert_eq!(held, (0, opencode_plugin::limits::Held::default()), "{carrier:?}: held once the part went");
+        let held = (opencode_plugin::surface::pictures(PICS), opencode_plugin::limits::held(PICS).images);
+        assert_eq!(held, (1, 16 * 16 * 4), "after {delta:?}");
     }
+    assert!(PICTURES.get() >= 6, "the part was viewed {} times", PICTURES.get());
+    assert!(world.frame().text().contains("pics call_1"), "{}", world.frame().text());
+    let host = world.harness.tui.plugins.monitor().host_time(PICS);
+    assert!(host > Duration::ZERO, "no host time for the part");
+    world.harness.tui.navigate(opencode_tui::Route::Home);
+    world.settle();
+    assert!(done());
+    let held = (opencode_plugin::surface::pictures(PICS), opencode_plugin::limits::held(PICS));
+    assert_eq!(held, (0, opencode_plugin::limits::Held::default()), "held once the part went");
 }
 
 thread_local! {
@@ -2611,58 +2238,47 @@ fn plugin_coalesce(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_revision_and_a_handler_in_one_frame_give_a_part_one_view() {
-    for carrier in CARRIERS {
-        BUMPS.set(0);
-        DECLINES.set(false);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.coalesce", setup: plugin_coalesce })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "coalesce" }));
-        world.settle();
-        world.harness.wait_for("coalesced 0");
-        let mut typed = String::new();
-        for (handler_first, refuse) in [(false, false), (false, true), (true, false), (true, true)] {
-            COALESCED.with_borrow_mut(Vec::clear);
-            let views = || COALESCED.with_borrow(Vec::len);
-            world.harness.app.advance(Duration::from_millis(20));
-            let delta = ["a", "b", "c", "d"][typed.len()];
-            typed.push_str(delta);
-            let revise = || world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
-            let handle = || {
-                DECLINES.set(refuse);
-                world.harness.tui.keymap.dispatch("claim.coalesce", None);
-                // The effect queue drains the handler's redraw before anything else comes.
-                world.harness.app.advance(Duration::ZERO);
-            };
-            match handler_first {
-                false => {
-                    revise();
-                    handle();
-                }
-                true => {
-                    handle();
-                    revise();
-                }
+    BUMPS.set(0);
+    DECLINES.set(false);
+    let world = World::with(vec![abi::Plugin { id: "claim.coalesce", setup: plugin_coalesce }.into()]);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "coalesce" }));
+    world.settle();
+    world.harness.wait_for("coalesced 0");
+    let mut typed = String::new();
+    for (handler_first, refuse) in [(false, false), (false, true), (true, false), (true, true)] {
+        COALESCED.with_borrow_mut(Vec::clear);
+        let views = || COALESCED.with_borrow(Vec::len);
+        world.harness.app.advance(Duration::from_millis(20));
+        let delta = ["a", "b", "c", "d"][typed.len()];
+        typed.push_str(delta);
+        let revise = || world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
+        let handle = || {
+            DECLINES.set(refuse);
+            world.harness.tui.keymap.dispatch("claim.coalesce", None);
+            // The effect queue drains the handler's redraw before anything else comes.
+            world.harness.app.advance(Duration::ZERO);
+        };
+        match handler_first {
+            false => {
+                revise();
+                handle();
             }
-            let order = if handler_first { "handler first" } else { "revision first" };
-            assert_eq!(views(), 0, "{carrier:?} {order}: a view before the paint");
-            let first = world.harness.app.render();
-            let log = COALESCED.with_borrow(Clone::clone);
-            let input = format!("in {typed}");
-            assert_eq!(
-                log,
-                [(BUMPS.get(), input.clone())],
-                "{carrier:?} {order}: one view at the first paint, of the newest"
-            );
-            let drawn = format!("coalesced {} {input}", BUMPS.get());
-            assert_eq!(
-                first.text().contains(&drawn),
-                !refuse,
-                "{carrier:?} {order}: the first paint:\n{}",
-                first.text()
-            );
-            world.harness.app.render();
-            assert_eq!(views(), 1, "{carrier:?} {order}: the paint after viewed again");
-            assert_eq!(mounted().iter().any(|shown| shown.shows), !refuse, "{carrier:?} {order}: {:?}", mounted());
+            true => {
+                handle();
+                revise();
+            }
         }
+        let order = if handler_first { "handler first" } else { "revision first" };
+        assert_eq!(views(), 0, "{order}: a view before the paint");
+        let first = world.harness.app.render();
+        let log = COALESCED.with_borrow(Clone::clone);
+        let input = format!("in {typed}");
+        assert_eq!(log, [(BUMPS.get(), input.clone())], "{order}: one view at the first paint, of the newest");
+        let drawn = format!("coalesced {} {input}", BUMPS.get());
+        assert_eq!(first.text().contains(&drawn), !refuse, "{order}: the first paint:\n{}", first.text());
+        world.harness.app.render();
+        assert_eq!(views(), 1, "{order}: the paint after viewed again");
+        assert_eq!(mounted().iter().any(|shown| shown.shows), !refuse, "{order}: {:?}", mounted());
     }
 }
 
@@ -2686,17 +2302,15 @@ fn mount_reader(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_claim_view_reads_its_part_s_mount_on_both_carriers() {
-    for carrier in CARRIERS {
-        READ_MOUNTS.with_borrow_mut(Vec::clear);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.mount", setup: mount_reader })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_7", "name": "bash" }));
-        world.settle();
-        world.harness.wait_for("read call_7");
-        let seen = READ_MOUNTS.with_borrow(Vec::clone);
-        assert!(!seen.is_empty(), "{carrier:?}: no view ran");
-        for (read, mount) in seen {
-            assert_eq!(read.as_ref(), Some(&mount), "{carrier:?}");
-        }
+    READ_MOUNTS.with_borrow_mut(Vec::clear);
+    let world = World::with(vec![abi::Plugin { id: "claim.mount", setup: mount_reader }.into()]);
+    world.emit("session.tool.input.started", json!({ "id": "call_7", "name": "bash" }));
+    world.settle();
+    world.harness.wait_for("read call_7");
+    let seen = READ_MOUNTS.with_borrow(Vec::clone);
+    assert!(!seen.is_empty(), "no view ran");
+    for (read, mount) in seen {
+        assert_eq!(read.as_ref(), Some(&mount));
     }
 }
 
@@ -2720,20 +2334,18 @@ fn plugin_wake(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_wake_drained_at_the_paint_shows_in_that_paint() {
-    for carrier in CARRIERS {
-        WOKEN.set(0);
-        let world = World::with(vec![builtin(carrier, abi::Plugin { id: "claim.wake", setup: plugin_wake })]);
-        world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "woke" }));
-        world.settle();
-        world.harness.wait_for("woke 0");
-        WOKE_VIEWS.with_borrow_mut(Vec::clear);
-        WOKEN.set(1);
-        WAKE.with_borrow(|waker| waker.as_ref().expect("the plugin's waker").wake());
-        world.harness.app.advance(Duration::from_millis(1));
-        let first = world.harness.app.render().text();
-        assert!(first.contains("woke 1"), "{carrier:?}: the first paint after the wake:\n{first}");
-        assert_eq!(WOKE_VIEWS.with_borrow(Clone::clone), [1], "{carrier:?}");
-        world.harness.app.render();
-        assert_eq!(WOKE_VIEWS.with_borrow(Vec::len), 1, "{carrier:?}: the paint after viewed again");
-    }
+    WOKEN.set(0);
+    let world = World::with(vec![abi::Plugin { id: "claim.wake", setup: plugin_wake }.into()]);
+    world.emit("session.tool.input.started", json!({ "id": "call_1", "name": "woke" }));
+    world.settle();
+    world.harness.wait_for("woke 0");
+    WOKE_VIEWS.with_borrow_mut(Vec::clear);
+    WOKEN.set(1);
+    WAKE.with_borrow(|waker| waker.as_ref().expect("the plugin's waker").wake());
+    world.harness.app.advance(Duration::from_millis(1));
+    let first = world.harness.app.render().text();
+    assert!(first.contains("woke 1"), "the first paint after the wake:\n{first}");
+    assert_eq!(WOKE_VIEWS.with_borrow(Clone::clone), [1]);
+    world.harness.app.render();
+    assert_eq!(WOKE_VIEWS.with_borrow(Vec::len), 1, "the paint after viewed again");
 }

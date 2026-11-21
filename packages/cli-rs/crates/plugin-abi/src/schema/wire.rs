@@ -6,10 +6,10 @@ use crate::interact::{self, Bind, Button, Dragged, Focused, Handled, Key, Layer,
 use crate::{
     Alert, Attention, Blob, Command, Composer, ComposerEdit, Confirm, ConfirmLabel, Dialog, DialogSurface,
     ErrorDetails, Family, Fence, Fenced, Fetch, Foreground, Gutter, HostRequest, Image, ImageBounds, Images, Info,
-    InputTo, KeymapActive, KeymapCommand, KeymapPending, KeymapSlash, Level, Manifest, Measure, Member, Metadata,
-    Panel, PanelAction, PanelBind, PanelSize, PluginEntry, PluginOrigin, PluginStatus, Prompt, Render, RenderFence,
-    Request, RequestId, Route, Scope, Select, SelectAction, SelectOption, Session, SessionStatus, SlotClaim, SlotKind,
-    Sound, SoundName, SurfaceClaim, SurfacePlace, Tab, TabEdit, Toast, Unread, Variant, ViewReply, When,
+    InputTo, KeymapActive, KeymapCommand, KeymapPending, KeymapSlash, Level, Manifest, Measure, Member, Panel,
+    PanelAction, PanelBind, PanelSize, PluginEntry, PluginOrigin, PluginStatus, Prompt, Render, RenderFence, Request,
+    RequestId, Route, Scope, Select, SelectAction, SelectOption, Session, SessionStatus, SlotClaim, SlotKind, Sound,
+    SoundName, SurfaceClaim, SurfacePlace, Tab, TabEdit, Toast, Unread, Variant, ViewReply, When,
 };
 
 /// The node tree of a render (`render`, `render-fence`, `render-route`) and of a dialog body, beside a surface's keyed
@@ -29,20 +29,9 @@ type OpenPanel = interact::OpenPanel;
 
 pub(super) fn definitions() -> Vec<(&'static str, Value)> {
     vec![
-        ("Metadata", {
-            let _ = |value: &Metadata| {
-                let Metadata { version: _, id: _, requires: _ } = value;
-            };
-            object(
-                &[("id", json!({ "type": "string", "minLength": 1 }))],
-                &[("version", nullable(string())), ("requires", array(string()))],
-                None,
-                "What a library's `describe` answers: its nonempty ID, which the host reads before any `create`.",
-            )
-        }),
         (
             "Manifest",
-            object!(Manifest, "What `create` answers: everything the plugin registered in its setup.", {
+            object!(Manifest, "Everything the plugin registered in its setup.", {
                 id: string(), commands: array(reference("Command")), fences: array(string()),
                 slots: array(reference("SlotClaim")), routes: array(string()), storage: array(string()),
             } {
@@ -198,8 +187,6 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Change { node: string(), text: string() } { seq: uint64() },
                 Submit { node: string(), text: string() } { },
                 Mount { mount: reference("MountId"), mounted: boolean() } { slot: nullable(reference("SlotInput")) },
-                #[cfg(feature = "next")]
-                Later { } { },
             }, newtype {
                 Key: reference("Key"),
                 Pointer: reference("Pointer"),
@@ -790,8 +777,6 @@ pub(super) fn messages() -> Value {
         items.iter().map(|(name, schema)| ((*name).to_owned(), schema.clone())).collect()
     };
     json!({
-        "describe": reference("Metadata"),
-        "create": reference("Manifest"),
         "call": map(&call),
         "host": map(&host),
     })

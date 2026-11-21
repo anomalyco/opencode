@@ -37,8 +37,6 @@ fn scenarios() {
     let only = std::env::var("PARITY_SCENARIO").ok();
     let recordings = Recording::all(only.as_deref()).unwrap_or_else(|error| panic!("{error}"));
     assert!(!recordings.is_empty(), "no P-APP recording matches {only:?}");
-    // Run built-in screens on both carriers. `PARITY_CARRIER=both` repeats every selected scenario on both.
-    let both = std::env::var("PARITY_CARRIER").is_ok_and(|carrier| carrier == "both");
     let mut failed = Vec::new();
     for recording in &recordings {
         // An npm scenario runs its packages on the JS host, so without bun it is skipped, as the JS host's own rows are
@@ -55,24 +53,17 @@ fn scenarios() {
             eprintln!("skip {} (built without the ts feature)", recording.scenario);
             continue;
         }
-        let carriers: &[bool] = match both || recording.scenario.starts_with("E.14/") {
-            true => &[false, true],
-            false => &[false],
-        };
-        for &abi in carriers {
-            let (passed, report) = run(recording, abi);
-            let name = format!("{}{}", recording.scenario, if abi { " (C ABI)" } else { "" });
-            eprintln!("{} {name}\n{report}", if passed { "ok  " } else { "FAIL" });
-            if !passed {
-                failed.push(name);
-            }
+        let (passed, report) = run(recording);
+        eprintln!("{} {}\n{report}", if passed { "ok  " } else { "FAIL" }, recording.scenario);
+        if !passed {
+            failed.push(recording.scenario.clone());
         }
     }
     assert!(failed.is_empty(), "P-APP scenarios failed: {failed:?} (reports above)");
 }
 
-/// Runs one recording, with the built-ins on the C ABI's byte shims when `abi`; returns whether it passed and its report.
-fn run(recording: &Recording, abi: bool) -> (bool, String) {
+/// Runs one recording; returns whether it passed and its report.
+fn run(recording: &Recording) -> (bool, String) {
     let memory = Memory::new(routes(recording));
     let app = TestApp::new(recording.width, recording.height);
     #[cfg(feature = "ts")]
@@ -107,7 +98,6 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
             },
             continue_: args.continue_,
             events: true,
-            abi_builtins: abi,
             roots: cache.as_ref().and_then(|cache| {
                 support::roots(Paths { cache: cache.path().to_owned(), ..support::paths(cache.path()) }, "test")
             }),
@@ -155,7 +145,6 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
         let external = opencode_tui::plugins::host::External {
             config_dir: root.path().join("config"),
             cwd: root.path().to_path_buf(),
-            dev: Vec::new(),
         };
         opencode_tui::plugins::host::external_with(&tui, external, Some(config));
         root

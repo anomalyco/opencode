@@ -49,11 +49,8 @@ pub(super) fn ask(tui: &Tui, target: &str, back: impl Fn() + 'static) {
     tui.dialogs.replace(move |cx| confirm(cx, props.clone()), Some(closed), options);
 }
 
-/// Describe the actual library path, hash, and whether the decision can be saved.
+/// Describe the plugin directory's real path, the hash of its files, and whether the decision can be saved.
 fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String {
-    let inside =
-        artifact.script || std::fs::canonicalize(target).is_ok_and(|directory| artifact.path.starts_with(directory));
-    let elsewhere = if inside { "" } else { "\nIt is outside this plugin directory." };
     let saved =
         unsaved.map(|reason| format!("\nYour answer lasts until opencode exits: {reason}.")).unwrap_or_default();
     // The real path as a user would type it: Windows' canonical form starts `\\?\` (`\\?\C:\`, `\\?\UNC\`).
@@ -62,22 +59,14 @@ fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String 
     if opencode_plugin::luau::approves(artifact) {
         return format!(
             "This project wants to run a Luau plugin inside opencode:\n\n{target}\nPlugin directory: {path}\
-             {elsewhere}\nSHA-256 of its files: {}…\n\nIt has no direct access to your files, but it acts through \
-             opencode with your permissions. Approve it only if you trust this project.{saved}",
+             \nSHA-256 of its files: {}…\n\nIt has no direct access to your files, but it acts through opencode with \
+             your permissions. Approve it only if you trust this project.{saved}",
             opencode_plugin::luau::tree_of(artifact).short(),
         );
     }
-    if artifact.script {
-        return format!(
-            "This project wants to run TypeScript code in opencode's JS host:\n\n{target}\nModule directory: {path}\
-             {elsewhere}\nSHA-256 of its files: {}…\n\nIt runs with your permissions. Approve it only if you trust this \
-             project.{saved}",
-            artifact.short(),
-        );
-    }
     format!(
-        "This project wants to run native code inside opencode:\n\n{target}\nLibrary: {path}{elsewhere}\nSHA-256: {}…\n\n\
-         It runs with your permissions. Approve it only if you trust this project.{saved}",
+        "This project wants to run TypeScript code in opencode's JS host:\n\n{target}\nModule directory: {path}\
+         \nSHA-256 of its files: {}…\n\nIt runs with your permissions. Approve it only if you trust this project.{saved}",
         artifact.short(),
     )
 }
@@ -87,46 +76,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_question_names_the_library_and_says_what_is_not_saved() {
-        let root = opencode_util::temp::tempdir().unwrap();
-        let target = root.path().join("plugins").join("p");
-        std::fs::create_dir_all(&target).unwrap();
-        let inside = std::fs::canonicalize(&target).unwrap().join("plugin.so");
-        let artifact = |path: std::path::PathBuf| Artifact {
-            target: target.clone(),
-            path,
-            sha256: "ab".repeat(32),
-            script: false,
-        };
-        let text = question(&target.to_string_lossy(), &artifact(inside.clone()), None);
-        // As a user would type it: on Windows `canonicalize` gives `\\?\C:\…`, which the question leaves out.
-        let shown = opencode_util::path::strip_verbatim(&inside.to_string_lossy()).into_owned();
-        assert!(text.contains(&format!("Library: {shown}")), "{text}");
-        assert!(text.contains(&format!("SHA-256: {}…", "ab".repeat(8))), "{text}");
-        assert!(!text.contains("outside") && !text.contains("lasts until"), "{text}");
-        let text = question(&target.to_string_lossy(), &artifact("/shared/plugin.so".into()), Some("it is shared"));
-        assert!(text.contains("It is outside this plugin directory."), "{text}");
+    fn the_question_names_the_files_and_says_what_is_not_saved() {
+        let artifact = Artifact { target: "/p".into(), path: "/real/p".into(), sha256: "ab".repeat(32) };
+        let text = question("/p", &artifact, None);
+        assert!(text.contains("Module directory: /real/p\n"), "{text}");
+        assert!(text.contains(&format!("SHA-256 of its files: {}…", "ab".repeat(8))), "{text}");
+        assert!(!text.contains("lasts until"), "{text}");
+        let text = question("/p", &artifact, Some("it is shared"));
         assert!(text.contains("Your answer lasts until opencode exits: it is shared."), "{text}");
     }
 
     // Expected: on Windows the real path is shown as a user would type it, without the verbatim prefix that
-    // `canonicalize` gives, for a drive and for a share, a library and a module directory.
+    // `canonicalize` gives, for a drive and for a share.
     #[test]
     fn the_question_shows_a_windows_path_without_its_verbatim_prefix() {
-        let artifact = |path: &str, script: bool| Artifact {
+        let artifact = |path: &str| Artifact {
             target: r"C:\work\.opencode\plugins\p".into(),
             path: path.into(),
             sha256: "ab".repeat(32),
-            script,
         };
         let cases = [
-            (r"\\?\C:\work\.opencode\plugins\p\plugin.dll", false, r"Library: C:\work\.opencode\plugins\p\plugin.dll"),
-            (r"\\?\UNC\srv\share\p\plugin.dll", false, r"Library: \\srv\share\p\plugin.dll"),
-            (r"\\?\C:\work\.opencode\plugins\p", true, r"Module directory: C:\work\.opencode\plugins\p"),
-            (r"\\?\UNC\srv\share\p", true, r"Module directory: \\srv\share\p"),
+            (r"\\?\C:\work\.opencode\plugins\p", r"Module directory: C:\work\.opencode\plugins\p"),
+            (r"\\?\UNC\srv\share\p", r"Module directory: \\srv\share\p"),
         ];
-        for (path, script, shown) in cases {
-            let text = question(r"C:\work\.opencode\plugins\p", &artifact(path, script), None);
+        for (path, shown) in cases {
+            let text = question(r"C:\work\.opencode\plugins\p", &artifact(path), None);
             assert!(text.contains(&format!("{shown}\n")) && !text.contains(r"\\?\"), "{path}: {text}");
         }
     }
@@ -134,7 +108,7 @@ mod tests {
     #[cfg(luau)]
     #[test]
     fn a_luau_plugin_is_asked_about_as_one() {
-        let tree = Artifact { target: "/p".into(), path: "/p".into(), sha256: "ab".repeat(32), script: true };
+        let tree = Artifact { target: "/p".into(), path: "/p".into(), sha256: "ab".repeat(32) };
         let text = question("/p", &opencode_plugin::luau::artifact(tree.clone()), None);
         assert!(text.contains("run a Luau plugin") && text.contains(&format!("files: {}…", "ab".repeat(8))), "{text}");
         assert!(question("/p", &tree, None).contains("TypeScript code in opencode's JS host"));

@@ -202,42 +202,6 @@ fn the_sections_let_go_of_their_settings_listeners() {
     assert_eq!(mounts(50), before);
 }
 
-/// The frames of the sidebar as mounted, after a click folds the MCP list, and after one opens it again. With
-/// `loopback`, the MCP section is wired through the byte shims of the C ABI (`Loopback`) instead of running in
-/// process.
-#[cfg(native)]
-fn mcp_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
-    let h = mount(if loopback { &["-opencode.sidebar.mcp"] } else { &[] }, false);
-    if loopback {
-        let (definition, _) = crate::support::loopback(
-            &opencode_tui::plugins::host::host(&h.tui),
-            crate::support::loopback_entries!(
-                "loopback.sidebar.mcp",
-                opencode_tui::plugins::sidebar_mcp::plugin().setup
-            ),
-        )
-        .unwrap();
-        opencode_tui::plugins::host::add(&h.tui, definition);
-    }
-    h.servers();
-    let mut frames = vec![h.app.render()];
-    h.click("MCP");
-    h.wait_for("MCP (1 active, 2 errors)");
-    frames.push(h.app.render());
-    h.click("MCP");
-    h.wait_for("sentry");
-    frames.push(h.app.render());
-    h.click("linear");
-    h.wait_for("MCP server: linear");
-    frames
-}
-
-#[test]
-#[cfg(native)]
-fn the_mcp_section_acts_the_same_through_the_c_abi_loopback() {
-    assert_eq!(mcp_frames(true), mcp_frames(false));
-}
-
 #[test]
 fn a_hidden_sidebar_mounts_no_section() {
     let h = support::mount(

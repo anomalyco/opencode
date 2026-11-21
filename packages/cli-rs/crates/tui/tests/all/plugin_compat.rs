@@ -281,8 +281,7 @@ fn a_slot_claim_that_draws_nothing_moves_no_row_while_it_loads() {
         let deps = Deps { route: route.clone(), ..support::deps(Arc::new(server)) };
         let harness = support::mount(80, 24, deps);
         let settled = footer(&harness.wait_for("ctrl+p commands"));
-        let external =
-            External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+        let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
         external_with(&harness.tui, external, Some(config.clone()));
         let pipe = Pipe { harness, root };
         let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
@@ -318,7 +317,7 @@ fn raw(config: Config, name: &str, source: &str) -> Pipe {
     std::fs::create_dir_all(&plugin).unwrap();
     std::fs::write(plugin.join("tui.ts"), source).unwrap();
     let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active(&format!("example.{name}"));
@@ -1065,7 +1064,7 @@ fn a_key_a_js_listener_lets_go_is_heard_once_by_each_native_listener() {
     let log = log_file();
     let options = json!({ "log": log.to_string_lossy() });
     let plugin = opencode_plugin::abi::Plugin { id: "example.hearing", setup: hearing };
-    let builtin = crate::plugin_surface::builtin(crate::plugin_surface::Carrier::Linked, plugin);
+    let builtin = plugin.into();
     let pipe = crate::plugin_pipe::open_with(&[("v2probe", Some(options))], config, (80, 30), vec![builtin]);
     pipe.active(PROBE);
     pipe.settle();
@@ -1331,7 +1330,7 @@ fn a_project_plugin_imports_nothing_outside_its_approved_files() {
     );
     std::fs::write(dir.join("tui.ts"), module).unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: work };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.settle();
@@ -1379,7 +1378,7 @@ fn a_project_plugins_package_name_cannot_lead_out_of_its_approved_files() {
     )
     .unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: work };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.settle();
@@ -1421,7 +1420,7 @@ fn a_global_plugins_package_name_cannot_lead_out_of_its_directory() {
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let work = root.path().join("work");
     std::fs::create_dir_all(&work).unwrap();
-    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: work };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.harness.wait("the plugin failed", || {
@@ -1456,7 +1455,7 @@ fn a_project_plugin_imports_its_own_files_by_relative_paths() {
         .unwrap();
     std::fs::write(dir.join("dist/part.js"), "export const part = \"near\"\n").unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: work };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.settle();
@@ -1482,7 +1481,7 @@ fn a_dependency_changed_after_approval_runs_nothing_unapproved() {
     );
     std::fs::write(dir.join("tui.ts"), module).unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: work };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.settle();
@@ -1522,7 +1521,7 @@ fn a_plugin_importing_opentuis_classes_links_and_sets_up() {
     );
     std::fs::write(dir.join("tui.ts"), module).unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.linked");
@@ -1562,7 +1561,7 @@ fn a_plugin_imports_runtime_modules_and_calls_its_own_rpc() {
     });
     let requests = server.log();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.rpc");
@@ -1583,7 +1582,7 @@ fn a_local_plugin_that_fails_is_listed_by_its_package() {
     std::fs::write(dir.join("package.json"), r#"{ "name": "opencode-broken-thing" }"#).unwrap();
     std::fs::write(dir.join("tui.ts"), "throw new Error(\"boom\")\n").unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     let entry = || {
@@ -1617,7 +1616,7 @@ fn a_plugin_with_eighty_stores_reads_each() {
         opencode_plugin::Host::storage_write(&*host, &format!("plugin.example.shards.shard{index}"), r#"{"n":1}"#)
             .unwrap();
     }
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     let (received, sent) = (opencode_plugin::pipe::crossed().received, opencode_plugin::pipe::crossed().sent);
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
@@ -1669,7 +1668,7 @@ fn a_plugin_past_the_stored_values_bound_goes_on_and_follows_a_large_value() {
     std::fs::write(dir.join("tui.ts"), module).unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let host = opencode_tui::plugins::host::host(&harness.tui);
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.big");
@@ -1727,7 +1726,7 @@ fn a_store_update_of_a_value_answered_past_a_frame_keeps_it() {
     let quotes = serde_json::json!({ "items": ["\"".repeat(110_000)] }).to_string();
     assert!(quotes.len() < opencode_plugin::storage::VALUE_BYTES);
     opencode_plugin::Host::storage_write(&*host, key, &quotes).unwrap();
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.notes");
@@ -1757,7 +1756,7 @@ fn project(globals: &[&str], config: Config) -> (Pipe, PathBuf, PathBuf) {
         copy(&Path::new(EXAMPLES).join(name), &config_dir.join("plugins").join(name));
     }
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir, cwd: work, dev: Vec::new() };
+    let external = External { config_dir, cwd: work };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.settle();
@@ -1768,7 +1767,6 @@ fn approve(pipe: &Pipe, dir: &Path) {
     let tui = &pipe.harness.tui;
     let target = dir.to_string_lossy().into_owned();
     let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(tui, &target) else { panic!("nothing is held") };
-    assert!(artifact.script, "{artifact:?}");
     assert_eq!(crate::plugin_pipe::decide(&pipe.harness, &target, &artifact, Decision::Approved), Ok(true));
 }
 
@@ -1817,7 +1815,7 @@ fn missing_package(config: Config) -> (Option<Status>, Option<String>, usize) {
     let harness = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let work = root.path().join("work");
     std::fs::create_dir_all(&work).unwrap();
-    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: work };
     external_with(&harness.tui, external, Some(registry.point(config)));
     let pipe = Pipe { harness, root };
     pipe.harness.wait("the plugin failed", || {

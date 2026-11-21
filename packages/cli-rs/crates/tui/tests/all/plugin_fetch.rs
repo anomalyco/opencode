@@ -7,8 +7,6 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use opencode_api::client::Auth;
-#[cfg(native)]
-use opencode_api::generated::SessionID;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_plugin::abi;
 use opencode_tui::{Deps, Route};
@@ -126,43 +124,6 @@ fn mount(server: &Server, plugins: &[&str]) -> Harness {
     let h = support::mount(100, 40, deps);
     h.wait_for("Fix the parser");
     h
-}
-
-/// The poster's cells as `/stats` opens it from the session, twice, going back with escape in between. With
-/// `loopback`, stats runs through the byte shims of the C ABI.
-#[cfg(native)]
-fn stats_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
-    let server = Server::new(true);
-    let h = mount(&server, if loopback { &["-opencode.stats"] } else { &[] });
-    if loopback {
-        let (definition, _) = crate::support::loopback(
-            &opencode_tui::plugins::host::host(&h.tui),
-            crate::support::loopback_entries!("loopback.stats", opencode_tui::plugins::stats::plugin().setup),
-        )
-        .unwrap();
-        opencode_tui::plugins::host::add(&h.tui, definition);
-        h.wait_for("Fix the parser");
-    }
-    let session = Route::Session { id: SessionID("ses_a".into()) };
-    let mut frames = Vec::new();
-    for open in 1..=2 {
-        h.tui.keymap.dispatch("stats.open", None);
-        h.wait_for("best streak");
-        assert_eq!(server.sent("/session/stats").len(), open, "each opening fetches the stats afresh");
-        frames.push(h.app.render().cells);
-        h.app.press("escape");
-        h.wait("escape to go back to the session", || h.tui.route() == session);
-        h.wait_for("Fix the parser");
-    }
-    frames
-}
-
-#[test]
-#[cfg(native)]
-fn stats_goes_back_with_escape_and_fetches_afresh_the_same_through_the_c_abi_loopback() {
-    let direct = stats_frames(false);
-    assert_eq!(direct[0], direct[1]);
-    assert!(stats_frames(true) == direct, "the loopback draws other cells");
 }
 
 #[test]
@@ -334,27 +295,17 @@ fn an_error_status_reaches_the_plugin_with_its_status_and_body() {
     .into_iter()
     .map(|error| Err(error.to_owned()))
     .collect();
-    for loopback in crate::support::LOOPBACK {
-        PROBED.with_borrow_mut(Vec::clear);
-        let server = Server::new(true);
-        let h = mount(&server, &[]);
-        let definition = match loopback {
-            false => abi::Plugin { id: "probe", setup: probe_setup }.into(),
-            true => {
-                let host = opencode_tui::plugins::host::host(&h.tui);
-                crate::support::loopback(&host, crate::support::loopback_entries!("loopback.probe", probe_setup))
-                    .unwrap()
-                    .0
-            }
-        };
-        opencode_tui::plugins::host::add(&h.tui, definition);
-        for path in ["404/text", "404/json", "404/empty", "500/text", "500/json", "500/empty"] {
-            let count = PROBED.with_borrow(Vec::len);
-            h.tui.keymap.dispatch("probe.fetch", Some(&format!("/probe/{path}")));
-            h.wait(path, || PROBED.with_borrow(Vec::len) > count);
-        }
-        assert_eq!(PROBED.with_borrow(Clone::clone), want, "loopback: {loopback}");
+    PROBED.with_borrow_mut(Vec::clear);
+    let server = Server::new(true);
+    let h = mount(&server, &[]);
+    let definition = abi::Plugin { id: "probe", setup: probe_setup }.into();
+    opencode_tui::plugins::host::add(&h.tui, definition);
+    for path in ["404/text", "404/json", "404/empty", "500/text", "500/json", "500/empty"] {
+        let count = PROBED.with_borrow(Vec::len);
+        h.tui.keymap.dispatch("probe.fetch", Some(&format!("/probe/{path}")));
+        h.wait(path, || PROBED.with_borrow(Vec::len) > count);
     }
+    assert_eq!(PROBED.with_borrow(Clone::clone), want);
 }
 
 #[test]

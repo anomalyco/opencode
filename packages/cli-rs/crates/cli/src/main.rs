@@ -2,7 +2,6 @@ mod args;
 mod askpass;
 mod commands;
 mod completions;
-mod contain;
 mod env;
 mod help;
 mod output;
@@ -27,29 +26,10 @@ fn main() -> ExitCode {
     if let Some(port) = askpass::port() {
         return ExitCode::from(askpass::run(&port));
     }
-    // Before any thread starts: the TUI may run under a parent that restarts it after a plugin crash.
-    let raw = match contain::start(std::env::args_os().collect()) {
-        Ok(raw) => raw,
-        // The client's whole code: on Windows it may not fit in a byte.
-        Err(code) => std::process::exit(code),
-    };
+    let raw: Vec<std::ffi::OsString> = std::env::args_os().collect();
     // Bun decodes the arguments the same way, with U+FFFD for bytes that are not UTF-8. Nothing reads the raw
     // arguments again.
     let args: Vec<String> = raw.iter().skip(1).map(|arg| arg.to_string_lossy().into_owned()).collect();
-    // `plugin dev` and `plugin test` are the native plugin author's, and not in the TypeScript tree the parser follows.
-    // `plugin dev` starts once the rest of its line parsed as the TUI's, and the process environment is set.
-    let (args, dev) = match commands::plugin_dev::take(&args) {
-        None => (args, None),
-        Some(Err(error)) => return exit(Err(error)),
-        Some(Ok(commands::plugin_dev::Native::Help(usage))) => {
-            println!("{usage}");
-            return ExitCode::SUCCESS;
-        }
-        Some(Ok(commands::plugin_dev::Native::Test(test))) => {
-            return exit(commands::plugin_dev::test(&test, &mut std::io::stdout()));
-        }
-        Some(Ok(commands::plugin_dev::Native::Dev { dir, rest })) => (rest, Some(dir)),
-    };
     prompt::init(&args);
     let invocation = match parse::parse(&args, &help::name()) {
         Outcome::Help(path) => return exit(help::show(&path)),
@@ -78,10 +58,6 @@ fn main() -> ExitCode {
     telemetry::install(options);
     signals::install();
     let _terminal = signals::on_shutdown("restore the terminal", prompt::restore_terminal);
-    let dev = match dev.map(|dir| commands::plugin_dev::start(&dir, cli.command.is_none())).transpose() {
-        Ok(dev) => dev,
-        Err(error) => return exit(Err(error)),
-    };
     let logged = serde_json::to_string(&logged_args(&args)).unwrap_or_default();
     log::info!(
         version = help::VERSION,
@@ -95,8 +71,7 @@ fn main() -> ExitCode {
     if let Some(server) = opencode_util::bundle::server() {
         log::info!(path = server.display().to_string().as_str(); "bundled server");
     }
-    let context =
-        commands::Context { server: invocation.server.clone(), args, dev: dev.as_ref().map(|dev| dev.library.clone()) };
+    let context = commands::Context { server: invocation.server.clone(), args };
     let result = commands::run(&context, cli);
     if let Some(error) = result.as_ref().err().filter(|error| error.downcast_ref::<output::Exit>().is_none()) {
         log::error!(cause = format!("{error:#}").as_str(), args = logged.as_str(); "cli process failed");

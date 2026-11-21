@@ -14,6 +14,5 @@ OPENTUI_LIB_HINT = { value = "run `bun run opentui:native` in packages/cli-rs, o
 LUAU_CXXFLAGS = { value = "-g1", force = false }
 
 # The musl targets have no rustflags: they link statically, with Rust's default crt-static, and Zig (cargo zigbuild)
-# links musl statically by default too. A static executable has no dynamic loader, so the build scripts of
-# opencode-plugin, opencode-tui and opencode-cli compile native plugins out there (`cfg(native)`). O-188 supersedes
-# O-164's dynamic musl link.
+# links musl statically by default too, so the executable has no dynamic loader. O-188 supersedes O-164's dynamic musl
+# link.

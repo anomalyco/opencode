@@ -1,16 +1,9 @@
 //! The plugin registry activates plugins, resolves slot claims and routes calls through `opencode-plugin-abi`.
 
-// `cfg(native)` comes from build.rs, which asks rustc whether musl links statically (`native_cfg.rs`). A static musl
-// executable has no dynamic loader, so a carrier compiled into one could never open a library.
-#[cfg(all(native, target_env = "musl", target_feature = "crt-static"))]
-compile_error!("cfg(native) is set in a static musl build, which cannot load native plugins (see native_cfg.rs)");
-
 mod activation;
 pub mod behave;
 pub mod canvas;
 pub mod claim;
-#[cfg(native)]
-pub mod conformance;
 pub mod contain;
 pub mod facts;
 pub mod image;
@@ -136,7 +129,7 @@ pub trait Host: 'static {
         self.toast(
             &abi::Toast::new(
                 abi::Variant::Warning,
-                "This project wants to run native code inside opencode. Run /plugins to approve or decline it.",
+                "This project wants to run a plugin inside opencode. Run /plugins to approve or decline it.",
             )
             .title(format!("Plugin needs approval: {target}")),
         );
@@ -156,8 +149,6 @@ pub trait Host: 'static {
     fn open_route(&self, _id: &str, _name: &str) {}
     /// Mounts the current route again, so changed slot claims and code-block renderers show.
     fn remount(&self) {}
-    /// The plugins on disk may load differently now (a held target was released): the host has the loader look again.
-    fn plugins_changed(&self) {}
     /// Runs the registered command `name` with `input` (a plugin's [`abi::Host::dispatch`], a click's
     /// [`abi::Action::Command`]). Called outside every plugin callback.
     fn dispatch(&self, _name: &str, _input: Option<&str>) {}
@@ -346,10 +337,6 @@ type InlineMathRender = Rc<dyn Fn(&str, &Theme) -> Option<Vec<Span<'static>>>>;
 pub enum Builtin {
     /// A plugin of the one API, run in process.
     Plugin(abi::Plugin),
-    /// The same plugin through the byte shims of the C ABI, as a loaded library runs: its other carrier, for the tests
-    /// that compare the two (`carrier-equal`).
-    #[cfg(native)]
-    Abi(abi::Plugin),
 }
 
 impl From<abi::Plugin> for Builtin {
@@ -390,7 +377,7 @@ impl Definition {
     }
 
     /// Marks an external plugin loaded from `target`; `error` reports its failure while it is active.
-    #[cfg_attr(not(any(native, feature = "ts", feature = "luau")), allow(dead_code))]
+    #[cfg_attr(not(any(feature = "ts", feature = "luau")), allow(dead_code))]
     pub(crate) fn external(mut self, target: impl Into<String>, error: ErrorFn) -> Self {
         self.target = Some(target.into());
         self.error = Some(error);
@@ -398,7 +385,7 @@ impl Definition {
     }
 
     /// Names the build of an external plugin.
-    #[cfg_attr(not(any(native, feature = "ts", feature = "luau")), allow(dead_code))]
+    #[cfg_attr(not(any(feature = "ts", feature = "luau")), allow(dead_code))]
     pub(crate) fn digest(mut self, digest: u64) -> Self {
         self.digest = Some(format!("{digest:016x}"));
         self
@@ -419,8 +406,6 @@ impl From<Builtin> for Definition {
     fn from(builtin: Builtin) -> Self {
         match builtin {
             Builtin::Plugin(plugin) => in_process(plugin),
-            #[cfg(native)]
-            Builtin::Abi(plugin) => loader::native::carried(plugin),
         }
     }
 }
@@ -479,7 +464,7 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
         api.set_waker(activation.waker());
         api.set_link(mailbox);
         // Setup reaches the host as a command does: its effects wait on the one queue. A setup that panics runs its
-        // dispose callbacks within the same call, as the C ABI's `create` does, so nothing either asked for happens.
+        // dispose callbacks within the same call, so nothing either asked for happens.
         let (set_up, _) = scope.monitor.call(scope.slot, "setup", || {
             scope.attempt(&**setup.host(), |host| match contain::catch(|| run(&mut api.setup_with(host), limits)) {
                 Ok(set_up) => set_up,
@@ -718,7 +703,7 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
         }
         for claim in api.claims() {
             let called = scope.clone();
-            // A claim's view reads the part's mount as `Read::mount`, as over the C ABI.
+            // A claim's view reads the part's mount as `Read::mount`.
             let call: claim::Call = Rc::new(move |host, mount, view| {
                 match called.owners.for_mount(mount, || called.call_timed("view", host, |read| view(read))) {
                     (None, _) => claim::Called::Failed,
@@ -829,7 +814,7 @@ struct Scope {
     external: bool,
 }
 
-/// A linked plugin's replies and cancels, on the C ABI's path ([`loader::requests::reply_to`]), so that a mount's close
+/// A linked plugin's replies and cancels, on the pipe's path ([`loader::requests::reply_to`]), so that a mount's close
 /// cancels its requests the same way on both.
 impl loader::requests::Answers for Scope {
     fn live(&self) -> bool {
@@ -1212,7 +1197,7 @@ impl Scope {
             // An external carrier's failure is its own report, which names the plugin and where in it (a Luau error).
             Some(Err(panic)) if self.external => Some(panic.to_string()),
             Some(Err(panic)) => Some(format!("{export} panicked: {panic}")),
-            // A call that returned late did return: what it asked for happens, then it fails, as over the C ABI.
+            // A call that returned late did return: what it asked for happens, then it fails.
             _ if timed.overrun && self.external => {
                 let limit = self.monitor.limits().overrun.as_millis();
                 Some(match timed.cpu {
@@ -1765,7 +1750,7 @@ impl Scoped<'_> {
         }
         let id = next_request();
         let scope: Weak<dyn loader::requests::Answers> = Rc::downgrade(self.scope) as Weak<Scope>;
-        // A request a mount's call asked for ends with the mount, as over the C ABI: one whose mount closed first is
+        // A request a mount's call asked for ends with the mount, as on the pipe: one whose mount closed first is
         // cancelled, and a reply for a mount that closed, also one opened again since, is dropped.
         let mount = self.scope.owners.owning();
         self.defer_reserved(move |host| {
@@ -2344,8 +2329,8 @@ impl Setup<'_> {
         self.registration.routes.push((name.into(), Rc::new(render)));
     }
 
-    /// Renders Markdown fences of `language`.
-    #[cfg_attr(not(native), allow(dead_code))]
+    /// Renders Markdown fences of `language`: what a fence claim registers, for the tests of their order.
+    #[cfg(test)]
     pub(crate) fn code_block(
         &mut self,
         language: impl Into<String>,
@@ -2428,8 +2413,8 @@ pub enum Status {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
     /// What names this entry and no other ([`Registry::toggle_entry`]): `plugin:<id>` for a plugin of the registry,
-    /// `held:<target>` for a build held back, `target:<target>` for a target that did not load. An ID alone is not
-    /// enough: a held build may share its ID with a loaded plugin.
+    /// `target:<target>` for a target that did not load. An ID alone is not enough: a target that did not load may
+    /// share its ID with a loaded plugin.
     pub key: String,
     /// The plugin ID, or the configured target of a skipped entry, or its package's name ([`Registry::set_label`]).
     pub id: String,
@@ -2449,11 +2434,6 @@ impl Entry {
     pub fn plugin_key(id: &str) -> String {
         format!("plugin:{id}")
     }
-
-    /// The key of the build held back at `target`.
-    pub fn held_key(target: &str) -> String {
-        format!("held:{target}")
-    }
 }
 
 /// Reason a configured script plugin is listed but not loaded.
@@ -2471,26 +2451,8 @@ pub const SKIPPED_NO_LUAU: &str =
 /// Why a TypeScript plugin is not loaded when no JS host runs: [`SKIPPED_JS_OFF`], or [`SKIPPED_NO_TS`] in a build without
 /// the `ts` feature, which has none to turn on.
 pub const SKIPPED_OFF: &str = if cfg!(feature = "ts") { SKIPPED_JS_OFF } else { SKIPPED_NO_TS };
-/// Why a native plugin library is not loaded when `OPENCODE_PLUGIN_NATIVE` turned native plugins off.
-pub const SKIPPED_NATIVE_OFF: &str =
-    "native plugins load in process, which OPENCODE_PLUGIN_NATIVE turns off: unset it to load them";
-/// Why a native plugin library is not loaded in a build without native plugins (`cfg(native)`, build.rs): one without
-/// the `native` feature, or a static musl build, which has no dynamic loader (O-188).
-pub const SKIPPED_NO_NATIVE: &str = if cfg!(feature = "native") {
-    "this build of opencode-native has no native plugin support (a static musl build cannot load plugin libraries)"
-} else {
-    "this build of opencode-native has no native plugin support (built without the native feature)"
-};
-/// Why a native plugin library is not loaded: [`SKIPPED_NATIVE_OFF`], or [`SKIPPED_NO_NATIVE`] in a build without
-/// native plugins, which has nothing to turn on.
-pub const SKIPPED_NATIVE: &str = if cfg!(native) { SKIPPED_NATIVE_OFF } else { SKIPPED_NO_NATIVE };
-
-/// Native plugin libraries load unless `OPENCODE_PLUGIN_NATIVE` is `0`, `false` or `off`, and never in a build without
-/// native plugins (`cfg(native)`).
-pub fn native_enabled() -> bool {
-    cfg!(native) && !turned_off(std::env::var_os("OPENCODE_PLUGIN_NATIVE").as_deref())
-}
-
+/// Why a native plugin library (`plugin.so`, `plugin.dylib`, `plugin.dll`) is not loaded.
+pub const SKIPPED_NATIVE: &str = "opencode-native does not load native plugin libraries";
 /// Why a TypeScript plugin is not loaded when no Bun runs the JS host: neither the local server's opencode binary nor
 /// `bun` on the path.
 pub const SKIPPED_NO_BUN: &str = "TypeScript TUI plugins run on the JS host, which needs Bun: neither the server's opencode nor bun on the path runs it; install Bun 1.4 or newer, or set OPENCODE_BUN to its absolute path";
@@ -2532,32 +2494,6 @@ pub struct SetupFailed {
     pub kept: bool,
 }
 
-/// An external plugin's build that crashed or hung the client. Its library is not opened again, by this client or the
-/// next, until the user enables it or another build takes its target.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Crashed {
-    /// The ID its build described, for the manager.
-    pub id: String,
-    pub target: String,
-    /// The build ([`Definition::digest`]).
-    pub digest: String,
-    /// What the manager lists: "crashed the client in `render-slot` and is disabled".
-    pub reason: String,
-}
-
-/// Why the loader may not open a target's library.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Hold {
-    /// Its build crashed the client.
-    Crashed { id: String, reason: String },
-    /// The client started with every external plugin off.
-    Safe,
-    /// No parent guards this client, so no native plugin may run in it (decision 5): the reason.
-    Unsupervised(String),
-}
-
-type Forget = Box<dyn Fn(&Crashed) -> Result<(), String>>;
-
 /// The host's plugins in enable order, and the configured entries it did not load.
 pub struct Registry {
     plugins: RefCell<Vec<Plugin>>,
@@ -2572,16 +2508,6 @@ pub struct Registry {
     /// The slot paths mounted now, which claims resolve against.
     live: Rc<slot::Live>,
     monitor: Rc<contain::Monitor>,
-    crashed: RefCell<Vec<Crashed>>,
-    forget: RefCell<Option<Forget>>,
-    /// Every external plugin is held: a second crash that named no plugin.
-    safe: Cell<bool>,
-    /// Why every external plugin is held, when no parent guards the client.
-    unsupervised: RefCell<Option<String>>,
-    /// The targets the user enabled while they were held, this run.
-    released: RefCell<Vec<String>>,
-    /// The targets held now, never opened: by target, with the ID their crash named, and why.
-    held: RefCell<Vec<(String, Hold)>>,
     /// What names a target that is not loaded in place of its path: its package's name.
     labels: RefCell<HashMap<String, String>>,
 }
@@ -2620,12 +2546,6 @@ impl Registry {
             generations: Cell::new(0),
             live: Rc::default(),
             monitor: Rc::new(contain::Monitor::new(contain::Limits::from_env())),
-            crashed: RefCell::default(),
-            forget: RefCell::default(),
-            safe: Cell::new(false),
-            unsupervised: RefCell::default(),
-            released: RefCell::default(),
-            held: RefCell::default(),
             labels: RefCell::default(),
         }
     }
@@ -2635,134 +2555,16 @@ impl Registry {
         &self.monitor
     }
 
-    /// The builds that crashed the client, before any loads. `forget` is told when an entry ends: the user enabled the
-    /// plugin, or another build took its target. It says whether the crash list kept the change: a release it could not
-    /// record does not happen, as the next start would hold the build again.
-    pub fn set_crashed(&self, crashed: Vec<Crashed>, forget: impl Fn(&Crashed) -> Result<(), String> + 'static) {
-        *self.crashed.borrow_mut() = crashed;
-        *self.forget.borrow_mut() = Some(Box::new(forget));
-    }
-
-    /// The builds that crashed the client, as known.
-    pub fn crashed(&self) -> Vec<Crashed> {
-        self.crashed.borrow().clone()
-    }
-
-    /// Holds every external plugin from now on, as after a second crash that named no plugin: the user enables them
-    /// one at a time. Nothing of it is kept.
-    pub fn set_safe(&self) {
-        self.safe.set(true);
-    }
-
-    /// Holds every external plugin, because no parent guards this client; `reason` says what to do.
-    pub fn set_unsupervised(&self, reason: impl Into<String>) {
-        *self.unsupervised.borrow_mut() = Some(reason.into());
-    }
-
-    /// Whether the loader may open the library of `target`, whose build is `digest`. A held target is listed, and
-    /// nothing of it is opened. A crash entry of another build at the target ends.
-    pub fn admit(&self, target: &str, digest: &str) -> bool {
-        let ended = {
-            let mut crashed = self.crashed.borrow_mut();
-            let index = crashed.iter().position(|entry| entry.target == target && entry.digest != digest);
-            index.map(|index| crashed.remove(index))
-        };
-        if let (Some(ended), Some(forget)) = (ended, &*self.forget.borrow())
-            && let Err(error) = forget(&ended)
-        {
-            log::warn!("plugin {target}: the crash list kept its old build: {error}");
-        }
-        let released = self.released.borrow().iter().any(|known| known == target);
-        let crash = self.crashed.borrow().iter().find(|entry| entry.target == target).cloned();
-        let hold = match crash {
-            Some(crash) if !released => Some(Hold::Crashed { id: crash.id, reason: crash.reason }),
-            _ if released => None,
-            _ if self.safe.get() => Some(Hold::Safe),
-            _ => self.unsupervised.borrow().clone().map(Hold::Unsupervised),
-        };
-        let mut held = self.held.borrow_mut();
-        held.retain(|(known, _)| known != target);
-        match hold {
-            Some(hold) => {
-                held.push((target.to_owned(), hold));
-                drop(held);
-                // Listed once, as held: not also as waiting for approval or declined.
-                self.set_unloaded(target, None);
-                false
-            }
-            None => true,
-        }
-    }
-
-    /// [`Registry::admit`] for the TypeScript plugin of `target`, on the JS host: safe mode holds it; a crash of the
-    /// client or a client no parent guards does not, as nothing of it runs in this process.
-    pub fn admit_script(&self, target: &str) -> bool {
-        let released = self.released.borrow().iter().any(|known| known == target);
-        let mut held = self.held.borrow_mut();
-        held.retain(|(known, _)| known != target);
-        if released || !self.safe.get() {
-            return true;
-        }
-        held.push((target.to_owned(), Hold::Safe));
-        drop(held);
-        self.set_unloaded(target, None);
-        false
-    }
-
     /// Whether plugin `id`, loaded from `target`, starts enabled: as the plugin loaded from it before is, else as the
     /// directives say.
     pub fn starts_enabled(&self, target: &str, id: &str) -> bool {
         self.with_target(target, |plugin| plugin.enabled).unwrap_or_else(|| self.enabled(target, id))
     }
 
-    /// Whether `target` is held.
-    pub fn held(&self, target: &str) -> bool {
-        self.held.borrow().iter().any(|(known, _)| known == target)
-    }
-
-    /// Lets the user's enable of a held target through: it ends its crash entry, and the loader opens it next.
-    fn release(&self, host: &Rc<dyn Host>, id: &str) -> Option<Result<(), String>> {
-        let target = {
-            let held = self.held.borrow();
-            let (target, _) = held.iter().find(|(target, hold)| match hold {
-                Hold::Crashed { id: known, .. } => known == id || target == id,
-                _ => target == id,
-            })?;
-            target.clone()
-        };
-        self.release_target(host, &target)
-    }
-
-    /// [`Registry::release`] of the build held at `target`. The crash list must keep its end first: else the build
-    /// stays held, and the user is told why.
-    fn release_target(&self, host: &Rc<dyn Host>, target: &str) -> Option<Result<(), String>> {
-        let hold = self.held.borrow().iter().find(|(known, _)| known == target).map(|(_, hold)| hold.clone())?;
-        if let Hold::Unsupervised(reason) = hold {
-            return Some(Err(reason));
-        }
-        let ended: Vec<Crashed> =
-            self.crashed.borrow().iter().filter(|entry| entry.target == target).cloned().collect();
-        if let Some(forget) = &*self.forget.borrow()
-            && let Err(error) = ended.iter().try_for_each(forget)
-        {
-            return Some(Err(format!("The plugin stays disabled: its crash could not be forgotten: {error}")));
-        }
-        self.crashed.borrow_mut().retain(|entry| entry.target != target);
-        self.held.borrow_mut().retain(|(known, _)| known != target);
-        self.released.borrow_mut().push(target.to_owned());
-        host.plugins_changed();
-        Some(Ok(()))
-    }
-
     /// The plugin manager's toggle of the entry `key` names ([`Entry::key`]), `None` when there is none or it cannot be
-    /// toggled: a plugin of the registry as [`Registry::toggle`], or the release of a held build, which only enables.
+    /// toggled: a plugin of the registry, as [`Registry::toggle`].
     pub fn toggle_entry(&self, host: &Rc<dyn Host>, key: &str, active: bool) -> Option<Result<(), String>> {
-        if let Some(id) = key.strip_prefix("plugin:") {
-            self.with_plugin(id, |_| ())?;
-            return self.toggle(host, id, active);
-        }
-        let target = key.strip_prefix("held:").filter(|_| active)?;
-        self.release_target(host, target)
+        self.toggle(host, key.strip_prefix("plugin:")?, active)
     }
 
     /// Applies the `plugins` entries of a changed `cli.json`, as TS reconciles on `config.data.plugins`: the
@@ -2985,7 +2787,6 @@ impl Registry {
     /// Deactivates and removes the external plugin loaded from `target`; the built-in it replaced comes back in its
     /// place.
     pub fn unload(&self, host: &Rc<dyn Host>, target: &str) {
-        self.held.borrow_mut().retain(|(known, _)| known != target);
         let (removed, restored) = {
             let mut plugins = self.plugins.borrow_mut();
             let Some(index) = plugins.iter().position(|plugin| plugin.definition.target() == Some(target)) else {
@@ -3037,10 +2838,6 @@ impl Registry {
     /// plugin returns its error for the manager to show, and leaves the plugin as it was: enabled or not, and listed
     /// as the last load left it, so a later reload of a disabled plugin starts nothing.
     pub fn toggle(&self, host: &Rc<dyn Host>, id: &str, active: bool) -> Option<Result<(), String>> {
-        // A held target is not loaded: enabling it lets the loader open it; there is nothing to disable.
-        if self.with_plugin(id, |_| ()).is_none() {
-            return if active { self.release(host, id) } else { None };
-        }
         // A plugin that failed while active is listed failed by its activation's failure, which the restart ends: kept
         // as its listed failure, so a setup that fails again leaves the row failed.
         let before = self.with_plugin(id, |plugin| {
@@ -3111,16 +2908,6 @@ impl Registry {
                 active: plugin.active.is_some(),
             }
         });
-        let held = self.held.borrow();
-        let held = held.iter().map(|(target, hold)| {
-            let (id, source, status) = match hold {
-                Hold::Crashed { id, reason } => (id.clone(), Source::External, Status::Failed(reason.clone())),
-                Hold::Safe => (target.clone(), Source::External, Status::Inactive),
-                Hold::Unsupervised(reason) => (target.clone(), Source::Configured, Status::Skipped(reason.clone())),
-            };
-            let key = Entry::held_key(target);
-            Entry { key, id, target: Some(target.clone()), source, status, active: false, slow: None }
-        });
         let unloaded = self.unloaded.borrow();
         let labels = self.labels.borrow();
         let unloaded = unloaded.iter().map(|(target, status)| Entry {
@@ -3132,7 +2919,7 @@ impl Registry {
             active: false,
             slow: None,
         });
-        active.chain(held).chain(unloaded).collect()
+        active.chain(unloaded).collect()
     }
 
     /// Mounts slot `path` into `parent`: the claims before it, prepended to it, `content` (the host's own,

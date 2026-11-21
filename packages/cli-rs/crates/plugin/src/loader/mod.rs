@@ -1,18 +1,12 @@
 //! Discovers plugin targets and reconciles them with the registry. A failed rebuild leaves the running plugin
 //! active. Project plugins require approval before loading.
 
-// A build with no carrier of external plugins (no `ts`, `luau` or `native`) lists every target as skipped: what loads
+// A build with no carrier of external plugins (no `ts` or `luau`) lists every target as skipped: what loads
 // one goes unused.
-#![cfg_attr(not(any(native, feature = "ts", feature = "luau")), allow(dead_code, unused_imports, unused_variables))]
+#![cfg_attr(not(any(feature = "ts", feature = "luau")), allow(dead_code, unused_imports, unused_variables))]
 
 pub mod approval;
-#[cfg(native)]
-pub mod deps;
-#[cfg(native)]
-pub mod native;
 pub mod npm;
-#[cfg(native)]
-pub mod quarantine;
 pub(crate) mod requests;
 
 use std::cell::RefCell;
@@ -27,45 +21,12 @@ use crate::pipe::{Scripts, Step};
 use crate::{Definition, ErrorFn, Host, Registry, SKIPPED, SKIPPED_OFF, Status};
 use approval::{Approvals, Artifact, Decision};
 
-/// The file name of a plugin directory's native build: `plugin.so`, `plugin.dylib`, or `plugin.dll`.
+/// The file name of a native plugin library, which no carrier loads: `plugin.so`, `plugin.dylib`, or `plugin.dll`.
 pub fn entry_file() -> String {
     format!("plugin.{}", std::env::consts::DLL_EXTENSION)
 }
 
-/// A build to open: its digest, its bytes and its raw quarantine, read through one descriptor.
-#[cfg(native)]
-type Build = (u64, Vec<u8>, Option<Vec<u8>>);
-
-/// Loads native builds.
-#[cfg(native)]
-pub trait Backend {
-    /// Loads the build `library`, read from the file `source`, against `host`, returning the definition, not yet
-    /// active, and its failure while it runs. Setup runs with `options` (JSON text) on each activation, not here. An
-    /// error is why the build cannot load.
-    fn load(
-        &self,
-        host: &Rc<dyn Host>,
-        library: &[u8],
-        source: &Path,
-        options: Option<&str>,
-    ) -> Result<(Definition, ErrorFn), String>;
-
-    /// Loads bytes and quarantine metadata read from the same descriptor, so replacing the path cannot change which
-    /// attribute travels with the copy.
-    fn load_read(
-        &self,
-        host: &Rc<dyn Host>,
-        library: &[u8],
-        quarantine: Option<&[u8]>,
-        source: &Path,
-        options: Option<&str>,
-    ) -> Result<(Definition, ErrorFn), String> {
-        let _ = quarantine;
-        self.load(host, library, source, options)
-    }
-}
-
-/// A `plugins` entry of `cli.json` that names no built-in: a TypeScript package or path, or a native build.
+/// A `plugins` entry of `cli.json` that names no built-in: a TypeScript package or path, or a Luau plugin directory.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Configured {
     pub target: String,
@@ -86,7 +47,7 @@ pub struct Target {
 }
 
 impl Target {
-    /// The native build: the target itself when it is a shared library, else the directory's [`entry_file`].
+    /// The native plugin library the target is or holds ([`entry_file`]), which is skipped ([`crate::SKIPPED_NATIVE`]).
     pub fn library(&self) -> Option<PathBuf> {
         let local = self.local.as_ref()?;
         let extension = std::env::consts::DLL_EXTENSION;
@@ -109,8 +70,8 @@ pub enum ServerPart {
 
 /// The build a target holds on the disk now ([`Loader::found`]).
 pub enum Found {
-    /// A library, identified at once.
-    Build(Result<Artifact, String>),
+    /// Nothing to approve, and why: a target that names no plugin the loader runs.
+    Refused(String),
     /// A TypeScript plugin's directory, whose full hash can take seconds with a large `node_modules`: the caller runs
     /// [`Found::identify`] off the UI thread.
     Tree(PathBuf),
@@ -124,7 +85,7 @@ impl Found {
     /// The artifact: a tree is hashed now ([`Artifact::tree`]).
     pub fn identify(self) -> Result<Artifact, String> {
         match self {
-            Self::Build(identified) => identified,
+            Self::Refused(error) => Err(error),
             Self::Tree(dir) => Artifact::tree(&dir),
             #[cfg(luau)]
             Self::Luau(dir) => Artifact::tree(&dir).map(crate::luau::artifact),
@@ -134,7 +95,7 @@ impl Found {
     /// Whether [`Found::identify`] walks a tree, which the caller runs off the UI thread.
     pub fn walks(&self) -> bool {
         match self {
-            Self::Build(_) => false,
+            Self::Refused(_) => false,
             Self::Tree(_) => true,
             #[cfg(luau)]
             Self::Luau(_) => true,
@@ -151,9 +112,6 @@ struct Seen {
 }
 
 pub struct Loader {
-    /// What opens native builds ([`Loader::with_native`]): without it a library is skipped.
-    #[cfg(native)]
-    backend: Option<Rc<dyn Backend>>,
     /// The global config directory, whose `plugins` directory is always searched and which relative
     /// `plugins` paths start from (TS `path.dirname(config.path)`).
     config_dir: PathBuf,
@@ -232,8 +190,6 @@ pub const STARTING: &str = "starting on the JS host";
 impl Loader {
     pub fn new(config_dir: PathBuf, cwd: PathBuf, configured: Vec<Configured>) -> Self {
         Self {
-            #[cfg(native)]
-            backend: None,
             config_dir,
             cwd,
             configured: RefCell::new(configured),
@@ -254,12 +210,6 @@ impl Loader {
             #[cfg(luau)]
             luau_builds: None,
         }
-    }
-
-    /// Opens the native builds with `backend`.
-    #[cfg(native)]
-    pub fn with_native(self, backend: Rc<dyn Backend>) -> Self {
-        Self { backend: Some(backend), ..self }
     }
 
     /// Runs the directories with a `plugin.toml` and no native build as Luau plugins. `walked` runs on a walk's thread
@@ -674,7 +624,7 @@ impl Loader {
             }
             return self.script(host, registry, target, scripts, dir, &listed);
         }
-        let Some(file) = target.library() else {
+        if target.library().is_none() {
             self.held.borrow_mut().remove(name);
             // What ran from a project's plugin whose build went stops now, not at the next reconcile.
             if target.project {
@@ -692,64 +642,8 @@ impl Loader {
                 (Some(local), false) if local.is_dir() => SKIPPED_OFF.to_owned(),
                 _ => SKIPPED.to_owned(),
             });
-        };
-        // A build without the `native` feature, or one `OPENCODE_PLUGIN_NATIVE` turned off, opens no library.
-        #[cfg(native)]
-        if let Some(backend) = self.backend.clone() {
-            return self.library(host, registry, target, &*backend, &file, listed);
         }
-        let _ = file;
         skip(crate::SKIPPED_NATIVE)
-    }
-
-    /// Loads the native build `file` of `target` with `backend`, once it is admitted.
-    #[cfg(native)]
-    fn library(
-        &self,
-        host: &Rc<dyn Host>,
-        registry: &Registry,
-        target: &Target,
-        backend: &dyn Backend,
-        file: &Path,
-        listed: Option<Status>,
-    ) -> bool {
-        let name = target.target.as_str();
-        let (digest, bytes, quarantine) = match self.admit(host, registry, target, file, &listed) {
-            Ok(build) => build,
-            Err(changed) => return changed,
-        };
-        self.waiting.borrow_mut().remove(name);
-        // Nothing the build names may come from the project, or leave its private copy.
-        let checked = deps::check(&bytes, target.project);
-        // Opening the library runs its code: the record names the build while it does, before its ID is known.
-        let slot = registry.monitor().slot(&crate::contain::Artifact::external("", name, &format!("{digest:016x}")));
-        // Do not run an unrecordable build: a crash would restart the same plugin.
-        let checked = checked.and_then(|()| match registry.monitor().attributed(slot) {
-            true => Ok(()),
-            false => Err(format!(
-                "the crash guard cannot name this build ({} builds this run at most, a path of about {} bytes at \
-                 most), so it does not run; restart opencode-native, or move the plugin to a shorter path",
-                crate::contain::record::NAMES,
-                crate::contain::record::NAME_BYTES
-            )),
-        });
-        let (loaded, _) = registry.monitor().call(slot, "load", || {
-            checked
-                .and_then(|()| backend.load_read(host, &bytes, quarantine.as_deref(), file, target.options.as_deref()))
-        });
-        let loaded = loaded.and_then(|loaded| {
-            if !registry.id_taken(&loaded.0.id, name) {
-                return Ok(loaded);
-            }
-            self.waiting.borrow_mut().insert(name.to_owned(), loaded.0.id.clone());
-            Err(format!("plugin ID {} is already registered", loaded.0.id))
-        });
-        let (definition, error) = match loaded {
-            Ok(loaded) => loaded,
-            Err(error) => return self.fail(&**host, registry, &listed, name, digest, error),
-        };
-        log::info!("plugin {} loaded from {}", definition.id, file.display());
-        self.register(host, registry, &listed, name, definition, error, digest)
     }
 
     /// Registers the `definition` of `target`'s build `digest`, whose failure `error` reports.
@@ -804,7 +698,7 @@ impl Loader {
         listed: &Option<Status>,
     ) -> bool {
         let name = target.target.as_str();
-        // A project's TypeScript plugin runs only once the user approved its files, as a native build does: until then
+        // A project's TypeScript plugin runs only once the user approved its files: until then
         // nothing of it reaches the JS host, which does not start for it. What the JS host imports is a copy of
         // exactly the approved files; a save since the approval holds the plugin back for a decision on it. Its files
         // are hashed and copied off the UI thread: until the first walk, or the copy of an approved tree, ended it is
@@ -839,17 +733,6 @@ impl Loader {
             false => None,
         };
         let dir = staged.as_deref().unwrap_or(dir);
-        // Safe mode holds it as it holds a library. A crash or a client no parent guards does not: nothing of it runs
-        // in this process.
-        let was_held = registry.held(name);
-        if !registry.admit_script(name) {
-            scripts.forget(name);
-            if self.seen.borrow_mut().remove(name).is_some() {
-                registry.unload(host, name);
-                return true;
-            }
-            return !was_held;
-        }
         match scripts.step(name, dir, target.options.as_deref(), staged.is_some()) {
             Step::Same => false,
             // Its setup runs only when it starts enabled.
@@ -901,9 +784,7 @@ impl Loader {
     /// in process ([`crate::luau`]). A running build keeps running while the next fails to compile or set up. A walk on a
     /// thread of its own finds a plugin's files changed, and another thread reads and compiles them; until the first
     /// build is compiled the plugin is starting. A project's plugin runs only once the user approved its directory as a Luau plugin
-    /// ([`crate::luau::artifact`]), from the staged copy of the approved bytes, made off the UI thread too. It is
-    /// admitted as a native build is ([`Registry::admit`]): a build the crash list names, safe mode and a client no
-    /// parent guards hold it.
+    /// ([`crate::luau::artifact`]), from the staged copy of the approved bytes, made off the UI thread too.
     #[cfg(luau)]
     fn luau(
         &self,
@@ -949,14 +830,6 @@ impl Loader {
         };
         if self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest) {
             return false;
-        }
-        let was_held = registry.held(name);
-        if !registry.admit(name, &format!("{digest:016x}")) {
-            if self.seen.borrow_mut().remove(name).is_some() {
-                registry.unload(host, name);
-                return true;
-            }
-            return !was_held;
         }
         // A project's plugin loads from a staged copy named by its hash; a global one's key is its walk's light hash.
         let built = match builds.built(name, &from, build, !target.project) {
@@ -1047,8 +920,8 @@ impl Loader {
         self.answers.borrow().get(target).is_some_and(|last| *last != answer)
     }
 
-    /// The build `target` holds on the disk now, as a reconcile reads it, for [`Loader::decide`]: its library, or its
-    /// TypeScript tree to hash ([`Found::identify`]). `None` when it is no target.
+    /// The build `target` holds on the disk now, as a reconcile reads it, for [`Loader::decide`]: its TypeScript or
+    /// Luau tree to hash ([`Found::identify`]). `None` when it is no target.
     pub fn found(&self, target: &str) -> Option<Found> {
         let known = self.targets().into_iter().find(|known| known.target == target)?;
         #[cfg(luau)]
@@ -1058,103 +931,10 @@ impl Loader {
         if let (true, Some(dir)) = (self.scripted(&known), &known.local) {
             return Some(Found::Tree(dir.clone()));
         }
-        let identified = known.library().ok_or_else(|| format!("{}: no build", known.target)).and_then(|file| {
-            #[cfg(not(native))]
-            return Err(format!("{}: {}", file.display(), crate::SKIPPED_NATIVE));
-            #[cfg(native)]
-            return Artifact::open(known.local.as_deref().unwrap_or(&file), &file).map(|(artifact, _)| artifact);
-        });
-        Some(Found::Build(identified))
-    }
-
-    /// Checks approval and crash policy before loading a native build. Returns the digest, bytes and quarantine from
-    /// one descriptor; a held or unchanged build is not opened.
-    #[cfg(native)]
-    fn admit(
-        &self,
-        host: &Rc<dyn Host>,
-        registry: &Registry,
-        target: &Target,
-        file: &Path,
-        listed: &Option<Status>,
-    ) -> Result<Build, bool> {
-        let name = target.target.as_str();
-        // Setup runs with the options, so new options load the build again.
-        let digest = |build: &[u8]| {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(build);
-            hasher.write(target.options.as_deref().unwrap_or_default().as_bytes());
-            hasher.finish()
-        };
-        let unchanged = |digest: u64| self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest);
-        let (digest, bytes, quarantine) = match target.project {
-            // A project's build runs only once the user approved this artifact. Until then nothing of it is read
-            // but its hash, nothing is opened, and it claims nothing. What is loaded is what was hashed. When it
-            // cannot be identified, what ran from it stops and nothing is reported.
-            true => {
-                let (artifact, mut handle) = match Artifact::open(target.local.as_deref().unwrap_or(file), file) {
-                    Ok((artifact, handle)) => (self.approved(host, registry, name, Ok(artifact))?, handle),
-                    Err(error) => return Err(self.hold(host, registry, name, Err(error), None)),
-                };
-                let digest = digest(artifact.sha256.as_bytes());
-                if unchanged(digest) {
-                    return Err(false);
-                }
-                // The quarantine of the file that was hashed, read through its descriptor.
-                let read = artifact.bytes(&mut handle).and_then(|bytes| {
-                    let quarantine = quarantine::read(&handle).map_err(|error| format!("{}: {error}", file.display()));
-                    Ok((bytes, quarantine?))
-                });
-                match read {
-                    Ok((bytes, quarantine)) => (digest, bytes, quarantine),
-                    Err(error) => return Err(self.hold(host, registry, name, Err(error), None)),
-                }
-            }
-            false => {
-                // The bytes and their quarantine through one descriptor, as for a project's build.
-                let read = std::fs::File::open(file).and_then(|mut handle| {
-                    if handle.metadata()?.len() > approval::LIMIT {
-                        return Err(std::io::Error::other(format!(
-                            "larger than {} MiB",
-                            approval::LIMIT / 1024 / 1024
-                        )));
-                    }
-                    let mut bytes = Vec::new();
-                    std::io::Read::read_to_end(&mut std::io::Read::take(&mut handle, approval::LIMIT + 1), &mut bytes)?;
-                    let quarantine = quarantine::read(&handle).map_err(std::io::Error::other)?;
-                    Ok((bytes, quarantine))
-                });
-                let (bytes, quarantine) = match read {
-                    Ok(read) => read,
-                    Err(error) => {
-                        return Err(self.fail(
-                            &**host,
-                            registry,
-                            listed,
-                            name,
-                            0,
-                            format!("{}: {error}", file.display()),
-                        ));
-                    }
-                };
-                let digest = digest(&bytes);
-                if unchanged(digest) {
-                    return Err(false);
-                }
-                (digest, bytes, quarantine)
-            }
-        };
-        let build = format!("{digest:016x}");
-        // A held build is not opened at all: no initializer, no `describe`, nothing of it runs.
-        let was_held = registry.held(name);
-        if !registry.admit(name, &build) {
-            if self.seen.borrow_mut().remove(name).is_some() {
-                registry.unload(host, name);
-                return Err(true);
-            }
-            return Err(!was_held);
-        }
-        Ok((digest, bytes, quarantine))
+        Some(Found::Refused(match known.library() {
+            Some(file) => format!("{}: {}", file.display(), crate::SKIPPED_NATIVE),
+            None => format!("{}: no build", known.target),
+        }))
     }
 
     /// Returns the approved artifact or holds the target pending. The error indicates whether the manager list
@@ -1273,25 +1053,6 @@ fn identity(file: &Path) -> Option<(u64, u64)> {
     {
         std::fs::canonicalize(file).ok().map(|_| (0, 0))
     }
-}
-
-/// Checks targets for native builds without opening a library. Disabled targets count because they can be enabled
-/// later.
-pub fn has_native_build(config_dir: &Path, cwd: &Path, configured: &[&str]) -> bool {
-    let discovered = discover(&plugin_directories(config_dir, cwd)).into_iter().map(Some);
-    let configured = configured.iter().map(|target| local_source(target, config_dir));
-    discovered.chain(configured).flatten().any(|local| {
-        let target = Target { target: String::new(), local: Some(local), options: None, project: false };
-        // A Luau plugin runs in process too, and the crash list holds its build as it holds a library's.
-        #[cfg(luau)]
-        if crate::luau::enabled()
-            && target.library().is_none()
-            && target.local.as_deref().is_some_and(crate::luau::is_plugin)
-        {
-            return true;
-        }
-        crate::native_enabled() && target.library().is_some()
-    })
 }
 
 /// The `plugins` directories to search: the global config directory's, then each `.opencode` directory from the

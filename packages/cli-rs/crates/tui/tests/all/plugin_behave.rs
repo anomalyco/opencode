@@ -2566,54 +2566,49 @@ fn tops(screen: &str) -> (String, String) {
 #[test]
 fn an_event_acts_on_the_mount_it_came_from() {
     use opentui::prelude::*;
-    for carrier in crate::plugin_surface::CARRIERS {
-        TWICE.with(|twice| twice.borrow_mut().clear());
-        let deps = Deps {
-            route: Route::Home,
-            builtins: vec![crate::plugin_surface::builtin(
-                carrier,
-                abi::Plugin { id: "test.twice", setup: twice_setup },
-            )],
-            ..support::deps(Arc::new(support::empty()))
-        };
-        let harness = support::mount_still(80, 16, deps);
-        harness.app.advance(Duration::ZERO);
-        let host = opencode_tui::plugins::host::host(&harness.tui);
-        let app = harness.app.app();
-        let frame = View::new(app).row().absolute().z_index(3000).width(80).height(12);
-        let mounts: Vec<_> = (0..2)
-            .map(|_| {
-                let mount = harness.tui.plugins.route(&*host, "test.twice", "two").expect("the route mounts");
-                let cell = View::new(app).column().width(40).height(12);
-                cell.add(&mount.root());
-                frame.add(&cell);
-                mount
-            })
-            .collect();
-        opencode_ui::root::add(app, &frame);
-        let settle = || {
-            for _ in 0..3 {
-                harness.app.advance(Duration::from_millis(1));
-                harness.app.render();
-            }
-            harness.app.render().text()
-        };
-        assert_eq!(tops(&settle()), ("r0".into(), "r0".into()), "{carrier:?}");
-        // Submit in the left mount, then in the right one.
-        for (x, row, expected) in [(1, "5", ("r5", "r0")), (41, "9", ("r5", "r9"))] {
-            harness.app.click(x, 0);
-            harness.app.type_text(row);
-            harness.app.press("enter");
-            let screen = settle();
-            assert_eq!(tops(&screen), (expected.0.into(), expected.1.into()), "{carrier:?}:\n{screen}");
+    TWICE.with(|twice| twice.borrow_mut().clear());
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![opencode_plugin::abi::Plugin { id: "test.twice", setup: twice_setup }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount_still(80, 16, deps);
+    harness.app.advance(Duration::ZERO);
+    let host = opencode_tui::plugins::host::host(&harness.tui);
+    let app = harness.app.app();
+    let frame = View::new(app).row().absolute().z_index(3000).width(80).height(12);
+    let mounts: Vec<_> = (0..2)
+        .map(|_| {
+            let mount = harness.tui.plugins.route(&*host, "test.twice", "two").expect("the route mounts");
+            let cell = View::new(app).column().width(40).height(12);
+            cell.add(&mount.root());
+            frame.add(&cell);
+            mount
+        })
+        .collect();
+    opencode_ui::root::add(app, &frame);
+    let settle = || {
+        for _ in 0..3 {
+            harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
         }
-        // The user's scroll of the left list reads the left list's offset.
-        harness.app.scroll(10, 6, true);
-        settle();
-        let read = TWICE.with(|twice| twice.borrow().clone());
-        assert!(!read.is_empty() && read.iter().all(|offset| (5..9).contains(offset)), "{carrier:?}: read {read:?}");
-        drop(mounts);
+        harness.app.render().text()
+    };
+    assert_eq!(tops(&settle()), ("r0".into(), "r0".into()));
+    // Submit in the left mount, then in the right one.
+    for (x, row, expected) in [(1, "5", ("r5", "r0")), (41, "9", ("r5", "r9"))] {
+        harness.app.click(x, 0);
+        harness.app.type_text(row);
+        harness.app.press("enter");
+        let screen = settle();
+        assert_eq!(tops(&screen), (expected.0.into(), expected.1.into()), "{screen}");
     }
+    // The user's scroll of the left list reads the left list's offset.
+    harness.app.scroll(10, 6, true);
+    settle();
+    let read = TWICE.with(|twice| twice.borrow().clone());
+    assert!(!read.is_empty() && read.iter().all(|offset| (5..9).contains(offset)), "read {read:?}");
+    drop(mounts);
 }
 
 thread_local! {
@@ -2657,64 +2652,59 @@ fn keyed_setup(setup: &mut abi::Setup) -> Result<(), String> {
 #[test]
 fn a_handler_and_a_layout_name_the_mount_they_are_for() {
     use opentui::prelude::*;
-    for carrier in crate::plugin_surface::CARRIERS {
-        DRAFTS.with(|drafts| drafts.borrow_mut().clear());
-        LAID.with(|laid| laid.borrow_mut().clear());
-        let deps = Deps {
-            route: Route::Home,
-            builtins: vec![crate::plugin_surface::builtin(
-                carrier,
-                abi::Plugin { id: "test.keyed", setup: keyed_setup },
-            )],
-            ..support::deps(Arc::new(support::empty()))
-        };
-        let harness = support::mount_still(80, 16, deps);
-        harness.app.advance(Duration::ZERO);
-        let host = opencode_tui::plugins::host::host(&harness.tui);
-        let app = harness.app.app();
-        let frame = View::new(app).row().absolute().z_index(3000).width(80).height(12);
-        let cells: Vec<View> = (0..2).map(|_| View::new(app).column().width(40).height(12)).collect();
-        cells.iter().for_each(|cell| {
-            frame.add(cell);
-        });
-        let open = |cell: &View| {
-            let mount = harness.tui.plugins.route(&*host, "test.keyed", "keyed").expect("the route mounts");
-            cell.add(&mount.root());
-            mount
-        };
-        let mut mounts: Vec<_> = cells.iter().map(open).collect();
-        opencode_ui::root::add(app, &frame);
-        let settle = || {
-            for _ in 0..3 {
-                harness.app.advance(Duration::from_millis(1));
-                harness.app.render();
-            }
-            harness.app.render().text()
-        };
-        let drafts = || DRAFTS.with(|drafts| drafts.borrow().values().cloned().collect::<Vec<_>>());
-        settle();
-        for (x, typed) in [(1, "a"), (41, "b")] {
-            harness.app.click(x, 0);
-            harness.app.type_text(typed);
-            settle();
+    DRAFTS.with(|drafts| drafts.borrow_mut().clear());
+    LAID.with(|laid| laid.borrow_mut().clear());
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![opencode_plugin::abi::Plugin { id: "test.keyed", setup: keyed_setup }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount_still(80, 16, deps);
+    harness.app.advance(Duration::ZERO);
+    let host = opencode_tui::plugins::host::host(&harness.tui);
+    let app = harness.app.app();
+    let frame = View::new(app).row().absolute().z_index(3000).width(80).height(12);
+    let cells: Vec<View> = (0..2).map(|_| View::new(app).column().width(40).height(12)).collect();
+    cells.iter().for_each(|cell| {
+        frame.add(cell);
+    });
+    let open = |cell: &View| {
+        let mount = harness.tui.plugins.route(&*host, "test.keyed", "keyed").expect("the route mounts");
+        cell.add(&mount.root());
+        mount
+    };
+    let mut mounts: Vec<_> = cells.iter().map(open).collect();
+    opencode_ui::root::add(app, &frame);
+    let settle = || {
+        for _ in 0..3 {
+            harness.app.advance(Duration::from_millis(1));
+            harness.app.render();
         }
-        let screen = settle();
-        assert_eq!(drafts(), ["a", "b"], "{carrier:?}: the model\n{screen}");
-        assert!(screen.contains("draft[a]") && screen.contains("draft[b]"), "{carrier:?}:\n{screen}");
-        assert_eq!(LAID.with(|laid| laid.borrow().len()), 2, "{carrier:?}: the layout named one mount for both");
-        // The left mount closes, and opens again as a new mount, which types its own draft.
-        let closed = mounts.remove(0);
-        closed.root().detach();
-        drop(closed);
+        harness.app.render().text()
+    };
+    let drafts = || DRAFTS.with(|drafts| drafts.borrow().values().cloned().collect::<Vec<_>>());
+    settle();
+    for (x, typed) in [(1, "a"), (41, "b")] {
+        harness.app.click(x, 0);
+        harness.app.type_text(typed);
         settle();
-        assert_eq!(drafts(), ["b"], "{carrier:?}: the closed mount kept its model");
-        mounts.insert(0, open(&cells[0]));
-        settle();
-        harness.app.click(1, 0);
-        harness.app.type_text("c");
-        let screen = settle();
-        assert_eq!(drafts(), ["b", "c"], "{carrier:?}: the model\n{screen}");
-        assert!(screen.contains("draft[c]") && screen.contains("draft[b]"), "{carrier:?}:\n{screen}");
-        drop(mounts);
     }
+    let screen = settle();
+    assert_eq!(drafts(), ["a", "b"], "the model\n{screen}");
+    assert!(screen.contains("draft[a]") && screen.contains("draft[b]"), "{screen}");
+    assert_eq!(LAID.with(|laid| laid.borrow().len()), 2, "the layout named one mount for both");
+    // The left mount closes, and opens again as a new mount, which types its own draft.
+    let closed = mounts.remove(0);
+    closed.root().detach();
+    drop(closed);
+    settle();
+    assert_eq!(drafts(), ["b"], "the closed mount kept its model");
+    mounts.insert(0, open(&cells[0]));
+    settle();
+    harness.app.click(1, 0);
+    harness.app.type_text("c");
+    let screen = settle();
+    assert_eq!(drafts(), ["b", "c"], "the model\n{screen}");
+    assert!(screen.contains("draft[c]") && screen.contains("draft[b]"), "{screen}");
+    drop(mounts);
 }

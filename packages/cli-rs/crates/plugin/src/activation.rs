@@ -384,8 +384,7 @@ impl Drop for Activation {
 pub(crate) struct Wake {
     id: u64,
     state: AtomicU8,
-    /// The activation ended or failed: a wake posts nothing. A failed C ABI instance is kept, not destroyed, so its
-    /// own waker is never revoked; this is.
+    /// The activation ended or failed: a wake posts nothing.
     revoked: AtomicBool,
     proxy: Option<AppProxy>,
     /// The `Woken`s posted and handled, for the model that holds at most one in flight.
@@ -460,12 +459,6 @@ impl Wake {
     /// The plugin's waker woke the host: its wake handlers run, or its claims draw again.
     pub fn post(&self) {
         self.raise(PENDING | HINTED);
-    }
-
-    /// Whether a [`Woken`] is on its way to the UI thread.
-    #[cfg(all(test, native))]
-    pub(crate) fn pending(&self) -> bool {
-        self.state.load(Ordering::Acquire) & POSTED != 0
     }
 
     /// Posts one [`Woken`] until the UI thread handles it, unless the activation ended.

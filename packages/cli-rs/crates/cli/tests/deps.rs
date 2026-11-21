@@ -91,10 +91,7 @@ const LAYERS: [&[Crate]; 6] = [
         ("service", &["api", "local", "util"], &[]),
         ("ui", &["api-types", "util"], &["parity"]),
     ],
-    &[
-        ("plugin", &["api-types", "plugin-abi", "ui", "util"], &["latex", "mermaid"]),
-        ("store", &["api", "util"], &["local", "service"]),
-    ],
+    &[("plugin", &["api-types", "plugin-abi", "ui", "util"], &[]), ("store", &["api", "util"], &["local", "service"])],
     &[
         ("acp", &["api", "service", "util"], &[]),
         ("mini", &["api", "local", "store", "ui", "util"], &[]),

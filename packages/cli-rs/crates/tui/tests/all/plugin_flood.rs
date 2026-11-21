@@ -1,6 +1,5 @@
-//! Check mailbox fairness and per-frame work under repeated wakes on both native carriers.
+//! Check mailbox fairness and per-frame work under repeated wakes of linked plugins.
 
-use crate::plugin_surface::{CARRIERS, Carrier, builtin};
 use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
 
@@ -78,14 +77,14 @@ fn setup_b(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-fn open(carrier: Carrier, all: Duration) -> Harness {
+fn open(all: Duration) -> Harness {
     LOG.with(|log| log.borrow_mut().clear());
     CLOCK.with(|clock| clock.set(Duration::ZERO));
     let deps = Deps {
         route: Route::Home,
         builtins: vec![
-            builtin(carrier, abi::Plugin { id: PLUGINS[0], setup: setup_a }),
-            builtin(carrier, abi::Plugin { id: PLUGINS[1], setup: setup_b }),
+            abi::Plugin { id: PLUGINS[0], setup: setup_a }.into(),
+            abi::Plugin { id: PLUGINS[1], setup: setup_b }.into(),
         ],
         ..support::deps(Arc::new(support::empty()))
     };
@@ -118,14 +117,13 @@ struct Run {
 }
 
 struct Flood {
-    carrier: Carrier,
     /// The total budget: under it two plugins never reach it, at it they do.
     all: Duration,
 }
 
 impl Flood {
     fn run_all(&self, commands: &[Command]) -> Run {
-        let harness = open(self.carrier, self.all);
+        let harness = open(self.all);
         let mut waiting: [std::collections::VecDeque<u32>; 2] = Default::default();
         // Each plugin numbers its own messages, so a twin without another plugin's sends numbers them alike.
         let mut numbers = [0u32; 2];
@@ -287,27 +285,21 @@ impl Model for Flood {
 
 #[test]
 fn a_flood_drains_in_turn_under_the_frame_budget() {
-    for carrier in CARRIERS {
-        model::check(&Flood { carrier, all: Duration::from_millis(4) }, 24, 32);
-        model::check(&Flood { carrier, all: Duration::from_micros(1500) }, 24, 32);
-    }
+    model::check(&Flood { all: Duration::from_millis(4) }, 24, 32);
+    model::check(&Flood { all: Duration::from_micros(1500) }, 24, 32);
 }
 
 #[test]
 fn a_plugin_that_went_idle_keeps_its_spend_for_the_frame() {
     let commands = [Command::Send(0, 1), Command::Key, Command::Key, Command::Send(0, 1), Command::Frame];
-    for carrier in CARRIERS {
-        let failure = Flood { carrier, all: Duration::from_millis(4) }.run(&commands);
-        assert_eq!(failure, None, "{carrier:?}");
-    }
+    let failure = Flood { all: Duration::from_millis(4) }.run(&commands);
+    assert_eq!(failure, None);
 }
 
 #[test]
 fn a_key_read_with_a_wake_runs_before_the_update() {
-    for carrier in CARRIERS {
-        let failure = Flood { carrier, all: Duration::from_millis(4) }.run(&[Command::Send(0, 1), Command::Key]);
-        assert_eq!(failure, None, "{carrier:?}");
-    }
+    let failure = Flood { all: Duration::from_millis(4) }.run(&[Command::Send(0, 1), Command::Key]);
+    assert_eq!(failure, None);
 }
 
 #[test]
@@ -315,10 +307,8 @@ fn wakes_before_a_paint_ask_for_one_drain() {
     let mut commands = vec![Command::Send(0, 40), Command::Frame];
     commands.extend((0..30).flat_map(|_| [Command::Send(0, 1), Command::Poll]));
     commands.push(Command::Frame);
-    for carrier in CARRIERS {
-        let failure = Flood { carrier, all: Duration::from_millis(4) }.run(&commands);
-        assert_eq!(failure, None, "{carrier:?}");
-    }
+    let failure = Flood { all: Duration::from_millis(4) }.run(&commands);
+    assert_eq!(failure, None);
 }
 
 fn send(plugin: usize, count: u32) {
@@ -328,124 +318,109 @@ fn send(plugin: usize, count: u32) {
 
 #[test]
 fn a_paint_does_not_cut_the_frame_open() {
-    for carrier in CARRIERS {
-        let harness = open(carrier, Duration::from_millis(4));
-        harness.tui.navigate(Route::Plugin { id: PLUGINS[0].to_owned(), name: "drawn".to_owned() });
+    let harness = open(Duration::from_millis(4));
+    harness.tui.navigate(Route::Plugin { id: PLUGINS[0].to_owned(), name: "drawn".to_owned() });
+    harness.app.render();
+    DRAW_COST.with(|cost| cost.set(Duration::from_micros(800)));
+    for _ in 0..40 {
+        send(0, 1);
+        harness.app.advance(Duration::from_millis(16));
         harness.app.render();
-        DRAW_COST.with(|cost| cost.set(Duration::from_micros(800)));
-        for _ in 0..40 {
-            send(0, 1);
-            harness.app.advance(Duration::from_millis(16));
-            harness.app.render();
-        }
-        DRAW_COST.with(|cost| cost.set(Duration::ZERO));
-        let slow = harness.tui.plugins.monitor().is_slow(PLUGINS[0]);
-        assert!(slow, "{carrier:?}: 1.1 ms a paint was not slow");
     }
+    DRAW_COST.with(|cost| cost.set(Duration::ZERO));
+    let slow = harness.tui.plugins.monitor().is_slow(PLUGINS[0]);
+    assert!(slow, "1.1 ms a paint was not slow");
 }
 
 #[test]
 fn a_key_between_paints_is_in_the_next_paints_frame() {
-    for carrier in CARRIERS {
-        let harness = open(carrier, Duration::from_millis(4));
-        harness.tui.navigate(Route::Plugin { id: PLUGINS[0].to_owned(), name: "drawn".to_owned() });
+    let harness = open(Duration::from_millis(4));
+    harness.tui.navigate(Route::Plugin { id: PLUGINS[0].to_owned(), name: "drawn".to_owned() });
+    harness.app.render();
+    DRAW_COST.with(|cost| cost.set(Duration::from_micros(400)));
+    for _ in 0..40 {
+        send(0, 1);
+        harness.app.app().dispatch(opentui::prelude::Event::Wake);
+        harness.app.press("j");
+        harness.app.advance(Duration::from_millis(16));
         harness.app.render();
-        DRAW_COST.with(|cost| cost.set(Duration::from_micros(400)));
-        for _ in 0..40 {
-            send(0, 1);
-            harness.app.app().dispatch(opentui::prelude::Event::Wake);
-            harness.app.press("j");
-            harness.app.advance(Duration::from_millis(16));
-            harness.app.render();
-        }
-        DRAW_COST.with(|cost| cost.set(Duration::ZERO));
-        assert!(harness.tui.plugins.monitor().is_slow(PLUGINS[0]), "{carrier:?}: 1.1 ms a frame was not slow");
     }
+    DRAW_COST.with(|cost| cost.set(Duration::ZERO));
+    assert!(harness.tui.plugins.monitor().is_slow(PLUGINS[0]), "1.1 ms a frame was not slow");
 }
 
 #[test]
 fn a_paints_draws_leave_the_next_paints_updates_their_budget() {
-    for carrier in CARRIERS {
-        let harness = open(carrier, Duration::from_millis(4));
-        harness.tui.navigate(Route::Plugin { id: PLUGINS[0].to_owned(), name: "drawn".to_owned() });
+    let harness = open(Duration::from_millis(4));
+    harness.tui.navigate(Route::Plugin { id: PLUGINS[0].to_owned(), name: "drawn".to_owned() });
+    harness.app.render();
+    DRAW_COST.with(|cost| cost.set(Duration::from_micros(900)));
+    send(0, 100);
+    let mut per_paint = Vec::new();
+    for _ in 0..6 {
+        let before = LOG.with(|log| log.borrow().len());
         harness.app.render();
-        DRAW_COST.with(|cost| cost.set(Duration::from_micros(900)));
-        send(0, 100);
-        let mut per_paint = Vec::new();
-        for _ in 0..6 {
-            let before = LOG.with(|log| log.borrow().len());
-            harness.app.render();
-            per_paint.push(LOG.with(|log| log.borrow().len()) - before);
-        }
-        DRAW_COST.with(|cost| cost.set(Duration::ZERO));
-        assert!(per_paint[1..].iter().all(|updates| *updates == 4), "{carrier:?}: updates a paint {per_paint:?}");
+        per_paint.push(LOG.with(|log| log.borrow().len()) - before);
     }
+    DRAW_COST.with(|cost| cost.set(Duration::ZERO));
+    assert!(per_paint[1..].iter().all(|updates| *updates == 4), "updates a paint {per_paint:?}");
 }
 
 #[test]
 fn plugins_take_turns_to_go_first() {
-    for carrier in CARRIERS {
-        let harness = open(carrier, Duration::from_micros(1500));
-        send(0, 100);
-        send(1, 100);
-        for _ in 0..10 {
-            harness.app.render();
-        }
-        let updates = LOG.with(|log| {
-            let log = log.borrow();
-            [0, 1]
-                .map(|plugin| log.iter().filter(|event| matches!(event, Event::Update(of, _) if *of == plugin)).count())
-        });
-        assert!(updates[0].abs_diff(updates[1]) <= 1, "{carrier:?}: updates {updates:?}");
+    let harness = open(Duration::from_micros(1500));
+    send(0, 100);
+    send(1, 100);
+    for _ in 0..10 {
+        harness.app.render();
     }
+    let updates = LOG.with(|log| {
+        let log = log.borrow();
+        [0, 1].map(|plugin| log.iter().filter(|event| matches!(event, Event::Update(of, _) if *of == plugin)).count())
+    });
+    assert!(updates[0].abs_diff(updates[1]) <= 1, "updates {updates:?}");
 }
 
 #[test]
 fn sends_between_paints_wake_the_ui_thread_once() {
-    for carrier in CARRIERS {
-        let harness = open(carrier, Duration::from_millis(4));
-        for round in 0..2 {
-            let before = opencode_plugin::schedule::work().wakes;
-            for _ in 0..25 {
-                send(0, 1);
-                harness.app.event(opentui::prelude::Event::Wake);
-            }
-            let wakes = opencode_plugin::schedule::work().wakes - before;
-            assert_eq!(wakes, 1, "{carrier:?}, round {round}: wakes between two paints");
-            harness.app.render();
+    let harness = open(Duration::from_millis(4));
+    for round in 0..2 {
+        let before = opencode_plugin::schedule::work().wakes;
+        for _ in 0..25 {
+            send(0, 1);
+            harness.app.event(opentui::prelude::Event::Wake);
         }
+        let wakes = opencode_plugin::schedule::work().wakes - before;
+        assert_eq!(wakes, 1, "round {round}: wakes between two paints");
+        harness.app.render();
     }
 }
 
 #[test]
 fn the_last_frame_over_the_budget_ends_without_a_call() {
-    for carrier in CARRIERS {
-        let harness = open(carrier, Duration::from_millis(4));
-        for _ in 0..13 {
-            for _ in 0..3 {
-                harness.app.press("j");
-            }
-            harness.app.advance(Duration::from_millis(16));
-            harness.app.render();
+    let harness = open(Duration::from_millis(4));
+    for _ in 0..13 {
+        for _ in 0..3 {
+            harness.app.press("j");
         }
-        assert!(!harness.tui.plugins.monitor().is_slow(PLUGINS[0]), "{carrier:?}: slow before its 13th frame ended");
-        for _ in 0..2 {
-            harness.app.advance(Duration::from_millis(16));
-            harness.app.render();
-        }
-        assert!(harness.tui.plugins.monitor().is_slow(PLUGINS[0]), "{carrier:?}: the 13th frame never ended");
+        harness.app.advance(Duration::from_millis(16));
+        harness.app.render();
     }
+    assert!(!harness.tui.plugins.monitor().is_slow(PLUGINS[0]), "slow before its 13th frame ended");
+    for _ in 0..2 {
+        harness.app.advance(Duration::from_millis(16));
+        harness.app.render();
+    }
+    assert!(harness.tui.plugins.monitor().is_slow(PLUGINS[0]), "the 13th frame never ended");
 }
 
 #[test]
 fn a_wake_handlers_toast_shows_in_the_frame_that_ran_it() {
-    for carrier in CARRIERS {
-        let harness = open(carrier, Duration::from_millis(4));
-        WAKER_B.with(|waker| waker.borrow().as_ref().unwrap().wake());
-        harness.app.event(opentui::prelude::Event::Wake);
-        let toast = || harness.tui.toasts.current().is_some_and(|toast| toast.message == "b woke");
-        assert!(!toast(), "{carrier:?}: the wake ran before a paint");
-        let frame = harness.app.render().text();
-        assert!(frame.contains("b woke"), "{carrier:?}: no toast in the frame that ran the wake\n{frame}");
-    }
+    let harness = open(Duration::from_millis(4));
+    WAKER_B.with(|waker| waker.borrow().as_ref().unwrap().wake());
+    harness.app.event(opentui::prelude::Event::Wake);
+    let toast = || harness.tui.toasts.current().is_some_and(|toast| toast.message == "b woke");
+    assert!(!toast(), "the wake ran before a paint");
+    let frame = harness.app.render().text();
+    assert!(frame.contains("b woke"), "no toast in the frame that ran the wake\n{frame}");
 }

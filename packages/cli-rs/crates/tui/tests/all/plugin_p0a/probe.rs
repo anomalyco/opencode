@@ -1,4 +1,4 @@
-//! Dialogs, composer edits and a styled footer exercised through the linked and native carriers.
+//! Dialogs, composer edits and a styled footer, which the linked carrier's tests exercise.
 
 use super::abi::{
     Action, Alert, Border, BorderStyle, Command, ComposerEdit, Confirm, Dialog, Edges, Host, Layout, Node, Overflow,

@@ -13,8 +13,6 @@ use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_plugin::abi;
 use opencode_plugin::loader::approval::{self, Approvals, Artifact, Decision};
-#[cfg(native)]
-use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Configured, Loader, ServerPart};
 use opencode_plugin::node::{abi_mode, assign, refill, theme_color};
 use opencode_plugin::{Builtin, Definition, Host, Registry, RouteMount, SlotInput, SlotMount, Status};
@@ -30,8 +28,6 @@ use crate::prelude::*;
 pub struct Plugins {
     registry: Registry,
     loader: RefCell<Option<Rc<Loader>>>,
-    /// The snapshot last published in the run record.
-    pub(crate) published: RefCell<Option<opencode_plugin::contain::Snapshot>>,
     #[cfg(feature = "ts")]
     pub scripts: RefCell<Option<Rc<opencode_plugin::pipe::Scripts>>>,
     /// Last plugin list delivered to subscribers.
@@ -192,10 +188,6 @@ impl Host for Tui {
         tell_plugins(self);
     }
 
-    fn plugins_changed(&self) {
-        let _ = self.app.proxy().send(PluginsChanged);
-    }
-
     fn revoked(&self, id: &str) {
         super::panel::close(self, id);
         // A dialog surface on screen mounts again from the registration that replaced the one that ended.
@@ -214,19 +206,18 @@ impl Host for Tui {
     }
 
     fn pending(&self, target: &str) {
-        let held = held(self, target).and_then(|(artifact, _)| artifact.ok());
         #[cfg(luau)]
-        if held.as_ref().is_some_and(opencode_plugin::luau::approves) {
+        if held(self, target)
+            .and_then(|(artifact, _)| artifact.ok())
+            .as_ref()
+            .is_some_and(opencode_plugin::luau::approves)
+        {
             let message =
                 "This project wants to run a Luau plugin inside opencode. Run /plugins to approve or decline it.";
             return pending_toast(self, target, message);
         }
-        let message = match held.is_some_and(|artifact| artifact.script) {
-            true => {
-                "This project wants to run TypeScript code in opencode's JS host. Run /plugins to approve or decline it."
-            }
-            false => "This project wants to run native code inside opencode. Run /plugins to approve or decline it.",
-        };
+        let message =
+            "This project wants to run TypeScript code in opencode's JS host. Run /plugins to approve or decline it.";
         pending_toast(self, target, message);
     }
 
@@ -1181,16 +1172,7 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
 }
 
 /// Register built-ins in palette order, including the renderers supplied through [`crate::Deps::builtins`].
-fn builtins(external: Vec<Builtin>, abi: bool) -> Vec<Builtin> {
-    // On the other carrier each plugin's calls cross the C ABI's byte shims ([`Builtin::Abi`]), which a build without
-    // the `native` feature does not have.
-    #[cfg(not(native))]
-    let _ = abi;
-    let carried = |builtin: Builtin| match builtin {
-        #[cfg(native)]
-        Builtin::Plugin(plugin) if abi => Builtin::Abi(plugin),
-        builtin => builtin,
-    };
+fn builtins(external: Vec<Builtin>) -> Vec<Builtin> {
     let mut builtins = vec![
         super::home_footer::plugin().into(),
         super::prompt_footer::plugin().into(),
@@ -1206,17 +1188,15 @@ fn builtins(external: Vec<Builtin>, abi: bool) -> Vec<Builtin> {
     ];
     builtins.extend(external);
     builtins.push(super::diffs::plugin().into());
-    builtins.into_iter().map(carried).collect()
+    builtins
 }
 
-/// The registry of the built-ins and the `plugins` config, not yet active; with `abi`, the built-ins run through the
-/// C ABI's byte shims ([`crate::Deps::abi_builtins`]).
-pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>, abi: bool) -> Plugins {
+/// The registry of the built-ins and the `plugins` config, not yet active.
+pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>) -> Plugins {
     let targets = info.plugins.iter().flatten().map(target);
     Plugins {
-        registry: Registry::new(builtins(external, abi), targets),
+        registry: Registry::new(builtins(external), targets),
         loader: RefCell::default(),
-        published: RefCell::default(),
         #[cfg(feature = "ts")]
         scripts: RefCell::default(),
         told: RefCell::default(),
@@ -1243,7 +1223,6 @@ pub fn host(tui: &Rc<Tui>) -> Rc<dyn Host> {
 pub fn install(tui: &Rc<Tui>) {
     let weak = tui.weak();
     tui.plugins.monitor().set_frames(move || weak.upgrade().map_or(0, |tui| tui.app.frame_number()));
-    super::contain::install(tui);
     tui.plugins.activate(&host(tui));
     tell_plugins(tui);
     // Notify plugin keymap readers when pending keys, layers, or focus change.
@@ -1469,8 +1448,6 @@ fn pending_toast(tui: &Tui, target: &str, message: &str) {
 pub struct External {
     pub config_dir: PathBuf,
     pub cwd: PathBuf,
-    /// Extra plugin targets that survive config reloads without being persisted, including `plugin dev`.
-    pub dev: Vec<String>,
 }
 
 struct PluginsChanged;
@@ -1516,24 +1493,9 @@ pub fn external(tui: &Rc<Tui>, external: External) {
 
 /// Load external plugins using the given JS host configuration. Without a host, list TypeScript plugins as skipped.
 pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>) {
-    let builds: Vec<Build> =
-        external.dev.iter().map(|library| Build::new(Path::new(library).with_file_name("build.log"))).collect();
-    let dev = external.dev;
-    let targets = move |plugins: &[opencode_local::cli_config::Plugin]| -> Vec<String> {
-        plugins.iter().map(target).map(str::to_owned).chain(dev.iter().cloned()).collect()
-    };
-    if !targets(&[]).is_empty() {
-        let plugins = tui.config().info.plugins.clone().unwrap_or_default();
-        tui.plugins.set_targets(&host(tui), targets(&plugins).iter().map(String::as_str));
-    }
     let entries = configured(tui, tui.plugins.skipped());
     let project = opencode_plugin::loader::project_root(&external.cwd);
     let loader = Loader::new(external.config_dir, external.cwd, entries);
-    #[cfg(native)]
-    let loader = match opencode_plugin::native_enabled() {
-        true => loader.with_native(Rc::new(Native)),
-        false => loader,
-    };
     #[cfg(luau)]
     let loader = match opencode_plugin::luau::enabled() {
         true => {
@@ -1583,7 +1545,6 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
         bind!(tui, |tui, _, _: &PluginsChanged| {
             loader.reconcile(&host(&tui), &tui.plugins);
             watch(&tui, &loader, &watches);
-            builds.iter().for_each(|build| build.tell(&tui));
             tell_skipped(&tui);
         })
     });
@@ -1594,8 +1555,7 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
             return;
         }
         let host = host(&tui);
-        let targets =
-            tui.plugins.set_targets(&host, targets(current.as_deref().unwrap_or_default()).iter().map(String::as_str));
+        let targets = tui.plugins.set_targets(&host, current.iter().flatten().map(target));
         plugins.replace(current);
         loader.set_configured(configured(&tui, targets));
         loader.set_user(user_plugins(&tui, loader.config_dir()));
@@ -1608,51 +1568,6 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
     let server = tui.reads.server.borrow().1.clone();
     set_server_parts(tui, &server);
     tell_skipped(tui);
-}
-
-/// How long a failed `plugin dev` build is told: until the next build replaces the toast, or the user closes it. The
-/// author saves in an editor and looks back at the TUI later, past the 5 s of a toast's default (dx-fresh).
-const FAILED_BUILD: Duration = Duration::from_secs(24 * 60 * 60);
-
-/// Watch the development build log; an empty log means success.
-struct Build {
-    log: PathBuf,
-    /// Last log timestamp and failure state.
-    seen: Cell<(Option<std::time::SystemTime>, bool)>,
-}
-
-impl Build {
-    fn new(log: PathBuf) -> Self {
-        let seen = Cell::new(Self::read(&log));
-        Self { log, seen }
-    }
-
-    fn read(log: &Path) -> (Option<std::time::SystemTime>, bool) {
-        let meta = std::fs::metadata(log).ok();
-        (meta.as_ref().and_then(|meta| meta.modified().ok()), meta.is_some_and(|meta| meta.len() > 0))
-    }
-
-    /// Report build failure and the first subsequent recovery.
-    fn tell(&self, tui: &Tui) {
-        let now = Self::read(&self.log);
-        let (written, failed) = self.seen.replace(now);
-        if now.0 == written {
-            return;
-        }
-        match (now.1, failed) {
-            (true, _) => tui.toasts.show(
-                ToastOptions::new(
-                    Variant::Error,
-                    format!("The running version stays. The compiler's output is in {}.", self.log.display()),
-                )
-                .title("plugin dev: the build failed")
-                .duration(FAILED_BUILD)
-                .keep(),
-            ),
-            (false, true) => tui.toasts.show(ToastOptions::new(Variant::Success, "plugin dev: the build passes again")),
-            (false, false) => {}
-        }
-    }
 }
 
 /// The build of the project plugin of `target` the user would be asked about, or why it cannot be read, and why

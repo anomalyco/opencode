@@ -31,7 +31,7 @@ serde_json.workspace = true
 tokio.workspace = true
 unicode-width.workspace = true
 url.workspace = true
-# `plugin test` renders on the headless renderer.
+# The terminal size and raw reads of the prompt kit.
 opentui.workspace = true
 opencode-acp.workspace = true
 opencode-api.workspace = true
@@ -57,9 +57,6 @@ default = ["ts", "luau"]
 ts = ["opencode-tui/ts", "opencode-plugin/ts"]
 # Luau plugins, in process (O-178). On by default; `OPENCODE_PLUGIN_LUAU=0` turns them off at run time.
 luau = ["opencode-tui/luau"]
-# Native plugin libraries over the C ABI, `plugin dev` and `plugin test` (native-feature). Off by default
-# (native-off); `OPENCODE_PLUGIN_NATIVE=0` turns them off at run time in a build with them.
-native = ["opencode-tui/native", "opencode-plugin/native"]
 
 [dev-dependencies]
 serde_json.workspace = true

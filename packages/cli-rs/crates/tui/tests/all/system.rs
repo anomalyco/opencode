@@ -45,18 +45,12 @@ impl Mounted {
 }
 
 fn mount_with(app: &TestApp, info: Info, answer: Answer) -> Mounted {
-    mount_on(app, info, answer, false)
-}
-
-/// [`mount_with`], with the built-ins' calls across the C ABI's byte shims when `abi` says so.
-fn mount_on(app: &TestApp, info: Info, answer: Answer, abi: bool) -> Mounted {
     let fake = fake(answer);
     let log = fake.log();
     let deps = Deps {
         directory: DIRECTORY.into(),
         config: support::config(info),
         route: Route::Home,
-        abi_builtins: abi,
         ..support::deps(Arc::new(fake))
     };
     Mounted { tui: opencode_tui::mount(app, deps), log }
@@ -242,13 +236,9 @@ fn team_plugin() -> abi::Plugin {
     abi::Plugin { id: "team.tui", setup }
 }
 
+/// Opens the plugin manager.
 fn plugin_manager(app: &TestApp, extra: Value) -> (Mounted, fn() -> u32) {
-    plugin_manager_on(app, extra, false)
-}
-
-/// Open the plugin manager linked or through the C ABI.
-fn plugin_manager_on(app: &TestApp, extra: Value, abi: bool) -> (Mounted, fn() -> u32) {
-    let mounted = mount_on(app, support::component_info(extra), plugin_server(), abi);
+    let mounted = mount_with(app, support::component_info(extra), plugin_server());
     ACTIVATIONS.set(0);
     opencode_tui::plugins::host::add(&mounted.tui, team_plugin().into());
     (mounted, || ACTIVATIONS.get())
@@ -260,14 +250,8 @@ fn active(tui: &Tui, id: &str) -> bool {
 
 #[test]
 fn plugin_manager_matches_typescript() {
-    for abi in crate::support::LOOPBACK {
-        plugin_manager_matches_typescript_on(abi);
-    }
-}
-
-fn plugin_manager_matches_typescript_on(abi: bool) {
     let app = TestApp::new(100, 30);
-    let (mounted, _) = plugin_manager_on(&app, json!({}), abi);
+    let (mounted, _) = plugin_manager(&app, json!({}));
     mounted.tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "team.plugins");
     assert_dialog(&app, "E.18b/plugins", "Plugins");
@@ -293,7 +277,7 @@ fn plugin_manager_matches_typescript_on(abi: bool) {
     assert_dialog(&app, "E.18b/plugins-failed", "Plugins");
 
     let app = TestApp::new(100, 40);
-    let (mounted, _) = plugin_manager_on(&app, json!({}), abi);
+    let (mounted, _) = plugin_manager(&app, json!({}));
     mounted.tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "team.plugins");
     app.press("ctrl+a");
@@ -303,12 +287,6 @@ fn plugin_manager_matches_typescript_on(abi: bool) {
 
 #[test]
 fn plugin_manager_follows_plugin_updated_under_its_error_view() {
-    for abi in crate::support::LOOPBACK {
-        plugin_manager_follows_plugin_updated_under_its_error_view_on(abi);
-    }
-}
-
-fn plugin_manager_follows_plugin_updated_under_its_error_view_on(abi: bool) {
     use opencode_api::memory::{Memory, Route as MemoryRoute};
     let failed = json!([{
         "id": "audit", "source": { "type": "local", "path": format!("{DIRECTORY}/audit.ts") },
@@ -325,7 +303,6 @@ fn plugin_manager_follows_plugin_updated_under_its_error_view_on(abi: bool) {
         config: support::config(support::component_info(json!({}))),
         route: Route::Home,
         events: true,
-        abi_builtins: abi,
         ..support::deps(Arc::new(memory.clone()))
     };
     let tui = opencode_tui::mount(&app, deps);
@@ -354,11 +331,9 @@ fn plugin_manager_follows_plugin_updated_under_its_error_view_on(abi: bool) {
 
 #[test]
 fn plugin_manager_reads_the_active_location() {
-    for abi in crate::support::LOOPBACK {
-        let app = TestApp::new(100, 30);
-        let (mounted, _) = plugin_manager_on(&app, json!({}), abi);
-        plugin_manager_reads_the_active_location_on(&app, &mounted);
-    }
+    let app = TestApp::new(100, 30);
+    let (mounted, _) = plugin_manager(&app, json!({}));
+    plugin_manager_reads_the_active_location_on(&app, &mounted);
 }
 
 fn plugin_manager_reads_the_active_location_on(app: &TestApp, mounted: &Mounted) {
@@ -399,14 +374,8 @@ fn the_host_entries_list_and_toggle_like_plugins() {
 
 #[test]
 fn plugin_manager_toggles_checks_and_updates() {
-    for abi in crate::support::LOOPBACK {
-        plugin_manager_toggles_checks_and_updates_on(abi);
-    }
-}
-
-fn plugin_manager_toggles_checks_and_updates_on(abi: bool) {
     let app = TestApp::new(100, 30);
-    let (mounted, activations) = plugin_manager_on(&app, json!({}), abi);
+    let (mounted, activations) = plugin_manager(&app, json!({}));
     let tui = &mounted.tui;
     tui.keymap.dispatch("plugins.list", None);
     wait_for(&app, "disable enter");
@@ -890,21 +859,18 @@ fn without_an_updater_there_is_no_update_command_or_notice() {
 
 #[test]
 fn the_prompt_takes_typing_after_a_plugin_manager_toggle() {
-    for abi in crate::support::LOOPBACK {
-        let h = support::mount(100, 30, carried(abi));
-        h.wait_for("Fix the parser");
-        toggle_a_plugin(&h);
-        h.app.press("escape");
-        h.wait_gone("enable enter");
-        h.app.type_text("xyz");
-        h.wait("the text reaches the prompt", || h.text().contains("xyz"));
-    }
+    let h = support::mount(100, 30, fixture());
+    h.wait_for("Fix the parser");
+    toggle_a_plugin(&h);
+    h.app.press("escape");
+    h.wait_gone("enable enter");
+    h.app.type_text("xyz");
+    h.wait("the text reaches the prompt", || h.text().contains("xyz"));
 }
 
-/// The session fixture's server, with the built-ins on the linked carrier or with `abi` across the C ABI's byte shims.
-fn carried(abi: bool) -> Deps {
-    let deps = support::deps(Arc::new(Fake::new(|seen| support::base(seen, support::DIRECTORY))));
-    Deps { abi_builtins: abi, ..deps }
+/// The session fixture's server.
+fn fixture() -> Deps {
+    support::deps(Arc::new(Fake::new(|seen| support::base(seen, support::DIRECTORY))))
 }
 
 /// Opens `/plugins`, shows the internal plugins, and turns the first off, which mounts the route again under the
@@ -920,17 +886,15 @@ pub(crate) fn toggle_a_plugin(h: &support::Harness) {
 
 #[test]
 fn the_plugin_manager_search_finds_built_ins_once_they_show() {
-    for abi in crate::support::LOOPBACK {
-        let h = support::mount(100, 30, carried(abi));
-        h.wait_for("Fix the parser");
-        h.tui.keymap.dispatch("plugins.list", None);
-        h.wait_for("Plugins");
-        h.app.press("ctrl+a");
-        h.wait_for("hide internal");
-        h.app.type_text("btw");
-        h.wait_for("opencode.btw");
-        assert!(!h.app.text().contains("No results found"), "{}", h.app.text());
-    }
+    let h = support::mount(100, 30, fixture());
+    h.wait_for("Fix the parser");
+    h.tui.keymap.dispatch("plugins.list", None);
+    h.wait_for("Plugins");
+    h.app.press("ctrl+a");
+    h.wait_for("hide internal");
+    h.app.type_text("btw");
+    h.wait_for("opencode.btw");
+    assert!(!h.app.text().contains("No results found"), "{}", h.app.text());
 }
 
 #[test]

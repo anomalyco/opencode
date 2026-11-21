@@ -9,39 +9,9 @@ use std::time::Duration;
 
 use opencode_api::memory::Memory;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-#[cfg(native)]
-use opencode_plugin::abi;
-use opencode_plugin::loader::entry_file;
 use opencode_tui::plugins::host::{External, external_with};
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
-
-/// The example plugin `name` (`crates/plugin/examples/<name>`), built once per test run.
-pub(crate) fn build(name: &str) -> Vec<u8> {
-    static BUILT: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
-    let mut built = BUILT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some((_, library)) = built.iter().find(|(known, _)| known == name) {
-        return library.clone();
-    }
-    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples");
-    let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/sample-plugin");
-    // A release test run, as the measures run, builds the plugin in release too.
-    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
-    let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()))
-        .args(["build", "--quiet", "--manifest-path"])
-        .arg(examples.join(name).join("Cargo.toml"))
-        .arg("--target-dir")
-        .arg(&target)
-        .args((profile == "release").then_some("--release"))
-        .status()
-        .unwrap();
-    assert!(status.success(), "the {name} plugin did not build");
-    let file =
-        format!("{}opencode_{}{}", std::env::consts::DLL_PREFIX, name.replace('-', "_"), std::env::consts::DLL_SUFFIX);
-    let library = std::fs::read(target.join(profile).join(file)).unwrap();
-    built.push((name.to_owned(), library.clone()));
-    library
-}
 
 type Handler = Arc<dyn Fn(&Seen) -> Option<Reply> + Send + Sync>;
 
@@ -98,14 +68,6 @@ pub(crate) struct Port {
 
 deref_harness!(Port);
 
-/// Example library or pinned package to load into the test TUI.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum Carrier<'a> {
-    #[cfg_attr(not(native), allow(dead_code))]
-    Example(&'a str),
-    Npm(&'a str),
-}
-
 /// Unpacks the published package `name` from its tarball into `into`.
 pub(crate) fn unpack(name: &str, into: &Path) {
     let tarball = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -129,30 +91,23 @@ pub(crate) fn pinned(tarball: &Path) {
     assert_eq!(pins[name.as_ref()].as_str(), Some(actual.as_str()), "{name} is not the pinned tarball");
 }
 
-/// The TUI on `first`, or on session `ses_p`, with each of `carriers`' plugins in `<config>/plugins`, over `handler`,
+/// The TUI on `first`, or on session `ses_p`, with each of the pinned `packages` in `<config>/plugins`, over `handler`,
 /// with real TUI storage in the temp directory when `stored`; `None` without Bun for a package.
 pub(crate) fn open_as(
-    carriers: &[Carrier<'_>],
+    packages: &[&str],
     width: u16,
     handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
     stored: bool,
     first: Option<Route>,
 ) -> Option<Port> {
-    let scripts = match carriers.iter().any(|carrier| matches!(carrier, Carrier::Npm(_))) {
-        true => Some(crate::plugin_pipe::config()?),
-        false => None,
+    let scripts = match packages.is_empty() {
+        true => None,
+        false => Some(crate::plugin_pipe::config()?),
     };
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
-    for carrier in carriers {
-        match *carrier {
-            Carrier::Example(name) => {
-                let plugin = config.join("plugins").join(name);
-                std::fs::create_dir_all(&plugin).unwrap();
-                std::fs::write(plugin.join(entry_file()), build(name)).unwrap();
-            }
-            Carrier::Npm(name) => unpack(name, &config.join("plugins").join(name.replace('/', "__"))),
-        }
+    for name in packages {
+        unpack(name, &config.join("plugins").join(name.replace('/', "__")));
     }
     let server = Server {
         events: Memory::new(Vec::new()),
@@ -173,7 +128,7 @@ pub(crate) fn open_as(
     // time.
     let now = std::time::Instant::now();
     harness.tui.plugins.monitor().set_clock(move || now);
-    let external = External { config_dir: config, cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: config, cwd: root.path().to_path_buf() };
     match scripts {
         Some(scripts) => external_with(&harness.tui, external, Some(scripts)),
         None => opencode_tui::plugins::host::external(&harness.tui, external),
@@ -294,7 +249,7 @@ pub(crate) fn by_update() -> Vec<(String, String, &'static str)> {
 
 #[test]
 fn the_published_subagents_sidebar_lists_and_picks() {
-    let Some(h) = open_as(&[Carrier::Npm("opencode-subagents-sidebar")], 170, subagents, false, None) else { return };
+    let Some(h) = open_as(&["opencode-subagents-sidebar"], 170, subagents, false, None) else { return };
     h.wait_for("+2 more");
     h.wait("Child 03 runs", || {
         h.sidebar(120).iter().any(|row| row.starts_with("• Child 03") && row.ends_with(" running"))
@@ -327,7 +282,7 @@ fn the_published_subagents_sidebar_lists_and_picks() {
 
 #[test]
 fn the_published_subagents_sidebar_opens_a_clicked_row_and_stores_the_fold() {
-    let Some(h) = open_as(&[Carrier::Npm("opencode-subagents-sidebar")], 170, subagents, true, None) else { return };
+    let Some(h) = open_as(&["opencode-subagents-sidebar"], 170, subagents, true, None) else { return };
     h.wait_for("+2 more");
     let (first, title, _) = &by_update()[0];
     let (x, y) = h.find(&format!("• {title}"));
@@ -346,7 +301,7 @@ fn the_published_subagents_sidebar_opens_a_clicked_row_and_stores_the_fold() {
 
 #[test]
 fn quick_folds_each_land_and_keep_a_field_another_client_stored() {
-    let Some(h) = open_as(&[Carrier::Npm("opencode-subagents-sidebar")], 170, subagents, true, None) else { return };
+    let Some(h) = open_as(&["opencode-subagents-sidebar"], 170, subagents, true, None) else { return };
     h.wait_for("+2 more");
     let storage = h.tui.storage().unwrap();
     let file = storage.file("plugin.subagents-sidebar.view").unwrap();
@@ -383,7 +338,7 @@ fn the_published_sidebar_prompt_shows_a_queued_prompt() {
         ("GET", "/api/session/ses_p/inbox") => Some((200, json!({ "data": [queued.clone()] }))),
         _ => None,
     };
-    let Some(h) = open_as(&[Carrier::Npm("opencode-sidebar-prompt")], 140, handler, false, None) else { return };
+    let Some(h) = open_as(&["opencode-sidebar-prompt"], 140, handler, false, None) else { return };
     let rows = || h.sidebar(100).into_iter().skip_while(|row| row != "Last prompt").take(4).collect::<Vec<_>>();
     h.wait("the sidebar shows a prompt", || rows().len() == 4);
     assert_eq!(
@@ -418,7 +373,7 @@ pub(crate) fn running(seen: &Seen) -> Option<Reply> {
 
 #[test]
 fn the_published_force_input_interrupts_then_sends() {
-    let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else {
+    let Some(h) = open_as(&[FORCE_INPUT], 120, running, false, None) else {
         return;
     };
     h.wait("the hint", || h.app.text().contains("⏎ "));
@@ -435,7 +390,7 @@ fn the_published_force_input_interrupts_then_sends() {
 
 #[test]
 fn a_prompt_waits_for_every_earlier_interrupt_of_its_session() {
-    let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
+    let Some(h) = open_as(&[FORCE_INPUT], 120, running, false, None) else { return };
     h.wait("the hint", || h.app.text().contains("⏎ "));
     let (release, held) = tokio::sync::oneshot::channel();
     *h.hold.lock().unwrap() = Some(held);
@@ -452,7 +407,7 @@ fn a_prompt_waits_for_every_earlier_interrupt_of_its_session() {
 
 #[test]
 fn a_prompt_waits_for_an_interrupt_sent_from_an_earlier_composer() {
-    let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
+    let Some(h) = open_as(&[FORCE_INPUT], 120, running, false, None) else { return };
     h.wait("the hint", || h.app.text().contains("⏎ "));
     let (release, held) = tokio::sync::oneshot::channel();
     *h.hold.lock().unwrap() = Some(held);
@@ -473,7 +428,7 @@ fn a_prompt_waits_for_an_interrupt_sent_from_an_earlier_composer() {
 
 #[test]
 fn a_slash_command_waits_for_a_pending_interrupt() {
-    let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
+    let Some(h) = open_as(&[FORCE_INPUT], 120, running, false, None) else { return };
     h.wait("the hint", || h.app.text().contains("⏎ "));
     let (release, held) = tokio::sync::oneshot::channel();
     *h.hold.lock().unwrap() = Some(held);
@@ -504,7 +459,7 @@ fn a_slash_command_waits_for_a_pending_interrupt() {
 fn a_slash_command_picked_from_the_popup_or_the_palette_waits_for_a_pending_interrupt() {
     use opencode_ui::keymap::COMMAND_PALETTE_COMMAND;
 
-    let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
+    let Some(h) = open_as(&[FORCE_INPUT], 120, running, false, None) else { return };
     h.wait("the hint", || h.app.text().contains("⏎ "));
     let order = || -> Vec<String> {
         h.log
@@ -622,8 +577,7 @@ pub(crate) fn usage(grown: Arc<Mutex<bool>>, paged: bool) -> impl Fn(&Seen) -> O
 #[test]
 fn the_published_session_usage_totals_the_paged_history_and_follows_usage_events() {
     let grown = Arc::new(Mutex::new(false));
-    let Some(h) = open_as(&[Carrier::Npm("opencode-session-usage")], 170, usage(grown.clone(), false), false, None)
-    else {
+    let Some(h) = open_as(&["opencode-session-usage"], 170, usage(grown.clone(), false), false, None) else {
         return;
     };
     h.wait_for("≈ $2.50 session total");
@@ -678,7 +632,7 @@ fn the_published_session_usage_asks_for_the_sessions_location_first() {
         }
         _ => base(seen),
     };
-    let Some(h) = open_as(&[Carrier::Npm("opencode-session-usage")], 170, handler, false, None) else { return };
+    let Some(h) = open_as(&["opencode-session-usage"], 170, handler, false, None) else { return };
     h.wait_for("≈ $2.50 session total");
     let limits = h.sent("/api/experimental/usage/limits");
     assert!(limits.first().is_some_and(|first| first.contains("location%5Bdirectory%5D=%2Felsewhere")), "{limits:#?}");
@@ -686,7 +640,7 @@ fn the_published_session_usage_asks_for_the_sessions_location_first() {
 
 #[test]
 fn published_slots_draw_again_after_the_js_host_restarts() {
-    let carriers = [Carrier::Npm("opencode-session-usage"), Carrier::Npm("opencode-sidebar-tokens")];
+    let carriers = ["opencode-session-usage", "opencode-sidebar-tokens"];
     let Some(h) = open_as(&carriers, 170, usage(Arc::new(Mutex::new(false)), false), false, None) else { return };
     h.wait_for_all(&["≈ $2.50 session total", "Session tokens"]);
     let scripts = h.tui.plugins.scripts.borrow().clone().unwrap();
@@ -716,7 +670,7 @@ fn published_slots_draw_again_after_the_js_host_restarts() {
 
 #[test]
 fn the_published_sidebar_tokens_follows_the_sessions_totals() {
-    let Some(h) = open_as(&[Carrier::Npm("opencode-sidebar-tokens")], 170, |_| None, false, None) else { return };
+    let Some(h) = open_as(&["opencode-sidebar-tokens"], 170, |_| None, false, None) else { return };
     h.wait_for("Session tokens");
     h.events.emit(&json!({
         "id": "evt_usage", "created": 2, "type": "session.usage.updated",
@@ -744,7 +698,7 @@ fn the_published_sidebar_tokens_follows_the_sessions_totals() {
 #[test]
 fn the_published_session_usage_pages_the_children_one_parent_at_a_time() {
     let handler = usage(Arc::new(Mutex::new(false)), true);
-    let Some(h) = open_as(&[Carrier::Npm("opencode-session-usage")], 170, handler, false, None) else { return };
+    let Some(h) = open_as(&["opencode-session-usage"], 170, handler, false, None) else { return };
     h.wait_for("≈ $2.50 session total");
     let log = h.log.lock().unwrap();
     let cursors: Vec<String> = log
@@ -754,87 +708,4 @@ fn the_published_session_usage_pages_the_children_one_parent_at_a_time() {
         .map(|seen| seen.param("cursor"))
         .collect();
     assert_eq!(cursors, ["", "more"]);
-}
-
-// Expected: the author's fixture loads into the TUI: its sidebar counter shows and counts a click, and its toast follows
-// a finished session.
-#[test]
-#[cfg(native)]
-fn the_author_fixture_counts_and_toasts_a_finished_session() {
-    let h = open_as(&[Carrier::Example("author")], 170, |_| None, false, None).unwrap();
-    h.wait_for("Counted 0");
-    let (x, y) = h.find("Counted 0");
-    h.app.click(x, y);
-    h.wait_for("Counted 1");
-    h.events.emit(&json!({
-        "id": "evt_done", "created": 2, "type": "session.execution.succeeded",
-        "durable": { "aggregateID": "ses_p", "seq": 1, "version": 1 },
-        "location": { "directory": DIRECTORY }, "data": { "sessionID": "ses_p" },
-    }));
-    h.wait_for("A session finished");
-}
-
-// --- Dialog::Select on both paths
-
-#[cfg(native)]
-fn picking(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command::new(name);
-    setup.command(command("probe.pick"), |host, _| {
-        let option = |title: &str, value: &str| abi::SelectOption::new(title, value);
-        host.dialog(abi::Dialog::Select(
-            abi::Select::new(
-                "Pick one".to_owned(),
-                vec![
-                    option("Alpha", "a").description("first"),
-                    option("Beta", "b").footer("2nd"),
-                    option("Gamma", "c"),
-                ],
-                abi::Action::command("probe.picked"),
-            )
-            .placeholder("Search picks")
-            .current("b"),
-        ));
-    });
-    setup.command(command("probe.picked"), |host, input| {
-        host.toast(abi::Toast::new(abi::Variant::Info, format!("picked {}", input.unwrap_or("nothing"))));
-    });
-    Ok(())
-}
-
-/// The select's cells as it opens, and the toast after a move down and enter.
-#[cfg(native)]
-fn picked(loopback: bool) -> (Vec<opentui::testing::Cell>, String) {
-    let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let definition = match loopback {
-        true => {
-            crate::support::loopback(
-                &opencode_tui::plugins::host::host(&h.tui),
-                crate::support::loopback_entries!("probe", picking),
-            )
-            .unwrap()
-            .0
-        }
-        false => abi::Plugin { id: "probe", setup: picking }.into(),
-    };
-    opencode_tui::plugins::host::add(&h.tui, definition);
-    h.tui.keymap.dispatch("probe.pick", None);
-    h.wait_for("Pick one");
-    let cells = h.app.render().cells;
-    h.app.press("down");
-    h.app.press("return");
-    let screen = h.wait_for("picked ");
-    h.wait_gone("Pick one");
-    let toast = screen.lines().find(|line| line.contains("picked ")).unwrap().trim().to_owned();
-    (cells, toast)
-}
-
-// Expected: a plugin's select opens on its current option, lists the options with their description and footer, and
-// picking one closes it and runs the action with the value as its input; the same cells and pick through the C ABI's
-// byte shims (`Loopback`).
-#[test]
-#[cfg(native)]
-fn a_select_dialog_picks_the_same_through_the_c_abi_loopback() {
-    let direct = picked(false);
-    assert!(direct.1.contains("picked c"), "{}", direct.1);
-    assert!(picked(true) == direct, "the loopback draws or picks otherwise");
 }

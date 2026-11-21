@@ -148,7 +148,7 @@ fn a_spinning_plugin_is_failed_on_cpu_time_and_the_thread_is_back_at_once() {
         host.app.advance(Duration::from_millis(1));
         let error = failure(&registry, "test.luau").expect("the spinning plugin failed");
         assert!(error.contains("CPU") && error.contains("Luau budget"), "{error}");
-        // Well under the 2 s watchdog, which a native plugin that spins meets; CPU time, not wall time, stopped it.
+        // CPU time, not wall time, stopped it.
         assert!(took < Duration::from_millis(1500), "{command} held the thread {took:?}");
         assert!(host.toasts.borrow().iter().all(|toast| toast.message != "before the spin"));
     }
@@ -1017,27 +1017,6 @@ fn a_project_luau_plugin_waits_for_an_approval_of_its_directory() {
 }
 
 #[test]
-fn a_luau_build_the_crash_list_names_is_held() {
-    let temp = opencode_util::temp::tempdir().unwrap();
-    let config = temp.path().join("config");
-    let dir = config.join("plugins").join("hello");
-    install("hello", &dir);
-    let target = dir.to_string_lossy().into_owned();
-    let host = host();
-    let first = Registry::define(Vec::new(), []);
-    settle(&loader(&config, temp.path()), &host, &first);
-    let digest = first.with_target(&target, |plugin| plugin.definition.digest.clone()).flatten().unwrap();
-    let registry = Registry::define(Vec::new(), []);
-    let reason = "crashed the client in run-command and is disabled".to_owned();
-    let crashed =
-        crate::Crashed { id: "example.luau-hello".into(), target: target.clone(), digest, reason: reason.clone() };
-    registry.set_crashed(vec![crashed], |_| Ok(()));
-    settle(&loader(&config, temp.path()), &host, &registry);
-    assert_eq!(entry(&registry.entries(), &target).status, Status::Failed(reason));
-    assert!(!footer(&host, &registry).contains("hello"));
-}
-
-#[test]
 fn a_value_past_the_conversion_bounds_is_refused_at_once() {
     let host = host();
     let shared = r#"
@@ -1894,7 +1873,7 @@ impl abi::Host for Nop {
     fn copy(&self, _: &str, _: Option<abi::Action>) {}
 }
 
-/// `examples/hello`'s Rust source: a command and a footer claim.
+/// The quick start in Rust: a command and a footer claim.
 fn hello(setup: &mut abi::Setup) -> Result<(), String> {
     let command = abi::Command::new("hello.greet").title("Say hello").palette();
     setup.command(command, |host, _| host.toast(abi::Toast::new(abi::Variant::Success, "Hello from a plugin")));
@@ -1913,9 +1892,8 @@ fn each(rounds: u32, mut f: impl FnMut()) -> Duration {
     start.elapsed() / rounds
 }
 
-// The spike's carrier measure, printed: one render of the quick start's claim and one run of its command, linked, as
-// the C ABI carries it (the request and the answer through JSON both ways, without the FFI call, which costs
-// nanoseconds), and in Luau. Run with `--release --ignored --nocapture`.
+// The spike's carrier measure, printed: one render of the quick start's claim and one run of its command, linked and
+// in Luau. Run with `--release --ignored --nocapture`.
 #[test]
 #[ignore]
 fn measure_one_call_on_each_carrier() {
@@ -1936,16 +1914,6 @@ fn measure_one_call_on_each_carrier() {
         });
         println!("{name}: render {rendered:?}, command {ran:?}");
     }
-    // The C ABI's work on top of the linked call: the request to JSON and back, and the answer to JSON and back.
-    let (_, _, render) = linked.renders().next().unwrap();
-    let request = abi::Request::Render { claim: 0, input: input.clone(), changed: changed.clone() };
-    let carried = each(rounds, || {
-        let bytes = serde_json::to_vec(&request).unwrap();
-        let abi::Request::Render { input, changed, .. } = serde_json::from_slice(&bytes).unwrap() else { panic!() };
-        let answer = serde_json::to_vec(&render(&Nop, &input, &changed)).unwrap();
-        drop(std::hint::black_box(serde_json::from_slice::<abi::Render>(&answer).unwrap()));
-    });
-    println!("c-abi: render {carried:?}");
     // The Luau render as the host makes it, timed by the budget's monitor, which reads the thread's CPU time too.
     let monitor = crate::contain::Monitor::new(crate::contain::Limits::default());
     let slot = monitor.slot(&crate::contain::Artifact::builtin("example.luau-hello"));
@@ -2065,18 +2033,6 @@ fn heavy_calls() {
         let drawn = each(rounds / 10, || drop(std::hint::black_box(draws(&Nop, &plain, &little))));
         println!("{name}: input-heavy {read:?}, output-heavy {drawn:?}");
     }
-    let mut renders = linked.renders().map(|(_, _, render)| render);
-    let (reads, draws) = (renders.next().unwrap(), renders.next().unwrap());
-    let carried = |render: &abi::RenderFn, input: &abi::SlotInput, changed: &abi::Changed| {
-        let request = abi::Request::Render { claim: 0, input: input.clone(), changed: changed.clone() };
-        let bytes = serde_json::to_vec(&request).unwrap();
-        let abi::Request::Render { input, changed, .. } = serde_json::from_slice(&bytes).unwrap() else { panic!() };
-        let answer = serde_json::to_vec(&render(&Nop, &input, &changed)).unwrap();
-        drop(std::hint::black_box(serde_json::from_slice::<abi::Render>(&answer).unwrap()));
-    };
-    let read = each(rounds, || carried(reads, &input, &changed));
-    let drawn = each(rounds / 10, || carried(draws, &plain, &little));
-    println!("c-abi: input-heavy {read:?}, output-heavy {drawn:?}");
 }
 
 // The spike's memory measure, printed: what an idle VM of each example holds once its setup ran, and what compiling

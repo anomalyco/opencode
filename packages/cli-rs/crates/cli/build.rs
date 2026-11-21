@@ -1,7 +1,3 @@
-// `cfg(native)`: the `native` feature outside a static musl build (O-188).
-#[path = "../plugin/native_cfg.rs"]
-mod native_cfg;
-
 fn main() {
     // A deeply nested plugin tree can exceed the Windows main thread's default 1 MiB stack in a debug build.
     let stack = 8 << 20;
@@ -12,5 +8,4 @@ fn main() {
         }
         _ => {}
     }
-    native_cfg::emit();
 }

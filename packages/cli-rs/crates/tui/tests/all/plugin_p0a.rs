@@ -1,4 +1,4 @@
-//! Compare composer edits, dialogs, and styled nodes on linked and native ABI carriers.
+//! Check composer edits, dialogs, and styled nodes of a linked plugin.
 
 use crate::prompt::{Setup, session_route};
 use crate::support::{self, Harness};
@@ -9,50 +9,17 @@ use opencode_plugin::abi;
 use opencode_tui::{Deps, Route};
 use opentui::prelude::Widget;
 
-#[path = "../../../plugin/examples/sample/src/p0a.rs"]
 pub(crate) mod probe;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Carrier {
-    Linked,
-    #[cfg_attr(not(native), allow(dead_code))]
-    Loopback,
-}
-
-/// The C ABI's loopback only in a build with the `native` feature, which has it.
-#[cfg(native)]
-const CARRIERS: [Carrier; 2] = [Carrier::Linked, Carrier::Loopback];
-#[cfg(not(native))]
-const CARRIERS: [Carrier; 1] = [Carrier::Linked];
-
-fn add(h: &Harness, carrier: Carrier) {
-    let definition = match carrier {
-        Carrier::Linked => abi::Plugin { id: "p0a", setup: probe::setup }.into(),
-        Carrier::Loopback => {
-            crate::support::loopback(
-                &opencode_tui::plugins::host::host(&h.tui),
-                crate::support::loopback_entries!("p0a", probe::setup),
-            )
-            .unwrap()
-            .0
-        }
-    };
+fn add(h: &Harness) {
+    let definition = abi::Plugin { id: "p0a", setup: probe::setup }.into();
     opencode_tui::plugins::host::add(&h.tui, definition);
 }
 
-fn home(carrier: Carrier) -> Harness {
+fn home() -> Harness {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    add(&h, carrier);
+    add(&h);
     h
-}
-
-/// Mask the random composer placeholder before comparing cells.
-fn cells(h: &Harness) -> Vec<opentui::testing::Cell> {
-    let capture = h.app.render();
-    let row = h.app.text().lines().position(|line| line.contains("Ask anything")).filter(|_| !h.tui.dialogs.is_open());
-    let width = capture.width as usize;
-    let example = |index: usize| Some(index / width) == row && index % width >= 16;
-    capture.cells.into_iter().enumerate().filter(|(index, _)| !example(*index)).map(|(_, cell)| cell).collect()
 }
 
 fn log(h: &Harness) -> Vec<String> {
@@ -76,66 +43,52 @@ fn a_confirm_answers_true_false_or_nothing_on_both_carriers() {
         (&["escape"], Some("answered false")),
         (&[], None),
     ];
-    let mut drawn = Vec::new();
-    for carrier in CARRIERS {
-        for (keys, answer) in rows {
-            let h = home(carrier);
-            h.tui.keymap.dispatch("p0a.confirm", None);
-            let screen = h.wait_for("Delete the draft?");
-            assert!(screen.contains("It cannot be undone.") && screen.contains("Delete"), "{carrier:?}: {screen}");
-            assert!(screen.contains("Keep") && !screen.contains("Cancel"), "{carrier:?}: {screen}");
-            if keys == ["return"] {
-                drawn.push(cells(&h));
+    for (keys, answer) in rows {
+        let h = home();
+        h.tui.keymap.dispatch("p0a.confirm", None);
+        let screen = h.wait_for("Delete the draft?");
+        assert!(screen.contains("It cannot be undone.") && screen.contains("Delete"), "{screen}");
+        assert!(screen.contains("Keep") && !screen.contains("Cancel"), "{screen}");
+        keys.iter().for_each(|key| h.app.press(key));
+        match answer {
+            Some(answer) => {
+                h.wait_for(answer);
+                h.wait_gone("Delete the draft?");
+                assert_eq!(toasts(&h, "answered"), 1, "{keys:?}: {}", h.app.text());
             }
-            keys.iter().for_each(|key| h.app.press(key));
-            match answer {
-                Some(answer) => {
-                    h.wait_for(answer);
-                    h.wait_gone("Delete the draft?");
-                    assert_eq!(toasts(&h, "answered"), 1, "{carrier:?} {keys:?}: {}", h.app.text());
-                }
-                None => {
-                    h.tui.keymap.dispatch("p0a.alert", None);
-                    h.wait_for("Heads up");
-                    h.wait_gone("Delete the draft?");
-                    h.app.advance(std::time::Duration::from_millis(50));
-                    assert_eq!(toasts(&h, "answered"), 0, "{carrier:?}: {}", h.app.text());
-                }
+            None => {
+                h.tui.keymap.dispatch("p0a.alert", None);
+                h.wait_for("Heads up");
+                h.wait_gone("Delete the draft?");
+                h.app.advance(std::time::Duration::from_millis(50));
+                assert_eq!(toasts(&h, "answered"), 0, "{}", h.app.text());
             }
         }
     }
-    assert!(drawn.iter().all(|other| *other == drawn[0]), "the loopback draws the confirm otherwise");
 }
 
 #[test]
 fn an_alert_runs_its_action_once_however_it_closes() {
-    let mut drawn = Vec::new();
-    for carrier in CARRIERS {
-        for close in ["return", "escape", "replace"] {
-            let h = home(carrier);
-            h.tui.keymap.dispatch("p0a.alert", None);
-            let screen = h.wait_for("Heads up");
-            assert!(screen.contains("The plugin says hello.") && screen.contains("ok"), "{carrier:?}: {screen}");
-            if close == "return" {
-                drawn.push(cells(&h));
-            }
-            match close {
-                "replace" => drop(h.tui.keymap.dispatch("p0a.confirm", None)),
-                key => h.app.press(key),
-            }
-            h.wait_for("alert closed");
-            h.app.advance(std::time::Duration::from_millis(50));
-            assert_eq!(logged(&h, "closed"), ["closed @1"], "{carrier:?} {close}");
-            assert_eq!(h.tui.dialogs.is_open(), close == "replace", "{carrier:?} {close}");
+    for close in ["return", "escape", "replace"] {
+        let h = home();
+        h.tui.keymap.dispatch("p0a.alert", None);
+        let screen = h.wait_for("Heads up");
+        assert!(screen.contains("The plugin says hello.") && screen.contains("ok"), "{screen}");
+        match close {
+            "replace" => drop(h.tui.keymap.dispatch("p0a.confirm", None)),
+            key => h.app.press(key),
         }
+        h.wait_for("alert closed");
+        h.app.advance(std::time::Duration::from_millis(50));
+        assert_eq!(logged(&h, "closed"), ["closed @1"], "{close}");
+        assert_eq!(h.tui.dialogs.is_open(), close == "replace", "{close}");
     }
-    assert!(drawn.iter().all(|other| *other == drawn[0]), "the loopback draws the alert otherwise");
 }
 
 /// The probe on `ses_a` with its catalogs loaded, so a submit sends.
-fn session(carrier: Carrier) -> Setup {
+fn session() -> Setup {
     let setup = Setup::new(session_route());
-    add(&setup, carrier);
+    add(&setup);
     setup.ready();
     setup
 }
@@ -157,43 +110,41 @@ fn read(setup: &Setup) -> String {
 
 #[test]
 fn the_composer_reads_and_edits_the_same_on_both_carriers() {
-    for carrier in CARRIERS {
-        let setup = session(carrier);
-        setup.app.type_text("hello");
-        setup.app.press("left");
-        setup.app.press("left");
-        assert_eq!(read(&setup), "composer \"hello\" at 3, focused true", "{carrier:?}");
-        setup.tui.keymap.dispatch("p0a.insert", Some("XY"));
-        setup.wait("the insert", || setup.textarea().text() == "helXYlo");
-        // Typing goes on after what the plugin inserted.
-        setup.app.type_text("!");
-        assert_eq!(setup.textarea().text(), "helXY!lo", "{carrier:?}");
-        setup.tui.keymap.dispatch("p0a.set", Some("héllo wörld"));
-        setup.wait("the set", || setup.textarea().text() == "héllo wörld");
-        assert_eq!(read(&setup), "composer \"héllo wörld\" at 13, focused true", "{carrier:?}");
-        setup.tui.keymap.dispatch("p0a.submit", None);
-        let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
-        assert_eq!(prompts[0]["text"], "héllo wörld", "{carrier:?}");
-        setup.wait("the clear", || setup.textarea().text().is_empty());
-        setup.app.type_text("!");
-        setup.wait_for("Shell");
-        setup.tui.keymap.dispatch("p0a.set", Some("ls"));
-        setup.wait("the set in shell mode", || setup.textarea().text() == "ls");
-        setup.app.advance(std::time::Duration::from_millis(50));
-        assert!(setup.app.text().contains("Shell"), "{carrier:?}: {}", setup.app.text());
-        setup.app.press("escape");
-        setup.wait_for("Build");
-        setup.app.press("ctrl+c");
-        setup.app.type_text("later");
-        setup.tui.keymap.dispatch("p0a.alert", None);
-        setup.wait_for("Heads up");
-        assert_eq!(read(&setup), "composer \"later\" at 5, focused false", "{carrier:?}");
-    }
+    let setup = session();
+    setup.app.type_text("hello");
+    setup.app.press("left");
+    setup.app.press("left");
+    assert_eq!(read(&setup), "composer \"hello\" at 3, focused true");
+    setup.tui.keymap.dispatch("p0a.insert", Some("XY"));
+    setup.wait("the insert", || setup.textarea().text() == "helXYlo");
+    // Typing goes on after what the plugin inserted.
+    setup.app.type_text("!");
+    assert_eq!(setup.textarea().text(), "helXY!lo");
+    setup.tui.keymap.dispatch("p0a.set", Some("héllo wörld"));
+    setup.wait("the set", || setup.textarea().text() == "héllo wörld");
+    assert_eq!(read(&setup), "composer \"héllo wörld\" at 13, focused true");
+    setup.tui.keymap.dispatch("p0a.submit", None);
+    let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+    assert_eq!(prompts[0]["text"], "héllo wörld");
+    setup.wait("the clear", || setup.textarea().text().is_empty());
+    setup.app.type_text("!");
+    setup.wait_for("Shell");
+    setup.tui.keymap.dispatch("p0a.set", Some("ls"));
+    setup.wait("the set in shell mode", || setup.textarea().text() == "ls");
+    setup.app.advance(std::time::Duration::from_millis(50));
+    assert!(setup.app.text().contains("Shell"), "{}", setup.app.text());
+    setup.app.press("escape");
+    setup.wait_for("Build");
+    setup.app.press("ctrl+c");
+    setup.app.type_text("later");
+    setup.tui.keymap.dispatch("p0a.alert", None);
+    setup.wait_for("Heads up");
+    assert_eq!(read(&setup), "composer \"later\" at 5, focused false");
 }
 
 #[test]
 fn the_cursor_read_is_where_an_insert_goes() {
-    let setup = session(Carrier::Linked);
+    let setup = session();
     for (text, lefts) in [("a\tb", 1), ("\tab\ncd", 4), ("e\u{301}x", 1), ("👨‍👩‍👧x", 1), ("日本語", 1)]
     {
         setup.tui.keymap.dispatch("p0a.set", Some(text));
@@ -211,7 +162,7 @@ fn the_cursor_read_is_where_an_insert_goes() {
 #[test]
 fn a_set_tells_the_completion_of_the_new_text() {
     for (typed, popup) in [("/", "Switch agent"), ("@", "@general")] {
-        let setup = session(Carrier::Linked);
+        let setup = session();
         setup.app.type_text(typed);
         setup.wait_for(popup);
         setup.tui.keymap.dispatch("p0a.send", Some("plain words"));
@@ -220,7 +171,7 @@ fn a_set_tells_the_completion_of_the_new_text() {
         setup.wait("the clear", || setup.textarea().text().is_empty());
         setup.wait_gone(popup);
     }
-    let setup = session(Carrier::Linked);
+    let setup = session();
     setup.tui.keymap.dispatch("p0a.send", Some("/rev"));
     setup.wait_for("/review");
     setup.app.advance(std::time::Duration::from_millis(50));
@@ -236,7 +187,7 @@ fn serving(route: Route, reads: Vec<(&str, serde_json::Value)>) -> Setup {
 
 fn serving_at(route: Route, reads: Vec<(&str, serde_json::Value)>, width: u16) -> Setup {
     let setup = Setup::serving(route, reads, width);
-    add(&setup, Carrier::Linked);
+    add(&setup);
     setup.wait("the catalog", || !setup.requests("GET", "/api/model").is_empty());
     setup.app.advance(std::time::Duration::from_millis(50));
     setup
@@ -313,7 +264,7 @@ fn a_disabled_composer_takes_no_submit() {
 
 #[test]
 fn a_submit_behind_a_dialog_sends_and_leaves_the_dialog() {
-    let setup = session(Carrier::Linked);
+    let setup = session();
     setup.tui.keymap.dispatch("p0a.alert", None);
     setup.wait_for("Heads up");
     setup.tui.keymap.dispatch("p0a.send", Some("sent behind"));
@@ -338,38 +289,36 @@ fn changed(file: &str) -> opencode_api::generated::V2Event {
 
 #[test]
 fn a_composer_edit_is_not_overtaken_by_the_next_signal() {
-    for carrier in CARRIERS {
-        let setup = session(carrier);
-        opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
-        opencode_tui::features::events::testing::signal(&setup.tui, changed("src/read.rs"));
-        setup.wait("the read", || !logged(&setup, "read").is_empty());
-        assert_eq!(logged(&setup, "read"), ["read from an event"], "{carrier:?}");
-        setup.tui.keymap.dispatch("p0a.set", Some(""));
-        setup.wait("the clear", || setup.textarea().text().is_empty());
-        opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
-        setup.tui.keymap.dispatch("p0a.wake", None);
-        setup.wait("the wake", || {
-            setup.app.render();
-            !logged(&setup, "woke").is_empty()
-        });
-        assert_eq!(logged(&setup, "woke"), ["woke from an event"], "{carrier:?}");
+    let setup = session();
+    opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
+    opencode_tui::features::events::testing::signal(&setup.tui, changed("src/read.rs"));
+    setup.wait("the read", || !logged(&setup, "read").is_empty());
+    assert_eq!(logged(&setup, "read"), ["read from an event"]);
+    setup.tui.keymap.dispatch("p0a.set", Some(""));
+    setup.wait("the clear", || setup.textarea().text().is_empty());
+    opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
+    setup.tui.keymap.dispatch("p0a.wake", None);
+    setup.wait("the wake", || {
+        setup.app.render();
+        !logged(&setup, "woke").is_empty()
+    });
+    assert_eq!(logged(&setup, "woke"), ["woke from an event"]);
 
-        let setup = Setup::new(Route::Home);
-        add(&setup, carrier);
-        setup.ready();
-        opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
-        let select = event("tui.session.select", serde_json::json!({ "sessionID": "ses_a" }));
-        opencode_tui::features::events::testing::signal(&setup.tui, select);
-        setup.wait("the session", || matches!(setup.tui.route(), Route::Session { .. }));
-        setup.app.advance(std::time::Duration::from_millis(100));
-        assert_eq!(setup.textarea().text(), "", "{carrier:?}");
-        assert!(setup.requests("POST", "/prompt").is_empty(), "{carrier:?}");
-    }
+    let setup = Setup::new(Route::Home);
+    add(&setup);
+    setup.ready();
+    opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
+    let select = event("tui.session.select", serde_json::json!({ "sessionID": "ses_a" }));
+    opencode_tui::features::events::testing::signal(&setup.tui, select);
+    setup.wait("the session", || matches!(setup.tui.route(), Route::Session { .. }));
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert_eq!(setup.textarea().text(), "");
+    assert!(setup.requests("POST", "/prompt").is_empty());
 }
 
 #[test]
 fn a_set_starts_the_history_over() {
-    let setup = session(Carrier::Linked);
+    let setup = session();
     for (count, text) in [(1, "one"), (2, "two")] {
         setup.app.type_text(text);
         setup.app.press("return");
@@ -389,26 +338,24 @@ fn a_set_starts_the_history_over() {
 
 #[test]
 fn a_call_that_panics_leaves_no_composer_edit_and_no_dialog() {
-    for carrier in CARRIERS {
-        for panics in [false, true] {
-            let setup = session(carrier);
-            setup.app.type_text("draft");
-            setup.tui.keymap.dispatch("p0a.all", panics.then_some("panic"));
-            match panics {
-                false => {
-                    let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
-                    assert_eq!(prompts[0]["text"], "all of it", "{carrier:?}");
-                    setup.wait_for("Delete the draft?");
-                    setup.wait("the alert's close", || logged(&setup, "closed") == ["closed @1"]);
-                    assert_eq!(setup.textarea().text(), "", "{carrier:?}");
-                }
-                true => {
-                    setup.wait_for("Plugin failed: p0a");
-                    assert_eq!(setup.textarea().text(), "draft", "{carrier:?}");
-                    assert!(setup.requests("POST", "/prompt").is_empty(), "{carrier:?}");
-                    assert!(!setup.tui.dialogs.is_open(), "{carrier:?}: {}", setup.app.text());
-                    assert!(logged(&setup, "closed").is_empty(), "{carrier:?}");
-                }
+    for panics in [false, true] {
+        let setup = session();
+        setup.app.type_text("draft");
+        setup.tui.keymap.dispatch("p0a.all", panics.then_some("panic"));
+        match panics {
+            false => {
+                let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+                assert_eq!(prompts[0]["text"], "all of it");
+                setup.wait_for("Delete the draft?");
+                setup.wait("the alert's close", || logged(&setup, "closed") == ["closed @1"]);
+                assert_eq!(setup.textarea().text(), "");
+            }
+            true => {
+                setup.wait_for("Plugin failed: p0a");
+                assert_eq!(setup.textarea().text(), "draft");
+                assert!(setup.requests("POST", "/prompt").is_empty());
+                assert!(!setup.tui.dialogs.is_open(), "{}", setup.app.text());
+                assert!(logged(&setup, "closed").is_empty());
             }
         }
     }
@@ -416,20 +363,18 @@ fn a_call_that_panics_leaves_no_composer_edit_and_no_dialog() {
 
 #[test]
 fn a_dispose_callback_that_panics_leaves_no_effects() {
-    for carrier in CARRIERS {
-        let setup = session(carrier);
-        setup.app.type_text("untouched");
-        setup.tui.keymap.dispatch("p0a.teardown", None);
-        setup.wait("the arming", || logged(&setup, "teardown").len() == 1);
-        let host = opencode_tui::plugins::host::host(&setup.tui);
-        assert!(setup.tui.plugins.set_active(&host, "p0a", false));
-        setup.app.advance(std::time::Duration::from_millis(100));
-        assert_eq!(setup.textarea().text(), "untouched", "{carrier:?}");
-        assert!(setup.requests("POST", "/prompt").is_empty(), "{carrier:?}");
-        assert!(!setup.tui.dialogs.is_open(), "{carrier:?}: {}", setup.app.text());
-        assert_eq!(logged(&setup, "disposed"), ["disposed last @1", "disposed first @1"], "{carrier:?}");
-        assert!(logged(&setup, "teardown wrote").is_empty(), "{carrier:?}");
-    }
+    let setup = session();
+    setup.app.type_text("untouched");
+    setup.tui.keymap.dispatch("p0a.teardown", None);
+    setup.wait("the arming", || logged(&setup, "teardown").len() == 1);
+    let host = opencode_tui::plugins::host::host(&setup.tui);
+    assert!(setup.tui.plugins.set_active(&host, "p0a", false));
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert_eq!(setup.textarea().text(), "untouched");
+    assert!(setup.requests("POST", "/prompt").is_empty());
+    assert!(!setup.tui.dialogs.is_open(), "{}", setup.app.text());
+    assert_eq!(logged(&setup, "disposed"), ["disposed last @1", "disposed first @1"]);
+    assert!(logged(&setup, "teardown wrote").is_empty());
 }
 
 fn witness() -> abi::Plugin {
@@ -463,65 +408,59 @@ fn witnessed(h: &Harness) -> u64 {
 
 #[test]
 fn a_dialog_of_a_disabled_plugin_goes_and_answers_nobody() {
-    for carrier in CARRIERS {
-        for (open, title) in [("p0a.alert", "Heads up"), ("p0a.alert-foreign", "Heads up")] {
-            let h = home(carrier);
-            opencode_tui::plugins::host::add(&h.tui, witness().into());
-            let host = opencode_tui::plugins::host::host(&h.tui);
-            h.tui.keymap.dispatch(open, None);
-            h.wait_for(title);
-            assert!(h.tui.plugins.set_active(&host, "p0a", false));
-            h.wait_gone(title);
-            h.wait("the composer's focus", || h.textarea().is_focused());
-            assert!(h.tui.plugins.set_active(&host, "p0a", true));
-            h.app.press("return");
-            h.app.advance(std::time::Duration::from_millis(50));
-            let answers: Vec<_> = log(&h).into_iter().filter(|entry| !entry.starts_with("setup ")).collect();
-            assert!(answers.iter().all(|entry| entry.starts_with("disposed ")), "{carrier:?} {open}: {answers:?}");
-            assert_eq!(witnessed(&h), 0, "{carrier:?} {open}");
-            // Disabled and enabled in one turn, then answered: the dialog of the first activation answers nobody.
-            h.tui.keymap.dispatch(open, None);
-            h.wait_for(title);
-            assert!(h.tui.plugins.set_active(&host, "p0a", false) && h.tui.plugins.set_active(&host, "p0a", true));
-            h.app.press("return");
-            h.app.advance(std::time::Duration::from_millis(50));
-            h.wait_gone(title);
-            let answers: Vec<_> = log(&h).into_iter().filter(|entry| !entry.starts_with("setup ")).collect();
-            assert!(answers.iter().all(|entry| entry.starts_with("disposed ")), "{carrier:?} {open}: {answers:?}");
-            assert_eq!(witnessed(&h), 0, "{carrier:?} {open}");
-        }
+    for (open, title) in [("p0a.alert", "Heads up"), ("p0a.alert-foreign", "Heads up")] {
+        let h = home();
+        opencode_tui::plugins::host::add(&h.tui, witness().into());
+        let host = opencode_tui::plugins::host::host(&h.tui);
+        h.tui.keymap.dispatch(open, None);
+        h.wait_for(title);
+        assert!(h.tui.plugins.set_active(&host, "p0a", false));
+        h.wait_gone(title);
+        h.wait("the composer's focus", || h.textarea().is_focused());
+        assert!(h.tui.plugins.set_active(&host, "p0a", true));
+        h.app.press("return");
+        h.app.advance(std::time::Duration::from_millis(50));
+        let answers: Vec<_> = log(&h).into_iter().filter(|entry| !entry.starts_with("setup ")).collect();
+        assert!(answers.iter().all(|entry| entry.starts_with("disposed ")), "{open}: {answers:?}");
+        assert_eq!(witnessed(&h), 0, "{open}");
+        // Disabled and enabled in one turn, then answered: the dialog of the first activation answers nobody.
+        h.tui.keymap.dispatch(open, None);
+        h.wait_for(title);
+        assert!(h.tui.plugins.set_active(&host, "p0a", false) && h.tui.plugins.set_active(&host, "p0a", true));
+        h.app.press("return");
+        h.app.advance(std::time::Duration::from_millis(50));
+        h.wait_gone(title);
+        let answers: Vec<_> = log(&h).into_iter().filter(|entry| !entry.starts_with("setup ")).collect();
+        assert!(answers.iter().all(|entry| entry.starts_with("disposed ")), "{open}: {answers:?}");
+        assert_eq!(witnessed(&h), 0, "{open}");
     }
 }
 
 #[test]
 fn a_dialog_of_a_plugin_that_is_not_live_does_not_show() {
-    for carrier in CARRIERS {
-        let h = home(carrier);
-        opencode_tui::plugins::host::add(&h.tui, witness().into());
-        h.tui.keymap.dispatch("witness.alert", None);
-        h.wait_for("Witness says");
-        h.tui.keymap.dispatch("p0a.alert", None);
-        assert!(h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "p0a", false));
-        h.app.advance(std::time::Duration::from_millis(50));
-        let screen = h.app.text();
-        assert!(screen.contains("Witness says") && !screen.contains("Heads up"), "{carrier:?}: {screen}");
-    }
+    let h = home();
+    opencode_tui::plugins::host::add(&h.tui, witness().into());
+    h.tui.keymap.dispatch("witness.alert", None);
+    h.wait_for("Witness says");
+    h.tui.keymap.dispatch("p0a.alert", None);
+    assert!(h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "p0a", false));
+    h.app.advance(std::time::Duration::from_millis(50));
+    let screen = h.app.text();
+    assert!(screen.contains("Witness says") && !screen.contains("Heads up"), "{screen}");
 }
 
 #[test]
 fn a_dialog_of_a_failed_plugin_goes_and_answers_nobody() {
-    for carrier in CARRIERS {
-        let h = home(carrier);
-        opencode_tui::plugins::host::add(&h.tui, witness().into());
-        h.tui.keymap.dispatch("p0a.alert-foreign", None);
-        h.wait_for("Heads up");
-        h.tui.keymap.dispatch("p0a.all", Some("panic"));
-        h.wait_for("Plugin failed: p0a");
-        h.wait_gone("Heads up");
-        h.wait("the composer's focus", || h.textarea().is_focused());
-        h.app.advance(std::time::Duration::from_millis(50));
-        assert_eq!(witnessed(&h), 0, "{carrier:?}");
-    }
+    let h = home();
+    opencode_tui::plugins::host::add(&h.tui, witness().into());
+    h.tui.keymap.dispatch("p0a.alert-foreign", None);
+    h.wait_for("Heads up");
+    h.tui.keymap.dispatch("p0a.all", Some("panic"));
+    h.wait_for("Plugin failed: p0a");
+    h.wait_gone("Heads up");
+    h.wait("the composer's focus", || h.textarea().is_focused());
+    h.app.advance(std::time::Duration::from_millis(50));
+    assert_eq!(witnessed(&h), 0);
 }
 
 // Expected: a confirm or an alert that closed no longer belongs to its plugin, so the dialog the host opens after it,
@@ -529,7 +468,7 @@ fn a_dialog_of_a_failed_plugin_goes_and_answers_nobody() {
 #[test]
 fn a_closed_dialog_leaves_the_next_one_to_the_host() {
     for (open, title) in [("p0a.confirm", "Delete the draft?"), ("p0a.alert", "Heads up")] {
-        let h = home(Carrier::Linked);
+        let h = home();
         h.tui.keymap.dispatch(open, None);
         h.wait_for(title);
         h.app.press("escape");
@@ -545,7 +484,7 @@ fn a_closed_dialog_leaves_the_next_one_to_the_host() {
 
 #[test]
 fn a_live_dialog_runs_a_foreign_command_once() {
-    let h = home(Carrier::Linked);
+    let h = home();
     opencode_tui::plugins::host::add(&h.tui, witness().into());
     h.tui.keymap.dispatch("p0a.alert-foreign", None);
     h.wait_for("Heads up");
@@ -556,16 +495,9 @@ fn a_live_dialog_runs_a_foreign_command_once() {
 }
 
 #[test]
-fn a_styled_box_draws_the_same_on_both_carriers() {
-    let drawn: Vec<_> = CARRIERS
-        .iter()
-        .map(|carrier| {
-            let h = home(*carrier);
-            h.wait_for("p0a");
-            (cells(&h), h.app.text())
-        })
-        .collect();
-    let screen = &drawn[0].1;
+fn a_styled_box_draws_its_border_title_and_rule() {
+    let h = home();
+    let screen = h.wait_for("p0a");
     let rows: Vec<&str> = screen.lines().skip_while(|line| !line.contains("p0a")).take(5).collect();
     assert_eq!(
         rows.iter().map(|row| row.trim_end()).collect::<Vec<_>>(),
@@ -578,20 +510,4 @@ fn a_styled_box_draws_the_same_on_both_carriers() {
         ],
         "{screen}"
     );
-    assert!(drawn.iter().all(|other| other.0 == drawn[0].0), "the loopback draws the box otherwise");
-}
-
-#[test]
-#[cfg(native)]
-fn the_sample_library_confirms_and_edits_the_composer() {
-    let h = crate::plugins::open(Route::Home, "", &crate::plugins::build("p0a"));
-    h.wait_for("sample plugin v1: home.footer");
-    h.tui.keymap.dispatch("p0a.confirm", None);
-    h.wait_for("Delete the draft?");
-    h.app.press("return");
-    h.wait_for("answered true");
-    h.tui.keymap.dispatch("p0a.insert", Some("from a library"));
-    h.wait("the insert", || h.textarea().text() == "from a library");
-    h.tui.keymap.dispatch("p0a.read", None);
-    h.wait_for("composer \"from a library\" at 14, focused true");
 }

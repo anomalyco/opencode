@@ -79,11 +79,10 @@ fn routes() -> Vec<MemoryRoute> {
     routes
 }
 
-/// Session `ses_a`, `width` columns wide, over `server`; with `loopback`, the footer runs through the byte shims. With
-/// `events`, the event stream's `server.connected` reads the goal again, at a time the test does not control.
-fn mount(server: &Gated, width: u16, loopback: bool, events: bool) -> Harness {
-    let plugins: &[&str] = if loopback { &["-opencode.prompt.footer"] } else { &[] };
-    let config = json!({ "animations": false, "plugins": plugins });
+/// Session `ses_a`, `width` columns wide, over `server`. With `events`, the event stream's `server.connected` reads
+/// the goal again, at a time the test does not control.
+fn mount(server: &Gated, width: u16, events: bool) -> Harness {
+    let config = json!({ "animations": false, "plugins": [] });
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
         events,
@@ -91,25 +90,13 @@ fn mount(server: &Gated, width: u16, loopback: bool, events: bool) -> Harness {
     };
     let h = support::mount(width, 30, deps);
     h.wait_for("Fix the parser");
-    if loopback {
-        let (definition, _) = crate::support::loopback(
-            &opencode_tui::plugins::host::host(&h.tui),
-            crate::support::loopback_entries!(
-                "loopback.prompt.footer",
-                opencode_tui::plugins::prompt_footer::plugin().setup
-            ),
-        )
-        .unwrap();
-        opencode_tui::plugins::host::add(&h.tui, definition);
-        h.wait_for("Fix the parser");
-    }
     h
 }
 
 #[test]
 fn a_change_event_before_the_first_read_returns_wins() {
     let server = Gated::new(false);
-    let h = mount(&server, 100, false, true);
+    let h = mount(&server, 100, true);
     // The event stream's `server.connected` may read it again. It comes on the stream before the change, so that
     // read is older too.
     h.wait("the goal read to go out", || server.reads() >= 1);
@@ -125,7 +112,7 @@ fn a_change_event_before_the_first_read_returns_wins() {
 #[test]
 fn a_remount_while_the_read_is_pending_keeps_the_read() {
     let server = Gated::new(false);
-    let h = mount(&server, 100, false, false);
+    let h = mount(&server, 100, false);
     // Without the event stream, the mount's read is the only one.
     h.wait("the goal read to go out", || server.reads() == 1);
     let reads = server.reads();
@@ -141,41 +128,8 @@ fn a_remount_while_the_read_is_pending_keeps_the_read() {
 #[test]
 fn the_busy_footer_shrinks_on_a_narrow_terminal() {
     let server = Gated::new(true);
-    let h = mount(&server, 40, false, true);
+    let h = mount(&server, 40, true);
     let screen = h.wait_for("◎ goal");
     let row = screen.lines().find(|line| line.contains("◎ goal")).unwrap();
     assert!(row.contains("/project") && row.trim_end().chars().count() <= 40, "{screen}");
-}
-
-/// The cells of the footer with the goal, of its panel, and of the panel after `p`, and the commands sent.
-#[cfg(native)]
-fn goal_frames(loopback: bool) -> (Vec<Vec<opentui::testing::Cell>>, Vec<Option<Value>>) {
-    let server = Gated::new(true);
-    let h = mount(&server, 100, loopback, true);
-    h.wait_for("◎ goal");
-    let mut frames = vec![h.app.render().cells];
-    let (x, y) = h.find("◎ goal");
-    h.app.click(x + 2, y);
-    h.wait_for("pause p");
-    frames.push(h.app.render().cells);
-    h.app.press("p");
-    h.wait("the pause to go out", || server.sent("/api/session/ses_a/command").len() == 1);
-    server.paused();
-    h.wait_for("Paused by the user");
-    assert!(h.app.text().contains("resume r"), "{}", h.app.text());
-    frames.push(h.app.render().cells);
-    h.app.press("x");
-    h.wait_gone("Paused by the user");
-    h.wait("the clear to go out", || server.sent("/api/session/ses_a/command").len() == 2);
-    let commands = server.sent("/api/session/ses_a/command").into_iter().map(|logged| logged.body).collect();
-    (frames, commands)
-}
-
-#[test]
-#[cfg(native)]
-fn the_goal_panel_acts_the_same_through_the_c_abi_loopback() {
-    let direct = goal_frames(false);
-    let texts: Vec<_> = direct.1.iter().map(|body| body.as_ref().unwrap()["text"].clone()).collect();
-    assert_eq!(texts, [json!("pause"), json!("clear")]);
-    assert!(goal_frames(true) == direct, "the loopback draws other cells or sends other commands");
 }

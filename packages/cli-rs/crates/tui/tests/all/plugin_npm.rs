@@ -52,7 +52,7 @@ fn open_in(
     std::fs::create_dir_all(&config_dir).unwrap();
     let global = format!("// mine\n{}", serde_json::json!({ "plugins": user }));
     std::fs::write(config_dir.join("opencode.jsonc"), global).unwrap();
-    let external = External { config_dir, cwd, dev: Vec::new() };
+    let external = External { config_dir, cwd };
     external_with(&harness.tui, external, Some(config));
     Some(Pipe { harness, root })
 }
@@ -417,7 +417,7 @@ fn a_client_with_nothing_to_run_starts_no_bun() {
     let harness = support::mount_on(opentui::testing::TestApp::new(120, 30), deps, args);
     let root = opencode_util::temp::tempdir().unwrap();
     let config_dir = root.path().join("config");
-    let external = External { config_dir: config_dir.clone(), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: config_dir.clone(), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(lazy));
     let pipe = Pipe { harness, root };
     pipe.settle();

@@ -74,10 +74,6 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         slot: Option<crate::SlotInput>,
     },
-    /// An event a later 2.x adds, which only the SDK's `next` feature has: a plugin's wildcard arm follows it.
-    #[cfg(feature = "next")]
-    #[doc(hidden)]
-    Later {},
 }
 
 impl Event {
@@ -90,8 +86,6 @@ impl Event {
             }
             Event::Scroll { event } => Some(matches!(event, crate::v2::ScrollEvent::UserScroll { .. })),
             Event::Hover { .. } | Event::Closed { .. } | Event::Mount { .. } => None,
-            #[cfg(feature = "next")]
-            Event::Later {} => None,
         }
     }
 }

@@ -78,91 +78,6 @@ fn stream(harness: &Harness, count: u64) {
 }
 
 #[test]
-#[cfg(native)]
-fn a_streamed_delta_does_no_work_in_the_built_ins() {
-    stream(&session(&[], Vec::new()), 20);
-    let crossed = stream_crossed(&history(0, true), 20);
-    assert_eq!(crossed.calls, 20 * SESSION.len() as u64, "{crossed:?}");
-}
-
-/// `ses_a` with `turns` question and answer pairs before, each answer with its tokens, on the C ABI carrier when `abi`.
-#[cfg(native)]
-fn history(turns: u64, abi: bool) -> Harness {
-    let messages: Vec<Value> = (1..=turns)
-        .rev()
-        .flat_map(|turn| {
-            let created = turn * 10_000;
-            [
-                json!({
-                    "id": format!("msg_{turn:04}b"), "type": "assistant", "agent": "build",
-                    "model": { "providerID": "p", "id": "m" },
-                    "time": { "created": created + 1000, "completed": created + 2000 }, "finish": "stop",
-                    "tokens": { "input": 100, "output": 10, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-                    "content": [{ "type": "text", "text": format!("Answer {turn} one.\n\nAnswer {turn} two.") }],
-                }),
-                json!({ "id": format!("msg_{turn:04}a"), "type": "user", "text": format!("Question {turn}"),
-                        "time": { "created": created } }),
-            ]
-        })
-        .collect();
-    let fake = Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
-        ("GET", "/api/session/ses_a/message") => (200, json!({ "data": messages, "cursor": {} })),
-        _ => support::base(seen, DIRECTORY),
-    });
-    let deps = Deps {
-        config: support::config(support::decode(r#"{ "animations": false }"#)),
-        abi_builtins: abi,
-        ..support::deps(Arc::new(fake))
-    };
-    let harness = support::mount_still(170, 34, deps);
-    harness.wait_for("Getting started");
-    if turns > 0 {
-        harness.wait_for(&format!("Answer {turns} two."));
-    }
-    settle(&harness);
-    harness
-}
-
-#[test]
-#[cfg(native)]
-fn a_streamed_delta_crosses_the_same_bytes_at_any_history() {
-    let per_delta = |turns| {
-        let harness = history(turns, true);
-        stream_crossed(&harness, 20)
-    };
-    let (none, long) = (per_delta(0), per_delta(200));
-    assert_eq!(none.calls, long.calls, "{none:?} {long:?}");
-    // The requests name mount generations and request ids, process-wide counters whose digits grow with whatever ran
-    // before (other tests in parallel): a tenth is slack for those. A read of the session at 200 turns copies all 400
-    // messages on every delta, many times what a delta crosses.
-    let bound = |bytes: u64| bytes + bytes / 10;
-    assert!(long.sent <= bound(none.sent) && long.received <= bound(none.received), "{none:?} {long:?}");
-}
-
-/// What crossed the C ABI while `count` deltas streamed into a reply of `ses_a`.
-#[cfg(native)]
-fn stream_crossed(harness: &Harness, count: u64) -> opencode_plugin::loader::native::Crossed {
-    let id = "msg_live";
-    let started = json!({ "sessionID": "ses_a", "assistantMessageID": id, "agent": "build",
-                          "model": { "providerID": "p", "id": "m" }, "started": 1 });
-    harness.tui.data.apply(&[event("session.step.started", 1, started)]);
-    let text = json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0 });
-    harness.tui.data.apply(&[event("session.text.started", 2, text)]);
-    settle(harness);
-    let (before, work, adopted) = (opencode_plugin::loader::native::crossed(), reconcile::work(), surface::adopted());
-    for index in 0..count {
-        let delta =
-            json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0, "delta": format!("w{index} ") });
-        harness.tui.data.apply(&[event("session.text.delta", 3 + index, delta)]);
-        settle(harness);
-    }
-    assert!(harness.app.text().contains(&format!("w{} ", count - 1)), "{}", harness.app.text());
-    assert_eq!(reconcile::work().since(work), reconcile::Work::default(), "streamed deltas worked in the built-ins");
-    assert_eq!(surface::adopted() - adopted, 0, "a built-in answered a delta with a tree");
-    opencode_plugin::loader::native::crossed().since(before)
-}
-
-#[test]
 fn a_theme_switch_builds_nothing_in_the_built_ins() {
     for route in [opencode_tui::Route::Home, support::session_route("ses_a")] {
         let harness = session(&[], Vec::new());
@@ -465,15 +380,7 @@ fn mounts_and_first_views() -> Vec<String> {
 
 #[test]
 fn a_surface_hears_its_mounts_begin_and_end_in_order() {
-    for abi in crate::support::LOOPBACK {
-        mounts_in_order(abi);
-    }
-}
-
-fn mounts_in_order(abi: bool) {
-    let plugin = abi::Plugin { id: "test.probe", setup: probe };
-    let builtin = if abi { crate::support::abi_builtin(plugin) } else { opencode_plugin::Builtin::Plugin(plugin) };
-    let harness = session(&[], vec![builtin]);
+    let harness = session(&[], vec![abi::Plugin { id: "test.probe", setup: probe }.into()]);
     let first = mounts_and_first_views();
     let opened = first.first().map(|line| line.split(' ').nth(2).unwrap().parse::<u64>().unwrap()).unwrap();
     assert_eq!(
@@ -491,7 +398,7 @@ fn mounts_in_order(abi: bool) {
         .wait("the replies", || HEARD.with(|heard| heard.borrow().iter().filter(|line| *line == "reply").count()) == 2);
     let log = mounts_and_first_views();
     let views: Vec<u64> = log.iter().filter(|line| line.starts_with("view")).map(|line| generation(line)).collect();
-    assert!(views.len() == 2 && views[0] > opened && views[1] > views[0], "abi {abi}: {log:?}");
+    assert!(views.len() == 2 && views[0] > opened && views[1] > views[0], "{log:?}");
     let expected = [
         format!("mount true {} ses_a shell true details true", views[0]),
         format!("view {} shell true all", views[0]),
@@ -500,14 +407,14 @@ fn mounts_in_order(abi: bool) {
         format!("view {} shell false all", views[1]),
         format!("mount false {} ses_a shell true details true", views[0]),
     ];
-    assert_eq!(log, expected, "abi {abi}");
+    assert_eq!(log, expected);
     // The route mounts again: a mount of equal input, which only the notice's mount tells from the one it replaces.
     harness.tui.navigate(harness.tui.route());
     settle(&harness);
     harness.wait("the reply", || HEARD.with(|heard| heard.borrow().iter().any(|line| line == "reply")));
     let log = mounts_and_first_views();
     let again = log.iter().find(|line| line.starts_with("view")).map(|line| generation(line)).unwrap_or_default();
-    assert!(again > views[1], "abi {abi}: {log:?}");
+    assert!(again > views[1], "{log:?}");
     let mut sorted = log.clone();
     sorted.sort();
     let mut expected = [
@@ -516,7 +423,7 @@ fn mounts_in_order(abi: bool) {
         format!("view {again} shell false all"),
     ];
     expected.sort();
-    assert_eq!(sorted, expected, "abi {abi}");
+    assert_eq!(sorted, expected);
     let host = opencode_tui::plugins::host::host(&harness.tui);
     assert_eq!(harness.tui.plugins.toggle(&host, "test.probe", false), Some(Ok(())));
     harness.tui.navigate(harness.tui.route());
@@ -639,18 +546,11 @@ fn keeper(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-fn carried(plugin: abi::Plugin, abi: bool) -> opencode_plugin::Builtin {
-    match abi {
-        true => crate::support::abi_builtin(plugin),
-        false => opencode_plugin::Builtin::Plugin(plugin),
-    }
-}
-
-/// `ses_a` with the keeper, on the C ABI carrier when `abi`.
-fn keeper_session(abi: bool) -> Harness {
+/// `ses_a` with the keeper.
+fn keeper_session() -> Harness {
     CARDS.with(|cards| *cards.borrow_mut() = vec![1, 2, 3]);
     GIVEN.set(None);
-    let harness = session(&[], vec![carried(abi::Plugin { id: "test.keeper", setup: keeper }, abi)]);
+    let harness = session(&[], vec![abi::Plugin { id: "test.keeper", setup: keeper }.into()]);
     if !HIDE.get() {
         harness.wait_for("K2=3");
     }
@@ -659,38 +559,33 @@ fn keeper_session(abi: bool) -> Harness {
 
 #[test]
 fn a_kept_root_keeps_what_the_mount_holds() {
-    for abi in crate::support::LOOPBACK {
-        let harness = keeper_session(abi);
-        assert_eq!(surface::ledger_of("test.keeper").memo_entries, 3, "abi {abi}");
-        assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
-        harness.tui.theme_changed();
-        settle(&harness);
-        stream(&harness, 2);
-        assert_eq!(surface::ledger_of("test.keeper").memo_entries, 3, "abi {abi}");
-        BUILT.set(0);
-        CARDS.with(|cards| cards.borrow_mut()[1] = 5);
-        harness.tui.keymap.dispatch("keeper.wake", None);
-        harness.wait_for("K1=5");
-        assert_eq!(BUILT.get(), 1, "abi {abi}");
-        GIVE.set(true);
-        harness.tui.keymap.dispatch("keeper.wake", None);
-        settle(&harness);
-        harness.tui.keymap.dispatch("keeper.wake", None);
-        harness.wait_for("GIVEN BYTES");
-        let sizes = SIZES.with(|sizes| sizes.take());
-        assert!(sizes.iter().all(|[w, h, width, height]| (w, h) == (width, height) && *w > 0), "abi {abi}: {sizes:?}");
-    }
+    let harness = keeper_session();
+    assert_eq!(surface::ledger_of("test.keeper").memo_entries, 3);
+    assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
+    harness.tui.theme_changed();
+    settle(&harness);
+    stream(&harness, 2);
+    assert_eq!(surface::ledger_of("test.keeper").memo_entries, 3);
+    BUILT.set(0);
+    CARDS.with(|cards| cards.borrow_mut()[1] = 5);
+    harness.tui.keymap.dispatch("keeper.wake", None);
+    harness.wait_for("K1=5");
+    assert_eq!(BUILT.get(), 1);
+    GIVE.set(true);
+    harness.tui.keymap.dispatch("keeper.wake", None);
+    settle(&harness);
+    harness.tui.keymap.dispatch("keeper.wake", None);
+    harness.wait_for("GIVEN BYTES");
+    let sizes = SIZES.with(|sizes| sizes.take());
+    assert!(sizes.iter().all(|[w, h, width, height]| (w, h) == (width, height) && *w > 0), "{sizes:?}");
 }
 
 #[test]
 fn a_kept_root_takes_a_new_theme() {
-    for (abi, hide) in [(false, false), (true, false), (false, true)] {
-        if abi && !cfg!(native) {
-            continue;
-        }
+    for hide in [false, true] {
         HIDE.set(hide);
         let ready = move |screen: &str| screen.contains("K2=3") != hide && screen.contains("Getting started");
-        support::assert_restyles_in_place(|| Box::new(keeper_session(abi)), |_| {}, ready);
+        support::assert_restyles_in_place(|| Box::new(keeper_session()), |_| {}, ready);
     }
     HIDE.set(false);
 }
@@ -723,21 +618,19 @@ fn mounter(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn what_a_mount_notice_opens_ends_with_the_plugin() {
-    for abi in crate::support::LOOPBACK {
-        let harness = session(&[], vec![carried(abi::Plugin { id: "test.mounter", setup: mounter }, abi)]);
-        let overlays = opencode_plugin::interact::ledger(&*harness.tui).overlays;
-        VIEWS.set(0);
-        harness.tui.navigate(opencode_tui::Route::Plugin { id: "test.mounter".into(), name: "mounter".into() });
-        harness.wait_for("POPPED");
-        settle(&harness);
-        // The mount builds its whole tree once: the notice's opening does not, and no later view is a first one again.
-        assert_eq!(VIEWS.get(), 1, "abi {abi}");
-        let host = opencode_tui::plugins::host::host(&harness.tui);
-        assert_eq!(harness.tui.plugins.toggle(&host, "test.mounter", false), Some(Ok(())));
-        harness.tui.navigate(support::session_route("ses_a"));
-        settle(&harness);
-        assert!(!harness.app.render().text().contains("POPPED"), "abi {abi}");
-        assert_eq!(opencode_plugin::interact::ledger(&*harness.tui).overlays, overlays, "abi {abi}");
-        assert_eq!(surface::ledger_of("test.mounter"), surface::Ledger::default(), "abi {abi}");
-    }
+    let harness = session(&[], vec![abi::Plugin { id: "test.mounter", setup: mounter }.into()]);
+    let overlays = opencode_plugin::interact::ledger(&*harness.tui).overlays;
+    VIEWS.set(0);
+    harness.tui.navigate(opencode_tui::Route::Plugin { id: "test.mounter".into(), name: "mounter".into() });
+    harness.wait_for("POPPED");
+    settle(&harness);
+    // The mount builds its whole tree once: the notice's opening does not, and no later view is a first one again.
+    assert_eq!(VIEWS.get(), 1);
+    let host = opencode_tui::plugins::host::host(&harness.tui);
+    assert_eq!(harness.tui.plugins.toggle(&host, "test.mounter", false), Some(Ok(())));
+    harness.tui.navigate(support::session_route("ses_a"));
+    settle(&harness);
+    assert!(!harness.app.render().text().contains("POPPED"));
+    assert_eq!(opencode_plugin::interact::ledger(&*harness.tui).overlays, overlays);
+    assert_eq!(surface::ledger_of("test.mounter"), surface::Ledger::default());
 }

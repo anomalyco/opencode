@@ -1,4 +1,4 @@
-//! Exercise plugin surface lifecycle and compare visible frames, callback logs, and retained resources across carriers.
+//! Exercise plugin surface lifecycle and compare visible frames, callback logs, and retained resources of linked plugins.
 
 use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
@@ -106,30 +106,10 @@ fn patch(index: usize, value: u32) -> String {
     format!("@@ -1 +1 @@\n-item {index}\n+item {index} is {value}\n")
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Carrier {
-    Linked,
-    /// Through the byte shims of the C ABI: JSON both ways, as a loaded library.
-    Abi,
-}
-
-/// The carriers a plugin of the one API runs on: linked, and on the C ABI in a build with the `native` feature.
-#[cfg(native)]
-pub const CARRIERS: [Carrier; 2] = [Carrier::Linked, Carrier::Abi];
-#[cfg(not(native))]
-pub const CARRIERS: [Carrier; 1] = [Carrier::Linked];
-
-pub fn builtin(carrier: Carrier, plugin: abi::Plugin) -> opencode_plugin::Builtin {
-    match carrier {
-        Carrier::Linked => opencode_plugin::Builtin::Plugin(plugin),
-        Carrier::Abi => crate::support::abi_builtin(plugin),
-    }
-}
-
-fn open_tui(carrier: Carrier) -> Harness {
+fn open_tui() -> Harness {
     let deps = Deps {
         route: Route::Home,
-        builtins: vec![builtin(carrier, abi::Plugin { id: ID, setup })],
+        builtins: vec![abi::Plugin { id: ID, setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
     let harness = support::mount_still(80, 40, deps);
@@ -188,7 +168,7 @@ fn apply(harness: &Harness, command: Command) {
     settle(harness);
 }
 
-struct Surfaces(Carrier);
+struct Surfaces;
 
 impl Model for Surfaces {
     type Command = Command;
@@ -209,7 +189,7 @@ impl Model for Surfaces {
     fn run(&self, commands: &[Command]) -> Option<Failure> {
         board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
         let baseline = surface::ledger_of(ID);
-        let harness = open_tui(self.0);
+        let harness = open_tui();
         // The reference: the generation mounted, the highest one seen, and a bad view armed.
         let mut mounted: Option<u64> = None;
         let mut highest = 0;
@@ -296,67 +276,13 @@ fn fail_at(step: usize, property: &'static str, detail: String) -> Option<Failur
 
 #[test]
 fn surface_mounts_hold_their_properties() {
-    for carrier in CARRIERS {
-        model::check(&Surfaces(carrier), 40, 32);
-    }
-}
-
-#[cfg(native)]
-struct Equal;
-
-#[cfg(native)]
-impl Model for Equal {
-    type Command = Command;
-
-    fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Command> {
-        Surfaces(Carrier::Linked).generate(rng, steps)
-    }
-
-    fn run(&self, commands: &[Command]) -> Option<Failure> {
-        let runs: Vec<Vec<(Vec<opentui::testing::Cell>, Vec<Call>)>> = CARRIERS
-            .iter()
-            .map(|carrier| {
-                board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-                let harness = open_tui(*carrier);
-                // Generations are new across the process, so each run numbers its own from 1.
-                let mut generations: Vec<u64> = Vec::new();
-                commands
-                    .iter()
-                    .map(|command| {
-                        apply(&harness, *command);
-                        let mut calls = board(|board| std::mem::take(&mut board.calls));
-                        for call in &mut calls {
-                            if !generations.contains(&call.generation) {
-                                generations.push(call.generation);
-                            }
-                            call.generation =
-                                generations.iter().position(|known| *known == call.generation).unwrap() as u64;
-                        }
-                        // Home's prompt shows a random placeholder in each TUI; only the route's frame is the plugin's.
-                        let on_route = matches!(harness.tui.route(), Route::Plugin { .. });
-                        let cells = if on_route { harness.app.render().cells } else { Vec::new() };
-                        (cells, calls)
-                    })
-                    .collect()
-            })
-            .collect();
-        let (linked, library) = (&runs[0], &runs[1]);
-        let step = linked.iter().zip(library).position(|(linked, library)| linked != library)?;
-        let detail = format!("linked {:?}\nlibrary {:?}", linked[step].1, library[step].1);
-        Some(Failure { property: "carrier-equal", site: "carrier-equal", step, detail })
-    }
-}
-
-#[test]
-#[cfg(native)]
-fn both_carriers_give_equal_frames_and_call_logs() {
-    model::check(&Equal, 24, 24);
+    model::check(&Surfaces, 40, 32);
 }
 
 /// The cells of the route after `commands`, with a plugin that reads the palette or not.
-fn frame_cells(carrier: Carrier, commands: &[Command], palette: bool) -> Vec<opentui::testing::Cell> {
+fn frame_cells(commands: &[Command], palette: bool) -> Vec<opentui::testing::Cell> {
     board(|board| *board = Board { values: vec![0; ITEMS], palette, ..Board::default() });
-    let harness = open_tui(carrier);
+    let harness = open_tui();
     for command in commands {
         apply(&harness, *command);
     }
@@ -364,9 +290,9 @@ fn frame_cells(carrier: Carrier, commands: &[Command], palette: bool) -> Vec<ope
 }
 
 /// The frame of the route after `commands`.
-fn frame_after(carrier: Carrier, commands: &[Command]) -> String {
+fn frame_after(commands: &[Command]) -> String {
     board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-    let harness = open_tui(carrier);
+    let harness = open_tui();
     for command in commands {
         apply(&harness, *command);
     }
@@ -376,42 +302,38 @@ fn frame_after(carrier: Carrier, commands: &[Command]) -> String {
 #[test]
 fn a_refused_tree_leaves_no_trace() {
     use Command::*;
-    for carrier in CARRIERS {
-        let with = frame_after(carrier, &[Open, Bump(1), Bad, Bump(2), Wake]);
-        let without = frame_after(carrier, &[Open, Bump(1), Bump(2), Wake]);
-        assert_eq!(with, without, "{carrier:?}");
-        assert_ne!(frame_after(carrier, &[Open, Bump(1), Bump(3), Wake]), without);
-        let calls = board(|board| board.calls.clone());
-        assert!(calls.iter().all(|call| !call.bad));
-    }
+    let with = frame_after(&[Open, Bump(1), Bad, Bump(2), Wake]);
+    let without = frame_after(&[Open, Bump(1), Bump(2), Wake]);
+    assert_eq!(with, without);
+    assert_ne!(frame_after(&[Open, Bump(1), Bump(3), Wake]), without);
+    let calls = board(|board| board.calls.clone());
+    assert!(calls.iter().all(|call| !call.bad));
 }
 
 #[test]
 fn a_second_refusal_in_a_row_fails_the_plugin() {
-    for carrier in CARRIERS {
-        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-        let harness = open_tui(carrier);
-        apply(&harness, Command::Open);
-        board(|board| board.bad = 2);
-        apply(&harness, Command::Bump(0));
-        let failed =
-            matches!(status(&harness), opencode_plugin::Status::Failed(ref error) if error.contains("refused twice"));
-        assert!(failed, "{carrier:?}");
-        let calls = board(|board| board.calls.len());
-        apply(&harness, Command::Bump(1));
-        apply(&harness, Command::Wake);
-        assert_eq!(board(|board| board.calls.len()), calls, "a failed plugin got a view");
-        assert_eq!(surface::ledger_of(ID), Ledger::default(), "{carrier:?}");
-        assert!(!harness.app.render().text().contains("card 0"), "{carrier:?}");
-    }
+    board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+    let harness = open_tui();
+    apply(&harness, Command::Open);
+    board(|board| board.bad = 2);
+    apply(&harness, Command::Bump(0));
+    let failed =
+        matches!(status(&harness), opencode_plugin::Status::Failed(ref error) if error.contains("refused twice"));
+    assert!(failed);
+    let calls = board(|board| board.calls.len());
+    apply(&harness, Command::Bump(1));
+    apply(&harness, Command::Wake);
+    assert_eq!(board(|board| board.calls.len()), calls, "a failed plugin got a view");
+    assert_eq!(surface::ledger_of(ID), Ledger::default());
+    assert!(!harness.app.render().text().contains("card 0"));
 }
 
 #[test]
 fn a_theme_change_calls_only_a_surface_that_reads_the_palette() {
-    for (carrier, palette) in CARRIERS.into_iter().flat_map(|carrier| [(carrier, false), (carrier, true)]) {
-        let fresh = frame_cells(carrier, &[Command::Theme(1), Command::Open, Command::Bump(2)], palette);
+    for palette in [false, true] {
+        let fresh = frame_cells(&[Command::Theme(1), Command::Open, Command::Bump(2)], palette);
         board(|board| *board = Board { values: vec![0; ITEMS], palette, ..Board::default() });
-        let harness = open_tui(carrier);
+        let harness = open_tui();
         apply(&harness, Command::Open);
         // The last tree keeps every card but one.
         apply(&harness, Command::Bump(2));
@@ -485,17 +407,13 @@ fn parts(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_part_output_shows_the_transcripts_own_text() {
-    for (root, carrier) in [(false, Carrier::Linked), (true, Carrier::Linked), (true, Carrier::Abi)] {
-        if carrier == Carrier::Abi && !cfg!(native) {
-            continue;
-        }
-        part_output(root, carrier);
-    }
+    part_output(false);
+    part_output(true);
 }
 
-fn part_output(root: bool, carrier: Carrier) {
+fn part_output(root: bool) {
     PART_ROOT.set(root);
-    let harness = parts_harness(carrier);
+    let harness = parts_harness();
     let shown = |harness: &Harness| -> Vec<String> {
         let screen = harness.app.render().text();
         screen.lines().map(str::trim).filter(|line| !line.is_empty()).map(str::to_owned).collect()
@@ -510,7 +428,7 @@ fn part_output(root: bool, carrier: Carrier) {
     assert_eq!(
         shown(&harness),
         ["tool said fn parse", "lib.rs", "REAL_RESULT", "kept:", "REAL_RESULT", "REAL_RESULT", "REAL_RESULT", "end"],
-        "root kept {root}, {carrier:?}"
+        "root kept {root}"
     );
     assert!(PART_VIEWS.get() >= 2, "the kept box was never kept");
     PART_ROOT.set(false);
@@ -526,7 +444,7 @@ fn call_2(harness: &Harness, kind: &str, seq: u64, extra: serde_json::Value) {
     settle(harness);
 }
 
-fn parts_harness(carrier: Carrier) -> Harness {
+fn parts_harness() -> Harness {
     PART_VIEWS.set(0);
     let session = support::merge(support::session("ses_p", "Parts"), serde_json::json!({ "agent": "build" }));
     let messages = serde_json::json!([
@@ -573,7 +491,7 @@ fn parts_harness(carrier: Carrier) -> Harness {
     });
     let deps = Deps {
         route: support::session_route("ses_p"),
-        builtins: vec![builtin(carrier, abi::Plugin { id: "test.parts", setup: parts })],
+        builtins: vec![abi::Plugin { id: "test.parts", setup: parts }.into()],
         ..support::deps(Arc::new(fake))
     };
     let harness = support::mount_still(80, 24, deps);
@@ -589,10 +507,10 @@ fn a_kept_output_is_admitted_as_one_written_out() {
         text: 64,
         ..opencode_plugin::limits::Limits::default()
     });
-    let run = |keeps: bool, root: bool, carrier: Carrier| {
+    let run = |keeps: bool, root: bool| {
         PART_KEEPS.set(keeps);
         PART_ROOT.set(root);
-        let harness = parts_harness(carrier);
+        let harness = parts_harness();
         let over = "x".repeat(88);
         let stages = [
             (1, "small output", "small output"),
@@ -615,15 +533,12 @@ fn a_kept_output_is_admitted_as_one_written_out() {
         PART_ROOT.set(false);
         (frames, PART_VIEWS.get())
     };
-    for (root, carrier) in [(false, Carrier::Linked), (false, Carrier::Abi), (true, Carrier::Linked)] {
-        if carrier == Carrier::Abi && !cfg!(native) {
-            continue;
-        }
-        let (kept, views) = run(true, root, carrier);
-        let (written, _) = run(false, false, carrier);
-        assert!(views >= 2, "{carrier:?}, root {root}: the kept box was never kept");
+    for root in [false, true] {
+        let (kept, views) = run(true, root);
+        let (written, _) = run(false, false);
+        assert!(views >= 2, "root {root}: the kept box was never kept");
         for (stage, (kept, written)) in ["small", "over", "small again"].iter().zip(kept.iter().zip(&written)) {
-            assert_eq!(kept, written, "{carrier:?}, root {root}, {stage}: a kept output is not the one written out");
+            assert_eq!(kept, written, "root {root}, {stage}: a kept output is not the one written out");
         }
         assert!(written[1].contains("⋯ too large: 88 bytes"), "the output past the limit shows\n{}", written[1]);
     }
@@ -780,23 +695,14 @@ pub(crate) fn held() -> (support::Fake, Gate, Count, Count) {
 
 #[test]
 fn a_late_reply_does_not_reach_a_mount_opened_again() {
-    for loopback in crate::support::LOOPBACK {
-        late_reply(loopback);
-    }
+    late_reply();
 }
 
-fn late_reply(loopback: bool) {
+fn late_reply() {
     REPLIES.with(|replies| replies.borrow_mut().clear());
     let (fake, gate, served, _) = held();
     let harness = support::mount_still(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
-    let host = opencode_tui::plugins::host::host(&harness.tui);
-    let definition = match loopback {
-        true => {
-            let entries = crate::support::loopback_entries!("test.owned", owned);
-            crate::support::loopback(&host, entries).unwrap().0
-        }
-        false => abi::Plugin { id: "test.owned", setup: owned }.into(),
-    };
+    let definition = abi::Plugin { id: "test.owned", setup: owned }.into();
     opencode_tui::plugins::host::add(&harness.tui, definition);
     let route = Route::Plugin { id: "test.owned".into(), name: "owned".into() };
     harness.tui.navigate(route.clone());
@@ -817,17 +723,10 @@ fn late_reply(loopback: bool) {
         harness.app.wait_until(Duration::from_millis(300), || false);
     };
     arrived(1);
-    assert!(
-        REPLIES.with(|replies| replies.borrow().is_empty()),
-        "loopback {loopback}: a reply reached a mount opened again"
-    );
+    assert!(REPLIES.with(|replies| replies.borrow().is_empty()), "a reply reached a mount opened again");
     let _ = harness.tui.keymap.dispatch("owned.global", None);
     arrived(2);
-    assert_eq!(
-        REPLIES.with(|replies| replies.borrow().len()),
-        1,
-        "loopback {loopback}: the plugin's own reply did not arrive"
-    );
+    assert_eq!(REPLIES.with(|replies| replies.borrow().len()), 1, "the plugin's own reply did not arrive");
     harness.tui.plugins.deactivate_all();
 }
 
@@ -1094,21 +993,19 @@ fn a_failed_surface_gives_its_slot_back() {
 
 #[test]
 fn a_theme_of_another_name_calls_the_view_once_and_builds_nothing() {
-    for carrier in CARRIERS {
-        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-        let harness = open_tui(carrier);
-        apply(&harness, Command::Open);
-        let calls = board(|board| board.calls.len());
-        let work = reconcile::work();
-        assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
-        harness.tui.theme_changed();
-        settle(&harness);
-        let done = reconcile::work().since(work);
-        let after = board(|board| board.calls[calls..].to_vec());
-        assert_eq!(after.len(), 1, "{after:?}");
-        assert!(after[0].built == 0 && !after[0].full, "{after:?}");
-        assert_eq!((done.created, done.removed, done.parses), (0, 0, 0), "{done:?}");
-    }
+    board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+    let harness = open_tui();
+    apply(&harness, Command::Open);
+    let calls = board(|board| board.calls.len());
+    let work = reconcile::work();
+    assert!(harness.tui.theme.borrow_mut().set("tokyonight"));
+    harness.tui.theme_changed();
+    settle(&harness);
+    let done = reconcile::work().since(work);
+    let after = board(|board| board.calls[calls..].to_vec());
+    assert_eq!(after.len(), 1, "{after:?}");
+    assert!(after[0].built == 0 && !after[0].full, "{after:?}");
+    assert_eq!((done.created, done.removed, done.parses), (0, 0, 0), "{done:?}");
 }
 
 #[test]
@@ -1149,100 +1046,35 @@ fn a_reload_drops_the_replies_of_the_activation_before() {
 
 #[test]
 fn a_mounts_widgets_are_freed_with_it() {
-    for carrier in CARRIERS {
-        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-        let harness = open_tui(carrier);
-        let marked = |harness: &Harness| {
-            let marker = Rc::new(());
-            support::mark_at(&harness.app, "card 0: 0", 4, &marker);
-            assert_eq!(Rc::strong_count(&marker), 5);
-            marker
-        };
-        apply(&harness, Command::Open);
-        let marker = marked(&harness);
-        apply(&harness, Command::Bad);
-        apply(&harness, Command::Bump(1));
-        assert_eq!(Rc::strong_count(&marker), 5, "a refused tree and its retry freed shown widgets");
-        apply(&harness, Command::Open);
-        assert_eq!(Rc::strong_count(&marker), 1, "a mount opened again kept the last one's widgets");
-        let marker = marked(&harness);
-        apply(&harness, Command::Home);
-        assert_eq!(Rc::strong_count(&marker), 1, "a closed mount kept its widgets");
-        apply(&harness, Command::Open);
-        let marker = marked(&harness);
-        board(|board| board.bad = 2);
-        apply(&harness, Command::Bump(2));
-        assert!(matches!(status(&harness), opencode_plugin::Status::Failed(_)));
-        assert_eq!(Rc::strong_count(&marker), 1, "a failed plugin's mount kept its widgets");
-    }
+    board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+    let harness = open_tui();
+    let marked = |harness: &Harness| {
+        let marker = Rc::new(());
+        support::mark_at(&harness.app, "card 0: 0", 4, &marker);
+        assert_eq!(Rc::strong_count(&marker), 5);
+        marker
+    };
+    apply(&harness, Command::Open);
+    let marker = marked(&harness);
+    apply(&harness, Command::Bad);
+    apply(&harness, Command::Bump(1));
+    assert_eq!(Rc::strong_count(&marker), 5, "a refused tree and its retry freed shown widgets");
+    apply(&harness, Command::Open);
+    assert_eq!(Rc::strong_count(&marker), 1, "a mount opened again kept the last one's widgets");
+    let marker = marked(&harness);
+    apply(&harness, Command::Home);
+    assert_eq!(Rc::strong_count(&marker), 1, "a closed mount kept its widgets");
+    apply(&harness, Command::Open);
+    let marker = marked(&harness);
+    board(|board| board.bad = 2);
+    apply(&harness, Command::Bump(2));
+    assert!(matches!(status(&harness), opencode_plugin::Status::Failed(_)));
+    assert_eq!(Rc::strong_count(&marker), 1, "a failed plugin's mount kept its widgets");
 }
 
 thread_local! {
     /// How many cards `test.cards` shows, and the value of the first.
     static CARDS: std::cell::Cell<(usize, u32)> = const { std::cell::Cell::new((0, 0)) };
-}
-
-/// A route of cards, each memoized on its value; a command bumps the first card, another changes nothing.
-#[cfg(native)]
-fn cards(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command::new(name);
-    setup.command(command("cards.bump"), |_, _| CARDS.with(|cards| cards.set((cards.get().0, cards.get().1 + 1))));
-    setup.command(command("cards.same"), |_, _| {});
-    setup.surface(v2::Surface::new("cards", v2::Place::Route("cards".into()), |cx| {
-        let (count, first) = CARDS.with(std::cell::Cell::get);
-        let cards = (0..count)
-            .map(|index| {
-                let value = if index == 0 { first } else { 0 };
-                cx.memo(format!("card-{index}"), value, |_| {
-                    v2::Node::text(vec![abi::Span::new(format!("card {index} is {value}"))])
-                })
-            })
-            .collect();
-        v2::Node::column(cards).with_id("cards")
-    }));
-    Ok(())
-}
-
-/// What crossed the C ABI while `step` ran, on the route of `test.cards` with `count` cards.
-#[cfg(native)]
-fn crossed_by(count: usize, step: impl FnOnce(&Harness)) -> opencode_plugin::loader::native::Crossed {
-    CARDS.with(|cards| cards.set((count, 0)));
-    let deps = Deps {
-        route: Route::Home,
-        builtins: vec![builtin(Carrier::Abi, abi::Plugin { id: "test.cards", setup: cards })],
-        ..support::deps(Arc::new(support::empty()))
-    };
-    let harness = support::mount_still(80, 40, deps);
-    harness.tui.navigate(Route::Plugin { id: "test.cards".into(), name: "cards".into() });
-    settle(&harness);
-    let before = opencode_plugin::loader::native::crossed();
-    step(&harness);
-    settle(&harness);
-    opencode_plugin::loader::native::crossed().since(before)
-}
-
-#[test]
-#[cfg(native)]
-fn a_revision_crosses_bytes_that_follow_the_change() {
-    let run = |count, command: &'static str| {
-        crossed_by(count, move |harness| {
-            harness.tui.keymap.dispatch(command, None);
-        })
-    };
-    let (small, large) =
-        ((run(40, "cards.same"), run(40, "cards.bump")), (run(410, "cards.same"), run(410, "cards.bump")));
-    assert_eq!((small.0.calls, small.1.calls), (2, 2), "a command and a view");
-    // The requests name two numbers that may have one digit more: the mount's generation, a count across the process,
-    // and `next`, which numbers content after the cards' handles.
-    assert!(small.1.sent.abs_diff(large.1.sent) <= 2, "the requests grew with the cards: {small:?} {large:?}");
-    assert_eq!(small.1.received - small.0.received, large.1.received - large.0.received, "{small:?} {large:?}");
-    assert!(small.1.received > small.0.received);
-    assert!(small.1.sent < 512, "{small:?}");
-    let theme = crossed_by(410, |harness| {
-        harness.tui.theme.borrow_mut().set("tokyonight");
-        harness.tui.theme_changed();
-    });
-    assert_eq!(theme.calls, 1, "a theme of another name crossed more than its one view: {theme:?}");
 }
 
 thread_local! {
@@ -1272,24 +1104,22 @@ fn hiding(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_card_left_out_is_built_again_when_it_comes_back() {
-    for carrier in CARRIERS {
-        HIDE.with(|hide| *hide.borrow_mut() = (None, Vec::new()));
-        let deps = Deps {
-            route: Route::Home,
-            builtins: vec![builtin(carrier, abi::Plugin { id: "test.hide", setup: hiding })],
-            ..support::deps(Arc::new(support::empty()))
-        };
-        let harness = support::mount_still(60, 20, deps);
-        harness.tui.navigate(Route::Plugin { id: "test.hide".into(), name: "hide".into() });
+    HIDE.with(|hide| *hide.borrow_mut() = (None, Vec::new()));
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.hide", setup: hiding }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount_still(60, 20, deps);
+    harness.tui.navigate(Route::Plugin { id: "test.hide".into(), name: "hide".into() });
+    settle(&harness);
+    for input in [Some("1"), None, Some("2"), None] {
+        harness.tui.keymap.dispatch("hide.toggle", input);
         settle(&harness);
-        for input in [Some("1"), None, Some("2"), None] {
-            harness.tui.keymap.dispatch("hide.toggle", input);
-            settle(&harness);
-        }
-        let fulls = HIDE.with(|hide| hide.borrow().1.clone());
-        assert!(fulls.len() >= 5 && fulls[0], "{carrier:?}: {fulls:?}");
-        assert!(fulls[1..].iter().all(|full| !full), "{carrier:?}: a whole tree was asked for again: {fulls:?}");
     }
+    let fulls = HIDE.with(|hide| hide.borrow().1.clone());
+    assert!(fulls.len() >= 5 && fulls[0], "{fulls:?}");
+    assert!(fulls[1..].iter().all(|full| !full), "a whole tree was asked for again: {fulls:?}");
 }
 
 thread_local! {
@@ -1316,25 +1146,23 @@ fn duplicating(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_duplicate_id_fails_the_plugin_without_a_retry() {
-    for carrier in CARRIERS {
-        DUP.with(|dup| *dup.borrow_mut() = (false, Vec::new()));
-        let deps = Deps {
-            route: Route::Home,
-            builtins: vec![builtin(carrier, abi::Plugin { id: "test.dup", setup: duplicating })],
-            ..support::deps(Arc::new(support::empty()))
-        };
-        let harness = support::mount_still(60, 20, deps);
-        harness.tui.navigate(Route::Plugin { id: "test.dup".into(), name: "dup".into() });
-        settle(&harness);
-        let before = DUP.with(|dup| dup.borrow().1.len());
-        harness.tui.keymap.dispatch("dup.arm", None);
-        settle(&harness);
-        let views = DUP.with(|dup| dup.borrow().1[before..].to_vec());
-        assert_eq!(views, [false], "{carrier:?}: a whole tree was asked for after a duplicate id");
-        let status = harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "test.dup").unwrap().status;
-        let broke = matches!(&status, opencode_plugin::Status::Failed(error) if error.contains("broke the contract"));
-        assert!(broke, "{carrier:?}: {status:?}");
-    }
+    DUP.with(|dup| *dup.borrow_mut() = (false, Vec::new()));
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.dup", setup: duplicating }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount_still(60, 20, deps);
+    harness.tui.navigate(Route::Plugin { id: "test.dup".into(), name: "dup".into() });
+    settle(&harness);
+    let before = DUP.with(|dup| dup.borrow().1.len());
+    harness.tui.keymap.dispatch("dup.arm", None);
+    settle(&harness);
+    let views = DUP.with(|dup| dup.borrow().1[before..].to_vec());
+    assert_eq!(views, [false], "a whole tree was asked for after a duplicate id");
+    let status = harness.tui.plugins.entries().into_iter().find(|entry| entry.id == "test.dup").unwrap().status;
+    let broke = matches!(&status, opencode_plugin::Status::Failed(error) if error.contains("broke the contract"));
+    assert!(broke, "{status:?}");
 }
 
 fn page(setup: &mut abi::Setup) -> Result<(), String> {
@@ -1353,27 +1181,22 @@ fn a_route_opens_with_one_view() {
         ("a page without commands", Route::Plugin { id: "test.none".into(), name: "none".into() }),
         ("a route with commands", Route::Plugin { id: "test.page".into(), name: "page".into() }),
     ];
-    for carrier in CARRIERS {
-        for (name, before) in &from {
-            board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-            let deps = Deps {
-                route: Route::Home,
-                builtins: vec![
-                    builtin(carrier, abi::Plugin { id: ID, setup }),
-                    builtin(carrier, abi::Plugin { id: "test.page", setup: page }),
-                ],
-                ..support::deps(Arc::new(support::empty()))
-            };
-            let harness = support::mount_still(80, 40, deps);
-            harness.tui.navigate(before.clone());
-            settle(&harness);
-            let views = board(|board| board.calls.len());
-            harness.tui.navigate(route());
-            settle(&harness);
-            let calls = board(|board| board.calls[views..].to_vec());
-            assert_eq!(calls.len(), 1, "{carrier:?} from {name}: {calls:?}");
-            assert!(harness.app.render().text().contains("card 0"), "{carrier:?} from {name}");
-        }
+    for (name, before) in &from {
+        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+        let deps = Deps {
+            route: Route::Home,
+            builtins: vec![abi::Plugin { id: ID, setup }.into(), abi::Plugin { id: "test.page", setup: page }.into()],
+            ..support::deps(Arc::new(support::empty()))
+        };
+        let harness = support::mount_still(80, 40, deps);
+        harness.tui.navigate(before.clone());
+        settle(&harness);
+        let views = board(|board| board.calls.len());
+        harness.tui.navigate(route());
+        settle(&harness);
+        let calls = board(|board| board.calls[views..].to_vec());
+        assert_eq!(calls.len(), 1, "from {name}: {calls:?}");
+        assert!(harness.app.render().text().contains("card 0"), "from {name}");
     }
 }
 
@@ -1396,42 +1219,40 @@ fn tally(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_routes_commands_are_in_the_palette() {
-    for carrier in CARRIERS {
-        let deps = Deps {
-            route: Route::Home,
-            builtins: vec![builtin(carrier, abi::Plugin { id: "test.tally", setup: tally })],
-            ..support::deps(Arc::new(support::empty()))
-        };
-        let harness = support::mount_still(80, 30, deps);
-        let palette = |harness: &Harness| {
-            harness.tui.keymap.dispatch("command.palette.show", None);
-            harness.wait_for("Search commands");
-            harness.app.type_text("Bump the tally");
-            settle(harness);
-            harness.app.render().text()
-        };
-        let screen = palette(&harness);
-        assert!(!screen.contains("Bump the tally\n") && screen.contains("No results"), "{carrier:?}: {screen}");
-        harness.app.press("escape");
-        settle(&harness);
-        harness.tui.navigate(Route::Plugin { id: "test.tally".into(), name: "tally".into() });
-        harness.wait_for("a tally");
-        TALLIED.set(0);
-        harness.app.press("1");
-        settle(&harness);
-        assert_eq!(TALLIED.get(), 1, "{carrier:?}: its key runs it on the route");
-        let screen = palette(&harness);
-        assert!(!screen.contains("No results"), "{carrier:?}: {screen}");
-        harness.app.press("1");
-        settle(&harness);
-        assert_eq!(TALLIED.get(), 1, "{carrier:?}: its key ran it under a dialog");
-        harness.app.press("backspace");
-        settle(&harness);
-        harness.app.press("enter");
-        settle(&harness);
-        assert_eq!(TALLIED.get(), 2, "{carrier:?}: the palette runs it");
-        assert!(!harness.tui.dialogs.is_open() && harness.app.render().text().contains("a tally"), "{carrier:?}");
-    }
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.tally", setup: tally }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount_still(80, 30, deps);
+    let palette = |harness: &Harness| {
+        harness.tui.keymap.dispatch("command.palette.show", None);
+        harness.wait_for("Search commands");
+        harness.app.type_text("Bump the tally");
+        settle(harness);
+        harness.app.render().text()
+    };
+    let screen = palette(&harness);
+    assert!(!screen.contains("Bump the tally\n") && screen.contains("No results"), "{screen}");
+    harness.app.press("escape");
+    settle(&harness);
+    harness.tui.navigate(Route::Plugin { id: "test.tally".into(), name: "tally".into() });
+    harness.wait_for("a tally");
+    TALLIED.set(0);
+    harness.app.press("1");
+    settle(&harness);
+    assert_eq!(TALLIED.get(), 1, "its key runs it on the route");
+    let screen = palette(&harness);
+    assert!(!screen.contains("No results"), "{screen}");
+    harness.app.press("1");
+    settle(&harness);
+    assert_eq!(TALLIED.get(), 1, "its key ran it under a dialog");
+    harness.app.press("backspace");
+    settle(&harness);
+    harness.app.press("enter");
+    settle(&harness);
+    assert_eq!(TALLIED.get(), 2, "the palette runs it");
+    assert!(!harness.tui.dialogs.is_open() && harness.app.render().text().contains("a tally"));
 }
 
 /// A route whose command panics.
@@ -1446,54 +1267,38 @@ fn doomed(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_failed_plugins_route_says_it_failed() {
-    for carrier in CARRIERS {
-        let deps = Deps {
-            route: Route::Home,
-            builtins: vec![builtin(carrier, abi::Plugin { id: "test.doomed", setup: doomed })],
-            ..support::deps(Arc::new(support::empty()))
-        };
-        let harness = support::mount_still(100, 30, deps);
-        harness.tui.navigate(Route::Plugin { id: "test.doomed".into(), name: "page".into() });
-        harness.wait_for("a doomed page");
-        harness.tui.keymap.dispatch("doomed.panic", None);
-        let screen = harness.wait_for("Plugin test.doomed failed. Run /plugins for details.");
-        assert!(!screen.contains("Unknown"), "{carrier:?}: {screen}");
-        harness.tui.navigate(Route::Plugin { id: "test.none".into(), name: "page".into() });
-        harness.wait_for("Unknown plugin route: test.none/page");
-    }
-}
-
-#[test]
-#[cfg(native)]
-fn leaving_a_surface_unmounts_it_in_the_library() {
-    let harness = open_tui(Carrier::Abi);
-    harness.tui.navigate(route());
-    settle(&harness);
-    let before = opencode_plugin::loader::native::crossed();
-    harness.tui.navigate(Route::Home);
-    settle(&harness);
-    assert_eq!(opencode_plugin::loader::native::crossed().since(before).calls, 1);
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.doomed", setup: doomed }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount_still(100, 30, deps);
+    harness.tui.navigate(Route::Plugin { id: "test.doomed".into(), name: "page".into() });
+    harness.wait_for("a doomed page");
+    harness.tui.keymap.dispatch("doomed.panic", None);
+    let screen = harness.wait_for("Plugin test.doomed failed. Run /plugins for details.");
+    assert!(!screen.contains("Unknown"), "{screen}");
+    harness.tui.navigate(Route::Plugin { id: "test.none".into(), name: "page".into() });
+    harness.wait_for("Unknown plugin route: test.none/page");
 }
 
 #[test]
 fn each_change_of_the_hosts_state_after_a_view_calls_one() {
-    for carrier in CARRIERS {
-        board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
-        let harness = open_tui(carrier);
-        harness.tui.navigate(route());
-        settle(&harness);
-        let views = || board(|board| board.calls.len());
-        let before = views();
-        opencode_tui::dialogs::settings::update(&harness.tui, |value| {
-            opencode_tui::dialogs::settings::set_path(value, &["animations"], serde_json::json!(false));
-        });
-        settle(&harness);
-        assert_eq!(views() - before, 1, "{carrier:?}: a settings write");
-        let before = views();
-        harness.tui.local.sync(&opencode_store::Changes::everything());
-        settle(&harness);
-        assert_eq!(views() - before, 1, "{carrier:?}: a local change");
-    }
+    board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
+    let harness = open_tui();
+    harness.tui.navigate(route());
+    settle(&harness);
+    let views = || board(|board| board.calls.len());
+    let before = views();
+    opencode_tui::dialogs::settings::update(&harness.tui, |value| {
+        opencode_tui::dialogs::settings::set_path(value, &["animations"], serde_json::json!(false));
+    });
+    settle(&harness);
+    assert_eq!(views() - before, 1, "a settings write");
+    let before = views();
+    harness.tui.local.sync(&opencode_store::Changes::everything());
+    settle(&harness);
+    assert_eq!(views() - before, 1, "a local change");
 }
 
 thread_local! {
@@ -1515,22 +1320,20 @@ fn nesting(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_kept_memo_that_holds_a_memo_keeps_a_library_active() {
-    for carrier in CARRIERS {
-        NESTED.with(|nested| nested.set(0));
-        let deps = Deps {
-            route: Route::Home,
-            builtins: vec![builtin(carrier, abi::Plugin { id: "test.nest", setup: nesting })],
-            ..support::deps(Arc::new(support::empty()))
-        };
-        let harness = support::mount_still(80, 20, deps);
-        harness.tui.navigate(Route::Plugin { id: "test.nest".into(), name: "nest".into() });
-        settle(&harness);
-        harness.tui.keymap.dispatch("nest.bump", None);
-        settle(&harness);
-        let screen = harness.app.text();
-        assert!(screen.contains("bumped 1") && screen.contains("kept"), "{carrier:?}:\n{screen}");
-        assert_eq!(opencode_plugin::surface::ledger_of("test.nest").memo_entries, 2, "{carrier:?}");
-    }
+    NESTED.with(|nested| nested.set(0));
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![abi::Plugin { id: "test.nest", setup: nesting }.into()],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount_still(80, 20, deps);
+    harness.tui.navigate(Route::Plugin { id: "test.nest".into(), name: "nest".into() });
+    settle(&harness);
+    harness.tui.keymap.dispatch("nest.bump", None);
+    settle(&harness);
+    let screen = harness.app.text();
+    assert!(screen.contains("bumped 1") && screen.contains("kept"), "{screen}");
+    assert_eq!(opencode_plugin::surface::ledger_of("test.nest").memo_entries, 2);
 }
 
 // The route and dialog each expose a field; the probe records which mount receives input.
@@ -1539,19 +1342,17 @@ thread_local! {
     static DIALOG_SEEN: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
-/// The dialog probe's carriers: linked, the C ABI, and Luau.
+/// The dialog probe's carriers: linked, and Luau.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum DialogCarrier {
-    Native(Carrier),
+    Linked,
     #[cfg(luau)]
     Luau,
 }
 
 fn dialog_carriers() -> Vec<DialogCarrier> {
     vec![
-        DialogCarrier::Native(Carrier::Linked),
-        #[cfg(native)]
-        DialogCarrier::Native(Carrier::Abi),
+        DialogCarrier::Linked,
         #[cfg(luau)]
         DialogCarrier::Luau,
     ]
@@ -1664,12 +1465,7 @@ fn dialog_open(carrier: DialogCarrier) -> Harness {
     let harness =
         support::mount_still(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let definition = match carrier {
-        DialogCarrier::Native(Carrier::Linked) => abi::Plugin { id: "test.dlg", setup: dialog_probe }.into(),
-        DialogCarrier::Native(Carrier::Abi) => {
-            let entries = crate::support::loopback_entries!("test.dlg", dialog_probe);
-            let host = opencode_tui::plugins::host::host(&harness.tui);
-            crate::support::loopback(&host, entries).unwrap().0
-        }
+        DialogCarrier::Linked => abi::Plugin { id: "test.dlg", setup: dialog_probe }.into(),
         #[cfg(luau)]
         DialogCarrier::Luau => {
             let sources = opencode_plugin::luau::Sources::from_files([
@@ -1697,7 +1493,7 @@ fn dialog_turns(harness: &Harness) {
 #[cfg_attr(not(luau), allow(unused_variables))]
 fn dialog_seen(harness: &Harness, carrier: DialogCarrier) -> Vec<String> {
     match carrier {
-        DialogCarrier::Native(_) => DIALOG_SEEN.with_borrow(Vec::clone),
+        DialogCarrier::Linked => DIALOG_SEEN.with_borrow(Vec::clone),
         #[cfg(luau)]
         DialogCarrier::Luau => {
             let stored = opencode_plugin::Host::storage_read(&*harness.tui, "plugin.test.dlg.seen");
@@ -1760,12 +1556,6 @@ fn a_dialog_surface_takes_the_focus_inside_it_only_and_closes_on_ctrl_c() {
     }
 }
 
-/// Native carriers used for dialog-surface assertions.
-#[cfg(native)]
-const DIALOG_NATIVE: [DialogCarrier; 2] = [DialogCarrier::Native(Carrier::Linked), DialogCarrier::Native(Carrier::Abi)];
-#[cfg(not(native))]
-const DIALOG_NATIVE: [DialogCarrier; 1] = [DialogCarrier::Native(Carrier::Linked)];
-
 /// The probe's running activation, as the host names it.
 fn dialog_generation(h: &Harness) -> u64 {
     (0..100_000).find(|generation| h.tui.plugins.live("test.dlg", *generation)).expect("a running activation")
@@ -1773,74 +1563,64 @@ fn dialog_generation(h: &Harness) -> u64 {
 
 #[test]
 fn a_dialog_surface_keeps_its_field_focused_in_a_new_theme() {
-    for carrier in DIALOG_NATIVE {
-        let h = dialog_open(carrier);
-        _ = h.tui.keymap.dispatch("dlg.open", None);
-        h.wait_for("dialog body");
-        dialog_turns(&h);
-        h.tui.theme.borrow_mut().set("tokyonight");
-        h.tui.theme_changed();
-        dialog_turns(&h);
-        assert_eq!(dialog_focus(&h, "ask").0.as_deref(), Some("name"), "{carrier:?}: the theme took the focus");
-        h.app.type_text("q");
-        dialog_turns(&h);
-        assert_eq!(dialog_seen(&h, carrier).last().map(String::as_str), Some("change q"), "{carrier:?}");
-    }
+    let h = dialog_open(DialogCarrier::Linked);
+    _ = h.tui.keymap.dispatch("dlg.open", None);
+    h.wait_for("dialog body");
+    dialog_turns(&h);
+    h.tui.theme.borrow_mut().set("tokyonight");
+    h.tui.theme_changed();
+    dialog_turns(&h);
+    assert_eq!(dialog_focus(&h, "ask").0.as_deref(), Some("name"), "the theme took the focus");
+    h.app.type_text("q");
+    dialog_turns(&h);
+    assert_eq!(dialog_seen(&h, DialogCarrier::Linked).last().map(String::as_str), Some("change q"));
 }
 
 #[test]
 fn escape_closes_a_dialog_surface_whose_bind_would_take_it() {
-    for carrier in DIALOG_NATIVE {
-        let h = dialog_open(carrier);
-        _ = h.tui.keymap.dispatch("dlg.open", None);
-        h.wait_for("dialog body");
-        dialog_turns(&h);
-        h.app.press("escape");
-        dialog_turns(&h);
-        assert!(!h.app.text().contains("dialog body"), "{carrier:?}: escape left the dialog open");
-        assert!(!dialog_seen(&h, carrier).contains(&"esc".to_owned()), "{carrier:?}: the bind took escape");
-    }
+    let h = dialog_open(DialogCarrier::Linked);
+    _ = h.tui.keymap.dispatch("dlg.open", None);
+    h.wait_for("dialog body");
+    dialog_turns(&h);
+    h.app.press("escape");
+    dialog_turns(&h);
+    assert!(!h.app.text().contains("dialog body"), "escape left the dialog open");
+    assert!(!dialog_seen(&h, DialogCarrier::Linked).contains(&"esc".to_owned()), "the bind took escape");
 }
 
 #[test]
 fn a_dialog_shown_and_focused_takes_the_focus_from_a_field_with_its_id_under_it() {
-    for carrier in DIALOG_NATIVE {
-        let h = dialog_open(carrier);
-        _ = h.tui.keymap.dispatch("dlg.same", None);
-        h.wait_for("same body");
-        dialog_turns(&h);
-        assert_eq!(dialog_focus(&h, "same").0.as_deref(), Some("outside"), "{carrier:?}: no focus in the dialog");
-        h.app.type_text("k");
-        dialog_turns(&h);
-        assert_eq!(dialog_seen(&h, carrier).last().map(String::as_str), Some("change outside k"), "{carrier:?}");
-    }
+    let h = dialog_open(DialogCarrier::Linked);
+    _ = h.tui.keymap.dispatch("dlg.same", None);
+    h.wait_for("same body");
+    dialog_turns(&h);
+    assert_eq!(dialog_focus(&h, "same").0.as_deref(), Some("outside"), "no focus in the dialog");
+    h.app.type_text("k");
+    dialog_turns(&h);
+    assert_eq!(dialog_seen(&h, DialogCarrier::Linked).last().map(String::as_str), Some("change outside k"));
 }
 
 #[test]
 fn a_focused_field_of_a_dialog_below_a_scroll_shows() {
-    for carrier in DIALOG_NATIVE {
-        let h = dialog_open(carrier);
-        _ = h.tui.keymap.dispatch("dlg.tall", None);
-        h.wait_for("tall body");
-        dialog_turns(&h);
-        let offset = opencode_plugin::behave::mounts(h.app.app(), "test.dlg", "tall")
-            .pop()
-            .and_then(|mount| mount.offsets.into_iter().find(|(id, _)| id == "sc"))
-            .map(|(_, offset)| offset);
-        assert!(offset.is_some_and(|offset| offset > 0), "{carrier:?}: the scroll stayed at {offset:?}");
-    }
+    let h = dialog_open(DialogCarrier::Linked);
+    _ = h.tui.keymap.dispatch("dlg.tall", None);
+    h.wait_for("tall body");
+    dialog_turns(&h);
+    let offset = opencode_plugin::behave::mounts(h.app.app(), "test.dlg", "tall")
+        .pop()
+        .and_then(|mount| mount.offsets.into_iter().find(|(id, _)| id == "sc"))
+        .map(|(_, offset)| offset);
+    assert!(offset.is_some_and(|offset| offset > 0), "the scroll stayed at {offset:?}");
 }
 
 #[test]
 fn a_focused_field_of_a_dialog_taller_than_the_screen_shows() {
-    for carrier in DIALOG_NATIVE {
-        let h = dialog_open(carrier);
-        _ = h.tui.keymap.dispatch("dlg.long", None);
-        h.wait_for("row 0");
-        dialog_turns(&h);
-        assert_eq!(dialog_focus(&h, "long").0.as_deref(), Some("end"), "{carrier:?}");
-        assert!(h.app.text().contains("row 44"), "{carrier:?}: the field is below the screen:\n{}", h.app.text());
-    }
+    let h = dialog_open(DialogCarrier::Linked);
+    _ = h.tui.keymap.dispatch("dlg.long", None);
+    h.wait_for("row 0");
+    dialog_turns(&h);
+    assert_eq!(dialog_focus(&h, "long").0.as_deref(), Some("end"));
+    assert!(h.app.text().contains("row 44"), "the field is below the screen:\n{}", h.app.text());
 }
 
 /// Shows the probe's dialog `same` as an earlier activation of the plugin did, before a reload, then changes it in
@@ -1857,37 +1637,33 @@ fn dialog_changed_in_place(h: &Harness, change: impl FnOnce(abi::Dialog) -> abi:
 
 #[test]
 fn a_dialog_changed_in_place_by_a_waiting_request_tells_it_closed() {
-    for carrier in DIALOG_NATIVE {
-        let h = dialog_open(carrier);
-        dialog_changed_in_place(&h, |shown| abi::Dialog::Dismissable {
-            dialog: Box::new(shown),
-            dismissed: abi::Action::Command { name: "dlg.dismissed".into(), input: None },
-        });
-        h.app.press("escape");
-        dialog_turns(&h);
-        assert!(!h.app.text().contains("same body"), "{carrier:?}: escape left the dialog open");
-        assert!(
-            dialog_seen(&h, carrier).contains(&"dismissed".to_owned()),
-            "{carrier:?}: {:?}",
-            dialog_seen(&h, carrier)
-        );
-    }
+    let h = dialog_open(DialogCarrier::Linked);
+    dialog_changed_in_place(&h, |shown| abi::Dialog::Dismissable {
+        dialog: Box::new(shown),
+        dismissed: abi::Action::Command { name: "dlg.dismissed".into(), input: None },
+    });
+    h.app.press("escape");
+    dialog_turns(&h);
+    assert!(!h.app.text().contains("same body"), "escape left the dialog open");
+    assert!(
+        dialog_seen(&h, DialogCarrier::Linked).contains(&"dismissed".to_owned()),
+        "{:?}",
+        dialog_seen(&h, DialogCarrier::Linked)
+    );
 }
 
 #[test]
 fn a_dialog_changed_in_place_by_a_later_activation_leaves_no_owner() {
-    for carrier in DIALOG_NATIVE {
-        let h = dialog_open(carrier);
-        let generation = dialog_changed_in_place(&h, |shown| shown);
-        h.app.press("escape");
-        dialog_turns(&h);
-        assert!(!h.app.text().contains("same body"), "{carrier:?}: escape left the dialog open");
-        h.tui.dialogs.replace(|cx| opentui::prelude::View::new(&cx.app), None, Default::default());
-        let close = abi::Dialog::Close { key: String::new() };
-        opencode_tui::plugins::panel::show(&h.tui, "test.dlg", generation, close);
-        assert!(h.tui.dialogs.is_open(), "{carrier:?}: the plugin closed the host's dialog");
-        h.tui.dialogs.clear();
-    }
+    let h = dialog_open(DialogCarrier::Linked);
+    let generation = dialog_changed_in_place(&h, |shown| shown);
+    h.app.press("escape");
+    dialog_turns(&h);
+    assert!(!h.app.text().contains("same body"), "escape left the dialog open");
+    h.tui.dialogs.replace(|cx| opentui::prelude::View::new(&cx.app), None, Default::default());
+    let close = abi::Dialog::Close { key: String::new() };
+    opencode_tui::plugins::panel::show(&h.tui, "test.dlg", generation, close);
+    assert!(h.tui.dialogs.is_open(), "the plugin closed the host's dialog");
+    h.tui.dialogs.clear();
 }
 
 #[cfg(feature = "ts")]
@@ -1919,7 +1695,6 @@ export default {{ id: "example.dlgraw", setup(api) {{
     let external = opencode_tui::plugins::host::External {
         config_dir: root.path().join("config"),
         cwd: root.path().to_path_buf(),
-        dev: Vec::new(),
     };
     opencode_tui::plugins::host::external_with(&harness.tui, external, Some(config));
     let pipe = crate::plugin_pipe::Pipe { harness, root: opencode_util::temp::tempdir().unwrap() };

@@ -791,7 +791,7 @@ export type LocationRef = {
     workspace: string?,
 }
 
---- What `create` answers: everything the plugin registered in its setup.
+--- Everything the plugin registered in its setup.
 export type Manifest = {
     id: string,
     commands: { Command },
@@ -826,13 +826,6 @@ export type Member = {
     updated: number,
     parent: string?,
     jobs: number?,
-}
-
---- What a library's `describe` answers: its nonempty ID, which the host reads before any `create`.
-export type Metadata = {
-    id: string,
-    version: string?,
-    requires: { string }?,
 }
 
 export type Mode = ("dark" | "light")

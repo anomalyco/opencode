@@ -96,18 +96,9 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
         server_executable: connection.executable(),
         auto: args.permissions.auto(),
         environment: local.then(opencode_store::environment::session_environment),
-        contain: opencode_tui::plugins::contain::Contain {
-            record: crate::contain::record(),
-            watch: true,
-            unsupervised: crate::contain::unsupervised(),
-        },
         ..Args::default()
     };
-    let plugins = External {
-        config_dir: paths.config.clone(),
-        cwd: directory.clone(),
-        dev: context.dev.iter().map(|library| library.to_string_lossy().into_owned()).collect(),
-    };
+    let plugins = External { config_dir: paths.config.clone(), cwd: directory.clone() };
     // The TUI's tasks run on this runtime: `App::runtime` uses the multi-threaded runtime it starts in.
     let _guard = runtime.enter();
     opencode_tui::run(Launch {
@@ -121,7 +112,6 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
             continue_: args.continue_,
             events: true,
             builtins: vec![opencode_mermaid::plugin().into(), opencode_latex::plugin().into()],
-            abi_builtins: false,
         },
         args: tui_args,
         keep: Box::new(connection),
