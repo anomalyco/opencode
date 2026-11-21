@@ -112,6 +112,11 @@ export interface Snapshot {
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
+  /**
+   * The expression a Code Mode program calls a tool by (`tools.opencode.session.search`), when `name` is the path or
+   * registry ID of one of this snapshot's Code Mode tools.
+   */
+  readonly codeModeExpression?: (name: string) => string | undefined
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Tool") {}
@@ -363,7 +368,15 @@ const layer = Layer.effect(
                 return { tool, inventory, catalog: entry.value, definition: entry.definition }
               })()
           return {
-            ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog }),
+            ...(codemode === undefined
+              ? {}
+              : {
+                  codeModeCatalog: codemode.catalog,
+                  codeModeExpression: (name: string) => {
+                    const found = CodeModeTool.find(codemode.inventory, name)
+                    return found && toolExpression(CodeModeTool.qualifiedName(found.registration))
+                  },
+                }),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
@@ -379,26 +392,9 @@ const layer = Layer.effect(
                 progress: input.progress ?? (() => Effect.void),
                 cancel: input.cancel,
               }
-              // Weaker models sometimes call a Code Mode tool at the top level, by its path or registry ID. When this
-              // request offered execute, run the program the model should have written instead.
-              const program =
-                codemode &&
-                !direct.has(input.call.name) &&
-                input.call.name !== "execute" &&
-                (!input.definitions || input.definitions.has("execute"))
-                  ? CodeModeTool.find(codemode.inventory, input.call.name)
-                  : undefined
-              const expression = program && toolExpression(CodeModeTool.qualifiedName(program.registration))
-              const call = expression
-                ? {
-                    ...input.call,
-                    name: "execute",
-                    input: { code: `return await ${expression}(${JSON.stringify(input.call.input ?? {})})` },
-                  }
-                : input.call
-              const initialName = input.definitions?.get(call.name)?.name ?? call.name
+              const initialName = input.definitions?.get(input.call.name)?.name ?? input.call.name
               const initial = initialName === "execute" && codemode ? codemode.tool : direct.get(initialName)
-              const event = yield* beforeExecute(call.name, initial, call.input, context)
+              const event = yield* beforeExecute(input.call.name, initial, input.call.input, context)
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
               if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
@@ -407,10 +403,7 @@ const layer = Layer.effect(
               if (name === "execute" && codemode) {
                 const run = (ctx: Tool.Context) => executeTool(codemode.tool, name, event.input, ctx)
                 const background = yield* CodeModeJob.Current
-                const result = yield* background ? background(context, run) : run(context)
-                if (!expression) return result
-                const note = `Note: ${expression} is a Code Mode tool, so this call ran inside execute as \`await ${expression}(input)\`. Call it there next time.`
-                return { ...result, content: [{ type: "text" as const, text: note }, ...result.content] }
+                return yield* background ? background(context, run) : run(context)
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)

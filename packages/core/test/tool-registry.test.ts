@@ -625,38 +625,20 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("runs a Code Mode tool called at the top level as an execute program and says so", () =>
+  it.effect("gives the program expression for a Code Mode tool's path or registry ID", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      const hooks = yield* PluginHooks.Service
       yield* transform(service, { echo: make(), "kebab-echo": make() }, { namespace: "acme.tools" })
-      const seen: Array<{ tool: string; codemode: boolean }> = []
-      yield* hooks.register("tool", "execute.before", (event) =>
-        Effect.sync(() => void seen.push({ tool: event.tool, codemode: event.codemode })),
-      )
+      yield* transform(service, { direct: make() }, { codemode: false })
       const snapshot = yield* service.snapshot()
-      for (const [name, expression] of [
-        ["acme.tools.echo", "tools.acme.tools.echo"],
-        ["acme_tools_echo", "tools.acme.tools.echo"],
-        ["acme.tools.kebab-echo", 'tools.acme.tools["kebab-echo"]'],
-      ]) {
-        const result = yield* snapshot.execute(call(name))
-        expect(result.output).toMatchObject({ output: JSON.stringify({ text: name }) })
-        expect(result.content[0]).toEqual({
-          type: "text",
-          text: expect.stringContaining(`ran inside execute as \`await ${expression}(input)\``),
-        })
-      }
-      // Plugins see an execute call, then the program's call to the tool, as for any program.
-      expect(seen.slice(0, 2)).toEqual([
-        { tool: "execute", codemode: false },
-        { tool: "acme_tools_echo", codemode: true },
-      ])
-      // A tool this request doesn't offer stays unknown.
+      expect(snapshot.codeModeExpression?.("acme.tools.echo")).toBe("tools.acme.tools.echo")
+      expect(snapshot.codeModeExpression?.("acme_tools_echo")).toBe("tools.acme.tools.echo")
+      expect(snapshot.codeModeExpression?.("acme.tools.kebab-echo")).toBe('tools.acme.tools["kebab-echo"]')
+      for (const name of ["direct", "execute", "missing", "tools.acme.tools.echo"])
+        expect(snapshot.codeModeExpression?.(name)).toBeUndefined()
+      // A tool this request doesn't offer has no expression.
       const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
-      expect((yield* denied.execute(call("acme.tools.echo")).pipe(Effect.flip)).message).toContain(
-        'No tool named "acme.tools.echo"',
-      )
+      expect(denied.codeModeExpression?.("acme.tools.echo")).toBeUndefined()
     }),
   )
 
