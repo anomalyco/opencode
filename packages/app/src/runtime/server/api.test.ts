@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test"
-import { authFromToken, authTokenFromCredentials, createApiForServer, fileStreamUrl } from "./api"
+import {
+  authFromToken,
+  authTokenFromCredentials,
+  createApiForServer,
+  fileReadHeaders,
+  fileReadUrl,
+  fileStreamUrl,
+} from "./api"
 
 test.each([
   [btoa("opencode:secret"), { password: "secret" }],
@@ -22,6 +29,17 @@ test("fileStreamUrl never puts a credential in a media URL", () => {
   expect(fileStreamUrl({ url: "http://127.0.0.1:4096" }, input)).toBe(
     "http://127.0.0.1:4096/api/fs/read/clips/final%20cut.mp4?location%5Bdirectory%5D=%2Fwork%2Fapp",
   )
+})
+
+test("fileReadUrl and fileReadHeaders keep credentials in the Authorization header", () => {
+  const input = { path: "reports/q4 data.csv", directory: "/work/app" }
+  expect(fileReadUrl({ url: "http://127.0.0.1:4096", password: "secret" }, input)).toBe(
+    "http://127.0.0.1:4096/api/fs/read/reports/q4%20data.csv?location%5Bdirectory%5D=%2Fwork%2Fapp",
+  )
+  expect(fileReadHeaders({ url: "http://127.0.0.1:4096" })).toBeUndefined()
+  expect(fileReadHeaders({ url: "http://127.0.0.1:4096", password: "secret" })).toEqual({
+    Authorization: `Basic ${btoa("opencode:secret")}`,
+  })
 })
 
 test("only message and inbox reads ask for media refs, so other cross-origin requests stay unpreflighted", async () => {

@@ -54,6 +54,8 @@ export function createPreviewFind(input: { root: () => HTMLElement | undefined; 
       return
     }
 
+    // The query goes out first: a table preview renders the rows it matches before the ranges are read.
+    update({ query, index })
     local.ranges = query ? documentRanges(current.target, query) : []
     const at = local.ranges.length === 0 ? 0 : Math.min(index, local.ranges.length - 1)
     update({ query, index: at, count: local.ranges.length })

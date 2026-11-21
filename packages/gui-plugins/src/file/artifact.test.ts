@@ -13,6 +13,10 @@ describe("binary content helpers", () => {
     copy[0] = 9
     expect(content.bytes[0]).toBe(0)
   })
+
+  test("uses explicit size on text content without re-encoding", () => {
+    expect(contentBytes({ type: "text", content: "a,b\n1,2\n", size: 72_351_744, truncated: true })).toBe(72_351_744)
+  })
 })
 
 describe("parseDelimited", () => {
@@ -23,14 +27,83 @@ describe("parseDelimited", () => {
       ["Smith, J", 'says "hi"\nand more'],
       ["plain", ""],
     ])
-    expect(parsed.total).toBe(3)
     expect(parsed.columns).toBe(2)
+    expect(parsed.truncated).toBe(false)
+    expect(parsed.total).toBe(3)
   })
 
-  test("counts rows past the limit without keeping them", () => {
-    const parsed = parseDelimited("a\tb\n1\t2\n3\t4\n5\t6", "\t", 2)
-    expect(parsed.rows).toHaveLength(2)
-    expect(parsed.total).toBe(4)
+  test("keeps rows up to the limit and counts the rest of a whole small file", () => {
+    const exact = parseDelimited("a\tb\n1\t2\n\n\r\n", "\t", 2)
+    expect(exact).toEqual({
+      rows: [
+        ["a", "b"],
+        ["1", "2"],
+      ],
+      columns: 2,
+      truncated: false,
+      total: 2,
+    })
+
+    const over = parseDelimited("a\tb\n1\t2\n3\t4\n5\t6", "\t", 2)
+    expect(over).toEqual({
+      rows: [
+        ["a", "b"],
+        ["1", "2"],
+      ],
+      columns: 2,
+      truncated: true,
+      total: 4,
+    })
+  })
+
+  test("drops incomplete trailing rows and unclosed quotes on byte-truncated previews", () => {
+    expect(parseDelimited("a,b\n1,2\n3,part", ",", 100, { truncated: true })).toEqual({
+      rows: [
+        ["a", "b"],
+        ["1", "2"],
+      ],
+      columns: 2,
+      truncated: true,
+    })
+
+    expect(parseDelimited('a,b\n1,2\n"unclosed\nline', ",", 100, { truncated: true })).toEqual({
+      rows: [
+        ["a", "b"],
+        ["1", "2"],
+      ],
+      columns: 2,
+      truncated: true,
+    })
+
+    expect(parseDelimited("a,b\n1,2\n", ",", 100, { truncated: true })).toEqual({
+      rows: [
+        ["a", "b"],
+        ["1", "2"],
+      ],
+      columns: 2,
+      truncated: true,
+    })
+
+    expect(parseDelimited("a,b,c", ",", 100, { truncated: true })).toEqual({
+      rows: [["a", "b", "c"]],
+      columns: 3,
+      truncated: true,
+    })
+  })
+
+  test("stops early on multi-megabyte delimited text once the row limit is reached", () => {
+    const header = Array.from({ length: 22 }, (_, i) => `col_${i}`).join(",")
+    const row = Array.from({ length: 22 }, (_, i) => `value_${i}_0123456789abcdef`).join(",")
+    // ~20 MiB CSV (35,000 rows x 22 columns); without early stop this scans every character.
+    const large = `${header}\n${`${row}\n`.repeat(35_000)}`
+
+    const parsed = parseDelimited(large, ",", 1001)
+    expect(parsed.rows).toHaveLength(1001)
+    expect(parsed.columns).toBe(22)
+    expect(parsed.truncated).toBe(true)
+    expect(parsed.total).toBeUndefined()
+    expect(parsed.rows[0]?.[0]).toBe("col_0")
+    expect(parsed.rows[1000]?.[21]).toBe("value_21_0123456789abcdef")
   })
 })
 
