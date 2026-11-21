@@ -951,15 +951,11 @@ export const dict = {
     "Иҷозатро тафтиш карда натавонист. Пайвасти серверро санҷед ва аз нав кӯшиш кунед.",
   "provider.connect.console.startFailed":
     "Воридшавиро оғоз карда натавонист. Пайвасти серверро санҷед ва аз нав кӯшиш кунед.",
-  "provider.connect.models.title": "Ба {{provider}} пайваст шуд",
-  "provider.connect.models.description": "Барои оғоз моделеро интихоб кунед. Моделҳоро ҳар вақт иваз карда метавонед.",
-  "provider.connect.models.available": "Моделҳои дастрас",
   "provider.connect.chatgptWelcome.title": "ChatGPT пайваст шуд",
   "provider.connect.chatgptWelcome.description":
     "Дархостҳои мувофиқ дар OpenCode метавонанд нақшаи ChatGPT-и шуморо истифода баранд.",
   "provider.connect.chatgptWelcome.usage": "Истифодаро дар танзимоти ChatGPT идора кунед",
   "provider.connect.chatgptWelcome.confirm": "Фаҳмидам",
-  "provider.connect.models.list": "Моделҳои дастрас аз {{provider}}",
   "provider.connect.chatgptUsageLimit.title": "Ба ҳадди истифодаи ChatGPT расидед",
   "provider.connect.chatgptUsageLimit.description": "Истифода ва ҳадҳои худро дар танзимоти ChatGPT санҷед.",
   "provider.connect.chatgptUsageLimit.manage": "Идораи истифода",
