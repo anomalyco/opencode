@@ -2,6 +2,7 @@ import type { ProviderPackage } from "../provider-package.js"
 import { VeniceChat } from "../protocols/venice-chat.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
+import { VeniceE2EE } from "./venice/e2ee.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
@@ -42,7 +43,15 @@ const responsesRoute = Route.make({
   transport: OpenResponses.httpTransport,
   options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
-export const routes = [route, responsesRoute]
+const e2eeRoute = Route.make({
+  id: "venice-e2ee-chat",
+  provider: id,
+  providerMetadataKey: "venice",
+  protocol: VeniceChat.protocol,
+  endpoint: Endpoint.path("/chat/completions", { baseURL }),
+  transport: VeniceE2EE.transport,
+})
+export const routes = [route, responsesRoute, e2eeRoute]
 
 export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, queryParams, ...rest } = input
@@ -51,8 +60,9 @@ export const configure = (input: Config = {}) => {
     endpoint: { baseURL: endpoint ?? baseURL, query: queryParams },
     auth: AuthOptions.bearer(input, "VENICE_API_KEY"),
   }
+  // ponytail: Venice names every E2EE model `e2ee-*`; switch to `supportsE2EE` from /models if that ever drifts.
   const chat = (modelID: string | ModelID) =>
-    route.with(options).model<ChatOptionsInput>({
+    (modelID.startsWith("e2ee-") ? e2eeRoute.with(options) : route.with(options)).model<ChatOptionsInput>({
       id: modelID,
       compatibility: VeniceChat.compatibility,
       capabilities: VeniceChat.capabilities,
