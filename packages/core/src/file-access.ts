@@ -74,7 +74,7 @@ export function externalDirectoryRequest(targets: readonly Target[]) {
 export const key = (target: { readonly absolute: string; readonly environment: { readonly id: Environment.ID } }) =>
   `${target.environment.id.length}:${target.environment.id}:${target.absolute}`
 
-/** The rule "always" saves for a file action: every file on the target's machine, which only that machine's rules allow. */
+/** The rule "always" saves for a file action: every file on the target's machine. */
 export const always = (target: Target) => (target.machine ? `${target.machine}:*` : "*")
 
 export type Invocation = Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id">

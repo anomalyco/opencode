@@ -595,6 +595,8 @@ export const dict = {
   "notification.session.responseReady.title": "Response ready",
   "notification.session.error.title": "Session error",
   "notification.session.error.fallbackDescription": "An error occurred",
+  "notification.taskbar.badge.one": "{{count}} session needs you",
+  "notification.taskbar.badge.other": "{{count}} sessions need you",
 
   "home.title": "Home",
   "home.projects": "Projects",

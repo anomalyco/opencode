@@ -437,6 +437,7 @@ export function createServerNotificationState(input: {
         ...list.filter((request) => request.id !== requestID),
         { id: requestID, pending: () => !!pending() },
       ])
+      void platform.requestAttention?.().catch(() => undefined)
 
       return platform.notify(
         language.t(requestTitles[kind]),

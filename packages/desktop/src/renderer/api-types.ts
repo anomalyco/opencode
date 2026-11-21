@@ -18,6 +18,7 @@ export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(signal?: AbortSignal): Promise<ServerReadyData>
   onSidecarChanged(cb: (data: ServerReadyData) => void): () => void
+  onSystemResumed(cb: () => void): () => void
   readyDeepLinks(): void
   acknowledgeDeepLinks(attempt: number): void
   isFirstLaunchOnboardingPending(): Promise<boolean>
@@ -55,6 +56,7 @@ export type ElectronAPI = {
   readClipboardImage(): Promise<ClipboardImage | null>
   writeClipboardText(text: string): Promise<void>
   getWindowFocused(): Promise<boolean>
+  requestAttention(): Promise<void>
   requestMicrophone(): Promise<boolean>
   setVoiceCallActive(active: boolean): Promise<void>
   getWindowFullscreen(): Promise<boolean>
@@ -72,6 +74,7 @@ export type ElectronAPI = {
   onZoomChanged(cb: (zoom: { factor: number; level: DesktopZoomLevel }) => void): () => void
   setTitlebar(theme: TitlebarTheme): Promise<void>
   setTrafficLightsPosition(position: { x: number; y: number }): Promise<void>
+  setTaskbarBadge(count: number, description: string): Promise<void>
   setTaskbarProgress(mode: TaskbarProgressMode): Promise<void>
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>
   setBackgroundColor(color: string): Promise<void>

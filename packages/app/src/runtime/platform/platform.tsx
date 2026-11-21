@@ -68,6 +68,9 @@ type PlatformBase = {
   /** Take back the system notification sent with this tag, when it is still shown (desktop only) */
   dismissNotification?(tag: string): void
 
+  /** Draw the user to a window in the background, as a flashing taskbar button on Windows (desktop only) */
+  requestAttention?(): Promise<void>
+
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?<Value>(
     opts: OpenAttachmentPickerOptions,
@@ -80,8 +83,17 @@ type PlatformBase = {
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
 
+  /**
+   * Observe `opencode://` links opened with the app (desktop only). Links that arrived before the first listener
+   * are delivered to it at once.
+   */
+  onDeepLinks?(listener: (urls: string[]) => void): () => void
+
   /** Observe native drag cancellation that does not reach the renderer event loop. */
   onDragCancel?(callback: () => void): () => void
+
+  /** Observe the machine waking from sleep, when server event streams may be dead without knowing it (desktop only) */
+  onSystemResume?(callback: () => void): () => void
 
   /** Open a native save file dialog and write content to the selected path (desktop only) */
   saveFile?(opts: SaveFilePickerOptions, content: string): Promise<boolean>

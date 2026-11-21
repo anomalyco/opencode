@@ -20,6 +20,14 @@ export const MachineInfo = Schema.Struct({
   paired: Schema.Boolean,
   os: Schema.optionalKey(Schema.String),
   arch: Schema.optionalKey(Schema.String),
+  connection: Schema.optionalKey(
+    Schema.Struct({
+      kind: Schema.Literals(["websocket", "iroh"]),
+      path: Schema.optionalKey(Schema.Literals(["direct", "relayed"])),
+      /** Round-trip time in milliseconds. */
+      rtt: Schema.optionalKey(Schema.Number),
+    }),
+  ),
 }).annotate({ identifier: "Machine.Info" })
 export type MachineInfo = typeof MachineInfo.Type
 
@@ -40,6 +48,7 @@ export const MachineInvite = Schema.Struct({
   name: Schema.String,
   join: Schema.String,
   expires: Schema.Int,
+  reach: Schema.Array(Schema.Union([MachineReach, Schema.Struct({ type: Schema.Literal("iroh") })])),
 }).annotate({ identifier: "Machine.Invite" })
 export type MachineInvite = typeof MachineInvite.Type
 
