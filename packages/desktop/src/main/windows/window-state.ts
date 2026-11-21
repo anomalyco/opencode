@@ -123,7 +123,13 @@ export type ManagedWindow = Pick<
 
 // Tracks the window until it closes and writes the final state then. Bounds are recorded while
 // the window is in its normal state so a maximized window restores to its previous size.
-export function manageWindowState(win: ManagedWindow, file: string, initial: WindowState, displays: Displays) {
+export function manageWindowState(
+  win: ManagedWindow,
+  file: string,
+  initial: WindowState,
+  displays: Displays,
+  onError: (error: Error) => void,
+) {
   const state = { ...initial }
 
   if (state.isMaximized) win.maximize()
@@ -171,9 +177,14 @@ export function manageWindowState(win: ManagedWindow, file: string, initial: Win
     win.off("move", changed)
     win.off("close", update)
     win.off("closed", closed)
-    mkdirSync(path.dirname(file), { recursive: true })
-    writeFileSync(`${file}.tmp`, JSON.stringify(state))
-    renameSync(`${file}.tmp`, file)
+
+    try {
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(`${file}.tmp`, JSON.stringify(state))
+      renameSync(`${file}.tmp`, file)
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error(String(error)))
+    }
   }
 
   win.on("resize", changed)
