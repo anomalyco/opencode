@@ -160,4 +160,20 @@ describe("desktop notifications", () => {
     expect(events).toEqual(input.events)
     expect(created.map((notification) => notification.icon)).toEqual([input.icon, input.icon])
   })
+
+  test("on windows a tagged toast that timed out into the notification center is still taken back", async () => {
+    globalThis.Notification = FakeNotification
+
+    const desktop = createDesktopNotify(
+      { getWindowFocused: async () => false, showWindow: async () => {}, setWindowFocus: async () => {} },
+      "windows",
+    )
+
+    await desktop.notify("Response ready", "Fix login", undefined, { tag: "server\0session:ses_1" })
+    // Windows fires `close` when the toast leaves the screen for the notification center.
+    created[0]?.onclose?.call(created[0], new Event("close"))
+    desktop.dismissNotification?.("server\0session:ses_1")
+
+    expect(events).toEqual(["created:Response ready:Fix login", "notification.close:server\0session:ses_1"])
+  })
 })

@@ -48,7 +48,7 @@ export function createDesktopNotify(
 
       activeNotifications.add(notification)
 
-      if (tag) tagged.set(tag, notification)
+      if (tag) remember(tag, notification)
 
       const release = () => {
         activeNotifications.delete(notification)
@@ -59,7 +59,9 @@ export function createDesktopNotify(
         notification.onerror = null
       }
 
-      notification.onclose = release
+      // On Windows a toast that times out fires `close` too, but it still sits in the notification center: a tagged one
+      // stays known until it is replaced or dismissed, so an answer can still take it back.
+      notification.onclose = tag ? () => activeNotifications.delete(notification) : release
       notification.onerror = release
 
       notification.onclick = () => {
@@ -71,8 +73,21 @@ export function createDesktopNotify(
     },
     dismissNotification: (tag) => {
       tagged.get(tag)?.close()
+      tagged.delete(tag)
     },
   }
+}
+
+function remember(tag: string, notification: Notification) {
+  tagged.delete(tag)
+
+  if (tagged.size >= MAX_ACTIVE_NOTIFICATIONS) {
+    const oldest = tagged.keys().next().value
+
+    if (oldest !== undefined) tagged.delete(oldest)
+  }
+
+  tagged.set(tag, notification)
 }
 
 function clip(value: string | undefined) {
