@@ -87,7 +87,9 @@ This matches both `git status` and `git status --short`.
 
 OpenCode combines rules in order and uses the last match. Lower-priority
 configuration is loaded first, global rules are appended next, and agent rules
-are appended last.
+are appended after them. [Managed configuration](/config#locations) is applied
+last, so its rules override user and project rules, including an agent's own
+rules.
 
 ```jsonc
 {

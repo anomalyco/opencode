@@ -8,6 +8,7 @@ import { Config } from "@opencode/core/config"
 import { Directory, Document, Event, Info } from "@opencode/schema/config"
 import { Model } from "@opencode/schema/model"
 import { ConfigAgentPlugin } from "@opencode/core/config/plugin/agent"
+import { ConfigManaged } from "@opencode/core/config/managed"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -363,6 +364,101 @@ permissions: [{ action: edit, resource: "*", effect: deny }]`,
         { action: "edit", resource: "*", effect: "allow" },
       ])
       expect(yield* agents.get(Agent.ID.make("removed"))).toBeUndefined()
+    }),
+  )
+
+  it.effect("applies managed permissions after project agent permissions", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const build = Agent.ID.make("build")
+      const general = Agent.ID.make("general")
+      yield* agents.transform((editor) => {
+        editor.update(build, () => {})
+        editor.update(general, () => {})
+      })
+
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            permissions: [{ action: "read", resource: "*", effect: "allow" }],
+            agents: {
+              build: {
+                permissions: [
+                  { action: "example_mcp_tool", resource: "*", effect: "allow" },
+                  { action: "skill", resource: "example*", effect: "allow" },
+                ],
+              },
+            },
+          }),
+        }),
+        new ConfigManaged.Document({
+          type: "document",
+          info: decode({
+            permissions: [
+              { action: "example_mcp_tool", resource: "*", effect: "ask" },
+              { action: "skill", resource: "example*", effect: "deny" },
+            ],
+            agents: { audited: { description: "Managed agent", mode: "subagent" } },
+          }),
+        }),
+      ]
+
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provide(Config.testLayer(entries)),
+      )
+
+      const buildAgent = yield* agents.get(build)
+      if (!buildAgent) throw new Error("expected configured build agent")
+      expect(buildAgent.permissions).toEqual([
+        ...defaultPermissions,
+        { action: "read", resource: "*", effect: "allow" },
+        { action: "example_mcp_tool", resource: "*", effect: "allow" },
+        { action: "skill", resource: "example*", effect: "allow" },
+        { action: "example_mcp_tool", resource: "*", effect: "ask" },
+        { action: "skill", resource: "example*", effect: "deny" },
+      ])
+      expect(Permission.evaluate("example_mcp_tool", "run", buildAgent.permissions).effect).toBe("ask")
+      expect(Permission.evaluate("skill", "example-skill", buildAgent.permissions).effect).toBe("deny")
+
+      const generalAgent = yield* agents.get(general)
+      expect(Permission.evaluate("skill", "example-skill", generalAgent?.permissions ?? []).effect).toBe("deny")
+
+      // An agent the managed layer creates still inherits the lower layers' top-level rules.
+      expect((yield* agents.get(Agent.ID.make("audited")))?.permissions).toEqual([
+        ...defaultPermissions,
+        { action: "read", resource: "*", effect: "allow" },
+        { action: "example_mcp_tool", resource: "*", effect: "ask" },
+        { action: "skill", resource: "example*", effect: "deny" },
+      ])
+    }),
+  )
+
+  it.live("keeps a managed Markdown agent's own rules above managed top-level rules", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const fs = yield* FSUtil.Service
+      yield* fs.makeDirectory(path.join(tmp.path, "agents"))
+      yield* fs.writeFileString(
+        path.join(tmp.path, "agents", "auditor.md"),
+        "---\npermissions:\n  - action: example_mcp_tool\n    resource: '*'\n    effect: allow\n---\nAudit.",
+      )
+      const agents = yield* Agent.Service
+      const entries = [
+        new ConfigManaged.Document({
+          type: "document",
+          info: decode({ permissions: [{ action: "example_mcp_tool", resource: "*", effect: "ask" }] }),
+        }),
+        new ConfigManaged.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
+      ]
+
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provide(Config.testLayer(entries)),
+      )
+
+      const auditor = yield* agents.get(Agent.ID.make("auditor"))
+      if (!auditor) throw new Error("expected managed Markdown agent")
+      expect(Permission.evaluate("example_mcp_tool", "run", auditor.permissions).effect).toBe("allow")
     }),
   )
 
