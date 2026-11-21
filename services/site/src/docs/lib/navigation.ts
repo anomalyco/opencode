@@ -164,7 +164,6 @@ export const docsSections: DocsSection[] = [
           { title: "Overview", slug: "console/api" },
           { title: "Models", slug: "console/api/models" },
           { title: "Inference", slug: "console/api/inference" },
-          { title: "Embeddings", slug: "console/api/embeddings" },
           { title: "Providers", slug: "console/api/providers" },
         ],
       },
