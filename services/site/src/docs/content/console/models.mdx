@@ -247,6 +247,16 @@ curl https://opencode.ai/inference/openai/v1/images/generations \
 Google takes its native `contents` and `generationConfig`, and xAI its native options such as `resolution` and
 `quality`. OpenAI Images and xAI Images also accept edits at `/images/edits`.
 
+### Video models
+
+`gemini-omni-1.2-flash` (Gemini Omni 1.2 Flash) generates and edits video from text, image, and video input, and
+returns the result inline as an MP4. Let OpenCode's `experimental_video_generate` tool use the model by setting
+`experimental.video_generate.model`, for example `opencode/gemini-omni-1.2-flash`.
+
+Delivery through the Files API or `gs://` URIs, audio input, and document input aren't available through OpenCode.
+You can continue an earlier Omni task with a follow-up request, but only in the same workspace and only once that
+task has completed successfully.
+
 ## Pricing
 
 Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**, with image models priced per image where
@@ -384,6 +394,12 @@ models to generate session titles.
 | GPT Image 2.5 Sunburst | $1.00 / image               | Plus $8 / $30 per 1M input / output tokens, and $2 per 1M cached input tokens.      |
 | Nano Banana 2.1        | $1.50 / $7.50 / $30.00 per 1M tokens | Input / text output / image output. About $0.034 per 1K image, $0.050 per 2K, $0.113 per 4K. |
 | Grok Imagine Image 2.0 | $0.04 / image               | $0.01 per input image; quality and resolution can raise the output price to $0.05–$0.08. |
+
+### Video pricing
+
+| Model                 | Price                                | Notes                                                                    |
+| --------------------- | ------------------------------------ | ------------------------------------------------------------------------ |
+| Gemini Omni 1.2 Flash | $1.50 / $9.00 / $12.00 per 1M tokens | Input (text, image, and video) / text and thought output / video output. |
 
 ### Free models
 
