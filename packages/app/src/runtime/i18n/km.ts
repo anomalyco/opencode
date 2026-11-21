@@ -1178,7 +1178,6 @@ export const dict = {
   "common.closeTabsBelow": "បិទផ្ទាំងនៅខាងក្រោម",
   "sidebar.inbox.empty": "សម័យដែលអ្នកធ្វើការនឹងបង្ហាញនៅទីនេះ",
   "sidebar.inbox.section.needsAttention": "ត្រូវការការយកចិត្តទុកដាក់",
-  "sidebar.inbox.section.unread": "មិនទាន់អាន",
   "sidebar.inbox.showMore": "បង្ហាញច្រើនទៀត",
   "sidebar.inbox.showLess": "បង្ហាញតិច",
   "sidebar.inbox.announce.approval": "{{title}} ត្រូវការការយល់ព្រម។",

@@ -121,13 +121,12 @@ export function SidebarInbox() {
       .filter((entry) => entry.status === "approval" || entry.status === "input")
       .toSorted((a, b) => (a.since ?? Infinity) - (b.since ?? Infinity))
 
-    const unread = active
-      .filter((entry) => entry.status === "done" || entry.status === "failed")
+    // Unread results stay in Recent at their own place, so reading one doesn't move it.
+    const settled = active
+      .filter((entry) => entry.status === "done" || entry.status === "failed" || entry.status === "ready")
       .toSorted((a, b) => (b.since ?? 0) - (a.since ?? 0))
 
-    const read = active.filter((entry) => entry.status === "ready").toSorted((a, b) => (b.since ?? 0) - (a.since ?? 0))
-
-    const recent = state.recentExpanded ? read : read.slice(0, RECENT_LIMIT)
+    const recent = state.recentExpanded ? settled : settled.slice(0, RECENT_LIMIT)
 
     // `time.updated` moves with every message of a run, so keep Working ordered by run start.
     const working = active.filter((entry) => entry.status === "working").toSorted(compareWorking)
@@ -136,11 +135,10 @@ export function SidebarInbox() {
 
     return {
       needs,
-      unread,
       recent,
-      more: read.length > RECENT_LIMIT,
+      more: settled.length > RECENT_LIMIT,
       current:
-        current && ![...needs, ...unread, ...recent, ...working].some((entry) => entry.key === current.key)
+        current && ![...needs, ...recent, ...working].some((entry) => entry.key === current.key)
           ? [current]
           : [],
       archived: list.some(inboxArchived),
@@ -206,7 +204,7 @@ export function SidebarInbox() {
   createEffect(() => {
     const visible = sections()
 
-    inbox.loadBranches([...visible.needs, ...visible.current, ...visible.working, ...visible.unread, ...visible.recent])
+    inbox.loadBranches([...visible.needs, ...visible.current, ...visible.working, ...visible.recent])
   })
 
   // Takes an accessor so only the For tracks the section. Reading it here would recreate the For, remounting every
@@ -305,16 +303,6 @@ export function SidebarInbox() {
         return sections().needs.length
       },
       rows: () => rows(() => sections().needs),
-    },
-    {
-      id: "unread",
-      get label() {
-        return language.t("sidebar.inbox.section.unread")
-      },
-      get count() {
-        return sections().unread.length
-      },
-      rows: () => rows(() => sections().unread),
     },
     {
       id: "recent",

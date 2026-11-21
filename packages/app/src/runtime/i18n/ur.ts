@@ -1202,7 +1202,6 @@ export const dict = {
   "common.closeTabsBelow": "نیچے کے ٹیبز بند کریں",
   "sidebar.inbox.empty": "جن سیشنز پر آپ کام کریں گے وہ یہاں ظاہر ہوں گے",
   "sidebar.inbox.section.needsAttention": "توجہ درکار",
-  "sidebar.inbox.section.unread": "نہ پڑھے گئے",
   "sidebar.inbox.showMore": "مزید دکھائیں",
   "sidebar.inbox.showLess": "کم دکھائیں",
   "sidebar.inbox.announce.approval": "⁨{{title}}⁩ کو منظوری درکار ہے۔",

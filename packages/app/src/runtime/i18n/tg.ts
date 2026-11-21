@@ -1205,7 +1205,6 @@ export const dict = {
   "common.closeTabsBelow": "Пӯшидани варақаҳои поён",
   "sidebar.inbox.empty": "Сессияҳое, ки бо онҳо кор мекунед, дар ин ҷо пайдо мешаванд",
   "sidebar.inbox.section.needsAttention": "Диққат лозим",
-  "sidebar.inbox.section.unread": "Хонданашуда",
   "sidebar.inbox.showMore": "Бештар нишон диҳед",
   "sidebar.inbox.showLess": "Камтар нишон диҳед",
   "sidebar.inbox.announce.approval": "{{title}} тасдиқ талаб мекунад.",

@@ -1221,7 +1221,6 @@ export const dict = {
   "common.closeTabsBelow": "Zavřít karty níže",
   "sidebar.inbox.empty": "Zde se zobrazí relace, na kterých pracujete",
   "sidebar.inbox.section.needsAttention": "Vyžaduje pozornost",
-  "sidebar.inbox.section.unread": "Nepřečtené",
   "sidebar.inbox.showMore": "Zobrazit více",
   "sidebar.inbox.showLess": "Zobrazit méně",
   "sidebar.inbox.announce.approval": "{{title}} vyžaduje schválení.",

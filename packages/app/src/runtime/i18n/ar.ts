@@ -1247,7 +1247,6 @@ export const dict = {
   "common.closeTabsBelow": "إغلاق علامات التبويب أدناه",
   "sidebar.inbox.empty": "ستظهر هنا الجلسات التي تعمل عليها",
   "sidebar.inbox.section.needsAttention": "تحتاج إلى انتباه",
-  "sidebar.inbox.section.unread": "غير مقروءة",
   "sidebar.inbox.showMore": "عرض المزيد",
   "sidebar.inbox.showLess": "عرض أقل",
   "sidebar.inbox.announce.approval": "{{title}} تحتاج إلى موافقة.",

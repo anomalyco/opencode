@@ -1199,7 +1199,6 @@ export const dict = {
   "common.closeTabsBelow": "အောက်ရှိ တက်ဘ်များကို ပိတ်ရန်",
   "sidebar.inbox.empty": "သင်လုပ်ဆောင်သော စက်ရှင်များ ဤနေရာတွင် ပေါ်လာမည်",
   "sidebar.inbox.section.needsAttention": "အာရုံစိုက်ရန် လိုအပ်သည်",
-  "sidebar.inbox.section.unread": "မဖတ်ရသေး",
   "sidebar.inbox.showMore": "နောက်ထပ်ပြရန်",
   "sidebar.inbox.showLess": "လျှော့ပြရန်",
   "sidebar.inbox.announce.approval": "{{title}} သည် အတည်ပြုချက် လိုအပ်သည်။",

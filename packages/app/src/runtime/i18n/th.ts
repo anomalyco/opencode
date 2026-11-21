@@ -1223,7 +1223,6 @@ export const dict = {
   "common.closeTabsBelow": "ปิดแท็บด้านล่าง",
   "sidebar.inbox.empty": "เซสชันที่คุณทำงานอยู่จะปรากฏที่นี่",
   "sidebar.inbox.section.needsAttention": "ต้องการความสนใจ",
-  "sidebar.inbox.section.unread": "ยังไม่อ่าน",
   "sidebar.inbox.showMore": "แสดงเพิ่มเติม",
   "sidebar.inbox.showLess": "แสดงน้อยลง",
   "sidebar.inbox.announce.approval": "{{title}} ต้องการการอนุมัติ",

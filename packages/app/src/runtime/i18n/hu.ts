@@ -1202,7 +1202,6 @@ export const dict = {
   "common.closeTabsBelow": "Lenti lapok bezárása",
   "sidebar.inbox.empty": "Itt jelennek meg a munkamenetek, amelyeken dolgozik",
   "sidebar.inbox.section.needsAttention": "Figyelmet igényel",
-  "sidebar.inbox.section.unread": "Olvasatlan",
   "sidebar.inbox.showMore": "Több megjelenítése",
   "sidebar.inbox.showLess": "Kevesebb megjelenítése",
   "sidebar.inbox.announce.approval": "{{title}} jóváhagyásra vár.",

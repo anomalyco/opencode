@@ -1187,7 +1187,6 @@ export const dict = {
   "common.closeTabsBelow": "아래 탭 닫기",
   "sidebar.inbox.empty": "작업 중인 세션이 여기에 표시됩니다",
   "sidebar.inbox.section.needsAttention": "확인 필요",
-  "sidebar.inbox.section.unread": "읽지 않음",
   "sidebar.inbox.showMore": "더 보기",
   "sidebar.inbox.showLess": "간략히 보기",
   "sidebar.inbox.announce.approval": "{{title}} 세션에 승인이 필요합니다.",

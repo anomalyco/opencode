@@ -1183,7 +1183,6 @@ export const dict = {
   "common.closeTabsBelow": "بستن برگه‌های پایین",
   "sidebar.inbox.empty": "جلسه‌هایی که روی آن‌ها کار می‌کنید اینجا نمایش داده می‌شوند",
   "sidebar.inbox.section.needsAttention": "نیاز به توجه",
-  "sidebar.inbox.section.unread": "خوانده‌نشده",
   "sidebar.inbox.showMore": "نمایش بیشتر",
   "sidebar.inbox.showLess": "نمایش کمتر",
   "sidebar.inbox.announce.approval": "⁨{{title}}⁩ نیاز به تأیید دارد.",

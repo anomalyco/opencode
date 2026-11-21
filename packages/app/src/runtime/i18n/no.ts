@@ -1252,7 +1252,6 @@ export const dict = {
   "common.closeTabsBelow": "Lukk faner nedenfor",
   "sidebar.inbox.empty": "Økter du jobber med, vises her",
   "sidebar.inbox.section.needsAttention": "Trenger oppmerksomhet",
-  "sidebar.inbox.section.unread": "Uleste",
   "sidebar.inbox.showMore": "Vis mer",
   "sidebar.inbox.showLess": "Vis mindre",
   "sidebar.inbox.announce.approval": "{{title}} trenger godkjenning.",

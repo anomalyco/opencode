@@ -1193,7 +1193,6 @@ export const dict = {
   "common.closeTabsBelow": "Mbyll skedat më poshtë",
   "sidebar.inbox.empty": "Sesionet ku punoni do të shfaqen këtu",
   "sidebar.inbox.section.needsAttention": "Kërkon vëmendje",
-  "sidebar.inbox.section.unread": "Të palexuara",
   "sidebar.inbox.showMore": "Shfaq më shumë",
   "sidebar.inbox.showLess": "Shfaq më pak",
   "sidebar.inbox.announce.approval": "{{title}} kërkon miratim.",

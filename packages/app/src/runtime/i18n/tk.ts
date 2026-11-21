@@ -1184,7 +1184,6 @@ export const dict = {
   "common.closeTabsBelow": "Aşakdaky goýmalary ýapyň",
   "sidebar.inbox.empty": "Işleýän sessiýalaryňyz şu ýerde peýda bolar",
   "sidebar.inbox.section.needsAttention": "Üns gerek",
-  "sidebar.inbox.section.unread": "Okalmadyk",
   "sidebar.inbox.showMore": "Köpräk görkez",
   "sidebar.inbox.showLess": "Azrak görkez",
   "sidebar.inbox.announce.approval": "{{title}} tassyklama garaşýar.",

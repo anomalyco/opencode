@@ -1214,7 +1214,6 @@ export const dict = {
   "common.closeTabsBelow": "Chiudi le schede sottostanti",
   "sidebar.inbox.empty": "Le sessioni su cui lavori appariranno qui",
   "sidebar.inbox.section.needsAttention": "Richiedono attenzione",
-  "sidebar.inbox.section.unread": "Non lette",
   "sidebar.inbox.showMore": "Mostra altro",
   "sidebar.inbox.showLess": "Mostra meno",
   "sidebar.inbox.announce.approval": "{{title}} richiede approvazione.",

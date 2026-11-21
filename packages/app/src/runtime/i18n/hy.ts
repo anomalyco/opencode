@@ -1187,7 +1187,6 @@ export const dict = {
   "common.closeTabsBelow": "Փակել ներքևի ներդիրները",
   "sidebar.inbox.empty": "Նիստերը, որոնց վրա աշխատում եք, կհայտնվեն այստեղ",
   "sidebar.inbox.section.needsAttention": "Պահանջում է ուշադրություն",
-  "sidebar.inbox.section.unread": "Չկարդացված",
   "sidebar.inbox.showMore": "Ցույց տալ ավելին",
   "sidebar.inbox.showLess": "Ցույց տալ ավելի քիչ",
   "sidebar.inbox.announce.approval": "{{title}}-ը պահանջում է հաստատում։",

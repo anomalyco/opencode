@@ -1293,7 +1293,6 @@ export const dict = {
   "common.closeTabsBelow": "Закрыть вкладки ниже",
   "sidebar.inbox.empty": "Здесь появятся сессии, с которыми вы работаете",
   "sidebar.inbox.section.needsAttention": "Требуют внимания",
-  "sidebar.inbox.section.unread": "Непрочитанные",
   "sidebar.inbox.showMore": "Показать больше",
   "sidebar.inbox.showLess": "Показать меньше",
   "sidebar.inbox.announce.approval": "{{title}}: требуется одобрение.",

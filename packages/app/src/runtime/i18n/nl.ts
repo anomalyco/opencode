@@ -1204,7 +1204,6 @@ export const dict = {
   "common.closeTabsBelow": "Tabbladen hieronder sluiten",
   "sidebar.inbox.empty": "Sessies waaraan je werkt verschijnen hier",
   "sidebar.inbox.section.needsAttention": "Vraagt aandacht",
-  "sidebar.inbox.section.unread": "Ongelezen",
   "sidebar.inbox.showMore": "Meer tonen",
   "sidebar.inbox.showLess": "Minder tonen",
   "sidebar.inbox.announce.approval": "{{title}} heeft goedkeuring nodig.",

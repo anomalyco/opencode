@@ -1192,7 +1192,6 @@ export const dict = {
   "common.closeTabsBelow": "नीचे के टैब बंद करें",
   "sidebar.inbox.empty": "आपके सेशन यहाँ दिखाई देंगे",
   "sidebar.inbox.section.needsAttention": "ध्यान देने की आवश्यकता",
-  "sidebar.inbox.section.unread": "अपठित",
   "sidebar.inbox.showMore": "और दिखाएँ",
   "sidebar.inbox.showLess": "कम दिखाएँ",
   "sidebar.inbox.announce.approval": "{{title}} को अनुमोदन चाहिए।",

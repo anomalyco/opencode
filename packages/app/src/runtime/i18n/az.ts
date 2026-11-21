@@ -1194,7 +1194,6 @@ export const dict = {
   "common.closeTabsBelow": "Aşağıdakı tabları bağla",
   "sidebar.inbox.empty": "Üzərində işlədiyiniz sessiyalar burada görünəcək",
   "sidebar.inbox.section.needsAttention": "Diqqət tələb edir",
-  "sidebar.inbox.section.unread": "Oxunmamış",
   "sidebar.inbox.showMore": "Daha çox göstər",
   "sidebar.inbox.showLess": "Daha az göstər",
   "sidebar.inbox.announce.approval": "{{title}} təsdiq tələb edir.",

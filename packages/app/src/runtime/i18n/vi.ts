@@ -1188,7 +1188,6 @@ export const dict = {
   "common.closeTabsBelow": "Đóng các tab bên dưới",
   "sidebar.inbox.empty": "Các phiên bạn làm việc sẽ xuất hiện ở đây",
   "sidebar.inbox.section.needsAttention": "Cần chú ý",
-  "sidebar.inbox.section.unread": "Chưa đọc",
   "sidebar.inbox.showMore": "Hiển thị thêm",
   "sidebar.inbox.showLess": "Hiển thị ít hơn",
   "sidebar.inbox.announce.approval": "{{title}} cần phê duyệt.",

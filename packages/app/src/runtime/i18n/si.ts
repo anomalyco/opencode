@@ -1191,7 +1191,6 @@ export const dict = {
   "common.closeTabsBelow": "පහළ ටැබ් වසන්න",
   "sidebar.inbox.empty": "ඔබ වැඩ කරන සැසි මෙහි දිස්වේ",
   "sidebar.inbox.section.needsAttention": "අවධානය අවශ්‍යයි",
-  "sidebar.inbox.section.unread": "නොකියවූ",
   "sidebar.inbox.showMore": "තව පෙන්වන්න",
   "sidebar.inbox.showLess": "අඩුවෙන් පෙන්වන්න",
   "sidebar.inbox.announce.approval": "{{title}} හට අනුමැතිය අවශ්‍යයි.",

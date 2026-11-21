@@ -1188,7 +1188,6 @@ export const dict = {
   "common.closeTabsBelow": "Sulje alla olevat välilehdet",
   "sidebar.inbox.empty": "Istunnot, joiden parissa työskentelet, näkyvät täällä",
   "sidebar.inbox.section.needsAttention": "Vaatii huomiota",
-  "sidebar.inbox.section.unread": "Lukemattomat",
   "sidebar.inbox.showMore": "Näytä lisää",
   "sidebar.inbox.showLess": "Näytä vähemmän",
   "sidebar.inbox.announce.approval": "{{title}} odottaa hyväksyntää.",

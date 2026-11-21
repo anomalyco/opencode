@@ -1243,7 +1243,6 @@ export const dict = {
   "common.closeTabsBelow": "Fermer les onglets en dessous",
   "sidebar.inbox.empty": "Les sessions sur lesquelles vous travaillez apparaîtront ici",
   "sidebar.inbox.section.needsAttention": "Requiert votre attention",
-  "sidebar.inbox.section.unread": "Non lues",
   "sidebar.inbox.showMore": "Afficher plus",
   "sidebar.inbox.showLess": "Afficher moins",
   "sidebar.inbox.announce.approval": "{{title}} attend une approbation.",

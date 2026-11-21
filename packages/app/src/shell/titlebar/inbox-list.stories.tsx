@@ -19,7 +19,6 @@ const titles = [
 function SessionListStory(props: {
   currentCount: number
   needsCount: number
-  unreadCount: number
   recentCount: number
   workingCount: number
   archived: boolean
@@ -49,7 +48,7 @@ function SessionListStory(props: {
   createEffect(() => setState("archived", props.archived))
   createEffect(() => setState("recentExpanded", props.recentExpanded))
 
-  const sessions = (section: "current" | "needs" | "unread" | "recent" | "working", count: number) =>
+  const sessions = (section: "current" | "needs" | "recent" | "working", count: number) =>
     Array.from({ length: count }, (_, index) => {
       const status = (): InboxStatus => {
         if (section === "current") return "ready"
@@ -58,7 +57,10 @@ function SessionListStory(props: {
 
         if (section === "needs") return index % 2 === 0 ? "approval" : "input"
 
-        if (section === "unread") return index % 2 === 0 ? "done" : "failed"
+        // Unread results sit among read sessions in Recent.
+        if (section === "recent" && index % 5 === 3) return "failed"
+
+        if (section === "recent" && index % 3 === 1) return "done"
 
         return "ready"
       }
@@ -79,8 +81,6 @@ function SessionListStory(props: {
   const needs = createMemo(() => sessions("needs", props.needsCount))
 
   const recent = createMemo(() => sessions("recent", props.recentCount))
-
-  const unread = createMemo(() => sessions("unread", props.unreadCount))
 
   const visibleRecent = createMemo(() => (state.recentExpanded ? recent() : recent().slice(0, 10)))
 
@@ -133,16 +133,6 @@ function SessionListStory(props: {
         return needs().length
       },
       rows: () => rows(needs),
-    },
-    {
-      id: "unread",
-      get label() {
-        return language.t("sidebar.inbox.section.unread")
-      },
-      get count() {
-        return unread().length
-      },
-      rows: () => rows(unread),
     },
     {
       id: "recent",
@@ -232,7 +222,6 @@ export default {
   args: {
     currentCount: 0,
     needsCount: 2,
-    unreadCount: 2,
     recentCount: 6,
     workingCount: 2,
     archived: true,
@@ -249,12 +238,11 @@ export default {
   argTypes: {
     currentCount: { control: { type: "range", min: 0, max: 1, step: 1 } },
     needsCount: { control: { type: "range", min: 0, max: 12, step: 1 } },
-    unreadCount: { control: { type: "range", min: 0, max: 20, step: 1 } },
     recentCount: { control: { type: "range", min: 0, max: 20, step: 1 } },
     workingCount: { control: { type: "range", min: 0, max: 12, step: 1 } },
     selectedSession: {
       control: "select",
-      options: ["current-0", "recent-1", "recent-0", "needs-0", "working-0", "unread-0", "none"],
+      options: ["current-0", "recent-1", "recent-0", "needs-0", "working-0", "none"],
     },
     width: { control: { type: "range", min: 136, max: 640, step: 8 } },
     height: { control: { type: "range", min: 240, max: 900, step: 20 } },
@@ -277,7 +265,6 @@ export const CurrentOnly = {
   args: {
     currentCount: 1,
     needsCount: 0,
-    unreadCount: 0,
     recentCount: 0,
     workingCount: 0,
     selectedSession: "current-0",
@@ -285,16 +272,15 @@ export const CurrentOnly = {
   },
 }
 
-export const RecentOnly = { args: { needsCount: 0, unreadCount: 0, workingCount: 0 } }
+export const RecentOnly = { args: { needsCount: 0, workingCount: 0 } }
 
 export const NeedsAttention = {
-  args: { needsCount: 4, unreadCount: 0, recentCount: 0, workingCount: 0, archived: false },
+  args: { needsCount: 4, recentCount: 0, workingCount: 0, archived: false },
 }
 
 export const WorkingOnly = {
   args: {
     needsCount: 0,
-    unreadCount: 0,
     recentCount: 0,
     workingCount: 3,
     selectedSession: "working-0",
@@ -304,9 +290,7 @@ export const WorkingOnly = {
 
 export const WorkingCollapsed = { args: { workingExpanded: false, selectedSession: "working-0" } }
 
-export const Empty = { args: { needsCount: 0, unreadCount: 0, recentCount: 0, workingCount: 0, archived: false } }
-
-export const ManyUnread = { args: { unreadCount: 14 } }
+export const Empty = { args: { needsCount: 0, recentCount: 0, workingCount: 0, archived: false } }
 
 export const NeverRun = { args: { neverRun: true } }
 
@@ -326,4 +310,4 @@ export const Loading = { args: { loading: true } }
 
 export const RecentExpanded = { args: { recentCount: 16, recentExpanded: true } }
 
-export const ArchivedOnly = { args: { needsCount: 0, unreadCount: 0, recentCount: 0, workingCount: 0 } }
+export const ArchivedOnly = { args: { needsCount: 0, recentCount: 0, workingCount: 0 } }

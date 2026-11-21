@@ -1209,7 +1209,6 @@ export const dict = {
   "common.closeTabsBelow": "Затвори картице испод",
   "sidebar.inbox.empty": "Сесије на којима радите појавиће се овде",
   "sidebar.inbox.section.needsAttention": "Захтева пажњу",
-  "sidebar.inbox.section.unread": "Непрочитано",
   "sidebar.inbox.showMore": "Прикажи још",
   "sidebar.inbox.showLess": "Прикажи мање",
   "sidebar.inbox.announce.approval": "{{title}}: потребно је одобрење.",

@@ -1199,7 +1199,6 @@ export const dict = {
   "common.closeTabsBelow": "关闭下方标签页",
   "sidebar.inbox.empty": "你处理过的会话将显示在这里",
   "sidebar.inbox.section.needsAttention": "需要注意",
-  "sidebar.inbox.section.unread": "未读",
   "sidebar.inbox.showMore": "显示更多",
   "sidebar.inbox.showLess": "收起",
   "sidebar.inbox.announce.approval": "{{title}} 需要批准。",

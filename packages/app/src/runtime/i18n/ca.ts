@@ -1220,7 +1220,6 @@ export const dict = {
   "common.closeTabsBelow": "Tanca les pestanyes de sota",
   "sidebar.inbox.empty": "Les sessions en què treballeu apareixeran aquí",
   "sidebar.inbox.section.needsAttention": "Requereix atenció",
-  "sidebar.inbox.section.unread": "No llegides",
   "sidebar.inbox.showMore": "Mostra'n més",
   "sidebar.inbox.showLess": "Mostra'n menys",
   "sidebar.inbox.announce.approval": "{{title}} necessita aprovació.",

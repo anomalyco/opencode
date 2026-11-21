@@ -2567,22 +2567,27 @@ test("sessions opened from Home and Search get a temporary Current session row w
   await expect(rows).toHaveCount(10)
 })
 
-test("the inbox keeps every unread result separate from expandable Recent, including never-run sessions", async ({
+test("the inbox lists unread results in Recent by when they settled, and reading one keeps its place", async ({
   page,
 }) => {
   await mockWorkspace(page, {
     name: "InboxSections",
     sessions: [
-      ...Array.from({ length: 12 }, (_, index) => ({
+      ...Array.from({ length: 6 }, (_, index) => ({
         id: `ses_unread_${index}`,
         title: `Unread result ${index}`,
         outcome: index === 0 ? "failed" : "succeeded",
-        time: { created: T0, updated: T0 + index, idle: T0 + index },
+        time: { created: T0, updated: T0 + 2 * index + 1, idle: T0 + 2 * index + 1 },
       })),
-      ...Array.from({ length: 12 }, (_, index) => ({
+      ...Array.from({ length: 6 }, (_, index) => ({
         id: `ses_read_${index}`,
         title: index === 0 ? "Never-run session" : `Read session ${index}`,
-        time: { created: T0, updated: T0 + 100 - index, idle: index ? T0 + 100 - index : undefined, viewed: T0 + 200 },
+        time: {
+          created: T0,
+          updated: index ? T0 + 2 * index : T0 + 12,
+          idle: index ? T0 + 2 * index : undefined,
+          viewed: T0 + 200,
+        },
       })),
     ],
     seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
@@ -2591,47 +2596,65 @@ test("the inbox keeps every unread result separate from expandable Recent, inclu
 
   const inbox = page.locator('[data-slot="sidebar-inbox"]')
 
-  const unread = inbox.getByRole("group", { name: "Unread", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
-
   const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
 
-  await expect(unread).toContainText(Array.from({ length: 12 }, (_, index) => `Unread result ${11 - index}`))
-  await expect(unread.filter({ hasText: "Unread result 0" })).toHaveAttribute("data-status", "failed")
-  await expect(recent).toContainText([
+  const order = [
     "Never-run session",
-    ...Array.from({ length: 9 }, (_, index) => `Read session ${index + 1}`),
-  ])
+    "Unread result 5",
+    "Read session 5",
+    "Unread result 4",
+    "Read session 4",
+    "Unread result 3",
+    "Read session 3",
+    "Unread result 2",
+    "Read session 2",
+    "Unread result 1",
+    "Read session 1",
+    "Unread result 0",
+  ]
+
+  await expect(recent).toContainText(order.slice(0, 10))
   await expect(recent).toHaveCount(10)
+  await expect(inbox.getByRole("group", { name: "Unread", exact: true })).toHaveCount(0)
+  await expect(recent.filter({ hasText: "Unread result 5" })).toHaveAttribute("data-status", "done")
+  await expect(recent.filter({ hasText: "Read session 5" })).toHaveAttribute("data-status", "ready")
   await expect(inbox.locator('[data-slot="sidebar-inbox-item"][tabindex="0"]')).toHaveCount(1)
 
-  await unread.filter({ hasText: "Unread result 11" }).focus()
+  await recent.filter({ hasText: "Never-run session" }).focus()
   await page.keyboard.press("ArrowDown")
-  await expect(unread.filter({ hasText: "Unread result 10" })).toBeFocused()
+  await expect(recent.filter({ hasText: "Unread result 5" })).toBeFocused()
   await page.keyboard.press("End")
-  await expect(recent.filter({ hasText: "Read session 9" })).toBeFocused()
+  await expect(recent.filter({ hasText: "Unread result 1" })).toBeFocused()
   await page.keyboard.press("Home")
-  await expect(unread.filter({ hasText: "Unread result 11" })).toBeFocused()
+  await expect(recent.filter({ hasText: "Never-run session" })).toBeFocused()
 
   await inbox.getByRole("button", { name: "Show more", exact: true }).click()
   await expect(recent).toHaveCount(12)
-  await expect(recent.filter({ hasText: "Read session 11" })).toHaveCount(1)
-  await expect(unread).toHaveCount(12)
+  await expect(recent).toContainText(order)
+  await expect(recent.filter({ hasText: "Unread result 0" })).toHaveAttribute("data-status", "failed")
   await page.reload()
   await expect(recent).toHaveCount(12)
   await inbox.getByRole("button", { name: "Show less", exact: true }).click()
   await expect(recent).toHaveCount(10)
-  await expect(unread).toHaveCount(12)
 
-  const marked = page.getByText("Read session 1", { exact: true })
+  // Reading or unreading a session changes its mark, not its place.
+  const read = recent.nth(3)
 
-  await recent.filter({ has: marked }).click({ button: "right" })
-  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
-  await expect(unread.filter({ has: marked })).toHaveCount(1)
-  await expect(recent.filter({ has: marked })).toHaveCount(0)
-  await unread.filter({ has: marked }).click({ button: "right" })
+  await expect(read).toContainText("Unread result 4")
+  await read.click({ button: "right" })
   await page.getByRole("menuitem", { name: "Mark as read", exact: true }).click()
-  await expect(recent.filter({ has: marked })).toHaveCount(1)
-  await expect(unread.filter({ has: marked })).toHaveCount(0)
+  await expect(read).toHaveAttribute("data-status", "ready")
+  await expect(read).toContainText("Unread result 4")
+  await expect(recent).toContainText(order.slice(0, 10))
+
+  const unread = recent.nth(8)
+
+  await expect(unread).toContainText("Read session 2")
+  await unread.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await expect(unread).toHaveAttribute("data-status", "done")
+  await expect(unread).toContainText("Read session 2")
+  await expect(recent).toContainText(order.slice(0, 10))
 })
 
 test("the inbox waits for initial requests and orders attention by waiting age rather than last update", async ({

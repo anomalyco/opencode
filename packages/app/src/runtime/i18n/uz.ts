@@ -1202,7 +1202,6 @@ export const dict = {
   "common.closeTabsBelow": "Pastdagi varaqlarni yopish",
   "sidebar.inbox.empty": "Siz ishlayotgan sessiyalar shu yerda paydo bo‘ladi",
   "sidebar.inbox.section.needsAttention": "E’tibor talab qiladi",
-  "sidebar.inbox.section.unread": "O‘qilmagan",
   "sidebar.inbox.showMore": "Ko‘proq ko‘rsatish",
   "sidebar.inbox.showLess": "Kamroq ko‘rsatish",
   "sidebar.inbox.announce.approval": "{{title}} tasdiqlashni talab qiladi.",
