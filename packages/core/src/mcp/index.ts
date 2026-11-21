@@ -133,6 +133,7 @@ const FALLBACK_LIST_TIMEOUT = "5 seconds"
 // persisted session row, so their forms are owned by this opaque sentinel session identifier.
 const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
+const CONFIRM_ELICITATION_FIELD_KEY = "confirm"
 
 const changes = { tools: McpEvent.ToolsChanged, resources: McpEvent.ResourcesChanged, prompts: PromptsChanged }
 
@@ -518,18 +519,25 @@ export const layer = (options?: Options) =>
             const [field, ...fields] = Object.entries(params.requestedSchema.properties).map(([key, property]) =>
               toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
             )
-            if (!field) return { action: "accept" as const, content: {} }
             return yield* forms
               .ask({
                 sessionID: GLOBAL_ELICITATION_SESSION_ID,
                 title: `${input.server} is requesting input`,
                 metadata: { kind: "mcp-elicitation", server: input.server, message: params.message },
-                fields: [field, ...fields],
+                // An empty schema asks the user to confirm the message, so the form asks for that alone.
+                fields: field
+                  ? [field, ...fields]
+                  : [{ key: CONFIRM_ELICITATION_FIELD_KEY, type: "boolean", title: "Confirm", required: true }],
               })
               .pipe(
                 Effect.raceFirst(waitForAbort(input.signal)),
                 Effect.map((state): McpClient.ElicitationResult => {
                   if (state.status !== "answered") return { action: "cancel" }
+                  // The confirmation field is ours, not the server's, so its answer is never sent.
+                  if (!field)
+                    return state.answer[CONFIRM_ELICITATION_FIELD_KEY] === true
+                      ? { action: "accept", content: {} }
+                      : { action: "decline" }
                   return {
                     action: "accept",
                     content: Object.fromEntries(
