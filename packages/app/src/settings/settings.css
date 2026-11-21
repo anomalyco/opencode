@@ -329,9 +329,14 @@
   outline: none;
 }
 
-.settings-about-version:hover::before,
-.settings-about-version:focus-visible::before {
+.settings-about-version:hover::before {
   background: var(--v2-background-bg-layer-02);
+}
+
+/* The ring follows the hover background, which reaches past the label. */
+.settings-about-version:focus-visible::before {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
 }
 
 .settings-about-version:disabled {

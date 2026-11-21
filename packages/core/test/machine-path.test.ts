@@ -222,6 +222,8 @@ off.effect("resolves a machine-shaped path exactly as a local path with the flag
       expect(target.resource).toBe("gpu:/work/a")
       expect(target.externalDirectory).toBeUndefined()
       expect(target.environment.id).toBe(Environment.localID)
+      // "Always" saves what it saves for any local file, never a rule for a machine named gpu.
+      expect(FileAccess.always(target)).toBe("*")
 
       // No machine's home is asked for either: `gpu:~` is a local folder like any other.
       const home = yield* access.resolve({ path: "gpu:~/x" })
@@ -357,7 +359,7 @@ on.effect("reads a file under the machine's home and asks approval for its resol
       })
       expect(tools.assertions.map((entry) => [entry.action, entry.resources, entry.save])).toEqual([
         ["external_directory", ["gpu:/home/worker/*"], ["gpu:/home/worker/*"]],
-        ["read", ["gpu:/home/worker/notes.txt"], ["*"]],
+        ["read", ["gpu:/home/worker/notes.txt"], ["gpu:*"]],
       ])
       expect(yield* Effect.promise(() => fs.readdir(tmp.path))).toEqual([])
     }).pipe(Effect.provide(graph(tools)))
@@ -401,9 +403,12 @@ on.effect("uses a rule for the machine's path, never one for the same path witho
 
       const read = tools.assertions.find((entry) => entry.action === "read")
       expect(read?.resources).toEqual(["gpu:/work/a.txt"])
-      expect(read?.save).toEqual(["*"])
+      expect(read?.save).toEqual(["gpu:*"])
 
       const allow = (resource: string) => [{ action: "read" as const, resource, effect: "allow" as const }]
+      expect(Permission.evaluate("read", "gpu:/work/a.txt", allow("gpu:*")).effect).toBe("allow")
+      expect(Permission.evaluate("read", "cpu:/work/a.txt", allow("gpu:*")).effect).toBe("ask")
+      expect(Permission.evaluate("read", "gpu:/work/a.txt", allow("*")).effect).toBe("ask")
       expect(Permission.evaluate("read", "gpu:/work/a.txt", allow("/work/*")).effect).toBe("ask")
       expect(Permission.evaluate("read", "gpu:/work/a.txt", allow("gpu:/work/*")).effect).toBe("allow")
       const external = (resource: string) => [

@@ -1,8 +1,13 @@
 import type { SessionMessageAssistant } from "@opencode/client/promise"
 import { getFilename } from "@opencode/util/path"
 import { Option, Predicate, Schema } from "effect"
-import { currentToolFailed, currentToolInput, currentToolMetadata } from "../message/current-tool-state"
-import type { TimelineDetail } from "./detail"
+import {
+  currentToolFailed,
+  currentToolHasLoadedFiles,
+  currentToolInput,
+  currentToolMetadata,
+  readImagePath,
+} from "../message/current-tool-state"
 import { isInterruptedError } from "./turn-phase-machine"
 
 /**
@@ -23,12 +28,15 @@ export type FactOutcome = { kind: "shell" | "subagent"; verb: FactVerb; failed: 
 
 /** What facts are read from: a message part, a user's shell command, or what background work reported. */
 export type FactPart =
-  | (Content & { id?: string; messageID?: string })
+  | (Tool & { id?: string; messageID?: string })
+  | { type: "text"; id?: string; messageID?: string; text?: string }
+  | { type: "reasoning"; id?: string; messageID?: string; text?: string }
   | { type: "shell"; id: string; messageID?: string }
   | { type: "notice"; id: string; messageID?: string }
   | { type: "outcome"; id: string; messageID?: string; outcome: FactOutcome }
 
-export type CallFact = {
+/** What placing a call reads: where it shows, which group it joins and whether it starts open. */
+export type PlaceFact = {
   kind: "call"
   id: string
   /** The tool's current name; `tool` keeps the name the call used. */
@@ -37,8 +45,19 @@ export type CallFact = {
   mode: FactMode
   status: Tool["state"]["status"] | "user"
   failed: boolean
+  /** The user stopped it, by stopping the turn or cancelling its command. */
+  stopped: boolean
+  /** The model finished writing what to call it with. */
+  called: boolean
+  /** A plain file read, which reads well beside the reads around it. */
+  groupedRead: boolean
   /** Runs on after the call returns, reporting back as an outcome. */
   background: boolean
+  /** The changes a finished foreground script made to files, each placed like a direct edit's file. */
+  changes: number
+}
+
+export type CallFact = PlaceFact & {
   path?: string
   provider?: string
   /** How a call that launches background work ended, or undefined while it is still written. */
@@ -55,8 +74,12 @@ export type FileFact = {
   status: Tool["state"]["status"]
   additions?: number
   deletions?: number
+  /** How the file changed, and its diff, where the call recorded them. */
+  change?: "added" | "deleted" | "modified"
+  patch?: string
   by: string
-  via: "direct"
+  /** A call that edits files, or a script that changed them as it ran. */
+  via: "direct" | "script"
 }
 
 export type Fact =
@@ -116,59 +139,135 @@ function partFacts(part: FactPart): Fact[] {
 
   if (part.type === "shell")
     return [
-      { kind: "call", id, name: "shell", tool: "shell", mode: "run", status: "user", failed: false, background: false },
+      {
+        kind: "call",
+        id,
+        name: "shell",
+        tool: "shell",
+        mode: "run",
+        status: "user",
+        failed: false,
+        stopped: false,
+        called: true,
+        groupedRead: false,
+        background: false,
+        changes: 0,
+      },
     ]
 
   return toolFacts(part, id)
 }
-
-const decodeInput = Schema.decodeUnknownOption(
-  Schema.Struct({ path: Schema.optional(Schema.String), background: Schema.optional(Schema.Unknown) }),
-)
 
 const decodeFile = Schema.decodeUnknownOption(
   Schema.Struct({
     file: Schema.String,
     additions: Schema.optional(Schema.Number),
     deletions: Schema.optional(Schema.Number),
+    status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
+    patch: Schema.optional(Schema.String),
   }),
+)
+
+const decodeScript = Schema.decodeUnknownOption(
+  Schema.Struct({ background: Schema.optional(Schema.Unknown), jobID: Schema.optional(Schema.Unknown) }),
 )
 
 const decodeFiles = Schema.decodeUnknownOption(Schema.Array(Schema.Unknown))
 
 const decodeText = Schema.decodeUnknownOption(Schema.NonEmptyString)
 
-function toolFacts(tool: Tool, id: string): Fact[] {
+type Reads = { input: () => Schema.JsonObject; metadata: () => Schema.JsonObject }
+
+// Input changes with every streamed delta and metadata with every progress report, so each is read only where it is
+// needed, and once.
+function reads(tool: Tool): Reads {
+  let input: Schema.JsonObject | undefined
+  let metadata: Schema.JsonObject | undefined
+
+  return {
+    input: () => (input ??= currentToolInput(tool)),
+    metadata: () => (metadata ??= currentToolMetadata(tool)),
+  }
+}
+
+/** What placing a call reads of it. Reads input and metadata only where they can move the call or open it. */
+export function placeFactOf(tool: Tool, id = tool.id): PlaceFact {
+  return placeFact(tool, id, reads(tool))
+}
+
+function placeFact(tool: Tool, id: string, read: Reads): PlaceFact {
   const name = toolName(tool.name)
-
-  const input = Option.getOrElse(decodeInput(currentToolInput(tool)), () => ({
-    path: undefined,
-    background: undefined,
-  }))
-
-  const metadata = currentToolMetadata(tool)
   const state = tool.state
-  const background = name === "subagent" || (name === "shell" && input.background === true)
-  const path = input.path || undefined
-  const mode = modes.get(name) ?? "tool"
+  const stopped = toolStopped(tool)
 
-  const call: CallFact = {
+  return {
     kind: "call",
     id,
     name,
     tool: tool.name,
-    mode,
+    mode: modes.get(name) ?? "tool",
     status: state.status,
-    failed: !stopped(tool) && currentToolFailed({ ...tool, name }),
-    background,
+    failed: !stopped && currentToolFailed({ ...tool, name }),
+    stopped,
+    called: state.status !== "streaming" && (state.status !== "error" || Object.keys(read.input()).length > 0),
+    groupedRead:
+      tool.name === "read" &&
+      state.status !== "error" &&
+      !readImagePath(read.input()) &&
+      !currentToolHasLoadedFiles(tool),
+    background: name === "subagent" || (name === "shell" && read.input().background === true),
+    changes: name === "execute" ? scriptChanges(tool, read).length : 0,
   }
+}
+
+// Whether a script that fails or is stopped keeps the changes it made, which really happened.
+const keepFailedScriptChanges = true
+
+// A script reports the files it changes as it runs and when it ends in the foreground; one moved to the background has
+// none. Placement reads only their count, so progress reports that add no change never move it. Entries that don't
+// decode are dropped here, so every reader numbers the changes alike.
+function scriptChanges(tool: Tool, read: Reads) {
+  const status = tool.state.status
+
+  if (status !== "running" && status !== "completed" && !(status === "error" && keepFailedScriptChanges)) return []
+  const metadata = read.metadata()
+  const script = Option.getOrUndefined(decodeScript(metadata))
+
+  // Until a script finishes, its background flag says only that it can move there: one stopped or declined keeps it.
+  if (script?.jobID !== undefined || (status === "completed" && script?.background === true)) return []
+
+  return Option.getOrElse(decodeFiles(metadata.files), () => [])
+    .flatMap((file) => Option.toArray(decodeFile(file)))
+    .filter((file) => file.file !== "")
+}
+
+/** The paths of the changes a finished script made, in order. */
+export function scriptChangePaths(tool: Tool) {
+  return scriptChanges(tool, reads(tool)).map((file) => file.file)
+}
+
+/** How a call that launches background work ended, or undefined for any other call or while it is still written. */
+export function launchOf(tool: Tool) {
+  const read = reads(tool)
+
+  return placeFact(tool, tool.id, read).background ? launch(tool, toolName(tool.name), read) : undefined
+}
+
+function toolFacts(tool: Tool, id: string): Fact[] {
+  const read = reads(tool)
+  const fact = placeFact(tool, id, read)
+  const raw = read.input().path
+  const path = Predicate.isString(raw) && raw ? raw : undefined
+  const metadata = read.metadata()
+  const state = tool.state
+  const call: CallFact = { ...fact }
 
   if (path) call.path = path
 
   // Each field is read on its own, so one of the wrong type leaves the others.
   if (Predicate.isString(metadata.provider) && metadata.provider) call.provider = metadata.provider
 
-  if (background) call.launch = launch(tool, name)
+  if (fact.background) call.launch = launch(tool, fact.name, read)
 
   if ("time" in state && state.time) call.time = state.time
 
@@ -177,7 +276,14 @@ function toolFacts(tool: Tool, id: string): Fact[] {
 
   if (Predicate.isNumber(metadata.matches)) call.matches = metadata.matches
 
-  if (mode !== "edit") return [call]
+  if (fact.name === "execute")
+    return [
+      call,
+      // One fact per change, in order: a script can change the same file more than once.
+      ...scriptChanges(tool, read).map((file, index) => scriptFileFactOf(file, index, id, state.status)),
+    ]
+
+  if (fact.mode !== "edit") return [call]
 
   const changed = Option.getOrElse(decodeFiles(metadata.files), () => []).flatMap((file) =>
     Option.toArray(decodeFile(file)),
@@ -185,35 +291,36 @@ function toolFacts(tool: Tool, id: string): Fact[] {
 
   const files = changed.length ? changed : path ? [{ file: path }] : []
 
-  return [
-    call,
-    ...files.map((file): FileFact => {
-      const fact: FileFact = {
-        kind: "file",
-        id: `${id}:file:${file.file}`,
-        path: file.file,
-        status: state.status,
-        by: id,
-        via: "direct",
-      }
+  return [call, ...files.map((file) => fileFact(file, id, state.status, "direct"))]
+}
 
-      if (file.additions !== undefined) fact.additions = file.additions
+function fileFact(
+  file: { file: string; additions?: number; deletions?: number; status?: FileFact["change"]; patch?: string },
+  by: string,
+  status: Tool["state"]["status"],
+  via: FileFact["via"],
+): FileFact {
+  const fact: FileFact = { kind: "file", id: `${by}:file:${file.file}`, path: file.file, status, by, via }
 
-      if (file.deletions !== undefined) fact.deletions = file.deletions
+  if (file.additions !== undefined) fact.additions = file.additions
 
-      return fact
-    }),
-  ]
+  if (file.deletions !== undefined) fact.deletions = file.deletions
+
+  if (file.status !== undefined) fact.change = file.status
+
+  if (file.patch !== undefined) fact.patch = file.patch
+
+  return fact
 }
 
 // How a call that launches background work ended. Older sessions marked a foreground subagent's result as completed.
-function launch(tool: Tool, name: string): FactOutcome | undefined {
+function launch(tool: Tool, name: string, read: Reads): FactOutcome | undefined {
   const kind = name === "shell" ? "shell" : "subagent"
   const state = tool.state
 
   if (state.status === "streaming") return undefined
-  const input = currentToolInput(tool)
-  const metadata = currentToolMetadata(tool)
+  const input = read.input()
+  const metadata = read.metadata()
   const followUp = kind === "subagent" ? Option.getOrUndefined(decodeText(input.sessionID)) : undefined
 
   const id =
@@ -239,7 +346,11 @@ function launch(tool: Tool, name: string): FactOutcome | undefined {
   return { kind, key, verb: background ? "started" : "ran", failed: false }
 }
 
-function stopped(tool: Tool) {
+/**
+ * Whether the user stopped a call, by stopping the turn or cancelling its command. The shell reports a cancelled
+ * command as its own error, "Command cancelled".
+ */
+export function toolStopped(tool: Tool) {
   if (tool.state.status !== "error") return false
 
   return isInterruptedError(tool.state.error) || tool.state.error.message === "Command cancelled"
@@ -344,21 +455,39 @@ function shells(facts: readonly Fact[]) {
   }
 }
 
-/** The detail setting that shows or hides a fact. */
-export function categoryOf(fact: Fact): keyof TimelineDetail | undefined {
-  if (fact.kind === "thought") return "thinking"
+/** Where a script's change stands in a message: its part id is the script's, then the change's place and path. */
+export function scriptFilePartID(scriptID: string, index: number, path: string) {
+  return `${scriptID}:file:${index}:${path}`
+}
 
-  if (fact.kind === "file") return "edit"
+function scriptFileFactOf(
+  file: Parameters<typeof fileFact>[0],
+  index: number,
+  by: string,
+  status: Tool["state"]["status"],
+): FileFact {
+  return { ...fileFact(file, by, status, "script"), id: `${by}:file:${index}:${file.file}` }
+}
 
-  if (fact.kind === "outcome") return "notices"
+const fileFactKeys = ["id", "path", "status", "additions", "deletions", "change", "patch", "by", "via"] as const
 
-  if (fact.kind !== "call") return
+/** Whether two reads of a change show the same: a script's changes never change once made, only its status does. */
+export function sameFileFact(previous: FileFact, next: FileFact) {
+  return fileFactKeys.every((key) => previous[key] === next[key])
+}
 
-  if (fact.name === "shell" || fact.name === "execute") return "shell"
+const scriptFilePart = /^(.*?):file:(\d+):/
 
-  if (fact.mode === "edit") return "edit"
+/** The change a script made that a part id names, read from that one entry of the script's part in the message. */
+export function scriptFileFact(content: readonly Content[], messageID: string, partID: string) {
+  const match = scriptFilePart.exec(partID)
 
-  if (fact.name === "subagent") return "subagents"
+  if (!match) return undefined
+  const [, scriptID, index] = match
+  const tool = content.find((item) => item.type === "tool" && item.id === scriptID)
 
-  return "tools"
+  if (tool?.type !== "tool") return undefined
+  const file = scriptChanges(tool, reads(tool))[Number(index)]
+
+  return file ? scriptFileFactOf(file, Number(index), `${messageID}:${scriptID}`, tool.state.status) : undefined
 }

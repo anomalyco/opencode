@@ -25,7 +25,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@opencode/util/uuid"
 import { contextItemKey } from "@/composer/schema"
 import type { QuoteSource } from "@/composer/quote-source"
-import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
+import type { ComposerDelivery, ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import { useComposerCommands } from "@/composer/commands"
@@ -398,6 +398,18 @@ export function createActiveSessionRegion(input: {
         focusPrompt()
       },
       focus: focusPrompt,
+      delivery: (): ComposerDelivery | undefined => {
+        const send = active()?.composer.view.submit.comment
+
+        if (!send?.available()) return
+
+        return send.delivery() ?? "send"
+      },
+      send: (key: string, comment: string) => {
+        const send = active()?.composer.view.submit.comment
+
+        if (send?.available()) void send.onSubmit(key, comment)
+      },
     },
     actions: {
       // Each timeline passes its own session and child flag, which a kept timeline holds while another is routed.

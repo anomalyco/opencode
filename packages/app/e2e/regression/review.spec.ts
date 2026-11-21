@@ -99,9 +99,9 @@ for (const view of ["desktop", "mobile"] as const) {
     await expect(panel.getByText("Track, review, and undo changes in this project")).toBeVisible()
 
     if (view === "desktop") {
-      const toggle = panel.getByRole("button", {name:"Toggle file tree"})
+      const toggle = panel.getByRole("button", { name: "Toggle file tree" })
 
-      if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click()
+      if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click()
       await expect(panel.getByText("No changed files. Use Open file to browse the workspace.")).toBeVisible()
     }
 
@@ -2271,6 +2271,9 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
     const panel = page.locator("#review-panel")
+    // Once the panel settles open, its strip shows its own copy of the toggle in place of the header's. Actions wait
+    // for that copy: one that starts on the header's copy as they swap keeps waiting for it to show again.
+    const settled = panel.getByRole("button", { name: "Toggle review", exact: true })
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     const closed = (await toggle.boundingBox())!
     const header = (await page.locator("[data-session-title]").boundingBox())!
@@ -2308,6 +2311,7 @@ for (const direction of ["ltr", "rtl"] as const) {
         .toBe(closed.y + closed.height / 2)
     }
 
+    await expect(settled).toBeVisible()
     await toggle.press("Enter")
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     await expect(toggle).toBeFocused()
@@ -2320,7 +2324,10 @@ for (const direction of ["ltr", "rtl"] as const) {
       await expect(toggle).toHaveAttribute("aria-expanded", String(opened))
       await expect(panel).toHaveAttribute("aria-hidden", String(!opened))
 
-      if (opened) await expect(() => expectHeaderClearOfToggle(page, toggle)).toPass()
+      if (opened) {
+        await expect(settled).toBeVisible()
+        await expect(() => expectHeaderClearOfToggle(page, toggle)).toPass()
+      }
     }
 
     await expect(panel).toBeHidden()
@@ -2368,8 +2375,12 @@ async function expectHeaderClearOfToggle(page: Page, toggle: Locator) {
   expect(Math.abs(geometry.row - geometry.panels)).toBeLessThanOrEqual(1)
 
   const clip = (await toggle.boundingBox())!
-  // Header contents must make no difference to the pixels behind the fixed toggle.
+  // Header contents must make no difference to the pixels behind the toggle, which sits in the strip's last slot.
   expect(await page.screenshot({ clip })).toEqual(
-    await page.screenshot({ clip, style: ".session-review-v2-tabs-bar { visibility: hidden !important; }" }),
+    await page.screenshot({
+      clip,
+      style: `.session-review-v2-tabs-bar * { visibility: hidden !important; }
+        .session-review-v2-tabs-bar [data-slot="session-review-panel-toggle"] * { visibility: visible !important; }`,
+    }),
   )
 }

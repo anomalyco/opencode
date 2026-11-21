@@ -71,6 +71,7 @@ export type SessionReviewLineComment = {
   selection: SelectedLineRange
   comment: string
   preview?: string
+  send?: boolean
 }
 
 export type SessionReviewCommentUpdate = SessionReviewLineComment & {

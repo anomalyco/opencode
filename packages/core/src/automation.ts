@@ -87,7 +87,7 @@ export class InvalidError extends Schema.TaggedError<InvalidError>()("Automation
 
 export class DisabledError extends Schema.TaggedError<DisabledError>()("Automation.DisabledError", {}) {
   override get message() {
-    return "Automations are disabled; set experimental.automations in config"
+    return "Automations are disabled. Set automations to true in config to enable them."
   }
 }
 
@@ -106,7 +106,7 @@ export interface Interface {
   readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError>
   readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError>
   readonly remove: (id: ID) => Effect.Effect<void, NotFoundError>
-  /** Whether experimental.automations is on in the config of `directory`. */
+  /** Whether automations are enabled in the config of `directory`. */
   readonly enabled: (directory: string) => Effect.Effect<boolean, FileSystem.DirectoryNotFoundError>
   /** Runs every automation that is due now, at most once each. */
   readonly tick: Effect.Effect<void>
@@ -130,7 +130,7 @@ const LATE_AFTER = MINUTE
 const MAX_SLEEP = 30_000
 const LEADER_KEY = "automation:leader"
 const LEADER_TTL = 2 * MAX_SLEEP
-/** How long a due automation waits before its location's flag is read again, while automations are off there. */
+/** How long a due automation waits before reading config again while automations are disabled there. */
 const DISABLED_RETRY = HOUR
 /** How long an automation whose prompt failed waits before trying again. */
 const FAILED_RETRY = 5 * MINUTE
@@ -301,10 +301,9 @@ const layer = Layer.effect(
         const config = yield* Config.Service
         const flags = yield* Flag.Service
         const entries = yield* config.entries()
-        const resolved = flags.resolve(entries)
         return {
-          enabled: resolved.automations.enabled,
-          events: resolved.mcp_events.enabled,
+          enabled: Config.latest(entries, "automations") ?? true,
+          events: flags.resolve(entries).mcp_events.enabled,
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(inDirectory(directory))
@@ -630,7 +629,7 @@ const layer = Layer.effect(
         effect.pipe(Effect.catchTag("Automation.InvalidError", (error) => pauseWith(row, now, error.reason))),
     )
 
-    /** Runs one due automation, after the checks all actions share: leadership, expiry and the flag. */
+    /** Runs one due automation after checking leadership, expiry and whether automations are enabled. */
     const runDue = Effect.fnUntraced(function* (row: Row, now: number) {
       const due = row.next_due_at
       if (due === null) return
@@ -647,8 +646,8 @@ const layer = Layer.effect(
         })
       }
       if (!(yield* settings(row.directory)).enabled) {
-        // Reading the flag boots the location, so check again in an hour rather than every tick. The row keeps its
-        // due time, so once the flag is back on it catches up like any missed slot.
+        // Reading config boots the location, so check again in an hour rather than every tick. The row keeps its
+        // due time, so once automations are enabled it catches up like any missed slot.
         yield* settle(row, { last_outcome: "disabled", retry_at: now + DISABLED_RETRY, time_updated: now })
         return
       }

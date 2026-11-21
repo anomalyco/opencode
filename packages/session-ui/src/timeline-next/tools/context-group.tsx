@@ -24,7 +24,8 @@ import {
 } from "../../tools/tool-renderer"
 import { TimelineEventRow } from "../event-row"
 import { toolEvent, workKey, type TimelineEvent } from "../events"
-import { toolRule, toolStopped } from "../rules"
+import { toolRule } from "../rules"
+import { sameFileFact, toolStopped } from "../../timeline/facts"
 import { activityLabel, activityText, usedLabel } from "./activity-label"
 import { FileGroup } from "./file-group"
 import { ThoughtRow } from "./thought"
@@ -218,6 +219,20 @@ export function ContextGroup(props: {
                     return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
                   })
 
+                  // A change keeps its card while progress reports rebuild the list around it.
+                  const file = createMemo(
+                    () => {
+                      const value = item()
+
+                      return !Array.isArray(value) && value.type === "file" ? value : undefined
+                    },
+                    undefined,
+                    {
+                      equals: (previous, next) =>
+                        previous === next || (!!previous && !!next && sameFileFact(previous.file, next.file)),
+                    },
+                  )
+
                   const callback = createMemo(() => {
                     const value = item()
 
@@ -243,8 +258,16 @@ export function ContextGroup(props: {
                             <Show
                               when={work()}
                               fallback={
-                                <Show when={callback()}>
-                                  {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                                <Show
+                                  when={file()}
+                                  keyed
+                                  fallback={
+                                    <Show when={callback()}>
+                                      {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                                    </Show>
+                                  }
+                                >
+                                  {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
                                 </Show>
                               }
                             >
@@ -319,6 +342,7 @@ function GroupItem(props: {
 }) {
   const tool = createMemo(() => props.tools[0]!)
   const name = createMemo(() => toolRule(tool()).name)
+  const defaultOpen = createMemo(() => props.toolDefaultOpen?.(tool()))
 
   return (
     <Switch
@@ -332,8 +356,8 @@ function GroupItem(props: {
           error={currentToolError(tool())}
           stopped={toolStopped(tool())}
           status={tool().state.status}
-          defaultOpen={props.toolDefaultOpen?.(tool()) ?? false}
-          open={props.toolOpen?.(tool().id) ?? props.toolDefaultOpen?.(tool())}
+          defaultOpen={defaultOpen() ?? false}
+          open={props.toolOpen?.(tool().id) ?? defaultOpen()}
           onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
           deferContent
           virtualizeDiff={false}

@@ -8,6 +8,7 @@ import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { RemoteTunnel } from "../../services/remote-tunnel"
 import { ServiceConfig } from "../../services/service-config"
+import { isLoopback, serverURLs } from "../../services/service-urls"
 
 export default Runtime.handler(
   Commands.commands.pair,
@@ -120,8 +121,7 @@ const pairingURLs = Effect.fnUntraced(function* (
   input: Runtime.Input<typeof Commands.commands.pair>,
 ) {
   if (input.remote) return [yield* remoteURL(client)]
-  if (Option.isSome(input.url)) return [input.url.value]
-  return (yield* Effect.tryPromise(() => client.server.info())).urls
+  return yield* serverURLs(client, input.url)
 })
 
 // The service attaches the tunnel in the background, so wait for its URL to appear in server info.
@@ -151,9 +151,3 @@ const remoteURL = Effect.fnUntraced(function* (client: ReturnType<typeof OpenCod
     }),
   )
 })
-
-function isLoopback(hostname: string) {
-  return (
-    hostname === "localhost" || hostname.endsWith(".localhost") || hostname.startsWith("127.") || hostname === "[::1]"
-  )
-}
