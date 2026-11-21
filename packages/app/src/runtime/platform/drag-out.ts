@@ -10,16 +10,19 @@ const state: DragOutState = { current: undefined }
 
 /**
  * Hands a file row's `dragstart` to the system's drag, so the file drops into other apps as the file itself. False
- * when the platform has no system drag; the event's own drag goes on then.
+ * when the platform has no system drag; the event's own drag goes on then. When the system drag ends, the row gets
+ * the `dragend` its cancelled drag never fired, so whatever started dragging it can finish.
  */
 export function startDragOut(platform: Pick<Platform, "startFileDrag">, event: DragEvent, path: string) {
   if (!platform.startFileDrag || !event.dataTransfer) return false
   const drag = { path, text: event.dataTransfer.getData("text/plain") }
+  const source = event.target
   event.preventDefault()
   state.current = drag
 
   const end = () => {
     if (state.current === drag) state.current = undefined
+    source?.dispatchEvent(new DragEvent("dragend", { bubbles: true }))
   }
 
   void platform.startFileDrag(path).then(end, end)
@@ -36,7 +39,14 @@ export function draggingOut() {
 export function dragOutText(paths: readonly string[]) {
   const drag = state.current
 
-  if (!drag || paths.length !== 1 || paths[0] !== drag.path) return
+  if (!drag || paths.length !== 1 || !sameFile(paths[0] ?? "", drag.path)) return
 
   return drag.text
+}
+
+// The system drag is Windows-only, where paths ignore case and take either separator.
+function sameFile(a: string, b: string) {
+  const key = (value: string) => value.replaceAll("/", "\\").toLowerCase()
+
+  return key(a) === key(b)
 }
