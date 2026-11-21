@@ -29,9 +29,6 @@ export function show(sender: WebContents, tag: string, input: ToastInput) {
     emitIpcEvent(sender, new ToastActivated({ tag }))
   })
 
-  // Past the cap the oldest leaves the notification center too, so none stays there that an answer can't take back.
-  // A toast dismissed by hand stays listed: Windows reports a timeout the same way, and one that timed out must still
-  // be taken back.
   if (posted.size >= MAX_POSTED) {
     const oldest = posted.keys().next().value
 
