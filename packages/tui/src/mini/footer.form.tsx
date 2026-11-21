@@ -2,6 +2,7 @@
 import { measureEditText, type BoxRenderable, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { I18n } from "../i18n"
 import {
   createFormBodyState,
   formAcknowledge,
@@ -99,12 +100,17 @@ export function RunFormBody(props: {
   })
 
   const action = createMemo(() => {
-    if (confirm()) return "submit"
-    if (textual() || state().editing) return "save"
+    if (confirm()) return I18n.t("form.action.submit")
+    if (textual() || state().editing) return I18n.t("form.action.save")
     const field = externalField()
-    if (!field) return "choose"
-    if (state().answers[field.key] === true) return formSingle(props.request) ? "submit" : "next"
-    return state().externalReady[field.key] ? (size().width < 24 ? "done" : "acknowledge") : "open URL"
+    if (!field) return I18n.t("form.action.choose")
+    if (state().answers[field.key] === true)
+      return formSingle(props.request) ? I18n.t("form.action.submit") : I18n.t("form.action.next")
+    return state().externalReady[field.key]
+      ? size().width < 24
+        ? I18n.t("form.action.done")
+        : I18n.t("form.action.acknowledge")
+      : I18n.t("form.action.openUrl")
   })
 
   createEffect(() => {
@@ -199,7 +205,7 @@ export function RunFormBody(props: {
     const field = current()
     if (field?.type === "external") {
       if (state().answers[field.key] !== true) {
-        setState((previous) => formSetError(previous, `Acknowledge ${formLabel(field)}`))
+        setState((previous) => formSetError(previous, I18n.t("form.acknowledgeField", { field: formLabel(field) })))
         return
       }
     } else if (field) {
@@ -235,7 +241,7 @@ export function RunFormBody(props: {
       setState((previous) => formSetExternalReady(previous, field.key))
     } catch {
       setState((previous) => formSetExternalReady(previous, field.key))
-      setState((previous) => formSetError(previous, "Could not open the URL. Open it manually, then press enter."))
+      setState((previous) => formSetError(previous, I18n.t("form.openUrlFailed")))
     }
   }
 
@@ -326,7 +332,7 @@ export function RunFormBody(props: {
         <Show when={!unsupported() && !formSingle(props.request)}>
           <text fg={props.theme.muted} wrapMode="none" flexShrink={0}>
             {confirm()
-              ? "Review"
+              ? I18n.t("form.review")
               : `${Math.min(state().field + 1, props.request.fields.length)}/${props.request.fields.length}`}
           </text>
         </Show>
@@ -394,10 +400,10 @@ export function RunFormBody(props: {
                   flexShrink={0}
                 >
                   {state().answers[field().key] === true
-                    ? "Acknowledged"
+                    ? I18n.t("form.acknowledged")
                     : state().externalReady[field().key]
-                      ? "Press enter to acknowledge completion"
-                      : "Press enter to open the URL"}
+                      ? I18n.t("form.acknowledgeHint")
+                      : I18n.t("form.openUrlHint")}
                 </text>
               </box>
             )}
@@ -530,8 +536,8 @@ export function RunFormBody(props: {
                     {formLabel(field)}:{" "}
                     {field.type === "external"
                       ? state().answers[field.key] === true
-                        ? "acknowledged"
-                        : "required"
+                        ? I18n.t("form.acknowledged").toLowerCase()
+                        : I18n.t("form.required")
                       : formDisplay(field, state().answers[field.key]) || "(not answered)"}
                   </text>
                 )}
@@ -597,18 +603,16 @@ export function RunFormBody(props: {
               minWidth={0}
             >
               {state().submitting
-                ? "submitting…"
+                ? I18n.t("form.submitting")
                 : unsupported()
-                  ? "esc dismiss"
+                  ? I18n.t("form.hint.dismiss")
                   : confirm()
-                    ? "enter submit   esc dismiss"
+                    ? I18n.t("form.hint.submit")
                     : editing()
-                      ? "enter save   esc dismiss"
+                      ? I18n.t("form.hint.save")
                       : externalField()
-                        ? `enter ${action()}   esc dismiss`
-                        : props.mono
-                          ? "up/down select   enter choose   tab next   esc dismiss"
-                          : "↑↓ select   enter choose   tab next   esc dismiss"}
+                        ? `${I18n.t("form.action.acknowledge")}   ${I18n.t("form.hint.dismiss")}`
+                        : I18n.t(props.mono ? "form.hint.choose" : "form.hint.chooseArrows")}
             </text>
             <Show when={state().error}>
               <text fg={props.theme.error} wrapMode="none" truncate flexShrink={1}>
@@ -626,7 +630,7 @@ export function RunFormBody(props: {
               wrapMode="none"
               flexShrink={0}
             >
-              {state().submitting ? "submitting…" : `enter ${action()}`}
+              {state().submitting ? I18n.t("form.submitting") : `enter ${action()}`}
             </text>
           </Show>
           <Show when={!state().submitting}>
@@ -636,8 +640,8 @@ export function RunFormBody(props: {
           </Show>
           <Show when={!state().submitting && size().height >= 10}>
             <text fg={props.theme.muted} wrapMode="word" maxWidth="100%" flexShrink={0}>
-              {size().width >= 56 && rows().length > 0 && !state().editing ? "up/down select  tab next  " : ""}pgup/pgdn
-              scroll
+              {size().width >= 56 && rows().length > 0 && !state().editing ? I18n.t("form.hint.select") : ""}
+              {`pgup/pgdn ${I18n.t("hint.scroll")}`}
             </text>
           </Show>
         </box>

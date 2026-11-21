@@ -14,6 +14,7 @@ import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCle
 import { OneCellSpinner } from "../component/one-cell-spinner"
 import { WORK_SPINNERS, SEED_LAUNCH, SEED_MONO } from "../ui/one-cell-motion"
 import { entrySplashLayout } from "./splash"
+import { I18n } from "../i18n"
 import {
   RUN_SUBAGENT_PANEL_ROWS,
   RunAgentSelectBody,
@@ -397,24 +398,24 @@ export function RunFooterView(props: RunFooterViewProps) {
   const statusText = createMemo(() => {
     if (exiting() || (busy() && armed())) {
       const key = exiting() ? clearShortcut() : interruptLabel()
-      const action = exiting() ? "exit" : "stop"
-      if (!key) return exiting() ? "Exit pending" : "Stop pending"
+      const action = I18n.t(exiting() ? "view.action.exit" : "view.action.stop")
+      if (!key) return I18n.t(exiting() ? "view.exitPending" : "view.stopPending")
       const phrases = [
-        `Press ${key} again to ${exiting() ? "exit" : "interrupt"}`,
-        `${key} again to ${exiting() ? "exit" : "interrupt"}`,
-        `${key} again: ${action}`,
-        `${key} ${action}`,
+        I18n.t("view.pressAgain", { key, action: I18n.t(exiting() ? "view.action.exit" : "view.action.interrupt") }),
+        I18n.t("view.again", { key, action: I18n.t(exiting() ? "view.action.exit" : "view.action.interrupt") }),
+        I18n.t("view.againShort", { key, action }),
+        I18n.t("view.keyAction", { key, action }),
       ]
       return phrases.find((text) => stringWidth(text) <= statusWidth()) ?? phrases[phrases.length - 1]!
     }
 
     if (notice()) return notice()
-    if (!footerDetails()) return shell() ? "Shell" : ""
+    if (!footerDetails()) return shell() ? I18n.t("view.shell") : ""
     if (busy()) {
-      if (stateStatus() === "reconnecting") return "reconnecting"
-      return interruptLabel() ? `${interruptLabel()} stop` : "Running"
+      if (stateStatus() === "reconnecting") return I18n.t("view.reconnecting")
+      return interruptLabel() ? `${interruptLabel()} ${I18n.t("view.action.stop")}` : I18n.t("view.running")
     }
-    return stateStatus() || (shell() ? "Shell" : "")
+    return stateStatus() || (shell() ? I18n.t("view.shell") : "")
   })
   const agentStatus = createMemo(() => {
     if (!footerDetails() || !prompt() || shell()) return undefined
