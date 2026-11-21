@@ -186,6 +186,7 @@ it.live("pairs a worker over Iroh, carries its frames, and refuses a bad join wi
     expect(server.state.loads).toBe(1)
     const join = Option.getOrThrow(Join.decode(added.join))
     expect(join.reach).toEqual([{ type: "iroh" }])
+    expect(added.reach).toEqual(join.reach)
     const dial = yield* workerEndpoint(server.state.endpoint!)
 
     // A stranger with a wrong secret: refused, and the home closes the connection with 1008.
@@ -216,6 +217,9 @@ it.live("pairs a worker over Iroh, carries its frames, and refuses a bad join wi
     })
     yield* fake.restore
     yield* until(Effect.map(server.machines.list(), (list) => list.some((machine) => machine.online)))
+    const listed = yield* Effect.promise(() => server.api.experimental.machine.list())
+    expect(listed[0].connection).toMatchObject({ kind: "iroh", path: "direct" })
+    expect(listed[0].connection?.rtt).toBeGreaterThanOrEqual(0)
     const files = (yield* server.machines.get(Environment.ID.make("gpu"))).files
     const bytes = randomBytes(200_000)
     yield* files.write("/note.bin", bytes)
