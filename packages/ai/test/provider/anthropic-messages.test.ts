@@ -1291,6 +1291,45 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("closes reasoning before an overlapping reasoning block starts", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
+        { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Planning." } },
+        { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_0" } },
+        { type: "content_block_start", index: 1, content_block: { type: "thinking", thinking: "", signature: "" } },
+        { type: "content_block_delta", index: 1, delta: { type: "signature_delta", signature: "sig_1" } },
+        { type: "content_block_stop", index: 1 },
+        {
+          type: "content_block_start",
+          index: 2,
+          content_block: { type: "tool_use", id: "toolu_1", name: "shell", input: {} },
+        },
+        { type: "content_block_delta", index: 2, delta: { type: "input_json_delta", partial_json: "{}" } },
+        { type: "content_block_stop", index: 2 },
+        { type: "content_block_stop", index: 0 },
+        { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 2 } },
+        { type: "message_stop" },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(
+        response.events
+          .filter((event) => event.type === "reasoning-start" || event.type === "reasoning-end")
+          .map((event) => `${event.type}:${event.id}`),
+      ).toEqual([
+        "reasoning-start:reasoning-0",
+        "reasoning-end:reasoning-0",
+        "reasoning-start:reasoning-1",
+        "reasoning-end:reasoning-1",
+      ])
+      expect(response.events.find((event) => event.type === "reasoning-end" && event.id === "reasoning-0")).toMatchObject({
+        providerMetadata: { anthropic: { signature: "sig_0" } },
+      })
+    }),
+  )
+
   it.effect("parses text, reasoning, and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
