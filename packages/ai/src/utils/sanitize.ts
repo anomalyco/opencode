@@ -3,11 +3,16 @@ import { Media } from "../media.js"
 import { isRecord } from "./record.js"
 
 /**
- * Replace lone UTF-16 surrogates in every string, key and nested value. Unchanged
+ * Replace lone UTF-16 surrogates and NUL bytes in every string, key and nested value. NUL bytes
+ * are rejected outright by some providers ("String must not contain null bytes"), and tool output
+ * can contain them legitimately (e.g. `git-upload-pack` capability advertisements). Unchanged
  * subtrees are returned by reference so requests with large histories are not copied.
  */
 export const sanitizeSurrogates = <T>(value: T): T => {
-  if (typeof value === "string") return (value.isWellFormed() ? value : value.toWellFormed()) as T
+  if (typeof value === "string") {
+    const wellFormed = value.isWellFormed() ? value : value.toWellFormed()
+    return (wellFormed.includes("\0") ? wellFormed.replaceAll("\0", "") : wellFormed) as T
+  }
   if (Array.isArray(value)) {
     const items = value.map(sanitizeSurrogates)
     return (
