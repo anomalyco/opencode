@@ -16,8 +16,6 @@ export { useTabs } from "./shell/tabs/tabs"
 
 export { useWindowTabActivity, type WindowTabActivity } from "./shell/layout/project-avatar-state"
 
-export { useWindowTaskbarBadgeCount } from "./shell/layout/taskbar-badge-count"
-
 export { createDraftStore } from "./runtime/persistence/drafts"
 
 export { createNamespaceStorage, type NamespaceStorage } from "./runtime/persistence/namespace"

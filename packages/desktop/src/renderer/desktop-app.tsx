@@ -14,7 +14,6 @@ import {
   usePluginServers,
   useTabs,
   useWindowTabActivity,
-  useWindowTaskbarBadgeCount,
   type LayoutRoute,
   type Platform,
 } from "@opencode/app/desktop"
@@ -281,7 +280,6 @@ function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "li
   const theme = useTheme()
   const language = useLanguage()
   const activity = useWindowTabActivity()
-  const badgeCount = useWindowTaskbarBadgeCount()
 
   createEffect(() => {
     theme.themeId()
@@ -299,7 +297,7 @@ function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "li
 
   createEffect(() => {
     if (props.os !== "windows") return
-    const count = badgeCount()
+    const count = activity().needsYou
     void props.api.setTaskbarBadge(count, count > 0 ? language.plural("notification.taskbar.badge", count) : "")
   })
 
