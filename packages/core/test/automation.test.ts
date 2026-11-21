@@ -38,7 +38,6 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
-import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 
@@ -72,7 +71,6 @@ const enabledEntries = [
     type: "document",
     info: new Info({
       timezone: "America/New_York",
-      experimental: new ConfigExperimental.Info({ automations: true }),
     }),
   }),
 ]
@@ -80,13 +78,13 @@ const disabledEntries = [
   new Document({
     type: "document",
     info: new Info({
-      experimental: new ConfigExperimental.Info({ automations: false }),
+      automations: false,
     }),
   }),
 ]
 const enabled = Config.testLayer(enabledEntries)
 const disabled = Config.testLayer(disabledEntries)
-/** A location whose flag the test turns on, counting every config read. */
+/** A location whose config the test changes, counting every config read. */
 const toggle = { on: false, reads: 0 }
 const toggled = Layer.succeed(
   Config.Service,
@@ -866,7 +864,7 @@ describe("Automation", () => {
     }),
   )
 
-  it.effect("rejects creation when experimental.automations is off", () =>
+  it.effect("rejects creation when automations is false", () =>
     Effect.gen(function* () {
       const automations = yield* setup(disabledDirectory)
       expect(
@@ -879,7 +877,7 @@ describe("Automation", () => {
     }),
   )
 
-  it.effect("rechecks hourly while its location has the flag off, then catches up once it is on", () =>
+  it.effect("rechecks hourly while automations are disabled in its location, then catches up when enabled", () =>
     Effect.gen(function* () {
       const automations = yield* setup(toggleDirectory)
       toggle.on = true
@@ -898,12 +896,12 @@ describe("Automation", () => {
       const reads = toggle.reads
       expect(reads).toBeGreaterThan(before)
 
-      // Within the hour the location is not booted to read the flag again.
+      // Within the hour the location is not booted to read config again.
       yield* TestClock.adjust("59 minutes")
       yield* automations.tick
       expect(toggle.reads).toBe(reads)
 
-      // Once the flag is on and the hour has passed, the missed slot runs once, late, and keeps the phase.
+      // Once automations are enabled and the hour has passed, the missed slot runs once, late, and keeps the phase.
       toggle.on = true
       yield* TestClock.adjust("2 minutes")
       yield* automations.tick
