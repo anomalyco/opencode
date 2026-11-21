@@ -11,10 +11,10 @@
       "harfbuzz.wasm": { "type": "wasm" },
       "satori-layout.wasm": { "type": "wasm" },
       "resvg.wasm": { "type": "wasm" },
-      "opentui-mono-regular-rest.bin": { "type": "data" },
-      "opentui-mono-regular-latin.bin": { "type": "data" },
-      "opentui-mono-bold-rest.bin": { "type": "data" },
-      "opentui-mono-bold-latin.bin": { "type": "data" }
+      "openmono-regular-rest.bin": { "type": "data" },
+      "openmono-regular-latin.bin": { "type": "data" },
+      "openmono-bold-rest.bin": { "type": "data" },
+      "openmono-bold-latin.bin": { "type": "data" }
     }
   }
 }
