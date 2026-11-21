@@ -50,8 +50,6 @@ export class RefreshError extends OAuthError {
   }
 }
 
-// Refresh tokens rotate, so concurrent refreshes of the same token share one request or the second gets invalid_grant.
-const refreshes = new Map<string, ReturnType<FetchLike>>()
 // Different MCP resources can share an authorization server. Serialize their refreshes across
 // Locations, rather than sending a burst for every server after sleep or a network interruption.
 const refreshLoads = KeyedMutex.makeUnsafe<string>()
@@ -69,29 +67,17 @@ const rejections = new Set<string>([
   OAuthErrorCode.UnauthorizedClient,
 ])
 
-const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
-  if (!(init?.body instanceof URLSearchParams) || init.body.get("grant_type") !== "refresh_token") return undefined
-  return [String(url), init.body.get("client_id") ?? "", init.body.get("refresh_token") ?? ""].join("\u0000")
-}
-
-// Bun's and Node's fetch types both apply here and the SDK's FetchLike wants Bun's Response, so the
-// overload is picked by annotation and clone() is pinned to the type it was called on. A tool call
-// can stay silent for minutes, so Bun's idle deadline is off; the MCP execution timeout still applies.
-const share = (pending: ReturnType<FetchLike>) => pending.then((response) => response.clone() as typeof response)
-
-// Requests use `FetchHttpClient.Fetch`, which an embedder can replace, rather than the global fetch. Refreshes
-// share one in-flight request per token, run one at a time per authorization-server origin, cannot hold a
-// half-open connection past 30 seconds, and carry a `Retry-After` hint when the server asks to back off.
+// Credential.refresh owns sharing and the deadline for each credential. The sender only serializes
+// requests across credentials at the same origin and reports transient failures with Retry-After.
 const sender = Effect.gen(function* () {
   const fetch = yield* FetchHttpClient.Fetch
   const run = Effect.runPromiseWith(yield* Effect.context())
+  // A tool call can stay silent for minutes; use the MCP execution timeout instead of Bun's idle deadline.
   const base: FetchLike = (url, init) => fetch(url, { ...init, timeout: false } as BunFetchRequestInit)
   const send: FetchLike = (url, init) => {
-    const key = refreshKey(url, init)
-    if (key === undefined) return base(url, init)
-    const current = refreshes.get(key)
-    if (current) return share(current)
-    const pending = run(
+    if (!(init?.body instanceof URLSearchParams) || init.body.get("grant_type") !== "refresh_token")
+      return base(url, init)
+    return run(
       Effect.gen(function* () {
         const response = yield* Effect.tryPromise({
           try: (signal) => base(url, { ...init, signal }),
@@ -101,14 +87,7 @@ const sender = Effect.gen(function* () {
               : new RefreshError(
                   `OAuth token refresh could not reach the authorization server: ${error instanceof Error ? error.message : String(error)}`,
                 ),
-        }).pipe(
-          Effect.timeoutOrElse({
-            // Unlike tool execution, token refresh must not hold the authorization server's queue
-            // indefinitely when a half-open connection survives a VPN interruption.
-            duration: "30 seconds",
-            orElse: () => Effect.fail(new RefreshError("OAuth token refresh timed out")),
-          }),
-        )
+        })
         if (response.status !== 408 && response.status !== 429 && (response.status < 500 || response.status === 501))
           return response
         const header = response.headers.get("Retry-After")
@@ -126,11 +105,7 @@ const sender = Effect.gen(function* () {
         )
       }).pipe(refreshLoads.withLock(new URL(url).origin)),
       { signal: init?.signal ?? undefined },
-    ).finally(() => {
-      if (refreshes.get(key) === pending) refreshes.delete(key)
-    })
-    refreshes.set(key, pending)
-    return share(pending)
+    )
   }
   return send
 })
