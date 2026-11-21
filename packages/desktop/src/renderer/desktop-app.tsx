@@ -273,7 +273,7 @@ function DesktopStartupReady(props: { dispatch: (event: StartupEvent) => void })
   return null
 }
 
-function DesktopEffects(props: { api: ElectronAPI; os?: "macos" | "windows" | "linux" }) {
+function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "linux" | undefined }) {
   const command = useCommand()
   onCleanup(bindDesktopMenu((id) => command.trigger(id)))
   const theme = useTheme()
@@ -290,11 +290,11 @@ function DesktopEffects(props: { api: ElectronAPI; os?: "macos" | "windows" | "l
   createEffect(() => {
     if (props.os !== "windows") return
     const mode = selectTaskbarProgressMode(activity())
-    void props.api.setTaskbarProgress(mode).catch(() => undefined)
+    void props.api.setTaskbarProgress(mode)
   })
 
   onCleanup(() => {
-    if (props.os === "windows") void props.api.setTaskbarProgress("none").catch(() => undefined)
+    if (props.os === "windows") void props.api.setTaskbarProgress("none")
   })
 
   return null

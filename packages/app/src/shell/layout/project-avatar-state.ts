@@ -108,7 +108,6 @@ export type SessionRequests = ReturnType<typeof sessionRequests>
 
 export type WindowTabActivity = {
   readonly waiting: number
-  readonly unread: number
   readonly failed: boolean
   readonly busy: boolean
 }
@@ -137,12 +136,11 @@ export function useWindowTabActivity(): Accessor<WindowTabActivity> {
 
           return {
             waiting: summary.waiting + (isWaiting ? 1 : 0),
-            unread: summary.unread + (isUnread ? 1 : 0),
             failed: summary.failed || isFailed,
             busy: summary.busy || isBusy,
           }
         },
-        { waiting: 0, unread: 0, failed: false, busy: false },
+        { waiting: 0, failed: false, busy: false },
       ),
   )
 }

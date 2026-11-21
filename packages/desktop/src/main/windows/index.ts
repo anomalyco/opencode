@@ -32,7 +32,7 @@ import { windowRecovery } from "./recovery"
 import { createRevealDriver } from "./reveal-machine"
 import { restoreEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
-import { clearTaskbarProgress, setTaskbarProgress } from "./taskbar-progress"
+import { setTaskbarProgress } from "./taskbar-progress"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
 const revealDrivers = new WeakMap<BrowserWindow, ReturnType<typeof createRevealDriver>>()
@@ -200,7 +200,6 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
 
     if (process.platform === "linux") win.webContents.once("did-finish-load", contentReady)
     win.once("closed", () => {
-      clearTaskbarProgress(win)
       reveal.dispatch({ type: "window.closed" })
       revealDrivers.delete(win)
     })

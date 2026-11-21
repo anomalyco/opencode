@@ -1,31 +1,18 @@
 import type { BrowserWindow } from "electron"
 import type { TaskbarProgressMode } from "../../shared/ipc-contract"
-import {
-  INITIAL_TASKBAR_PROGRESS_STATE,
-  transitionTaskbarProgress,
-  type TaskbarProgressState,
-} from "./taskbar-progress-machine"
 
 export type TaskbarProgressWindow = Pick<BrowserWindow, "isDestroyed" | "setProgressBar">
 
-const states = new WeakMap<TaskbarProgressWindow, TaskbarProgressState>()
+// The mode each window last applied, so a repeat makes no shell call and an idle launch makes none at all.
+const applied = new WeakMap<TaskbarProgressWindow, TaskbarProgressMode>()
+
+// `paused` and `error` fill the bar, `indeterminate` animates it, `none` removes it.
+const progress = { none: -1, indeterminate: 2, paused: 1, error: 1 } satisfies Record<TaskbarProgressMode, number>
 
 export function setTaskbarProgress(win: TaskbarProgressWindow | null | undefined, mode: TaskbarProgressMode) {
   if (process.platform !== "win32" || !win || win.isDestroyed()) return
-  const current = states.get(win) ?? INITIAL_TASKBAR_PROGRESS_STATE
-  const next = transitionTaskbarProgress(current, { type: "mode.reported", mode })
-  states.set(win, next.state)
-  next.commands.forEach((command) => {
-    if (command.type === "apply" && !win.isDestroyed()) {
-      win.setProgressBar(command.progress, { mode: command.mode })
-    }
-  })
-}
 
-export function clearTaskbarProgress(win: TaskbarProgressWindow | null | undefined) {
-  if (!win) return
-  const current = states.get(win)
-
-  if (!current) return
-  states.set(win, transitionTaskbarProgress(current, { type: "window.closed" }).state)
+  if ((applied.get(win) ?? "none") === mode) return
+  applied.set(win, mode)
+  win.setProgressBar(progress[mode], { mode })
 }
