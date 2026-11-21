@@ -3,12 +3,10 @@ export * as DesktopFiles from "./index"
 import { execFile, spawn } from "node:child_process"
 import { app, clipboard, dialog, nativeImage, shell, webContents } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
-import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions } from "../../shared/ipc-contract"
 import { scoped } from "../native/logging"
-import { nativeT } from "../native/translations"
-import { assertAttachmentBudget, createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
+import { createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
 import { resolveExternalURL } from "./external-url"
-import { pickerStarts } from "./picker-start"
+import { createFilePickers } from "./pickers"
 
 export type Interface = ReturnType<typeof make>
 
@@ -60,85 +58,20 @@ function make(
   path: Path.Path,
   pickedFiles: ReturnType<typeof createPickedFileAuthorizations>,
 ) {
-  // The first start that exists; none when even home is gone, which leaves the system to choose.
-  const start = Effect.fnUntraced(function* (requested: string | undefined, save = false) {
-    for (const candidate of pickerStarts(requested, app.getPath("home"), save)) {
-      if (yield* fs.exists(candidate.check).pipe(Effect.orElseSucceed(() => false))) return candidate.use
-    }
-
-    return undefined
+  const pickers = createFilePickers({
+    fs,
+    path,
+    pickedFiles,
+    dialog,
+    home: () => app.getPath("home"),
   })
 
   return {
-    openDirectoryPicker: Effect.fn("DesktopFiles.openDirectoryPicker")(function* (options?: DirectoryPickerOptions) {
-      const defaultPath = yield* start(options?.defaultPath)
-
-      const result = yield* Effect.promise(() =>
-        dialog.showOpenDialog({
-          properties: ["openDirectory", ...(options?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
-          title: options?.title ?? nativeT("desktop.dialog.chooseFolder"),
-          defaultPath,
-        }),
-      )
-
-      if (result.canceled) return null
-
-      return options?.multiple ? result.filePaths : result.filePaths[0]
-    }),
-    openFilePicker: Effect.fn("DesktopFiles.openFilePicker")(function* (sender: number, options?: FilePickerOptions) {
-      const picker = pickedFiles.open(sender)
-
-      if (picker === undefined) return null
-
-      return yield* Effect.gen(function* () {
-        const defaultPath = yield* start(options?.defaultPath)
-
-        const result = yield* Effect.promise(() =>
-          dialog.showOpenDialog({
-            properties: ["openFile", ...(options?.multiple ? ["multiSelections" as const] : [])],
-            title: options?.title ?? nativeT("desktop.dialog.chooseFile"),
-            defaultPath,
-            filters: pickerFilters(options?.extensions),
-          }),
-        )
-
-        if (result.canceled) return null
-
-        const files = yield* Effect.forEach(
-          result.filePaths,
-          Effect.fnUntraced(function* (file) {
-            const info = yield* fs.stat(file)
-
-            return { path: file, name: path.basename(file), size: Number(info.size) }
-          }),
-          { concurrency: "unbounded" },
-        )
-
-        assertAttachmentBudget(files)
-        const token = pickedFiles.grant(picker, result.filePaths)
-
-        return token === undefined ? null : { token, files }
-      }).pipe(Effect.ensuring(Effect.sync(() => pickedFiles.close(picker))))
-    }),
+    openDirectoryPicker: pickers.openDirectoryPicker,
+    openFilePicker: pickers.openFilePicker,
     readPickedFile: pickedFiles.read,
     releasePickedFiles: pickedFiles.release,
-    saveFile: Effect.fn("DesktopFiles.saveFile")(function* (options: SaveFilePickerOptions, content: string) {
-      const defaultPath = yield* start(options?.defaultPath, true)
-
-      const result = yield* Effect.promise(() =>
-        dialog.showSaveDialog({
-          title: options?.title ?? nativeT("desktop.dialog.saveFile"),
-          defaultPath,
-        }),
-      )
-
-      if (result.canceled) return false
-
-      if (!result.filePath) return false
-      yield* fs.writeFile(result.filePath, new TextEncoder().encode(content))
-
-      return true
-    }),
+    saveFile: pickers.saveFile,
     openPath: Effect.fn("DesktopFiles.openPath")(function* (target: string, application?: string) {
       if (!application) {
         const error = yield* Effect.promise(() => shell.openPath(target))
@@ -270,9 +203,3 @@ export const openExternalURL = Effect.fn("DesktopFiles.openExternalURL")(functio
     ),
   )
 })
-
-function pickerFilters(extensions?: string[]) {
-  if (!extensions?.length) return undefined
-
-  return [{ name: nativeT("desktop.dialog.files"), extensions }]
-}

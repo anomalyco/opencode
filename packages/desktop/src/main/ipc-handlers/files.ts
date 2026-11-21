@@ -1,3 +1,4 @@
+import { BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { FileRpcs } from "../../shared/ipc-rpc"
 import { DesktopFiles, openExternalURL } from "../files"
@@ -10,21 +11,27 @@ export const fileHandlers = FileRpcs.toLayer(
     const handoff = yield* IpcPortHandoff
 
     return FileRpcs.of({
-      FilesOpenDirectoryPicker: ({ options }) => files.openDirectoryPicker(options),
-      FilesOpenFilePicker: ({ options }, context) =>
-        files
+      FilesOpenDirectoryPicker: ({ options }, context) =>
+        files.openDirectoryPicker(BrowserWindow.fromWebContents(sender(handoff, context)), options),
+      FilesOpenFilePicker: ({ options }, context) => {
+        const contents = sender(handoff, context)
+
+        return files
           .openFilePicker(
-            sender(handoff, context).id,
+            contents.id,
+            BrowserWindow.fromWebContents(contents),
             options ? { ...options, extensions: options.extensions && [...options.extensions] } : undefined,
           )
-          .pipe(Effect.orDie),
+          .pipe(Effect.orDie)
+      },
       FilesReadPickedFile: ({ token, path }, context) =>
         files
           .readPickedFile(sender(handoff, context).id, token, path)
           .pipe(Effect.map((buffer) => new Uint8Array(buffer)), Effect.orDie),
       FilesReleasePickedFiles: ({ token }, context) =>
         Effect.sync(() => files.releasePickedFiles(sender(handoff, context).id, token)),
-      FilesSaveFile: ({ options, content }) => files.saveFile(options, content).pipe(Effect.orDie),
+      FilesSaveFile: ({ options, content }, context) =>
+        files.saveFile(BrowserWindow.fromWebContents(sender(handoff, context)), options, content).pipe(Effect.orDie),
       FilesOpenExternal: ({ url }) => openExternalURL(url).pipe(Effect.asVoid),
       FilesOpenBrowser: ({ url }) => (/^https?:/i.test(url) ? openExternalURL(url) : Effect.succeed(false)),
       FilesOpenPath: ({ path, application }) =>
