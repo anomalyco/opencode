@@ -1,5 +1,5 @@
 import { $ } from "bun"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Duration, Effect, Fiber, Layer, Logger, Option, Schedule, Stream } from "effect"
@@ -85,6 +85,33 @@ describe("Watcher lifecycle", () => {
         expect(errors).toHaveLength(1)
       }).pipe(Effect.provide(AppNodeBuilder.build(Watcher.node)), Effect.provide(Logger.layer([logger]))),
     )
+  })
+
+  // Lowering the process descriptor limit makes inotify_init1 fail without using up the user's shared inotify budget.
+  // A live directory watch keeps Parcel's shared inotify backend running, so a later one needs no new instance.
+  test.skipIf(process.platform !== "linux").each([
+    ["skips a directory watch with a warning when no inotify instance can be created", [], "skipped"],
+    ["still watches a directory when no inotify instance is left but one watch is live", ["live"], "subscribed"],
+  ])("%s", async (_name, args, outcome) => {
+    await using tmp = await tmpdir()
+    const child = Bun.spawn(
+      [
+        "sh",
+        "-c",
+        'ulimit -n 256 && exec "$@"',
+        "sh",
+        process.execPath,
+        path.join(import.meta.dir, "../fixture/watcher-fd-limit.ts"),
+        tmp.path,
+        ...args,
+      ],
+      { stdout: "pipe", stderr: "pipe", timeout: 15_000 },
+    )
+    const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
+    expect(stderr).toBe("")
+    expect(stdout.includes("fs.inotify.max_user_instances")).toBe(outcome === "skipped")
+    expect(stdout.trim().split("\n").at(-1)).toBe(outcome)
+    expect(await child.exited).toBe(0)
   })
 
   it.effect("signals readiness after acquisition and buffers updates published by the ready callback", () =>
