@@ -493,7 +493,7 @@ pub static ROOT: Spec = Spec::new("opencode", "OpenCode command line interface")
                 .params(&[Param::Arg(arg("key", KEY)), Param::Arg(optional("name", "Environment variable name"))]),
         ]),
         Spec::new("reload", "Reload configuration").globals(SERVER_FLAGS),
-        Spec::new("machine", "Manage remote machines").commands(&[
+        Spec::new("machine", "Manage remote machines").globals(SERVER_FLAGS).commands(&[
             Spec::new("add", "Add a machine and print a one-time join string").params(&[
                 Param::Arg(arg("name", MACHINE_NAME)),
                 Param::Flag(string("url", "Use an external HTTP(S) server URL in the join string").check(Check::ServerUrl)),

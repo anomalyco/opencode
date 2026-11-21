@@ -1,9 +1,8 @@
-//! `machine add`, `machine list` and `machine remove`: remote machines through the background service's
-//! experimental API. Every failure prints one line to stderr and exits 1, as TS's `reportMachineError`.
+//! `machine add`, `machine list` and `machine remove`: remote machines through the experimental API of `--server`
+//! or the background service. Every failure prints one line to stderr and exits 1, as TS's `reportMachineError`.
 
 use std::io::IsTerminal;
 
-use opencode_api::client::Client;
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::{
     ConflictError, ExperimentalMachineAddInput, ExperimentalMachineRemoveInput, ForbiddenError, InvalidRequestError,
@@ -13,7 +12,7 @@ use opencode_util::time::{Zone, now_ms};
 use opencode_util::{bail, error};
 
 use super::Context;
-use super::client::block_on;
+use super::client::{Connected, block_on, connect};
 use super::pair::{is_loopback, server_urls};
 use super::service::Local;
 use super::stats::js_round;
@@ -23,23 +22,24 @@ use crate::output::{Exit, print};
 /// `MACHINE_LINK_PATH`.
 const LINK_PATH: &str = "/api/experimental/machine/link";
 
-pub fn run(_context: &Context, args: &MachineArgs) -> error::Result<()> {
+pub fn run(context: &Context, args: &MachineArgs) -> error::Result<()> {
     let Some(command) = &args.command else { return crate::help::print(&["machine"]) };
     let name = match command {
         MachineCommand::Add(add) => Some(add.name.as_str()),
         MachineCommand::Remove(remove) => Some(remove.name.as_str()),
         MachineCommand::List => None,
     };
-    let Err(error) = block_on(machine(command)).and_then(|result| result) else { return Ok(()) };
+    let Err(error) = block_on(machine(context, command)).and_then(|result| result) else { return Ok(()) };
     eprintln!("{}", message(&error, name));
     Err(Exit(1).into())
 }
 
-async fn machine(command: &MachineCommand) -> error::Result<()> {
-    let client = client().await?;
+async fn machine(context: &Context, command: &MachineCommand) -> error::Result<()> {
+    let connected = client(context).await?;
+    let client = &connected.client;
     match command {
         MachineCommand::Add(args) => {
-            let reach = reach(&server_urls(&client, args.url.as_deref()).await?);
+            let reach = reach(&server_urls(client, args.url.as_deref()).await?);
             let input = ExperimentalMachineAddInput {
                 name: args.name.clone(),
                 reach: reach.clone(),
@@ -56,13 +56,16 @@ async fn machine(command: &MachineCommand) -> error::Result<()> {
     }
 }
 
-/// `ensureMachineClient`: the background service's client, started if needed.
-async fn client() -> error::Result<Client> {
-    let local = Local::from_env()?;
-    if local.config().read()?.disabled == Some(true) {
+/// `ensureMachineClient`: the `--server` given, else the background service, started if needed.
+async fn client(context: &Context) -> error::Result<Connected> {
+    if context.server.standalone {
+        bail!("--standalone starts a server for this command only; a machine needs one that keeps running.");
+    }
+    let disabled = Local::from_env()?.config().read()?.disabled == Some(true);
+    if context.server.server.is_none() && disabled {
         bail!("Managing machines requires the background service; run `opencode service unset disabled` first.");
     }
-    Ok(local.ensure().await?.service.endpoint.client(local.transport())?)
+    connect(context).await
 }
 
 /// `machineReach`: each server URL's link address over ws(s), reachable ones first, loopback ones last, once each.

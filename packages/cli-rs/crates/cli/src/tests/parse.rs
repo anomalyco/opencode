@@ -130,6 +130,16 @@ fn server_flags_apply_where_declared() {
     assert!(!server(&["debug", "heap-dump"]).standalone);
 }
 
+/// machine.test.ts "accept the global --server flag in any position".
+#[test]
+fn machine_commands_take_server_anywhere() {
+    let url = "http://127.0.0.1:4096";
+    assert_eq!(server(&["machine", "list", "--server", url]).server.as_deref(), Some(url));
+    assert_eq!(server(&["machine", "--server", url, "add", "gpu"]).server.as_deref(), Some(url));
+    assert_eq!(server(&["--server", url, "machine", "remove", "gpu"]).server.as_deref(), Some(url));
+    assert_eq!(server(&["machine", "list"]).server, None);
+}
+
 /// login-alias.test.ts: the hidden `login` parses into the same input as `auth login`.
 #[test]
 fn login_parses_like_auth_login() {
