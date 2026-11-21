@@ -69,6 +69,12 @@ type PlatformBase = {
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
 
+  /**
+   * Observe `opencode://` links opened with the app (desktop only). Links that arrived before the first listener
+   * are delivered to it at once.
+   */
+  onDeepLinks?(listener: (urls: string[]) => void): () => void
+
   /** Observe native drag cancellation that does not reach the renderer event loop. */
   onDragCancel?(callback: () => void): () => void
 
