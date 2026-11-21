@@ -2,8 +2,12 @@ import { splitProps, type ComponentProps } from "solid-js"
 import { syncSpinPhase } from "../../hooks/spin-phase"
 import "./loader.css"
 
-export function Loader(props: ComponentProps<"svg">) {
-  const [local, rest] = splitProps(props, ["class", "classList", "width", "height"])
+/**
+ * `delayed` keeps the loader invisible for a moment and then fades it in, so loads that finish quickly never flash
+ * a spinner.
+ */
+export function Loader(props: ComponentProps<"svg"> & { delayed?: boolean }) {
+  const [local, rest] = splitProps(props, ["class", "classList", "width", "height", "delayed"])
 
   return (
     <svg
@@ -17,6 +21,7 @@ export function Loader(props: ComponentProps<"svg">) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       data-component="loader-v2"
+      data-delayed={local.delayed ? "" : undefined}
       aria-hidden={rest["aria-hidden"] ?? "true"}
     >
       <circle cx="8" cy="8" r="6" data-slot="loader-v2-background" stroke-width="2" />

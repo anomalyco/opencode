@@ -3,6 +3,7 @@ import { pickerMode } from "./domain"
 import {
   createPickerTreeState,
   hasPickerGitRepo,
+  pickerLoadingDirs,
   pickerTreeView,
   transitionPickerTree,
   type PickerNode,
@@ -49,6 +50,16 @@ function ready(root: string, nodes: PickerNode[]) {
 function dirs(state: PickerTreeState) {
   return state.status === "ready" ? state.dirs : {}
 }
+
+test("a folder shows as loading only while the user waits on its listing", () => {
+  const state = ready(HOME, [folder("work"), folder("notes")])
+  const expanded = run([{ type: "dir.expanded", dir: "work/" }], state)
+  const loaded = run([{ type: "dir.loaded", dir: "work", attempt: 2, nodes: [] }], expanded.state)
+
+  expect(pickerLoadingDirs(state)).toEqual([])
+  expect(pickerLoadingDirs(expanded.state)).toEqual(["work/"])
+  expect(pickerLoadingDirs(loaded.state)).toEqual([])
+})
 
 test("a child folder that fails leaves the root readable and retries on its next expand", () => {
   const state = ready(HOME, [folder("work")])

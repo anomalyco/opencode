@@ -19,14 +19,32 @@
   transform-origin: center;
 }
 
+/* A load that finishes within the delay never shows the loader. */
+[data-component="loader-v2"][data-delayed] {
+  opacity: 0;
+  animation:
+    loader-v2-spin var(--_duration) linear infinite,
+    loader-v2-fade-in 200ms ease-out var(--loader-v2-delay, 150ms) forwards;
+}
+
 @keyframes loader-v2-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
+@keyframes loader-v2-fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
 :root[data-motion="reduce"] {
   [data-component="loader-v2"] {
     animation: none;
+  }
+
+  [data-component="loader-v2"][data-delayed] {
+    animation: loader-v2-fade-in 200ms ease-out var(--loader-v2-delay, 150ms) forwards;
   }
 }

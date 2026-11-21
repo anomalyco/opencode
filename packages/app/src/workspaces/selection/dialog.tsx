@@ -4,6 +4,7 @@ import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@op
 import { Button } from "@opencode/ui/button"
 import { Divider } from "@opencode/ui/divider"
 import { Icon } from "@opencode/ui/icon"
+import { Loader } from "@opencode/ui/loader"
 import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import {
@@ -14,6 +15,7 @@ import {
   ProjectAvatar,
 } from "@opencode/ui/project-avatar"
 import { TextInput } from "@opencode/ui/text-input"
+import { treeRowLoadingCss } from "@opencode/ui/tree-row-loading"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
@@ -42,6 +44,7 @@ import {
 import {
   createPickerTreeState,
   hasPickerGitRepo,
+  pickerLoadingDirs,
   pickerTreeView,
   transitionPickerTree,
   type PickerNode,
@@ -444,6 +447,13 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     dialog.close()
   }
 
+  // The rows live in the tree's shadow root, so the folders still listing are marked by a style inside it.
+  const loadingStyle = document.createElement("style")
+  const loadingCss = createMemo(() => treeRowLoadingCss(pickerLoadingDirs(treeMachine())))
+  createEffect(() => {
+    loadingStyle.textContent = loadingCss()
+  })
+
   onMount(() => {
     const closeSuggestions = (event: PointerEvent) => {
       if (event.target instanceof Node && pathArea?.contains(event.target)) return
@@ -599,7 +609,9 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
     if (!container) return
     tree.render({ containerWrapper: container })
-    tree.getFileTreeContainer()?.classList.add("directory-picker-tree")
+    const host = tree.getFileTreeContainer()
+    host?.classList.add("directory-picker-tree")
+    host?.shadowRoot?.append(loadingStyle)
   })
 
   // Opens the first root. Without a dialog location the tree first resolves the server's default one.
@@ -830,7 +842,9 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             on:wheel={{ handleEvent: (event: WheelEvent) => event.stopPropagation(), passive: true }}
           >
             <Show when={treeView().loading}>
-              <div class="directory-picker-state">{language.t("common.loading")}</div>
+              <div class="directory-picker-state" role="status" aria-label={language.t("common.loading")}>
+                <Loader delayed />
+              </div>
             </Show>
             <Show when={treeView().error}>
               <div class="directory-picker-state">{language.t("dialog.directory.readError")}</div>
