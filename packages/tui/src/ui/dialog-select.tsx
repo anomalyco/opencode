@@ -438,6 +438,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     }
     const target = scroll.getChildren()[index]
     if (!target) return
+    // An options change rebuilds every row. Reading a row that the next layout pass has not
+    // sized yet yields a zero height, and its position turns into a scroll to the top.
+    if (target.height === 0) {
+      const option = selected()
+      if (option) scrollAfterLayout(center, option.value)
+      return
+    }
     const y = target.y - scroll.y
     if (center) {
       const centerOffset = Math.floor(scroll.height / 2)

@@ -96,7 +96,7 @@ async function mountSelect<T>(
   focusCurrent?: boolean,
   select?: Pick<
     DialogSelectProps<T>,
-    "flat" | "ref" | "onFilter" | "renderFilter" | "onCancel" | "focusTarget" | "search"
+    "flat" | "ref" | "onFilter" | "renderFilter" | "onCancel" | "focusTarget" | "search" | "onMove"
   >,
 ) {
   const state = path.join(root, "state")
@@ -139,7 +139,10 @@ async function mountSelect<T>(
             current={value()}
             focusCurrent={focusCurrent}
             {...select}
-            onMove={(option) => moved.push(option.value)}
+            onMove={(option) => {
+              moved.push(option.value)
+              select?.onMove?.(option)
+            }}
             onSelect={(option) => selected.push(option.value)}
           />
         )),
@@ -691,6 +694,33 @@ test("keeps the first row selected when current is only a marker", async () => {
     await select.app.waitFor(() => select.selected.length === 1)
 
     expect(select.selected).toEqual(["recent"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("keeps the viewport when a move rebuilds the option rows", async () => {
+  await using tmp = await tmpdir()
+  const options = Array.from({ length: 12 }, (_, index) => ({
+    title: `Session ${String(index + 1).padStart(2, "0")}`,
+    value: `session-${index + 1}`,
+    category: "Today",
+  }))
+  // The session list clears its delete marker in onMove, which remints every option and rebuilds
+  // the rows before the same key scrolls.
+  const select = await mountSelect(tmp.path, options, undefined, undefined, {
+    onMove: () => select.replaceOptions(options.map((option) => ({ ...option }))),
+  })
+
+  try {
+    for (let index = 0; index < 8; index++) select.app.mockInput.pressKey("n", { ctrl: true })
+    await select.app.waitForFrame((frame) => frame.includes("Session 09"))
+
+    select.replaceOptions(options.filter((option) => option.value !== "session-9"))
+    await select.app.waitForFrame((frame) => !frame.includes("Session 09"))
+    select.app.mockInput.pressKey("n", { ctrl: true })
+
+    await select.app.waitForFrame((frame) => frame.includes("Session 11") && !frame.includes("Session 01"))
   } finally {
     select.app.renderer.destroy()
   }
