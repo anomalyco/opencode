@@ -27,7 +27,7 @@ const handler = Effect.fn("cli.machine.add")(function* (
       name: invited.name,
       join: invited.join,
       expires: invited.expires,
-      reach,
+      reach: invited.reach,
       tty: Boolean(process.stdout.isTTY),
     }),
   )
