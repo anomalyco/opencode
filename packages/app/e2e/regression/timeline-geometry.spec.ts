@@ -227,7 +227,7 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
   const wrapper = page.locator(`[data-timeline-part-id="${id}"]`)
   const diff = wrapper.locator('[data-component="apply-patch-file-diff"]')
   const row = page.locator("[data-timeline-key]", { has: wrapper })
-  const trigger = wrapper.getByRole("button")
+  const trigger = wrapper.locator('[data-slot="accordion-trigger"]')
 
   const bottom = () =>
     scroller.evaluate((element) => Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop))

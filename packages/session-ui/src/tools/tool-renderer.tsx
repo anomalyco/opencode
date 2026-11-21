@@ -1379,6 +1379,65 @@ export function FileAccordionGroup(props: { children: JSX.Element }) {
   )
 }
 
+// A file's diff shows this much before the rest folds away. One just past the limit stays whole.
+const FILE_DIFF_FOLD = { over: 480, show: 420 }
+
+/** Folds a tall file diff as a long user message folds: laid out whole, clipped, and opened by the toggle below it. */
+export function FileDiffFold(props: { children: JSX.Element }) {
+  const i18n = useI18n()
+  const id = createUniqueId()
+  const [state, setState] = createStore({ tall: false, expanded: false })
+
+  let fold: HTMLDivElement | undefined
+  let toggle: HTMLButtonElement | undefined
+
+  createResizeObserver(
+    () => fold,
+    () => {
+      if (fold!.scrollHeight > FILE_DIFF_FOLD.over) setState("tall", true)
+    },
+  )
+
+  const folded = () => state.tall && !state.expanded
+
+  // Closing shrinks the diff above the toggle, which would leave the reader far past its end, so the toggle stays
+  // where it was pressed. Opening moves nothing above it.
+  const flip = () => {
+    const before = toggle!.getBoundingClientRect().top
+    setState("expanded", !state.expanded)
+    const moved = before - toggle!.getBoundingClientRect().top
+
+    if (moved > 1) scrollParent(toggle!)?.scrollBy({ top: -moved, behavior: "instant" })
+  }
+
+  return (
+    <>
+      <div
+        ref={fold}
+        id={id}
+        data-slot="file-diff-fold"
+        data-folded={folded() ? "" : undefined}
+        style={{ "max-height": folded() ? `${FILE_DIFF_FOLD.show}px` : undefined }}
+      >
+        {props.children}
+      </div>
+      <Show when={state.tall}>
+        <button
+          ref={toggle}
+          type="button"
+          data-slot="file-diff-fold-toggle"
+          aria-expanded={state.expanded}
+          aria-controls={id}
+          onClick={flip}
+        >
+          {i18n.t(state.expanded ? "ui.common.showLess" : "ui.common.showMore")}
+          <Icon name="chevron-down" />
+        </button>
+      </Show>
+    </>
+  )
+}
+
 function FileAccordionItem(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -1422,7 +1481,7 @@ function FileAccordionItem(props: {
           data-slot="accordion-content"
           data-expanded=""
         >
-          {props.children}
+          <FileDiffFold>{props.children}</FileDiffFold>
         </div>
       </Show>
     </div>
