@@ -5543,6 +5543,37 @@ describe("SessionRunnerLLM", () => {
     },
   )
 
+  scenario("records and runs a call to another harness's tool name as the tool it means", function* (s) {
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* transformTools(
+      registry,
+      {
+        shell: {
+          name: "shell",
+          description: "Shell",
+          input: Schema.Struct({ command: Schema.String }),
+          execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "done" })),
+        },
+      },
+      { codemode: false },
+    )
+    yield* s.admit("Call bash")
+
+    yield* s.llm.push(TestLLM.toolCall("call-bash", "bash", { command: "ls" }), TestLLM.stop())
+    yield* s.resume
+
+    // Saved as shell, so history only holds a call the model can repeat.
+    expect(executed).toEqual([{ command: "ls" }])
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Call bash"),
+      Expected.assistant({}, [
+        Expected.completedTool({ id: "call-bash", name: "shell" }, { content: [Expected.text("done")] }),
+      ]),
+      { type: "assistant", finish: "stop" },
+    ])
+  })
+
   scenario("durably settles local tool failures before continuing", function* (s) {
     yield* s.admit("Call missing")
 

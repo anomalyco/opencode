@@ -133,12 +133,12 @@ export const make = Effect.gen(function* () {
     // A local execution starts only after its Tool.Called publication completes.
     // Read to the end, not just the finish event, so the next request can reuse this response.
     // The span covers only the provider stream, so model time separates from tools, which run in this consumer.
-    const programs = new Map<string, string>()
+    const resolved = new Map<string, Tool.Resolution>()
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
       Stream.withSpan("LLM.stream", { attributes: modelAttributes }),
       Stream.runForEach((streamed) =>
         Effect.gen(function* () {
-          const event = asProgram(streamed, programs, input.prepared.codeModeExpression)
+          const event = resolveCall(streamed, resolved, input.prepared.resolveTool)
           if (event === undefined) return
           if (publisher.record().providerFailed) return
           // Wait here, where cancellation still works, rather than inside the uninterruptible publish.
@@ -346,38 +346,41 @@ const isInterruptedStream = (failure: AIError) => {
 }
 
 /**
- * Weaker models sometimes call a Code Mode tool at the top level. Rewrite that call into the `execute` program it should
- * have been, so it is recorded, run and replayed as one. Its input streams as JSON rather than code, so the deltas are
- * held back until the call completes.
+ * Records and runs a local call under what it resolves to before anything is published, so history only holds calls the
+ * model can repeat: a Code Mode tool called at the top level becomes an `execute` program, and an alias such as `bash`
+ * becomes its tool. A program's input streams as JSON rather than code, so its deltas are held back until the call.
  */
-const asProgram = (
+const resolveCall = (
   event: LLMEvent,
-  programs: Map<string, string>,
-  expressionFor: ((name: string) => string | undefined) | undefined,
+  resolved: Map<string, Tool.Resolution>,
+  resolve: ((name: string) => Tool.Resolution | undefined) | undefined,
 ): LLMEvent | undefined => {
-  if (expressionFor === undefined) return event
+  if (resolve === undefined) return event
   if (event.type === "tool-input-start" && !event.providerExecuted) {
-    const expression = expressionFor(event.name)
-    if (expression === undefined) return event
-    programs.set(event.id, expression)
-    return { ...event, name: "execute", namespace: undefined }
+    const resolution = resolve(event.name)
+    if (resolution === undefined) return event
+    resolved.set(event.id, resolution)
+    return { ...event, name: resolution.name, namespace: undefined }
   }
-  if (event.type === "tool-input-delta") return programs.has(event.id) ? undefined : event
-  if (event.type === "tool-input-end")
-    return programs.has(event.id) ? { ...event, name: "execute", namespace: undefined } : event
-  if (event.type === "tool-input-error") {
-    if (!programs.delete(event.id)) return event
-    return { ...event, name: "execute", namespace: undefined }
+  if (event.type === "tool-input-delta" || event.type === "tool-input-end" || event.type === "tool-input-error") {
+    const resolution = resolved.get(event.id)
+    if (resolution === undefined) return event
+    if (event.type === "tool-input-error") resolved.delete(event.id)
+    if (event.type === "tool-input-delta" && resolution.expression !== undefined) return undefined
+    return { ...event, name: resolution.name, namespace: undefined }
   }
   if (event.type !== "tool-call" || event.providerExecuted) return event
-  const expression = programs.get(event.id) ?? expressionFor(event.name)
-  if (expression === undefined) return event
-  programs.delete(event.id)
+  const resolution = resolved.get(event.id) ?? resolve(event.name)
+  if (resolution === undefined) return event
+  resolved.delete(event.id)
   return {
     ...event,
-    name: "execute",
+    name: resolution.name,
     namespace: undefined,
-    input: { code: `return await ${expression}(${JSON.stringify(event.input ?? {})})` },
+    input:
+      resolution.expression === undefined
+        ? event.input
+        : { code: `return await ${resolution.expression}(${JSON.stringify(event.input ?? {})})` },
   }
 }
 

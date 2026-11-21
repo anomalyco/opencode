@@ -115,11 +115,23 @@ export interface Snapshot {
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
   /**
-   * The expression a Code Mode program calls a tool by (`tools.opencode.session.search`), when `name` is the path or
-   * registry ID of one of this snapshot's Code Mode tools.
+   * What a model's call to `name` should be recorded and run as, when `name` isn't a tool the request advertised. A
+   * Code Mode tool called at the top level becomes an `execute` program, and a name carried over from another harness
+   * (`bash`) becomes the tool it means. Undefined leaves the call as it is. `definitions` are the request's surviving
+   * definitions, keyed by advertised name, as for `execute`.
    */
-  readonly codeModeExpression?: (name: string) => string | undefined
+  readonly resolve?: (name: string, definitions?: ReadonlyMap<string, ToolDefinition>) => Resolution | undefined
 }
+
+export interface Resolution {
+  /** The advertised name to record, replay and run the call under. */
+  readonly name: string
+  /** For a call that becomes an `execute` program, the expression it calls, such as `tools.opencode.session.search`. */
+  readonly expression?: string
+}
+
+// Tool names models carry over from other harnesses, used only when no tool has that name.
+const aliases = new Map([["bash", "shell"]])
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Tool") {}
 
@@ -371,15 +383,24 @@ const layer = Layer.effect(
                 return { tool, inventory, catalog: entry.value, definition: entry.definition }
               })()
           return {
-            ...(codemode === undefined
-              ? {}
-              : {
-                  codeModeCatalog: codemode.catalog,
-                  codeModeExpression: (name: string) => {
-                    const found = CodeModeTool.find(codemode.inventory, name)
-                    return found && toolExpression(CodeModeTool.qualifiedName(found.registration))
-                  },
-                }),
+            ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog }),
+            resolve: (name, definitions) => {
+              // The name a registered tool is advertised under, after any session context rename.
+              const advertised = (id: string) =>
+                definitions
+                  ? Array.from(definitions).find(([, definition]) => definition.name === id)?.[0]
+                  : direct.has(id) || (id === "execute" && codemode)
+                    ? id
+                    : undefined
+              if (definitions ? definitions.has(name) : advertised(name) !== undefined) return
+              const target = aliases.get(name)
+              const aliased = target === undefined ? undefined : advertised(target)
+              if (aliased !== undefined) return { name: aliased }
+              const execute = codemode && advertised("execute")
+              const found = execute ? CodeModeTool.find(codemode.inventory, target ?? name) : undefined
+              if (!execute || !found) return
+              return { name: execute, expression: toolExpression(CodeModeTool.qualifiedName(found.registration)) }
+            },
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
