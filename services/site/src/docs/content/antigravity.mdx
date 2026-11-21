@@ -1,0 +1,63 @@
+---
+title: "Google Antigravity"
+description: "Use your Antigravity login in OpenCode through the Google Antigravity provider, which runs the Antigravity CLI on your machine."
+noindex: true
+---
+
+Use your Antigravity subscription in OpenCode. The Google Antigravity provider runs the Antigravity CLI on your machine
+over the Agent Client Protocol, so install the CLI and sign in first.
+
+```bash
+agy
+```
+
+Then choose a model.
+
+```text
+/models
+# Select Google Antigravity.
+```
+
+The model list comes from your account, so it is what the CLI reports for the plan you are on. Effort levels are
+variants, such as `antigravity/gemini-3.8-flash#high`.
+
+OpenCode finds `agy` on your `PATH`. To use another copy, set `OPENCODE_ANTIGRAVITY_PATH` on the server.
+
+```bash
+opencode service set env OPENCODE_ANTIGRAVITY_PATH /opt/agy/bin/agy
+```
+
+## How it works
+
+The agent calls the model, and OpenCode does everything else.
+
+- The agent runs with the Antigravity CLI's own system prompt, tools and instruction files.
+- The agent's tool calls are shown in OpenCode as provider-executed calls. OpenCode does not run them.
+- The agent's own permission rules govern what it may change on the machine; a permission request is refused unless the
+  host answers it.
+- Your Antigravity settings are not loaded into OpenCode.
+
+## Cost
+
+A consumer Antigravity subscription covers the usage, so no cost is shown.
+
+## Limitations
+
+- The Antigravity CLI must be installed on the same machine as the OpenCode server. The provider is not available in
+  remote workspaces.
+- The agent's tools are the CLI's own, so OpenCode's tool permissions and policies do not apply to them.
+- Temperature, top-p, top-k, seed, and stop sequences are not supported.
+- The agent cannot be steered mid-turn.
+
+## Terms
+
+This provider drives the CLI's `antigravity-acp` runtime, which is the surface Google's Antigravity FAQ names as usable
+for single-user interactive development. It does not drive the CLI's print mode (`agy -p`), which the FAQ says is not
+supported for third-party agents on consumer plans.
+
+## Errors
+
+| Error or symptom | Check |
+| --- | --- |
+| `Antigravity: could not start agy` | Install the Antigravity CLI, or set `OPENCODE_ANTIGRAVITY_PATH` to its path. |
+| `Antigravity: the CLI reported no models for this account` | Run `agy` once and sign in. |
