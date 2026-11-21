@@ -14,6 +14,8 @@ export { useGlobal } from "./runtime/server/runtime"
 
 export { useTabs } from "./shell/tabs/tabs"
 
+export { useWindowTaskbarBadgeCount } from "./shell/layout/taskbar-badge-count"
+
 export { createDraftStore } from "./runtime/persistence/drafts"
 
 export { createNamespaceStorage, type NamespaceStorage } from "./runtime/persistence/namespace"

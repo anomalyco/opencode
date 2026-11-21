@@ -5,6 +5,7 @@ import { IpcPortHandoff } from "../ipc-transport"
 import {
   getPinchZoomEnabled,
   setPinchZoomEnabled,
+  setTaskbarBadge,
   setTitlebar,
   setTrafficLightsPosition,
   setWindowThemeReady,
@@ -67,6 +68,12 @@ export const windowHandlers = WindowRpcs.toLayer(
           const win = BrowserWindow.fromWebContents(sender(handoff, context))
 
           if (win) setTrafficLightsPosition(win, position)
+        }),
+      WindowSetTaskbarBadge: ({ count, description }, context) =>
+        Effect.sync(() => {
+          const win = BrowserWindow.fromWebContents(sender(handoff, context))
+
+          if (win) setTaskbarBadge(win, count, description)
         }),
     })
   }),

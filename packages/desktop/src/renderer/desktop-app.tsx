@@ -10,8 +10,10 @@ import {
   ServerConnection,
   useCommand,
   useCurrentRoute,
+  useLanguage,
   usePluginServers,
   useTabs,
+  useWindowTaskbarBadgeCount,
   type LayoutRoute,
   type Platform,
 } from "@opencode/app/desktop"
@@ -123,7 +125,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
               revealed={selectStartupRevealed(startup.state())}
               dispatch={startup.dispatch}
             />
-            <DesktopEffects api={props.api} />
+            <DesktopEffects api={props.api} os={platform.os} />
             <Suspense fallback={null}>
               <Show when={activeSidecar()} keyed>
                 {(server) => <MigrationStatus server={server} />}
@@ -271,10 +273,12 @@ function DesktopStartupReady(props: { dispatch: (event: StartupEvent) => void })
   return null
 }
 
-function DesktopEffects(props: { api: ElectronAPI }) {
+function DesktopEffects(props: { api: ElectronAPI; os?: "macos" | "windows" | "linux" }) {
   const command = useCommand()
   onCleanup(bindDesktopMenu((id) => command.trigger(id)))
   const theme = useTheme()
+  const language = useLanguage()
+  const badgeCount = useWindowTaskbarBadgeCount()
 
   createEffect(() => {
     theme.themeId()
@@ -282,6 +286,17 @@ function DesktopEffects(props: { api: ElectronAPI }) {
     const background = getComputedStyle(document.documentElement).getPropertyValue("--background-base").trim()
 
     if (background) void props.api.setBackgroundColor(background)
+  })
+
+  createEffect(() => {
+    if (props.os !== "windows") return
+    const count = badgeCount()
+    const description = count > 0 ? language.plural("notification.taskbar.badge", count) : ""
+    void props.api.setTaskbarBadge(count, description).catch(() => undefined)
+  })
+
+  onCleanup(() => {
+    if (props.os === "windows") void props.api.setTaskbarBadge(0, "").catch(() => undefined)
   })
 
   return null
