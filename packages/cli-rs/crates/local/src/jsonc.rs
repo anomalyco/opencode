@@ -1095,3 +1095,21 @@ fn format_range(document: &str, range_start: usize, range_end: usize) -> Vec<Edi
     }
     edits
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Nesting past the bound is a parse error rather than a stack overflow, and an edit fails rather than formatting
+    // gigabytes.
+    #[test]
+    fn deep_jsonc_is_invalid_not_a_crash() {
+        let nested = |depth: usize| "[".repeat(depth) + &"]".repeat(depth);
+        assert!(parse(&nested(MAX_DEPTH)).is_some());
+        for depth in [MAX_DEPTH + 1, 100_000] {
+            assert_eq!(parse(&nested(depth)), None, "{depth}");
+            let edit = modify(&nested(depth), &[Segment::Index(0)], Some(&Value::Null));
+            assert!(matches!(edit, Err(EditError::TooDeep)), "{depth}");
+        }
+    }
+}

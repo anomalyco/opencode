@@ -178,7 +178,8 @@ mod tests {
         };
         let p = paths(&[
             ("HOME", "/h"),
-            ("XDG_DATA_HOME", "/d"),
+            // Normalized as `path.join` does, as TS keys file locks by these paths.
+            ("XDG_DATA_HOME", "/x/..//d/./"),
             ("XDG_CACHE_HOME", "/c"),
             ("XDG_CONFIG_HOME", "/x"),
             ("XDG_STATE_HOME", ""),
@@ -218,15 +219,6 @@ mod tests {
         }
         assert_eq!(tmpdir(Flavor::Posix, &lookup(&[("TEMP", "C:\\Temp")])), PathBuf::from("C:\\Temp"));
         assert_eq!(tmpdir(Flavor::Posix, &lookup(&[])), PathBuf::from("/tmp"));
-    }
-
-    // The lock keys TypeScript derives from these with `path.join`.
-    #[test]
-    fn roots_normalize_as_path_join() {
-        let p = paths(&[("HOME", "/h"), ("XDG_STATE_HOME", "/x/y/..//s/./")]);
-        let native = |path: &str| PathBuf::from(if cfg!(windows) { path.replace('/', "\\") } else { path.to_owned() });
-        assert_eq!(p.state, native("/x/s/opencode"));
-        assert_eq!(join(Path::new("./c//d"), "cli.json"), native("c/d/cli.json"));
     }
 
     #[test]
