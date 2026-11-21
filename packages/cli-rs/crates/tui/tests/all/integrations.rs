@@ -31,6 +31,12 @@ fn integrations() -> Value {
             "methods": [{ "type": "oauth", "id": "device", "label": "Sign in with OpenCode" }],
             "connections": [credential("cred_work", "work", None), credential("cred_home", "home", None)],
         },
+        // Hidden: OpenCode Go is listed only once a Go key is saved.
+        {
+            "id": "opencode-go", "name": "OpenCode Go",
+            "methods": [{ "type": "key" }],
+            "connections": [{ "type": "env", "name": "OPENCODE_API_KEY" }],
+        },
         {
             "id": "openai", "name": "OpenAI",
             "methods": [

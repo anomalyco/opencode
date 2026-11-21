@@ -637,6 +637,7 @@ fn is_web_url(target: &str) -> error::Result<bool> {
     }
 }
 
+// OpenCode Go connects through OpenCode, so it's only offered to people who already saved a Go key.
 fn login_choices(integrations: &[IntegrationInfo]) -> Vec<IntegrationChoice> {
     let mcp = |integration: &IntegrationInfo| {
         integration.metadata.as_ref().and_then(|metadata| metadata.get("source")).and_then(Value::as_str) == Some("mcp")
@@ -644,8 +645,14 @@ fn login_choices(integrations: &[IntegrationInfo]) -> Vec<IntegrationChoice> {
     let priority = |integration: &IntegrationInfo| {
         PRIORITY.iter().position(|id| *id == integration.id.as_str()).unwrap_or(PRIORITY.len())
     };
-    let mut choices: Vec<&IntegrationInfo> =
-        integrations.iter().filter(|integration| !connect_methods(integration).is_empty()).collect();
+    let mut choices: Vec<&IntegrationInfo> = integrations
+        .iter()
+        .filter(|integration| !connect_methods(integration).is_empty())
+        .filter(|integration| {
+            integration.id.as_str() != "opencode-go"
+                || integration.connections.iter().any(|connection| matches!(connection, ConnectionInfo::Credential(_)))
+        })
+        .collect();
     choices.sort_by(|a, b| {
         mcp(b)
             .cmp(&mcp(a))
@@ -1664,6 +1671,27 @@ mod tests {
         )
         .unwrap();
         assert_eq!(entries[0].value.to_string(), r#"{"type":"key","key":"k","metadata":{"a":1,"b":3}}"#);
+    }
+
+    #[test]
+    fn login_choices_hide_opencode_go_until_a_go_key_is_saved() {
+        let integration = |id: &str, connection: &str| -> IntegrationInfo {
+            serde_json::from_str(&format!(
+                r#"{{"id":"{id}","name":"{id}","methods":[{{"type":"key"}}],"connections":[{connection}]}}"#
+            ))
+            .unwrap()
+        };
+        let values = |connection: &str| -> Vec<String> {
+            login_choices(&[integration("opencode", ""), integration("opencode-go", connection)])
+                .into_iter()
+                .map(|choice| choice.value)
+                .collect()
+        };
+        assert_eq!(values(r#"{"type":"env","name":"OPENCODE_API_KEY"}"#), ["opencode"]);
+        assert_eq!(
+            values(r#"{"type":"credential","id":"go","label":"Go","method":"key"}"#),
+            ["opencode-go", "opencode"]
+        );
     }
 
     #[test]

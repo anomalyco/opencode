@@ -138,8 +138,10 @@ impl Method {
     }
 }
 
-/// `integrationOptions`: popular first, then by name and ID.
+/// `integrationOptions`: popular first, then by name and ID. OpenCode Go connects through OpenCode, so it's only
+/// listed for people who already saved a Go key.
 fn sorted(mut list: Vec<IntegrationInfo>) -> Vec<IntegrationInfo> {
+    list.retain(|integration| integration.id.0 != "opencode-go" || !credentials(integration).is_empty());
     let priority = |id: &IntegrationID| PRIORITY.iter().position(|name| *name == id.0).unwrap_or(99);
     list.sort_by(|a, b| {
         priority(&a.id)
@@ -1359,4 +1361,45 @@ fn provider_id(local: &Local, integration: &IntegrationID) -> Option<String> {
                 .map(|provider| provider.id.0.clone())
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn integration(id: &str, name: &str, connection: &str) -> IntegrationInfo {
+        serde_json::from_str(&format!(r#"{{"id":"{id}","name":"{name}","methods":[],"connections":[{connection}]}}"#))
+            .unwrap()
+    }
+
+    fn ids(list: Vec<IntegrationInfo>) -> Vec<String> {
+        sorted(list).into_iter().map(|item| item.id.0).collect()
+    }
+
+    #[test]
+    fn integration_options_put_popular_first_then_sort_by_name() {
+        let go = r#"{"type":"credential","id":"go","label":"Go","method":"key"}"#;
+        assert_eq!(
+            ids(vec![
+                integration("mistral", "Mistral", ""),
+                integration("openai", "OpenAI", ""),
+                integration("custom-z", "Zebra", ""),
+                integration("anthropic", "Anthropic", ""),
+                integration("opencode", "OpenCode Zen", ""),
+                integration("opencode-go", "OpenCode Go", go),
+            ]),
+            ["opencode", "opencode-go", "openai", "anthropic", "mistral", "custom-z"]
+        );
+    }
+
+    #[test]
+    fn integration_options_hide_opencode_go_until_a_go_key_is_saved() {
+        assert_eq!(
+            ids(vec![
+                integration("opencode", "OpenCode Zen", ""),
+                integration("opencode-go", "OpenCode Go", r#"{"type":"env","name":"OPENCODE_API_KEY"}"#),
+            ]),
+            ["opencode"]
+        );
+    }
 }
