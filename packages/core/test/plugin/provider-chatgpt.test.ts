@@ -21,7 +21,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { GithubCopilotPlugin } from "@opencode/core/plugin/provider/github-copilot"
-import { ChatGPTPlugin, fetchModels, revoke, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
+import { ChatGPTPlugin, fetchModels, refresh, revoke, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
@@ -195,6 +195,47 @@ describe("ChatGPTPlugin", () => {
 
       expect(yield* Effect.flip(revoke(value, App.make(), url))).toBeInstanceOf(Error)
       expect(forms).toHaveLength(2)
+    }),
+  )
+
+  it.live("asks to connect again only when OpenAI rejects the refresh token", () =>
+    Effect.gen(function* () {
+      const server = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            port: 0,
+            routes: {
+              "/expired": Response.json({ error: "invalid_grant" }, { status: 400 }),
+              "/invalid": Response.json({ error: "invalid_request" }, { status: 400 }),
+              "/error": new Response("unavailable", { status: 500 }),
+            },
+            fetch: () => new Response(null, { status: 404 }),
+          }),
+        ),
+        (server) => Effect.sync(() => server.stop()),
+      )
+      const baseURL = `http://localhost:${server.port}`
+      const value = Credential.OAuth.make({
+        type: "oauth",
+        methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+        access: "access",
+        refresh: "refresh-token",
+        expires: 1,
+        metadata: { clientID: "oaiapp_issued" },
+      })
+
+      expect(yield* Effect.flip(refresh(value, App.make(), `${baseURL}/expired`))).toHaveProperty(
+        "message",
+        "This ChatGPT sign-in has expired or was revoked. Connect again.",
+      )
+      expect(yield* Effect.flip(refresh(value, App.make(), `${baseURL}/invalid`))).toHaveProperty(
+        "message",
+        "Request failed: 400",
+      )
+      expect(yield* Effect.flip(refresh(value, App.make(), `${baseURL}/error`))).toHaveProperty(
+        "message",
+        "Request failed: 500",
+      )
     }),
   )
 
