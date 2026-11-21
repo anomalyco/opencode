@@ -1,6 +1,6 @@
 import { type ParentProps } from "solid-js"
 import { ModelsProvider } from "@/providers/models/models"
-import { ServerProvider } from "@/runtime/server/current"
+import { ServerProvider } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 
 export function SettingsServerDataScope(props: ParentProps<{ server: ServerConnection.Any; directory?: string }>) {

@@ -11,6 +11,9 @@ import {
   getOwner,
   onCleanup,
   untrack,
+  Show,
+  type JSX,
+  type ParentProps,
 } from "solid-js"
 import { createServerProjects, ServerConnection, useServers } from "./registry"
 import {
@@ -25,6 +28,7 @@ import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
 import { selectServerHostname } from "@/runtime/server/health-machine"
 import { createServerSdkContext } from "./client"
+import { ServerContextProvider } from "@/runtime/server/current"
 import { createServerSyncContext } from "./sync"
 import { createData, createSessionRetention } from "@opencode/client/solid"
 import type { ServerScope } from "@/runtime/server/scope"
@@ -391,6 +395,27 @@ export function useServerCtx(server: Accessor<ServerConnection.Any | undefined>)
 
     return conn ? global.serverCtx(ServerConnection.key(conn)) : undefined
   }
+}
+
+// Keyed by controller: while the server rejects our credentials the children unmount and `signedOut` shows instead,
+// and they mount again with the controller its new credentials start.
+export function ServerProvider(props: ParentProps<{ conn: ServerConnection.Any; signedOut?: JSX.Element }>) {
+  const global = useGlobal()
+  const key = ServerConnection.key(props.conn)
+
+  return (
+    <Show
+      when={global.serverCtx(key)}
+      keyed
+      fallback={<Show when={global.serverSignedOut(key)}>{props.signedOut}</Show>}
+    >
+      {(ctx) => (
+        <ServerContextProvider conn={props.conn} ctx={ctx} health={global.servers.health[key]}>
+          {props.children}
+        </ServerContextProvider>
+      )}
+    </Show>
+  )
 }
 
 export type ServerCtx = ReturnType<typeof createServerController>
