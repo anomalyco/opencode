@@ -41,9 +41,8 @@ function required<T>(value: T | undefined): T {
 
 const httpRequest = Effect.fn(function* (request: Request) {
   const hooks = yield* PluginHooks.Service
-  return yield* hooks.trigger("session", "http.request", {
-    sessionID: Session.ID.make("ses_test"),
-    agent: Agent.ID.make("build"),
+  return yield* hooks.trigger("model", "experimental.http.request", {
+    session: { id: Session.ID.make("ses_test"), agent: Agent.ID.make("build") },
     model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4") }),
     kind: "primary",
     request,
@@ -302,9 +301,8 @@ describe("GithubCopilotPlugin", () => {
     Effect.gen(function* () {
       yield* addPlugin()
       const hooks = yield* PluginHooks.Service
-      const event = yield* hooks.trigger("session", "http.request", {
-        sessionID: Session.ID.make("ses_test"),
-        agent: Agent.ID.make("build"),
+      const event = yield* hooks.trigger("model", "experimental.http.request", {
+        session: { id: Session.ID.make("ses_test"), agent: Agent.ID.make("build") },
         model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("claude-sonnet-4.5") }),
         kind: "primary",
         request: new Request("https://api.githubcopilot.com/v1/messages", {

@@ -144,26 +144,26 @@ only when the plugin needs to remove that particular hook or transform earlier w
 
 Use this table to find the closest V2 API for each V1 hook:
 
-| V1 hook                                | V2 API                                                       |
-| -------------------------------------- | ------------------------------------------------------------ |
-| `event`                                | `ctx.event.subscribe()`                                      |
-| `dispose`                              | cleanup function returned by `setup`                         |
-| `config`                               | transforms on the affected domains                           |
-| `tool` map                             | `ctx.tool.transform(...)`                                    |
-| `auth`                                 | `ctx.integration.transform(...)` and integration APIs        |
-| `provider`                             | `ctx.provider.transform(...)` and `ctx.model.transform(...)` |
-| `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
-| `chat.params`                          | `ctx.session.hook("context", ...)`                           |
-| `chat.headers`                         | `ctx.session.hook("model.request", ...)` or `"http.request"` |
-| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                       |
-| `command.execute.before`               | command transforms or the prompt hook, depending on intent   |
-| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                       |
-| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                        |
-| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                       |
-| `tool.definition`                      | `ctx.tool.transform(...)`                                    |
-| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` and edit `event.system`   |
-| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` and edit `event.messages` |
-| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
+| V1 hook                                | V2 API                                                                                         |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `event`                                | `ctx.event.subscribe()`                                                                        |
+| `dispose`                              | cleanup function returned by `setup`                                                           |
+| `config`                               | transforms on the affected domains                                                             |
+| `tool` map                             | `ctx.tool.transform(...)`                                                                      |
+| `auth`                                 | `ctx.integration.transform(...)` and integration APIs                                          |
+| `provider`                             | `ctx.provider.transform(...)` and `ctx.model.transform(...)`                                   |
+| `chat.message`                         | `ctx.session.hook("prompt", ...)`                                                              |
+| `chat.params`                          | `ctx.session.hook("context", ...)`                                                             |
+| `chat.headers`                         | `ctx.session.hook("model.request", ...)` or `ctx.model.hook("experimental.http.request", ...)` |
+| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                                                         |
+| `command.execute.before`               | command transforms or the prompt hook, depending on intent                                     |
+| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                                                         |
+| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                                                          |
+| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                                                         |
+| `tool.definition`                      | `ctx.tool.transform(...)`                                                                      |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` and edit `event.system`                                     |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` and edit `event.messages`                                   |
+| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                                                          |
 
 These are migration destinations, not always exact renames. In particular, the V2 `prompt` hook runs before durable
 prompt admission, while `context` runs immediately before an agent model request. Register `context`, `compaction`,
@@ -219,8 +219,9 @@ export default Plugin.define({
 ```
 
 Use semantic provider options in `event.options`. Use `model.request` for model request headers and raw request settings,
-and use `http.request` or `http.response` only when the plugin needs the native provider HTTP exchange. Provider-specific
-hooks can pass `{ providerID: "..." }` as the third argument to `ctx.session.hook`.
+and use `ctx.model.hook("experimental.http.request")` or `"experimental.http.response"` only when the plugin needs the
+native provider HTTP exchange. Provider-specific hooks can pass `{ providerID: "..." }` as the third argument to
+`ctx.session.hook` and `ctx.model.hook`.
 
 ## Migrate custom tools
 

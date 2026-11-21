@@ -28,6 +28,8 @@ import { llmClient, requestExecutor } from "./effect/app-node-platform.js"
 import { Integration } from "./integration.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Model } from "./model.js"
+import { ModelHttp } from "./model-http.js"
+import { PluginHooks } from "./plugin/hooks.js"
 import { ModelRetry } from "./model-retry.js"
 
 export interface TextInput {
@@ -147,6 +149,7 @@ export const layer = Layer.effect(
     const images = yield* ImageClient.Service
     const decisionClient = yield* DecisionClient.Service
     const videos = yield* VideoClient.Service
+    const hooks = yield* PluginHooks.Service
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
       const resolved = yield* resolver
@@ -182,6 +185,7 @@ export const layer = Layer.effect(
           }),
         )
         .pipe(
+          ModelHttp.scoped(hooks, { model: resolved.ref, kind: "text" }),
           ModelRetry.retryOneShot,
           Effect.mapError((error) => providerError(resolved.ref, error)),
         )
@@ -224,6 +228,7 @@ export const layer = Layer.effect(
         })
         .pipe(
           Effect.provideService(ImageClient.Service, images),
+          ModelHttp.scoped(hooks, { model: input.model, kind: "image" }),
           ModelRetry.retryOneShot,
           Effect.mapError((error) => providerError(input.model, error)),
         )
@@ -265,6 +270,7 @@ export const layer = Layer.effect(
         })
         .pipe(
           Effect.provideService(DecisionClient.Service, decisionClient),
+          ModelHttp.scoped(hooks, { model: input.model, kind: "decision" }),
           ModelRetry.retryOneShot,
           Effect.mapError((error) => providerError(input.model, error)),
         )
@@ -289,6 +295,7 @@ export const layer = Layer.effect(
       if (!model) return yield* missing(ref, "video")
       return yield* run(model).pipe(
         Effect.provideService(VideoClient.Service, videos),
+        ModelHttp.scoped(hooks, { model: ref, kind: "video" }),
         Effect.mapError((error) => providerError(ref, error)),
       )
     })
@@ -393,5 +400,5 @@ function failureReason(tag: AIError["reason"]["_tag"], status: number | undefine
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ModelResolver.node, Model.node, llmClient, requestExecutor],
+  deps: [ModelResolver.node, Model.node, PluginHooks.node, llmClient, requestExecutor],
 })

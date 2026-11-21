@@ -601,9 +601,10 @@ describe("AzurePlugin requests", () => {
         kind: "primary" as const,
       }
 
-      const azure = yield* hooks.trigger("session", "http.request", {
-        ...context,
-        sessionID: Session.ID.make("ses_azure"),
+      const azure = yield* hooks.trigger("model", "experimental.http.request", {
+        model: context.model,
+        kind: context.kind,
+        session: { id: Session.ID.make("ses_azure"), agent: context.agent },
         request: new Request("https://test-resource.openai.azure.com/openai/v1/responses", {
           headers: { "api-key": "stored-token", "x-keep": "yes" },
         }),
@@ -614,15 +615,26 @@ describe("AzurePlugin requests", () => {
       expect(azure.request.headers.has("api-key")).toBe(false)
       expect(azure.request.headers.get("x-keep")).toBe("yes")
 
-      const foundry = yield* hooks.trigger("session", "http.request", {
-        ...context,
-        sessionID: Session.ID.make("ses_foundry"),
+      const foundry = yield* hooks.trigger("model", "experimental.http.request", {
+        model: context.model,
+        kind: context.kind,
+        session: { id: Session.ID.make("ses_foundry"), agent: context.agent },
         request: new Request("https://test-resource.services.ai.azure.com/anthropic/v1/messages", {
           headers: { "x-api-key": "stored-token" },
         }),
       })
       expect(foundry.request.headers.get("authorization")).toBe("Bearer https://ai.azure.com/.default-token")
       expect(foundry.request.headers.has("x-api-key")).toBe(false)
+
+      // Generate calls have no Session and get the same token.
+      const generated = yield* hooks.trigger("model", "experimental.http.request", {
+        model: context.model,
+        kind: "text",
+        request: new Request("https://test-resource.openai.azure.com/openai/v1/responses"),
+      })
+      expect(generated.request.headers.get("authorization")).toBe(
+        "Bearer https://cognitiveservices.azure.com/.default-token",
+      )
 
       const handshake = yield* hooks.trigger("session", "experimental.ws.handshake", {
         ...context,

@@ -92,8 +92,8 @@ const request = Effect.fn(function* (
     baseURL: event.baseURL,
     headers: event.headers,
     hasHttpHooks:
-      (yield* hooks.has("session", "http.request", providerID)) ||
-      (yield* hooks.has("session", "http.response", providerID)),
+      (yield* hooks.has("model", "experimental.http.request", providerID)) ||
+      (yield* hooks.has("model", "experimental.http.response", providerID)),
   }
 })
 

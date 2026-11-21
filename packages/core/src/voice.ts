@@ -10,10 +10,14 @@ import {
 } from "@opencode/ai/experimental"
 import { RequestExecutor } from "@opencode/ai/route"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { Context, Effect, Layer, Redacted, Schema } from "effect"
 import { Credential } from "./credential.js"
 import { requestExecutor } from "./effect/app-node-platform.js"
 import { Integration } from "./integration.js"
+import { ModelHttp } from "./model-http.js"
+import { PluginHooks } from "./plugin/hooks.js"
 
 export interface ModelInfo {
   readonly model: string
@@ -56,6 +60,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
     const integrations = yield* Integration.Service
+    const hooks = yield* PluginHooks.Service
 
     // Integration lists the active credential first, then newer stored credentials, then non-empty env vars.
     const findConnection = (provider: string, methods: readonly string[] = ["key"]) =>
@@ -114,6 +119,10 @@ export const layer = Layer.effect(
         ...access,
       }).pipe(
         Effect.provideService(RequestExecutor.Service, executor),
+        ModelHttp.scoped(hooks, {
+          model: Model.Ref.make({ providerID: Provider.ID.make(found.provider), id: Model.ID.make(input.model) }),
+          kind: "voice",
+        }),
         Effect.mapError(
           (error: AIError): Error =>
             error.reason._tag === "InvalidRequest" || error.reason._tag === "UnsupportedOperation"
@@ -130,7 +139,7 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Integration.node, requestExecutor],
+  deps: [Integration.node, PluginHooks.node, requestExecutor],
 })
 
 /** OpenCode hosts GPT-Live on its OpenAI account, billed to the workspace whose credential starts a session. */
