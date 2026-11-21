@@ -148,7 +148,10 @@ export type PaneMachineEvent =
       readonly binding: string
       readonly window: number
       readonly storageKey: string
-      /** The window's inventory, which wins over the saved one. */
+      /**
+       * The window's inventory, which has each tab's title and order. It is what the window last heard, so it can
+       * lack a tab opened since: the binding lists every tab main still holds as well (`createConnecting`).
+       */
       readonly restore: Browser.State | undefined
       readonly saved: StoredRestore
     }
@@ -237,18 +240,17 @@ export function transitionPane(state: PaneState, event: PaneMachineEvent): PaneT
     if (state.bindings.has(event.binding)) return { state, effects: [] }
     // A reconnect can arrive before the old attach stream observes the disconnect. The window owns one
     // native pane for this session, even when the renderer lost the IPC that would normally close it.
-    const bindings = new Map(state.bindings)
-    const effects: PaneEffect[] = []
-
-    for (const [id, old] of bindings) {
-      if (old.window !== event.window || old.storageKey !== event.storageKey) continue
-      bindings.delete(id)
-      effects.push(...close(old, "browser.pane.replaced", false).effects)
-    }
+    const replaced = Array.from(state.bindings.values()).filter((old) => old.window === event.window && old.storageKey === event.storageKey)
+    const bindings = new Map(Array.from(state.bindings).filter(([, old]) => !replaced.includes(old)))
+    // The tabs the binding it replaces still holds, which the window may not have heard of yet.
+    const held = replaced.flatMap((old) => Array.from(old.tabs.values(), (slot) => slot.tab))
 
     return {
-      state: { status: "active", bindings: bindings.set(event.binding, createConnecting(event)) },
-      effects: [...effects, { type: "start-timer", binding: event.binding, ms: REGISTER_TIMEOUT_MS }],
+      state: { status: "active", bindings: bindings.set(event.binding, createConnecting(event, held)) },
+      effects: [
+        ...replaced.flatMap((old) => close(old, "browser.pane.replaced", false).effects),
+        { type: "start-timer", binding: event.binding, ms: REGISTER_TIMEOUT_MS },
+      ],
     }
   }
 
@@ -563,22 +565,34 @@ function publish(state: AttachedBinding, error?: string, placed?: StateEvent["pl
   }
 }
 
-function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "registered" }>): ActiveBinding {
-  const restore = event.restore ?? {
-    tabs: event.saved.tabs.map((tab) => ({
-      id: tab.id,
-      url: tab.url,
-      title: "",
-      loading: false,
-      canGoBack: false,
-      canGoForward: false,
-      generation: 0,
-    })),
-    focusedTabID: event.saved.focusedTabID,
-  }
+/**
+ * A binding for a session starts with the window's inventory and every tab main holds for the session that the window
+ * left out: `held`, the tabs of the binding it replaces, else the saved ones, which follow each report. A tab opened
+ * while the window registers again, or whose report it had not received, is in neither the window's inventory nor a
+ * page any more, and nobody closed it. Each stands after the tab before it in main's order, else at the end.
+ */
+function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "registered" }>, held: readonly Browser.Tab[]): ActiveBinding {
+  const saved = event.saved.tabs.map((tab) => ({
+    id: tab.id,
+    url: tab.url,
+    title: "",
+    loading: false,
+    canGoBack: false,
+    canGoForward: false,
+    generation: 0,
+  }))
+
+  const restore = event.restore ?? { tabs: saved, focusedTabID: event.saved.focusedTabID }
+
+  const listed = (held.length > 0 ? held : saved).reduce<readonly Browser.Tab[]>((tabs, tab, index, own) => {
+    if (tabs.some((item) => item.id === tab.id)) return tabs
+    const before = tabs.findIndex((item) => item.id === own[index - 1]?.id)
+
+    return before === -1 ? [...tabs, tab] : [...tabs.slice(0, before + 1), tab, ...tabs.slice(before + 1)]
+  }, restore.tabs)
 
   const tabs = new Map(
-    restore.tabs.map((tab): [Browser.TabID, TabSlot] => [
+    listed.map((tab): [Browser.TabID, TabSlot] => [
       tab.id,
       {
         status: "unloaded",

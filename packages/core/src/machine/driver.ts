@@ -32,8 +32,16 @@ export class ProcessLost extends Schema.TaggedError<ProcessLost>()("Machine.Proc
   }
 }
 
+export const ConnectionInfo = Schema.Struct({
+  kind: Schema.Literals(["websocket", "iroh"]),
+  path: Schema.optionalKey(Schema.Literals(["direct", "relayed"])),
+  /** Round-trip time in milliseconds. */
+  rtt: Schema.optionalKey(Schema.Number),
+})
+
 /** One connection from the worker, as the endpoint that accepted it hands it over. */
 export interface Connection {
+  readonly describe?: () => typeof ConnectionInfo.Type
   readonly hello: Hello
   /** Queues the message and returns. A message queued on a connection that is lost is dropped. */
   readonly send: (message: ToWorker) => void
@@ -55,11 +63,13 @@ export interface Interface {
   readonly close: (error: Error) => void
   /** The hello of the connection being served, if there is one. */
   readonly hello: () => Hello | undefined
+  readonly describe: () => typeof ConnectionInfo.Type | undefined
 }
 
 type Reply = Extract<FromWorker, { type: "fs" }>
 
 interface Link {
+  readonly describe: Connection["describe"]
   readonly hello: Hello
   readonly send: Connection["send"]
   readonly lost: Deferred.Deferred<void>
@@ -120,6 +130,7 @@ export const make = (id: Environment.ID): Interface => {
     Effect.suspend(() => {
       if (link) lose(link)
       const current: Link = {
+        describe: connection.describe,
         hello: connection.hello,
         send: connection.send,
         lost: Deferred.makeUnsafe(),
@@ -339,6 +350,7 @@ export const make = (id: Environment.ID): Interface => {
     connect,
     close,
     hello: () => link?.hello,
+    describe: () => link?.describe?.(),
     environment: Environment.make(id, {
       spawner,
       overrides: {

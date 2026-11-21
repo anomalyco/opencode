@@ -148,6 +148,24 @@ function make(
         return
       }
 
+      if (process.platform === "win32" && /^wt(?:\.exe)?$/i.test(path.basename(application))) {
+        const info = yield* fs.stat(target)
+        const cwd = info.type === "Directory" ? target : path.dirname(target)
+
+        // Windows Terminal splits its command line on `;` even inside quotes, so the folder goes only to `cwd`,
+        // never onto its command line, and it opens a window of its own rather than a tab in one the user has open.
+        return yield* Effect.tryPromise(() =>
+          new Promise<void>((resolve, reject) => {
+            const child = spawn(application, windowsTerminalArgs, { cwd, stdio: "ignore", detached: true })
+            child.once("error", reject)
+            child.once("spawn", () => {
+              child.unref()
+              resolve()
+            })
+          }),
+        )
+      }
+
       if (process.platform === "win32" && /^(?:powershell|pwsh)(?:\.exe)?$/i.test(path.basename(application))) {
         const info = yield* fs.stat(target)
         const cwd = info.type === "Directory" ? target : path.dirname(target)
@@ -215,6 +233,9 @@ function make(
 
 // Chromium exposes copied bitmaps as image/png; JPEG only appears when an app placed one explicitly.
 const clipboardImageTypes = ["image/png", "image/jpeg"]
+
+// A new Windows Terminal window whose first tab starts in the launch's working directory.
+const windowsTerminalArgs = ["-w", "new", "-d", "."]
 
 export const openExternalURL = Effect.fn("DesktopFiles.openExternalURL")(function* (value: string) {
   const url = resolveExternalURL(value)

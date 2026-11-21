@@ -75,7 +75,10 @@ function requestDetail(data: Data, kind: keyof typeof requestTitles, sessionID: 
 
   if (!request) return
 
-  return request.resources.length ? `${request.action}: ${request.resources.join(", ")}` : request.action
+  // A request record without resources still says what it asks: its action.
+  const resources = request.resources ?? []
+
+  return resources.length ? `${request.action}: ${resources.join(", ")}` : request.action
 }
 
 // The list Desktop kept before unread state moved to the server. Until its viewed state reaches the server, unread
@@ -443,6 +446,7 @@ export function createServerNotificationState(input: {
         ...list.filter((request) => request.id !== requestID),
         { id: requestID, pending: () => !!pending() },
       ])
+      void platform.requestAttention?.().catch(() => undefined)
 
       const open = () => openNotificationSession(tabs, input.key, target)
 

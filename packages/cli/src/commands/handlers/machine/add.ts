@@ -27,7 +27,8 @@ const handler = Effect.fn("cli.machine.add")(function* (
       name: invited.name,
       join: invited.join,
       expires: invited.expires,
-      reach,
+      // A server from before this field existed returns none; show what was sent.
+      reach: invited.reach ?? reach,
       tty: Boolean(process.stdout.isTTY),
     }),
   )

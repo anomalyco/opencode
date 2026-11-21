@@ -16,6 +16,7 @@ export const iconNames = [
   "textmate",
   "powershell",
   "sublime-text",
+  "windows-terminal",
 ] as const
 
 export type IconName = (typeof iconNames)[number]

@@ -8,7 +8,7 @@ export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("Deep
   urls: Schema.Array(Schema.String),
 }) {}
 
-// A toast this window posted was clicked: on a button when `action` is set, else on its body.
+// A Windows toast this window posted was clicked: on a button when `action` is set, else on its body.
 export class ToastActivated extends Schema.TaggedClass<ToastActivated>()("ToastActivated", {
   tag: Schema.String,
   action: Schema.optional(Schema.String),
@@ -84,10 +84,14 @@ export class SidecarChanged extends Schema.TaggedClass<SidecarChanged>()("Sideca
   url: Schema.String,
 }) {}
 
+// The machine woke from sleep; every window checks its server event streams instead of waiting for them to time out.
+export class SystemResumed extends Schema.TaggedClass<SystemResumed>()("SystemResumed", {}) {}
+
 export const DesktopEvent = Schema.Union([
   DeepLinksOpened,
   ToastActivated,
   SidecarChanged,
+  SystemResumed,
   MenuCommandTriggered,
   WindowFullscreenChanged,
   WindowFocusChanged,
