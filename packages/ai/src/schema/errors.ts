@@ -5,7 +5,11 @@ import { ProviderID, RouteID } from "./ids.js"
 import type { LLMResponse } from "./events.js"
 import { awsErrorType, providerCodes } from "../utils/provider-codes.js"
 
-export const ProviderFailureClassification = Schema.Literals(["context-overflow", "payload-too-large"])
+export const ProviderFailureClassification = Schema.Literals([
+  "context-overflow",
+  "payload-too-large",
+  "reasoning-rejected",
+])
 export type ProviderFailureClassification = typeof ProviderFailureClassification.Type
 
 export class HttpContext extends Schema.Class<HttpContext>("AI.HttpContext")({
