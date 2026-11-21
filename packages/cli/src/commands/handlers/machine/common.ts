@@ -2,6 +2,7 @@ import {
   isConflictError,
   isForbiddenError,
   isInvalidRequestError,
+  isMachineNotFoundError,
   OpenCode,
   type MachineInfo,
 } from "@opencode/client/promise"
@@ -80,6 +81,7 @@ export function formatMachineError(error: unknown, name?: string) {
     const label = name === undefined ? "That name" : JSON.stringify(name)
     return `${label} is not a valid machine name. Use lowercase letters, digits, and hyphens, starting with a letter, 2 to 63 characters, and not "local".`
   }
+  if (isMachineNotFoundError(error)) return `No machine named ${JSON.stringify(name ?? error.machine)}.`
   if (isConflictError(error)) {
     const target = name ?? error.resource
     const label = target === undefined ? "This machine" : `Machine ${JSON.stringify(target)}`

@@ -216,7 +216,7 @@ export const Plugin = {
               yield* permission.assert({
                 action: "edit",
                 resources: [target.resource],
-                save: ["*"],
+                save: [FileAccess.always(target)],
                 ...Permission.invocation(context),
               })
               yield* ctx.worktree

@@ -182,6 +182,31 @@ describe("Permission", () => {
     expect(Permission.evaluate("external_directory", "C:/Users/x/other/*", rules).effect).toBe("ask")
   })
 
+  test("allows a machine's files only by a rule that names the machine", () => {
+    const allow = (resource: string): Permission.Ruleset => [{ action: "read", resource, effect: "allow" }]
+    const files = process.platform === "darwin" || process.platform === "win32"
+    expect(Permission.evaluate("read", "gpu:/work/a", allow("*")).effect).toBe("ask")
+    expect(Permission.evaluate("read", "gpu:/work/a", allow("**/work/*")).effect).toBe("ask")
+    expect(Permission.evaluate("read", "gpu:/work/a", allow("gpu:/work/*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "gpu:/work/a", allow("gpu:*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "cpu:/work/a", allow("gpu:/work/*")).effect).toBe("ask")
+    expect(Permission.evaluate("read", "/work/a", allow("gpu:/work/*")).effect).toBe("ask")
+    // The machine's name follows the same letter-case rule as the rest of a file rule.
+    expect(Permission.evaluate("read", "gpu:/work/a", allow("GPU:/work/*")).effect).toBe(files ? "allow" : "ask")
+    // A bare deny still reaches every machine.
+    expect(Permission.evaluate("edit", "gpu:/work/a", [{ action: "*", resource: "*", effect: "deny" }]).effect).toBe(
+      "deny",
+    )
+    // Local paths, drive letters included, match as before, and resources that are not files are untouched.
+    expect(Permission.evaluate("read", "/work/a", allow("*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "C:/work/a", allow("*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "C:\\work\\a", allow("C:/work/*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "C:/work/a", allow("**/work/*")).effect).toBe("allow")
+    expect(
+      Permission.evaluate("shell", "gpu:/bin/x", [{ action: "shell", resource: "*", effect: "allow" }]).effect,
+    ).toBe("allow")
+  })
+
   test("matches file rules without case where file systems ignore it by default", () => {
     const rules: Permission.Ruleset = [
       { action: "*", resource: "*", effect: "allow" },

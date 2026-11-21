@@ -41,6 +41,7 @@ const PIECE = 65_535 - 16 - 1
 
 const HELLO: Machine.Hello = {
   type: "hello",
+  protocol: 1,
   os: "linux",
   arch: "x64",
   home: "/home/worker",
@@ -458,6 +459,22 @@ it.effect("refuses a worker whose first message is not a hello", () =>
       const worker = yield* raw(carrier, { home: paired.home, identity: paired.worker })
       yield* worker.message(started("a"))
       expect(yield* Fiber.join(serving).pipe(Effect.flip)).toEqual(new Link.Refused())
+    }),
+  ),
+)
+
+it.effect("refuses a hello with no protocol version or one it does not know", () =>
+  home(
+    Effect.gen(function* () {
+      const paired = yield* enrol("gpu")
+      const { protocol: _, ...unversioned } = Schema.encodeSync(Machine.Hello)(HELLO)
+      for (const hello of [unversioned, { ...unversioned, protocol: 2 }]) {
+        const carrier = yield* wires()
+        const serving = yield* Effect.forkChild(Link.serve(carrier.home), { startImmediately: true })
+        const worker = yield* raw(carrier, { home: paired.home, identity: paired.worker })
+        yield* worker.frame(concat(Uint8Array.of(0), text(JSON.stringify(hello))))
+        expect(yield* Fiber.join(serving).pipe(Effect.flip)).toEqual(new Link.Refused())
+      }
     }),
   ),
 )

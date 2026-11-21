@@ -10,6 +10,7 @@ import { Agent } from "./agent.js"
 import { SessionErrors } from "./session/error.js"
 import { SessionSchema } from "./session/schema.js"
 import { SessionStore } from "./session/store.js"
+import { MachinePath } from "./machine/path.js"
 import { Wildcard } from "./util/wildcard.js"
 import { PermissionSaved } from "./permission/saved.js"
 import { PluginHooks } from "./plugin/hooks.js"
@@ -101,11 +102,19 @@ export function ignoresCase(action: string) {
 
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
   const ignoreCase = ignoresCase(action)
+  // Only a rule that names a machine allows that machine's files, so `*` saved on this computer never reaches another.
+  // Denies and asks still apply everywhere.
+  const machine = pathActions.some((item) => item === action) ? MachinePath.parse(resource)?.machine : undefined
   return (
     rulesets
       .flat()
       .findLast(
-        (rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource, ignoreCase),
+        (rule) =>
+          Wildcard.match(action, rule.action) &&
+          (machine === undefined ||
+            rule.effect !== "allow" ||
+            Wildcard.match(rule.resource.slice(0, machine.length + 1), `${machine}:`, ignoreCase)) &&
+          Wildcard.match(resource, rule.resource, ignoreCase),
       ) ?? {
       action,
       resource: "*",

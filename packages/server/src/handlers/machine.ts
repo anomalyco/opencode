@@ -299,7 +299,8 @@ export const makeMachine = Effect.gen(function* () {
     }),
     remove: Effect.fn("MachineHandler.remove")(function* (name: string) {
       yield* requireEnabled
-      yield* machines.remove(Environment.ID.make(name))
+      if (!(yield* machines.remove(Environment.ID.make(name))))
+        return yield* new MachineNotFoundError({ machine: name, message: `No machine named ${JSON.stringify(name)}.` })
       return HttpApiSchema.NoContent.make()
     }),
   }
