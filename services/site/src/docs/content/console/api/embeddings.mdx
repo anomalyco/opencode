@@ -1,0 +1,154 @@
+---
+title: "Embeddings API"
+description: "Turn text into vectors with Console's embedding models through one OpenAI-compatible endpoint."
+---
+
+Console serves embedding models on OpenAI's Embeddings API at `https://opencode.ai/inference/openai/v1/embeddings`.
+Send the model and the text to embed.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": "The quick brown fox"
+  }'
+```
+
+## Authentication
+
+Replace `<token>` with a [personal API key](/console/api#personal-api-keys) or a
+[service account key](/console/api#service-accounts). Every embedding model is paid, so a request without a key gets
+HTTP `401`.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Request
+
+The body is OpenAI's Embeddings request.
+
+| Field             | Meaning                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------ |
+| `model`           | Required. An embedding model ID from [Models](#models).                                          |
+| `input`           | Required. A string, an array of strings, or token IDs. An array embeds each item in one request. |
+| `dimensions`      | Optional. Shortens each vector, for models that support it such as `text-embedding-3-small`.     |
+| `encoding_format` | Optional. `float` (the default) or `base64`.                                                     |
+
+Embed several texts at once by sending an array. Each vector comes back with the `index` of its input.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": ["hello world", "goodbye"],
+    "dimensions": 4
+  }'
+```
+
+## Response
+
+`data` holds one vector per input, in input order. `usage` reports the tokens and what the request cost.
+
+```json
+{
+  "object": "list",
+  "model": "text-embedding-3-small",
+  "data": [
+    { "object": "embedding", "index": 0, "embedding": [-0.1136, -0.6552, 0.5708, 0.4807] },
+    { "object": "embedding", "index": 1, "embedding": [0.9243, 0.1712, 0.2291, -0.2536] }
+  ],
+  "usage": {
+    "prompt_tokens": 4,
+    "total_tokens": 4,
+    "cost": 0.00000008,
+    "opencode": {
+      "billing_source": "balance",
+      "list_cost": 0.00000008,
+      "tokens": { "input": 4, "output": 0, "reasoning": 0, "cache_read": 0, "cache_write_5m": 0, "cache_write_1h": 0 }
+    }
+  }
+}
+```
+
+The `cost` and `opencode` fields are the same as on every inference response. See [Cost](/console/api/inference#cost).
+
+## SDKs
+
+OpenAI's SDKs work when pointed at Console's OpenAI base URL.
+
+```ts
+import OpenAI from "openai"
+
+const client = new OpenAI({
+  baseURL: "https://opencode.ai/inference/openai/v1",
+  apiKey: process.env.OPENCODE_API_KEY,
+})
+
+const result = await client.embeddings.create({
+  model: "text-embedding-3-small",
+  input: ["hello world", "goodbye"],
+})
+```
+
+## Models
+
+Prices are US dollars **per 1M input tokens**. The context window is per input.
+
+| Model                  | Model ID                 | Input | Context |
+| ---------------------- | ------------------------ | ----- | ------- |
+| text-embedding-3-small | `text-embedding-3-small` | $0.02 | 8,192   |
+| text-embedding-3-large | `text-embedding-3-large` | $0.13 | 8,192   |
+| Gemini Embedding 2     | `gemini-embedding-2`     | $0.20 | 8,192   |
+| Gemini Embedding 001   | `gemini-embedding-001`   | $0.15 | 2,048   |
+| Codestral Embed        | `codestral-embed`        | $0.15 | 8,192   |
+| Mistral Embed          | `mistral-embed`          | $0.10 | 8,000   |
+| Embed 5 Pro            | `cohere-embed-v5-pro`    | $0.12 | 128,000 |
+| Embed 5 Fast           | `cohere-embed-v5-fast`   | $0.08 | 128,000 |
+| voyage-4               | `voyage-4`               | $0.06 | 32,000  |
+| voyage-code-4          | `voyage-code-4`          | $0.12 | 32,000  |
+| Qwen3 Embedding 8B     | `qwen3-embedding-8b`     | $0.01 | 32,768  |
+| BGE M3                 | `bge-m3`                 | $0.01 | 8,192   |
+
+The [model list](/console/api/models#inference-model-lists) has the current set. Embedding models have
+`type: "embedding"`.
+
+```bash
+curl -s https://opencode.ai/inference/v1/models | jq -r '.data[] | select(.type == "embedding") | .id'
+```
+
+Vectors from different models aren't comparable. Embed your documents and your queries with the same model.
+
+## Cost
+
+- Input tokens are charged at the model's input price. Output is never charged.
+- Requests count toward [budgets](/console/budgets) like any other model call.
+- Each input must fit in the model's context window. A batch is checked input by input, not as a total.
+
+## Limits
+
+- [Go](/console/go) doesn't include embedding models, and there is no free tier for them.
+- OpenCode doesn't use embedding models for chat, so they don't appear in `/models`.
+
+## Your own provider
+
+A [provider](/console/providers) connected to your workspace serves its embedding models at its Console API URL. An
+owner or admin turns them on under **Embeddings** on the provider's page.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": "The quick brown fox"
+  }'
+```
+
+- Use a [service account key](/console/api#service-accounts), as for the rest of the [Providers API](/console/api/providers).
+- The provider bills you for the tokens. Console counts them toward budgets at the price set on the model.
+- Azure, Bedrock and Vertex connections don't serve embeddings.

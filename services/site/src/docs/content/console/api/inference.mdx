@@ -34,9 +34,10 @@ Authorization: Bearer <token>
 | OpenAI Responses        | `/inference/openai/v1/responses`                          |
 | Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
 | Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
 
-Each model is served by one API family. See the [model endpoints](/console/models#endpoints) table, or fetch the live
-list:
+Each model is served by one API family, and [embedding models](/console/api/embeddings) only by Embeddings. See the
+[model endpoints](/console/models#endpoints) table, or fetch the live list:
 
 ```bash
 curl https://opencode.ai/inference/v1/models

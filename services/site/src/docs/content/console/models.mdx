@@ -247,6 +247,19 @@ curl https://opencode.ai/inference/openai/v1/images/generations \
 Google takes its native `contents` and `generationConfig`, and xAI its native options such as `resolution` and
 `quality`. OpenAI Images and xAI Images also accept edits at `/images/edits`.
 
+### Embedding models
+
+Models such as `text-embedding-3-small`, `voyage-4`, and `qwen3-embedding-8b` turn text into vectors. OpenCode doesn't
+use them for chat. Call them on OpenAI's Embeddings API with a Console key; see [Embeddings](/console/api/embeddings)
+for the full list and prices.
+
+```bash
+curl https://opencode.ai/inference/openai/v1/embeddings \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "model": "text-embedding-3-small", "input": "The quick brown fox" }'
+```
+
 ## Pricing
 
 Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**, with image models priced per image where
