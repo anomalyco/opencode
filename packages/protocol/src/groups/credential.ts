@@ -32,14 +32,14 @@ export const CredentialGroup = HttpApiGroup.make("server.credential")
   .add(
     HttpApiEndpoint.patch("credential.update", "/api/credential/:credentialID", {
       params: { credentialID: Credential.ID },
-      payload: Schema.Struct({ label: Schema.String }),
+      payload: Schema.Struct({ label: Schema.String, value: Schema.optional(Credential.Value) }),
       success: HttpApiSchema.NoContent,
     })
       .annotateMerge(
         OpenApi.annotations({
           identifier: "credential.update",
           summary: "Update credential",
-          description: "Update a stored credential label.",
+          description: "Update a stored credential label, or rotate its secret value in place.",
         }),
       ),
   )
