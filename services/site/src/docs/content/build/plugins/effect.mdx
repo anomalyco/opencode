@@ -875,10 +875,30 @@ effect: (ctx) =>
   }),
 ```
 
+Answer `question` tool forms from an external system. A form appears when the agent asks a question; replying settles
+it and unblocks the turn. `list` returns every pending form kind, so filter `metadata.kind === "question"` when
+answering questions. Answers are keyed by the form's field keys (`q0`, `q1`, … for the built-in `question` tool);
+multiselect fields take an array of strings. Forms are scoped to the plugin's current location. Use `get` to inspect
+the current state, and `cancel` to dismiss a form; a cancel message is surfaced to the model as question feedback.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    // `sessionID` is the session that owns the form.
+    const pending = yield* ctx.session.form.list({ sessionID }).pipe(Effect.orDie)
+    const form = pending.find((item) => item.metadata?.kind === "question")
+    if (!form) return
+    const detail = yield* ctx.session.form.get({ sessionID, formID: form.id }).pipe(Effect.orDie)
+    if (detail.state.status !== "pending") return
+    yield* ctx.session.form.reply({ sessionID, formID: form.id, answer: { q0: "yes" } }).pipe(Effect.orDie)
+  }),
+```
+
 Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
 [`Session.Inbox.User`](/api#schema-Session.Inbox.User),
 [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
-[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info).
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info), [`Form.Info`](/api#schema-Form.Info),
+[`Form.Detail`](/api#schema-Form.Detail).
 
 ```ts
 type SessionDomain = Pick<
@@ -900,7 +920,9 @@ type SessionDomain = Pick<
   | "wait"
   | "context"
   | "instructions"
->
+> & {
+  readonly form: Pick<SessionApi<unknown>["form"], "list" | "get" | "reply" | "cancel">
+}
 ```
 
 ### Skills
