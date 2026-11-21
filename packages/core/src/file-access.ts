@@ -130,6 +130,7 @@ const layer = Layer.effect(
     const environment = yield* Environment.Service
     const exists = (file: string) => Environment.exists(environment.files, file)
     const location = yield* Location.Service
+    const workingDirectory = yield* Environment.workingDirectory
     const permission = yield* Permission.Service
     const flags = yield* Flag.Service
     const machines = yield* Machines.Service
@@ -160,7 +161,7 @@ const layer = Layer.effect(
       const id = machine?.machine ?? base?.environment.id ?? environment.id
       if (!machine && id === environment.id)
         return {
-          absolute: AbsolutePath.make(resolvePath(base?.absolute ?? location.directory, text)),
+          absolute: AbsolutePath.make(resolvePath(base?.absolute ?? workingDirectory.absolute, text)),
           environment: { id },
         } satisfies Place
       // A machine's paths use POSIX rules rather than this server's, and `~` there is that machine's home, never this
@@ -195,10 +196,10 @@ const layer = Layer.effect(
       const absolute = located.absolute
       const worktree = path.resolve(location.project.directory)
       const internal =
-        FSUtil.contains(location.directory, absolute) ||
+        FSUtil.contains(workingDirectory.absolute, absolute) ||
         (worktree !== path.parse(worktree).root && FSUtil.contains(worktree, absolute))
       if (internal) {
-        const relative = slash(path.relative(location.directory, absolute) || ".")
+        const relative = slash(path.relative(workingDirectory.absolute, absolute) || ".")
         return {
           absolute,
           // With machines on, a local folder can be named like a machine path; `./` keeps its permission name its own.
