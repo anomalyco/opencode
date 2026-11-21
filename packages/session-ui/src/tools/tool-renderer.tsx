@@ -1249,7 +1249,7 @@ export function samePatchFile(a: FileDiffInfo, b: FileDiffInfo) {
 function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: ReturnType<typeof useI18n>) {
   const input = toolInput(currentToolInput(tool))
   const metadata = toolMetadata(currentToolMetadata(tool))
-  const subtitle = displayDirectory(input.path ?? "/")
+  const subtitle = displayFolder(input.path)
 
   const matches = (count: number | undefined) =>
     count ? i18n.plural("ui.messagePart.context.match", count) : undefined
@@ -1645,7 +1645,7 @@ export function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   if (props.tool === "read" || props.tool === "edit" || props.tool === "write") return getFilename(input.path ?? "")
 
   if (props.tool === "list" || props.tool === "glob" || props.tool === "grep")
-    return displayDirectory(input.path || "/")
+    return displayFolder(input.path)
 
   if (props.tool === "webfetch") return input.url || undefined
 
@@ -1789,7 +1789,7 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.list"),
-          subtitle: displayDirectory(toolInput(props.input).path ?? "/"),
+          subtitle: displayFolder(toolInput(props.input).path),
         }}
       >
         <Show when={props.output}>
@@ -1821,7 +1821,7 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.glob"),
-          subtitle: displayDirectory(input().path ?? "/"),
+          subtitle: displayFolder(input().path),
           args: input().pattern === undefined ? [] : ["pattern=" + input().pattern],
         }}
       >
@@ -1859,7 +1859,7 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.grep"),
-          subtitle: displayDirectory(input().path ?? "/"),
+          subtitle: displayFolder(input().path),
           args: args(),
         }}
       >
