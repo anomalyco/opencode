@@ -23,6 +23,7 @@ import { Snapshot } from "@opencode/core/snapshot"
 import { Money } from "@opencode/schema/money"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
+import { withEnv } from "./fixture/env"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -203,5 +204,70 @@ describe("Session.diff", () => {
       }),
     // Real Location/plugin startup and Git snapshots can exceed five seconds under CI load.
     { timeout: 30_000 },
+  )
+
+  it.live("returns plain patches when global Git config forces color and custom diff prefixes", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const directory = path.join(tmp.path, "project")
+      const globalConfig = path.join(tmp.path, "gitconfig")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(directory)
+        await Bun.write(
+          globalConfig,
+          "[color]\n\tui = always\n\tdiff = always\n[diff]\n\tmnemonicPrefix = true\n\tnoprefix = true\n",
+        )
+        await Bun.write(path.join(directory, "example.txt"), "one\n")
+        await $`git init -q`.cwd(directory).quiet()
+        await $`git -c core.fsmonitor=false add .`.cwd(directory).quiet()
+      })
+      yield* withEnv({ GIT_CONFIG_GLOBAL: globalConfig }, () =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const database = yield* Database.Service
+          const bus = yield* Bus.Service
+          const created = yield* sessions.create({ location: { directory: AbsolutePath.make(directory) } })
+
+          yield* Effect.gen(function* () {
+            const plugins = yield* Plugin.Service
+            yield* plugins.awaitActivation
+            const snapshot = yield* Snapshot.Service
+            const admitted = yield* sessions.prompt({ sessionID: created.id, text: "Add a line", resume: false })
+            yield* SessionInbox.promote(database.db, bus, created.id, "steer")
+            const before = yield* snapshot.capture()
+            if (!before) throw new Error("Start snapshot missing")
+            const assistantMessageID = SessionMessage.ID.create()
+            yield* bus.publish(SessionEvent.Step.Started, {
+              sessionID: created.id,
+              assistantMessageID,
+              agent: Agent.defaultID,
+              model: { id: Model.ID.make("test-model"), providerID: Provider.ID.make("test-provider") },
+              snapshot: before,
+              started: 0,
+            })
+            yield* Effect.promise(() => Bun.write(path.join(directory, "example.txt"), "one\ntwo\n"))
+            const after = yield* snapshot.capture()
+            if (!after) throw new Error("End snapshot missing")
+            yield* bus.publish(SessionEvent.Step.Ended, {
+              sessionID: created.id,
+              assistantMessageID,
+              finish: "stop",
+              cost: Money.USD.zero,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              snapshot: after,
+              files: yield* snapshot.files({ from: before, to: after }),
+            })
+            yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: created.id })
+
+            const files = yield* sessions.diff({ sessionID: created.id, from: admitted.id })
+            expect(files.map(summarize)).toEqual([["example.txt", "modified", 1, 0]])
+            expect(files[0]?.patch).not.toContain("\u001b")
+            expect(files[0]?.patch).toMatch(/^@@ /m)
+            expect(files[0]?.patch).toContain("diff --git a/example.txt b/example.txt")
+            expect(files[0]?.patch).toContain("+two\n")
+          }).pipe(Effect.provide(LocationServiceMap.Service.get(created.location)))
+        }),
+      )
+    }),
   )
 })
