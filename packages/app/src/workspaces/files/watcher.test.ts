@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode/client/promise"
+import { createPathHelpers } from "./path"
 import { invalidateFromWatcher } from "./watcher"
 
 type FilesystemEvent = Extract<OpenCodeEvent, { type: "filesystem.changed" }>
@@ -48,6 +49,26 @@ describe("file watcher invalidation", () => {
     })
 
     expect(loads).toEqual(["src/open.ts"])
+  })
+
+  test("reloads files stored with either separator on Windows", () => {
+    const normalize = createPathHelpers(() => "C:\\repo").normalize
+
+    for (const file of ["C:\\repo\\src\\open.ts", "src\\open.ts"]) {
+      const loads: string[] = []
+
+      invalidateFromWatcher(filesystemEvent(file, "change"), {
+        normalize,
+        hasFile: (path) => path === "src/open.ts",
+        isOpen: (path) => path === "src\\open.ts",
+        loadFile: (path) => loads.push(path),
+        node: () => undefined,
+        isDirLoaded: () => false,
+        refreshDir: () => {},
+      })
+
+      expect([...loads].sort()).toEqual(["src/open.ts", "src\\open.ts"].sort())
+    }
   })
 
   test("reloads files when watcher event uses Windows backslashes", () => {
