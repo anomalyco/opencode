@@ -29,7 +29,20 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
-import { Cause, Clock, Duration, Effect, Exit, PlatformError, Queue, Schedule, Schema, Stream } from "effect"
+import {
+  Cause,
+  Clock,
+  Duration,
+  Effect,
+  Exit,
+  Option,
+  PlatformError,
+  Queue,
+  Schedule,
+  Schema,
+  Semaphore,
+  Stream,
+} from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
@@ -72,16 +85,17 @@ const isTransient = (error: unknown) =>
 // JSON-RPC id of the `events/stream` request that opened it.
 const EVENTS = "io.modelcontextprotocol/events"
 const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
-// A stream is dead after three granted heartbeat intervals pass in silence, or 60 seconds before the server grants one.
+// A stream is dead once three granted heartbeat intervals pass without a message, or a minute before the first grant.
 const MISSED_HEARTBEATS = 3
-const UNGRANTED_HEARTBEAT = Duration.seconds(20)
+const UNGRANTED_SILENCE = Duration.minutes(1)
 const EVENT_LIST_PAGES = 100
 
 /** Experimental: MCP Events is a beta extension; may change without compatibility guarantees. */
 export const EventType = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
-  delivery: Schema.NonEmptyArray(Schema.Literals(["poll", "push", "webhook"])),
+  /** Any of "poll", "push" and "webhook"; modes added later pass through. */
+  delivery: Schema.NonEmptyArray(Schema.String),
   inputSchema: Schema.Record(Schema.String, Schema.Unknown),
   payloadSchema: Schema.Record(Schema.String, Schema.Unknown),
 })
@@ -90,10 +104,13 @@ const EventError = Schema.Struct({ code: Schema.Int, message: Schema.String, dat
 export type EventError = typeof EventError.Type
 // An absent cursor means null: the event type has no replay.
 const Cursor = Schema.optional(Schema.NullOr(Schema.String))
-const Subscribed = { _meta: Schema.Struct({ [SUBSCRIPTION_ID]: Schema.Union([Schema.String, Schema.Number]) }) }
+const Subscribed = { _meta: Schema.Struct({ [SUBSCRIPTION_ID]: Schema.Union([Schema.String, Schema.Int]) }) }
+// Each event type is decoded on its own, so one malformed type doesn't hide the rest.
 const EventList = Schema.toStandardSchemaV1(
-  Schema.Struct({ events: Schema.Array(EventType), nextCursor: Schema.optional(Schema.String) }),
+  Schema.Struct({ events: Schema.Array(Schema.Unknown), nextCursor: Schema.optional(Schema.String) }),
 )
+const decodeEventType = Schema.decodeUnknownOption(EventType)
+const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
 const AnyValue = Schema.toStandardSchemaV1(Schema.Unknown)
 const ActiveNotification = Schema.toStandardSchemaV1(
   Schema.Struct({
@@ -107,7 +124,7 @@ const EventNotification = Schema.toStandardSchemaV1(
   Schema.Struct({
     eventId: Schema.String,
     name: Schema.String,
-    timestamp: Schema.String.check(Schema.makeFilter((text) => !Number.isNaN(Date.parse(text)))),
+    timestamp: Schema.String.check(Schema.makeFilter((text) => ISO_8601.test(text) && !Number.isNaN(Date.parse(text)))),
     data: Schema.Record(Schema.String, Schema.Json),
     cursor: Cursor,
     ...Subscribed,
@@ -330,9 +347,13 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     return signal
   }
 
-  // Open event streams, by the JSON-RPC id of their `events/stream` request: each counts what it has heard and the
-  // heartbeat interval the server granted, for the watchdog that tells a quiet stream from a dead one.
-  type OpenStream = { queue: Queue.Queue<EventMessage, Error | Cause.Done>; heard: number; interval: Duration.Duration }
+  // Open event streams, by the JSON-RPC id of their `events/stream` request. Every message pulses `heard` for the
+  // watchdog, which fails the stream once `silence` passes without one.
+  type OpenStream = {
+    queue: Queue.Queue<EventMessage, Error | Cause.Done>
+    heard: Queue.Queue<void>
+    silence: Duration.Duration
+  }
   const streams = new Map<string, OpenStream>()
 
   // The SDK fails pending requests with a bare "Connection closed"; the transport error before it says why.
@@ -396,13 +417,13 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       ) => {
         const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
         if (!open) return
-        open.heard++
+        Queue.offerUnsafe(open.heard, undefined)
         Queue.offerUnsafe(open.queue, message)
       }
       client.setNotificationHandler("notifications/events/active", { params: ActiveNotification }, (params) => {
         // The server's grant is authoritative, and it comes with every `active`.
         const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
-        if (open) open.interval = Duration.millis(params.heartbeatMs)
+        if (open) open.silence = Duration.millis(params.heartbeatMs * MISSED_HEARTBEATS)
         deliver(params, { type: "active", cursor: params.cursor ?? null, truncated: params.truncated === true })
       })
       client.setNotificationHandler("notifications/events/event", { params: EventNotification }, (params) =>
@@ -585,10 +606,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     // first and leave the request unmade; the result is the same empty list without the noise.
     const advertised = (capability: "tools" | "prompts" | "resources") =>
       Boolean(client.getServerCapabilities()?.[capability])
-    // Each listed event type's `x-mcp-header` annotations, mirrored as `Mcp-Param-*` headers on its stream.
-    const eventHeaders = new Map<string, ReadonlyArray<HeaderParam>>()
+    // Each listed event type's `x-mcp-header` annotations, mirrored as `Mcp-Param-*` headers on its stream. One
+    // refresh runs at a time and swaps in a complete map, so a stream never reads a half-built one.
+    let eventHeaders = new Map<string, ReadonlyArray<HeaderParam>>()
+    const refresh = yield* Semaphore.make(1)
     const listEvents = Effect.fnUntraced(function* () {
-      const events: EventType[] = []
+      const events: unknown[] = []
       let cursor: string | undefined
       for (let page = 0; page < EVENT_LIST_PAGES; page++) {
         const result = yield* list("list MCP events", (signal) =>
@@ -603,9 +626,18 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       }
       if (cursor !== undefined)
         yield* Effect.logWarning("MCP event list has more pages than read", { server, pages: EVENT_LIST_PAGES })
-      eventHeaders.clear()
+      const headers = new Map<string, ReadonlyArray<HeaderParam>>()
       const valid: EventType[] = []
-      for (const event of events) {
+      for (const raw of events) {
+        const decoded = decodeEventType(raw)
+        if (Option.isNone(decoded)) {
+          yield* Effect.logWarning("skipping malformed MCP event type", {
+            server,
+            event: isRecord(raw) ? raw.name : undefined,
+          })
+          continue
+        }
+        const event = decoded.value
         const params = headerParams(event.inputSchema)
         if (typeof params === "string") {
           yield* Effect.logWarning("skipping MCP event type with an invalid x-mcp-header", {
@@ -615,11 +647,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           })
           continue
         }
-        eventHeaders.set(event.name, params)
+        headers.set(event.name, params)
         valid.push(event)
       }
+      eventHeaders = headers
       return valid
-    })
+    }, refresh.withPermit)
 
     // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
     const connection: Connection = {
@@ -635,26 +668,25 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
               stream: (input) =>
                 Stream.callback<EventMessage, Error>((queue) =>
                   Effect.gen(function* () {
-                    const stream: OpenStream = { queue, heard: 0, interval: UNGRANTED_HEARTBEAT }
+                    const stream: OpenStream = {
+                      queue,
+                      heard: yield* Queue.sliding<void>(1),
+                      silence: UNGRANTED_SILENCE,
+                    }
                     yield* Effect.addFinalizer(() =>
                       Effect.sync(() => {
                         for (const [id, open] of streams) if (open === stream) streams.delete(id)
                       }),
                     )
-                    // Heartbeats, not a request timeout, tell a quiet stream from a dead one: it fails once
-                    // MISSED_HEARTBEATS intervals in a row pass without a message.
-                    yield* Effect.gen(function* () {
-                      let silent = 0
-                      while (silent < MISSED_HEARTBEATS) {
-                        const heard = stream.heard
-                        yield* Effect.sleep(stream.interval)
-                        silent = stream.heard === heard ? silent + 1 : 0
-                      }
-                      yield* Queue.fail(
-                        queue,
-                        new Error(`MCP server ${server} stopped sending event stream heartbeats`),
-                      )
-                    }).pipe(Effect.forkScoped)
+                    // Heartbeats, not a request timeout, tell a quiet stream from a dead one. Each message restarts
+                    // the deadline, using the grant it may have just changed.
+                    yield* Effect.suspend(() => Queue.take(stream.heard).pipe(Effect.timeout(stream.silence))).pipe(
+                      Effect.forever,
+                      Effect.catch(() =>
+                        Queue.fail(queue, new Error(`MCP server ${server} stopped sending event stream heartbeats`)),
+                      ),
+                      Effect.forkScoped,
+                    )
                     // Interrupting the request cancels the stream; the server closing it resolves the request.
                     const request = Effect.tryPromise({
                       try: (signal) =>

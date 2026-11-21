@@ -51,7 +51,13 @@ const eventServer = Effect.fnUntraced(function* (
       void reply(
         message.id,
         params.cursor === "page-2"
-          ? { events: [{ name: "job.failed", delivery: ["push"], inputSchema: {}, payloadSchema: {} }] }
+          ? {
+              events: [
+                { name: "job.failed", delivery: ["push", "future"], inputSchema: {}, payloadSchema: {} },
+                // Malformed: no payloadSchema. Skipped without hiding the others.
+                { name: "job.broken", delivery: ["push"], inputSchema: {} },
+              ],
+            }
           : {
               events: [
                 {
@@ -137,7 +143,7 @@ describe("MCP events", () => {
           inputSchema: { type: "object" },
           payloadSchema: { type: "object" },
         },
-        { name: "job.failed", delivery: ["push"], inputSchema: {}, payloadSchema: {} },
+        { name: "job.failed", delivery: ["push", "future"], inputSchema: {}, payloadSchema: {} },
       ])
       expect(server.state.lists).toEqual([{}, { cursor: "page-2" }])
       // It listens for event list changes, and relists when one arrives.
@@ -257,10 +263,10 @@ describe("MCP events", () => {
         )
       yield* until(() => server.state.streams.length === 1)
       const id = server.state.streams[0].id
-      // The grant replaces the 20 second interval assumed before it; the first check runs at 20 seconds.
+      // A 10 second grant allows 30 seconds of silence from the last message.
       yield* server.notify("active", id, { cursor: null, heartbeatMs: 10_000 })
       yield* until(() => received.includes("active"))
-      yield* TestClock.adjust("49 seconds")
+      yield* TestClock.adjust("29 seconds")
       yield* Effect.yieldNow
       expect(collected.pollUnsafe()).toBeUndefined()
       yield* TestClock.adjust("2 seconds")

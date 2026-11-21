@@ -136,7 +136,7 @@ const URL_ELICITATION_FIELD_KEY = "elicitation"
 
 const changes = { tools: McpEvent.ToolsChanged, resources: McpEvent.ResourcesChanged, prompts: PromptsChanged }
 
-// A broken, silent or closed event stream reopens after a delay growing from a second to this cap.
+// A broken, silent or closed event stream reopens after a delay growing from a second to about this cap.
 // Jittered so streams that broke together don't all reopen at the same moment.
 const EVENT_REOPEN = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")]).pipe(
   Schedule.jittered,
