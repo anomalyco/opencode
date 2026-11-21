@@ -312,6 +312,10 @@ export function createBrowserPage(
     sites: SitePermissions
     /** The page browses in a remote server's partition, not the profile. */
     serverPartition?: boolean
+    /**
+     * What a load waits for before it is issued, if anything: in the profile its content filters, in a remote
+     * server's partition the first copy of the sign-ins.
+     */
     waitForFilters?: (url: string, signal: AbortSignal) => Promise<void> | undefined
     /** Reports what the tab waits on the user for, to the window only. */
     prompt?: (view: PromptView | null) => void

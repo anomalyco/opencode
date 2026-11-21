@@ -5,6 +5,7 @@ import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests
 import { needsUser } from "@/session/requests/auto-approve-machine"
 import { ServerConnection } from "@/runtime/server/registry"
 import { projectSettingsKey, useSettings } from "@/settings/model"
+import { useTabs } from "@/shell/tabs/tabs"
 
 type ServerData = ServerCtx["data"]
 
@@ -104,6 +105,45 @@ function running(data: ServerData, sessionId: string, root: boolean) {
 }
 
 export type SessionRequests = ReturnType<typeof sessionRequests>
+
+export type WindowTabActivity = {
+  readonly waiting: number
+  readonly failed: boolean
+  readonly busy: boolean
+}
+
+/** Summarizes the open session tabs in the current window for OS taskbar status indicators. */
+export function useWindowTabActivity(): Accessor<WindowTabActivity> {
+  const tabs = useTabs()
+  const global = useGlobal()
+  const settings = useSettings()
+
+  return createMemo(() =>
+    tabs.store
+      .filter((tab) => tab.type === "session")
+      .reduce<WindowTabActivity>(
+        (summary, tab) => {
+          const ctx = global.serverCtx(tab.server)
+
+          if (!ctx) return summary
+          const session = ctx.data.session.get(tab.sessionId)
+          const muted = global.sessionPreferences.muted(tab.server, tab.sessionId)
+          const autoApprove = settings.permissions.autoApproves(projectSettingsKey(ctx.sdk.scope, session?.projectID))
+          const isWaiting = !muted && attention(ctx, tab.sessionId, true, autoApprove)
+          const isBusy = running(ctx.data, tab.sessionId, true)
+          const isUnread = !muted && !isWaiting && !isBusy && ctx.notification.session.unread(tab.sessionId)
+          const isFailed = isUnread && session?.outcome === "failed"
+
+          return {
+            waiting: summary.waiting + (isWaiting ? 1 : 0),
+            failed: summary.failed || isFailed,
+            busy: summary.busy || isBusy,
+          }
+        },
+        { waiting: 0, failed: false, busy: false },
+      ),
+  )
+}
 
 // Like the TUI, work waiting in the inbox counts as busy; parked synthetic context does not.
 export function sessionBusy(data: ServerData, sessionId: string) {
