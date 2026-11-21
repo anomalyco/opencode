@@ -921,7 +921,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "जडान गर्नुहोस्",
   "provider.connect.breadcrumb.label": "जडानका चरणहरू",
   "provider.connect.methods.description": "{{provider}} कसरी जडान गर्ने छान्नुहोस्।",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "फेरि प्रयास गर्नुहोस्",
   "provider.connect.console.serviceKeyDescription":

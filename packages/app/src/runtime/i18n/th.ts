@@ -964,7 +964,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "เชื่อมต่อ",
   "provider.connect.breadcrumb.label": "ขั้นตอนการเชื่อมต่อ",
   "provider.connect.methods.description": "เลือกวิธีเชื่อมต่อ {{provider}}",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "ลองอีกครั้ง",
   "provider.connect.console.serviceKeyDescription": "เชื่อมต่อด้วยคีย์ API ของบัญชีบริการจาก OpenCode Console",

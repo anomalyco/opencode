@@ -923,7 +923,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Свързване",
   "provider.connect.breadcrumb.label": "Стъпки за свързване",
   "provider.connect.methods.description": "Изберете как да свържете {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Опитайте отново",
   "provider.connect.console.serviceKeyDescription": "Свързване с API ключ на служебен акаунт от OpenCode Console.",
