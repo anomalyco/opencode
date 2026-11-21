@@ -7,7 +7,7 @@ import { App } from "../../app.js"
 import { WebSearchMcp } from "./mcp.js"
 import { WebSearchProvider } from "./provider.js"
 
-export const endpoint = "https://search.parallel.ai/mcp"
+export const endpoint = "https://mcp.parallel.ai/mcp"
 
 const McpInput = Schema.Struct({
   objective: Schema.String,
