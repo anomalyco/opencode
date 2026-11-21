@@ -5,6 +5,18 @@ story.beforeEach(async ({ page }) => {
   await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"))
 })
 
+story("separates model capabilities in the Simplified Chinese flyout", async ({ mount, page }) => {
+  // The model-selector regression uses live hover timers, unlike the tooltip timing cases below.
+  await page.clock.resume()
+  await mount("app-dialog-model-selector--dialog", { globals: { locale: "zh" } })
+  const dialog = page.getByRole("dialog", { name: "选择模型", exact: true })
+  await expect(dialog).toBeVisible()
+  await page.mouse.move(0, 0)
+  await dialog.getByRole("option", { name: "Claude Sonnet 5", exact: true }).hover()
+  const flyout = page.locator('[data-slot="model-dialog-flyout"]')
+  await expect(flyout.getByText("Text、Image、Tools", { exact: true })).toBeVisible()
+})
+
 story("cancels a pending hover on click and opens again on re-entry", async ({ mount, page }) => {
   const root = await mount("ui-tooltip--with-button")
 
