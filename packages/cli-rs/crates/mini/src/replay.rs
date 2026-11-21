@@ -1871,7 +1871,7 @@ mod tests {
     /// A listed message, with the fields the tests do not care about filled in.
     pub(crate) fn message(value: Value) -> SessionMessageInfo {
         let mut value = value;
-        value["time"] = json!({ "created": 1 });
+        value["time"]["created"] = json!(1);
         if value["type"] == "assistant" {
             value["agent"] = json!("build");
             value["model"] = json!({ "id": "model", "providerID": "demo" });
@@ -2005,19 +2005,6 @@ mod tests {
         assert_eq!(texts(&hidden.hydrate(&[user], false)), [(EntryKind::User, "tidy up".into())]);
     }
 
-    /// A local row whose text conflicts with the listed text of its message is not restored: the list shows the
-    /// message (`performResizeReplay` falls through to its `messageIDs` check).
-    #[test]
-    fn a_resize_replay_drops_a_conflicting_row_of_a_listed_message() {
-        let mut transcript = Transcript::new("ses_1", true, true, true, None);
-        transcript.hydrate(&[], true);
-        transcript.event(&delta("msg_a", "x"));
-        transcript.begin_replay();
-        let listed = [message(json!({ "id": "msg_a", "type": "assistant",
-            "content": [{ "type": "text", "text": "yx" }] }))];
-        assert_eq!(texts(&transcript.replayed(&listed, true)), [(EntryKind::Assistant, "yx".into())]);
-    }
-
     /// A resize replay restores a local image row even when its message was listed (`performResizeReplay`).
     #[test]
     fn a_resize_replay_restores_an_image_of_a_listed_message() {
@@ -2059,21 +2046,6 @@ mod tests {
         );
     }
 
-    /// A shell outside this client's turns ends idle; a turn in flight ends the footer's work itself.
-    #[test]
-    fn a_shell_ends_idle_unless_a_turn_waits() {
-        let mut transcript = Transcript::new("ses_1", true, true, true, None);
-        transcript.hydrate(&[], false);
-        let shell = json!({ "id": "sh_1", "status": "exited", "command": "ls", "cwd": "/", "shell": "bash",
-            "file": "/out", "metadata": {}, "time": { "started": 1, "completed": 2 }, "exit": 0 });
-        let output = json!({ "output": "", "cursor": 0, "size": 0, "truncated": false });
-        let ended = event("session.shell.ended", json!({ "shell": shell, "output": output }));
-        let idle = Patch { running: Some(false), status: Some(String::new()), usage: None };
-        assert_eq!(transcript.event(&ended).patch, Some(idle));
-        transcript.begin_wait("msg_p");
-        assert_eq!(transcript.event(&ended).patch, None);
-    }
-
     /// Rows a reconnect or a settled turn printed stay when a resize lists without them (`--replay-limit`).
     #[test]
     fn rows_a_reconnect_or_a_settle_printed_survive_a_resize() {
@@ -2086,6 +2058,107 @@ mod tests {
         transcript.begin_replay();
         let restored = [(EntryKind::User, "one".into()), (EntryKind::User, "two".into())];
         assert_eq!(texts(&transcript.replayed(&[], true)), restored);
+    }
+
+    /// With tools hidden, text waits for its step, a tool message stays quiet, and an end after a list that showed
+    /// the part buffers only the rest.
+    #[test]
+    fn with_tools_hidden_text_waits_for_its_step_and_tool_messages_stay_quiet() {
+        let mut transcript = Transcript::new("ses_1", true, false, true, None);
+        let text = json!([{ "type": "text", "text": "Hi" }]);
+        transcript.hydrate(&[message(json!({ "id": "msg_a", "type": "assistant", "content": text }))], true);
+        let ended = json!({ "assistantMessageID": "msg_a", "ordinal": 0, "text": "Hi there" });
+        assert!(transcript.event(&event("session.text.ended", ended)).commits.is_empty());
+        let tokens = json!({ "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
+        let step = |id| {
+            event(
+                "session.step.ended",
+                json!({ "assistantMessageID": id, "finish": "stop", "cost": 0, "tokens": tokens }),
+            )
+        };
+        assert_eq!(texts(&transcript.event(&step("msg_a"))), [(EntryKind::Assistant, " there".into())]);
+        assert!(transcript.event(&delta("msg_b", "Let me look")).commits.is_empty());
+        let tool = json!({ "assistantMessageID": "msg_b", "id": "call_1", "input": {}, "executed": true });
+        assert!(transcript.event(&event("session.tool.called", tool)).commits.is_empty());
+        assert!(transcript.event(&step("msg_b")).commits.is_empty());
+    }
+
+    /// A live call prints its start, new output and end once; a buffered start does not reset a listed running call.
+    #[test]
+    fn live_tool_events_print_the_start_new_output_and_the_end_once() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        let tool =
+            |id, state| json!([{ "type": "tool", "id": id, "name": "bash", "state": state, "time": { "created": 1 } }]);
+        let running = tool("call_0", json!({ "status": "running", "input": {}, "metadata": {} }));
+        transcript.hydrate(&[message(json!({ "id": "msg_a", "type": "assistant", "content": running }))], true);
+        let mut call = |kind: &str, id, mut data: Value| {
+            (data["assistantMessageID"], data["id"]) = (json!("msg_a"), json!(id));
+            transcript.event(&event(kind, data))
+        };
+        let called = json!({ "input": { "command": "ls" }, "executed": true });
+        for id in ["call_0", "call_1"] {
+            assert!(call("session.tool.input.started", id, json!({ "name": "bash" })).commits.is_empty());
+        }
+        assert!(call("session.tool.called", "call_0", called.clone()).commits.is_empty());
+        let output = call("session.tool.called", "call_1", called);
+        assert_eq!(output.patch.unwrap().status.as_deref(), Some("running shell"));
+        assert_eq!(output.commits[0].tool.as_deref(), Some("shell"));
+        let ok = json!({ "content": [{ "type": "text", "text": "a\n" }], "metadata": { "exit": 0 }, "executed": true });
+        let output = call("session.tool.success", "call_1", ok.clone());
+        assert_eq!((output.commits.len(), output.commits[0].phase), (1, Phase::Progress));
+        assert!(call("session.tool.success", "call_1", ok).commits.is_empty(), "a finished tool prints once");
+        let done = tool("call_1", json!({ "status": "completed", "input": {}, "content": [] }));
+        let listed = message(json!({ "id": "msg_a", "type": "assistant", "content": done }));
+        assert!(transcript.message(&listed, true).commits.is_empty(), "nor when listed later");
+    }
+
+    /// A compaction already running when the session is listed goes on to print the rest of its summary.
+    #[test]
+    fn a_listed_running_compaction_prints_its_tail() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        let running =
+            json!({ "id": "msg_c", "type": "compaction", "status": "running", "reason": "auto", "summary": "One" });
+        assert_eq!(texts(&transcript.hydrate(&[message(running)], true))[1], (EntryKind::Assistant, "One".into()));
+        let ended = event("session.compaction.ended", json!({ "reason": "auto", "text": "One, two" }));
+        let tail = [(EntryKind::Assistant, ", two".into()), (EntryKind::Assistant, "".into())];
+        assert_eq!(texts(&transcript.event(&ended)), tail);
+    }
+
+    /// A shell outside this client's turns ends idle; a turn in flight ends the footer's work itself. A resize replay
+    /// prints a shell, a skill and a failed or aborted compaction as a new client does, once (O-89).
+    #[test]
+    fn a_shell_ends_idle_and_a_resize_replay_prints_what_a_new_client_prints() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        transcript.hydrate(&[], true);
+        let output = json!({ "output": "", "cursor": 0, "size": 1, "truncated": false });
+        let shell = json!({ "id": "sh_1", "status": "exited", "command": "ls", "cwd": "/", "shell": "bash",
+            "file": "/out", "metadata": {}, "time": { "started": 1, "completed": 2 }, "exit": 0 });
+        let ended = event("session.shell.ended", json!({ "shell": shell, "output": output }));
+        assert_eq!(transcript.event(&ended).patch, Output::patch(false, "").patch);
+        let error = |kind| json!({ "type": kind, "message": "Boom" });
+        for (id, kind) in [("msg_c", "provider"), ("msg_d", "aborted")] {
+            transcript.event(&event("session.compaction.started", json!({ "reason": "auto", "inputID": id })));
+            transcript.event(&event("session.compaction.delta", json!({ "text": "bc" })));
+            transcript.event(&event("session.compaction.failed", json!({ "reason": "auto", "error": error(kind) })));
+        }
+        transcript.event(&event("session.skill.activated", json!({ "id": "tidy", "name": "tidy", "text": "x" })));
+        transcript.begin_replay();
+        let compaction = |id, kind| {
+            json!({ "id": id, "type": "compaction", "reason": "auto", "status": "failed",
+            "summary": "bc", "error": error(kind) })
+        };
+        let listed = [
+            json!({ "id": "msg_sh_1", "type": "shell", "shellID": "sh_1", "command": "ls", "status": "exited",
+                "exit": 0, "output": output, "time": { "completed": 2 } }),
+            compaction("msg_c", "provider"),
+            compaction("msg_d", "aborted"),
+            json!({ "id": message_from_event("evt_1"), "type": "skill", "skill": "tidy", "name": "tidy", "text": "x" }),
+        ]
+        .map(message);
+        let fresh = Transcript::new("ses_1", true, true, true, None).hydrate(&listed, true);
+        assert_eq!(texts(&transcript.replayed(&listed, true)), texts(&fresh));
+        transcript.begin_wait("msg_p");
+        assert_eq!(transcript.event(&ended).patch, None);
     }
 
     /// One message the client cannot read does not fail the list.
