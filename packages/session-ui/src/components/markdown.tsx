@@ -73,7 +73,7 @@ import { createImagePreview } from "./image-preview"
 import { createDiagramPreview } from "./diagram-preview"
 import { setupFragmentLinks } from "./markdown-fragment-links"
 import { markSessionLinks, sessionReferenceClipboardText, setupSessionLinks } from "./markdown-session-links"
-import { markdownClipboardHtml } from "./markdown-clipboard"
+import { markdownClipboardHtml, markdownMathClipboardText, markdownMathRanges } from "./markdown-clipboard"
 import { createCopyFeedback } from "./copy"
 
 type RenderedBlock =
@@ -815,14 +815,17 @@ function copySelection(event: ClipboardEvent & { currentTarget: HTMLDivElement }
   const ranges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index))
 
   if (!ranges.every((range) => event.currentTarget.contains(range.commonAncestorContainer))) return
+  const math = markdownMathRanges(event.currentTarget, ranges)
   event.preventDefault()
   event.clipboardData.setData(
     "text/plain",
-    sessionReferenceClipboardText(event.currentTarget, ranges) ?? selection.toString(),
+    math
+      ? markdownMathClipboardText(event.currentTarget, math)
+      : (sessionReferenceClipboardText(event.currentTarget, ranges) ?? selection.toString()),
   )
   event.clipboardData.setData(
     "text/html",
-    `<meta charset="utf-8">${ranges.map((range) => markdownClipboardHtml(event.currentTarget, range)).join("")}`,
+    `<meta charset="utf-8">${(math ?? ranges).map((range) => markdownClipboardHtml(event.currentTarget, range)).join("")}`,
   )
 }
 

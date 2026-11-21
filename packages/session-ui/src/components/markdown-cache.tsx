@@ -112,7 +112,13 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     ],
   })
   // These fragments still pass DOMPurify's structural/URI checks, but their renderer owns their inline geometry.
-  rendered.setConfig({ ...config, USE_PROFILES: { html: true, mathMl: true }, RETURN_DOM_FRAGMENT: true })
+  rendered.setConfig({
+    ...config,
+    ADD_TAGS: [...config.ADD_TAGS, "semantics", "annotation"],
+    FORBID_CONTENTS: [...config.FORBID_CONTENTS, "annotation-xml"],
+    USE_PROFILES: { html: true, mathMl: true },
+    RETURN_DOM_FRAGMENT: true,
+  })
   purifier.addHook("uponSanitizeElement", (node) => {
     // `a`, `use`, `image` and `foreignObject` inside SVG would link, reference or embed; drop them with their contents.
     if (node instanceof SVGElement && node.localName !== "svg" && node.localName !== "path") node.remove()

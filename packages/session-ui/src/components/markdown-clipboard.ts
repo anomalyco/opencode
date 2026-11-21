@@ -55,6 +55,60 @@ const linkProtocols = new Set(["http:", "https:", "mailto:"])
 
 const webProtocols = new Set(["http:", "https:"])
 
+/** Expand only formulas intersecting the original selection, without changing the screen selection. */
+export function markdownMathRanges(root: HTMLElement, ranges: readonly Range[]) {
+  const formulas = Array.from(root.querySelectorAll<HTMLElement>(".katex"))
+    .filter((element) => element.querySelector('annotation[encoding="application/x-tex"]'))
+    .map((element) => element.closest<HTMLElement>(".katex-display") ?? element)
+
+  if (!ranges.some((range) => formulas.some((formula) => range.intersectsNode(formula)))) return
+
+  return ranges.map((range) => {
+    const selection = range.cloneRange()
+    formulas.forEach((formula) => {
+      if (!range.intersectsNode(formula)) return
+
+      if (formula.contains(range.startContainer)) selection.setStartBefore(formula)
+
+      if (formula.contains(range.endContainer)) selection.setEndAfter(formula)
+    })
+
+    return selection
+  })
+}
+
+export function markdownMathClipboardText(root: HTMLElement, ranges: readonly Range[]) {
+  const container = document.createElement("div")
+  container.style.cssText = "position:fixed;top:0;left:-100000px"
+  ranges.forEach((range) => container.append(sessionReferenceRange(range).cloneContents()))
+  container.querySelectorAll<HTMLElement>("[data-session-reference]").forEach((reference) => {
+    reference.replaceWith(reference.dataset.sessionReference ?? "")
+  })
+  container.querySelectorAll<HTMLElement>(".katex").forEach((formula) => {
+    const source = formula.querySelector('annotation[encoding="application/x-tex"]')?.textContent
+
+    if (source === undefined || source === null) return
+    const display = formula.closest<HTMLElement>(".katex-display")
+    const tex = document.createElement("span")
+    tex.style.whiteSpace = "pre-wrap"
+    tex.textContent = display ? `$$${source}$$` : `$${source}$`
+
+    if (display) {
+      display.replaceChildren(tex)
+
+      return
+    }
+
+    formula.replaceWith(tex)
+  })
+  // innerText needs layout to retain the selected block and line breaks.
+  root.append(container)
+  const text = container.innerText
+  container.remove()
+
+  return text
+}
+
 function sanitizeAttributes(element: Element) {
   for (const attribute of Array.from(element.attributes)) {
     if (keptAttributes.has(attribute.name)) continue

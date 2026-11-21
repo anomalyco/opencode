@@ -115,6 +115,22 @@ story("restores layout from the math renderer, never from markup claiming to be 
   const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
   await expect(md.locator('.katex-html [style*="top:"]')).not.toHaveCount(0)
   await expect(md.locator('.katex-html').getByText("x", { exact: true })).toBeVisible()
+  await expect(md.locator('semantics > annotation[encoding="application/x-tex"]')).toHaveText("\\frac{x}{y}")
+
+  const authoredMath = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    const template = document.createElement("template")
+    template.innerHTML = sanitizeMarkdown(
+      '<math><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation><annotation-xml>other</annotation-xml></semantics></math>',
+    )
+
+    return {
+      encoding: template.content.querySelector("annotation")?.getAttribute("encoding"),
+      annotationXml: template.content.querySelector("annotation-xml") !== null,
+    }
+  }, fixture)
+
+  expect(authoredMath).toEqual({ encoding: null, annotationXml: false })
   const authored = md.getByText("Authored", { exact: true })
   await expect(authored).not.toHaveAttribute("style")
   await expect(authored).not.toHaveAttribute("data-markdown-renderer")
@@ -1503,13 +1519,17 @@ story("loads file URLs and Windows paths, and leaves unreadable images as alt te
   await expect(harness.locator('[data-component="markdown"]')).toHaveText("Still usable")
 })
 
-async function copySelection(page: Page, select: "markdown" | "harness") {
+async function copySelection(page: Page, select: "markdown" | "harness" | "existing") {
   await page.evaluate((select) => {
     const harness = document.querySelector('[data-testid="markdown-fixture"]')!
-    const range = document.createRange()
-    range.selectNodeContents(select === "markdown" ? harness.querySelector('[data-component="markdown"]')! : harness)
-    getSelection()!.removeAllRanges()
-    getSelection()!.addRange(range)
+
+    if (select !== "existing") {
+      const range = document.createRange()
+      range.selectNodeContents(select === "markdown" ? harness.querySelector('[data-component="markdown"]')! : harness)
+      getSelection()!.removeAllRanges()
+      getSelection()!.addRange(range)
+    }
+
     document.addEventListener(
       "copy",
       (event) => {
@@ -1523,6 +1543,53 @@ async function copySelection(page: Page, select: "markdown" | "harness") {
 
   return page.evaluate(() => ({ text: document.body.dataset.copiedText, html: document.body.dataset.copiedHtml }))
 }
+
+story("copies a partially selected visible math glyph as the complete formula", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "First $abc$ then $xyz$." })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator(".katex")).toHaveCount(2)
+
+  const before = await markdown.evaluate((root) => {
+    const node = root.querySelector(".katex-html .mord")!.firstChild!
+    const range = document.createRange()
+    range.setStart(node, 0)
+    range.setEnd(node, 1)
+    getSelection()!.removeAllRanges()
+    getSelection()!.addRange(range)
+
+    return getSelection()!.toString()
+  })
+
+  const copied = await copySelection(page, "existing")
+  expect(before).toBe("a")
+  expect(copied.text).toBe("$abc$")
+  expect(copied.html).toContain("<annotation>abc</annotation>")
+  expect(copied.html).toContain("abc")
+  expect(copied.html).not.toContain("xyz")
+  expect(await page.evaluate(() => getSelection()!.toString())).toBe(before)
+})
+
+story("copies mixed text, inline and display math, and session references as source", async ({ page }) => {
+  const display = "\\begin{aligned}\ny &= 1 \\\\\nz &= 2\n\\end{aligned}"
+  await page.evaluate(async ({ fixture, display }) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: `Before $x^2$ and @session:ses_0123456789abcdefghijklmnop.\n\n$$\n${display}\n$$\n\nAfter.`,
+      sessionTitle: "Example",
+    })
+  }, { fixture, display })
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator(".katex")).toHaveCount(2)
+  await expect(markdown.locator("[data-session-reference]")).toHaveCount(1)
+  const copied = await copySelection(page, "markdown")
+  expect(copied.text).toBe(`Before $x^2$ and @session:ses_0123456789abcdefghijklmnop.\n\n$$${display}$$\n\nAfter.`)
+  expect(copied.html).toContain("<annotation>x^2</annotation>")
+  expect(copied.html).toContain("<code>@session:ses_0123456789abcdefghijklmnop</code>")
+  expect(copied.html).not.toMatch(/style=|class=|<button|<svg/)
+})
 
 story("copies selected Markdown as semantic HTML without theme or highlight colours", async ({ page }) => {
   await page.evaluate(async (fixture) => {
