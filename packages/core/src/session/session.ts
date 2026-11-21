@@ -288,8 +288,10 @@ export const make = Effect.fn("Session.make")(function* () {
   const synthetic = (sessionID: SessionSchema.ID, input: Omit<Parameters<typeof admitSynthetic>[0], "sessionID">) =>
     admitSynthetic({ ...input, sessionID })
   const interrupt = Effect.fn("Session.interrupt")(
-    (sessionID: SessionSchema.ID, options?: { readonly resume?: boolean }) =>
-      Effect.uninterruptible(execution.interrupt(sessionID, options)),
+    (
+      sessionID: SessionSchema.ID,
+      options?: { readonly resume?: boolean; readonly reason?: SessionExecution.InterruptReason },
+    ) => Effect.uninterruptible(execution.interrupt(sessionID, options)),
   )
   const stage = Effect.fn("Session.revert.stage")(function* (
     sessionID: SessionSchema.ID,

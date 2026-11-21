@@ -4038,7 +4038,32 @@
           }
         },
         "description": "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When resume=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
-        "summary": "Interrupt session execution"
+        "summary": "Interrupt session execution",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["user", "superseded", "inactivity"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Why the execution is being interrupted. Defaults to \"user\" when omitted. Only \"user\" lets tools awaiting cancellation stop and settle their own call; any other reason interrupts them at once."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": false
+        }
       }
     },
     "/api/session/{sessionID}/background": {

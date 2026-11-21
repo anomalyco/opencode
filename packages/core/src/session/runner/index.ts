@@ -3,6 +3,7 @@ export * as SessionRunner from "./index.js"
 import type { FileSystem } from "../../filesystem.js"
 import type { AIError } from "@opencode/ai/effect"
 import { Context, Data, Effect } from "effect"
+import { SessionEvent } from "../event.js"
 import { SessionSchema } from "../schema.js"
 import type { Promotable } from "../inbox.js"
 import type { AgentNotFoundError, MessageDecodeError, StepFailedError } from "../error.js"
@@ -38,8 +39,8 @@ export interface Interface {
     readonly promotable?: Promotable
     /** The previous drain ran a step before handing off, so reaching idle still runs the idle hook. */
     readonly stepped?: boolean
-    /** Why the execution is being interrupted, once it is: `"user"` when someone stopped it. */
-    readonly interruption?: () => "user" | "shutdown" | undefined
+    /** Why the execution is being interrupted, once it is: the reason supplied with the interrupt, or undefined for a teardown. */
+    readonly interruption?: () => SessionEvent.Execution.Interrupted["data"]["reason"] | undefined
   }) => Effect.Effect<DrainResult, RunError>
 }
 
