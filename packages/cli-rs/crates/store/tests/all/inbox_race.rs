@@ -82,6 +82,18 @@ async fn late_snapshots_cannot_resurrect_consumed_items() {
     }
 }
 
+/// An item the pending read no longer lists was settled by an event lost in a reconnect: its row goes.
+#[tokio::test]
+async fn an_item_the_pending_read_drops_leaves_the_transcript() {
+    let response = Slot::<Reply>::default();
+    let data = fixture(&response, None);
+    emit(&data, enqueued());
+    let reading = data.pending_sync(&session());
+    response.resolve(ok(json!({ "data": [] })));
+    reading.await.unwrap();
+    assert!(data.read(|state| state.message(&session(), "msg_remote").is_none()));
+}
+
 async fn retains(action: &str) {
     let response = Slot::<Reply>::default();
     let data = fixture(&response, None);

@@ -103,6 +103,17 @@ async fn a_coalesced_reconnect_invalidates_reads_and_flushes_everything() {
     driver.await.unwrap();
 }
 
+/// The connection records a declared error by its message, as TS's does.
+#[tokio::test]
+async fn the_connection_records_a_declared_error_by_its_message() {
+    let declared = json!({ "_tag": "Unauthorized", "message": "no" });
+    let data =
+        data(handler(move |_req: Req| std::future::ready(Reply::Json(401, declared.clone()))), Options::default());
+    let (connection, _task) = opencode_store::connection::connect(&data, events::Options::default());
+    wait(|| connection.history().len() > 1).await;
+    assert_eq!(connection.history()[1].error.as_deref(), Some("no"));
+}
+
 /// The dying stream's last batch is applied before the disconnect invalidates, so a
 /// `session.created` in it cannot keep its reads marked done across the reconnect.
 #[tokio::test]
@@ -131,6 +142,16 @@ async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
     driver.await.unwrap();
 }
 
+/// A delivery whose enqueue this client missed in a reconnect reads the synced transcript again.
+#[tokio::test]
+async fn the_delivery_of_an_unseen_prompt_reads_the_transcript_again() {
+    let (data, paths) = counting();
+    data.message_sync(&id("ses_a")).await.unwrap();
+    let delivered = json!({ "sessionID": "ses_a", "inboxID": "msg_lost" });
+    emit(&data, durable("session.inbox.delivered", "evt_delivered", delivered));
+    wait(|| reads(&paths, "/api/session/ses_a/message") == 2).await;
+}
+
 async fn deleted_before_first_poll(read: &str) {
     let (data, _) = counting();
     let target = id("ses_gone");
@@ -142,8 +163,12 @@ async fn deleted_before_first_poll(read: &str) {
     };
     emit(&data, durable("session.deleted", "evt_deleted", json!({ "sessionID": "ses_gone" })));
     task.await.unwrap();
+    let item = json!({ "type": "user", "delivery": "steer", "payload": { "text": "late" } });
+    let late = json!({ "sessionID": "ses_gone", "inboxID": "msg_late", "item": item });
+    emit(&data, durable("session.inbox.enqueued", "evt_late", late));
     data.read(|state| {
         assert!(state.is_missing(&target), "{read}: still missing");
+        assert!(state.pending(&target).is_empty(), "{read}: no prompts");
         assert!(state.session(&target).is_none(), "{read}: no info");
         assert!(state.transcript(&target).is_none(), "{read}: no transcript");
         assert!(state.permissions(&target).is_none(), "{read}: no permissions");
