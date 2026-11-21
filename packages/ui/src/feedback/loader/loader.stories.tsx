@@ -17,6 +17,8 @@ export default {
   title: "UI/Loader",
   id: "ui-loader",
   component: Loader,
+  args: { size: 16 },
+  argTypes: { size: { control: { type: "range", min: 8, max: 32, step: 1 } } },
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -28,14 +30,14 @@ export default {
 }
 
 export const Basic = {
-  render: () => <Loader />,
+  render: (props: { size: number }) => <Loader width={props.size} height={props.size} />,
 }
 
 export const Sizes = {
-  render: () => (
+  render: (props: { size: number }) => (
     <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
       <Loader width={12} height={12} />
-      <Loader />
+      <Loader width={props.size} height={props.size} />
       <Loader width={24} height={24} />
     </div>
   ),

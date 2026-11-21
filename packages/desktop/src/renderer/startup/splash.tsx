@@ -2,24 +2,23 @@ import { Splash } from "@opencode/ui/logo"
 import { Wordmark } from "@opencode/ui/wordmark"
 import type { Platform } from "@opencode/app/desktop"
 import { onCleanup, onMount, Show } from "solid-js"
-import { createStore } from "solid-js/store"
 import "./splash.css"
 
 export function LoadingSplash(props: {
   deep: boolean
   firstLaunch: boolean
   platform: Platform
-  preview: boolean
+  drawingPaused: boolean
+  onDrawStart: () => void
   onDrawEnd: () => void
 }) {
-  const [drawing, setDrawing] = createStore({ started: false })
   onMount(() => {
-    if (!props.preview || !props.firstLaunch) return
+    if (!props.drawingPaused) return
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)")
 
     const start = () => {
       if (document.visibilityState !== "visible" || !document.hasFocus()) return
-      setDrawing("started", true)
+      props.onDrawStart()
 
       if (motion.matches) props.onDrawEnd()
     }
@@ -64,7 +63,7 @@ export function LoadingSplash(props: {
     >
       <div
         data-component="first-launch-splash"
-        data-drawing={props.preview && !drawing.started ? "pending" : "running"}
+        data-drawing={props.drawingPaused ? "pending" : "running"}
         aria-hidden="true"
         class="h-dvh w-screen bg-v2-background-bg-base"
         style={{

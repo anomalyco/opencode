@@ -141,3 +141,85 @@ export function resolveArtifactPath(base: string, href: string) {
 
   return `${dir.startsWith("/") ? "/" : ""}${segments.join("/")}`
 }
+
+const frontmatter = /^\uFEFF?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)??---[ \t]*(?:\r?\n|$)/
+
+/**
+ * Split a leading YAML frontmatter block from Markdown so preview does not render its closing `---`
+ * as a setext heading. Top-level `key: value` entries come back as properties; frontmatter this
+ * reader cannot split stays in the body as a fenced `yaml` code block. Empty frontmatter is dropped.
+ */
+export function splitFrontmatter(text: string) {
+  const match = frontmatter.exec(text)
+
+  if (!match) return { body: text }
+  const body = text.slice(match[0].length)
+  const yaml = (match[1] ?? "").replace(/\r\n?/g, "\n")
+
+  if (!yaml.trim()) return { body }
+  const properties = readProperties(yaml)
+
+  if (properties) return { properties, body }
+  const longest = Array.from(yaml.matchAll(/`+/g)).reduce((max, run) => Math.max(max, run[0].length), 0)
+  const fence = "`".repeat(Math.max(3, longest + 1))
+  const block = `${fence}yaml\n${yaml}\n${fence}`
+
+  return { body: body.trim() ? `${block}\n\n${body}` : block }
+}
+
+/** One top-level frontmatter entry. `code` marks a nested map or list, shown as its YAML source. */
+export type FrontmatterProperty = { key: string; value: string; code: boolean }
+
+function readProperties(yaml: string) {
+  const lines = yaml.split("\n").filter((line) => !line.startsWith("#"))
+  // A top-level key starts at column 0; a column-0 "- " item belongs to the key above it.
+  const starts = lines.flatMap((line, index) => (/^[^\s-]|^-[^\s]/.test(line) ? [index] : []))
+
+  if (starts.length === 0 || lines.slice(0, starts[0]).some((line) => line.trim())) return
+  const properties = starts.map((start, index) => readProperty(lines[start], lines.slice(start + 1, starts[index + 1])))
+
+  if (!properties.every((property) => property !== undefined)) return
+
+  return properties
+}
+
+// A `#` at the start or after whitespace begins a YAML comment in a plain scalar.
+const comment = /(?:^|\s)#/
+
+function readProperty(head: string, rest: string[]): FrontmatterProperty | undefined {
+  const match = /^([^\s:][^:]*?):(?:[ \t]+(.*))?$/.exec(head)
+
+  if (!match) return
+  const key = match[1]
+  const value = (match[2] ?? "").trim()
+  const block = rest.slice(0, rest.findLastIndex((line) => line.trim()) + 1)
+
+  // Only quoted values that close on this line without escapes are read; others fall back to the YAML block.
+  if (/^["']/.test(value)) {
+    const quoted = /^"([^"\\]*)"$|^'([^']*)'$/.exec(value)
+
+    if (!quoted || block.length > 0) return
+
+    return { key, value: quoted[1] ?? quoted[2], code: false }
+  }
+
+  if (comment.test(value)) return
+
+  if (block.length === 0) return { key, value, code: false }
+  const indent = Math.min(...block.flatMap((line) => (line.trim() ? [line.length - line.trimStart().length] : [])))
+  const lines = block.map((line) => line.slice(indent))
+
+  if (/^\|[+-]?\d?$/.test(value)) return { key, value: lines.join("\n"), code: false }
+
+  // Folded (`>`) and plain multi-line scalars read as one line.
+  if (value) {
+    const folded = /^>[+-]?\d?$/.test(value)
+
+    if (!folded && lines.some((line) => comment.test(line))) return
+    const words = [folded ? "" : value, ...lines.map((line) => line.trim())]
+
+    return { key, value: words.filter(Boolean).join(" "), code: false }
+  }
+
+  return { key, value: lines.join("\n"), code: true }
+}

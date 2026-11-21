@@ -93,17 +93,17 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/RepositoryCache") {}
 
-export function isError(error: unknown): error is Error {
-  return (
-    error instanceof InvalidBranchError ||
-    error instanceof CloneFailedError ||
-    error instanceof FetchFailedError ||
-    error instanceof CheckoutFailedError ||
-    error instanceof ResetFailedError ||
-    error instanceof LockFailedError ||
-    error instanceof CacheOperationError
-  )
-}
+export const isError: (error: unknown) => error is Error = Schema.is(
+  Schema.Union([
+    InvalidBranchError,
+    CloneFailedError,
+    FetchFailedError,
+    CheckoutFailedError,
+    ResetFailedError,
+    LockFailedError,
+    CacheOperationError,
+  ]),
+)
 
 export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(function* (branch: string) {
   return yield* Effect.try({

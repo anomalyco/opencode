@@ -1,5 +1,6 @@
 import { Credential } from "@opencode/core/credential"
 import { FileSystem } from "@opencode/core/filesystem"
+import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -63,8 +64,10 @@ export const CredentialHandler = HttpApiBuilder.group(Api, "server.credential", 
       .handle(
         "credential.remove",
         Effect.fn(function* (ctx) {
-          const credential = yield* Credential.Service
-          yield* credential.remove(ctx.params.credentialID)
+          // Removal goes through Integration so a sign-in method can revoke the credential remotely first.
+          // The global config directory always exists.
+          const integrations = yield* Integration.Service.pipe(Effect.provide(services), Effect.orDie)
+          yield* integrations.connection.remove(ctx.params.credentialID)
           return HttpApiSchema.NoContent.make()
         }),
       )

@@ -2,10 +2,8 @@ export * as ClaudeIntegration from "./integration.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Stream, SubscriptionRef } from "effect"
-import { Bus } from "../../../bus.js"
-import { Credential } from "../../../credential.js"
-import { Integration } from "../../../integration.js"
 import type { IntegrationConnection } from "../../../integration/connection.js"
+import { ProviderRefresh } from "../refresh.js"
 import { ClaudeProbe } from "./claude/probe.js"
 import type { ClaudeStatus } from "./claude/status.js"
 import { ClaudeProvider } from "./provider.js"
@@ -46,12 +44,7 @@ export const register = Effect.fn("ClaudeIntegration.register")(function* (
 
   // Check again when the user connects. opencode keeps a problem per connection, so a new connection starts with
   // none, and the user may have just run `claude auth login`.
-  const bus = yield* Bus.Service
-  yield* bus.subscribe(Credential.Event.Switched).pipe(
-    Stream.filter((event) => event.data.integrationID === Integration.ID.make(ClaudeProvider.ID)),
-    Stream.runForEach(() => status.refresh()),
-    Effect.forkScoped({ startImmediately: true }),
-  )
+  yield* ProviderRefresh.onSwitch(ClaudeProvider.ID, status.refresh())
 })
 
 function problem(state: ClaudeStatus.State): IntegrationConnection.Status | undefined {
@@ -64,6 +57,6 @@ function problem(state: ClaudeStatus.State): IntegrationConnection.Status | unde
   // The message already says what went wrong with Claude Code.
   if (state.type === "failed") return { status: "needs_auth", message: state.message }
   if (state.type === "ready" && !ClaudeProbe.isLoggedIn(state.probe.account))
-    return { status: "needs_auth", message: "Claude Code is not logged in. Run `claude auth login` in a terminal." }
+    return { status: "needs_auth", message: ClaudeProbe.loginMessage(state.configDir) }
   return undefined
 }

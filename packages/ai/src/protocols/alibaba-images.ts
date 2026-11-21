@@ -1,6 +1,6 @@
 import { Duration, Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
+import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords } from "../schema/index.js"
@@ -27,7 +27,7 @@ export type AlibabaImageOptions = {
   readonly enableSequential?: boolean
 } & Record<string, unknown>
 
-export type Request = ImageRequestFor<AlibabaImageOptions>
+export type Request = ImageRequest<ImageModel<AlibabaImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema

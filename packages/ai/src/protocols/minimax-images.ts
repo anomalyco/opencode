@@ -1,6 +1,6 @@
 import { Duration, Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
+import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
@@ -31,7 +31,7 @@ export type MiniMaxImageOptions = {
   readonly height?: number
 } & Record<string, unknown>
 
-export type Request = ImageRequestFor<MiniMaxImageOptions>
+export type Request = ImageRequest<ImageModel<MiniMaxImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema

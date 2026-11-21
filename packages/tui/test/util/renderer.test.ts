@@ -3,6 +3,12 @@ import { RendererControlState } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { destroyRenderer, setTerminalTitle } from "../../src/util/renderer"
 
+test("sets a title that contains control characters", async () => {
+  await using setup = await createTestRenderer({ width: 10, height: 2 })
+  await setup.renderer.setupTerminal()
+  expect(() => setTerminalTitle(setup.renderer, "Fix parser bug\nin tokenizer")).not.toThrow()
+})
+
 test("clears the terminal title before destroying the renderer", () => {
   const calls: string[] = []
   destroyRenderer({

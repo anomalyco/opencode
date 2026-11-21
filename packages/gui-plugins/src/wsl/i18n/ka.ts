@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} დრო ამოიწურა {{timeout}}ms",
   "error.failedPort": "პორტის მიღება ვერ მოხერხდა",
   "menu.remove": "წაშლა",
+  "error.busy": "{{distro}} სხვა ამოცანითაა დაკავებული. სცადეთ ხელახლა მისი დასრულების შემდეგ.",
 }

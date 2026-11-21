@@ -1,6 +1,7 @@
 import { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect"
 import { AIClient } from "./ai-client.js"
 import { Decision, type DecisionModel, type DecisionQuestions, type DecisionRequestInput } from "./decision.js"
+import { Embedding, type EmbeddingModel, type EmbeddingRequestInput } from "./embedding.js"
 import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
 import { Image, type ImageModel, type ImageRequest, type ImageRequestInput } from "./image.js"
 import { LLM } from "./llm.js"
@@ -12,7 +13,7 @@ import {
   type StreamOptions,
   type TriggerCompactOptions,
 } from "./route/client.js"
-import { RequestExecutor } from "./route/executor.js"
+import { RequestExecutor, type HttpMiddleware } from "./route/executor.js"
 import {
   AIError,
   InvalidRequestError,
@@ -20,18 +21,16 @@ import {
   type CompactionCheckpointResponse,
   type CompactionResponse,
   type LLMEvent,
-  type LLMRequest,
   type LLMResponse,
 } from "./schema/index.js"
 import type {
-  LoopInput,
   LoopObjectEvent,
   ObjectEvent,
-  ObjectInput,
   ObjectResponse,
   OutputSchema,
   OutputType,
-  RequestInput,
+  LLMLoopInput,
+  LLMRequestInput,
 } from "./llm.js"
 import { Speech, type SpeechModel, type SpeechRequest, type SpeechRequestInput } from "./speech.js"
 import {
@@ -47,8 +46,8 @@ import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } fro
 
 /**
  * Promise-first entrypoint for scripts and non-Effect callers. One `ManagedRuntime` hosts the LLM, image, video, speech,
- * transcription and decision clients over a request executor; every method runs the corresponding Effect API and rethrows
- * `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
+ * transcription, decision and embedding clients over a request executor; every method runs the corresponding Effect API
+ * and rethrows `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
  */
 export interface Options {
   /** Executor layer; defaults to `RequestExecutor.fetchLayer`. Inject a recorder or `RequestExecutor.middleware(fn)` here. */
@@ -57,7 +56,15 @@ export interface Options {
 
 export interface RunOptions {
   readonly signal?: AbortSignal
+  /**
+   * Runs on every provider request the call makes, like `RequestExecutor.withMiddleware`: submits, polls, results and
+   * cancels included. A handle the call returns keeps it for its own calls.
+   */
+  readonly http?: HttpMiddleware
 }
+
+/** Options for reading or writing an asset. Downloads use the asset's own `middleware`, never a caller's `http`. */
+export type AssetRunOptions = Omit<RunOptions, "http">
 
 export type Services = AIClient.Services
 
@@ -98,7 +105,7 @@ export const make = (options: Options = {}) => {
 
   /** Run any package Effect (for example `ai.compact(...)` from `@opencode/ai/effect`) inside this runtime. */
   const run = <A, E>(effect: Effect.Effect<A, E, Services>, options?: RunOptions) =>
-    runtime.runPromise(Effect.raceFirst(effect, abortEffect(options?.signal)))
+    runtime.runPromise(Effect.raceFirst(scoped(effect, options?.http), abortEffect(options?.signal)))
 
   const iterate = <A, E>(stream: Stream.Stream<A, E, Services>, options?: RunOptions): AsyncIterable<A> =>
     Stream.toAsyncIterable(
@@ -106,50 +113,55 @@ export const make = (options: Options = {}) => {
         runtime.contextEffect.pipe(
           Effect.map(
             (context): Stream.Stream<A, unknown> =>
-              stream.pipe(Stream.interruptWhen(abortEffect(options?.signal)), Stream.provideContext(context)),
+              scoped(stream, options?.http).pipe(
+                Stream.interruptWhen(abortEffect(options?.signal)),
+                Stream.provideContext(context),
+              ),
           ),
         ),
       ),
     )
 
   function generate<const Model extends LanguageModel, S extends OutputSchema>(
-    input: ObjectInput<S, Model>,
+    input: LLMRequestInput<Model> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): Promise<ObjectResponse<OutputType<S>>>
   function generate<const Model extends LanguageModel>(
-    input: RequestInput<Model> | LLMRequest,
+    input: LLMRequestInput<Model>,
     options?: StreamOptions & RunOptions,
   ): Promise<LLMResponse>
-  function generate(
-    input: ObjectInput<OutputSchema> | RequestInput | LLMRequest,
-    options?: StreamOptions & RunOptions,
-  ) {
-    return run(LLM.generate(input, options), options)
+  // `run` and `iterate` apply `http` around the whole call, so the LLM call gets none of its own.
+  function generate(input: LLMRequestInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
+    return run(LLM.generate(input, { ...options, http: undefined }), options)
   }
 
   function stream<const Model extends LanguageModel, S extends OutputSchema>(
-    input: ObjectInput<S, Model>,
+    input: LLMRequestInput<Model> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<ObjectEvent<OutputType<S>>>
   function stream<const Model extends LanguageModel>(
-    input: RequestInput<Model> | LLMRequest,
+    input: LLMRequestInput<Model>,
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LLMEvent>
-  function stream(input: ObjectInput<OutputSchema> | RequestInput | LLMRequest, options?: StreamOptions & RunOptions) {
-    return iterate(LLM.stream(input, options), options)
+  function stream(input: LLMRequestInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
+    return iterate(LLM.stream(input, { ...options, http: undefined }), options)
   }
 
   function loop<const Model extends LanguageModel, S extends OutputSchema>(
-    input: LoopInput<Model> & { readonly schema: S },
+    input: LLMLoopInput<Model> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LoopObjectEvent<OutputType<S>>>
   function loop<const Model extends LanguageModel>(
-    input: LoopInput<Model>,
+    input: LLMLoopInput<Model>,
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LLMEvent>
-  function loop(input: LoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
-    return iterate(LLM.loop(input, options), options)
+  function loop(input: LLMLoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
+    return iterate(LLM.loop(input, { ...options, http: undefined }), options)
   }
+
+  /** Read `events` from `stream` or `loop` to the end and fold them into the final result. */
+  const collect = <Event extends LLMEvent>(events: AsyncIterable<Event>, options?: RunOptions) =>
+    run(LLM.collect(Stream.fromAsyncIterable(events, (error) => error)), options)
 
   function compact(
     request: CheckpointRequest,
@@ -165,31 +177,33 @@ export const make = (options: Options = {}) => {
     options?: (TriggerCompactOptions | EndpointCompactOptions) & RunOptions,
   ) {
     return options?.mechanism === "trigger"
-      ? run(LLM.compact(request as CheckpointRequest, options), options)
-      : run(LLM.compact(request as CompactionRequest, options), options)
+      ? run(LLM.compact(request as CheckpointRequest, { ...options, http: undefined }), options)
+      : run(LLM.compact(request as CompactionRequest, { ...options, http: undefined }), options)
   }
 
-  const handle = <Response>(generation: Generation<Response>): GenerationHandle<Response> => ({
-    ...generation.snapshot,
-    snapshot: generation.snapshot,
-    terminal: generation.terminal,
-    token: generation.token,
-    await: (options) => run(generation.await(options), options),
-    events: (options) => iterate(generation.events(options), options),
-    result: (options) => run(generation.result(), options),
-    refresh: (options) => run(generation.refresh(), options).then(handle),
-    cancel: (options) => run(generation.cancel(), options),
-  })
+  const handle =
+    (http: HttpMiddleware | undefined) =>
+    <Response>(generation: Generation<Response>): GenerationHandle<Response> => ({
+      ...generation.snapshot,
+      snapshot: generation.snapshot,
+      terminal: generation.terminal,
+      token: generation.token,
+      await: (options) => run(generation.await(options), { http, ...options }),
+      events: (options) => iterate(generation.events(options), { http, ...options }),
+      result: (options) => run(generation.result(), { http, ...options }),
+      refresh: (options) => run(generation.refresh(), { http, ...options }).then(handle(options?.http ?? http)),
+      cancel: (options) => run(generation.cancel(), { http, ...options }),
+    })
 
   return {
     run,
     /** Decoded asset bytes, downloading `url` sources through the executor. */
-    bytes: (asset: Media.Asset, options?: RunOptions) => run(asset.bytes(), options),
-    base64: (asset: Media.Asset, options?: RunOptions) => run(asset.base64(), options),
+    bytes: (asset: Media.Asset, options?: AssetRunOptions) => run(asset.bytes(), options),
+    base64: (asset: Media.Asset, options?: AssetRunOptions) => run(asset.base64(), options),
     /** Pull a `url` asset into owned bytes before the provider URL expires. */
-    materialize: (asset: Media.Asset, options?: RunOptions) => run(asset.materialize(), options),
+    materialize: (asset: Media.Asset, options?: AssetRunOptions) => run(asset.materialize(), options),
     /** Read a file into an asset like `Media.file`: sniffed media type, then the extension's. */
-    file: async (path: string, options?: Media.AssetOptions & RunOptions) => {
+    file: async (path: string, options?: Media.AssetOptions & AssetRunOptions) => {
       const { readFile } = await import("node:fs/promises")
       return run(
         Effect.tryPromise({
@@ -204,26 +218,30 @@ export const make = (options: Options = {}) => {
         options,
       )
     },
-    /** Write an asset's bytes like `Media.write`, downloading `url` sources through the executor. */
-    write: async (asset: Media.Asset, path: string, options?: RunOptions) => {
-      const { writeFile } = await import("node:fs/promises")
-      return run(
-        asset.bytes().pipe(
-          Effect.flatMap((data) =>
-            Effect.tryPromise({
-              try: (signal) => writeFile(path, data, { signal }),
-              catch: (cause) => fileError(`Failed to write media file ${path}`, cause),
-            }),
-          ),
-        ),
-        options,
-      )
+    /** Write an asset's bytes like `Media.write`: streamed through a temporary file that replaces `path` on success. */
+    write: async (asset: Media.Asset, path: string, options?: AssetRunOptions) => {
+      const { open, rename, rm } = await import("node:fs/promises")
+      const temporary = `${path}.${crypto.randomUUID()}.tmp`
+      try {
+        const file = await open(temporary, "w")
+        try {
+          for await (const chunk of iterate(asset.stream(), options)) await file.write(chunk)
+        } finally {
+          await file.close()
+        }
+        await rename(temporary, path)
+      } catch (cause) {
+        await rm(temporary, { force: true })
+        if (cause instanceof AIError || cause === options?.signal?.reason) throw cause
+        throw fileError(`Failed to write media file ${path}`, cause)
+      }
     },
     request: LLM.request,
     generate,
     stream,
     /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
     loop,
+    collect,
     /** Compact a Responses request: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
     compact,
     canCompact: LLM.canCompact,
@@ -237,10 +255,14 @@ export const make = (options: Options = {}) => {
         input: ImageRequestInput<Model> | ImageRequest,
         options?: AwaitOptions & RunOptions,
       ) => iterate(Image.stream(input, options), options),
+      /** Submit a generation on a queued route and return its `{ id }` at once; nothing polls. */
       start: <const Model extends ImageModel>(input: ImageRequestInput<Model> | ImageRequest, options?: RunOptions) =>
-        run(Image.start(input), options).then(handle),
-      resume: (model: ImageModel, token: unknown, options?: RunOptions) =>
-        run(Image.resume(model, token), options).then(handle),
+        run(Image.start(input), options),
+      /** One status read for a job ID. */
+      status: (model: ImageModel, id: string, options?: RunOptions) => run(Image.status(model, id), options),
+      /** The finished images; fails while the job is still running. */
+      result: (model: ImageModel, id: string, options?: RunOptions) => run(Image.result(model, id), options),
+      cancel: (model: ImageModel, id: string, options?: RunOptions) => run(Image.cancel(model, id), options),
     },
     decision: {
       request: Decision.request,
@@ -248,6 +270,22 @@ export const make = (options: Options = {}) => {
         input: DecisionRequestInput<Model, Questions>,
         options?: RunOptions,
       ) => run(Decision.generate(input), options),
+    },
+    embedding: {
+      request: Embedding.request,
+      generate: <const Model extends EmbeddingModel>(input: EmbeddingRequestInput<Model>, options?: RunOptions) =>
+        run(Embedding.generate(input), options),
+    },
+    video: {
+      request: Video.request,
+      /** Submit a generation and return its `{ id }` at once; nothing polls. */
+      start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
+        run(Video.start(input), options),
+      /** One status read for a job ID. */
+      status: (model: VideoModel, id: string, options?: RunOptions) => run(Video.status(model, id), options),
+      /** The finished videos; fails while the job is still running. */
+      result: (model: VideoModel, id: string, options?: RunOptions) => run(Video.result(model, id), options),
+      cancel: (model: VideoModel, id: string, options?: RunOptions) => run(Video.cancel(model, id), options),
     },
     /** Experimental: may change without compatibility guarantees. */
     experimental: {
@@ -275,24 +313,9 @@ export const make = (options: Options = {}) => {
         start: <const Model extends TranscriptionModel>(
           input: TranscriptionRequestInput<Model> | TranscriptionRequest,
           options?: RunOptions,
-        ) => run(Transcription.start(input), options).then(handle),
+        ) => run(Transcription.start(input), options).then(handle(options?.http)),
         resume: (model: TranscriptionModel, token: unknown, options?: RunOptions) =>
-          run(Transcription.resume(model, token), options).then(handle),
-      },
-      video: {
-        request: Video.request,
-        start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
-          run(Video.start(input), options).then(handle),
-        generate: <const Model extends VideoModel>(
-          input: VideoRequestInput<Model> | VideoRequest,
-          options?: AwaitOptions & RunOptions,
-        ) => run(Video.generate(input, { poll: options?.poll }), options),
-        resume: (model: VideoModel, token: unknown, options?: RunOptions) =>
-          run(Video.resume(model, token), options).then(handle),
-        stream: <const Model extends VideoModel>(
-          input: VideoRequestInput<Model> | VideoRequest,
-          options?: AwaitOptions & RunOptions,
-        ) => iterate(Video.stream(input, { poll: options?.poll }), options),
+          run(Transcription.resume(model, token), options).then(handle(options?.http)),
       },
     },
     dispose: () => runtime.dispose(),
@@ -300,6 +323,11 @@ export const make = (options: Options = {}) => {
 }
 
 export type Client = ReturnType<typeof make>
+
+const scoped = <Self extends Effect.Effect<unknown, unknown, unknown> | Stream.Stream<unknown, unknown, unknown>>(
+  self: Self,
+  http: HttpMiddleware | undefined,
+) => (http === undefined ? self : RequestExecutor.withMiddleware(http)(self))
 
 const fileError = (message: string, cause: unknown) =>
   new AIError({ reason: new InvalidRequestError({ message, cause }) })
@@ -332,170 +360,4 @@ export const tool = <
 export const ai: Omit<Client, "dispose"> = make()
 
 export * as AI from "./index.js"
-export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
-export {
-  ProtocolID,
-  RouteID,
-  ModelID,
-  ProviderID,
-  ResponseID,
-  ContentBlockID,
-  ToolCallID,
-  JsonSchema,
-  ProviderOptions,
-  ProviderMetadata,
-  HttpTimeout,
-  RequestEncoding,
-  HttpOptions,
-  GenerationOptions,
-  LanguageModelDefaults,
-  ReasoningEfforts,
-  ReasoningEffort,
-  LanguageModelCompatibility,
-  LanguageModel,
-  LanguageModelSchema,
-  CacheTTL,
-  CacheHint,
-  CachePolicyObject,
-  CachePolicy,
-  MessageRole,
-  SystemPart,
-  TextPart,
-  MediaPart,
-  ToolResultValue,
-  ToolOutput,
-  ToolCallPart,
-  ToolResultPart,
-  ReasoningPart,
-  CompactionPart,
-  EffortPart,
-  ContentPart,
-  Message,
-  Freeform,
-  ToolDefinition,
-  ToolNamespace,
-  ToolEntry,
-  ToolChoice,
-  LLMRequest,
-  FinishReason,
-  Usage,
-  MediaUsage,
-  CompactionResponse,
-  CompactionCheckpointResponse,
-  StepStart,
-  TextStart,
-  TextDelta,
-  TextEnd,
-  ReasoningStart,
-  ReasoningDelta,
-  ReasoningEnd,
-  ToolInputStart,
-  ToolInputDelta,
-  ToolInputEnd,
-  ToolInputError,
-  ToolCall,
-  ToolResult,
-  ToolError,
-  FinishReasonDetails,
-  StepFinish,
-  Finish,
-  MediaEvent,
-  ProviderErrorEvent,
-  LLMEvent,
-  LLMResponse,
-  HttpContext,
-  HttpRateLimitDetails,
-  InvalidRequestError,
-  UnsupportedOperationError,
-  ProviderConfigurationError,
-  AuthenticationError,
-  RateLimitError,
-  QuotaExceededError,
-  ContentPolicyError,
-  ProviderInternalError,
-  TransportType,
-  TransportOperation,
-  TransportError,
-  InvalidProviderOutputError,
-  UnknownProviderError,
-  TimeoutError,
-  AIErrorReason,
-  AIError,
-} from "./schema/index.js"
-export type {
-  GenerationOptionsFields,
-  GenerationOptionsInput,
-  LanguageModelInput,
-  LanguageModelProviderOptions,
-  ToolDefinitionInput,
-  ToolNamespaceInput,
-  ToolNamespaceEntryInput,
-  ToolEntryInput,
-  UsageInput,
-} from "./schema/index.js"
-export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageRequest, ImageResponse } from "./image.js"
-export type {
-  ImageModelOptions,
-  ImageOptions,
-  ImageRequestFor,
-  ImageRequestInput,
-  ImageResolution,
-  ImageRoute,
-} from "./image.js"
-export {
-  ChoiceAnswer,
-  ChoiceQuestion,
-  ChoiceValue,
-  DecisionAnswer,
-  DecisionJsonPart,
-  DecisionMediaPart,
-  DecisionModel,
-  DecisionModelCompatibility,
-  DecisionModelSchema,
-  DecisionPart,
-  DecisionQuestion,
-  DecisionRequest,
-  DecisionResponse,
-  DecisionTextPart,
-  DecisionUsage,
-  ErrorAnswer,
-  ErrorReason,
-  PredicateAnswer,
-  PredicateQuestion,
-  ScoreAnswer,
-  ScoreQuestion,
-} from "./decision.js"
-export type {
-  AnswerFor,
-  AnswersFor,
-  DecisionInput,
-  DecisionModelOptions,
-  DecisionOptions,
-  DecisionQuestions,
-  DecisionRequestFor,
-  DecisionRequestInput,
-  DecisionResponseFor,
-  DecisionModelRoute,
-} from "./decision.js"
-export { Media } from "./media.js"
-export type {
-  AwaitOptions as GenerationAwaitOptions,
-  Event as GenerationEvent,
-  Poll,
-  Route as GenerationRoute,
-  Snapshot as GenerationSnapshot,
-  Status as GenerationStatus,
-} from "./generation.js"
-export type {
-  ExecutableTool,
-  Tool,
-  ToolExecute,
-  ToolExecuteContext,
-  ToolInput,
-  ToolInputType,
-  ToolModelOutputInput,
-  ToolOptions,
-  ToolSchema,
-  ToolToModelOutput,
-} from "./tool.js"
-export type { LLM } from "./llm.js"
+export * from "./public.js"

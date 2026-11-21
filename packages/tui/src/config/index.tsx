@@ -155,6 +155,9 @@ export const Info = Schema.Struct({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
+      submit_scroll: Schema.optional(Schema.Literals(["bottom", "keep"])).annotate({
+        description: "Jump to the latest message when sending a prompt, or keep the current transcript position",
+      }),
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning by default",
       }),
@@ -169,7 +172,7 @@ export const Info = Schema.Struct({
         description: "Show user attachment and tool-result images in the session transcript",
       }),
       tps: Schema.optional(Schema.Boolean).annotate({
-        description: "Show average tokens per second",
+        description: "Show output tokens per second while the model streams",
       }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
@@ -387,10 +390,10 @@ export function useCursorStyle() {
   return createMemo(() => ({ style: config.data.cursor.style, blinking: config.data.cursor.blinking }))
 }
 
-/** Reactive accessor for the temporary "new-designs" experiment. */
+/** Reactive accessor for the temporary "new-designs" experiment. On unless the config turns it off. */
 export function useNewDesigns() {
   const config = useConfig()
-  return () => config.data.experimental?.["new-designs"] === true
+  return () => config.data.experimental?.["new-designs"] !== false
 }
 
 /** Reactive accessor for the temporary "client-mcp" experiment. */

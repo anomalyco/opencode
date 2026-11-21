@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMRequest } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { DigitalOcean } from "../../src/providers/digitalocean.js"
 import { LLMClient } from "../../src/route.js"
 import {
@@ -38,7 +38,7 @@ for (const item of [
             system: LARGE_CACHEABLE_SYSTEM,
             prompt: "Reply exactly: OK",
             promptCacheKey: `digitalocean-recorded-${item.id}`,
-            generation: { maxTokens: item.maxTokens },
+            maxTokens: item.maxTokens,
           })
           const first = yield* LLMClient.generate(request)
           const second = yield* LLMClient.generate(request)
@@ -69,7 +69,7 @@ for (const item of [
             maxTokens: item.maxTokens,
             temperature: false,
           })
-          const events = yield* runWeatherToolLoop(LLMRequest.update(request, { cache: "auto" }))
+          const events = yield* runWeatherToolLoop({ ...request, cache: "auto" })
           expectWeatherToolLoop(events)
         }),
       60_000,

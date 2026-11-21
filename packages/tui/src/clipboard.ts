@@ -29,6 +29,7 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
       if (result.status !== "read") {
         if (result.status === "failed") throw result.error
         if (result.status === "timed-out") throw new Error("Clipboard read timed out")
+        if (result.status === "unsupported") throw new Error("Clipboard read is not supported on this system")
         if (result.status === "limit-exceeded") {
           throw new RangeError("Clipboard content exceeded configured read or image conversion limits")
         }

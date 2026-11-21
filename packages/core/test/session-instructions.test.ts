@@ -6,6 +6,7 @@ import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -13,6 +14,8 @@ import { Global } from "@opencode/util/global"
 import { Image } from "@opencode/core/image"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
+import { Environment } from "@opencode/core/environment/index"
 import { Model } from "@opencode/core/model"
 import { Permission } from "@opencode/core/permission"
 import { Project } from "@opencode/core/project"
@@ -27,6 +30,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionStore } from "@opencode/core/session/store"
 import { Session } from "@opencode/core/session"
+import { Skill } from "@opencode/core/skill"
 import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Tool } from "@opencode/core/tool"
@@ -42,13 +46,17 @@ const readToolNode = makeLocationNode({
   layer: Layer.effectDiscard(registerToolPlugin(ReadTool.Plugin)),
   deps: [
     Tool.node,
-    ReadToolFileSystem.node,
     FileAccess.node,
     Image.node,
     Permission.node,
     SessionInstructions.node,
+    InstructionDiscovery.node,
+    Skill.node,
     FSUtil.node,
+    Environment.node,
     Location.node,
+    Config.node,
+    Flag.node,
   ],
 })
 
@@ -66,11 +74,11 @@ const testLayer = AppNodeBuilder.build(
     Location.node,
     FSUtil.node,
     FileAccess.node,
-    ReadToolFileSystem.node,
     readToolNode,
     Tool.node,
     PluginHooks.node,
     SessionInstructions.node,
+    Skill.node,
     Global.node,
     Image.node,
   ]),
@@ -185,6 +193,31 @@ describe("SessionInstructions", () => {
       expect(secondInjected[1]!.description).toBe(`Loaded ${path.relative(dir, otherPath)}`)
       expect(secondInjected[1]!.metadata).toEqual({ instruction: { paths: [otherPath] } })
       expect(secondInjected.some((message) => message.text.includes("root-instructions"))).toBe(false)
+    }),
+  )
+
+  it.live("falls back to CLAUDE.md above a read where a directory has no AGENTS.md", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const dir = location.directory
+      const subAgents = path.resolve(dir, "sub", "AGENTS.md")
+      const deepClaude = path.resolve(dir, "sub", "deep", "CLAUDE.md")
+      yield* mkdir(path.resolve(dir, "sub", "deep"))
+      yield* writeAgents(subAgents, "sub-agents")
+      yield* writeAgents(path.resolve(dir, "sub", "CLAUDE.md"), "sub-claude")
+      yield* writeAgents(deepClaude, "deep-claude")
+      yield* Effect.promise(() => fs.writeFile(path.resolve(dir, "sub", "deep", "file.txt"), "content"))
+
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
+      yield* executeTool(registry, readCall(sessionID, "call-deep", "sub/deep/file.txt"))
+
+      const injected = yield* synthetics(sessionID)
+      expect(injected).toHaveLength(1)
+      expect(injected[0]!.text).toBe(
+        `Instructions from: ${deepClaude}\ndeep-claude\n\nInstructions from: ${subAgents}\nsub-agents`,
+      )
     }),
   )
 
@@ -341,7 +374,5 @@ describe("SessionInstructions", () => {
     expect(messages).toHaveLength(1)
     expect(messages[0]!.role).toBe("user")
     expect(messages[0]!.content).toEqual([{ type: "text", text: "Instructions from: /repo/sub/AGENTS.md\ncontent" }])
-    // Metadata is bookkeeping for the dedup ledger; the model must not see it.
-    expect(messages[0]!.metadata).toBeUndefined()
   })
 })

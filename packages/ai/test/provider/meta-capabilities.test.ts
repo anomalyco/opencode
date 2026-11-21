@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { ai, ImageClient, LLMEvent, LLMRequest, Media, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, ImageClient, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { MetaMessages } from "../../src/protocols/meta-messages.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
@@ -24,7 +24,7 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
           ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }),
         ],
         providerOptions: { effort: "low" },
-        generation: { maxTokens: 1024 },
+        maxTokens: 1024,
       }),
     )
     expect(compiled.body).toMatchObject({
@@ -88,8 +88,8 @@ it.effect("Meta Images preserves request overlays, bearer auth, JSON edit inputs
       },
       http: { body: { output_format: "jpeg", future_option: true }, query: { trace: "1" } },
     })
-    expect(response.image.mediaType).toBe("image/jpeg")
-    expect(response.image.source).toEqual({
+    expect(response.images[0].mediaType).toBe("image/jpeg")
+    expect(response.images[0].source).toEqual({
       type: "url",
       url: "https://images.example/result.jpg",
       mediaType: "image/jpeg",
@@ -177,9 +177,10 @@ for (const streamed of [false, true]) {
           type: "content",
           value: [{ type: "file", mime: "image/png", uri: "data:image/png;base64,iVBORw0KGgo=" }],
         })
-        const replay = yield* compileRequest(
-          LLMRequest.update(request, { messages: [...request.messages, response.message, Message.user("Edit")] }),
-        )
+        const replay = yield* compileRequest({
+          ...request,
+          messages: [...request.messages, response.message, Message.user("Edit")],
+        })
         expect(replay.body.input).toContainEqual({
           type: "image_generation_call",
           id: "ig_signed",

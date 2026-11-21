@@ -1,10 +1,12 @@
 export * as Generate from "./generate.js"
 
 import { Schema } from "effect"
+import { BlobStore } from "./blob-store.js"
+import { descending } from "./identifier.js"
 import { Model } from "./model.js"
 import { Money } from "./money.js"
 import { Base64 } from "./prompt.js"
-import { PositiveInt, optional } from "./schema.js"
+import { PositiveInt, optional, statics } from "./schema.js"
 
 const description = (text: string) => ({ description: text })
 
@@ -18,6 +20,12 @@ export const File = Schema.Struct({
   mime: Schema.String,
   name: Schema.String.pipe(optional),
 }).annotate({ identifier: "Generate.File" })
+
+export interface ImageFile extends Schema.Schema.Type<typeof ImageFile> {}
+export const ImageFile = Schema.Struct({
+  ...File.fields,
+  mime: Schema.String.check(Schema.isPattern(/^image\//iu)),
+}).annotate({ identifier: "Generate.ImageFile" })
 
 export interface Usage extends Schema.Schema.Type<typeof Usage> {}
 export const Usage = Schema.Struct({
@@ -78,6 +86,84 @@ export const ImageResult = Schema.Struct({
 }).annotate({ identifier: "Generate.ImageResult" })
 
 // ---------------------------------------------------------------------------
+// Video
+// ---------------------------------------------------------------------------
+
+// Strict, because the server names files after it.
+export const VideoID = Schema.String.check(Schema.isPattern(/^video_[0-9a-f]{12}[0-9A-Za-z]{14}$/u)).pipe(
+  Schema.brand("Generate.VideoID"),
+  Schema.annotate({ identifier: "Generate.VideoID" }),
+  statics((schema) => ({
+    create: () => schema.make("video_" + descending()),
+  })),
+)
+export type VideoID = typeof VideoID.Type
+
+export type VideoAspect = `${number}:${number}` | "auto"
+export const VideoAspect: Schema.Codec<VideoAspect> = Schema.Union([ImageAspect, Schema.Literal("auto")]).annotate({
+  identifier: "Generate.VideoAspect",
+  description: "Aspect ratio as width:height, or auto to follow the start image",
+})
+
+export type VideoResolution = "480p" | "720p" | "1080p" | "4k" | (string & {})
+export const VideoResolution: Schema.Codec<VideoResolution> = Schema.Union([
+  Schema.Literals(["480p", "720p", "1080p", "4k"]),
+  Schema.String,
+]).annotate({ identifier: "Generate.VideoResolution" })
+
+export interface VideoRequest extends Schema.Schema.Type<typeof VideoRequest> {}
+export const VideoRequest = Schema.Struct({
+  model: Model.Ref,
+  prompt: Schema.String,
+  start: ImageFile.pipe(optional).annotate(description("Image the video starts on exactly")),
+  end: ImageFile.pipe(optional).annotate(description("Image the video ends on exactly")),
+  references: Schema.Array(File)
+    .pipe(optional)
+    .annotate(description("Images, videos or audio that guide the subject or style without pinning a frame")),
+  duration: PositiveInt.pipe(optional).annotate(description("Length in seconds")),
+  aspect: VideoAspect.pipe(optional),
+  resolution: VideoResolution.pipe(optional),
+  sound: Schema.Boolean.pipe(optional).annotate(
+    description("Whether the video has a generated soundtrack; unset leaves the model's default"),
+  ),
+}).annotate({ identifier: "Generate.VideoRequest" })
+
+export const VideoErrorReason = Schema.Literals(["failed", "cancelled", "expired", "unknown"]).annotate({
+  identifier: "Generate.VideoErrorReason",
+  description:
+    "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time",
+})
+export type VideoErrorReason = typeof VideoErrorReason.Type
+
+export interface VideoRunning extends Schema.Schema.Type<typeof VideoRunning> {}
+export const VideoRunning = Schema.Struct({
+  id: VideoID,
+  status: Schema.Literal("running"),
+}).annotate({ identifier: "Generate.VideoRunning" })
+
+export interface VideoCompleted extends Schema.Schema.Type<typeof VideoCompleted> {}
+export const VideoCompleted = Schema.Struct({
+  id: VideoID,
+  status: Schema.Literal("completed"),
+  blobs: Schema.Array(BlobStore.Info).annotate(
+    description("The finished videos, usually one. Read each with GET /api/experimental/blob/:id"),
+  ),
+}).annotate({ identifier: "Generate.VideoCompleted" })
+
+export interface VideoError extends Schema.Schema.Type<typeof VideoError> {}
+export const VideoError = Schema.Struct({
+  id: VideoID,
+  status: Schema.Literal("error"),
+  error: Schema.String,
+  reason: VideoErrorReason,
+}).annotate({ identifier: "Generate.VideoError" })
+
+export type VideoJob = VideoRunning | VideoCompleted | VideoError
+export const VideoJob = Schema.Union([VideoRunning, VideoCompleted, VideoError]).annotate({
+  identifier: "Generate.VideoJob",
+})
+
+// ---------------------------------------------------------------------------
 // Decisions
 // ---------------------------------------------------------------------------
 
@@ -115,6 +201,9 @@ export const PredicateQuestion = Schema.Struct({
   type: Schema.Literal("predicate"),
   name: QuestionName,
   instructions: Schema.String,
+  criteria: Schema.Struct({ true: Schema.String.pipe(optional), false: Schema.String.pipe(optional) })
+    .pipe(optional)
+    .annotate(description("What counts as true and as false, for statements the instructions alone leave ambiguous")),
 }).annotate({ identifier: "Generate.PredicateQuestion", description: "The probability that a statement is true" })
 
 export interface ChoiceQuestion extends Schema.Schema.Type<typeof ChoiceQuestion> {}

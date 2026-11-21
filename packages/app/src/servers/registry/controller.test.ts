@@ -9,15 +9,18 @@ describe("sortServerConnections", () => {
     const first = server("http://first")
     const offline = server("http://offline")
     const unknown = server("http://unknown")
+    // A tunnel that just moved is still being checked, not failed.
+    const checking = server("http://checking")
 
     const result = sortServerConnections({
-      servers: [first, offline, unknown],
+      servers: [first, offline, unknown, checking],
       health: {
-        [ServerConnection.key(first)]: { healthy: true },
-        [ServerConnection.key(offline)]: { healthy: false },
+        [ServerConnection.key(first)]: { type: "healthy" },
+        [ServerConnection.key(offline)]: { type: "unreachable" },
+        [ServerConnection.key(checking)]: { type: "checking", managed: true },
       },
     })
 
-    expect(result).toEqual([first, unknown, offline])
+    expect(result).toEqual([first, unknown, checking, offline])
   })
 })

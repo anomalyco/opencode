@@ -20,6 +20,16 @@ describe("pairing link", () => {
     })
   })
 
+  test("reads the server name a QR code carries", () => {
+    expect(
+      pairingLink(JSON.stringify({ code: "abc", urls: ["http://192.168.1.2:49374"], name: "Anomaly Box" })),
+    ).toEqual({
+      urls: ["http://192.168.1.2:49374"],
+      code: "abc",
+      name: "Anomaly Box",
+    })
+  })
+
   test("rejects other URLs", () => {
     expect(pairingLink("http://192.168.1.2:49374/auth/connect/")).toBeUndefined()
     expect(pairingLink("http://192.168.1.2:49374/auth/connect/abc/extra")).toBeUndefined()

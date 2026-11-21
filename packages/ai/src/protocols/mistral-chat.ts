@@ -17,6 +17,8 @@ import {
   type MediaPart,
   type ToolCallPart,
   type ToolDefinition,
+  type ToolMessage,
+  type UserMessage,
 } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -227,7 +229,7 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart) {
   return yield* ProviderShared.invalidRequest(`Mistral Chat does not support media type ${part.media.mediaType}`)
 })
 
-const lowerUser = Effect.fnUntraced(function* (message: LLMRequest["messages"][number]) {
+const lowerUser = Effect.fnUntraced(function* (message: UserMessage) {
   const content: MistralUserContent[] = []
   for (const part of message.content) {
     if (part.type === "text") {
@@ -238,7 +240,6 @@ const lowerUser = Effect.fnUntraced(function* (message: LLMRequest["messages"][n
       content.push(yield* lowerMedia(part))
       continue
     }
-    return yield* ProviderShared.unsupportedContent("Mistral Chat", "user", ["text", "media"])
   }
   if (content.every((part) => part.type === "text"))
     return { role: "user" as const, content: content.map((part) => part.text).join("") }
@@ -285,14 +286,9 @@ const lowerAssistant = Effect.fnUntraced(function* (
   }
 })
 
-const lowerToolResults = Effect.fnUntraced(function* (
-  message: LLMRequest["messages"][number],
-  normalizeID: (id: string) => string,
-) {
+const lowerToolResults = Effect.fnUntraced(function* (message: ToolMessage, normalizeID: (id: string) => string) {
   const output: MistralMessage[] = []
   for (const part of message.content) {
-    if (part.type !== "tool-result")
-      return yield* ProviderShared.unsupportedContent("Mistral Chat", "tool", ["tool-result"])
     if (part.result.type !== "content") {
       output.push({
         role: "tool",
@@ -396,13 +392,13 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
     tools: flattened.tools.length > 0 ? flattened.tools.map(lowerTool) : undefined,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: request.generation?.maxTokens,
-    random_seed: request.generation?.seed,
-    temperature: request.generation?.temperature,
-    top_p: request.generation?.topP,
-    frequency_penalty: request.generation?.frequencyPenalty,
-    presence_penalty: request.generation?.presencePenalty,
-    stop: request.generation?.stop,
+    max_tokens: request.maxTokens,
+    random_seed: request.seed,
+    temperature: request.temperature,
+    top_p: request.topP,
+    frequency_penalty: request.frequencyPenalty,
+    presence_penalty: request.presencePenalty,
+    stop: request.stop,
     prompt_cache_key: ProviderShared.sendsPromptCacheKey(request)
       ? (options.promptCacheKey ?? request.promptCacheKey)
       : undefined,

@@ -30,10 +30,8 @@ const touchScroll = /mobile-timeline-scroll\.spec\.ts/
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: [
-    "service-worker/**",
-    process.env.OPENCODE_PERFORMANCE === "1" ? "performance/**/*.test.ts" : "performance/**",
-  ],
+  // Each has its own config and script: test:service-worker and test:stability.
+  testIgnore: ["service-worker/**", "stability/**"],
   outputDir: "./e2e/test-results",
   timeout: 60_000,
   expect: {

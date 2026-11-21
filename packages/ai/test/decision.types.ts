@@ -28,6 +28,12 @@ void (true satisfies Choice)
 void (true satisfies Name)
 void (true satisfies ClientRequirements)
 
+// A built request is a plain object: pass it back to `generate` as is, or edit it with a spread.
+const generated = ai.decision.generate(request)
+type GeneratedAnswers = Assert<Equal<Success<typeof generated>["answers"], Answers>>
+void (true satisfies GeneratedAnswers)
+ai.decision.generate({ ...request, input: [{ type: "text", text: "Charged twice" }] })
+
 Effect.gen(function* () {
   const response = yield* ai.decision.generate({
     model: OpenCode.decision("jev-1.13"),

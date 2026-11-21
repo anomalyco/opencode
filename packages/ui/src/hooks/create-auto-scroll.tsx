@@ -1,7 +1,17 @@
-import { createEffect, on, onCleanup } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createEventListener } from "@solid-primitives/event-listener"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
+import {
+  createAutoScrollState,
+  END_EPSILON,
+  SETTLE_MS,
+  selectOverflowAnchor,
+  selectPausesOnSelection,
+  selectUserScrolled,
+  transitionAutoScroll,
+  type AutoScrollEffect,
+  type AutoScrollEvent,
+} from "./auto-scroll-machine"
 
 export interface AutoScrollOptions {
   working: () => boolean
@@ -10,116 +20,66 @@ export interface AutoScrollOptions {
   bottomThreshold?: number
 }
 
+const DETACHED = { type: "scroller.detached" } as const
+
+const BOTTOM = { type: "scroll.bottom", force: false } as const
+
+const FORCE_BOTTOM = { type: "scroll.bottom", force: true } as const
+
+const DISPOSE = { type: "disposed" } as const
+
 export function createAutoScroll(options: AutoScrollOptions) {
-  let settling = false
+  const [state, setState] = createSignal(createAutoScrollState(untrack(options.working)))
+  const [refs, setRefs] = createStore<{ scroll?: HTMLElement; content?: HTMLElement }>({})
+  let attempts = 0
   let settleTimer: ReturnType<typeof setTimeout> | undefined
-  let autoTimer: ReturnType<typeof setTimeout> | undefined
-  let auto: { top: number; time: number } | undefined
 
-  const threshold = () => options.bottomThreshold ?? 10
+  // Scroll, resize and pin run every frame while content streams; reuse their events instead of allocating.
+  const resizeEvent = { type: "resize" as const, overflow: false }
+  const scrollEvent = { type: "scroll" as const, overflow: false, scrollTop: 0, maxScroll: 0, threshold: 0 }
+  const pauseEvent = { type: "pause" as const, overflow: false }
+  const flightEvent = { type: "flight.started" as const, top: 0 }
 
-  const [store, setStore] = createStore({
-    contentRef: undefined as HTMLElement | undefined,
-    scrollRef: undefined as HTMLElement | undefined,
-    userScrolled: false,
-  })
-
-  const active = () => options.working() || settling
-
-  const distanceFromBottom = (el: HTMLElement) => {
-    return el.scrollHeight - el.clientHeight - el.scrollTop
+  const dispatch = (event: AutoScrollEvent) => {
+    const result = transitionAutoScroll(untrack(state), event)
+    setState(result.state)
+    result.effects.forEach(run)
   }
 
-  const canScroll = (el: HTMLElement) => {
-    return el.scrollHeight - el.clientHeight > 1
+  const run = (effect: AutoScrollEffect) => {
+    if (effect.type === "pin.bottom") return pin()
+
+    if (effect.type === "notify.interacted") return options.onUserInteracted?.()
+    clearTimeout(settleTimer)
+
+    if (effect.type === "settle.stop") return
+    const attempt = effect.attempt
+    settleTimer = setTimeout(() => dispatch({ type: "settle.elapsed", attempt }), SETTLE_MS)
   }
 
-  // Browsers can dispatch scroll events asynchronously. If new content arrives
-  // between us calling `scrollTo()` and the subsequent `scroll` event firing,
-  // the handler can see a non-zero `distanceFromBottom` and incorrectly assume
-  // the user scrolled.
-  const markAuto = (el: HTMLElement) => {
-    auto = {
-      top: Math.max(0, el.scrollHeight - el.clientHeight),
-      time: Date.now(),
-    }
+  const pin = () => {
+    const el = refs.scroll
 
-    if (autoTimer) clearTimeout(autoTimer)
-    autoTimer = setTimeout(() => {
-      auto = undefined
-      autoTimer = undefined
-    }, 1500)
-  }
+    if (!el || !el.isConnected) return
+    const before = el.scrollTop
 
-  const isAuto = (el: HTMLElement) => {
-    const a = auto
-
-    if (!a) return false
-
-    if (Date.now() - a.time > 1500) {
-      auto = undefined
-
-      return false
-    }
-
-    return Math.abs(el.scrollTop - a.top) < 2
-  }
-
-  const scrollToBottomNow = (behavior: ScrollBehavior) => {
-    const el = store.scrollRef
-
-    if (!el) return
-    markAuto(el)
-
-    if (behavior === "smooth") {
-      el.scrollTo({ top: el.scrollHeight, behavior })
-
-      return
-    }
-
+    if (el.scrollHeight - el.clientHeight - before <= END_EPSILON) return
     // `scrollTop` assignment bypasses any CSS `scroll-behavior: smooth`.
     el.scrollTop = el.scrollHeight
+    const after = el.scrollTop
+
+    // The browser queues a `scroll` event only when the position actually moved.
+    if (Math.abs(after - before) <= END_EPSILON) return
+    flightEvent.top = after
+    dispatch(flightEvent)
   }
 
-  const scrollToBottom = (force: boolean) => {
-    if (!force && !active()) return
+  const pause = () => {
+    const el = refs.scroll
 
-    if (force && store.userScrolled) setStore("userScrolled", false)
-
-    const el = store.scrollRef
-
-    if (!el) return
-
-    if (!force && store.userScrolled) return
-
-    const distance = distanceFromBottom(el)
-
-    if (distance < 2) {
-      markAuto(el)
-
-      return
-    }
-
-    // For auto-following content we prefer immediate updates to avoid
-    // visible "catch up" animations while content is still settling.
-    scrollToBottomNow("auto")
-  }
-
-  const stop = () => {
-    const el = store.scrollRef
-
-    if (!el) return
-
-    if (!canScroll(el)) {
-      if (store.userScrolled) setStore("userScrolled", false)
-
-      return
-    }
-
-    if (store.userScrolled) return
-
-    setStore("userScrolled", true)
-    options.onUserInteracted?.()
+    if (!el || !el.isConnected) return
+    pauseEvent.overflow = canScroll(el)
+    dispatch(pauseEvent)
   }
 
   const handleWheel = (e: WheelEvent) => {
@@ -127,108 +87,65 @@ export function createAutoScroll(options: AutoScrollOptions) {
     // If the user is scrolling within a nested scrollable region (tool output,
     // code block, etc), don't treat it as leaving the "follow bottom" mode.
     // Those regions opt in via `data-scrollable`.
-    const el = store.scrollRef
-    const target = e.target instanceof Element ? e.target : undefined
-    const nested = target?.closest("[data-scrollable]")
+    const nested = e.target instanceof Element ? e.target.closest("[data-scrollable]") : null
 
-    if (el && nested && nested !== el) return
-    stop()
+    if (nested && nested !== refs.scroll) return
+    pause()
   }
 
   const handleScroll = () => {
-    const el = store.scrollRef
+    const el = refs.scroll
 
-    if (!el) return
-
-    if (!canScroll(el)) {
-      if (store.userScrolled) setStore("userScrolled", false)
-
-      return
-    }
-
-    if (distanceFromBottom(el) < threshold()) {
-      if (store.userScrolled) setStore("userScrolled", false)
-
-      return
-    }
-
-    // Ignore scroll events triggered by our own scrollToBottom calls.
-    if (!store.userScrolled && isAuto(el)) {
-      scrollToBottom(false)
-
-      return
-    }
-
-    stop()
+    if (!el || !el.isConnected) return
+    scrollEvent.maxScroll = el.scrollHeight - el.clientHeight
+    scrollEvent.overflow = canScroll(el)
+    scrollEvent.scrollTop = el.scrollTop
+    scrollEvent.threshold = options.bottomThreshold ?? 10
+    dispatch(scrollEvent)
   }
 
   const handleInteraction = () => {
-    if (!active()) return
+    if (!selectPausesOnSelection(untrack(state))) return
     const selection = window.getSelection()
 
-    if (selection && selection.toString().length > 0) {
-      stop()
-    }
+    if (!selection || selection.isCollapsed || selection.toString().length === 0) return
+    pause()
   }
-
-  const updateOverflowAnchor = (el: HTMLElement) => {
-    const mode = options.overflowAnchor ?? "dynamic"
-
-    if (mode === "none") {
-      el.style.overflowAnchor = "none"
-
-      return
-    }
-
-    if (mode === "auto") {
-      el.style.overflowAnchor = "auto"
-
-      return
-    }
-
-    el.style.overflowAnchor = store.userScrolled ? "auto" : "none"
-  }
-
-  createResizeObserver(
-    () => store.contentRef,
-    () => {
-      const el = store.scrollRef
-
-      if (el && !canScroll(el)) {
-        if (store.userScrolled) setStore("userScrolled", false)
-
-        return
-      }
-
-      if (!active()) return
-
-      if (store.userScrolled) return
-      // ResizeObserver fires after layout, before paint.
-      // Keep the bottom locked in the same frame to avoid visible
-      // "jump up then catch up" artifacts while streaming content.
-      scrollToBottom(false)
-    },
-  )
 
   createEffect(() => {
-    const el = store.scrollRef
+    const el = refs.scroll
+    const content = refs.content
+
+    if (!el || typeof ResizeObserver === "undefined") return
+
+    // ResizeObserver fires after layout, before paint. Keeping the bottom locked in
+    // the same frame avoids visible "jump up then catch up" artifacts while streaming.
+    const observer = new ResizeObserver(() => {
+      if (!el.isConnected) return
+      resizeEvent.overflow = canScroll(el)
+      dispatch(resizeEvent)
+    })
+
+    observer.observe(el)
+
+    if (content) observer.observe(content)
+    onCleanup(() => observer.disconnect())
+  })
+
+  createEffect(() => {
+    const el = refs.scroll
 
     if (!el) return
     const root = el.closest("main")
 
     if (!root) return
-    let connected = el.isConnected
-    const contains = (node: Node) => node === el || (node instanceof Element && node.contains(el))
+    const contains = (node: Node) => node.contains(el)
 
     const observer = new MutationObserver((records) => {
       records.forEach((record) => {
-        if ([...record.removedNodes].some(contains)) connected = false
+        if ([...record.removedNodes].some(contains)) dispatch(DETACHED)
 
-        if (!record.addedNodes.length || ![...record.addedNodes].some(contains)) return
-        const reattached = !connected
-        connected = true
-
-        if (reattached) scrollToBottom(false)
+        if ([...record.addedNodes].some(contains)) dispatch({ type: "scroller.reattached", overflow: canScroll(el) })
       })
     })
 
@@ -237,55 +154,43 @@ export function createAutoScroll(options: AutoScrollOptions) {
   })
 
   createEffect(
-    on(options.working, (working: boolean) => {
-      settling = false
-
-      if (settleTimer) clearTimeout(settleTimer)
-      settleTimer = undefined
-
-      if (working) {
-        if (!store.userScrolled) scrollToBottom(true)
-
-        return
-      }
-
-      settling = true
-      settleTimer = setTimeout(() => {
-        settling = false
-      }, 300)
+    on(options.working, (working) => {
+      if (!working) attempts += 1
+      dispatch({ type: "working.changed", working, attempt: attempts })
     }),
   )
 
+  const userScrolled = createMemo(() => selectUserScrolled(state()))
+  const overflowAnchor = createMemo(() => selectOverflowAnchor(state(), options.overflowAnchor))
+
   createEffect(() => {
-    // Track `userScrolled` even before `scrollRef` is attached, so we can
-    // update overflow anchoring once the element exists.
-    store.userScrolled
-    const el = store.scrollRef
+    const el = refs.scroll
 
     if (!el) return
-    updateOverflowAnchor(el)
+    el.style.overflowAnchor = overflowAnchor()
   })
 
-  createEventListener(() => store.scrollRef, "wheel", handleWheel, { passive: true })
+  createEventListener(() => refs.scroll, "wheel", handleWheel, { passive: true })
 
-  onCleanup(() => {
-    if (settleTimer) clearTimeout(settleTimer)
-
-    if (autoTimer) clearTimeout(autoTimer)
-  })
+  onCleanup(() => dispatch(DISPOSE))
 
   return {
-    scrollRef: (el: HTMLElement | undefined) => setStore("scrollRef", el),
-    contentRef: (el: HTMLElement | undefined) => setStore("contentRef", el),
+    scrollRef: (el: HTMLElement | undefined) => {
+      if (el === untrack(() => refs.scroll)) return
+      setRefs("scroll", el)
+      dispatch({ type: "scroller.changed", overflow: !!el && el.isConnected && canScroll(el) })
+    },
+    contentRef: (el: HTMLElement | undefined) => setRefs("content", el),
     handleScroll,
     handleInteraction,
-    pause: stop,
-    resume: () => {
-      if (store.userScrolled) setStore("userScrolled", false)
-      scrollToBottom(true)
-    },
-    scrollToBottom: () => scrollToBottom(false),
-    forceScrollToBottom: () => scrollToBottom(true),
-    userScrolled: () => store.userScrolled,
+    pause,
+    resume: () => dispatch(FORCE_BOTTOM),
+    scrollToBottom: () => dispatch(BOTTOM),
+    forceScrollToBottom: () => dispatch(FORCE_BOTTOM),
+    userScrolled,
   }
+}
+
+function canScroll(el: HTMLElement) {
+  return el.scrollHeight - el.clientHeight > 1
 }

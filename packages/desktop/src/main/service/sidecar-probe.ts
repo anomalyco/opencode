@@ -16,13 +16,15 @@ export function startSidecarProbe() {
   const version = CHANNEL === "beta" ? undefined : bundledVersion()
 
   if (version === "") return
-  probe = import("@opencode/client/service")
-    .then(({ Service }) => Service.discover({ version }))
-    .catch(() => undefined)
+  probe = import("@opencode/client/service").then(({ Service }) => Service.discover({ version })).catch(() => undefined)
 }
 
-export function sidecarProbe() {
-  return probe ?? Promise.resolve(undefined)
+/** The probe's result, once: a later connect must not adopt a service that may have exited since boot. */
+export function takeSidecarProbe() {
+  const result = probe ?? Promise.resolve(undefined)
+  probe = undefined
+
+  return result
 }
 
 function bundledVersion() {

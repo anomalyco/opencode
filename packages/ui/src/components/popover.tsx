@@ -1,14 +1,36 @@
-import { Popover as Kobalte } from "@kobalte/core/popover"
-import { ComponentProps, JSXElement, ParentProps, Show, createEffect, splitProps, ValidComponent } from "solid-js"
-import { createStore } from "solid-js/store"
-import { makeEventListener } from "@solid-primitives/event-listener"
+import { CloseButton, Content, Description, Portal, Root, Title, Trigger } from "@kobalte/core/popover"
+import {
+  ComponentProps,
+  JSXElement,
+  ParentProps,
+  Show,
+  createComputed,
+  createContext,
+  createEffect,
+  createSignal,
+  onCleanup,
+  splitProps,
+  untrack,
+  useContext,
+  ValidComponent,
+} from "solid-js"
 import { useI18n } from "../context/i18n"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import {
+  createPopoverState,
+  EMPTY_POPOVER_STACK,
+  selectPopoverOpen,
+  selectPreventCloseAutoFocus,
+  transitionPopover,
+  transitionPopoverStack,
+  type PopoverEvent,
+  type PopoverStackEvent,
+} from "./popover-machine"
 
 export interface PopoverProps<T extends ValidComponent = "div">
   extends ParentProps,
-    Omit<ComponentProps<typeof Kobalte>, "children"> {
+    Omit<ComponentProps<typeof Root>, "children"> {
   trigger?: JSXElement
   triggerAs?: T
   triggerProps?: ComponentProps<T>
@@ -18,6 +40,68 @@ export interface PopoverProps<T extends ValidComponent = "div">
   classList?: ComponentProps<"div">["classList"]
   style?: ComponentProps<"div">["style"]
   portal?: boolean
+}
+
+type PopoverLayer = {
+  trigger: () => HTMLElement | undefined
+  content: () => HTMLElement | undefined
+  dismiss: (reason: "escape" | "outside") => void
+}
+
+// Every open popover shares one set of window listeners, so Escape closes only the newest popover and a press inside a
+// portaled child keeps its parent open.
+let stack = EMPTY_POPOVER_STACK
+
+let nextLayerID = 0
+
+const layers = new Map<number, PopoverLayer>()
+
+const PopoverParentContext = createContext<number | null>(null)
+
+function dispatchStack(event: PopoverStackEvent) {
+  const previous = stack
+  const transition = transitionPopoverStack(previous, event)
+  stack = transition.state
+
+  if (previous.entries.length === 0 && stack.entries.length > 0) {
+    window.addEventListener("keydown", onStackKeyDown, true)
+    window.addEventListener("pointerdown", onStackInteract, true)
+    window.addEventListener("focusin", onStackInteract, true)
+  }
+
+  if (previous.entries.length > 0 && stack.entries.length === 0) {
+    window.removeEventListener("keydown", onStackKeyDown, true)
+    window.removeEventListener("pointerdown", onStackInteract, true)
+    window.removeEventListener("focusin", onStackInteract, true)
+  }
+
+  transition.effects.forEach((effect) => layers.get(effect.id)?.dismiss(effect.reason))
+}
+
+function onStackKeyDown(event: KeyboardEvent) {
+  // A dialog opened above the popover already took this Escape.
+  if (event.key !== "Escape" || event.defaultPrevented) return
+  const owner = event.target instanceof Element ? event.target.closest("[data-owns-escape]") : null
+
+  // A control inside the popover that cancels its own edit on Escape, such as a comment editor, keeps it open.
+  if (owner && ![...layers.values()].some((layer) => layer.trigger() === owner || layer.content() === owner)) return
+  dispatchStack({ type: "escape.pressed" })
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function onStackInteract(event: Event) {
+  const target = event.target
+
+  if (!(target instanceof Node)) return
+
+  const insideIds = new Set(
+    [...layers].flatMap(([id, layer]) =>
+      layer.trigger()?.contains(target) || layer.content()?.contains(target) ? [id] : [],
+    ),
+  )
+
+  dispatchStack({ type: "outside.interacted", insideIds })
 }
 
 export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>) {
@@ -40,99 +124,65 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
     "modal",
   ])
 
-  const [state, setState] = createStore({
-    contentRef: undefined as HTMLElement | undefined,
-    triggerRef: undefined as HTMLElement | undefined,
-    dismiss: null as "escape" | "outside" | null,
-    uncontrolledOpen: local.defaultOpen ?? false,
-  })
+  const id = ++nextLayerID
+  const parentId = useContext(PopoverParentContext)
+  const [popover, setPopover] = createSignal(createPopoverState(local.open, local.defaultOpen))
+  let triggerRef: HTMLElement | undefined
+  let contentRef: HTMLElement | undefined
 
-  const controlled = () => local.open !== undefined
-
-  const opened = () => {
-    if (controlled()) return local.open ?? false
-
-    return state.uncontrolledOpen
+  const dispatch = (event: PopoverEvent) => {
+    const transition = transitionPopover(untrack(popover), event)
+    setPopover(transition.state)
+    transition.effects.forEach((effect) => {
+      local.onOpenChange?.(effect.open)
+      // A controlled owner that kept `open` refuses the close, which clears the pending dismiss reason.
+      dispatch({ type: "props.synced", open: untrack(() => local.open) })
+    })
   }
 
-  const onOpenChange = (next: boolean) => {
-    if (next) setState("dismiss", null)
-
-    if (local.onOpenChange) local.onOpenChange(next)
-
-    if (controlled()) return
-    setState("uncontrolledOpen", next)
-  }
+  createComputed(() => dispatch({ type: "props.synced", open: local.open }))
 
   createEffect(() => {
-    if (!opened()) return
-
-    const inside = (node: Node | null | undefined) => {
-      if (!node) return false
-      const content = state.contentRef
-
-      if (content && content.contains(node)) return true
-      const trigger = state.triggerRef
-
-      if (trigger && trigger.contains(node)) return true
-
-      return false
-    }
-
-    const close = (reason: "escape" | "outside") => {
-      setState("dismiss", reason)
-      onOpenChange(false)
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      close("escape")
-      event.preventDefault()
-      event.stopPropagation()
-    }
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target
-
-      if (!(target instanceof Node)) return
-
-      if (inside(target)) return
-      close("outside")
-    }
-
-    const onFocusIn = (event: FocusEvent) => {
-      const target = event.target
-
-      if (!(target instanceof Node)) return
-
-      if (inside(target)) return
-      close("outside")
-    }
-
-    makeEventListener(window, "keydown", onKeyDown, { capture: true })
-    makeEventListener(window, "pointerdown", onPointerDown, { capture: true })
-    makeEventListener(window, "focusin", onFocusIn, { capture: true })
+    if (!selectPopoverOpen(popover())) return
+    layers.set(id, {
+      trigger: () => triggerRef,
+      content: () => contentRef,
+      dismiss: (reason) => dispatch({ type: "dismiss", reason }),
+    })
+    dispatchStack({ type: "layer.opened", id, parentId })
+    onCleanup(() => {
+      dispatchStack({ type: "layer.closed", id })
+      layers.delete(id)
+    })
   })
 
+  onCleanup(() => dispatch({ type: "disposed" }))
+
   const content = () => (
-    <Kobalte.Content
-      ref={(el: HTMLElement | undefined) => setState("contentRef", el)}
+    <Content
+      ref={(el: HTMLElement | undefined) => {
+        contentRef = el
+      }}
       data-component="popover-content"
+      data-owns-escape={selectPopoverOpen(popover()) ? "" : undefined}
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
       style={local.style}
+      onEscapeKeyDown={preventDismiss}
+      onPointerDownOutside={preventDismiss}
+      onFocusOutside={preventDismiss}
       onCloseAutoFocus={(event: Event) => {
-        if (state.dismiss === "outside") event.preventDefault()
-        setState("dismiss", null)
+        if (selectPreventCloseAutoFocus(untrack(popover))) event.preventDefault()
+        dispatch({ type: "close-auto-focus.handled" })
       }}
     >
-      {/* <Kobalte.Arrow data-slot="popover-arrow" /> */}
+      {/* <Arrow data-slot="popover-arrow" /> */}
       <Show when={local.title}>
         <div data-slot="popover-header">
-          <Kobalte.Title data-slot="popover-title">{local.title}</Kobalte.Title>
-          <Kobalte.CloseButton
+          <Title data-slot="popover-title">{local.title}</Title>
+          <CloseButton
             data-slot="popover-close-button"
             as={IconButton}
             icon={<Icon name="close" />}
@@ -142,25 +192,43 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
         </div>
       </Show>
       <Show when={local.description}>
-        <Kobalte.Description data-slot="popover-description">{local.description}</Kobalte.Description>
+        <Description data-slot="popover-description">{local.description}</Description>
       </Show>
-      <div data-slot="popover-body">{local.children}</div>
-    </Kobalte.Content>
+      <div data-slot="popover-body">
+        <PopoverParentContext.Provider value={id}>{local.children}</PopoverParentContext.Provider>
+      </div>
+    </Content>
   )
 
   return (
-    <Kobalte gutter={4} {...rest} open={opened()} onOpenChange={onOpenChange} modal={local.modal ?? false}>
-      <Kobalte.Trigger
-        ref={(el: HTMLElement) => setState("triggerRef", el)}
+    <Root
+      gutter={4}
+      {...rest}
+      open={selectPopoverOpen(popover())}
+      onOpenChange={(open) => dispatch({ type: "kobalte.changed", open })}
+      modal={local.modal ?? false}
+    >
+      <Trigger
+        ref={(el: HTMLElement) => {
+          triggerRef = el
+        }}
         as={local.triggerAs ?? "div"}
         data-slot="popover-trigger"
+        data-owns-escape={selectPopoverOpen(popover()) ? "" : undefined}
+        // SAFETY: `triggerProps` are `ComponentProps<T>` for `triggerAs`, the component Kobalte renders; Kobalte's
+        // polymorphic props cannot follow the generic `T`.
         {...(local.triggerProps as any)}
       >
         {local.trigger}
-      </Kobalte.Trigger>
+      </Trigger>
       <Show when={local.portal ?? true} fallback={content()}>
-        <Kobalte.Portal>{content()}</Kobalte.Portal>
+        <Portal>{content()}</Portal>
       </Show>
-    </Kobalte>
+    </Root>
   )
+}
+
+// The shared window listeners decide when a popover dismisses; Kobalte only closes it from the trigger or close button.
+function preventDismiss(event: Event) {
+  event.preventDefault()
 }

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, CacheHint, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
+import { ai, CacheHint, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import * as Anthropic from "../../src/providers/anthropic.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
@@ -21,7 +21,8 @@ const cacheRequest = ai.request({
   // Manual hint on the system part is the only marker we want here — skip the
   // auto-policy's latest-user-message breakpoint so the cassette body matches.
   cache: "none",
-  generation: { maxTokens: 16, temperature: 0 },
+  maxTokens: 16,
+  temperature: 0,
 })
 
 const lookup = ToolDefinition.make({
@@ -54,7 +55,8 @@ const longToolTurnRequest = ai.request({
   system: LARGE_CACHEABLE_SYSTEM,
   messages: longToolTurn,
   tools: [lookup],
-  generation: { maxTokens: 16, temperature: 0 },
+  maxTokens: 16,
+  temperature: 0,
 })
 
 const recorded = recordedTests({
@@ -94,15 +96,14 @@ describe("Anthropic Messages cache recorded", () => {
       // write establishes that Anthropic recognized the cache boundary.
       expect(firstCached).toBeGreaterThan(0)
 
-      const second = yield* LLMClient.generate(
-        LLMRequest.update(longToolTurnRequest, {
-          messages: [
-            ...longToolTurn,
-            Message.assistant("The fixture lookups are complete."),
-            Message.user("Reply exactly: OK"),
-          ],
-        }),
-      )
+      const second = yield* LLMClient.generate({
+        ...longToolTurnRequest,
+        messages: [
+          ...longToolTurn,
+          Message.assistant("The fixture lookups are complete."),
+          Message.user("Reply exactly: OK"),
+        ],
+      })
       expect(second.usage?.cacheReadInputTokens ?? 0).toBeGreaterThanOrEqual(firstCached)
       expect(second.usage?.cacheWriteInputTokens ?? 0).toBeLessThan(firstCached)
     }),

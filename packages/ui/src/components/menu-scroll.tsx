@@ -1,82 +1,159 @@
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { onMount, Show, splitProps, type ComponentProps } from "solid-js"
+import { createSignal, onCleanup, onMount, Show, splitProps, untrack, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
+import {
+  INITIAL_SCROLL_THUMB_STATE,
+  overflowChanged,
+  SCROLL_IDLE_ELAPSED,
+  SCROLL_IDLE_MS,
+  SCROLL_THUMB_DISPOSED,
+  SCROLLED,
+  selectDraggingAxis,
+  selectShowVerticalThumb,
+  selectThumbScrolling,
+  transitionScrollThumb,
+  type ScrollThumbEvent,
+  type ScrollThumbState,
+} from "./scroll-view-machine"
 import "./menu-scroll.css"
 
+/**
+ * A scroll container for menus, popovers and dialog lists. It hides the native scrollbar and draws the shared thumb
+ * over the content, so rows keep equal start and end padding whether or not the list overflows. Touch devices and
+ * high-contrast modes keep the native scrollbar.
+ */
 export function MenuScroll(
-  props: Omit<ComponentProps<"div">, "ref" | "onScroll"> & {
+  props: Omit<ComponentProps<"div">, "ref" | "onScroll" | "onFocusIn"> & {
     viewportClass?: string
     viewportRef?: (element: HTMLDivElement) => void
+    onScroll?: JSX.EventHandler<HTMLDivElement, Event>
   },
 ) {
-  const [local, rest] = splitProps(props, ["class", "children", "viewportClass", "viewportRef"])
+  const [local, rest] = splitProps(props, ["class", "children", "viewportClass", "viewportRef", "onScroll"])
 
-  const [state, setState] = createStore<{ size: number; start: number; overflow: boolean; grab?: number }>({
-    size: 0,
-    start: 4,
-    overflow: false,
-  })
+  const [geometry, setGeometry] = createStore({ size: 0, start: 4 })
+
+  const [thumbState, setThumbState] = createSignal<ScrollThumbState>(INITIAL_SCROLL_THUMB_STATE)
 
   let viewport!: HTMLDivElement
 
   let content!: HTMLDivElement
 
+  let thumb: HTMLDivElement | undefined
+
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+
+  const onIdleElapsed = () => {
+    idleTimer = undefined
+    dispatch(SCROLL_IDLE_ELAPSED)
+  }
+
+  const dispatch = (event: ScrollThumbEvent) => {
+    const prev = untrack(thumbState)
+    const next = transitionScrollThumb(prev, event)
+
+    if (next.state !== prev) setThumbState(next.state)
+
+    for (const effect of next.effects) {
+      if (effect === "release-capture") {
+        if (prev.status === "dragging" && thumb?.hasPointerCapture(prev.pointerId))
+          thumb.releasePointerCapture(prev.pointerId)
+        continue
+      }
+
+      clearTimeout(idleTimer)
+      idleTimer = effect === "reset-idle-timer" ? setTimeout(onIdleElapsed, SCROLL_IDLE_MS) : undefined
+    }
+  }
+
   const measure = () => {
     const track = Math.max(0, viewport.clientHeight - 8)
 
-    const size = Math.min(track, Math.max(32, (viewport.clientHeight / Math.max(1, viewport.scrollHeight)) * track))
+    const size = Math.min(track, Math.max(24, (viewport.clientHeight / Math.max(1, viewport.scrollHeight)) * track))
 
     const max = viewport.scrollHeight - viewport.clientHeight
 
-    setState({ size, start: 4 + (max > 0 ? (viewport.scrollTop / max) * (track - size) : 0), overflow: max > 0 })
-
-    if (max <= 0) setState("grab", undefined)
+    setGeometry("size", size)
+    setGeometry("start", 4 + (max > 0 ? (viewport.scrollTop / max) * (track - size) : 0))
+    dispatch(overflowChanged(max > 0, false))
   }
 
-  onMount(() => {
-    local.viewportRef?.(viewport)
-    createResizeObserver([viewport, content], measure)
-  })
+  const onPointerEnd = (event: PointerEvent) => dispatch({ type: "drag.ended", pointerId: event.pointerId })
+
+  onMount(() => createResizeObserver([viewport, content], measure))
+
+  onCleanup(() => dispatch(SCROLL_THUMB_DISPOSED))
 
   return (
-    <div data-component="menu-scroll" class={local.class}>
+    <div
+      data-component="menu-scroll"
+      data-scrolling={selectThumbScrolling(thumbState()) ? "" : undefined}
+      data-dragging={selectDraggingAxis(thumbState()) === "vertical" ? "" : undefined}
+      class={local.class}
+    >
       <div
-        {...rest}
-        ref={viewport}
         data-slot="menu-scroll-viewport"
+        {...rest}
+        ref={(element) => {
+          viewport = element
+          local.viewportRef?.(element)
+        }}
         data-scrollable
         class={local.viewportClass}
-        onScroll={measure}
+        onScroll={(event) => {
+          measure()
+          // Keyboard navigation scrolls without hovering, so the thumb also shows while the list scrolls.
+          dispatch(SCROLLED)
+          local.onScroll?.(event)
+        }}
+        // Kobalte menus focus items without scrolling and scroll their own content, which no longer overflows here.
+        onFocusIn={(event) => {
+          if (event.target !== viewport) event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
+        }}
       >
-        <div ref={content}>{local.children}</div>
+        <div ref={content} data-slot="menu-scroll-content">
+          {local.children}
+        </div>
       </div>
-      <Show when={state.overflow}>
+      <Show when={selectShowVerticalThumb(thumbState())}>
         <div
+          ref={thumb}
           data-slot="menu-scroll-thumb"
-          data-dragging={state.grab !== undefined ? "" : undefined}
           aria-hidden="true"
-          style={{ height: `${state.size}px`, transform: `translateY(${state.start}px)` }}
+          style={{ height: `${geometry.size}px`, transform: `translateY(${geometry.start}px)` }}
           onPointerDown={(event) => {
             if (event.button !== 0) return
             event.preventDefault()
             event.stopPropagation()
-            setState("grab", event.clientY - event.currentTarget.getBoundingClientRect().top)
-            event.currentTarget.setPointerCapture(event.pointerId)
+            dispatch({
+              type: "drag.started",
+              axis: "vertical",
+              pointerId: event.pointerId,
+              grabOffset: event.clientY - event.currentTarget.getBoundingClientRect().top,
+              rtl: false,
+            })
+
+            if (event.isTrusted && selectDraggingAxis(untrack(thumbState)) === "vertical")
+              event.currentTarget.setPointerCapture(event.pointerId)
           }}
           onPointerMove={(event) => {
-            if (state.grab === undefined) return
-            const travel = viewport.clientHeight - 8 - state.size
+            const drag = untrack(thumbState)
+
+            if (drag.status !== "dragging" || drag.pointerId !== event.pointerId) return
+
+            // A drag whose capture never started or was dropped without a `pointerup` ends at the first move without
+            // the button, instead of scrolling under a hovering pointer.
+            if (event.isTrusted && (event.buttons & 1) === 0) return onPointerEnd(event)
+            const travel = viewport.clientHeight - 8 - geometry.size
 
             if (travel <= 0) return
             viewport.scrollTop =
-              ((event.clientY - viewport.getBoundingClientRect().top - 4 - state.grab) / travel) *
+              ((event.clientY - viewport.getBoundingClientRect().top - 4 - drag.grabOffset) / travel) *
               (viewport.scrollHeight - viewport.clientHeight)
           }}
-          onPointerUp={(event) => {
-            if (state.grab === undefined) return
-            event.currentTarget.releasePointerCapture(event.pointerId)
-          }}
-          onLostPointerCapture={() => setState("grab", undefined)}
+          onPointerUp={onPointerEnd}
+          onPointerCancel={onPointerEnd}
+          onLostPointerCapture={onPointerEnd}
         />
       </Show>
     </div>

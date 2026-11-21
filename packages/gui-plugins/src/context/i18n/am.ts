@@ -5,7 +5,6 @@ export default {
   "usage.usage": "አጠቃቀም",
   "usage.cost": "ዋጋ",
   "usage.view": "የአውድ አጠቃቀምን ይመልከቱ",
-  "systemPrompt.title": "የስርዓት ፕሮምፕት",
   "rawMessages.title": "ጥሬ መልዕክቶች",
   "export.session": "ክፍለ ጊዜን ወደ ውጭ ላክ",
   "stats.session": "ክፍለ ጊዜ",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "የተቀመጠው ክፍለ ጊዜ ወደ {{filename}}",
   "export.failed.title": "ክፍለ-ጊዜን ወደ ውጭ መላክ አልተሳካም",
   "export.failed.description": "ክፍለ-ጊዜውን ወደ ውጭ በመላክ ላይ ስህተት ተፈጥሯል",
+  "usage.toggle": "የክፍለ ጊዜ አውድን ቀይር",
 }

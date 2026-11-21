@@ -24,6 +24,9 @@ resource: <integration ID>#<account>, or the bare integration ID without an acco
 action:   mcp.use | skill.use | plugin.use
 resource: MCP server name, skill ID, or unversioned package / absolute local path
 
+action:   websearch.use
+resource: web search provider ID, such as opencode, exa, or tinyfish
+
 Legacy integration.use statements with an mcp:, skill:, or plugin: prefix are
 converted to the matching *.use action when ConfigPolicy.Info decodes them.
 ```
@@ -78,6 +81,7 @@ interface PolicyInfo {
     | "mcp.use"
     | "skill.use"
     | "plugin.use"
+    | "websearch.use"
   resource: string
 }
 ```

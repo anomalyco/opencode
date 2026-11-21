@@ -1,12 +1,18 @@
 export * as Media from "./media.js"
 
-import { Effect, FileSystem, Schema, SchemaGetter } from "effect"
+import { Effect, FileSystem, Result, Schema, SchemaGetter, Stream } from "effect"
 import { Base64 } from "effect/encoding"
 import { HttpClientRequest } from "effect/http"
 import { ProviderID } from "./schema/ids.js"
-import { AIError, InvalidProviderOutputError, InvalidRequestError } from "./schema/errors.js"
+import { AIError, InvalidRequestError } from "./schema/errors.js"
 import { ProviderMetadata } from "./schema/options.js"
-import { responseHttp, Service } from "./route/executor-service.js"
+import {
+  CurrentMiddleware,
+  type HttpMiddleware,
+  responseBytes,
+  responseStream,
+  Service,
+} from "./route/executor-service.js"
 import { detectMediaType, fileMediaType } from "./utils/media-type.js"
 
 export { detectMediaType } from "./utils/media-type.js"
@@ -37,7 +43,7 @@ const UrlSource = Schema.Struct({
   expiresAt: Schema.optional(Schema.Number),
 })
 
-/** A provider-side handle: OpenAI `file_id`, Gemini file URI, `gs://`, `runway://`, or a prior generation id. */
+/** A provider-side handle: OpenAI `file_id`, Gemini file URI, `gs://`, or a prior generation id. */
 const RefSource = Schema.Struct({
   type: Schema.Literal("ref"),
   provider: ProviderID,
@@ -109,6 +115,8 @@ export class Asset {
   readonly providerMetadata?: ProviderMetadata
   /** Transient download credentials for `url` sources; see `Asset.Input.headers`. */
   readonly headers?: Record<string, string>
+  /** Middleware for downloading a `url` source; see `Asset.Input.middleware`. */
+  readonly middleware?: HttpMiddleware
 
   // Derived payload forms are cached on the instance because every protocol lowering re-reads the same payload. The
   // cache is check-then-set (concurrent first reads of a `url` source may both download) and is never observable
@@ -127,6 +135,7 @@ export class Asset {
     this.expiresAt = input.source.type === "url" ? input.source.expiresAt : undefined
     this.providerMetadata = input.providerMetadata
     this.headers = input.source.type === "url" ? input.headers : undefined
+    this.middleware = input.source.type === "url" ? input.middleware : undefined
   }
 
   /** Inline payload without effects, for protocols that embed base64 or data URLs directly. */
@@ -151,9 +160,16 @@ export class Asset {
           ? Effect.fromResult(Base64.decode(source.data)).pipe(
               Effect.mapError((cause) => invalid(`Media asset contains invalid base64 data`, cause)),
             )
-          : download(source, this.headers)
+          : download(source, this.headers, this.middleware)
       return decoded.pipe(Effect.tap((data) => Effect.sync(() => (this.#bytes = data))))
     })
+  }
+
+  /** The payload as a byte stream; `url` sources stream from the network without being buffered or cached. */
+  stream(): Stream.Stream<Uint8Array, AIError, Service> {
+    const source = this.source
+    if (source.type !== "url" || this.#bytes !== undefined) return Stream.fromEffect(this.bytes())
+    return Stream.unwrap(downloadStream(source, this.headers, this.middleware))
   }
 
   base64(): Effect.Effect<string, AIError, Service> {
@@ -199,11 +215,17 @@ export namespace Asset {
     readonly info?: Info
     readonly providerMetadata?: ProviderMetadata
     /**
-     * Headers required to download a `url` source, such as the provider API key Veo demands for its file URIs.
+     * Headers required to download a `url` source, such as a provider API key.
      * They are runtime-only: never part of `source`, `toJSON()`, or `AssetSchema`, so a persisted asset cannot leak
      * credentials and cannot be downloaded again after a round-trip. Call `materialize()` before persisting.
      */
     readonly headers?: Record<string, string>
+    /**
+     * Middleware for downloading a `url` source, runtime-only like `headers`. A download never uses the caller's
+     * scoped middleware (`RequestExecutor.withMiddleware`), so hooks that add provider credentials can't reach another
+     * host. Routes set this to that middleware only for result URLs on the provider's origin.
+     */
+    readonly middleware?: HttpMiddleware
   }
 }
 
@@ -232,27 +254,42 @@ export const AssetSchema = AssetEncoded.pipe(
   }),
 )
 
+/**
+ * An image, or a URL or provider file reference whose type it doesn't state, which the provider checks itself. Build one with
+ * `Media.image`; an asset known to be a video, audio or document is rejected.
+ */
+export const ImageAssetSchema = AssetInstance.check(
+  Schema.makeFilter(
+    (asset) =>
+      asset.kind === "image" ||
+      ((asset.source.type === "url" || asset.source.type === "ref") && asset.source.mediaType === undefined) ||
+      `expected an image, got ${asset.mediaType}`,
+  ),
+).pipe(Schema.brand("Media.ImageAsset"))
+export type ImageAsset = typeof ImageAssetSchema.Type
+
 const download = Effect.fn("Media.download")(function* (
   source: Extract<Source, { readonly type: "url" }>,
   headers: Record<string, string> | undefined,
+  middleware: HttpMiddleware | undefined,
 ) {
   const executor = yield* Service
-  const response = yield* executor.execute(
-    HttpClientRequest.get(source.url).pipe(HttpClientRequest.setHeaders(headers ?? {})),
-  )
-  const buffer = yield* response.arrayBuffer.pipe(
-    Effect.mapError(
-      (cause) =>
-        new AIError({
-          reason: new InvalidProviderOutputError({
-            message: `Failed to read media from ${source.url}`,
-            http: responseHttp(response),
-            cause,
-          }),
-        }),
-    ),
-  )
-  return new Uint8Array(buffer)
+  const response = yield* executor
+    .execute(HttpClientRequest.get(source.url).pipe(HttpClientRequest.setHeaders(headers ?? {})))
+    .pipe(Effect.provideService(CurrentMiddleware, middleware))
+  return yield* responseBytes(response)
+})
+
+const downloadStream = Effect.fn("Media.downloadStream")(function* (
+  source: Extract<Source, { readonly type: "url" }>,
+  headers: Record<string, string> | undefined,
+  middleware: HttpMiddleware | undefined,
+) {
+  const executor = yield* Service
+  const response = yield* executor
+    .execute(HttpClientRequest.get(source.url).pipe(HttpClientRequest.setHeaders(headers ?? {})))
+    .pipe(Effect.provideService(CurrentMiddleware, middleware))
+  return responseStream(response)
 })
 
 // ---------------------------------------------------------------------------
@@ -280,7 +317,7 @@ export const url = (
 export const ref = (provider: string | ProviderID, id: string, mediaType?: string, options?: AssetOptions) =>
   from({ type: "ref", provider: ProviderID.make(provider), id, mediaType }, options)
 
-const DATA_URL = /^data:([^;,]+)(?:;[^,]*)*;base64,(.*)$/s
+const DATA_URL = /^data:([^;,]+)(?:;[^,]*)*;base64,(.*)$/is
 
 /** Parse a `data:<mime>;base64,<data>` URL, or `undefined` when the value is not a base64 data URL. */
 export const parseDataUrl = (value: string, options?: AssetOptions) => {
@@ -295,6 +332,52 @@ export const fromDataUrl = (dataUrl: string, options?: AssetOptions) => {
   return asset
 }
 
+/** Plain file data: bytes, a URL, or a string holding a data URL, an http(s) URL or base64. */
+export type Data = Uint8Array | ArrayBuffer | URL | string
+
+/** What file inputs accept: an `Asset` or plain `Data`. */
+export type Input = Asset | Data
+
+/** Normalize input into an `ImageAsset`; throws when it's known not to be an image. */
+export const image = (input: Input, mediaType?: string): ImageAsset => {
+  const asset = make(input, mediaType)
+  if (!Schema.is(ImageAssetSchema)(asset)) throw invalid(`expected an image, got ${asset.mediaType}`)
+  return asset
+}
+
+/**
+ * Normalize file input into an `Asset`. Data URLs carry their media type and bytes or base64 are sniffed from magic
+ * bytes; `mediaType` is required when sniffing fails. Assets pass through unchanged.
+ */
+export const make = (input: Input, mediaType?: string): Asset => {
+  if (input instanceof Asset) return input
+  if (input instanceof ArrayBuffer) return make(new Uint8Array(input), mediaType)
+  if (input instanceof Uint8Array) return bytes(input, mediaType ?? requireMediaType(detectMediaType(input)))
+  const value = input instanceof URL ? input.href : input
+  if (/^data:/i.test(value)) {
+    const match = DATA_URL.exec(value)
+    if (match === null) throw invalid("Media data URLs must contain a MIME type and base64 data")
+    return base64(match[2], mediaType ?? match[1])
+  }
+  if (input instanceof URL || /^https?:\/\//i.test(value)) return url(value, { mediaType })
+  if (!BASE64.test(value))
+    throw invalid("Media strings must be base64, a data URL or an http(s) URL; read files with Media.file")
+  return base64(value, mediaType ?? requireMediaType(sniffBase64(value)))
+}
+
+const BASE64 = /^[A-Za-z0-9+/\-_\s]*={0,2}\s*$/
+
+// 64 characters decode to 48 bytes, enough for every signature `detectMediaType` reads.
+const sniffBase64 = (value: string) => {
+  const head = Result.getOrUndefined(Base64.decode(value.slice(0, 64)))
+  return head === undefined ? undefined : detectMediaType(head)
+}
+
+const requireMediaType = (detected: string | undefined) => {
+  if (detected === undefined) throw invalid("Media data needs a mediaType because its type cannot be detected")
+  return detected
+}
+
 /** Read a file through `FileSystem` and sniff its media type from magic bytes, then the extension. */
 export const file = (path: string, options?: AssetOptions): Effect.Effect<Asset, AIError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
@@ -305,12 +388,21 @@ export const file = (path: string, options?: AssetOptions): Effect.Effect<Asset,
     return bytes(data, fileMediaType(data, path), options)
   })
 
-/** Materialize an asset and write its bytes through `FileSystem`. */
+/**
+ * Stream an asset's bytes into a file through `FileSystem` without buffering `url` downloads. The bytes go to a temporary
+ * file next to `path` that replaces it only once the download finished, so a failed download leaves an existing file as
+ * it was.
+ */
 export const write = (asset: Asset, path: string): Effect.Effect<void, AIError, FileSystem.FileSystem | Service> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
-    const data = yield* asset.bytes()
-    yield* fs
-      .writeFile(path, data)
-      .pipe(Effect.mapError((cause) => invalid(`Failed to write media file ${path}`, cause)))
+    const temporary = `${path}.${crypto.randomUUID()}.tmp`
+    yield* asset.stream().pipe(
+      Stream.run(fs.sink(temporary)),
+      Effect.andThen(fs.rename(temporary, path)),
+      Effect.onError(() => fs.remove(temporary).pipe(Effect.ignore)),
+      Effect.mapError((cause) =>
+        cause instanceof AIError ? cause : invalid(`Failed to write media file ${path}`, cause),
+      ),
+    )
   })

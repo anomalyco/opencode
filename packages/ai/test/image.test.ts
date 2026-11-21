@@ -48,7 +48,8 @@ describe("Image", () => {
           apiKey: "test",
           baseURL: "https://api.openai.test/v1",
           queryParams: { "api-version": "v1" },
-          http: { body: { deployment: "test" }, headers: { "x-default": "yes" } },
+          headers: { "x-default": "yes" },
+          http: { body: { deployment: "test" } },
         }).image("gpt-image-2"),
         prompt: "A robot tending a rooftop garden",
         n: 2,
@@ -64,22 +65,22 @@ describe("Image", () => {
           native_default: true,
           future_option: true,
         },
+        headers: { "x-request": "yes" },
         http: {
           body: { output_format: "webp", output_compression: 50, future_option: "http", request_metadata: "value" },
-          headers: { "x-request": "yes" },
           query: { trace: "1" },
         },
       })
 
       expect(response.images).toHaveLength(2)
-      expect(response.image.mediaType).toBe("image/webp")
-      expect(response.image.source).toEqual({
+      expect(response.images[0].mediaType).toBe("image/webp")
+      expect(response.images[0].source).toEqual({
         type: "bytes",
         data: Uint8Array.from([1, 2, 3]),
         mediaType: "image/webp",
       })
-      expect(yield* response.image.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
-      expect(response.image.info).toEqual({ format: "webp", width: 2048, height: 2048 })
+      expect(yield* response.images[0].bytes()).toEqual(Uint8Array.from([1, 2, 3]))
+      expect(response.images[0].info).toEqual({ format: "webp", width: 2048, height: 2048 })
       expect(response.usage).toMatchObject({ type: "tokens", total: 12 })
       expect(response.providerMetadata).toEqual({
         openai: { outputFormat: "webp", size: "2048x2048", quality: "high", background: "opaque" },
@@ -150,7 +151,7 @@ describe("Image", () => {
           ),
         ),
       )
-      expect(response.image.source).toEqual({
+      expect(response.images[0].source).toEqual({
         type: "bytes",
         data: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
         mediaType: "image/jpeg",
@@ -207,22 +208,22 @@ describe("Image", () => {
     it.effect("keeps an http url as a URL asset", () =>
       Effect.gen(function* () {
         const response = yield* generate([{ url: "https://cdn.image.test/result.png" }])
-        expect(response.image.source).toEqual({ type: "url", url: "https://cdn.image.test/result.png" })
+        expect(response.images[0].source).toEqual({ type: "url", url: "https://cdn.image.test/result.png" })
       }),
     )
 
     it.effect("decodes a data url inline with its media type", () =>
       Effect.gen(function* () {
         const response = yield* generate([{ url: "data:image/png;base64,iVBORw==" }])
-        expect(response.image.source).toEqual({ type: "base64", data: "iVBORw==", mediaType: "image/png" })
-        expect(response.image.mediaType).toBe("image/png")
+        expect(response.images[0].source).toEqual({ type: "base64", data: "iVBORw==", mediaType: "image/png" })
+        expect(response.images[0].mediaType).toBe("image/png")
       }),
     )
 
     it.effect("prefers b64_json when url is null", () =>
       Effect.gen(function* () {
         const response = yield* generate([{ b64_json: "/9j/4AAQ", url: null }])
-        expect(response.image.source).toEqual({
+        expect(response.images[0].source).toEqual({
           type: "bytes",
           data: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
           mediaType: "image/jpeg",
@@ -448,7 +449,7 @@ describe("Image", () => {
       .pipe(
         Effect.tap((response) =>
           Effect.sync(() => {
-            expect(response.image.mediaType).toBe("image/avif")
+            expect(response.images[0].mediaType).toBe("image/avif")
           }),
         ),
         Effect.provide(
@@ -488,10 +489,8 @@ describe("Image", () => {
           quality: "high",
           future_option: true,
         },
-        http: {
-          body: { quality: "low", model: "corrupt", prompt: "corrupt", image: "corrupt", "image[]": "corrupt" },
-          headers: { "content-type": "application/json" },
-        },
+        headers: { "content-type": "application/json" },
+        http: { body: { quality: "low", model: "corrupt", prompt: "corrupt", image: "corrupt", "image[]": "corrupt" } },
       })
       .pipe(
         Effect.provide(
@@ -818,6 +817,7 @@ describe("Image", () => {
           imageConfig: { aspectRatio: "4:3", nativeImageOption: true },
           thinkingConfig: { thinkingLevel: "LOW", nativeThinkingOption: true },
         },
+        headers: { "x-request": "yes" },
         http: {
           body: {
             safetySettings: [],
@@ -828,7 +828,6 @@ describe("Image", () => {
               httpOption: true,
             },
           },
-          headers: { "x-request": "yes" },
           query: { trace: "1" },
         },
       })
@@ -1096,7 +1095,6 @@ describe("Image", () => {
       const prompt = "A lighthouse"
       const errors = yield* Effect.all(
         [
-          ai.image.start({ model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"), prompt }),
           ai.image.generate({
             model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"),
             prompt,
@@ -1107,7 +1105,6 @@ describe("Image", () => {
       )
       expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
         [
-          ["UnsupportedOperation", "image.start"],
           ["UnsupportedOperation", "media.n"],
           ["UnsupportedOperation", "media.n"],
         ],

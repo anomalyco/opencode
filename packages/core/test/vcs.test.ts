@@ -19,7 +19,7 @@ import { FileSystem } from "@opencode/schema/filesystem"
 import { VcsEvent } from "@opencode/schema/vcs-event"
 import { initGit } from "./fixture/git"
 import { location } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { it, testEffect } from "./lib/effect"
 import { host } from "./plugin/host"
 
@@ -54,10 +54,7 @@ const provide = (directory: string, input: { git?: boolean; worktree?: string } 
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
-  Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
+  tmpdirScoped().pipe(Effect.flatMap((tmp) => f(tmp.path)))
 
 const withGit = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>, input: { scope?: string } = {}) =>
   withTmp((directory) =>
@@ -832,6 +829,45 @@ describe("Vcs", () => {
         expect(diff[0].deletions).toBe(1)
         expect(diff[1].patch).toContain("+hello")
         expect(diff[1].additions).toBe(1)
+      }),
+    ),
+  )
+
+  it.live("respects the repository's line-ending conversion", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        const body = Array.from({ length: 20 }, (_, index) => `line-${index}`).join("\r\n") + "\r\n"
+        yield* Effect.promise(async () => {
+          await fs.appendFile(path.join(directory, ".git", "config"), "[core]\n\tautocrlf = true\n")
+          await fs.writeFile(path.join(directory, "file.txt"), body)
+          await fs.writeFile(path.join(directory, "same.txt"), body)
+          await commitAll(directory, "initial")
+          await fs.writeFile(path.join(directory, "file.txt"), body.replace("line-10", "changed"))
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.status()).toEqual([{ file: "file.txt", additions: 1, deletions: 1, status: "modified" }])
+        const diff = yield* vcs.diff("working")
+        expect(diff.map((item) => [item.file, item.additions, item.deletions])).toEqual([["file.txt", 1, 1]])
+        expect(diff[0].patch).toContain("-line-10")
+        expect(diff[0].patch).toContain("+changed")
+      }),
+    ),
+  )
+
+  it.live("respects the repository's symlink setting", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          // Git checks a symlink out as a plain file holding its target when the checkout cannot create symlinks.
+          await fs.appendFile(path.join(directory, ".git", "config"), "[core]\n\tsymlinks = false\n")
+          await fs.writeFile(path.join(directory, "link"), "target.txt")
+          const hash = (await $`git hash-object -w link`.cwd(directory).text()).trim()
+          await $`git update-index --add --cacheinfo 120000,${hash},link`.cwd(directory).quiet()
+          await $`git commit -m initial`.cwd(directory).quiet()
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.status()).toEqual([])
+        expect(yield* vcs.diff("working")).toEqual([])
       }),
     ),
   )

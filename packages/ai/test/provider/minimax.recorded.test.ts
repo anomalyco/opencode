@@ -1,15 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import {
-  ai,
-  type LanguageModel,
-  LLMEvent,
-  LLMRequest,
-  LLMResponse,
-  Message,
-  ToolChoice,
-  ToolDefinition,
-} from "../../src/effect.js"
+import { ai, type LanguageModel, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { MiniMax } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -95,7 +86,7 @@ describe("MiniMax recorded", () => {
           const request = ai.request({
             model: item.model,
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-            generation: { maxTokens: 1536 },
+            maxTokens: 1536,
           })
           const compiled = yield* compileRequest(request)
           expect(compiled.body).toMatchObject(item.body)
@@ -131,7 +122,7 @@ describe("MiniMax recorded", () => {
             prompt: "Use get_weather to look up the current weather in Paris.",
             tools: [weather],
             toolChoice: ToolChoice.named("get_weather"),
-            generation: { maxTokens: 512 },
+            maxTokens: 512,
           }),
         )
         expect(response.finishReason.normalized).toBe("tool-calls")
@@ -183,7 +174,7 @@ describe("MiniMax recorded", () => {
               "Look up the current weather in Paris using get_weather before answering. After receiving the result, report the weather in one short sentence.",
             tools: [weather],
             toolChoice: "auto",
-            generation: { maxTokens: 1536 },
+            maxTokens: 1536,
           })
           const first = yield* LLMClient.generate(request)
           expect(first.finishReason.normalized).toBe("tool-calls")
@@ -193,7 +184,8 @@ describe("MiniMax recorded", () => {
           expect(first.events.some(LLMEvent.is.reasoningDelta)).toBe(true)
           expectUsage(first)
 
-          const followUp = LLMRequest.update(request, {
+          const followUp = {
+            ...request,
             toolChoice: ToolChoice.make("none"),
             messages: [
               ...request.messages,
@@ -202,7 +194,7 @@ describe("MiniMax recorded", () => {
                 Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
               ),
             ],
-          })
+          }
           const replay = yield* compileRequest(followUp)
           const reasoning = first.message.content.filter((part) => part.type === "reasoning")
           if (item.api === "messages") {

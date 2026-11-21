@@ -12,10 +12,6 @@ export type SshHttp = typeof SshHttp.Type
 export const SshStage = Schema.Literals([
   "disconnected",
   "connecting",
-  "checking",
-  "downloading",
-  "uploading",
-  "starting",
   "ready",
   "authentication",
   "incompatible",
@@ -28,28 +24,35 @@ export const SshPrompt = Schema.Struct({
   confirm: Schema.Boolean,
 })
 
+export type SshPrompt = typeof SshPrompt.Type
+
+export const SshError = Schema.Literals([
+  "connection",
+  "input",
+  "platform",
+  "version",
+  "install",
+  "service",
+  "host-key",
+  "ssh-missing",
+  "unpublished",
+])
+
+export type SshError = typeof SshError.Type
+
 export const SshItem = Schema.Struct({
   config: SshConfig,
   saved: Schema.Boolean,
   destination: Schema.optional(Schema.String),
   stage: SshStage,
+  /** Set only while `stage` is `ready`. */
   http: Schema.optional(SshHttp),
   prompt: Schema.optional(SshPrompt),
   authenticatingElsewhere: Schema.optional(Schema.Boolean),
+  /** A `failed` server that main reconnects by itself; without it, the server waits for the user. */
+  retrying: Schema.optional(Schema.Boolean),
   detail: Schema.String,
-  error: Schema.optional(
-    Schema.Literals([
-      "connection",
-      "input",
-      "platform",
-      "version",
-      "install",
-      "service",
-      "host-key",
-      "ssh-missing",
-      "unpublished",
-    ]),
-  ),
+  error: Schema.optional(SshError),
 })
 
 export type SshItem = typeof SshItem.Type

@@ -3,7 +3,7 @@ import { Schema, SchemaGetter } from "effect"
 import { createComputed, createRoot } from "solid-js"
 import type { Platform } from "@/runtime/platform/platform"
 import { flushPersisted } from "@/runtime/persistence/persist"
-import { Persist, persisted } from "@/runtime/persistence/storage"
+import { localStorageNoticePending, Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { TabStorage } from "@/shell/tabs/schema"
 
@@ -181,13 +181,46 @@ describe("schema-backed persistence", () => {
     }
   })
 
-  test("a full or failing storage scope stops writing without disabling other scopes", () => {
-    const full = Persist.workspace("/schema-storage-full", "state")
-    const failing = Persist.workspace("/schema-storage-failing", "state")
-    const healthy = Persist.workspace("/schema-storage-healthy", "state")
-    const direct = "schema-storage-direct"
-    const values = new Map<string, string>()
-    const attempts: string[] = []
+  test("a late desktop read does not write its migrated value over an edit saved while loading", async () => {
+    const pending = Promise.withResolvers<string | null>()
+    const storage = desktop()
+    const key = "opencode.global.dat:schema-late-migrate"
+    const writes: string[] = []
+    storage.platform.storage = (name) => ({
+      getItem: () => pending.promise,
+      setItem: async (item, value) => {
+        writes.push(value)
+        storage.values.set(`${name}:${item}`, value)
+      },
+      removeItem: async () => undefined,
+    })
+
+    const root = createRoot((dispose) => ({
+      dispose,
+      state: persisted(Persist.global("schema-late-migrate"), Stored, initial, storage.platform),
+    }))
+
+    try {
+      root.state[1]("label", "new edit")
+      flushPersisted()
+      pending.resolve(JSON.stringify({ oldLabel: "old state" }))
+      await root.state[3].promise
+      await Promise.resolve()
+      expect(root.state[0].label).toBe("new edit")
+      expect(JSON.parse(storage.values.get(key)!)).toEqual({ enabled: true, label: "new edit" })
+      expect(writes).toHaveLength(1)
+    } finally {
+      root.dispose()
+    }
+  })
+
+  test("a write that eviction cannot fit loses no saved value and does not stop later reads or writes", () => {
+    const full = Persist.global("schema-storage-full")
+    const saved = Persist.global("schema-storage-saved")
+    const fullKey = `${full.storage}:${full.key}`
+    const savedKey = `${saved.storage}:${saved.key}`
+    const values = new Map([[savedKey, JSON.stringify({ enabled: false, label: "saved" })]])
+    const quota = { full: true }
 
     const storage: Storage = {
       get length() {
@@ -197,11 +230,7 @@ describe("schema-backed persistence", () => {
       clear: () => values.clear(),
       getItem: (key) => values.get(key) ?? null,
       setItem: (key, value) => {
-        attempts.push(key)
-
-        if (key.startsWith(`${full.storage}:`)) throw new DOMException("quota", "QuotaExceededError")
-
-        if (key.startsWith(`${failing.storage}:`)) throw new Error("storage set failed")
+        if (quota.full && key === fullKey) throw new DOMException("quota", "QuotaExceededError")
         values.set(key, value)
       },
       removeItem: (key) => void values.delete(key),
@@ -213,39 +242,19 @@ describe("schema-backed persistence", () => {
     try {
       createRoot((dispose) => {
         const [, setFull] = persisted(full, Current, initial, web)
-        const [, setFailing] = persisted(failing, Current, initial, web)
-
-        const count = () => ({
-          full: attempts.filter((key) => key === `${full.storage}:${full.key}`).length,
-          failing: attempts.filter((key) => key === `${failing.storage}:${failing.key}`).length,
-        })
-
-        setFull("label", "full")
-        setFailing("label", "first")
+        setFull("label", "too big")
         flushPersisted()
-        const first = count()
-        expect(first.full).toBeGreaterThan(0)
-        expect(first.failing).toBeGreaterThan(0)
-        setFull("label", "full again")
-        setFailing("label", "second")
-        flushPersisted()
-        expect(count()).toEqual(first)
+        expect(values.has(fullKey)).toBe(false)
+        expect(values.has(savedKey)).toBe(true)
+        expect(localStorageNoticePending()).toBe(true)
 
-        const [, setHealthy] = persisted(healthy, Current, initial, web)
-        const [, setDirect] = persisted(direct, Current, initial, web)
-        setHealthy("label", "healthy")
-        setDirect("label", "direct")
+        const [state] = persisted(saved, Current, initial, web)
+        expect(state).toEqual({ enabled: false, label: "saved" })
+
+        quota.full = false
+        setFull("label", "fits")
         flushPersisted()
-        expect(values.get(`${healthy.storage}:${healthy.key}`)).toBe(
-          JSON.stringify({ enabled: true, label: "healthy" }),
-        )
-        expect(values.get(direct)).toBe(JSON.stringify({ enabled: true, label: "direct" }))
-        dispose()
-      })
-      expect(values.has(`${full.storage}:${full.key}`)).toBe(false)
-      createRoot((dispose) => {
-        const [state] = persisted(full, Current, initial, web)
-        expect(state).toEqual(initial)
+        expect(values.get(fullKey)).toBe(JSON.stringify({ enabled: true, label: "fits" }))
         dispose()
       })
     } finally {

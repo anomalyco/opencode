@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { ai, LLMRequest, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, Message, ToolDefinition } from "../../src/effect.js"
 import { LLMClient, Route } from "../../src/route/client.js"
 import { Auth } from "../../src/route/auth.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -32,7 +32,10 @@ testEffect(
       if (new URL(request.url).pathname.endsWith("/compact")) {
         expect(JSON.parse(text)).toEqual({
           model: "overlaid",
-          input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] }],
+          input: [
+            { type: "message", role: "developer", content: "system instructions" },
+            { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] },
+          ],
           instructions: "request instructions",
           previous_response_id: "resp_previous",
         })
@@ -61,7 +64,7 @@ testEffect(
         headers.push(String(request.model.id))
         return { "x-deployment": "fixture", "x-override": "route" }
       },
-      defaults: {
+      options: {
         headers: { "x-default": "configured", "x-override": "configured" },
         providerOptions: { store: false },
         http: { body: { instructions: "default instructions" } },
@@ -71,8 +74,8 @@ testEffect(
       model: route.model({ id: "fixture" }),
       prompt: "hello",
       system: "system instructions",
+      headers: { "x-override": "request" },
       http: {
-        headers: { "x-override": "request" },
         query: { trace: "request" },
         body: {
           model: "overlaid",
@@ -112,8 +115,7 @@ for (const model of [
         expect(new URL(request.url).pathname).toEndWith("/responses/compact")
         expect(JSON.parse(text)).toEqual({
           model: "fixture",
-          input: [item],
-          instructions: "Keep the context",
+          input: [{ type: "message", role: "developer", content: "Keep the context" }, item],
           include: ["reasoning.encrypted_content"],
         })
         return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
@@ -137,7 +139,8 @@ for (const model of [
       })
       for (const [candidate, tag] of [
         [
-          LLMRequest.update(request, {
+          {
+            ...request,
             tools: [
               ToolDefinition.make({
                 name: "unsupported",
@@ -146,11 +149,11 @@ for (const model of [
                 native: { unsupported: {} },
               }),
             ],
-          }),
+          },
           "InvalidRequest",
         ],
         [
-          LLMRequest.update(request, { providerOptions: { contextManagement: "invalid-generation-option" } }),
+          { ...request, providerOptions: { contextManagement: "invalid-generation-option" } },
           model.provider === "xai" ? "UnsupportedOperation" : "InvalidRequest",
         ],
       ] as const) {
@@ -252,7 +255,7 @@ for (const model of [
       expect(compacted.replacement[4]?.content.map((part) => part.type)).toEqual(["media", "media", "media"])
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
-      yield* LLMClient.generate(LLMRequest.update(request, { messages }))
+      yield* LLMClient.generate({ ...request, messages })
     }),
   )
 }
@@ -292,7 +295,7 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
           include: ["reasoning.encrypted_content"],
           parallelToolCalls: false,
         },
-        generation: { maxTokens: 100 },
+        maxTokens: 100,
         tools: [{ name: "lookup", description: "Lookup", inputSchema: {} }],
         http: {
           body: {
@@ -387,17 +390,17 @@ for (const model of [
       const compacted = yield* ai.compact(request)
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
-      yield* LLMClient.generate(LLMRequest.update(request, { messages }))
+      yield* LLMClient.generate({ ...request, messages })
     }),
   )
 }
 
 testEffect(fixedResponse("must not execute")).effect("xAI rejects automatic compaction options", () =>
   Effect.gen(function* () {
-    const request = LLMRequest.update(
-      ai.request({ model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"), prompt: "hello" }),
-      { providerOptions: { contextManagement: [{ type: "compaction" }] } },
-    )
+    const request = {
+      ...ai.request({ model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"), prompt: "hello" }),
+      providerOptions: { contextManagement: [{ type: "compaction" }] },
+    }
     const error = yield* LLMClient.generate(request).pipe(Effect.flip)
     expect(error.reason._tag).toBe("UnsupportedOperation")
     expect(error.message).toContain("ai.compact")
@@ -421,15 +424,21 @@ for (const model of [
         if (new URL(request.url).pathname.endsWith("/responses/compact")) {
           expect(body).toEqual({
             model: model.id,
-            input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "original" }] }],
-            instructions: "system",
+            input: [
+              { type: "message", role: "developer", content: "system" },
+              { type: "message", role: "user", content: [{ type: "input_text", text: "original" }] },
+            ],
             include: ["reasoning.encrypted_content"],
             ...(model.id === "gpt-5.3-codex" ? { reasoning: { effort: "medium", summary: "auto" } } : {}),
           })
           return respond(
             JSON.stringify({
               object: "response.compaction",
-              output,
+              // `/compact` echoes the leading developer message; the replay leads with its own instead.
+              output: [
+                { type: "message", role: "developer", content: [{ type: "input_text", text: "system" }] },
+                ...output,
+              ],
               usage: { input_tokens: 1000, output_tokens: 10, total_tokens: 1010 },
             }),
             { headers: { "content-type": "application/json" } },
@@ -437,6 +446,7 @@ for (const model of [
         }
         expect(new URL(request.url).pathname.endsWith("/responses")).toBe(true)
         expect(body.input).toEqual([
+          { type: "message", role: "developer", content: "system" },
           ...output,
           { type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] },
         ])
@@ -457,7 +467,7 @@ for (const model of [
       ])
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
-      yield* LLMClient.generate(LLMRequest.update(request, { messages: [...messages, Message.user("continue")] }))
+      yield* LLMClient.generate({ ...request, messages: [...messages, Message.user("continue")] })
     }),
   )
 }

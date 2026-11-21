@@ -1,0 +1,3 @@
+# Sessions exported for the timeline compare tool hold real code and paths, so they stay on this machine.
+*
+!.gitignore

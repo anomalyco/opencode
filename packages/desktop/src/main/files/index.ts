@@ -1,13 +1,14 @@
 export * as DesktopFiles from "./index"
 
 import { execFile, spawn } from "node:child_process"
-import { clipboard, dialog, nativeImage, shell } from "electron"
+import { app, clipboard, dialog, nativeImage, shell, webContents } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions } from "../../shared/ipc-contract"
 import { scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { assertAttachmentBudget, createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
-import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { resolveExternalURL } from "./external-url"
+import { pickerStarts } from "./picker-start"
 
 export type Interface = ReturnType<typeof make>
 
@@ -19,22 +20,64 @@ export const layer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
 
-    return Service.of(make(fs, path))
+    const pickedFiles = createPickedFileAuthorizations(
+      (file, maxBytes) => readAttachment(file, maxBytes).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
+      watchRenderer,
+    )
+
+    yield* Effect.addFinalizer(() => Effect.sync(pickedFiles.dispose))
+
+    return Service.of(make(fs, path, pickedFiles))
   }),
 )
 
-function make(fs: FileSystem.FileSystem, path: Path.Path) {
-  const pickedFiles = createPickedFileAuthorizations((file, maxBytes) =>
-    readAttachment(file, maxBytes).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
-  )
+// A renderer that reloads or closes drops its picked files: the next document never asked for them.
+function watchRenderer(sender: number, clear: () => void) {
+  const contents = webContents.fromId(sender)
+
+  if (!contents || contents.isDestroyed()) {
+    queueMicrotask(clear)
+
+    return () => {}
+  }
+
+  const navigated = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
+    if (event.isMainFrame && !event.isSameDocument) clear()
+  }
+
+  contents.on("did-start-navigation", navigated)
+  contents.once("destroyed", clear)
+
+  return () => {
+    if (contents.isDestroyed()) return
+    contents.off("did-start-navigation", navigated)
+    contents.off("destroyed", clear)
+  }
+}
+
+function make(
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  pickedFiles: ReturnType<typeof createPickedFileAuthorizations>,
+) {
+  // The first start that exists; none when even home is gone, which leaves the system to choose.
+  const start = Effect.fnUntraced(function* (requested: string | undefined, save = false) {
+    for (const candidate of pickerStarts(requested, app.getPath("home"), save)) {
+      if (yield* fs.exists(candidate.check).pipe(Effect.orElseSucceed(() => false))) return candidate.use
+    }
+
+    return undefined
+  })
 
   return {
     openDirectoryPicker: Effect.fn("DesktopFiles.openDirectoryPicker")(function* (options?: DirectoryPickerOptions) {
+      const defaultPath = yield* start(options?.defaultPath)
+
       const result = yield* Effect.promise(() =>
         dialog.showOpenDialog({
           properties: ["openDirectory", ...(options?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
           title: options?.title ?? nativeT("desktop.dialog.chooseFolder"),
-          defaultPath: options?.defaultPath,
+          defaultPath,
         }),
       )
 
@@ -43,38 +86,49 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
       return options?.multiple ? result.filePaths : result.filePaths[0]
     }),
     openFilePicker: Effect.fn("DesktopFiles.openFilePicker")(function* (sender: number, options?: FilePickerOptions) {
-      const result = yield* Effect.promise(() =>
-        dialog.showOpenDialog({
-          properties: ["openFile", ...(options?.multiple ? ["multiSelections" as const] : [])],
-          title: options?.title ?? nativeT("desktop.dialog.chooseFile"),
-          defaultPath: options?.defaultPath,
-          filters: pickerFilters(options?.extensions),
-        }),
-      )
+      const picker = pickedFiles.open(sender)
 
-      if (result.canceled) return null
+      if (picker === undefined) return null
 
-      const files = yield* Effect.forEach(
-        result.filePaths,
-        Effect.fnUntraced(function* (file) {
-          const info = yield* fs.stat(file)
+      return yield* Effect.gen(function* () {
+        const defaultPath = yield* start(options?.defaultPath)
 
-          return { path: file, name: path.basename(file), size: Number(info.size) }
-        }),
-        { concurrency: "unbounded" },
-      )
+        const result = yield* Effect.promise(() =>
+          dialog.showOpenDialog({
+            properties: ["openFile", ...(options?.multiple ? ["multiSelections" as const] : [])],
+            title: options?.title ?? nativeT("desktop.dialog.chooseFile"),
+            defaultPath,
+            filters: pickerFilters(options?.extensions),
+          }),
+        )
 
-      assertAttachmentBudget(files)
+        if (result.canceled) return null
 
-      return { token: pickedFiles.add(sender, result.filePaths), files }
+        const files = yield* Effect.forEach(
+          result.filePaths,
+          Effect.fnUntraced(function* (file) {
+            const info = yield* fs.stat(file)
+
+            return { path: file, name: path.basename(file), size: Number(info.size) }
+          }),
+          { concurrency: "unbounded" },
+        )
+
+        assertAttachmentBudget(files)
+        const token = pickedFiles.grant(picker, result.filePaths)
+
+        return token === undefined ? null : { token, files }
+      }).pipe(Effect.ensuring(Effect.sync(() => pickedFiles.close(picker))))
     }),
     readPickedFile: pickedFiles.read,
     releasePickedFiles: pickedFiles.release,
     saveFile: Effect.fn("DesktopFiles.saveFile")(function* (options: SaveFilePickerOptions, content: string) {
+      const defaultPath = yield* start(options?.defaultPath, true)
+
       const result = yield* Effect.promise(() =>
         dialog.showSaveDialog({
           title: options?.title ?? nativeT("desktop.dialog.saveFile"),
-          defaultPath: options?.defaultPath,
+          defaultPath,
         }),
       )
 
@@ -86,9 +140,15 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
       return true
     }),
     openPath: Effect.fn("DesktopFiles.openPath")(function* (target: string, application?: string) {
-      if (!application) return yield* Effect.promise(() => shell.openPath(target))
+      if (!application) {
+        const error = yield* Effect.promise(() => shell.openPath(target))
 
-      if (process.platform === "win32" && /^powershell(\.exe)?$/i.test(path.basename(application))) {
+        if (error) return yield* Effect.fail(new Error(error))
+
+        return
+      }
+
+      if (process.platform === "win32" && /^(?:powershell|pwsh)(?:\.exe)?$/i.test(path.basename(application))) {
         const info = yield* fs.stat(target)
         const cwd = info.type === "Directory" ? target : path.dirname(target)
 
@@ -171,20 +231,6 @@ export const openExternalURL = Effect.fn("DesktopFiles.openExternalURL")(functio
       scoped("window", Effect.logError("failed to open external target", { url, error })).pipe(Effect.as(false)),
     ),
   )
-})
-
-export const openLocalFileURL = Effect.fn("DesktopFiles.openLocalFileURL")(function* (value: string) {
-  const path = resolveLocalFilePath(value)
-
-  if (!path) {
-    yield* scoped("window", Effect.logWarning("blocked local file target", { url: value }))
-
-    return
-  }
-
-  const error = yield* Effect.promise(() => shell.openPath(path))
-
-  if (error) yield* scoped("window", Effect.logError("failed to open local file", { path, error }))
 })
 
 function pickerFilters(extensions?: string[]) {

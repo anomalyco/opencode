@@ -16,11 +16,18 @@ type Init = {
 
 const fetch = (input: string | URL, init: Init = {}) =>
   Effect.gen(function* () {
-    const url = String(input)
-    if (URL.parse(url)?.protocol === "file:")
+    // Rules match the URL as written. The fragment is never sent, and would keep a rule for the exact URL from
+    // matching.
+    const url = String(input).split("#")[0]
+    const parsed = URL.parse(url)
+    if (parsed?.protocol === "file:")
       return yield* Effect.fail(new Error("fetch cannot be used for filesystem access."))
+    // Rules match the URL, so `https://user@evil.com` would slip past a rule for `https://evil.com/*`.
+    if (parsed?.username || parsed?.password)
+      return yield* Effect.fail(new TypeError("fetch cannot be used with credentials in the URL."))
     const execution = yield* CodeModeExecution.Service
     const permission = yield* Permission.Service
+    const source = { type: "tool" as const, messageID: execution.messageID, id: execution.id }
     // The same rules as the webfetch tool, so a URL denied there is denied here.
     yield* permission
       .assert({
@@ -30,7 +37,7 @@ const fetch = (input: string | URL, init: Init = {}) =>
         metadata: display([input, init]),
         sessionID: execution.sessionID,
         agent: execution.agent,
-        source: { type: "tool", messageID: execution.messageID, id: execution.id },
+        source,
       })
       .pipe(
         // The feedback is the user talking to the model, so it must reach the program as the error's message.
@@ -38,33 +45,61 @@ const fetch = (input: string | URL, init: Init = {}) =>
           Effect.fail(new Error(`The user rejected fetching ${url}: ${error.feedback}`)),
         ),
       )
-    return yield* Effect.tryPromise({ try: () => send(input, init), catch: (error) => error })
+    // Redirects are followed here so each new URL meets the same deny rules as the webfetch tool's hops.
+    const check = (next: string) =>
+      permission.assertNotDenied({
+        action: "webfetch",
+        resources: [next],
+        metadata: { ...display([next, init]), redirectedFrom: url },
+        sessionID: execution.sessionID,
+        agent: execution.agent,
+        source,
+      })
+    const signal = AbortSignal.any([execution.signal, AbortSignal.timeout(TIMEOUT_MS)])
+    let target = url
+    let request = init
+    for (let redirects = 0; ; redirects++) {
+      const response = yield* Effect.tryPromise({
+        try: () => globalThis.fetch(target, { ...request, redirect: "manual", signal }),
+        catch: (error) => error,
+      })
+      const location = response.headers.get("location")
+      if (!redirectStatuses.has(response.status) || location === null)
+        return new Extension.StreamingResponse(response, redirects > 0)
+      yield* Effect.tryPromise({ try: async () => response.body?.cancel(), catch: (error) => error })
+      if (redirects >= MAX_REDIRECTS)
+        return yield* Effect.fail(new Error(`Too many redirects (more than ${MAX_REDIRECTS})`))
+      const next = new URL(location, target)
+      if (next.protocol !== "http:" && next.protocol !== "https:")
+        return yield* Effect.fail(new Error(`fetch cannot follow a redirect to ${next.protocol} URLs.`))
+      if (next.username || next.password)
+        return yield* Effect.fail(new Error("fetch cannot follow a redirect with credentials in the URL."))
+      next.hash = ""
+      yield* check(next.href)
+      request = redirected(request, response.status, target, next)
+      target = next.href
+    }
   })
 
-const send = async (input: string | URL, init: Init) => {
-  const response = await globalThis.fetch(input, {
-    method: init.method,
-    headers: init.headers,
-    body: init.body,
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  })
-  const bytes = await response.bytes()
-  const headers = Object.fromEntries(response.headers)
-  const text = () => new TextDecoder().decode(bytes)
+export const MAX_REDIRECTS = 20
+const redirectStatuses = new Set([301, 302, 303, 307, 308])
+
+// The request a browser sends after a redirect: 303, and 301/302 after a POST, become a GET without a body, and
+// credentials are not sent to another origin.
+const redirected = (request: Init, status: number, from: string, to: URL): Init => {
+  const method = request.method?.toUpperCase() ?? "GET"
+  const toGet = status === 303 ? method !== "HEAD" : (status === 301 || status === 302) && method === "POST"
+  const headers = new Headers(request.headers)
+  if (toGet)
+    ["content-type", "content-length", "content-encoding", "content-language", "content-location"].forEach((name) =>
+      headers.delete(name),
+    )
+  if (new URL(from).origin !== to.origin)
+    ["authorization", "cookie", "proxy-authorization"].forEach((name) => headers.delete(name))
   return {
-    url: response.url,
-    status: response.status,
-    statusText: response.statusText,
-    ok: response.ok,
-    redirected: response.redirected,
-    headers: {
-      get: (name: string) => headers[name.toLowerCase()] ?? null,
-      has: (name: string) => name.toLowerCase() in headers,
-      entries: () => Object.entries(headers),
-    },
-    text: async () => text(),
-    json: async () => JSON.parse(text()) as unknown,
-    bytes: async () => bytes,
+    method: toGet ? "GET" : request.method,
+    headers: Array.from(headers),
+    body: toGet ? undefined : request.body,
   }
 }
 

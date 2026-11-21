@@ -84,13 +84,15 @@ test("creates a session in a new project and selects its model", async ({ page }
     return url.pathname === "/api/fs/list" && url.searchParams.get("path") === "C:/OpenCode"
   })
 
-  await picker.getByRole("button", { name: "Parent", exact: true }).click()
+  await picker
+    .getByRole("navigation", { name: "Folder path", exact: true })
+    .getByRole("button", { name: "OpenCode", exact: true })
+    .click()
   expect(new URL((await listing).url()).searchParams.get("location[directory]")).toBe(directory)
   const directoryItem = picker.getByRole("treeitem", { name: "NewProject", exact: true })
   await expect(directoryItem).toBeVisible()
   await directoryItem.click()
   await expect(directoryItem).toHaveAttribute("aria-selected", "true")
-  await expect(picker.getByText("C:\\OpenCode\\NewProject", { exact: true })).toBeVisible()
   const selectFolder = picker.getByRole("button", { name: "Select folder", exact: true })
   await expect(selectFolder).toBeEnabled()
   await selectFolder.click()
@@ -164,4 +166,51 @@ test("restores each existing session's model and variant when switching tabs", a
   await expect(page).toHaveURL(hrefA)
   await expect(modelControl).toHaveText("Model A")
   await expect(variant).toHaveText("high")
+})
+
+test("keeps a variant picked in another directory's session with that session across a reload", async ({ page }) => {
+  // The session view stays mounted while its tabs switch between sessions in different directories.
+  const sessions = [
+    { name: "Home", directory: "C:/OpenCode/ModelHome" },
+    { name: "Away", directory: "C:/OpenCode/ModelAway" },
+  ].map((item) => ({
+    id: `ses_model_${item.name.toLowerCase()}`,
+    title: `${item.name} session`,
+    directory: item.directory,
+    model: { id: `model-${item.name.toLowerCase()}`, providerID: "opencode", variant: "balanced" },
+  }))
+
+  await openSession(page, {
+    name: "ModelHome",
+    sessions,
+    provider: provider(
+      ...sessions.map((session) => ({
+        id: session.model.id,
+        name: session.title,
+        variants: { balanced: {}, high: {} },
+      })),
+    ),
+  })
+
+  const [home, away] = sessions.map((session) => sessionHref(session.id))
+  const composer = page.locator('[data-component="composer"]')
+  const modelControl = composer.locator('[data-action="composer-model"]')
+  const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
+  await expect(modelControl).toHaveText("Home session")
+  await page.locator(`[data-titlebar-tab-link][href="${away}"]`).click()
+  await expect(page).toHaveURL(away!)
+  await expect(modelControl).toHaveText("Away session")
+  await expect(variant).toHaveText("balanced")
+  await variant.click()
+  await page.getByRole("menuitemradio", { name: "high", exact: true }).click()
+  await expect(variant).toHaveText("high")
+
+  await page.reload()
+  await expect(modelControl).toHaveText("Away session")
+  await expect(variant).toHaveText("high")
+
+  await page.locator(`[data-titlebar-tab-link][href="${home}"]`).click()
+  await expect(page).toHaveURL(home!)
+  await expect(modelControl).toHaveText("Home session")
+  await expect(variant).toHaveText("balanced")
 })

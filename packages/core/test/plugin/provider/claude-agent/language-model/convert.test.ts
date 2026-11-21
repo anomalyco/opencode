@@ -28,6 +28,22 @@ describe("Claude conversions", () => {
     expect(unknown.some((part) => part.type === "tool-call" || part.type === "finish")).toBe(false)
   })
 
+  test("a step's finish carries the plan usage Claude Code reported during it", () => {
+    const recorded = Recorder.load("tools").find(
+      (line) => line.from === "claude" && line.message.type === "rate_limit_event",
+    )
+    if (recorded?.from !== "claude" || recorded.message.type !== "rate_limit_event")
+      throw new Error("Expected a recorded rate limit event")
+    expect(firstToolReply(TestTools.tools).at(-1)).toMatchObject({
+      type: "finish",
+      providerMetadata: { "claude-agent": { rateLimit: recorded.message.rate_limit_info } },
+    })
+    expect(ConvertClaudeStream.make([])(Recorder.result("text")).at(-1)).toMatchObject({
+      type: "finish",
+      providerMetadata: undefined,
+    })
+  })
+
   test("utility calls keep system instructions separate from conversation content and omit thinking", () => {
     const prompt: LanguageModelV3Prompt = [
       { role: "system", content: "Summarize this conversation." },

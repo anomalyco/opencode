@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { ai, LLMRequest, Message } from "../../src/effect.js"
+import { ai, Message } from "../../src/effect.js"
 import { LLMClient, WebSocketTransport } from "../../src/route.js"
 import { OpenAI } from "../../src/providers.js"
 import { testEffect } from "../lib/effect.js"
@@ -42,7 +42,7 @@ testEffect(fixedResponse("unexpected HTTP fallback")).effect(
       expect(first.message.content).toHaveLength(1)
       expect(first.message.content[0]?.type).toBe("compaction")
       yield* LLMClient.generate(
-        LLMRequest.update(request, { messages: [...request.messages, first.message, Message.user("continue")] }),
+        { ...request, messages: [...request.messages, first.message, Message.user("continue")] },
         { webSocket },
       )
       expect(sent).toHaveLength(2)

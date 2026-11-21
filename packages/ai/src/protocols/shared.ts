@@ -7,15 +7,18 @@ import {
   InvalidRequestError,
   UnsupportedOperationError,
   AIError,
-  LLMRequest,
+  AssistantMessage,
+  type LLMRequest,
   Message,
   ToolDefinition,
+  ToolMessage,
   type ContentPart,
   type MediaPart,
   type OpenString,
   type ProviderID,
   type RequestEncoding,
   type TextPart,
+  type ToolCallPart,
   type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
@@ -51,12 +54,36 @@ export const ReportedBilling = Schema.Struct({
   cost: billedAmount,
 })
 
-/** Reads `ReportedBilling` from a raw usage object, which provider metadata keeps as the endpoint sent it. */
-export const reportedBilling = (usage: unknown) =>
-  Option.match(Schema.decodeUnknownOption(ReportedBilling)(usage), {
-    onNone: () => ({}),
-    onSome: (billing) => ({ cost: billing.cost }),
-  })
+/**
+ * GitHub Copilot reports its charge beside usage on the frame that carries it, as `copilot_usage.total_nano_aiu`:
+ * billionths of an AI credit, which costs $0.01.
+ */
+const CopilotBilling = Schema.Struct({
+  copilot_usage: Schema.Struct({ total_nano_aiu: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)) }),
+})
+const decodeCopilotBilling = Schema.decodeUnknownOption(CopilotBilling)
+
+/**
+ * Reads `ReportedBilling` from a raw usage object, which provider metadata keeps as the endpoint sent it, or
+ * Copilot's billing from the frames that carry the usage.
+ */
+export const reportedBilling = (usage: unknown, ...frames: ReadonlyArray<unknown>) => {
+  const reported = Option.getOrUndefined(Schema.decodeUnknownOption(ReportedBilling)(usage))?.cost
+  if (reported !== undefined) return { cost: reported }
+  const nanoAiu = frames
+    .map((frame) => Option.getOrUndefined(decodeCopilotBilling(frame))?.copilot_usage.total_nano_aiu)
+    .find((value) => value !== undefined)
+  return nanoAiu === undefined ? {} : { cost: nanoAiu / 100_000_000_000 }
+}
+
+/**
+ * The filter that blocked a response, from maps keyed by filter name: Azure's `content_filter_results`
+ * (`{ hate: { filtered: true } }`) or GitHub Copilot's `copilot_annotations` (`{ TextCopyright: [...] }`).
+ */
+export const contentFilterCategory = (...sources: ReadonlyArray<unknown>) =>
+  sources
+    .flatMap((source) => (isRecord(source) ? Object.entries(source) : []))
+    .find(([, value]) => (isRecord(value) && "filtered" in value ? value.filtered === true : Boolean(value)))?.[0]
 
 /**
  * Accepts stream frames that carry no `type`, alongside the typed event schema. Gateways inject such frames as
@@ -85,7 +112,7 @@ export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
 // Body-level `prompt_cache_key` is off when caching is disabled or the model
 // explicitly rejects the field. Header-based affinity is unaffected.
 export const sendsPromptCacheKey = (request: LLMRequest) =>
-  request.cache !== "none" && request.model.compatibility?.supportsPromptCacheKey !== false
+  request.cache !== "none" && request.model.capabilities?.promptCacheKey !== false
 
 // OpenAI limits `prompt_cache_key` to 64 chars; DeepSeek and Zai inherit the same
 // limit via their OpenAI-compatible APIs. Clamp with unicode-aware slicing.
@@ -202,10 +229,7 @@ export const wrapSystemUpdate = (parts: ReadonlyArray<{ readonly text: string }>
  * raw retrieved, tool, or web content into privileged updates: keep untrusted
  * data in ordinary user/tool messages instead.
  */
-export const systemUpdateText = Effect.fnUntraced(function* (
-  route: string,
-  message: LLMRequest["messages"][number],
-) {
+export const systemUpdateText = Effect.fnUntraced(function* (route: string, message: LLMRequest["messages"][number]) {
   const content: TextPart[] = []
   for (const part of message.content) {
     if (!supportsContent(part, ["text"])) return yield* unsupportedContent(route, "system", ["text"])
@@ -350,22 +374,42 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
 }
 
 export const flattenToolRequest = (request: LLMRequest) => {
+  const tools = flattenTools(request.tools)
+  const declared = new Set(tools.map((tool) => tool.name))
+  const flatten = <Part extends ToolCallPart | ToolResultPart>(part: Part) => flattenToolName(part, declared)
   const messages = request.messages.map((message) => {
-    const content = message.content.map((part) => {
-      if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
-      return { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
-    })
-    return content.every((part, index) => part === message.content[index])
-      ? message
-      : new Message({ ...message, content })
+    if (message.role === "assistant") {
+      const content = message.content.map((part) =>
+        part.type === "tool-call" || part.type === "tool-result" ? flatten(part) : part,
+      )
+      return sameParts(content, message.content) ? message : new AssistantMessage({ ...message, content })
+    }
+    if (message.role !== "tool") return message
+    const content = message.content.map(flatten)
+    return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
   })
   return {
-    tools: flattenTools(request.tools),
+    tools,
     request: messages.every((message, index) => message === request.messages[index])
       ? request
-      : LLMRequest.update(request, { messages }),
+      : { ...request, messages },
   }
 }
+
+const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(
+  part: Part,
+  declared: ReadonlySet<string>,
+): Part => {
+  const flat = part.namespace === undefined ? part.name : `${part.namespace}_${part.name}`
+  // Models sometimes call names no tool declares, such as a Code Mode path like `a.b.c`. Several providers (OpenAI
+  // Chat Completions, Bedrock Converse) reject those characters when the call is replayed, so replace them. A
+  // declared name is kept as is, so a provider that accepts it sees calls under the tool's own name.
+  const name = declared.has(flat) ? flat : flat.replace(/[^a-zA-Z0-9_-]/g, "_") || "_"
+  return name === part.name && part.namespace === undefined ? part : { ...part, name, namespace: undefined }
+}
+
+const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
+  next.every((part, index) => part === previous[index])
 
 export const matchToolChoice = <Auto, None, Required, Tool>(
   route: string,

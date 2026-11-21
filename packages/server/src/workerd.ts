@@ -8,6 +8,8 @@ import type { DurableObjectStorage } from "@opencode/core/database/sqlite.worker
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { FileSystem } from "@opencode/core/filesystem"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
+import { BlobStore } from "@opencode/core/blob-store"
+import { VideoGeneration } from "@opencode/core/video-generation"
 import { Pty } from "@opencode/core/pty"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Vcs } from "@opencode/core/vcs"
@@ -30,6 +32,7 @@ import type { ServerOptions } from "./options"
  *   FileSystemSearch, and Pty fail with a clear defect until a remote sandbox
  *   backs them; Npm fails package installs with a typed workerd error; Snapshot
  *   and Vcs degrade to no-op results.
+ * - Blob storage and video generation report themselves unsupported: blobs are files on a local disk.
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
  *
@@ -46,6 +49,8 @@ export interface Options {
   readonly config?: { readonly content?: string }
   /** models.dev catalog options; the bundled snapshot is the boot-time floor either way. */
   readonly models?: ServerOptions["models"]
+  /** Replaces `globalThis.fetch` for OpenCode's own HTTP requests, e.g. to route them through a Service Binding. */
+  readonly fetch?: ServerOptions["fetch"]
 }
 
 /**
@@ -71,6 +76,7 @@ export function serverOptions(options: Options): ServerOptions {
     events: { persist: true },
     config: { content: options.config?.content },
     models: options.models,
+    fetch: options.fetch,
   }
 }
 
@@ -85,6 +91,9 @@ export function replacements(options: Options): LayerNode.Replacements {
     FileSystemSearch.node.replace(fileSystemSearchLayer),
     Pty.node.replace(ptyLayer),
     Npm.node.replace(npmLayer),
+    // Blobs need a local `blobs/` folder, which a Durable Object doesn't have.
+    BlobStore.node.replace(BlobStore.unsupportedLayer),
+    VideoGeneration.node.replace(VideoGeneration.unsupportedLayer),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
     ConfigPluginSource.node.replace(ConfigPluginSource.empty),
@@ -109,6 +118,8 @@ const npmLayer = Layer.succeed(
     resolve: (name) => Effect.succeed({ directory: "", name }),
     check: () => Effect.succeed(false),
     update: (pkg) => npmUnavailable("Npm.update", pkg),
+    follows: () => Effect.succeed(false),
+    reject: () => Effect.succeed(false),
     which: () => Effect.undefined,
   }),
 )
