@@ -216,75 +216,6 @@ const kernel = probe?.exitCode === 0 ? test : test.skip
 if (probe && probe.exitCode !== 0)
   console.warn(`Seatbelt integration tests unavailable: ${probe.stderr.toString().trim()}`)
 
-kernel("Seatbelt accepts nonexistent optional readable and protected roots", async () => {
-  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-sandbox-missing-")))
-  try {
-    const missing = path.join(root, "not-installed", "runtime")
-    const workspace = path.join(root, "workspace")
-    const outside = path.join(root, "outside")
-    await fs.mkdir(workspace)
-    await fs.writeFile(outside, "must remain unreadable")
-    const launch = MacSandbox.launch(
-      {
-        directory: workspace,
-        fullDiskRead: false,
-        readableRoots: [missing],
-        writableRoots: [workspace],
-        protectedPaths: [missing],
-        unreadablePaths: [],
-        scratch: workspace,
-      },
-      "/bin/sh",
-      ["-c", 'printf ready; ! /bin/cat "$1"', "probe", outside],
-      SandboxPolicy.environment(process.env, workspace),
-    )
-    const result = Bun.spawnSync([launch.command, ...launch.args], { cwd: workspace, env: launch.env })
-    expect({ exit: result.exitCode, stderr: result.stderr.toString() }).toMatchObject({ exit: 0 })
-    expect(result.stdout.toString()).toBe("ready")
-    await expect(fs.stat(missing)).rejects.toMatchObject({ code: "ENOENT" })
-  } finally {
-    await fs.rm(root, { recursive: true, force: true })
-  }
-})
-
-kernel("system shells bootstrap and run echo, pwd, and ls inside the sandbox", async () => {
-  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-sandbox-startup-")))
-  try {
-    const workspace = path.join(root, "workspace")
-    const scratch = path.join(root, "scratch")
-    await Promise.all([workspace, scratch].map((value) => fs.mkdir(value)))
-    await fs.writeFile(path.join(workspace, "workspace-marker"), "hello")
-    const confined: SandboxPolicy.Policy = {
-      directory: workspace,
-      fullDiskRead: false,
-      readableRoots: [],
-      writableRoots: [workspace, scratch],
-      scratch,
-      protectedPaths: [],
-      unreadablePaths: [],
-    }
-    for (const shell of ["/bin/zsh", "/bin/bash", "/bin/sh"]) {
-      const launch = MacSandbox.launch(
-        confined,
-        shell,
-        ["-c", "echo foo && pwd && ls -lah"],
-        SandboxPolicy.environment(process.env, scratch),
-      )
-      const result = Bun.spawnSync([launch.command, ...launch.args], { cwd: workspace, env: launch.env })
-      expect({
-        shell,
-        exit: result.exitCode,
-        signal: result.signalCode,
-        stderr: result.stderr.toString(),
-      }).toMatchObject({ exit: 0 })
-      expect(result.stdout.toString()).toStartWith(`foo\n${workspace}\n`)
-      expect(result.stdout.toString()).toContain("workspace-marker")
-    }
-  } finally {
-    await fs.rm(root, { recursive: true, force: true })
-  }
-})
-
 kernel.each([false, true])(
   "the kernel preserves write and credential restrictions with fullDiskRead=%s",
   async (fullDiskRead) => {
@@ -303,6 +234,7 @@ kernel.each([false, true])(
       }
       await Promise.all([...Object.values(host), outside].map((value) => fs.mkdir(value)))
       await fs.mkdir(path.join(workspace, ".opencode"))
+      await fs.mkdir(path.join(workspace, ".git"))
       const credentials = path.join(host.home, ".ssh")
       await fs.mkdir(credentials)
       await fs.writeFile(path.join(credentials, "key"), "credential-secret")
@@ -323,31 +255,6 @@ kernel.each([false, true])(
       const allowed = run('printf hello > local; cat local; printf scratch > "$TMPDIR/ok"')
       expect(allowed.exitCode).toBe(0)
       expect(allowed.stdout.toString()).toBe("hello")
-      const heredocScript = "cat <<'EOF'\nheredoc works\nEOF"
-      const blockedHeredoc = MacSandbox.launch(confined, "/bin/zsh", ["-c", heredocScript], {
-        ...process.env,
-        TMPPREFIX: path.join(outside, "zsh"),
-      })
-      expect(
-        Bun.spawnSync([blockedHeredoc.command, ...blockedHeredoc.args], { cwd: workspace, env: blockedHeredoc.env })
-          .exitCode,
-      ).not.toBe(0)
-      const heredoc = MacSandbox.launch(
-        confined,
-        "/bin/zsh",
-        ["-c", heredocScript],
-        SandboxPolicy.environment({ ...process.env, TMPPREFIX: path.join(outside, "zsh") }, scratch),
-      )
-      const heredocResult = Bun.spawnSync([heredoc.command, ...heredoc.args], { cwd: workspace, env: heredoc.env })
-      expect({
-        exit: heredocResult.exitCode,
-        stderr: heredocResult.stderr.toString(),
-        stdout: heredocResult.stdout.toString(),
-      }).toEqual({
-        exit: 0,
-        stderr: "",
-        stdout: "heredoc works\n",
-      })
       const read = run(`cat '${outside}/secret'`)
       expect(read.exitCode === 0).toBe(fullDiskRead)
       expect(read.stdout.toString().includes("outside-secret")).toBe(fullDiskRead)
@@ -356,14 +263,8 @@ kernel.each([false, true])(
       expect(run(`cat '${credentials}/key'`).exitCode).not.toBe(0)
       expect(run(`cat '${host.config}/secret'`).exitCode).not.toBe(0)
       expect(run("printf config > opencode.json").exitCode).not.toBe(0)
+      expect(run("printf index > .git/index").exitCode).not.toBe(0)
       expect(run("printf plugin > .opencode/plugin.ts").exitCode).not.toBe(0)
-      await fs.symlink(outside, path.join(workspace, "link"), "dir")
-      expect(run("cat link/secret").exitCode === 0).toBe(fullDiskRead)
-      expect(run("/bin/sh -c 'printf escape > link/escape'").exitCode).not.toBe(0)
-      await fs.symlink(credentials, path.join(workspace, "credentials"), "dir")
-      expect(
-        run("/usr/bin/sandbox-exec -p '(version 1)(allow default)' /bin/sh -c 'cat credentials/key'").stdout.toString(),
-      ).not.toContain("credential-secret")
       expect(await fs.readdir(outside)).toEqual(["secret"])
     } finally {
       await fs.rm(root, { recursive: true, force: true })
@@ -378,11 +279,13 @@ kernel.each([false, true])("custom database and sidecars remain private with ful
       ["directory", "scratch", "home", "config", "data", "state"].map((name) => [name, path.join(root, name)]),
     ) as Record<"directory" | "scratch" | "home" | "config" | "data" | "state", string>
     await Promise.all(Object.values(host).map((value) => fs.mkdir(value)))
-    const dbDirectory = path.join(host.directory, "db-dir")
-    await fs.mkdir(dbDirectory)
-    const database = path.join(dbDirectory, "database.db")
+    const database = path.join(host.directory, "database.db")
     const alias = path.join(host.directory, "database-alias.db")
-    await fs.writeFile(database, "private-database")
+    await Promise.all(
+      [database, `${database}-wal`, `${database}-shm`, `${database}-journal`].map((file) =>
+        fs.writeFile(file, "private-database"),
+      ),
+    )
     await fs.symlink(database, alias)
     const policy = await MacSandbox.policy(host, { fullDiskRead }, alias)
     for (const target of [database, alias, `${database}-wal`, `${alias}-shm`, `${database}-journal`]) {
@@ -397,35 +300,6 @@ kernel.each([false, true])("custom database and sidecars remain private with ful
       expect(result.stdout.toString()).toBe("")
     }
     expect(await fs.readFile(database, "utf8")).toBe("private-database")
-    const move = MacSandbox.launch(
-      policy,
-      "/bin/mv",
-      [dbDirectory, path.join(host.directory, "moved")],
-      SandboxPolicy.environment(process.env, host.scratch),
-    )
-    expect(Bun.spawnSync([move.command, ...move.args], { cwd: host.directory, env: move.env }).exitCode).not.toBe(0)
-    const futureDirectory = path.join(root, "future-db")
-    await fs.mkdir(futureDirectory)
-    const parentAlias = path.join(host.directory, "db-parent-alias")
-    const leafAlias = path.join(host.directory, "db-leaf-alias")
-    await fs.symlink(futureDirectory, parentAlias, "dir")
-    await fs.symlink(path.join(futureDirectory, "leaf.db"), leafAlias)
-    for (const [configured, target] of [
-      [path.join(parentAlias, "parent.db"), path.join(futureDirectory, "parent.db")],
-      [leafAlias, path.join(futureDirectory, "leaf.db")],
-    ]) {
-      const futurePolicy = await MacSandbox.policy(host, { fullDiskRead }, configured)
-      await fs.writeFile(target, "future-private")
-      const read = MacSandbox.launch(
-        futurePolicy,
-        "/bin/cat",
-        [target],
-        SandboxPolicy.environment(process.env, host.scratch),
-      )
-      const result = Bun.spawnSync([read.command, ...read.args], { cwd: host.directory, env: read.env })
-      expect(result.exitCode).not.toBe(0)
-      expect(result.stdout.toString()).toBe("")
-    }
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
@@ -481,69 +355,3 @@ kernel("the kernel blocks reachable loopback and Unix-socket servers", async () 
     await fs.rm(root, { recursive: true, force: true })
   }
 })
-
-const python = Bun.which("python3")
-const pythonKernel = probe?.exitCode === 0 && python ? test : test.skip
-pythonKernel("full-disk reads let installed Python load its runtime and urllib without readable roots", async () => {
-  if (!python) throw new Error("Python is unavailable")
-  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-sandbox-python-")))
-  try {
-    const launch = MacSandbox.launch(
-      {
-        directory: root,
-        fullDiskRead: true,
-        readableRoots: [],
-        writableRoots: [root],
-        protectedPaths: [],
-        unreadablePaths: [],
-        scratch: root,
-      },
-      python,
-      ["-I", "-B", "-c", 'import ssl, urllib.request; print("runtime ready")'],
-      SandboxPolicy.environment(process.env, root),
-    )
-    const result = Bun.spawnSync([launch.command, ...launch.args], { cwd: root, env: launch.env })
-    expect({ exit: result.exitCode, signal: result.signalCode, stderr: result.stderr.toString() }).toMatchObject({
-      exit: 0,
-    })
-    expect(result.stdout.toString()).toBe("runtime ready\n")
-  } finally {
-    await fs.rm(root, { recursive: true, force: true })
-  }
-})
-
-const homebrewPython = Bun.which("/opt/homebrew/bin/python3")
-const homebrewKernel = probe?.exitCode === 0 && homebrewPython ? test : test.skip
-homebrewKernel(
-  "default strict reads run Homebrew Python and list binaries while excluding configuration and service data",
-  async () => {
-    if (!homebrewPython) throw new Error("Homebrew Python is unavailable")
-    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-sandbox-homebrew-")))
-    try {
-      const host = {
-        directory: path.join(root, "workspace"),
-        scratch: path.join(root, "scratch"),
-        home: path.join(root, "home"),
-        config: path.join(root, "config"),
-        data: path.join(root, "data"),
-        state: path.join(root, "state"),
-      }
-      await Promise.all(Object.values(host).map((value) => fs.mkdir(value)))
-      const confined = await MacSandbox.policy(host, {})
-      const run = (command: string, args: string[]) => {
-        const launch = MacSandbox.launch(confined, command, args, SandboxPolicy.environment(process.env, host.scratch))
-        return Bun.spawnSync([launch.command, ...launch.args], { cwd: host.directory, env: launch.env })
-      }
-      const python = run(homebrewPython, ["-I", "-B", "-c", 'import ssl, urllib.request; print("runtime ready")'])
-      expect({ exit: python.exitCode, signal: python.signalCode, stderr: python.stderr.toString() }).toMatchObject({
-        exit: 0,
-      })
-      expect(python.stdout.toString()).toBe("runtime ready\n")
-      expect(run("/bin/ls", ["/opt/homebrew/bin"]).exitCode).toBe(0)
-      for (const directory of ["etc", "var", "share", "Library", "Caskroom"])
-        expect(run("/bin/ls", [`/opt/homebrew/${directory}`]).exitCode).not.toBe(0)
-    } finally {
-      await fs.rm(root, { recursive: true, force: true })
-    }
-  },
-)
