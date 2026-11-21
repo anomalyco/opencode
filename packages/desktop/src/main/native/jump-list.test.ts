@@ -4,6 +4,7 @@ import { jumpList, jumpTask } from "./jump-list"
 import { setNativeTranslations } from "./translations"
 
 const program = "C:\\Program Files\\OpenCode\\OpenCode.exe"
+
 const tasks = () => jumpList(program).flatMap((category) => category.items ?? [])
 
 afterEach(() => setNativeTranslations({ locale: "en", messages: { ...DESKTOP_NATIVE_ENGLISH } }))
