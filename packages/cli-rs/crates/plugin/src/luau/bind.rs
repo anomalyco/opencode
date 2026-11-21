@@ -661,6 +661,7 @@ fn binding(lua: &Lua, current: &Rc<Slot>, name: &str, host: bool) -> mlua::Resul
         "interactive" => |r, _lua| r.interactive();
         "shortcut" => |r, _lua, name: String| r.shortcut(&name);
         "dialogOpen" => |r, _lua, key: String| r.dialog_open(&key);
+        "keymapPending" => |r, _lua| r.keymap_pending();
         "composer" => |r, _lua| r.composer();
         "tabs" => |r, _lua| r.tabs();
         "tabsEnabled" => |r, _lua| r.tabs_enabled();
