@@ -146,7 +146,14 @@ afterEach(() => {
 
 type Voice = OpenCodeClient["experimental"]["voice"]
 
-const live = { model: "gpt-live-1", provider: "openai", available: true, transports: ["webrtc" as const] }
+const live = {
+  model: "gpt-live-1",
+  name: "GPT-Live 1",
+  engine: "openai-live",
+  provider: "openai",
+  available: true,
+  transports: ["webrtc" as const],
+}
 
 function open(models: Voice["models"] = () => Promise.resolve({ models: [live] })) {
   const voice: Voice = {

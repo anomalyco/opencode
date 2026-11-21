@@ -14,9 +14,12 @@ import { Context, Effect, Layer, Redacted, Schema } from "effect"
 import { Credential } from "./credential.js"
 import { requestExecutor } from "./effect/app-node-platform.js"
 import { Integration } from "./integration.js"
+import { ModelsDev } from "./models-dev.js"
 
 export interface ModelInfo {
   readonly model: string
+  readonly name: string
+  readonly engine: string
   readonly provider: string
   readonly transports: readonly RealtimeTransportType[]
   readonly available: boolean
@@ -56,6 +59,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
     const integrations = yield* Integration.Service
+    const modelsDev = yield* ModelsDev.Service
 
     // Integration lists the active credential first, then newer stored credentials, then non-empty env vars.
     const findConnection = (provider: string, methods: readonly string[] = ["key"]) =>
@@ -75,24 +79,46 @@ export const layer = Layer.effect(
       return hosted && { provider: openCodeLive.provider, connection: hosted }
     })
 
-    const models = Effect.fn("Voice.models")(function* () {
-      const list = yield* Effect.forEach(Realtime.engines, (engine) =>
+    // Each engine's models.dev voice models from the provider that would start them, newest first.
+    const offered = Effect.fnUntraced(function* () {
+      const catalog = yield* modelsDev.get()
+      const lists = yield* Effect.forEach(Realtime.engines, (engine) =>
         source(engine).pipe(
-          Effect.map((found) => ({
-            model: engine.model,
-            provider: found?.provider ?? engine.provider,
-            transports: engine.transports,
-            available: found !== undefined,
-          })),
+          Effect.map((found) => {
+            const provider = found?.provider ?? engine.provider
+            return (catalog.find((item) => item.info.id === provider)?.voices ?? [])
+              .filter((voice) => voice.api === engine.api)
+              .toSorted((a, b) => b.releaseDate.localeCompare(a.releaseDate))
+              .map((voice) => ({
+                engine,
+                info: {
+                  model: voice.id,
+                  name: voice.name,
+                  engine: engine.id,
+                  provider,
+                  transports: engine.transports,
+                  available: found !== undefined,
+                },
+              }))
+          }),
         ),
       )
+      return lists.flat()
+    })
+
+    const models = Effect.fn("Voice.models")(function* () {
+      const list = (yield* offered()).map((item) => item.info)
       const first = list.find((item) => item.available)?.model
       return first ? { models: list, default: first } : { models: list }
     })
 
     const session = Effect.fn("Voice.session")(function* (input: SessionInput) {
-      const engine = Realtime.engine(input.model)
-      if (!engine) return yield* new InvalidRequestError({ message: `Unsupported voice model: ${input.model}` })
+      const list = yield* offered()
+      const engine = list.find((item) => item.info.model === input.model)?.engine
+      if (!engine)
+        return yield* new InvalidRequestError({
+          message: `Unsupported voice model: ${input.model}. This server lists ${list.map((item) => item.info.model).join(", ") || "none"}.`,
+        })
 
       const found = yield* source(engine)
       const credential = found
@@ -108,6 +134,7 @@ export const layer = Layer.effect(
         })
 
       return yield* Realtime.connect({
+        engine,
         model: input.model,
         session: input.session,
         transport: input.transport,
@@ -130,7 +157,7 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Integration.node, requestExecutor],
+  deps: [Integration.node, ModelsDev.node, requestExecutor],
 })
 
 /** OpenCode hosts GPT-Live on its OpenAI account, billed to the workspace whose credential starts a session. */

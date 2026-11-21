@@ -133,11 +133,24 @@ const SourceProvider = Schema.Struct({
   models: Schema.Record(Schema.String, Schema.Unknown),
 })
 
-// The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request.
-const TYPES: readonly string[] = ["chat", "decision", "image", "video"]
+// The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request,
+// realtime ones as voice models.
+const TYPES: readonly string[] = ["chat", "decision", "image", "video", "realtime"]
+
+const SourceVoice = Schema.Struct({
+  id: Schema.String,
+  type: Schema.Literal("realtime"),
+  name: Schema.String,
+  release_date: Schema.String,
+  status: Schema.optional(Schema.String),
+  modalities: Schema.Struct({ output: Schema.Array(Schema.String) }),
+  capabilities: Schema.Struct({ tools: Schema.Struct({ supported: Schema.Boolean }) }),
+  api: Schema.Record(Schema.String, Schema.Unknown),
+})
 
 const ContextCondition = Schema.Struct({ gt: Schema.optional(Schema.Finite), gte: Schema.optional(Schema.Finite) })
 const decodeModel = Schema.decodeUnknownResult(SourceModel)
+const decodeVoice = Schema.decodeUnknownOption(SourceVoice)
 const decodeApi = Schema.decodeUnknownOption(SourceApi)
 const decodeMode = Schema.decodeUnknownOption(SourceMode)
 const decodeProvider = Schema.decodeUnknownOption(SourceProvider)
@@ -147,9 +160,18 @@ const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
 const knownFreeformFormat = Schema.is(FreeformFormat)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
+/** A realtime model that answers in speech and calls tools, by the API it speaks (`live`, `realtime`…). */
+export type Voice = {
+  readonly id: string
+  readonly name: string
+  readonly api: string
+  readonly releaseDate: string
+}
+
 export type Snapshot = {
   readonly info: Provider.Info
   readonly models: readonly Model.Info[]
+  readonly voices?: readonly Voice[]
   readonly environment: readonly string[]
 }
 
@@ -231,7 +253,15 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
         ),
       ]
     })
-    return [{ info, models, environment: [...item.env] }]
+    // Translation and streaming models are realtime too, but don't answer in speech or call tools.
+    const voices = Object.values(item.models).flatMap((value) => {
+      const voice = Option.getOrUndefined(decodeVoice(value))
+      const api = voice && Object.keys(voice.api)[0]
+      if (!voice || !api || voice.status === "deprecated" || !voice.capabilities.tools.supported) return []
+      if (!voice.modalities.output.some((output) => output.startsWith("audio"))) return []
+      return [{ id: voice.id, name: voice.name, api, releaseDate: voice.release_date }]
+    })
+    return [{ info, models, ...(voices.length > 0 ? { voices } : {}), environment: [...item.env] }]
   })
   if (failed.length > 0)
     yield* Effect.logWarning("Skipped models.dev models that failed to parse", {

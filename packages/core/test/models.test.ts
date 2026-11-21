@@ -551,6 +551,35 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.effect("keeps realtime models that answer in speech and call tools as voice models, not chat models", () =>
+    Effect.gen(function* () {
+      const realtime = (id: string, input: Record<string, unknown> = {}) =>
+        sourceModel(id, {
+          type: "realtime",
+          release_date: "2026-09-10",
+          modalities: { input: ["audio/pcm"], output: ["text", "audio/pcm"] },
+          api: { live: { base_url: "https://api.acme.test/v1", sdk: { opencodeai: "none" } } },
+          ...input,
+        })
+      const [acme] = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          acme: {
+            ...fixture.acme,
+            models: {
+              chat: sourceModel("chat"),
+              voice: realtime("voice", { name: "Voice 1" }),
+              translate: realtime("translate", { capabilities: { tools: { supported: false } } }),
+              streaming: realtime("streaming", { modalities: { input: ["audio/pcm"], output: ["text"] } }),
+              retired: realtime("retired", { status: "deprecated" }),
+            },
+          },
+        }),
+      )
+      expect(acme?.models.map((item) => item.id)).toEqual([Model.ID.make("chat")])
+      expect(acme?.voices).toEqual([{ id: "voice", name: "Voice 1", api: "live", releaseDate: "2026-09-10" }])
+    }),
+  )
+
   it.live("drops model types opencode doesn't keep", () =>
     Effect.gen(function* () {
       const cache = makeCache()
@@ -721,7 +750,7 @@ describe("ModelsDev Service", () => {
       )
       const [beta] = yield* ModelsDev.Service.use((service) => service.get()).pipe(Effect.provide(layer))
       expect(urls).toEqual([
-        "https://mirror.example/experimental/v2.0/api.json?type=chat,decision,image,video",
+        "https://mirror.example/experimental/v2.0/api.json?type=chat,decision,image,video,realtime",
         "https://mirror.example/api.json",
       ])
       expect(beta?.models.map((model) => model.id)).toEqual([Model.ID.make("beta-1")])
@@ -802,7 +831,7 @@ describe("ModelsDev Service", () => {
         Effect.provide(buildLayer(state, cache, { url: "", fetch: true, snapshot: false })),
       )
       expect((yield* Ref.get(state)).calls[0]?.url).toBe(
-        "https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video",
+        "https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video,realtime",
       )
     }),
   )

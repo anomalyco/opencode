@@ -768,7 +768,14 @@ export type GenerateChoiceAnswer = {
   confidence: number
 }
 
-export type VoiceModel = { model: string; provider: string; transports: Array<VoiceTransportType>; available: boolean }
+export type VoiceModel = {
+  model: string
+  name: string
+  engine: string
+  provider: string
+  transports: Array<VoiceTransportType>
+  available: boolean
+}
 
 export type VoiceTransport = VoiceWebRTCTransport | VoiceWebSocketTransport
 
