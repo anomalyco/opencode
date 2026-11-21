@@ -12,6 +12,7 @@ import {
   updateTitlebar,
 } from "../windows"
 import { storedZoomLevel } from "../windows/defaults"
+import { requestAttention } from "../windows/attention"
 import { focusWindow, showWindow } from "../windows/focus"
 import { sender } from "./context"
 
@@ -20,6 +21,8 @@ export const windowHandlers = WindowRpcs.toLayer(
     const handoff = yield* IpcPortHandoff
 
     return WindowRpcs.of({
+      WindowRequestAttention: (_args, context) =>
+        Effect.promise(() => requestAttention(BrowserWindow.fromWebContents(sender(handoff, context)))),
       WindowRequestMicrophone: () =>
         Effect.promise(() =>
           process.platform === "darwin" ? systemPreferences.askForMediaAccess("microphone") : Promise.resolve(true),

@@ -29,6 +29,7 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
     recordFatalRendererError: (error) => api.recordFatalRendererError(error),
     restart: async () => api.relaunch(),
     notify: createDesktopNotify(api),
+    requestAttention: () => api.requestAttention(),
     fetch: (input, init) => {
       if (input instanceof Request) return fetch(input)
 

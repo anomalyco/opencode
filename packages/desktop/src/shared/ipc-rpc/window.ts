@@ -49,7 +49,10 @@ export const WindowSetTrafficLightsPosition = Rpc.make("WindowSetTrafficLightsPo
   payload: { x: Schema.Number, y: Schema.Number },
 })
 
+export const WindowRequestAttention = Rpc.make("WindowRequestAttention")
+
 export const WindowRpcs = RpcGroup.make(
+  WindowRequestAttention,
   WindowRequestMicrophone,
   WindowSetVoiceCallActive,
   WindowThemeReady,
