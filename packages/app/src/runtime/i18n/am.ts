@@ -1135,7 +1135,6 @@ export const dict = {
   "common.closeTabsBelow": "ከታች ያሉትን ትሮች ዝጋ",
   "sidebar.inbox.empty": "የሚሰሩባቸው ክፍለ ጊዜዎች እዚህ ይታያሉ",
   "sidebar.inbox.section.needsAttention": "ትኩረት ይፈልጋል",
-  "sidebar.inbox.section.unread": "ያልተነበቡ",
   "sidebar.inbox.showMore": "ተጨማሪ አሳይ",
   "sidebar.inbox.showLess": "ያነሰ አሳይ",
   "sidebar.inbox.announce.approval": "{{title}} ማጽደቅ ይፈልጋል።",

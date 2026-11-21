@@ -1196,7 +1196,6 @@ export const dict = {
   "common.closeTabsBelow": "تھلے دیاں ٹیباں بند کرو",
   "sidebar.inbox.empty": "جنہاں سیشناں تے تسیں کم کردے او، اوہ ایتھے نظر آون گے",
   "sidebar.inbox.section.needsAttention": "توجہ چاہیدی اے",
-  "sidebar.inbox.section.unread": "اَن پڑھے",
   "sidebar.inbox.showMore": "ہور وکھاؤ",
   "sidebar.inbox.showLess": "گھٹ وکھاؤ",
   "sidebar.inbox.announce.approval": "⁨{{title}}⁩ نوں منظوری چاہیدی اے۔",

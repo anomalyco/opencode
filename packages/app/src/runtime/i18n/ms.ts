@@ -1192,7 +1192,6 @@ export const dict = {
   "common.closeTabsBelow": "Tutup tab di bawah",
   "sidebar.inbox.empty": "Sesi yang anda kerjakan akan muncul di sini",
   "sidebar.inbox.section.needsAttention": "Perlu perhatian",
-  "sidebar.inbox.section.unread": "Belum dibaca",
   "sidebar.inbox.showMore": "Tunjukkan lagi",
   "sidebar.inbox.showLess": "Tunjukkan kurang",
   "sidebar.inbox.announce.approval": "{{title}} memerlukan kelulusan.",

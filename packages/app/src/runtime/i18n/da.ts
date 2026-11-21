@@ -1243,7 +1243,6 @@ export const dict = {
   "common.closeTabsBelow": "Luk faner nedenfor",
   "sidebar.inbox.empty": "Sessioner, du arbejder på, vises her",
   "sidebar.inbox.section.needsAttention": "Kræver opmærksomhed",
-  "sidebar.inbox.section.unread": "Ulæste",
   "sidebar.inbox.showMore": "Vis mere",
   "sidebar.inbox.showLess": "Vis mindre",
   "sidebar.inbox.announce.approval": "{{title}} kræver godkendelse.",

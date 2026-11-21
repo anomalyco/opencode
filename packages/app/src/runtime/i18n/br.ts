@@ -1230,7 +1230,6 @@ export const dict = {
   "common.closeTabsBelow": "Fechar abas abaixo",
   "sidebar.inbox.empty": "As sessões em que você trabalha aparecerão aqui",
   "sidebar.inbox.section.needsAttention": "Requer atenção",
-  "sidebar.inbox.section.unread": "Não lidas",
   "sidebar.inbox.showMore": "Mostrar mais",
   "sidebar.inbox.showLess": "Mostrar menos",
   "sidebar.inbox.announce.approval": "{{title}} precisa de aprovação.",

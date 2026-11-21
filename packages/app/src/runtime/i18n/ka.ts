@@ -1190,7 +1190,6 @@ export const dict = {
   "common.closeTabsBelow": "ქვემოთ მდებარე ჩანართების დახურვა",
   "sidebar.inbox.empty": "სესიები, რომლებზეც მუშაობთ, აქ გამოჩნდება",
   "sidebar.inbox.section.needsAttention": "საჭიროებს ყურადღებას",
-  "sidebar.inbox.section.unread": "წაუკითხავი",
   "sidebar.inbox.showMore": "მეტის ჩვენება",
   "sidebar.inbox.showLess": "ნაკლების ჩვენება",
   "sidebar.inbox.announce.approval": "{{title}} საჭიროებს დამტკიცებას.",

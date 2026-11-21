@@ -828,7 +828,6 @@ export const dict = {
   "sidebar.help": "Help",
   "sidebar.inbox.empty": "Sessions you work on will appear here",
   "sidebar.inbox.section.needsAttention": "Needs attention",
-  "sidebar.inbox.section.unread": "Unread",
   "sidebar.inbox.showMore": "Show more",
   "sidebar.inbox.showLess": "Show less",
   "sidebar.inbox.announce.approval": "{{title}} needs approval.",

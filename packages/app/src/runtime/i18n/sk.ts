@@ -1227,7 +1227,6 @@ export const dict = {
   "common.closeTabsBelow": "Zavrieť karty nižšie",
   "sidebar.inbox.empty": "Relácie, na ktorých pracujete, sa zobrazia tu",
   "sidebar.inbox.section.needsAttention": "Vyžaduje pozornosť",
-  "sidebar.inbox.section.unread": "Neprečítané",
   "sidebar.inbox.showMore": "Zobraziť viac",
   "sidebar.inbox.showLess": "Zobraziť menej",
   "sidebar.inbox.announce.approval": "{{title}} vyžaduje schválenie.",

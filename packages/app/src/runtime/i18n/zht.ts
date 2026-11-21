@@ -1195,7 +1195,6 @@ export const dict = {
   "common.closeTabsBelow": "關閉下方分頁",
   "sidebar.inbox.empty": "你處理的工作階段會顯示在這裡",
   "sidebar.inbox.section.needsAttention": "需要注意",
-  "sidebar.inbox.section.unread": "未讀",
   "sidebar.inbox.showMore": "顯示更多",
   "sidebar.inbox.showLess": "顯示較少",
   "sidebar.inbox.announce.approval": "{{title}} 需要核准。",

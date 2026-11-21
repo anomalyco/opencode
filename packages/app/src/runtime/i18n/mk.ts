@@ -1198,7 +1198,6 @@ export const dict = {
   "common.closeTabsBelow": "Затвори ги картичките подолу",
   "sidebar.inbox.empty": "Сесиите на кои работите ќе се појават тука",
   "sidebar.inbox.section.needsAttention": "Бара внимание",
-  "sidebar.inbox.section.unread": "Непрочитани",
   "sidebar.inbox.showMore": "Прикажи повеќе",
   "sidebar.inbox.showLess": "Прикажи помалку",
   "sidebar.inbox.announce.approval": "{{title}} бара одобрение.",

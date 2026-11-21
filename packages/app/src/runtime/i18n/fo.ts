@@ -1183,7 +1183,6 @@ export const dict = {
   "common.closeTabsBelow": "Lat flipanar niðanfyri aftur",
   "sidebar.inbox.empty": "Setur, sum tú arbeiðir við, koma at síggjast her",
   "sidebar.inbox.section.needsAttention": "Krevur uppmerksemi",
-  "sidebar.inbox.section.unread": "Ólisið",
   "sidebar.inbox.showMore": "Vís meira",
   "sidebar.inbox.showLess": "Vís minni",
   "sidebar.inbox.announce.approval": "{{title}} krevur góðkenning.",

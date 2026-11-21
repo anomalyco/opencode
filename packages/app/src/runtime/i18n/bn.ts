@@ -1191,7 +1191,6 @@ export const dict = {
   "common.closeTabsBelow": "নিচের ট্যাবগুলো বন্ধ করুন",
   "sidebar.inbox.empty": "আপনি যে সেশনগুলিতে কাজ করবেন সেগুলি এখানে দেখা যাবে",
   "sidebar.inbox.section.needsAttention": "মনোযোগ প্রয়োজন",
-  "sidebar.inbox.section.unread": "অপঠিত",
   "sidebar.inbox.showMore": "আরও দেখান",
   "sidebar.inbox.showLess": "কম দেখান",
   "sidebar.inbox.announce.approval": "{{title}}-এর অনুমোদন প্রয়োজন।",

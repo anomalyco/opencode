@@ -1170,7 +1170,6 @@ export const dict = {
   "common.closeTabsBelow": "סגור כרטיסיות מתחת",
   "sidebar.inbox.empty": "הפעלות שאתה עובד עליהן יופיעו כאן",
   "sidebar.inbox.section.needsAttention": "דורש תשומת לב",
-  "sidebar.inbox.section.unread": "לא נקראו",
   "sidebar.inbox.showMore": "הצג עוד",
   "sidebar.inbox.showLess": "הצג פחות",
   "sidebar.inbox.announce.approval": "{{title}} ממתין לאישור.",

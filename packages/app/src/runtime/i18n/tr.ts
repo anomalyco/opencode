@@ -1264,7 +1264,6 @@ export const dict = {
   "common.closeTabsBelow": "Alttaki sekmeleri kapat",
   "sidebar.inbox.empty": "Üzerinde çalıştığınız oturumlar burada görünecek",
   "sidebar.inbox.section.needsAttention": "Dikkat gerektirenler",
-  "sidebar.inbox.section.unread": "Okunmamış",
   "sidebar.inbox.showMore": "Daha fazla göster",
   "sidebar.inbox.showLess": "Daha az göster",
   "sidebar.inbox.announce.approval": "{{title}} onay bekliyor.",

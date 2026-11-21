@@ -1190,7 +1190,6 @@ export const dict = {
   "common.closeTabsBelow": "तलका ट्याबहरू बन्द गर्नुहोस्",
   "sidebar.inbox.empty": "तपाईंले काम गर्ने सत्रहरू यहाँ देखिनेछन्",
   "sidebar.inbox.section.needsAttention": "ध्यान चाहिन्छ",
-  "sidebar.inbox.section.unread": "नपढिएका",
   "sidebar.inbox.showMore": "थप देखाउनुहोस्",
   "sidebar.inbox.showLess": "कम देखाउनुहोस्",
   "sidebar.inbox.announce.approval": "{{title}} लाई स्वीकृति चाहिन्छ।",
