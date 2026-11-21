@@ -79,8 +79,8 @@ impl From<SessionPromptInput> for Prompt {
 
 impl State {
     /// Pending inbox items in admission order (`pending.list`).
-    pub fn pending(&self, session: &SessionID) -> &[SessionInboxInfo] {
-        self.pending.get(session).map(Vec::as_slice).unwrap_or_default()
+    pub fn pending(&self, session: &(impl AsRef<str> + ?Sized)) -> &[SessionInboxInfo] {
+        self.pending.get(session.as_ref()).map(Vec::as_slice).unwrap_or_default()
     }
 
     /// Pending user and synthetic inputs (`input.list`); compactions are control items.

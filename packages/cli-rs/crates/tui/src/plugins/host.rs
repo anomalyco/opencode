@@ -137,18 +137,18 @@ impl Host for Tui {
         let mut options = ToastOptions::new(variant, toast.message.clone());
         options.title = toast.title.clone();
         // Only offer to open a session outside the visible family. Queue plugin toasts behind host failure notices.
-        let Some(session) = toast.session.as_ref().map(|id| SessionID(id.clone())) else {
+        let Some(session) = toast.session.as_deref() else {
             return self.toasts.show_behind_kept(options);
         };
         let here = match self.route() {
-            Route::Session { id: open } => self.data.read(|state| state.root(&open) == state.root(&session)),
+            Route::Session { id: open } => self.data.read(|state| state.root(&open) == state.root(session)),
             _ => false,
         };
         if !here {
             if options.title.is_none() {
-                options.title = self.data.read(|state| state.session(&session).and_then(|info| info.title.clone()));
+                options.title = self.data.read(|state| state.session(session).and_then(|info| info.title.clone()));
             }
-            let route = Route::Session { id: session };
+            let route = Route::Session { id: SessionID::from(session) };
             options = options.action("Open", bind!(self, |tui| tui.navigate(route.clone())));
         }
         self.toasts.show_behind_kept(options);
@@ -351,7 +351,7 @@ impl Host for Tui {
         if !crate::tabs::Tabs::enabled(self) {
             return false;
         }
-        let root = |session: &str| self.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+        let root = |session: &str| self.data.read(|state| state.root(session).to_owned());
         // Apply tab edits in call order.
         let (mut open, mut current) = (self.tabs.open_ids(self), self.tabs.current(self));
         for edit in staged {

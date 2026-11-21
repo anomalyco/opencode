@@ -38,43 +38,68 @@ impl State {
         sessions
     }
 
-    pub fn session(&self, id: &SessionID) -> Option<&SessionInfo> {
-        self.info.get(id)
+    /// True when any session is loaded.
+    pub fn has_sessions(&self) -> bool {
+        !self.info.is_empty()
+    }
+
+    pub fn session(&self, id: &(impl AsRef<str> + ?Sized)) -> Option<&SessionInfo> {
+        self.info.get(id.as_ref())
     }
 
     /// True when the session is known to be deleted.
-    pub fn is_missing(&self, id: &SessionID) -> bool {
-        self.missing.contains(id)
+    pub fn is_missing(&self, id: &(impl AsRef<str> + ?Sized)) -> bool {
+        self.missing.contains(id.as_ref())
     }
 
     /// True while an optimistic creation of the session is in flight.
-    pub fn is_creating(&self, id: &SessionID) -> bool {
-        self.creating.contains_key(id)
+    pub fn is_creating(&self, id: &(impl AsRef<str> + ?Sized)) -> bool {
+        self.creating.contains_key(id.as_ref())
     }
 
     /// The family root: the walk up `parentID` through loaded info stops at the first parent that
-    /// is not loaded (the furthest known ancestor) or repeats.
-    pub fn root(&self, id: &SessionID) -> SessionID {
-        let mut current = id.clone();
-        let mut parent = self.info.get(id).and_then(|info| info.parent_id.clone());
-        let mut seen = HashSet::from([id.clone()]);
-        while let Some(next) = parent {
-            if !seen.insert(next.clone()) {
-                break;
+    /// is not loaded (the furthest known ancestor) or repeats. On a repeat it is the last session
+    /// before the first one seen twice.
+    pub fn root<'a>(&'a self, id: &'a (impl AsRef<str> + ?Sized)) -> &'a str {
+        let parent = |id: &str| self.info.get(id).and_then(|info| info.parent_id.as_ref()).map(SessionID::as_str);
+        // Brent's cycle detection: `hare` walks while `tortoise` waits at each power of two, so a cycle of
+        // length `length` shows as `hare` meeting `tortoise`, with no memory of the walk.
+        let start = id.as_ref();
+        let mut tortoise = start;
+        let Some(mut hare) = parent(start) else { return start };
+        let (mut power, mut length) = (1_usize, 1_usize);
+        while hare != tortoise {
+            if power == length {
+                tortoise = hare;
+                power *= 2;
+                length = 0;
             }
-            parent = self.info.get(&next).and_then(|info| info.parent_id.clone());
-            current = next;
+            let Some(next) = parent(hare) else { return hare };
+            hare = next;
+            length += 1;
         }
-        current
+        // Two walkers `length` apart meet at the first repeated session; the leading one's previous step is
+        // the last session before it. Inside the cycle every session has a parent.
+        let step = |id| parent(id).unwrap_or(id);
+        let (mut tortoise, mut hare, mut before) = (start, start, start);
+        for _ in 0..length {
+            (before, hare) = (hare, step(hare));
+        }
+        while tortoise != hare {
+            tortoise = step(tortoise);
+            (before, hare) = (hare, step(hare));
+        }
+        before
     }
 
     /// Every known session of the family of `id`.
-    pub fn family(&self, id: &SessionID) -> &[SessionID] {
-        self.family.get(&self.root(id)).map(Vec::as_slice).unwrap_or_default()
+    pub fn family(&self, id: &(impl AsRef<str> + ?Sized)) -> &[SessionID] {
+        self.family.get(self.root(id)).map(Vec::as_slice).unwrap_or_default()
     }
 
     /// A child's own cost, or a root's cost with every known descendant.
-    pub fn cost(&self, id: &SessionID) -> f64 {
+    pub fn cost(&self, id: &(impl AsRef<str> + ?Sized)) -> f64 {
+        let id = id.as_ref();
         let Some(session) = self.info.get(id) else { return 0.0 };
         if session.parent_id.is_some() {
             return session.cost;
@@ -85,8 +110,8 @@ impl State {
         }
     }
 
-    pub fn status(&self, id: &SessionID) -> SessionStatus {
-        self.active.get(id).copied().unwrap_or(SessionStatus::Idle)
+    pub fn status(&self, id: &(impl AsRef<str> + ?Sized)) -> SessionStatus {
+        self.active.get(id.as_ref()).copied().unwrap_or(SessionStatus::Idle)
     }
 
     /// Running sessions.
@@ -119,7 +144,7 @@ impl State {
         if !self.info.contains_key(id) {
             return;
         }
-        let root = self.root(id);
+        let root = SessionID::from(self.root(id));
         if root != *id
             && let Some(orphans) = self.family.remove(id)
         {
@@ -208,8 +233,8 @@ impl State {
     /// Clears heavy cached data of the root and every known descendant (`evict`).
     pub(crate) fn evict(&mut self, id: &SessionID) {
         let root = self.root(id);
-        let mut members = vec![root.clone(), id.clone()];
-        members.extend(self.family.get(&root).into_iter().flatten().cloned());
+        let mut members = vec![SessionID::from(root), id.clone()];
+        members.extend(self.family.get(root).into_iter().flatten().cloned());
         let mut seen = HashSet::new();
         for member in members {
             if seen.insert(member.clone()) {
@@ -223,7 +248,7 @@ impl State {
             f(info);
             self.log.session(id);
             // A child's cost is part of its root's.
-            let root = self.root(id);
+            let root = SessionID::from(self.root(id));
             self.log.session(&root);
         }
     }

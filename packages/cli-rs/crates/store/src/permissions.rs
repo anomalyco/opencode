@@ -4,8 +4,8 @@ use crate::state::{Data, Error, State, Task, evict_missing, is_tag};
 
 impl State {
     /// Pending permission requests of a session; none until read or asked.
-    pub fn permissions(&self, session: &SessionID) -> Option<&[PermissionRequest]> {
-        self.permission.get(session).map(Vec::as_slice)
+    pub fn permissions(&self, session: &(impl AsRef<str> + ?Sized)) -> Option<&[PermissionRequest]> {
+        self.permission.get(session.as_ref()).map(Vec::as_slice)
     }
 
     /// Sessions with pending permission requests.

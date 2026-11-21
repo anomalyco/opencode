@@ -150,7 +150,7 @@ impl Rail {
             tabs.into_iter()
                 .zip(statuses)
                 .map(|(tab, status)| {
-                    let session = state.session(&SessionID(tab.session_id.clone()));
+                    let session = state.session(&tab.session_id);
                     let title = session
                         .and_then(|session| session.title.clone())
                         .or_else(|| tab.title.clone())
