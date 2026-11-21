@@ -30,7 +30,7 @@ import { WriteTool } from "@opencode/core/tool/plugin/write"
 import { elsewhere } from "./fixture/target-environment"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { executeTool, registerToolPlugin, sessionStub, toolIdentity } from "./lib/tool"
 
 const fileToolsNode = makeLocationNode({
   name: "test/file-tool-plugins",
@@ -61,6 +61,7 @@ const fileToolsNode = makeLocationNode({
     Location.node,
     Config.node,
     Flag.node,
+    Session.node,
   ],
 })
 
@@ -118,6 +119,7 @@ describe("file tools", () => {
             ...other.replacements,
             Formatter.node.replace(Layer.mock(Formatter.Service, { file: () => Effect.succeed(false) })),
             Config.node.replace(Config.testLayer()),
+            Session.node.replace(sessionStub),
             Global.node.replace(Global.layerWith({ data: Global.Path.data })),
           ]),
         ),

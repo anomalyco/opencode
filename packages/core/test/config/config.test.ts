@@ -6,6 +6,7 @@ import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigIntegration } from "@opencode/core/config/integration"
 import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { ConfigModel } from "@opencode/schema/config/model"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -2393,4 +2394,50 @@ describe("Config", () => {
       }),
     ),
   )
+})
+
+describe("experimental editing", () => {
+  const decode = Schema.decodeUnknownSync(ConfigExperimental.Info)
+
+  test("decodes add, remove, and result style deltas", () => {
+    expect(decode({ editing: { add: ["patch"], remove: ["edit", "write"], result_style: "diff" } }).editing).toEqual({
+      add: ["patch"],
+      remove: ["edit", "write"],
+      result_style: "diff",
+    })
+  })
+
+  test("decodes ordered rules", () => {
+    expect(
+      decode({
+        editing: {
+          add: ["patch"],
+          rules: [{ match: "^test/claude", add: ["patch"], remove: ["edit", "write"] }],
+        },
+      }).editing?.rules,
+    ).toEqual([{ match: "^test/claude", add: ["patch"], remove: ["edit", "write"] }])
+  })
+
+  test("accepts an empty editing block", () => {
+    expect(decode({ editing: {} }).editing).toEqual({})
+  })
+
+  test("rejects overlapping add and remove", () => {
+    expect(() => decode({ editing: { add: ["patch"], remove: ["patch"] } })).toThrow()
+    expect(() =>
+      decode({ editing: { rules: [{ match: "^test/", add: ["edit"], remove: ["edit"] }] } }),
+    ).toThrow()
+  })
+
+  test("rejects unknown editing tools", () => {
+    expect(() => decode({ editing: { add: ["multiedit"] } })).toThrow()
+  })
+
+  test("rejects an unknown result style", () => {
+    expect(() => decode({ editing: { result_style: "verbose" } })).toThrow()
+  })
+
+  test("rejects an invalid match expression", () => {
+    expect(() => decode({ editing: { rules: [{ match: "(", add: ["patch"] }] } })).toThrow()
+  })
 })

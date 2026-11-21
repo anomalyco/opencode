@@ -24,7 +24,7 @@ import { hostEnvironmentLayer } from "./fixture/environment"
 import { elsewhere } from "./fixture/target-environment"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { executeTool, registerToolPlugin, sessionStub, toolIdentity } from "./lib/tool"
 
 const fileToolsNode = makeLocationNode({
   name: "test/formatter-target-environment-plugins",
@@ -42,6 +42,7 @@ const fileToolsNode = makeLocationNode({
     Location.node,
     Permission.node,
     Tool.node,
+    Session.node,
   ],
 })
 
@@ -101,6 +102,7 @@ const run = (other: ReturnType<typeof elsewhere>) => {
           ).pipe(Layer.provide(LayerNode.compile(AppProcess.node))),
         ),
         Config.node.replace(Config.testLayer()),
+        Session.node.replace(sessionStub),
       ]),
     ),
   )

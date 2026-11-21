@@ -14,9 +14,12 @@ import { Formatter } from "../../formatter.js"
 import { FileMutation } from "../../file-mutation.js"
 import { FileAccess } from "../../file-access.js"
 import { Patch } from "@opencode/util/patch"
+import type { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Permission } from "../../permission.js"
+import { Session } from "../../session.js"
 import DESCRIPTION from "../patch.txt"
 import GRAMMAR from "../patch-grammar.txt"
+import { configuredEditing, editingResult } from "../editing.js"
 import { fileDiff } from "./file-diff.js"
 
 export const name = "patch"
@@ -56,6 +59,7 @@ export const Plugin = {
     const fileMutation = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
     const permission = yield* Permission.Service
+    const sessions = yield* Session.Service
     const config = yield* Config.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
@@ -288,15 +292,12 @@ export const Plugin = {
                 const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
                 return patchFile(change, formatted.get(FileAccess.key(target)))
               })
+              const session = yield* sessions.get(context.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+              const resultStyle = editingResult(session?.model, configuredEditing(loaded.entries))
               return {
                 // The multi-file patch contract intentionally leaves structured output empty.
                 output: {},
-                content: [
-                  "Success. Updated the following files:",
-                  ...files.map(
-                    (file) => `${file.status === "added" ? "A" : file.status === "deleted" ? "D" : "M"} ${file.file}`,
-                  ),
-                ].join("\n"),
+                content: renderResult(files, resultStyle),
                 metadata: { files },
               }
             }).pipe(fileMutation.withLock(lockTargets), Effect.mapError(toolFailure("Unable to apply patch")))
@@ -305,6 +306,31 @@ export const Plugin = {
       )
       .pipe(Effect.orDie)
   }),
+}
+
+function renderResult(
+  files: ReadonlyArray<typeof FileDiff.Info.Type>,
+  style: ConfigExperimental.EditingResult,
+) {
+  const label = (file: (typeof files)[number]) =>
+    `${file.status === "added" ? "A" : file.status === "deleted" ? "D" : "M"} ${file.file}${
+      style === "summary" ? "" : ` (+${file.additions} -${file.deletions})`
+    }`
+  return [
+    "Success. Updated the following files:",
+    ...files.flatMap((file) => (style === "diff" ? [`${label(file)}\n${renderDiff(file.patch)}`] : [label(file)])),
+  ].join("\n")
+}
+
+function renderDiff(patch: string) {
+  const lines = patch.split("\n")
+  const start = lines.findIndex((line) => line.startsWith("@@"))
+  if (start === -1) return ""
+  const body = lines.slice(start)
+  const limited = body.slice(0, 200)
+  const text = limited.join("\n")
+  const clipped = text.length > 12_000 ? text.slice(0, 12_000) : text
+  return body.length > limited.length || text.length > clipped.length ? `${clipped}\n... diff truncated ...` : clipped
 }
 
 function errorMessage(error: unknown) {

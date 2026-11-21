@@ -661,6 +661,48 @@ picks another image model automatically.
 }
 ```
 
+### Editing tools
+
+`editing` adjusts which editing tools OpenCode offers per model. It changes only `patch`, `edit`, and `write`; every
+other tool is untouched.
+
+```jsonc
+{
+  "experimental": {
+    "editing": {
+      "add": ["patch"],
+      "remove": ["edit", "write"],
+      "result_style": "diff",
+      "rules": [
+        { "match": "^anthropic/", "add": ["patch"], "remove": ["edit", "write"] },
+      ],
+    },
+  },
+}
+```
+
+`add` and `remove` adjust the built-in editing set. That set is `patch` for GPT model IDs containing `gpt-` but not
+`oss` or `gpt-4`, and `edit` and `write` for every other model. Because the base set is model-dependent, `remove`
+alone is not model-independent; normalize both sides to force one set.
+
+`rules` override the top-level `add`/`remove` when their `match` regular expression matches `providerID/modelID`. The
+last matching rule wins, and rules do not accumulate. An empty rule resets to the built-in set. `add` and `remove`
+in the same scope must not contain the same tool, or configuration decoding fails.
+
+`result_style` controls the `patch` success message. `summary` lists the files, `counts` adds `+N -M`, and `diff`
+includes the applied diff without file headers and caps very large output. A rule may set its own style. Otherwise the
+top-level value applies, and the default is `summary`, so existing behavior is unchanged when this config is absent.
+
+```jsonc
+{
+  "experimental": {
+    "editing": {
+      "result_style": "summary",
+    },
+  },
+}
+```
+
 ### Location idle timeout
 
 `location_idle_timeout` controls how long a project location can go without session activity before OpenCode unloads
