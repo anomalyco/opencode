@@ -725,10 +725,7 @@ const layer = Layer.effect(
             return yield* new AuthorizationError({ cause: new Error("API key cannot be empty.") })
           }
           const prefixes = method.validation?.prefixes
-          if (
-            prefixes?.length &&
-            !prefixes.some((prefix) => key.startsWith(prefix) && key.slice(prefix.length).trim().length > 0)
-          ) {
+          if (prefixes?.length && !prefixes.some((prefix) => key.startsWith(prefix) && key.length > prefix.length)) {
             return yield* new AuthorizationError({
               cause: new Error(`API key must start with one of the supported prefixes: ${prefixes.join(", ")}.`),
             })

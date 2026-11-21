@@ -24,6 +24,8 @@ export const registry = {
     "Give sessions in the home folder a persistent memory/, docs/ and scripts/ workspace the agent can use freely, tidied by a daily maintenance session that reads the day's home-folder conversations.",
   project_overlay:
     "Load a personal config dir for each project from ~/.config/opencode/project/<project-id>/, read like an extra .opencode dir that ranks above the repo's own, and let home memory keep the skills it builds for the user there.",
+  api_key_format:
+    "Refuse to save an API key that lacks the prefix its provider issues, for providers with a declared key format and no custom baseURL.",
   sqlite_fts:
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
 } as const satisfies Record<string, string>
