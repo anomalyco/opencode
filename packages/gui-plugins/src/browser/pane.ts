@@ -1078,6 +1078,27 @@ export function createBrowserPane(input: {
       announce(binding, tabID, reveal, active)
     }
 
+    // The first load of a tab this command made or shows a file in. A tab that stays (`keepsOpenedTab`) is an ordinary
+    // tab from here on, whatever its load came to: its command goes on as for one that loaded, so the tab is reported,
+    // shown as asked, and held by whoever opened it. Returns why the load did not finish, if it did not. Any other
+    // failure is thrown, and undoes a tab the command made.
+    const firstLoad = (tab: BrowserPage, tabID: Browser.TabID, url: string) =>
+      tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin).then(
+        () => undefined,
+        (error: Error) => {
+          if (!keepsOpenedTab(error, origin)) throw error
+
+          return error
+        },
+      )
+
+    // The person's tab says by itself that its page still loads or failed. The agent is told, with the tab to go on
+    // with: its open made a tab, though it has no page to answer with yet.
+    const stillLoading = (unfinished: Error | undefined, tabID: Browser.TabID) => {
+      if (unfinished && origin === "agent")
+        throw new Error(`${unfinished.message} The tab stays open as ${tabID}: use that tabID with browser.wait, browser.reload or browser.tabs.close, and do not open the address again.`, { cause: unfinished })
+    }
+
     // Undoes a tab this command made and could show no page in. The log names it: no person and no close tool did.
     const rollback = (tabID: Browser.TabID, opened: BrowserPage) => {
       if (page(binding, tabID) !== opened) return
@@ -1135,14 +1156,12 @@ export function createBrowserPane(input: {
         const tabID = tab.state().id
 
         if (!existing) opening.defer(() => rollback(tabID, tab))
-        await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin).catch((error: Error) => {
-          if (keepsOpenedTab(error, origin)) opening.move()
-          throw error
-        })
+        const unfinished = await firstLoad(tab, tabID, url)
         refresh(binding, tabID, tab)
         // A workspace file is opened to show it to the person: it takes the pane even when another tab is selected there.
         present(tabID, "tab")
         opening.move()
+        stillLoading(unfinished, tabID)
 
         return { value: { path: action.path, tabID, url: tab.state().url, tab: tab.state() }, files: [] }
       }
@@ -1207,18 +1226,13 @@ export function createBrowserPane(input: {
       try {
         await opened.ready
 
-        // A new page already loads about:blank, so only another address needs a navigation. A load that is still
-        // under way, or that failed where the person sees why, keeps the tab: only an open that showed no page is
-        // undone.
-        if (action.url !== undefined)
-          await opened.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin).catch((error: Error) => {
-            if (keepsOpenedTab(error, origin)) opening.move()
-            throw error
-          })
+        // A new page already loads about:blank, so only another address needs a navigation.
+        const unfinished = action.url === undefined ? undefined : await firstLoad(opened, tabID, action.url)
         refresh(binding, tabID, opened)
 
         if (origin === "agent") present(tabID, shown.reveal, action.focus !== false)
         opening.move()
+        stillLoading(unfinished, tabID)
 
         return { value: opened.state(), files: [] }
       } finally {

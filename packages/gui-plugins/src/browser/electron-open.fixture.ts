@@ -2,15 +2,18 @@ import { createServer, type ServerResponse } from "node:http"
 import electron from "electron"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds } from "@opencode/plugin/gui/main"
+import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { PaneEvent } from "./ipc"
 import type { Profile } from "./profile"
 
 // The Electron main process of `electron-open.test.ts`, bundled and run by the pinned Electron. It attaches the real
-// pane to a stand-in for the session's server, then opens tabs as a link in the conversation does (the window's
-// `tabs.open` command with an address): to a page that loads, to a page that shows and is still loading when the
-// command's deadline passes, and to a page that fails to load. The pane is given a deadline of 300 ms in place of its
-// 15 seconds, and nothing here depends on a page beating it: a load that outlasts it only settles its command sooner.
-// It prints the tabs the pane reported, as one JSON line.
+// pane to a stand-in for the session's server, then opens tabs the three ways a tab is opened with an address: as a
+// link in the conversation does (the window's `tabs.open` command), as a plugin does (`createTab`), and as the agent
+// does (a command from the server, for a web address and for a workspace file). Each opens a page that shows and is
+// still loading when the command's deadline passes; the person and the plugin also open a page that fails to load,
+// and the plugin an address that opens no page. The pane is given a deadline of 300 ms in place of its 15 seconds,
+// and nothing here depends on a page beating it: a load that outlasts it only settles its command sooner. It prints
+// what the pane reported and answered, as one JSON line.
 
 const loaded = `<!doctype html><title>Loaded</title><p>loaded</p>`
 
@@ -23,38 +26,51 @@ function createPages() {
     if (request.url === "/never") return
 
     // The server drops the connection, so Chromium fails the load at once.
-    if (request.url === "/dropped") return void request.socket.destroy()
+    if (request.url?.startsWith("/dropped")) return void request.socket.destroy()
+
+    // No content: the navigation ends without a page, as a link that becomes a download does.
+    if (request.url === "/nothing") return void response.writeHead(204).end()
 
     if (request.url === "/favicon.ico") return void response.writeHead(404).end()
     response.writeHead(200, { "content-type": "text/html" })
-    response.end(request.url === "/loading" ? loading : loaded)
+    response.end(request.url?.startsWith("/loading") ? loading : loaded)
   })
 }
 
-const session = {
-  id: "ses_fixture",
-  projectID: "prj_fixture",
-  cost: 0,
-  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-  time: { created: 0, updated: 0 },
-  location: { directory: process.cwd() },
-}
+type Control =
+  | { type: "attached"; connectionID: string; version: 4 }
+  | { type: "command"; connectionID: string; requestID: string }
 
 type Frame =
   | { type: "server.connected"; data: {} }
-  | {
-      type: "rpc.experimental.browser.control"
-      created: number
-      location: { directory: string }
-      data: { type: "attached"; connectionID: string; version: 4 }
-    }
+  | { type: "rpc.experimental.browser.control"; created: number; location: { directory: string }; data: Control }
+
+type Outcome = { type: "success" } | { type: "failure"; code: string; message: string }
 
 const frame = (event: Frame) => `data: ${JSON.stringify({ id: `evt_${Date.now()}`, ...event })}\n\n`
 
-// The session's server, as far as a pane's attachment asks: the session, the event stream, and the browser RPC, whose
-// `attach` call it answers with the `attached` handshake on the stream and then holds open.
-function createApi() {
+// The session's server, as far as a pane's attachment asks: the session, the event stream, and the browser RPC. It
+// answers `attach` with the `attached` handshake on the stream and then holds the call open, and it hands the pane
+// the agent's commands as the server does: a control event names a request, the pane fetches it and posts its result.
+function createApi(directory: string) {
   const streams = new Set<ServerResponse>()
+  const commands = new Map<string, Browser.Action>()
+  const results = new Map<string, (outcome: Outcome) => void>()
+  const attached = { connectionID: "" }
+
+  const session = {
+    id: "ses_fixture",
+    projectID: "prj_fixture",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+    location: { directory },
+  }
+
+  const control = (data: Control) =>
+    streams.forEach((stream) =>
+      stream.write(frame({ type: "rpc.experimental.browser.control", created: 0, location: session.location, data })),
+    )
 
   const server = createServer((request, response) => {
     const path = new URL(request.url ?? "/", "http://fixture").pathname
@@ -77,28 +93,35 @@ function createApi() {
     const chunks: Buffer[] = []
     request.on("data", (chunk: Buffer) => chunks.push(chunk))
     request.on("end", () => {
-      if (!path.endsWith("/attach")) {
-        response.writeHead(200, { "content-type": "application/json" })
+      const input: { connectionID: string; requestID?: string; outcome?: Outcome } = JSON.parse(Buffer.concat(chunks).toString()).input
 
-        return void response.end("{}")
+      if (path.endsWith("/attach")) {
+        attached.connectionID = input.connectionID
+
+        return control({ type: "attached", connectionID: input.connectionID, version: 4 })
       }
 
-      const connectionID: string = JSON.parse(Buffer.concat(chunks).toString()).input.connectionID
-      streams.forEach((stream) =>
-        stream.write(
-          frame({
-            type: "rpc.experimental.browser.control",
-            created: 0,
-            location: session.location,
-            data: { type: "attached", connectionID, version: 4 },
-          }),
-        ),
-      )
+      response.writeHead(200, { "content-type": "application/json" })
+
+      if (path.endsWith("/command")) return void response.end(JSON.stringify({ output: { action: commands.get(input.requestID ?? ""), files: [] } }))
+
+      if (path.endsWith("/result") && input.outcome) results.get(input.requestID ?? "")?.(input.outcome)
+      response.end("{}")
     })
   })
 
   return {
     server,
+    /** Runs a command of the agent's on the attached pane, and resolves with what the pane answered. */
+    agent(action: Browser.Action) {
+      const requestID = `request-${commands.size}`
+      const answered = Promise.withResolvers<Outcome>()
+      commands.set(requestID, action)
+      results.set(requestID, answered.resolve)
+      control({ type: "command", connectionID: attached.connectionID, requestID })
+
+      return answered.promise
+    },
     close() {
       streams.forEach((stream) => stream.destroy())
       server.closeAllConnections()
@@ -119,15 +142,20 @@ const listen = (server: ReturnType<typeof createServer>) =>
 void electron.app.whenReady().then(async () => {
   const { createBrowserPane } = await import("./pane")
   const { createHandlePath } = await import("./disk")
+  const { createPreviews } = await import("./profile/previews")
   const { RefsStore } = await import("./refs")
   const { createSitePermissions } = await import("./site-permissions")
   const { createSystemMedia } = await import("./system-media")
   const pages = createPages()
-  const api = createApi()
+  // The session's workspace, which holds `report.html`: a page that shows and takes over a second to finish loading.
+  const api = createApi(process.env.ELECTRON_OPEN_ROOT ?? "")
   const origin = await listen(pages)
   const server = await listen(api.server)
   const win = new electron.BrowserWindow({ show: false, width: 800, height: 600 })
   const values = new Map<string, unknown>()
+  const lifetime = new AbortController()
+  const verifier = createHandlePath()
+  const profileSession = electron.session.fromPartition("open-fixture")
 
   // SAFETY: the site permissions, the saved tabs and the reserved refs read only `store` and its `value` and `set`.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
@@ -160,8 +188,8 @@ void electron.app.whenReady().then(async () => {
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const profile = {
     partition: "open-fixture",
-    session: electron.session.fromPartition("open-fixture"),
-    previews: { failure: () => undefined },
+    session: profileSession,
+    previews: createPreviews(profileSession, lifetime.signal, verifier),
     extensionIDs: () => [],
     extensionMenu: () => [],
     extensionTabs: { register: () => () => undefined, activated: () => undefined, hidden: () => undefined },
@@ -169,8 +197,10 @@ void electron.app.whenReady().then(async () => {
     permissions: new Map(),
   } as unknown as Profile
 
-  // Every inventory the pane reported to the window, in order: each tab's address, and whether it loads or failed.
-  const reported: { url: string; loading: boolean; failed: boolean }[][] = []
+  // Every inventory the pane reported to the window, in order.
+  const reported: Browser.Tab[][] = []
+  // What the pane asked the window to show of the agent's tabs: each tab, and whether it takes the pane.
+  const shown: { tabID: string; reveal: string }[] = []
   // What the pane wrote to the desktop log.
   const logged: string[] = []
 
@@ -186,17 +216,22 @@ void electron.app.whenReady().then(async () => {
     profile,
     sites: createSitePermissions(storage, () => undefined),
     system: createSystemMedia(),
-    verifier: createHandlePath(),
+    verifier,
     log: { write: (_level, message) => void logged.push(message) },
     emit: (_window, value: { readonly event: PaneEvent }) => {
-      if (value.event.type === "state" && value.event.state)
-        reported.push(value.event.state.tabs.map((tab) => ({ url: tab.url, loading: tab.loading, failed: tab.loadError !== undefined })))
+      const event = value.event
+
+      if (event.type === "state" && event.state) reported.push([...event.state.tabs])
+
+      if (event.type === "activity") shown.push({ tabID: event.tabID, reveal: event.reveal })
     },
   })
 
   await pane.register(win.id, "binding", { server: "sidecar", session: "ses_fixture" })
-  const open = (url: string) => pane.command(win.id, "binding", { type: "tabs.open", url }).then(() => "settled", (error: Error) => error.message)
   const last = () => reported.at(-1) ?? []
+  const view = (tab: Browser.Tab) => ({ url: tab.url, loading: tab.loading, failed: tab.loadError !== undefined })
+  const tab = (address: string) => last().find((item) => item.url.endsWith(address))
+  const settle = <A>(work: Promise<A>) => work.then((value) => ({ value }), (error: Error) => ({ error: error.message }))
 
   // Until `check` holds, for at most `ms`: a report that never comes fails the test's comparison, not the fixture.
   const until = async (check: () => boolean, ms: number) => {
@@ -205,27 +240,67 @@ void electron.app.whenReady().then(async () => {
     while (!check() && Date.now() < deadline) await new Promise<void>((resolve) => setTimeout(resolve, 20))
   }
 
+  // The person: a link in the conversation.
+  const open = (url: string) => settle(pane.command(win.id, "binding", { type: "tabs.open", url })).then((outcome) => ("error" in outcome ? outcome.error : "settled"))
   const first = await open(`${origin}/first`)
   const second = await open(`${origin}/second`)
   // The person's two tabs have loaded, however long the first pages of a new process took.
-  await until(() => last().length === 2 && last().every((tab) => tab.url.startsWith(origin) && !tab.loading), 10_000)
-  const before = last().map((tab) => tab.url)
+  await until(() => last().length === 2 && last().every((item) => item.url.startsWith(origin) && !item.loading), 10_000)
+  const before = last().map((item) => item.url)
   // The still-loading page's command settles when the deadline passes; the page goes on loading.
   const [still, failed] = await Promise.all([open(`${origin}/loading`), open(`${origin}/dropped`)])
   // Every report that follows the commands: the page that shows, and the one that says why it could not load.
-  await until(() => last().length === 4 && last().some((tab) => tab.url === `${origin}/loading`) && last().some((tab) => tab.failed), 3_000)
+  await until(() => last().length === 4 && !!tab("/loading") && !!tab("/dropped")?.loadError, 3_000)
+  const person = { commands: { first, second, still, failed }, before, after: last().map(view) }
+
+  // A plugin: the handle it gets is its only way to close the tab again.
+  const handed = async (address: string) => {
+    const opened = await settle(pane.createTab(win.id, "binding", "plugin", `${origin}${address}`))
+    // Its page says how the load stands: still under way, or failed.
+    await until(() => "error" in opened || !!tab(address)?.loading || !!tab(address)?.loadError, 3_000)
+    const listed = tab(address)
+    const closed = "value" in opened ? await pane.closeTab(win.id, "binding", "plugin", opened.value) : undefined
+    await until(() => !tab(address), 3_000)
+
+    return { opened: "value" in opened ? "handle" : opened.error, listed: listed && view(listed), closed, left: !!tab(address) }
+  }
+
+  const plugin = { loading: await handed("/loading?plugin"), dropped: await handed("/dropped?plugin"), nothing: await handed("/nothing") }
+
+  // The agent: its command, what the pane answered, and what the pane asked the window to show meanwhile.
+  const asked = async (action: Browser.Action, address: string) => {
+    const from = shown.length
+    const outcome = await api.agent(action)
+    await until(() => !!tab(address), 3_000)
+    const listed = tab(address)
+
+    return {
+      answer: outcome.type === "failure" ? outcome.message : outcome.type,
+      tabID: listed?.id,
+      listed: listed && view(listed),
+      shown: shown.slice(from).flatMap((item) => (item.tabID === listed?.id ? [item.reveal] : [])),
+    }
+  }
+
+  const agent = {
+    front: await asked({ type: "tabs.open", url: `${origin}/loading?agent` }, "/loading?agent"),
+    behind: await asked({ type: "tabs.open", url: `${origin}/loading?behind`, focus: false }, "/loading?behind"),
+    preview: await asked({ type: "preview", path: "report.html" }, "/report.html"),
+  }
+
   process.stdout.write(
     `${JSON.stringify({
       origin,
-      commands: { first, second, still, failed },
-      before,
+      person,
       // The still-loading page committed and showed: an inventory listed its tab at its address.
-      shown: reported.some((tabs) => tabs.some((tab) => tab.url === `${origin}/loading`)),
-      after: reported.at(-1),
+      committed: reported.some((tabs) => tabs.some((item) => item.url === `${origin}/loading`)),
+      plugin,
+      agent,
       logged,
     })}\n`,
   )
   await pane.dispose()
+  lifetime.abort()
   api.close()
   pages.closeAllConnections()
   pages.close()
