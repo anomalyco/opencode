@@ -1025,6 +1025,7 @@ export const activeQuestionRequest = {
     },
     {
       key: "details",
+      custom: true,
       type: "multiselect",
       title: "Include",
       description: "Which supporting surfaces should remain visible?",

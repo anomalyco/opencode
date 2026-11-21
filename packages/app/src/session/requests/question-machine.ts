@@ -11,6 +11,7 @@ export type QuestionSpec = {
   readonly question: string
   readonly options: readonly { value: string; label: string; description?: string }[]
   readonly multiple: boolean
+  readonly custom: boolean
 }
 
 // One question's answer. Picked options and the typed answer are kept apart, so typing an option's value into the
@@ -88,6 +89,7 @@ export function questionSpecs(request: FormInfo): QuestionSpec[] {
       question: field.description ?? field.title ?? "",
       options: field.type === "string" ? (field.options ?? []) : field.options,
       multiple: field.type === "multiselect",
+      custom: (field.type === "string" && !field.options) || field.custom === true,
     }))
 }
 
