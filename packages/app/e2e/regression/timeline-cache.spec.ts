@@ -448,7 +448,7 @@ test("keeps the old workspace's shell on its own Location while destination hist
 })
 
 test("loads the transcript code font before opening rich history", async ({ page }) => {
-  const font = page.waitForResponse((response) => /IBMPlexMono-Text[^/]*\.woff2/.test(response.url()))
+  const font = page.waitForResponse((response) => /OpenMono-Regular-latin[^/]*\.woff2/.test(response.url()))
   await openTabs(page, {
     pageMessages: () => ({
       items: [{ id: "msg_font_source", type: "user", text: "A transcript with no code", time: { created: 1 } }],
@@ -468,7 +468,7 @@ test("loads the transcript code font before opening rich history", async ({ page
       code.style.font = "440 13px var(--font-family-mono)"
       code.textContent = "code"
       code.getBoundingClientRect()
-      const loaded = document.fonts.check('440 13px "IBM Plex Mono"')
+      const loaded = document.fonts.check('440 13px "OpenMono"')
       code.remove()
 
       return loaded

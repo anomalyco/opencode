@@ -143,7 +143,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, avoimen lähdekoodin koodausagentti",
   "settings.about.trademark": "OpenCode on Anomaly Innovations, Inc:n rekisteröity tavaramerkki.",
-  "settings.about.typeset": "Kirjasinlajit Inter ja IBM Plex Mono",
+  "settings.about.typeset": "Kirjasinlajit Inter ja OpenMono",
   "settings.about.tagline": "Tekoäly ei voi rakentaa erinomaista ohjelmistoa ilman sinua",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Muokkaa projektia",

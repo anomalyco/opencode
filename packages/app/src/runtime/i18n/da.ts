@@ -145,7 +145,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, open source-kodningsagenten",
   "settings.about.trademark": "OpenCode er et registreret varemærke tilhørende Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Sat med Inter og IBM Plex Mono",
+  "settings.about.typeset": "Sat med Inter og OpenMono",
   "settings.about.tagline": "AI kan ikke bygge fantastisk software uden dig",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Rediger projekt",

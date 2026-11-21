@@ -684,7 +684,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode، اوپن سورس کوڈنگ ایجنٹ",
   "settings.about.trademark": "OpenCode، Anomaly Innovations, Inc. دا رجسٹرڈ ٹریڈ مارک اے۔",
-  "settings.about.typeset": "Inter تے IBM Plex Mono وچ ٹائپ سیٹ",
+  "settings.about.typeset": "Inter تے OpenMono وچ ٹائپ سیٹ",
   "settings.about.tagline": "تہاڈے بغیر AI ودھیا سافٹ ویئر نئیں بݨا سکدا",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "پروجیکٹ وچ تبدیلی کرو",

@@ -679,7 +679,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, atvērtā koda kodēšanas aģents",
   "settings.about.trademark": "OpenCode ir Anomaly Innovations, Inc. reģistrēta preču zīme.",
-  "settings.about.typeset": "Salikums Inter un IBM Plex Mono",
+  "settings.about.typeset": "Salikums Inter un OpenMono",
   "settings.about.tagline": "AI nevar izveidot lielisku programmatūru bez jums",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Rediģēt projektu",

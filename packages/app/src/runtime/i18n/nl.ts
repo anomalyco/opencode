@@ -152,7 +152,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, de open-source programmeeragent",
   "settings.about.trademark": "OpenCode is een geregistreerd handelsmerk van Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Opgemaakt in Inter en IBM Plex Mono",
+  "settings.about.typeset": "Opgemaakt in Inter en OpenMono",
   "settings.about.tagline": "AI kan geen geweldige software bouwen zonder jou",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Project bewerken",

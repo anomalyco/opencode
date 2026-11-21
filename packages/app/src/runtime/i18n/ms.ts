@@ -676,7 +676,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, ejen pengekodan sumber terbuka",
   "settings.about.trademark": "OpenCode ialah tanda dagangan berdaftar Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Set taip dalam Inter dan IBM Plex Mono",
+  "settings.about.typeset": "Set taip dalam Inter dan OpenMono",
   "settings.about.tagline": "AI tidak boleh membina perisian yang hebat, tanpa anda",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Edit projek",

@@ -677,7 +677,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, ochiq manbali kodlash agenti",
   "settings.about.trademark": "OpenCode — Anomaly Innovations, Inc. kompaniyasining ro‘yxatdan o‘tgan savdo belgisi.",
-  "settings.about.typeset": "Inter va IBM Plex Mono shriftlarida terilgan",
+  "settings.about.typeset": "Inter va OpenMono shriftlarida terilgan",
   "settings.about.tagline": "Sizsiz AI ajoyib dasturiy ta’minot yarata olmaydi",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Loyihani tahrirlash",

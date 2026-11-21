@@ -723,7 +723,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode ，開源編碼代理",
   "settings.about.trademark": "OpenCode是Anomaly Innovations, Inc.的註冊商標。",
-  "settings.about.typeset": "Inter和IBM Plex Mono中的排版",
+  "settings.about.typeset": "Inter和OpenMono中的排版",
   "settings.about.tagline": "如果沒有您， AI就無法構建出色的軟件",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "編輯專案",

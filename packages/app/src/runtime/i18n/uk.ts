@@ -764,7 +764,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, агент кодування з відкритим кодом",
   "settings.about.trademark": "OpenCode є зареєстрованою торговою маркою Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Набір на Inter та IBM Plex Mono",
+  "settings.about.typeset": "Набір на Inter та OpenMono",
   "settings.about.tagline": "AI не може створити чудове програмне забезпечення без вас",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Редагувати проект",

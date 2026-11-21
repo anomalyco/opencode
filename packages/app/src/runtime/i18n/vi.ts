@@ -682,7 +682,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, tác nhân mã hóa nguồn mở",
   "settings.about.trademark": "OpenCode là nhãn hiệu đã đăng ký của Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Bộ sắp chữ trong Inter và IBM Plex Mono",
+  "settings.about.typeset": "Bộ sắp chữ trong Inter và OpenMono",
   "settings.about.tagline": "AI không thể xây dựng phần mềm tuyệt vời nếu không có bạn",
   "settings.about.copyright": "© Anomaly Đổi mới, Inc.",
   "project.settings.title": "Chỉnh sửa dự án",

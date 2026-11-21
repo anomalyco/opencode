@@ -681,7 +681,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, l'agent de codificació de codi obert",
   "settings.about.trademark": "OpenCode és una marca registrada de Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Tipografia en Inter i IBM Plex Mono",
+  "settings.about.typeset": "Tipografia en Inter i OpenMono",
   "settings.about.tagline": "La IA no pot crear un gran programari sense tu",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "Modifica el projecte",
