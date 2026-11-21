@@ -4108,7 +4108,7 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "enum": ["user", "shutdown", "superseded", "inactivity"]
+                        "enum": ["user", "superseded", "inactivity"]
                       },
                       {
                         "type": "null"
@@ -4121,7 +4121,7 @@
               }
             }
           },
-          "required": true
+          "required": false
         }
       }
     },

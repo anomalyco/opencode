@@ -67,13 +67,24 @@ it.live("accepts each known interrupt reason on an idle session", () =>
   Effect.gen(function* () {
     const handler = yield* makeHandler()
     const session = yield* createSession(handler)
-    for (const reason of ["user", "shutdown", "superseded", "inactivity"]) {
+    // "shutdown" is not a caller-supplied reason: it is only published when the process
+    // owner interrupts the execution fiber on teardown (see session-execution.test.ts).
+    for (const reason of ["user", "superseded", "inactivity"]) {
       const response = yield* interrupt(handler, session.id, { reason })
       expect(response.status).toBe(200)
       expect(Schema.decodeUnknownSync(InterruptResponse)(yield* Effect.promise(() => response.json()))).toEqual({
         interrupted: false,
       })
     }
+  }).pipe(Effect.scoped),
+)
+
+it.live("rejects shutdown as a caller-supplied interrupt reason with 400", () =>
+  Effect.gen(function* () {
+    const handler = yield* makeHandler()
+    const session = yield* createSession(handler)
+    const response = yield* interrupt(handler, session.id, { reason: "shutdown" })
+    expect(response.status).toBe(400)
   }).pipe(Effect.scoped),
 )
 
@@ -89,17 +100,17 @@ it.live("defaults an omitted interrupt reason to the idle no-op", () =>
   }).pipe(Effect.scoped),
 )
 
-it.live("rejects a body-less interrupt like every other payload endpoint", () =>
+it.live("accepts a body-less interrupt as the pre-reason call shape", () =>
   Effect.gen(function* () {
     const handler = yield* makeHandler()
     const session = yield* createSession(handler)
-    // Payload endpoints require a JSON body: session.fork answers the same 400 for a body-less POST.
-    // The generated clients always send a body object, so no existing caller is affected.
+    // Callers that sent no body before this endpoint gained a reason must still get 200:
+    // the server supplies "{}" for an empty body before payload decoding, and an omitted
+    // reason defaults to "user" in session execution.
     const noBody = yield* interrupt(handler, session.id)
-    expect(noBody.status).toBe(400)
-    expect(yield* Effect.promise(() => noBody.json())).toMatchObject({
-      _tag: "InvalidRequestError",
-      kind: "Payload",
+    expect(noBody.status).toBe(200)
+    expect(Schema.decodeUnknownSync(InterruptResponse)(yield* Effect.promise(() => noBody.json()))).toEqual({
+      interrupted: false,
     })
   }).pipe(Effect.scoped),
 )

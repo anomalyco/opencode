@@ -3824,7 +3824,7 @@ export type SessionGenerateOutput = SessionGenerateResponse["data"]
 export type SessionInterruptInput = {
   readonly sessionID: string
   readonly resume?: boolean | undefined
-  readonly reason?: "user" | "shutdown" | "superseded" | "inactivity" | undefined
+  readonly reason?: "user" | "superseded" | "inactivity" | undefined
 }
 
 export type SessionInterruptOutput = SessionInterruptResponse

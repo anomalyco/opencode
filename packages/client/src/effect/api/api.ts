@@ -340,7 +340,7 @@ export type SessionGenerateOperation<E = never> = (
 export type SessionInterruptInput = {
   readonly sessionID: Session.ID
   readonly resume?: boolean | undefined
-  readonly reason?: "user" | "shutdown" | "superseded" | "inactivity" | undefined
+  readonly reason?: "user" | "superseded" | "inactivity" | undefined
 }
 export type SessionInterruptOutput = { readonly interrupted: boolean }
 export type SessionInterruptOperation<E = never> = (

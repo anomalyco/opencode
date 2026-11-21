@@ -46,10 +46,18 @@ export interface Interface {
 /** Routes execution from a Session ID to its selected instance's runner. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionExecution") {}
 
-/** Why an execution is being interrupted, as published on `session.execution.interrupted`. */
-export type InterruptReason = SessionEvent.Execution.Interrupted["data"]["reason"]
+/**
+ * Why a caller interrupts an execution. "shutdown" is not a caller-supplied reason: it is only
+ * ever published when the process owner interrupts the execution fiber on teardown, where
+ * `terminal` defaults an unreasoned interruption to it. Callers that supply "shutdown" would
+ * take the shutdown settlement path (claim kept, jobs not cancelled, no idle transition).
+ */
+export type InterruptReason = Exclude<SessionEvent.Execution.Interrupted["data"]["reason"], "shutdown">
 
-export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
+export function terminal(
+  exit: Exit.Exit<void, SessionRunner.RunError>,
+  reason?: SessionEvent.Execution.Interrupted["data"]["reason"],
+) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
   if (Cause.hasInterrupts(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
   return { type: "failed" as const, error: toSessionError(Cause.squash(exit.cause)) }
@@ -182,6 +190,16 @@ export const layer = Layer.effect(
       isActive: coordinator.isActive,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
+          // The type excludes "shutdown", so this only fires for unchecked callers. Die rather
+          // than reinterpret it: a shutdown settlement keeps the claim and skips going idle,
+          // which must never follow from a public interrupt call.
+          if ((options?.reason as "shutdown" | undefined) === "shutdown") {
+            return yield* Effect.die(
+              new Error(
+                'SessionExecution.interrupt does not accept "shutdown": it is only published when the process owner interrupts the execution fiber on teardown.',
+              ),
+            )
+          }
           // An omitted reason is a person's stop: every existing caller interrupts without one.
           const interrupted = yield* coordinator.interrupt(sessionID, options?.reason ?? "user")
           if (!options?.resume) return interrupted

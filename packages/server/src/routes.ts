@@ -59,6 +59,7 @@ import { SpaceStore } from "./space-store"
 import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
+import { interruptBodyLayer } from "./middleware/interrupt-body"
 import { schemaErrorLayer } from "./middleware/schema-error"
 import { defectResponseLayer } from "./middleware/defect-response"
 import { ServerPairing } from "./pairing"
@@ -251,6 +252,7 @@ function makeRoutes(
         Layer.provide(auth),
         HttpRouter.provideRequest(requestServices),
         Layer.merge(defectResponseLayer),
+        Layer.merge(interruptBodyLayer),
         Layer.provideMerge(services),
         // MCP server names are path parameters, and clients name servers longer than find-my-way's default 100 characters.
         Layer.provideMerge(
