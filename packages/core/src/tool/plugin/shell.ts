@@ -347,7 +347,13 @@ export const Plugin = {
       // Approval can outlive the directory, so validate immediately before spawning.
       const workdir = yield* Environment.typeFollowing(target.environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () =>
-          Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
+          Effect.fail(
+            new Error(
+              target.machine === undefined
+                ? `Working directory does not exist: ${target.absolute}`
+                : `Working directory does not exist on ${target.machine}: ${target.absolute}`,
+            ),
+          ),
         ),
       )
       if (workdir !== "directory")
