@@ -155,8 +155,8 @@ type StepOutput = {
 ```
 
 A step that fails (throws, times out, returns an invalid view) leaves the previous state and view in place and shows the
-error inline. The first `init` step failing shows an error card with the message. Either way the client reports the
-error to the agent with the `report` RPC (see Server plugin), since the server never runs template code.
+error inline. The first `init` step failing shows an error card with the message. Either way it is a program error
+(see Failures), which the client sends with the `report` RPC, since the server never runs template code.
 
 ## Events
 
@@ -315,6 +315,37 @@ A `shader` node with an `id` (it has an `onPointer`) sends `pointer` events like
 `values` (same `wgsl`, same place in the tree), clients update its uniforms in place: no recompile, no rebuilt view, no
 restart of `widget.time`. Live programs drive shader games that way, re-rendering with new `values` every frame.
 
+## Failures
+
+A widget can fail in two ways, and only one is the template's.
+
+A **program error** is the template's own code failing or breaking a contract:
+
+- a parse error or a runtime exception in the program (including a handler, hook, `draw` or `main`);
+- an invalid view or invalid draw output (fails the node or draw command schema, more than 2,000 commands);
+- WGSL that fails validation (naga's or the platform's validator rejects the shader as written);
+- exceeding a program limit: the 250 ms step timeout, the 50 ms slice without awaiting (live), the heap cap, the post
+  rate (240 a second) or the `send` rate (`rate_limited`).
+
+Everything else is a **client error**: rendering or translating valid WGSL, a shader too slow on this device (the 50 ms
+frame stop), host internals, transport and RPC failures (a `program` fetch that fails), and client bugs. Clients never
+send client errors with `report`; they log them in dev mode like their other errors. Client errors are bugs to fix in
+the client, not a widget state. A fetch error a live program gets from `widget.fetch` is the program's to handle; only
+an exception it lets escape is a program error.
+
+A client that hits a program error shows it on the widget (error card or inline error) and calls `report` once with
+`{ phase, message, line?, column? }`, positions relative to the template's source (the prelude's lines subtracted;
+dropped when they fall past the template). The server records it as the widget's `failure`. Whether it reaches the
+agent depends on who made the template:
+
+- **The widget's Session created the template version** (its `widget_template` `save` or `edit` stored that version):
+  the failure is sent to the agent automatically, as a waking message or, while a `wait: true` call waits, as that
+  call's tool error. `failure.sent` becomes `true`.
+- **Otherwise** (a built-in, or a template saved in another Session): nothing is sent; `failure.sent` stays `false`.
+  Clients show the error with an **"Ask agent to fix it"** action, which calls `report` again with the same error and
+  `ask: true`. That sends it to the agent in the widget's Session once (the text ends with `The user asked you to fix
+  it.`) and sets `failure.sent`.
+
 ## Server plugin
 
 Widgets are an internal server plugin, `@opencode/plugin-widgets`, built only on the public plugin API
@@ -346,6 +377,11 @@ type State = {
   status: "open" | "submitted" | "dismissed" | "superseded"
   response?: unknown                    // the submitted value
   supersededBy?: { messageID: string; callID: string }   // the widget that replaced it (status "superseded")
+  failure?: {                           // the program error last reported (see Failures); the status stays
+    phase: string; message: string; line?: number; column?: number
+    client: string                      // who reported it: tui, rune, ios, android, web
+    sent: boolean                       // the agent has been told (automatically, or through ask)
+  }
   wait: boolean                         // the tool call waits for the answer (see Tools)
   capabilities?: { https?: { hosts: string[] } }   // the template's, for the client's grant chip
   time: { created: number; responded?: number }   // epoch ms
@@ -368,7 +404,7 @@ A widget goes `open → submitted`, `open → dismissed` or `open → superseded
 | `states` | `{ sessionID }` | `State[]` of the Session, oldest first | |
 | `respond` | `{ sessionID, messageID, callID, response: { value } \| { dismiss: true } }` | the new `State` | `not_found`, `closed` (`data: { status }`) |
 | `send` | `{ sessionID, messageID, callID, value, wake? }` | the `State` (unchanged) | `not_found`, `closed`, `rate_limited` |
-| `report` | `{ sessionID, messageID, callID, error: { phase, message, line?, column? }, client }` | the `State` (unchanged) | `not_found` |
+| `report` | `{ sessionID, messageID, callID, error: { phase, message, line?, column? }, client, ask? }` | the `State`, with `failure` | `not_found` |
 
 ```ts
 type Summary = {
@@ -403,7 +439,7 @@ prompt: an idle Session starts a turn, a busy one takes them at its next step.
 | submitted | `User responded to widget "<label>": <JSON value>` | `Responded to "<label>"` | `response` | yes |
 | dismissed | `User dismissed widget "<label>"` | `Dismissed "<label>"` | `response` | yes |
 | send | `Widget "<label>" sent: <JSON value>` | `<label>: <value>` (strings raw, else JSON, cut at 80) | `message` | `wake` (default true) |
-| report | `Widget "<label>" failed on <client>: <phase>: <message> (line N, col M)` | `<label> failed on <client>` | `error` | yes |
+| report | `Widget "<label>" failed on <client>: <phase>: <message> (line N, col M)`, plus ` The user asked you to fix it.` for `ask` | `<label> failed on <client>` | `error` | yes |
 
 `metadata` is `{ widget: { messageID, callID, kind } }` (`kind`: `response`, `message` or `error`); clients detect these by `metadata.widget`, never by text, and
 show them as one quiet line (`◈ <description>` in the TUI). `<label>` is the title, or the template name. A send with
@@ -412,12 +448,15 @@ show them as one quiet line (`◈ <description>` in the TUI). `<label>` is the t
 Waiting tool calls and the lock that serializes respond and send live in the server process, shared by every Location
 and plugin reload in it; this assumes one server process per database, like the goal plugin.
 
-`report` is how a client tells the agent that running the widget failed: `phase` is `init`, `event` (a handler or hook), `view`, `draw`,
-`main`, `shader`, `fetch` or another string; `line`/`column` (1-based) are in the template's source when known; `client`
-names the client (`tui`, `rune`, `ios`, `android`). Identical reports (same phase and message) for a widget are delivered
-once, and at most one report per widget every 10 seconds; reports for a closed widget are ignored. While a `wait: true`
-call waits, a report fails that call with the same text instead, so the model fixes the template and posts it again.
-Clients report when a step, a draw or the live program fails, and when the program doesn't load.
+`report` carries one program error (see Failures; never a client error): `phase` is `init`, `event` (a handler or
+hook), `view`, `draw`, `main`, `shader` or another string; `line`/`column` (1-based) are in the template's source when
+known; `client` names the client (`tui`, `rune`, `ios`, `android`, `web`). The server writes it as the widget's
+`failure` (publishing `changed`) unless it repeats the recorded one (same phase and message); a different error
+replaces it, unsent. It sends the failure to the agent only when the widget's Session is the template version's
+origin (automatic: repeats of an error already sent are dropped, and at most one automatic send per widget every 10
+seconds), or when `ask: true` and `failure.sent` is still `false` (once). A send fails a waiting `wait: true` call with
+the same text instead of messaging. Reports for a closed widget are ignored. Each saved version records its origin
+Session (the one whose `save` or `edit` first stored it); built-ins have none.
 
 Respond writes the state first and then admits the message. These are two writes without a transaction: if the server
 dies between them, the widget shows as answered but the model never hears of it (the user can say so in the prompt).
@@ -562,6 +601,8 @@ nothing.
 ## Client behaviour
 
 - Render each `widget` tool call inline in the timeline at its position, from its tool input plus its state.
+- `failure` (any status `open`): show the error on the widget. With `failure.sent: false`, add an **"Ask agent to fix
+  it"** action that calls `report` with that error and `ask: true`; with `sent: true`, say the agent was told.
 - `superseded`: render one quiet line, "Updated below", instead of the widget (the replacement follows it in the
   timeline; `supersededBy` names it).
 - `open`: interactive. `submitted` / `dismissed`: render the final view read-only with a status line ("Submitted",
