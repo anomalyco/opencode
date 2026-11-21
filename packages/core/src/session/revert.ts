@@ -1,6 +1,6 @@
 export * as SessionRevert from "./revert.js"
 
-import { and, asc, eq, gt, gte, isNull, lte, sql } from "drizzle-orm"
+import { and, asc, eq, gt, isNull, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { Event } from "@opencode/schema/event"
 import { Database } from "../database/database.js"
@@ -16,17 +16,13 @@ import { SessionSchema } from "./schema.js"
 import { SessionHistory } from "./history.js"
 import { SessionMessageTable, SessionTable } from "./sql.js"
 
-interface BoundaryInput {
+interface StageInput {
   readonly files?: boolean
   readonly session: SessionSchema.Info
   readonly messageID: SessionMessage.ID
 }
 
-export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
-  session: SessionSchema.Info
-  messageID: SessionMessage.ID
-  files?: boolean
-}) {
+export const stage = Effect.fn("SessionRevert.stage")(function* (input: StageInput) {
   const instances = yield* Instance.Service
   const database = yield* Database.Service
   const bus = yield* Bus.Service
@@ -39,9 +35,9 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
     if (original) {
       for (const file of input.session.revert?.files ?? []) restore.set(RelativePath.make(file.file), original)
     }
-    if (input.files !== false) for (const [file, tree] of next) restore.set(file, tree)
+    for (const [file, tree] of next) restore.set(file, tree)
     if (restore.size) yield* snapshot.restore({ files: restore })
-    const paths = input.files === false ? [] : Array.from(next.keys())
+    const paths = Array.from(next.keys())
     const files = original
       ? yield* snapshot.diff({ from: original, to: (yield* snapshot.capture()) ?? original, paths })
       : []
@@ -85,7 +81,7 @@ export const commit = Effect.fn("SessionRevert.commit")(function* (bus: Bus.Inte
 
 const plan = Effect.fn("SessionRevert.plan")(function* (
   db: Database.Interface["db"],
-  input: BoundaryInput,
+  input: StageInput,
   original: Snapshot.ID | undefined,
 ) {
   const boundary = yield* db
@@ -97,7 +93,7 @@ const plan = Effect.fn("SessionRevert.plan")(function* (
   if (!boundary) return yield* new MessageNotFoundError({ sessionID: input.session.id, messageID: input.messageID })
   if (input.files === false) return new Map<RelativePath, Snapshot.ID>()
   const steps: Step[] = []
-  const pending = new Map<SessionSchema.ID, readonly SessionMessage.AssistantTool[]>([[input.session.id, []]])
+  const pending = new Map<SessionSchema.ID, SessionMessage.AssistantTool[]>([[input.session.id, []]])
   for (const [sessionID, calls] of pending) {
     const child = sessionID !== input.session.id
     const ranges = child ? yield* delegatedRanges(db, sessionID, calls) : [{ after: boundary.seq, before: Infinity }]
@@ -132,7 +128,6 @@ const plan = Effect.fn("SessionRevert.plan")(function* (
       .all()
       .pipe(Effect.orDie)
     const owned = new Set(children.map((item) => item.id))
-    const delegated = new Map<SessionSchema.ID, SessionMessage.AssistantTool[]>()
     for (const row of owned.size ? yield* SessionHistory.withParts(db, included) : included) {
       const message = SessionHistory.decodeMessageRowSync(row)
       if (message.type !== "assistant") continue
@@ -141,13 +136,12 @@ const plan = Effect.fn("SessionRevert.plan")(function* (
       for (const part of message.content) {
         if (part.type !== "tool" || part.name !== "subagent" || part.state.status === "streaming") continue
         const id = part.state.metadata?.sessionID
-        if (!Schema.is(SessionSchema.ID)(id) || !owned.has(id) || pending.has(id)) continue
-        const list = delegated.get(id) ?? []
-        list.push(part)
-        delegated.set(id, list)
+        if (!Schema.is(SessionSchema.ID)(id) || !owned.has(id)) continue
+        const refs = pending.get(id)
+        if (refs) refs.push(part)
+        else pending.set(id, [part])
       }
     }
-    for (const [id, refs] of delegated) pending.set(id, refs)
   }
 
   return yield* restoreFiles(steps, original)
@@ -159,12 +153,7 @@ const delegatedRanges = Effect.fnUntraced(function* (
   calls: readonly SessionMessage.AssistantTool[],
 ) {
   const prompts = yield* db
-    .select({
-      id: SessionMessageTable.id,
-      seq: SessionMessageTable.seq,
-      created: SessionMessageTable.time_created,
-      text: sql<string>`json_extract(${SessionMessageTable.data}, '$.text')`,
-    })
+    .select({ id: SessionMessageTable.id, seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "user")))
     .orderBy(asc(SessionMessageTable.seq))
@@ -188,26 +177,18 @@ const delegatedRanges = Effect.fnUntraced(function* (
     const started = (call.time.ran ?? call.time.created).epochMilliseconds
     const completed = call.time.completed?.epochMilliseconds
     if (completed === undefined || typeof text !== "string") continue
-    const enqueued = yield* db
-      .select({ id: sql<SessionMessage.ID>`json_extract(${EventTable.data}, '$.inboxID')` })
-      .from(EventTable)
-      .where(
-        and(
-          eq(EventTable.aggregate_id, sessionID),
-          eq(
-            EventTable.type,
-            Event.versionedType(SessionEvent.InboxEnqueued.type, SessionEvent.InboxEnqueued.durable.version),
-          ),
-          gte(EventTable.created, started),
-          lte(EventTable.created, completed),
-        ),
-      )
-      .all()
-      .pipe(Effect.orDie)
-    const admitted = new Set(enqueued.map((item) => item.id))
-    const matches = prompts.filter(
-      (p) => p.text === text && (admitted.has(p.id) || (p.created >= started && p.created <= completed)),
-    )
+    const event = SessionEvent.InboxEnqueued
+    const lookup = sql`
+      SELECT id FROM ${SessionMessageTable}
+      WHERE session_id = ${sessionID} AND type = 'user' AND json_extract(data, '$.text') = ${text}
+        AND (time_created BETWEEN ${started} AND ${completed} OR id IN (
+          SELECT json_extract(data, '$.inboxID') FROM ${EventTable}
+          WHERE aggregate_id = ${sessionID} AND type = ${Event.versionedType(event.type, event.durable.version)}
+            AND created BETWEEN ${started} AND ${completed}
+        ))
+      LIMIT 2
+    `
+    const matches = yield* db.all<{ id: SessionMessage.ID }>(lookup).pipe(Effect.orDie)
     if (matches.length === 1) selected.add(matches[0]!.id)
   }
   return prompts.flatMap((prompt, i) =>
