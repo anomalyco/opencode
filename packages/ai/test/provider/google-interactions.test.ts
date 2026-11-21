@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Stream } from "effect"
-import { ai, isRetryable, Media, Message } from "../../src/effect.js"
+import { ai, isRetryable, Media, Message, ToolCallPart } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/testing.js"
@@ -15,6 +15,13 @@ const model = Google.configure({ apiKey: "test", baseURL: "https://generativelan
 const generate = (...events: ReadonlyArray<unknown>) =>
   LLMClient.generate(ai.request({ model, prompt: "Hi" })).pipe(Effect.provide(fixedResponse(sseEvents(...events))))
 
+const reply = [
+  { event_type: "step.start", index: 0, step: { type: "model_output" } },
+  { event_type: "step.delta", index: 0, delta: { type: "text", text: "Hello." } },
+  { event_type: "step.stop", index: 0 },
+  { event_type: "interaction.completed", interaction: { status: "completed" } },
+]
+
 describe("Google Interactions", () => {
   it.effect("sends Gemini safety settings in the Interactions request", () =>
     Effect.gen(function* () {
@@ -22,12 +29,7 @@ describe("Google Interactions", () => {
       const layer = dynamicResponse((input) =>
         Effect.sync(() => {
           bodies.push(JSON.parse(input.text))
-          return input.respond(
-            sseEvents({ event_type: "interaction.completed", interaction: { status: "completed" } }),
-            {
-              headers: { "content-type": "text/event-stream" },
-            },
-          )
+          return input.respond(sseEvents(...reply), { headers: { "content-type": "text/event-stream" } })
         }),
       )
       const configured = Google.configure({
@@ -110,6 +112,161 @@ describe("Google Interactions", () => {
       expect(withToolCall.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { query: "weather" } }])
       expect(withToolCall.finishReason).toEqual({ normalized: "tool-calls", raw: "completed" })
       expect(textOnly.finishReason).toEqual({ normalized: "stop", raw: "completed" })
+    }),
+  )
+
+  it.effect("fails a completed interaction that has no output as a retryable incomplete stream", () =>
+    Effect.gen(function* () {
+      // Gemini 4 sends this for a generation it could not parse: one thought step, billed output tokens, no output.
+      const completedEvent = {
+        event_type: "interaction.completed",
+        interaction: {
+          status: "completed",
+          usage: {
+            total_tokens: 325863,
+            total_input_tokens: 325163,
+            total_cached_tokens: 323114,
+            total_output_tokens: 28,
+            total_thought_tokens: 672,
+          },
+        },
+      }
+      const error = yield* generate(
+        { event_type: "interaction.created", interaction: {} },
+        { event_type: "interaction.status_update", status: "in_progress" },
+        { event_type: "step.start", index: 0, step: { type: "thought" } },
+        { event_type: "step.delta", index: 0, delta: { type: "thought_signature", signature: "sig_1" } },
+        { event_type: "step.stop", index: 0 },
+        completedEvent,
+      ).pipe(Effect.flip)
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        route: "google/google-interactions",
+        message: "Gemini completed without output",
+        classification: "incomplete-stream",
+        body: JSON.stringify(completedEvent),
+      })
+      expect(isRetryable(error)).toBe(true)
+
+      const blank = yield* generate(
+        { event_type: "step.start", index: 0, step: { type: "model_output", content: [{ type: "text", text: "" }] } },
+        { event_type: "step.delta", index: 0, delta: { type: "text", text: "" } },
+        { event_type: "step.stop", index: 0 },
+        { event_type: "interaction.completed", interaction: { status: "completed" } },
+      ).pipe(Effect.flip)
+      expect(blank.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+    }),
+  )
+
+  it.effect("finishes an interaction that reached its output limit before any output", () =>
+    Effect.gen(function* () {
+      const response = yield* generate(
+        { event_type: "step.start", index: 0, step: { type: "thought", signature: "sig_1" } },
+        { event_type: "step.stop", index: 0 },
+        { event_type: "interaction.completed", interaction: { status: "incomplete" } },
+      )
+
+      expect(response.text).toBe("")
+      expect(response.finishReason).toEqual({ normalized: "length", raw: "incomplete" })
+    }),
+  )
+
+  it.effect("moves generateContent thought signatures onto thought steps", () =>
+    Effect.gen(function* () {
+      const signed = (thoughtSignature: string) => ({ google: { thoughtSignature } })
+      const compiled = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.user("Check the weather."),
+            Message.assistant([
+              { type: "reasoning", text: "Plan the lookups." },
+              ToolCallPart.make({
+                id: "call_1",
+                name: "lookup",
+                input: { city: "Paris" },
+                providerMetadata: signed("sig_calls"),
+              }),
+              ToolCallPart.make({ id: "call_2", name: "lookup", input: { city: "Lyon" } }),
+            ]),
+            Message.tool({ id: "call_1", name: "lookup", result: { weather: "sunny" } }),
+            Message.tool({ id: "call_2", name: "lookup", result: { weather: "cloudy" } }),
+            Message.assistant([
+              ToolCallPart.make({
+                id: "call_3",
+                name: "lookup",
+                input: { city: "Nice" },
+                providerMetadata: signed("sig_first"),
+              }),
+              ToolCallPart.make({
+                id: "call_4",
+                name: "lookup",
+                input: { city: "Lille" },
+                providerMetadata: signed("sig_second"),
+              }),
+            ]),
+            Message.tool({ id: "call_3", name: "lookup", result: { weather: "warm" } }),
+            Message.tool({ id: "call_4", name: "lookup", result: { weather: "wet" } }),
+            Message.assistant([
+              { type: "reasoning", text: "Summarize.", providerMetadata: signed("sig_reasoning") },
+              { type: "text", text: "Sunny in Paris.", providerMetadata: signed("sig_text") },
+            ]),
+          ],
+        }),
+      )
+
+      expect(compiled.body.input).toEqual([
+        { type: "user_input", content: [{ type: "text", text: "Check the weather." }] },
+        { type: "thought", signature: "sig_calls", summary: [{ type: "text", text: "Plan the lookups." }] },
+        { type: "function_call", id: "call_1", name: "lookup", arguments: { city: "Paris" } },
+        { type: "function_call", id: "call_2", name: "lookup", arguments: { city: "Lyon" } },
+        { type: "function_result", call_id: "call_1", name: "lookup", result: { weather: "sunny" } },
+        { type: "function_result", call_id: "call_2", name: "lookup", result: { weather: "cloudy" } },
+        { type: "thought", signature: "sig_first" },
+        { type: "function_call", id: "call_3", name: "lookup", arguments: { city: "Nice" } },
+        { type: "thought", signature: "sig_second" },
+        { type: "function_call", id: "call_4", name: "lookup", arguments: { city: "Lille" } },
+        { type: "function_result", call_id: "call_3", name: "lookup", result: { weather: "warm" } },
+        { type: "function_result", call_id: "call_4", name: "lookup", result: { weather: "wet" } },
+        { type: "thought", signature: "sig_reasoning", summary: [{ type: "text", text: "Summarize." }] },
+        { type: "thought", signature: "sig_text" },
+        { type: "model_output", content: [{ type: "text", text: "Sunny in Paris." }] },
+      ])
+    }),
+  )
+
+  it.effect("replays an Interactions signature where the interaction returned it", () =>
+    Effect.gen(function* () {
+      const compiled = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "", providerMetadata: { google: { interactionSignature: "sig_thought" } } },
+              ToolCallPart.make({ id: "call_1", name: "lookup", input: { city: "Paris" } }),
+            ]),
+            Message.tool({ id: "call_1", name: "lookup", result: { weather: "sunny" } }),
+            Message.assistant([
+              ToolCallPart.make({
+                id: "call_2",
+                name: "lookup",
+                input: { city: "Lyon" },
+                providerMetadata: { google: { interactionSignature: "sig_call", thoughtSignature: "sig_other" } },
+              }),
+            ]),
+            Message.tool({ id: "call_2", name: "lookup", result: { weather: "cloudy" } }),
+          ],
+        }),
+      )
+
+      expect(compiled.body.input).toEqual([
+        { type: "thought", signature: "sig_thought" },
+        { type: "function_call", id: "call_1", name: "lookup", arguments: { city: "Paris" } },
+        { type: "function_result", call_id: "call_1", name: "lookup", result: { weather: "sunny" } },
+        { type: "function_call", id: "call_2", name: "lookup", arguments: { city: "Lyon" }, signature: "sig_call" },
+        { type: "function_result", call_id: "call_2", name: "lookup", result: { weather: "cloudy" } },
+      ])
     }),
   )
 
@@ -464,7 +621,7 @@ describe("Google Interactions response continuation", () => {
           { ...checkpoint("stored-token"), interaction_id: "hop-owner", status: "requires_continuation" },
           completed({ status: "requires_continuation" }),
         ),
-        sseEvents(completed()),
+        sseEvents(startText(0), text(0, "Done."), completed()),
       )
       yield* LLMClient.generate({ ...request, providerOptions: { store: true } }).pipe(Effect.provide(server.layer))
 
@@ -557,7 +714,7 @@ describe("Google Interactions response continuation", () => {
         empty,
         empty,
         empty,
-        sseEvents(completed()),
+        sseEvents(startText(0), text(0, "Done."), completed()),
       )
       const result = yield* LLMClient.generate(request).pipe(Effect.provide(server.layer))
 

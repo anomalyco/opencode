@@ -289,6 +289,12 @@ const thoughtSignature = (metadata: ProviderMetadata | undefined, key: string) =
   return typeof value?.thoughtSignature === "string" ? value.thoughtSignature : undefined
 }
 
+// The Interactions API stores the same signature as `interactionSignature`, on the thinking or on a function call.
+const interactionSignature = (metadata: ProviderMetadata | undefined, key: string) => {
+  const value = metadata?.[key]
+  return typeof value?.interactionSignature === "string" ? value.interactionSignature : undefined
+}
+
 const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string) => ({
   functionCall: { ...(omitIds ? {} : { id: part.id }), name: part.name, args: part.input },
   thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey),
@@ -332,6 +338,15 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
       // Parallel Gemini 3 calls may carry one signature on the first call; unsigned sibling calls are valid.
       let hasSignedToolCall = false
+      // generateContent carries a signature on the part after the thinking. A conversation that began on the
+      // Interactions API keeps its signatures by moving each one from its reasoning to the next part. The
+      // reasoning's signature is in the form generateContent returns, so it wins over a call's own.
+      let carried: string | undefined
+      const take = () => {
+        const signature = carried
+        carried = undefined
+        return signature
+      }
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call", "media"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "assistant", [
@@ -341,26 +356,28 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
             "media",
           ])
         if (part.type === "text") {
-          parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
+          parts.push({
+            text: part.text,
+            thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) ?? take(),
+          })
           continue
         }
         // Generated images replay as model-role inline data so multi-turn image editing keeps the prior output.
         if (part.type === "media") {
           const lowered = yield* lowerContentPart(part)
-          parts.push({ ...lowered, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
+          parts.push({ ...lowered, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) ?? take() })
           continue
         }
         if (part.type === "reasoning") {
-          parts.push({
-            text: part.text,
-            thought: true,
-            thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey),
-          })
+          const signature = thoughtSignature(part.providerMetadata, metadataKey)
+          carried = signature === undefined ? interactionSignature(part.providerMetadata, metadataKey) : undefined
+          parts.push({ text: part.text, thought: true, thoughtSignature: signature })
           continue
         }
         if (part.type === "tool-call") {
           const lowered = lowerToolCall(part, omitCallIds, metadataKey)
-          const signature = lowered.thoughtSignature
+          const signature =
+            lowered.thoughtSignature ?? take() ?? interactionSignature(part.providerMetadata, metadataKey)
           parts.push({
             ...lowered,
             thoughtSignature: signature ?? (!hasSignedToolCall ? SKIP_THOUGHT_SIGNATURE_VALIDATOR : undefined),
