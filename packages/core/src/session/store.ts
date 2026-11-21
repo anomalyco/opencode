@@ -160,7 +160,17 @@ const layer = Layer.effect(
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
-        if (input.search) conditions.push(sql`${SessionTable.title} GLOB ${titlePattern(input.search)}`)
+        if (input.search) {
+          const titleMatch = sql`${SessionTable.title} GLOB ${titlePattern(input.search)}`
+          // Only a term with the session prefix also matches IDs, by prefix: a short title query such as "a" would
+          // otherwise match the random characters of nearly every ID and bury the title matches.
+          const trimmed = input.search.trim()
+          conditions.push(
+            trimmed.startsWith("ses_")
+              ? or(titleMatch, sql`${SessionTable.id} GLOB ${idPrefixPattern(trimmed)}`)!
+              : titleMatch,
+          )
+        }
         if (input.parentID !== undefined)
           conditions.push(
             input.parentID === null ? isNull(SessionTable.parent_id) : eq(SessionTable.parent_id, input.parentID),
@@ -320,4 +330,9 @@ function titlePattern(search: string) {
     return "*?[".includes(char) ? `[${char}]` : char
   })
   return `*${chars.join("")}*`
+}
+
+function idPrefixPattern(search: string) {
+  const escaped = Array.from(search, (char) => ("*?[".includes(char) ? `[${char}]` : char)).join("")
+  return `${escaped}*`
 }
