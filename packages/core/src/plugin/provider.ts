@@ -9,6 +9,7 @@ import { DatabricksPlugin } from "./provider/databricks.js"
 import { DigitalOceanPlugin } from "./provider/digitalocean.js"
 import { GithubCopilotPlugin } from "./provider/github-copilot.js"
 import { GitLabPlugin } from "./provider/gitlab.js"
+import { HostlinkuPlugin } from "./provider/hostlinku.js"
 import { GoogleVertexPlugin } from "./provider/google-vertex.js"
 import { KiloPlugin } from "./provider/kilo.js"
 import { LLMGatewayPlugin } from "./provider/llmgateway.js"
@@ -41,6 +42,7 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   DigitalOceanPlugin,
   GithubCopilotPlugin,
   GitLabPlugin,
+  HostlinkuPlugin,
   GoogleVertexPlugin,
   KiloPlugin,
   LLMGatewayPlugin,
