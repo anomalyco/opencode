@@ -191,7 +191,8 @@ async fn routes_slash_commands_and_compact_through_their_session_endpoints() {
     let session = acp.new_session("/workspace", json!([])).await.unwrap();
     let id = session["sessionId"].as_str().unwrap();
 
-    let command = acp.prompt(id, "/review now").await.unwrap();
+    // JavaScript's white space: a byte order mark is some.
+    let command = acp.prompt(id, "\u{feff}/review\u{feff}now \u{3000}").await.unwrap();
     let compact = acp.prompt(id, "/compact").await.unwrap();
 
     assert_eq!(command["stopReason"], "end_turn");

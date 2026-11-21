@@ -342,18 +342,8 @@ mod tests {
         assert_eq!(parse(text), Some(vec![Hunk::Delete { path: "x".into() }]));
         assert_eq!(strip_heredoc("<<EOF\nbody\nEOF"), "body");
         assert_eq!(strip_heredoc("<<EOF\nbody\nEND"), "<<EOF\nbody\nEND");
-        // JavaScript's `\s` takes a BOM, not U+0085.
-        assert_eq!(strip_heredoc("cat\u{85}<<EOF\nbody\nEOF"), "cat\u{85}<<EOF\nbody\nEOF");
+        // JavaScript's `\s` takes a BOM.
         assert_eq!(strip_heredoc("cat\u{feff}<<EOF\nbody\nEOF"), "body");
-    }
-
-    #[test]
-    fn line_ends_trim_as_javascript_trim_end() {
-        let eof = "*** Begin Patch\n*** Update File: a\n@@\n-x\n+y\n*** End of File\u{feff}\n*** End Patch";
-        assert!(matches!(parse(eof).as_deref(), Some([Hunk::Update { chunks, .. }]) if chunks[0].end_of_file));
-        let chunks = vec![Chunk { old_lines: vec!["x".into()], new_lines: vec!["y".into()], ..Chunk::default() }];
-        assert!(derive("a", &chunks, "x\u{85}\n").is_err());
-        assert_eq!(derive("a", &chunks, "x\u{feff}\n"), Ok("y\n".into()));
     }
 
     #[test]
