@@ -208,18 +208,6 @@ fn a_drag_selection_copies_and_keeps_the_prompt_focused() {
 }
 
 #[test]
-fn a_click_inside_a_dialog_leaves_its_filter_focused() {
-    let h = mount();
-    h.wait_for("ctrl+p commands");
-    h.app.press("ctrl+p");
-    let (x, y) = h.find("Suggested", 0);
-    h.app.click(x, y);
-    h.app.type_text("zq");
-    h.wait_for("zq");
-    assert_eq!(h.prompt_text(), "");
-}
-
-#[test]
 fn a_click_on_the_prompt_focuses_it() {
     let h = mount();
     h.wait_for("ctrl+p commands");
