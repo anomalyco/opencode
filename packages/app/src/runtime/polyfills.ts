@@ -37,3 +37,14 @@ if (!Promise.try) {
     return new Promise<T>((resolve) => resolve(callback(...args)))
   } as typeof Promise.try
 }
+
+// Older Android WebViews need this before the plugin command registry renders.
+if (!Array.prototype.toSorted) {
+  Object.defineProperty(Array.prototype, "toSorted", {
+    configurable: true,
+    writable: true,
+    value: function toSorted<T>(this: ArrayLike<T>, compare?: (a: T, b: T) => number) {
+      return Array.from({ length: this.length }, (_, index) => this[index]).sort(compare)
+    },
+  })
+}
