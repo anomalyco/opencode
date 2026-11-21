@@ -8,6 +8,7 @@ import { AntigravitySessionHooks } from "./session-hooks.js"
 import { Environment } from "../../../environment/index.js"
 import { EnvironmentUnavailable } from "../../../environment/unavailable.js"
 import { Location } from "../../../location.js"
+import { which } from "../../../util/which.js"
 import type { PluginInternal } from "../../internal.js"
 
 export const ID = "opencode.provider.antigravity"
@@ -49,7 +50,7 @@ export const make = define({
 
     // With a cached model list the CLI waits for the first turn. Without one it is asked now, and only
     // when it is installed, so a machine without it logs nothing.
-    if (known.length > 0 || !Bun.which("agy")) return
+    if (known.length > 0 || !which("agy")) return
     yield* Effect.tryPromise(() => session.refresh()).pipe(
       Effect.catch((error) => Effect.logWarning("Antigravity: could not list the models", error)),
       Effect.forkScoped,

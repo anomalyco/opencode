@@ -1,7 +1,7 @@
 export * as AntigravitySession from "./session.js"
 
 import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk"
-import { AntigravityACP } from "./acp.js"
+import type { AntigravityACP } from "./acp.js"
 import { AntigravityCatalog } from "./catalog.js"
 
 /**
@@ -85,7 +85,7 @@ interface Owner {
 }
 
 export const make = (options: Options): Interface => {
-  const connect = options.connect ?? ((acp: AntigravityACP.Options) => AntigravityACP.Client.start(acp))
+  const connect = options.connect ?? startCLI
   let groups: readonly AntigravityCatalog.Group[] = options.initial ?? []
   let client: Promise<Connection> | undefined
   // The conversations belong to the CLI that opened them, so they go when it goes.
@@ -267,4 +267,10 @@ function commandOf(input: unknown) {
 
 function same(left: readonly AntigravityCatalog.Group[], right: readonly AntigravityCatalog.Group[]) {
   return JSON.stringify(left) === JSON.stringify(right)
+}
+
+// Loaded on first use, and stubbed on workerd, which cannot spawn the CLI.
+const startCLI = async (options: AntigravityACP.Options): Promise<Connection> => {
+  const { AntigravityACPClient } = await import("#antigravity-acp")
+  return AntigravityACPClient.Client.start(options)
 }
