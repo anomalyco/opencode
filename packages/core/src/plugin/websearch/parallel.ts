@@ -57,11 +57,12 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       id: "parallel",
       name: "Parallel",
       env: "PARALLEL_API_KEY",
-      execute: (input, credential) =>
+      endpoint,
+      execute: (input, connection) =>
         Effect.gen(function* () {
           const result = yield* WebSearchMcp.call(
             http,
-            endpoint,
+            connection.endpoint,
             "web_search",
             { input: McpInput, output: McpOutput },
             {
@@ -70,7 +71,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
             },
             {
               "User-Agent": App.useragent(ctx.app),
-              ...(credential?.type === "key" ? { Authorization: `Bearer ${credential.key}` } : {}),
+              ...(connection.key ? { Authorization: `Bearer ${connection.key}` } : {}),
             },
           )
           return (

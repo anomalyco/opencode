@@ -1,8 +1,8 @@
 export * as WebSearchExa from "./exa.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import { Effect, Schema, Scope } from "effect"
-import { HttpClient } from "effect/http"
+import { Duration, Effect, Schema, Scope } from "effect"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { WebSearchMcp } from "./mcp.js"
 import { WebSearchProvider } from "./provider.js"
 
@@ -23,6 +23,24 @@ const McpOutput = Schema.Struct({
   ),
 })
 
+const RestRequest = Schema.Struct({
+  query: Schema.String,
+  numResults: Schema.Number,
+  contents: Schema.Struct({ text: Schema.Boolean }),
+})
+
+const RestResponse = Schema.Struct({
+  results: Schema.Array(
+    Schema.Struct({
+      url: Schema.String,
+      title: Schema.NullOr(Schema.String).pipe(Schema.optional),
+      publishedDate: Schema.NullOr(Schema.String).pipe(Schema.optional),
+      text: Schema.NullOr(Schema.String).pipe(Schema.optional),
+      highlights: Schema.NullOr(Schema.Array(Schema.String)).pipe(Schema.optional),
+    }),
+  ),
+})
+
 export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
   id: "opencode.websearch.exa",
   effect: Effect.fn("WebSearchExa.Plugin")(function* (ctx) {
@@ -31,23 +49,61 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       id: "exa",
       name: "Exa",
       env: "EXA_API_KEY",
-      execute: (input, credential) =>
-        Effect.gen(function* () {
-          const url = new URL(endpoint)
-          if (credential?.type === "key") url.searchParams.set("exaApiKey", credential.key)
-          const result = yield* WebSearchMcp.call(
-            http,
-            url.toString(),
-            "web_search_exa",
-            { input: McpInput, output: McpOutput },
-            { query: input.query, numResults: 8 },
-          )
-          const content = result?.content.find((item) => item.text)
-          return content ? parseResults(content.text) : []
-        }),
+      endpoint,
+      execute: (input, connection) =>
+        // A configured endpoint is the Exa REST search API; the hosted service is the MCP server.
+        connection.custom
+          ? callRest(http, connection.endpoint, connection.key, input.query)
+          : Effect.gen(function* () {
+              const url = new URL(connection.endpoint)
+              if (connection.key) url.searchParams.set("exaApiKey", connection.key)
+              const result = yield* WebSearchMcp.call(
+                http,
+                url.toString(),
+                "web_search_exa",
+                { input: McpInput, output: McpOutput },
+                { query: input.query, numResults: 8 },
+              )
+              const content = result?.content.find((item) => item.text)
+              return content ? parseResults(content.text) : []
+            }),
     })
   }),
 })
+
+function callRest(http: HttpClient.HttpClient, url: string, apiKey: string | undefined, query: string) {
+  return Effect.gen(function* () {
+    const request = yield* HttpClientRequest.post(url).pipe(
+      HttpClientRequest.acceptJson,
+      HttpClientRequest.setHeaders(apiKey ? { "x-api-key": apiKey } : {}),
+      HttpClientRequest.schemaBodyJson(RestRequest)({
+        query,
+        numResults: 8,
+        contents: { text: true },
+      }),
+    )
+    const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
+      .execute(request)
+      .pipe(
+        Effect.flatMap(HttpClientResponse.schemaBodyJson(RestResponse)),
+        Effect.scoped,
+        Effect.timeoutOrElse({
+          duration: Duration.seconds(25),
+          orElse: () => Effect.fail(new Error("Exa web search request timed out")),
+        }),
+      )
+    return response.results.map((item) => {
+      const published = item.publishedDate ? Date.parse(item.publishedDate) : undefined
+      const content = item.text ?? item.highlights?.join("\n\n")
+      return {
+        url: item.url,
+        ...(item.title ? { title: item.title } : {}),
+        ...(content ? { content } : {}),
+        time: { ...(published !== undefined && Number.isFinite(published) ? { published } : {}) },
+      }
+    })
+  })
+}
 
 function parseResults(text: string) {
   return text.split(/\n\n---\n\n/).flatMap((block) => {
