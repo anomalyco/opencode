@@ -4,10 +4,10 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, netns, probeResult, same, scopedRegistrationFilename } from "../service-probe.js"
 
 export * from "../service.js"
-export { headers }
+export { headers, netns, scopedRegistrationFilename }
 /** Contents of the local service registration file. */
 export type Info = typeof Info.Type
 
