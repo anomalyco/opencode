@@ -78,9 +78,13 @@ export class SidecarChanged extends Schema.TaggedClass<SidecarChanged>()("Sideca
   url: Schema.String,
 }) {}
 
+// The machine woke from sleep; every window checks its server event streams instead of waiting for them to time out.
+export class SystemResumed extends Schema.TaggedClass<SystemResumed>()("SystemResumed", {}) {}
+
 export const DesktopEvent = Schema.Union([
   DeepLinksOpened,
   SidecarChanged,
+  SystemResumed,
   MenuCommandTriggered,
   WindowFullscreenChanged,
   WindowFocusChanged,
