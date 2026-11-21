@@ -294,4 +294,22 @@ describe("ShellParse", () => {
       { resource: 'sudo python3.13 -c "print(1)"', save: 'sudo python3.13 -c "print(1)"' },
     ])
   })
+
+  test("normalizes a path-qualified escalation wrapper before the wrapper check", async () => {
+    const nested = await Effect.runPromise(ShellParse.scan("sudo /usr/bin/sudo rm -rf /", "/bin/bash", "/workspace"))
+    expect(nested.commands[0]?.save).toBe("sudo /usr/bin/sudo rm *")
+
+    const direct = await Effect.runPromise(ShellParse.scan("/usr/bin/sudo rm -rf /", "/bin/bash", "/workspace"))
+    expect(direct.commands[0]?.save).toBe("/usr/bin/sudo rm *")
+  })
+
+  test("saves nothing when the exact command contains a wildcard character", async () => {
+    // Wildcard.match has no escape for `*` or `?`, so an exact save containing them would still match other
+    // commands; the caller persists no rule when the save is empty.
+    const star = await Effect.runPromise(ShellParse.scan("sudo bash -c 'rm /tmp/*.log'", "/bin/bash", "/workspace"))
+    expect(star.commands).toEqual([{ resource: "sudo bash -c 'rm /tmp/*.log'", save: "" }])
+
+    const question = await Effect.runPromise(ShellParse.scan("su -c 'rm /tmp/file?.log'", "/bin/bash", "/workspace"))
+    expect(question.commands).toEqual([{ resource: "su -c 'rm /tmp/file?.log'", save: "" }])
+  })
 })

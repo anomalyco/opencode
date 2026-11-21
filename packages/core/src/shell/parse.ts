@@ -233,8 +233,11 @@ export function scan(
         if (directoryCommand === parts && resolved.complete) continue
       }
       const selected = prefix(words)
-      // A wrapper whose options cannot be unwrapped saves the exact command rather than any wildcard.
-      const conventional = selected.length > 0 ? `${selected.join(" ")} *` : item.resource
+      // A wrapper whose options cannot be unwrapped saves the exact command rather than any wildcard. The
+      // pattern syntax has no escape for `*` or `?`, so a resource containing them saved as the exact
+      // command would still match other commands; save nothing instead.
+      const conventional =
+        selected.length > 0 ? `${selected.join(" ")} *` : /[*?]/.test(item.resource) ? "" : item.resource
       const end = item.wordEnds?.[selected.length - 1]
       // Keep existing grants stable unless normalized spacing loses the original source boundary.
       const save =
@@ -746,9 +749,15 @@ const COMMAND_RUNNERS = new Set([
   "script",
 ])
 
+// Path-qualified and version-qualified tokens (`/bin/bash`, `python3.13`) resolve to the same command as
+// their bare names, so callers normalize before set membership checks.
+function commandBase(token: string): string {
+  return (token.split(/[\\/]/).pop() ?? "").toLowerCase().replace(/\.exe$/, "")
+}
+
 function prefix(tokens: string[]): string[] {
-  const head = tokens[0]
-  if (head && ESCALATION_WRAPPERS.has(head)) return escalationPrefix(tokens)
+  const head = tokens[0] ? commandBase(tokens[0]) : undefined
+  if (head && ESCALATION_WRAPPERS.has(head)) return escalationPrefix(tokens, head)
   for (let length = Math.min(tokens.length, PREFIX_LENGTH); length > 0; length--) {
     const arity = ARITY[tokens.slice(0, length).join(" ")]
     if (arity !== undefined) return tokens.slice(0, arity)
@@ -759,8 +768,7 @@ function prefix(tokens: string[]): string[] {
 // Resolves an escalation wrapper's options so the saved pattern covers the wrapped command rather than every
 // command run through the wrapper. Returns [] when the wrapper cannot be unwrapped to a concrete inner
 // command, which saves the exact command instead of a bare escalation wildcard.
-function escalationPrefix(tokens: string[]): string[] {
-  const wrapper = tokens[0]
+function escalationPrefix(tokens: string[], wrapper: string): string[] {
   // `su` takes its command through -c or a login shell, so its arguments never unwrap to an inner command.
   if (wrapper === "su") return []
   let index = 1
@@ -783,7 +791,7 @@ function escalationPrefix(tokens: string[]): string[] {
   if (index >= tokens.length || tokens[index].startsWith("-")) return []
   // Path-qualified and version-qualified runners (`/bin/bash`, `python3.13`) run the same wrapped commands
   // as their bare names, so normalize the token before the COMMAND_RUNNERS check.
-  const base = (tokens[index].split(/[\\/]/).pop() ?? "").toLowerCase().replace(/\.exe$/, "")
+  const base = commandBase(tokens[index])
   if (COMMAND_RUNNERS.has(base) || COMMAND_RUNNERS.has(base.replace(/\d+(?:\.\d+)*$/, ""))) return []
   const inner = prefix(tokens.slice(index))
   if (inner.length === 0) return []
