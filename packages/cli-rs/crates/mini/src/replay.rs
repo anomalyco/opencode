@@ -1,5 +1,6 @@
 //! Rebuilds scrollback from session history and follows live events without duplicating entries.
 
+use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
 
 use futures_util::StreamExt;
@@ -47,8 +48,26 @@ impl Fragment {
 #[derive(Clone, Debug, Default)]
 struct FragmentState {
     text: String,
-    /// Text a list already showed that a live delta may repeat.
-    projected: Option<String>,
+    /// The text a list showed, which the first live deltas may repeat.
+    projected: Option<Projected>,
+}
+
+/// The stream subscribes before the list, so deltas sent before the list may still arrive after it. Nothing numbers
+/// them, but they are the last ones the list holds: a run of them ends where the listed text ends. A run that may
+/// still end there is held back, and shown once a delta proves it new.
+#[derive(Clone, Debug)]
+struct Projected {
+    listed: String,
+    run: String,
+    /// The length of the run when it last ended where the listed text ends.
+    covered: usize,
+}
+
+impl FragmentState {
+    fn listed(text: &str) -> Self {
+        let projected = Projected { listed: text.to_owned(), run: String::new(), covered: 0 };
+        Self { text: text.to_owned(), projected: Some(projected) }
+    }
 }
 
 /// What a fragment held before an update.
@@ -79,30 +98,41 @@ impl Fragments {
     /// The fragment's whole text from a list; `visible` when it was shown.
     pub fn project(&mut self, fragment: &Fragment, text: &str, visible: bool) -> Update {
         let current = self.0.remove(fragment).unwrap_or_default();
-        self.0.insert(
-            fragment.clone(),
-            FragmentState {
-                text: text.to_owned(),
-                projected: if visible { Some(text.to_owned()) } else { current.projected },
-            },
-        );
+        let state = if visible {
+            FragmentState::listed(text)
+        } else {
+            FragmentState { text: text.to_owned(), projected: current.projected }
+        };
+        self.0.insert(fragment.clone(), state);
         Update { previous: current.text }
     }
 
-    /// A live delta: the length of the text before it, or `None` when a list already showed it. TS returns the
-    /// previous text; copying it here for every delta would copy the whole prefix each time.
-    pub fn delta(&mut self, fragment: &Fragment, delta: &str) -> Option<usize> {
+    /// A live delta: the length of the text before it and the text to show, or `None` when there is nothing to show
+    /// yet. TS returns the previous text; copying it here for every delta would copy the whole prefix each time.
+    ///
+    /// TS drops a delta found anywhere in the listed text, so a list of "a b" and the deltas " " and "c" showed
+    /// "a bc" (`parity/deviations/M06-mini-covered-deltas.md`).
+    pub fn delta<'a>(&mut self, fragment: &Fragment, delta: &'a str) -> Option<(usize, Cow<'a, str>)> {
         let state = self.0.entry(fragment.clone()).or_default();
-        // Replay may start after an unseen prefix, so a covered chunk is consumed from anywhere in the projection.
-        if let Some(projected) = &mut state.projected
-            && let Some(at) = projected.find(delta)
-        {
-            projected.drain(..at + delta.len());
-            return None;
-        }
+        let shown = match &mut state.projected {
+            None => Cow::Borrowed(delta),
+            Some(projected) => {
+                projected.run.push_str(delta);
+                if projected.listed.ends_with(&projected.run) {
+                    projected.covered = projected.run.len();
+                    return None;
+                }
+                if projected.listed.contains(&projected.run) {
+                    return None;
+                }
+                let shown = projected.run.split_off(projected.covered);
+                state.projected = None;
+                Cow::Owned(shown)
+            }
+        };
         let previous = state.text.len();
-        state.text.push_str(delta);
-        Some(previous)
+        state.text.push_str(&shown);
+        Some((previous, shown))
     }
 
     /// The final text of a fragment.
@@ -115,15 +145,16 @@ impl Fragments {
         Update { previous }
     }
 
-    /// A locally printed text, replayed after the list (`restore`).
+    /// A locally printed text, replayed after the list (`restore`). The deltas that waited for the list may repeat
+    /// its end, as they may a listed text's.
     pub fn restore(&mut self, fragment: &Fragment, text: &str) -> Restore {
         let Some(current) = self.0.get(fragment) else {
-            self.0.insert(fragment.clone(), FragmentState { text: text.to_owned(), projected: Some(text.to_owned()) });
+            self.0.insert(fragment.clone(), FragmentState::listed(text));
             return Restore::Append(text.to_owned());
         };
         if let Some(suffix) = text.strip_prefix(current.text.as_str()) {
             let suffix = suffix.to_owned();
-            self.0.insert(fragment.clone(), FragmentState { text: text.to_owned(), projected: Some(text.to_owned()) });
+            self.0.insert(fragment.clone(), FragmentState::listed(text));
             return Restore::Append(suffix);
         }
         if current.text.starts_with(text) {
@@ -1021,14 +1052,14 @@ impl Transcript {
                 let data = &delta.data;
                 let message = data.assistant_message_id.as_str();
                 let fragment = Fragment::new(message, "text", data.ordinal as u64);
-                if self.fragments.delta(&fragment, &data.delta).is_none() {
+                let Some((_, shown)) = self.fragments.delta(&fragment, &data.delta) else {
                     return Output::default();
-                }
+                };
                 if !self.tools {
-                    self.buffer_quiet(message, &fragment.part_id, &data.delta, false);
+                    self.buffer_quiet(message, &fragment.part_id, &shown, false);
                     return Output::default();
                 }
-                Output::commits(vec![text_commit(&fragment, data.delta.as_str())])
+                Output::commits(vec![text_commit(&fragment, shown)])
             }
             V2Event::SessionTextEnded(ended) => {
                 let data = &ended.data;
@@ -1049,8 +1080,8 @@ impl Transcript {
                 let data = &delta.data;
                 let fragment = Fragment::new(data.assistant_message_id.as_str(), "reasoning", data.ordinal as u64);
                 match self.fragments.delta(&fragment, &data.delta) {
-                    Some(previous) if self.thinking => {
-                        let text = if previous == 0 { format!("Thinking: {}", data.delta) } else { data.delta.clone() };
+                    Some((previous, shown)) if self.thinking => {
+                        let text = if previous == 0 { format!("Thinking: {shown}") } else { shown.into_owned() };
                         Output::commits(vec![reasoning_commit(&fragment, text)])
                     }
                     _ => Output::default(),
@@ -1195,8 +1226,8 @@ impl Transcript {
                 let mut output = footer();
                 let Some(message) = self.active_compaction.clone() else { return output };
                 let fragment = Fragment { message_id: message.clone(), part_id: "compaction:summary".into() };
-                if self.fragments.delta(&fragment, &delta.data.text).is_some() {
-                    output.commits.push(compaction_summary(&message, &delta.data.text, Phase::Progress));
+                if let Some((_, shown)) = self.fragments.delta(&fragment, &delta.data.text) {
+                    output.commits.push(compaction_summary(&message, &shown, Phase::Progress));
                 }
                 output
             }
@@ -1903,6 +1934,8 @@ mod tests {
         transcript.event(&delta("msg_live", "streamed"));
         transcript.remember(&Commit::error("send failed").message("msg_local"));
         transcript.begin_replay();
+        // "e" occurs in the local text, but not at its end, so it is new: it shows with the delta that proves it.
+        assert!(transcript.event(&delta("msg_live", "e")).commits.is_empty());
         assert!(transcript.event(&delta("msg_live", " more")).commits.is_empty());
         let output = transcript.replayed(&history(), false);
         assert_eq!(
@@ -1914,10 +1947,34 @@ mod tests {
                 (EntryKind::Error, "Boom".into()),
                 (EntryKind::Assistant, "streamed".into()),
                 (EntryKind::Error, "send failed".into()),
-                (EntryKind::Assistant, " more".into()),
+                (EntryKind::Assistant, "e more".into()),
             ]
         );
         assert!(!transcript.replaying());
+    }
+
+    /// Deltas sent before a list may arrive after it, and repeat the end of the listed text. Only such a run is
+    /// dropped: a delta that occurs elsewhere in the listed text is new (TS drops it).
+    #[test]
+    fn a_list_drops_only_the_deltas_that_repeat_its_end() {
+        let rows: [(&str, &[&str], &str); 6] = [
+            ("a b", &[" ", "c"], "a b c"),
+            ("a b", &[" b"], "a b"),
+            ("a b", &[" ", "b"], "a b"),
+            ("a b", &[" b", " ", "c"], "a b c"),
+            ("abab", &["ab", "ab", "!"], "abab!"),
+            ("", &["a"], "a"),
+        ];
+        for (listed, deltas, screen) in rows {
+            let mut transcript = Transcript::new("ses_1", true, true, true, None);
+            let messages = [message(json!({ "id": "msg_a", "type": "assistant",
+                "content": [{ "type": "text", "text": listed }] }))];
+            let mut shown: String = texts(&transcript.hydrate(&messages, true)).into_iter().map(|row| row.1).collect();
+            for chunk in deltas {
+                shown.extend(texts(&transcript.event(&delta("msg_a", chunk))).into_iter().map(|row| row.1));
+            }
+            assert_eq!(shown, screen, "{listed:?} then {deltas:?}");
+        }
     }
 
     /// A prompt delivered before the list has it is restored as a local row; once listed, it does not print again.
