@@ -67,13 +67,21 @@ export interface EditInput {
   readonly example?: Schema.Json
 }
 
+/** How the server builds a version's program; the current prelude by default, another one in tests. */
+export interface Builder {
+  readonly program: (source: string) => string
+}
+const current: Builder = { program }
+
+// A stored version: the template and the exact program it was saved with.
+const Stored = Schema.Struct({ ...Widget.Template.fields, program: Schema.optional(Schema.String) })
 const decode = Schema.decodeUnknownSync(Widget.Template)
+const encodeStored = Schema.encodeSync(Stored)
 // Versions stored before templates had a mode are step templates.
 const decodeOption = (value: unknown) =>
-  Schema.decodeUnknownOption(Widget.Template)(
+  Schema.decodeUnknownOption(Stored)(
     typeof value === "object" && value !== null && !("mode" in value) ? { ...value, mode: "step" } : value,
   )
-const builtin = new Map(builtins.map((template) => [template.name, decode(template)]))
 
 // An exact host name, or `*.` and a host name for any subdomain of it, with an optional port. Single labels and IPv4
 // literals (`localhost`, `127.0.0.1`, `*.local`, `localhost:4097`) are for clients' dev-mode local network
@@ -99,15 +107,26 @@ const latestKey = (name: string) => `latest:${name}`
 // The 1-based number of a saved version among its template's versions, in the order they were first saved.
 const revisionKey = (name: string, version: string) => `revision:${name}:${version}`
 
-export const toProgram = (template: Widget.Template): Widget.Program => ({
-  ...template,
-  program: program(template.source),
-})
+/** A template without its program, for `get` and summaries. */
+export const withoutProgram = ({ program: _, ...template }: Widget.Program): Widget.Template => template
 
-export const make = (storage: StorageDomain) => {
+export const make = (storage: StorageDomain, builder: Builder = current) => {
+  // Built-ins are hashed with the prelude they ship with, which is the one the server runs now.
+  const builtin = new Map(
+    builtins.map((template) => {
+      const decoded = decode(template)
+      return [decoded.name, { ...decoded, program: builder.program(decoded.source) } satisfies Widget.Program]
+    }),
+  )
+
+  // A version is served with the program it was stored with, never rebuilt with a newer prelude.
   const read = Effect.fnUntraced(function* (name: string, version: string) {
-    return Option.getOrUndefined(decodeOption(yield* storage.get(versionKey(name, version))))
+    const stored = Option.getOrUndefined(decodeOption(yield* storage.get(versionKey(name, version))))
+    if (!stored) return undefined
+    return { ...stored, program: stored.program ?? builder.program(stored.source) } satisfies Widget.Program
   })
+  const store = (template: Widget.Program) =>
+    storage.set(versionKey(template.name, template.version), encodeStored(template))
 
   const savedLatest = Effect.fnUntraced(function* (name: string) {
     const version = yield* storage.get(latestKey(name))
@@ -128,7 +147,7 @@ export const make = (storage: StorageDomain) => {
   })
 
   const list = Effect.fn("WidgetTemplates.list")(function* () {
-    const saved: Widget.Template[] = []
+    const saved: Widget.Program[] = []
     let after: string | undefined
     do {
       const page = yield* storage.scan({ prefix: "latest:", after, limit: 100 })
@@ -139,14 +158,14 @@ export const make = (storage: StorageDomain) => {
       after = page.next
     } while (after !== undefined)
     return [...builtin.values(), ...saved]
-      .map(({ source: _, ...summary }): Widget.Summary => summary)
+      .map(({ source: _, program: __, ...summary }): Widget.Summary => summary)
       .toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
   /** Keeps a built-in version a widget uses, so it stays retrievable after a release changes the built-in. */
-  const remember = Effect.fn("WidgetTemplates.remember")(function* (template: Widget.Template) {
+  const remember = Effect.fn("WidgetTemplates.remember")(function* (template: Widget.Program) {
     if (!template.builtin || (yield* storage.get(versionKey(template.name, template.version))) !== undefined) return
-    yield* storage.set(versionKey(template.name, template.version), Schema.encodeSync(Widget.Template)(template))
+    yield* store(template)
   })
 
   // Data only: the server never runs a template, so `init` and `view` errors come back from clients (`report`).
@@ -162,10 +181,10 @@ export const make = (storage: StorageDomain) => {
     return typeof stored === "number" ? stored : undefined
   })
 
-  const save = (input: SaveInput) => store(input)
+  const save = (input: SaveInput) => create(input)
 
   // `save` and `edit`: validates, lints, checks the example when there is one, and stores the version.
-  const store = Effect.fn("WidgetTemplates.save")(function* (
+  const create = Effect.fn("WidgetTemplates.save")(function* (
     input: Omit<SaveInput, "example"> & { example?: Schema.Json },
   ) {
     const invalid = (reason: string) => new InvalidTemplateError({ name: input.name, reason })
@@ -177,6 +196,7 @@ export const make = (storage: StorageDomain) => {
     const mode = input.mode ?? "step"
     const problem = capabilitiesProblem(mode, input.capabilities)
     if (problem) return yield* invalid(problem)
+    const text = builder.program(input.source)
     const template = decode({
       name: input.name,
       version: version(input.source, input.data, mode, input.capabilities),
@@ -193,11 +213,11 @@ export const make = (storage: StorageDomain) => {
       yield* check(template, input.example).pipe(Effect.mapError((error) => invalid(`example: ${error.reason}`)))
     // The version first, so `latest` never names a version that is not stored. Saving existing content promotes it
     // again with the new description.
-    yield* storage.set(versionKey(template.name, template.version), Schema.encodeSync(Widget.Template)(template))
+    yield* store({ ...template, program: text })
     if ((yield* revision(template.name, template.version)) === undefined)
       yield* storage.set(revisionKey(template.name, template.version), yield* count(template.name))
     yield* storage.set(latestKey(template.name), template.version)
-    return template
+    return { ...template, program: text } satisfies Widget.Program
   })
 
   // How many versions of `name` are stored.
@@ -240,7 +260,7 @@ export const make = (storage: StorageDomain) => {
     }
     if (input.data !== undefined && input.example === undefined)
       return yield* invalid("`example` is required when `data` changes")
-    return yield* store({
+    return yield* create({
       name: input.name,
       description: input.description ?? base.description,
       data: input.data ?? base.data,

@@ -233,10 +233,7 @@ export default Plugin.define({
             (input.version === undefined
               ? templates.latest(input.name)
               : templates.get(input.name, input.version)
-            ).pipe(
-              Effect.map(WidgetTemplates.toProgram),
-              Effect.mapError((error) => call.error("not_found", error.message, {})),
-            ),
+            ).pipe(Effect.mapError((error) => call.error("not_found", error.message, {}))),
           states: (input) => list(input.sessionID),
           respond: (input, call) =>
             Effect.gen(function* () {
@@ -395,7 +392,10 @@ export default Plugin.define({
               })
               if (input.action === "get") {
                 const template = yield* templates.latest(named).pipe(Effect.mapError(toolError))
-                return { content: JSON.stringify(template, null, 2), metadata: yield* summary(template) }
+                return {
+                  content: JSON.stringify(WidgetTemplates.withoutProgram(template), null, 2),
+                  metadata: yield* summary(template),
+                }
               }
               const saved =
                 input.action === "edit"
