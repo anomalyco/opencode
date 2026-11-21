@@ -118,10 +118,6 @@ mod tests {
         );
         assert_eq!(channels(&[("OPENCODE_CHANNEL", "beta")]).storage, "beta");
         assert_eq!(channels(&[("OPENCODE_CHANNEL", "")]).channel, "latest");
-    }
-
-    #[test]
-    fn filename_replaces_each_utf16_unit() {
         assert_eq!(filename("a b/ü😀"), "service-a-b----.json");
     }
 }

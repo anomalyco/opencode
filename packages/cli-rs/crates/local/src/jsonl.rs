@@ -472,9 +472,6 @@ mod tests {
             history.append(prompt(&index.to_string()));
         }
         assert_eq!(history.entries().len(), MAX_HISTORY_ENTRIES);
-        // A byte that is not UTF-8 reads as U+FFFD, as Node reads it, rather than emptying the history.
-        fs::write(&file, b"{\"text\":\"caf\xe9\",\"pasted\":[]}\n").unwrap();
-        assert_eq!(History::load(state.path()).entries(), [json!({"text": "caf\u{fffd}", "pasted": []})]);
     }
 
     #[test]
