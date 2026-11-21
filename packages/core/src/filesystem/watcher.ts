@@ -206,11 +206,14 @@ export const nativeLayer = Layer.succeed(
       if (input.type === "file" || input.type === "entries") {
         const directory = input.type === "file" ? path.dirname(input.target) : input.target
         const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
+        const caseInsensitive = process.platform === "win32" || process.platform === "darwin"
+        const lookup = new Set(caseInsensitive ? Array.from(names, (name) => name.toLowerCase()) : names)
         return Effect.try({
           try: () =>
             watch(directory, { recursive: false }, (_event, file) => {
-              if (file && !names.has(file)) return
-              for (const name of file ? [file] : names) {
+              if (file && !lookup.has(caseInsensitive ? file.toLowerCase() : file)) return
+              const emitted = file ? [input.type === "file" ? path.basename(input.target) : file] : names
+              for (const name of emitted) {
                 input.publish({ path: path.join(directory, name), type: "update" })
               }
             }),

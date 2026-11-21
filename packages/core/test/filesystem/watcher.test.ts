@@ -183,6 +183,48 @@ describe("Watcher lifecycle", () => {
     ),
   )
 
+  it.live("matches watched entry names case-insensitively on Windows and macOS", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const native = yield* Watcher.Native
+          const events: Watcher.Update[] = []
+          yield* Effect.acquireRelease(
+            native.subscribe({
+              type: "entries",
+              target: tmp.path,
+              names: ["opencode.json"],
+              ignore: [],
+              publish: (update) => events.push(update),
+            }),
+            (subscription) => Effect.promise(() => subscription?.unsubscribe() ?? Promise.resolve()),
+          )
+          const target =
+            process.platform === "win32" || process.platform === "darwin" ? "OpenCode.json" : "opencode.json"
+          if (target === "opencode.json") {
+            yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "OpenCode.json"), "{}"))
+          }
+          let step = 0
+          const writes = yield* Effect.promise(() =>
+            fs.writeFile(path.join(tmp.path, target), `{"step":${++step}}`),
+          ).pipe(Effect.repeat(Schedule.spaced("25 millis")), Effect.forkScoped)
+          yield* Effect.sync(() => events.length)
+            .pipe(
+              Effect.filterOrFail((count) => count > 0),
+              Effect.retry(Schedule.spaced("10 millis")),
+              Effect.timeout("5 seconds"),
+            )
+            .pipe(Effect.ensuring(Fiber.interrupt(writes)))
+          if (target === "OpenCode.json") {
+            expect(events.some((update) => path.basename(update.path).toLowerCase() === "opencode.json")).toBe(true)
+            return
+          }
+          expect(events.every((update) => update.path === path.join(tmp.path, "opencode.json"))).toBe(true)
+        }).pipe(Effect.provide(Watcher.nativeLayer)),
+      ),
+    ),
+  )
+
   it.effect("interrupting a consumer interrupts a pending acquisition", () =>
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>()
