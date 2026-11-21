@@ -61,6 +61,8 @@ export const newTabCommand = { id: "tab.new", keybind: "mod+t,mod+n" }
 /** Search projects: a draft searches in place; everywhere else it opens a new draft with the project picker open. */
 export const projectSearchCommand = { id: "project.select", keybind: "mod+shift+o" }
 
+export const quickOpenCommand = { id: "quick.open", keybind: "mod+o" }
+
 export const goBackCommand = { id: "common.goBack", keybind: "mod+[" }
 
 export const goForwardCommand = { id: "common.goForward", keybind: "mod+]" }
@@ -535,6 +537,15 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
                   const { DialogSessionSearch } = await import("@/shell/commands/session-search")
                   void dialog.show(() => <DialogSessionSearch />)
+                },
+              },
+              {
+                ...quickOpenCommand,
+                title: language.t("command.quickOpen"),
+                category: language.t("command.category.session"),
+                onSelect: async () => {
+                  const { DialogSessionSearch } = await import("@/shell/commands/session-search")
+                  void dialog.show(() => <DialogSessionSearch projects />)
                 },
               },
             ])

@@ -23,9 +23,9 @@ export function matchesCommandPaletteEntry(entry: CommandPaletteEntry, query: st
   )
 }
 
-const typeOrder = { command: 0, session: 1, setting: 2, file: 3 }
+const typeOrder = { command: 0, project: 1, session: 2, setting: 3, file: 4 }
 
-/** Search results: commands lead, then sessions (those open as tabs first, then the newest), settings and files. */
+/** Search results: commands lead, then projects, sessions (those open as tabs first, then the newest), settings and files. */
 export function rankCommandPaletteEntries(
   entries: CommandPaletteEntry[],
   open: (entry: CommandPaletteEntry) => boolean,
