@@ -212,7 +212,7 @@ mod tests {
     /// machine.test.ts "machine output formatting".
     #[test]
     fn add_prints_the_join_string_alone_off_a_terminal() {
-        let invite = MachineInvite { name: "gpu".into(), join: "ocjoin_example".into(), expires: 0 };
+        let invite = MachineInvite { name: "gpu".into(), join: "ocjoin_example".into(), expires: 0, reach: Vec::new() };
         let reach =
             [MachineReach { r#type: "url".into(), url: "wss://example.com/api/experimental/machine/link".into() }];
         // 2026-01-01T12:00:00Z.
@@ -240,6 +240,7 @@ mod tests {
             online,
             os: os.map(Into::into),
             arch: arch.map(Into::into),
+            connection: None,
         };
         let machines = [
             machine("gpu", true, true, Some("linux"), Some("x64")),

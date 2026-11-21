@@ -2898,12 +2898,20 @@ export type MachineInfo = {
     paired: boolean,
     os: string?,
     arch: string?,
+    connection: {
+        kind: ("websocket" | "iroh"),
+        path: ("direct" | "relayed")?,
+        rtt: (number | ("Infinity" | "-Infinity" | "NaN"))?,
+    }?,
 }
 
 export type MachineInvite = {
     name: string,
     join: string,
     expires: number,
+    reach: { (MachineReach | {
+        type: "iroh",
+    }) },
 }
 
 export type MachineReach = {
