@@ -1,5 +1,12 @@
 import { spyOn } from "bun:test"
-import type { LocationRef, ModelListOutput, OpenCodeClient, ProviderListOutput } from "@opencode/client/promise"
+import type {
+  AgentListOutput,
+  ConfigGetOutput,
+  LocationRef,
+  ModelListOutput,
+  OpenCodeClient,
+  ProviderListOutput,
+} from "@opencode/client/promise"
 
 export function catalogProvider(id: string, name: string): ProviderListOutput["data"][number] {
   return {
@@ -43,6 +50,8 @@ export function stubCatalogLists(
     location?: LocationRef
     providers?: ProviderListOutput["data"]
     models?: ModelListOutput["data"]
+    agents?: AgentListOutput["data"]
+    config?: ConfigGetOutput
   } = {},
 ) {
   const location = {
@@ -52,10 +61,11 @@ export function stubCatalogLists(
   }
   const empty = { location, data: [] }
 
+  spyOn(sdk.config, "get").mockResolvedValue(input.config ?? [])
   return {
     provider: spyOn(sdk.provider, "list").mockResolvedValue({ location, data: input.providers ?? [] } as never),
     model: spyOn(sdk.model, "list").mockResolvedValue({ location, data: input.models ?? [] } as never),
-    agent: spyOn(sdk.agent, "list").mockResolvedValue(empty as never),
+    agent: spyOn(sdk.agent, "list").mockResolvedValue({ location, data: input.agents ?? [] } as never),
     reference: spyOn(sdk.reference, "list").mockResolvedValue(empty as never),
     command: spyOn(sdk.command, "list").mockResolvedValue(empty as never),
     skill: spyOn(sdk.skill, "list").mockResolvedValue(empty as never),
