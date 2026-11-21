@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { SessionConfigOption } from "@agentclientprotocol/sdk"
 import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
@@ -22,7 +23,15 @@ const catalog: Catalog = {
   modes: [{ id: Agent.ID.make("build"), name: "Build" }],
   defaultModeID: Agent.ID.make("build"),
   commands: [],
+  providers: [
+    { id: Provider.ID.make("anthropic"), name: "Anthropic" },
+    { id: Provider.ID.make("openai"), name: "OpenAI" },
+    { id: Provider.ID.make("test"), name: "Test Provider" },
+  ],
 }
+
+const selectOption = (options: readonly SessionConfigOption[], id: string) =>
+  options.find((option): option is Extract<SessionConfigOption, { type: "select" }> => option.id === id)
 
 const effortOption = (providerID: string, id: string) =>
   configOptions(catalog, {
@@ -49,6 +58,21 @@ describe("acp config options", () => {
       ],
     })
     expect(effortOption("openai", "gpt-5")?.currentValue).toBe("minimal")
+  })
+
+  test("labels model options with the provider display name and keeps the stable value", () => {
+    const modelOption = selectOption(configOptions(catalog, {}), "model")
+    expect(modelOption?.options).toEqual([
+      { value: "anthropic/claude-haiku", name: "Anthropic / Claude Haiku" },
+      { value: "anthropic/claude/sonnet-4", name: "Anthropic / Claude Sonnet 4" },
+      { value: "openai/gpt-5", name: "OpenAI / GPT-5" },
+      { value: "test/effort", name: "Test Provider / Effort" },
+    ])
+  })
+
+  test("falls back to the provider id when no display name is known", () => {
+    const modelOption = selectOption(configOptions({ ...catalog, providers: [] }, {}), "model")
+    expect(modelOption?.options?.[0]).toEqual({ value: "anthropic/claude-haiku", name: "anthropic / Claude Haiku" })
   })
 
   test.each([
