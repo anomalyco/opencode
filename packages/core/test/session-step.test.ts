@@ -233,7 +233,7 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
 // Interrupts an attempt running a tool that stops on `cancel` and one that never does, and returns how the step and
 // its calls were recorded.
 const stopTwoTools = (how: {
-  reason: "user" | "shutdown" | undefined
+  reason: "user" | "shutdown" | "superseded" | "inactivity" | undefined
   locationClosed: boolean
   handoffPrepared?: boolean
   // What the cooperative tool does once asked to stop; by default it fails with its partial output.
@@ -394,9 +394,17 @@ it.live("classifies what a tool raises while the user's stop settles it: a defec
 )
 
 // Without a handoff nothing will take the calls over, so they settle here however the step was interrupted.
-for (const reason of ["shutdown", undefined] as const)
+// Only a user's stop lets a tool settle its own call: every other reason hard-interrupts the tools,
+// like a shutdown does.
+for (const reason of ["shutdown", "inactivity", "superseded", undefined] as const)
   it.live(
-    `settles every call as interrupted on ${reason === "shutdown" ? "a server shutdown" : "an unexplained interrupt"} without a handoff`,
+    `settles every call as interrupted on ${
+      reason === "shutdown"
+        ? "a server shutdown"
+        : reason === undefined
+          ? "an unexplained interrupt"
+          : `a ${reason} interrupt`
+    } without a handoff`,
     () =>
       Effect.gen(function* () {
         const { exit, data, requests, interrupted } = yield* stopTwoTools({ reason, locationClosed: false })

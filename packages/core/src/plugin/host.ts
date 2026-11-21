@@ -621,7 +621,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       synthetic: sessions.synthetic,
       interrupt: (input) =>
         sessions
-          .interrupt(input.sessionID, { resume: input.resume })
+          .interrupt(input.sessionID, { resume: input.resume, reason: input.reason })
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
       context: (input) => sessions.context(input.sessionID),

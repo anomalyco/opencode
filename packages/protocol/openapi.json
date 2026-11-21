@@ -4097,7 +4097,32 @@
           }
         },
         "description": "Stop the session's agent if it is running in this server process; interrupted=false means nothing was running. With resume=true it continues with pending steer items, compaction and moves, while queued messages keep waiting.",
-        "summary": "Interrupt session execution"
+        "summary": "Interrupt session execution",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["user", "shutdown", "superseded", "inactivity"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Why the execution is being interrupted. Defaults to \"user\" when omitted. Only \"user\" lets tools awaiting cancellation stop and settle their own call; any other reason interrupts them at once."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/session/{sessionID}/background": {

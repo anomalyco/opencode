@@ -42,8 +42,8 @@ export const Outcome = Data.taggedEnum<Outcome>()
 
 interface Input {
   readonly isLocationClosed: () => boolean
-  /** Why the execution is being interrupted, once it is: `"user"` when someone stopped it. */
-  readonly interruption?: () => "user" | "shutdown" | undefined
+  /** Why the execution is being interrupted, once it is: the reason supplied with the interrupt, or undefined for a teardown. */
+  readonly interruption?: () => SessionEvent.Execution.Interrupted["data"]["reason"] | undefined
   /** Whether this server is handing its process daemon over to the next one (see `PersistentPty.handoffPrepared`). */
   readonly handoffPrepared?: () => boolean
   readonly sessionID: SessionSchema.ID
@@ -108,7 +108,8 @@ export const make = Effect.gen(function* () {
     }> = []
     const interruptTools = Effect.suspend(() => Fiber.interruptAll(toolRuns.map((run) => run.fiber)))
     // A user's stop asks each tool awaiting `cancel` to stop and settle its own call, and interrupts every other
-    // tool. A tool that does not settle in time is interrupted too. Teardown interrupts every tool.
+    // tool. A tool that does not settle in time is interrupted too. Teardown interrupts every tool, as does any
+    // other reason: only a user's stop is cooperative.
     const stopTools = Effect.suspend(() => {
       // A reloaded Location still serves the steps that borrow it, so its tools can stop on their own too.
       const user = input.interruption?.() === "user"

@@ -758,6 +758,12 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
               "Set to true to resume pending steering input and next-in-line control items after interrupting.",
           }),
         },
+        payload: Schema.Struct({
+          reason: SessionEvent.Execution.Interrupted.fields.data.fields.reason.pipe(Schema.optional).annotate({
+            description:
+              'Why the execution is being interrupted. Defaults to "user" when omitted. Only "user" lets tools awaiting cancellation stop and settle their own call; any other reason interrupts them at once.',
+          }),
+        }),
         success: Schema.Struct({
           interrupted: Schema.Boolean.annotate({
             description: "Whether an active execution owned by this OpenCode process was interrupted.",
