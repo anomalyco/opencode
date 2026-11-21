@@ -289,8 +289,12 @@ export function DialogSessionList() {
         {
           command: "session.rename",
           title: "rename",
-          onTrigger: (option: { value: string; title: string }) =>
-            DialogSessionRename.show(dialog, option.value, option.title),
+          // The row shows the delete confirmation while it waits for a second keystroke; rename still starts from the
+          // session's title, not from that label.
+          onTrigger: (option: { value: string }) => {
+            const session = sessions().find((session) => session.id === option.value)
+            DialogSessionRename.show(dialog, option.value, session && withTimestampedFallback(session))
+          },
         },
       ]}
       footerHints={[
