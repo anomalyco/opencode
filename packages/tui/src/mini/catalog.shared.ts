@@ -35,6 +35,9 @@ function runAgent(input: CurrentAgent): RunAgent {
     color: input.color,
     mode: input.mode,
     hidden: input.hidden,
+    model: input.model
+      ? { providerID: input.model.providerID, modelID: input.model.id, variant: input.model.variant }
+      : undefined,
   }
 }
 

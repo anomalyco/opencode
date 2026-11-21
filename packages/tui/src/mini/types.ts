@@ -106,6 +106,14 @@ export type RunAgent = {
   color?: string
   mode: "subagent" | "primary" | "all"
   hidden: boolean
+  // The agent's configured model from its frontmatter (`model:`), when set.
+  // Carried through so the footer can show it; it never becomes the sent
+  // model on its own — the server resolves it per step.
+  model?: {
+    providerID: string
+    modelID: string
+    variant?: string
+  }
 }
 
 export type RunReference = ReferenceListOutput["data"][number]
