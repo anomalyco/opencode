@@ -64,9 +64,14 @@ export type ElectronAPI = {
   onWindowFullscreenChanged(cb: (fullscreen: boolean) => void): () => void
   setWindowFocus(): Promise<void>
   showWindow(): Promise<void>
-  showToast(toast: { tag: string; title: string; body: string }): Promise<void>
+  showToast(toast: {
+    tag: string
+    title: string
+    body: string
+    actions: ReadonlyArray<{ id: string; label: string }>
+  }): Promise<void>
   dismissToast(tag: string): Promise<void>
-  onToastActivated(cb: (tag: string) => void): () => void
+  onToastActivated(cb: (activation: { tag: string; action?: string }) => void): () => void
   relaunch(): void
   getZoomFactor(): Promise<number>
   setZoomFactor(factor: number): Promise<void>

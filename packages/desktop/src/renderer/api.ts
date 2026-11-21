@@ -73,7 +73,7 @@ export const api: ElectronAPI = {
   showWindow: () => invoke("WindowShow"),
   showToast: (toast) => invoke("WindowShowToast", toast),
   dismissToast: (tag) => invoke("WindowDismissToast", { tag }),
-  onToastActivated: (cb) => listen("ToastActivated", (event) => cb(event.tag)),
+  onToastActivated: (cb) => listen("ToastActivated", (event) => cb({ tag: event.tag, action: event.action })),
   relaunch: () => send("AppRelaunch"),
   getZoomFactor: () => invoke("WindowGetZoomFactor"),
   setZoomFactor: (factor) => invoke("WindowSetZoomFactor", { factor }),

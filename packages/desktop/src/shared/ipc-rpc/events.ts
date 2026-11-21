@@ -8,8 +8,11 @@ export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("Deep
   urls: Schema.Array(Schema.String),
 }) {}
 
-// A Windows toast this window posted was clicked.
-export class ToastActivated extends Schema.TaggedClass<ToastActivated>()("ToastActivated", { tag: Schema.String }) {}
+// A Windows toast this window posted was clicked: on a button when `action` is set, else on its body.
+export class ToastActivated extends Schema.TaggedClass<ToastActivated>()("ToastActivated", {
+  tag: Schema.String,
+  action: Schema.optional(Schema.String),
+}) {}
 
 export class MenuCommandTriggered extends Schema.TaggedClass<MenuCommandTriggered>()("MenuCommandTriggered", {
   id: Schema.String,

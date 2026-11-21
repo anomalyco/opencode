@@ -60,7 +60,12 @@ export const WindowSetTaskbarProgress = Rpc.make("WindowSetTaskbarProgress", {
 })
 
 export const WindowShowToast = Rpc.make("WindowShowToast", {
-  payload: { tag: Schema.String, title: Schema.String, body: Schema.String },
+  payload: {
+    tag: Schema.String,
+    title: Schema.String,
+    body: Schema.String,
+    actions: Schema.Array(Schema.Struct({ id: Schema.String, label: Schema.String })),
+  },
 })
 
 export const WindowDismissToast = Rpc.make("WindowDismissToast", { payload: { tag: Schema.String } })
