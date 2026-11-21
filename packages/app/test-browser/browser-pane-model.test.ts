@@ -106,7 +106,7 @@ function fixture(
     sessions: { current, list: () => refs },
     screen: { current: () => undefined },
     links: { open: () => undefined },
-    layout: { narrow: () => false, stored: () => [], state: () => "closed", open() {}, close() {}, side: { opened: () => false } },
+    layout: { narrow: () => false, ready: () => false, stored: () => [], state: () => "closed", open() {}, close() {}, side: { opened: () => false } },
     stores: { history, tabs },
   }
 

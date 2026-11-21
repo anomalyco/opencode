@@ -77,6 +77,8 @@ type Handle = {
   cleanup: () => void
   timer?: ReturnType<typeof setTimeout>
   network?: BrowserNetwork
+  /** A remote server's partition: what a page waits for before it loads, while the sign-ins are first copied into it. */
+  signedIn?: (signal: AbortSignal) => Promise<void> | undefined
   sendState?: (state: Browser.State) => void
   /** Pages by attempt. */
   pages: Map<number, BrowserPage>
@@ -304,12 +306,17 @@ export function createBrowserPane(input: {
 
             if (!shared) {
               handle.network = yield* createBrowserNetwork({ rpc, attachment, location: options.location, partition })
+
               // Only when the user chose to share sign-ins with remote servers do they carry over, both ways, so a page
               // of a remote server is signed in where the profile is; otherwise `link` leaves the partition apart.
-              yield* Effect.acquireRelease(
-                Effect.promise(() => input.profile.link(electron.session.fromPartition(partition))),
-                (unlink) => Effect.sync(unlink),
+              // The attachment does not wait for the first copy of the sign-ins: only a page that is about to load
+              // does (`signedIn`). A registration that ends, for any reason, ends its copy with the scope.
+              const linked = yield* Effect.acquireRelease(
+                Effect.sync(() => input.profile.link(electron.session.fromPartition(partition))),
+                (link) => Effect.sync(link.unlink),
               )
+
+              handle.signedIn = linked.signedIn
             }
 
             const connected = yield* Deferred.make<void>()
@@ -879,7 +886,9 @@ export function createBrowserPane(input: {
       artifacts: handle.artifacts?.(),
       remote: remoteSource(binding),
       local: handle.shared,
-      waitForFilters: handle.shared ? input.profile.waitForFilters : undefined,
+      // What a web page waits for before its load is issued: in the profile its content filters, in a remote server's
+      // partition the first copy of the sign-ins, so a restored tab opens signed in.
+      waitForFilters: handle.shared ? input.profile.waitForFilters : (url, signal) => (/^https?:\/\//i.test(url) ? handle.signedIn?.(signal) : undefined),
       signal: handle.abort.signal,
       extensions: () => extensions(binding),
       shared,
