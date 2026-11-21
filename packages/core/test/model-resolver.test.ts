@@ -866,9 +866,10 @@ describe("ModelResolver", () => {
       })
       expect(resolved.options?.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
       expect(headers.authorization).toBe("Bearer chatgpt-token")
+      expect(prepared.body).not.toHaveProperty("instructions")
       expect(prepared.body).toMatchObject({
-        instructions: "Base instructions.\nProject instructions.",
         input: [
+          { role: "developer", content: "Base instructions.\nProject instructions." },
           { role: "user", content: [{ type: "input_text", text: "Hello" }] },
           { role: "developer", content: "Updated instructions." },
         ],
@@ -1612,6 +1613,86 @@ describe("ModelResolver", () => {
             }),
         },
       )
+    }),
+  )
+
+  it.effect("applies provider timeouts to resolved image, video, and decision models", () =>
+    Effect.gen(function* () {
+      const settings = { apiKey: "secret", timeout: 12_000, headerTimeout: 3_000, chunkTimeout: 4_000 }
+      const providerID = Provider.ID.make("timed")
+      const entries = [
+        model("@opencode/ai/providers/openai/images", { providerID, modelID: "gpt-image-2", settings }),
+        model("@opencode/ai/providers/xai/videos", { providerID, modelID: "grok-imagine-video-1.5", settings }),
+        model("@opencode/ai/providers/google/decisions", { providerID, modelID: "gemini-2.5-flash", settings }),
+      ].map((entry, index) =>
+        Info.make({
+          ...entry,
+          id: ID.make(["img", "vid", "dec"][index]!),
+          type: (["image", "video", "decision"] as const)[index],
+        }),
+      )
+      const provider = Provider.Info.make({
+        ...Provider.Info.empty(providerID),
+        activation: "enabled",
+        settings,
+      })
+      const resolverLayer = ModelResolver.layer.pipe(
+        Layer.provide(Layer.mock(Provider.Service, { get: () => Effect.succeed(provider) })),
+        Layer.provide(
+          Layer.mock(Model.Service, {
+            available: (types) =>
+              Effect.succeed(entries.filter((entry) => !types || types.includes(entry.type ?? "chat"))),
+          }),
+        ),
+        Layer.provide(
+          Layer.mock(Integration.Service, {
+            revision: () => 0,
+            connection: {
+              active: () => Effect.undefined,
+              resolve: () => Effect.die("unused"),
+              key: () => Effect.die("unused"),
+              external: () => Effect.die("unused"),
+              activate: () => Effect.die("unused"),
+              update: () => Effect.die("unused"),
+              remove: () => Effect.die("unused"),
+              status: () => Effect.die("unused"),
+            },
+            oauth: {
+              connect: () => Effect.die("unused"),
+              status: () => Effect.die("unused"),
+              complete: () => Effect.die("unused"),
+              cancel: () => Effect.die("unused"),
+            },
+            command: {
+              connect: () => Effect.die("unused"),
+              status: () => Effect.die("unused"),
+              cancel: () => Effect.die("unused"),
+            },
+          }),
+        ),
+        Layer.provide(
+          Layer.mock(AISDK.Service, {
+            hook: {
+              sdk: () => Effect.die("unused"),
+              language: () => Effect.die("unused"),
+            },
+            model: () => Effect.die("unused"),
+          }),
+        ),
+        Layer.provide(Layer.mock(Npm.Service, {})),
+      )
+
+      const resolver = yield* ModelResolver.Service.pipe(Effect.provide(resolverLayer))
+      const [image, video, decision] = yield* Effect.all([
+        resolver.resolveImage({ providerID, id: ID.make("img") }),
+        resolver.resolveVideo({ providerID, id: ID.make("vid") }),
+        resolver.resolveDecision({ providerID, id: ID.make("dec") }),
+      ])
+
+      const expected = { total: 12_000, headers: 3_000, chunk: 4_000 }
+      expect(image?.transport?.timeout).toEqual(expected)
+      expect(video?.transport?.timeout).toEqual(expected)
+      expect(decision?.transport?.timeout).toEqual(expected)
     }),
   )
 

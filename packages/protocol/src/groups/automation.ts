@@ -5,7 +5,7 @@ import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
 import { AutomationNotFoundError, ForbiddenError, InvalidRequestError, SessionNotFoundError } from "../errors.js"
 
 const EXPERIMENTAL =
-  "Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees."
+  "Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access."
 const errors = [AutomationNotFoundError, ForbiddenError] as const
 const params = { automationID: Automation.ID }
 const annotations = (identifier: string, summary: string, description: string) =>
@@ -38,7 +38,7 @@ export const AutomationEndpoints = [
     annotations(
       "create",
       "Create automation",
-      "Create an automation that sends a prompt or runs a Code Mode program at a time, every interval, or on a cron. Creating an MCP event watch requires the automation_create tool in a local session; a session ID over HTTP is not a watch authorization.",
+      "Create an automation that sends a prompt, runs a Code Mode program, or runs a shell command at a time, every interval, or on a cron. Creating an MCP event watch requires the automation_create tool in a local session; a session ID over HTTP is not a watch authorization.",
     ),
   ),
   HttpApiEndpoint.get("automation.list", "/api/experimental/automation", {

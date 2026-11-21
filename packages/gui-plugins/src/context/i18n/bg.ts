@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Използване",
   "usage.cost": "цена",
   "usage.view": "Преглед на използването на контекста",
-  "systemPrompt.title": "Системен ред",
   "rawMessages.title": "Сурови съобщения",
   "export.session": "Експортиране на сесия",
   "stats.session": "Сесия",

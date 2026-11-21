@@ -5,9 +5,6 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { Duration, Effect, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Parser } from "htmlparser2"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
-import { Flag } from "../../flag.js"
 import { Mime } from "../../mime.js"
 import { Permission } from "../../permission.js"
 import { convertHTMLToMarkdown, MAX_MARKDOWN_BYTES } from "../html-markdown.js"
@@ -35,9 +32,7 @@ export const Input = Schema.Struct({
 })
 
 const Output = Schema.Struct({
-  url: Schema.String,
   contentType: Schema.String,
-  format: Input.fields.format,
   output: Schema.String,
 })
 type Format = (typeof Input.Type)["format"]
@@ -133,15 +128,9 @@ export const Plugin = {
   effect: Effect.fn("WebFetchTool.Plugin")(function* (ctx: Context) {
     const http = yield* HttpClient.HttpClient
     const permission = yield* Permission.Service
-    const config = yield* Config.Service
-    // Internal plugins are not re-run on config changes, so reload the tool transform instead.
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
-    const flags = yield* Flag.Service
 
     yield* ctx.tool
-      .transform((editor) => {
-        // Code Mode programs have a `fetch` global that checks the same webfetch permission rules.
-        if (flags.resolve(loaded.entries).full_codemode.enabled) return
+      .transform((editor) =>
         editor.add({
           name,
           options: { codemode: false },
@@ -195,16 +184,10 @@ export const Plugin = {
                 try: () => convert(content, contentType, input.format),
                 catch: (error) => error,
               })
-              const result = {
-                url: input.url,
-                contentType,
-                format: input.format,
-                output,
-              }
-              return { output: result, content: result.output, metadata: { contentType: result.contentType } }
+              return { output: { contentType, output }, content: output, metadata: { contentType } }
             }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to fetch ${input.url}`, error }))),
-        })
-      })
+        }),
+      )
       .pipe(Effect.orDie)
   }),
 }

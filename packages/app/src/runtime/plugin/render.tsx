@@ -14,6 +14,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { Portal, render } from "solid-js/web"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import {
   MarkdownProvider,
   useMarkdown,
@@ -33,10 +34,15 @@ import {
   type CodeBlockProps,
   type MountedSession,
 } from "@opencode/plugin/gui"
-import { BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
+import { BuiltinAppLink, BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
+import { usePlatform } from "@/runtime/platform/platform"
+import { useLanguage } from "@/runtime/i18n/language"
+import { showToast } from "@/shell/notifications/toast"
+import { appLinkRoute, createAppLinks } from "./app-links"
 import { PluginContext } from "@opencode/plugin/gui/host"
 import { usePluginHost, type Item } from "./host"
 import { createLinkCheck } from "./link-check"
+import { webHref } from "./web-href"
 
 /**
  * Renders one plugin contribution with its context and error isolation: a contribution that throws records the
@@ -154,6 +160,7 @@ export function PluginThemes(props: { loaded: () => boolean }) {
 export function PluginLinks(props: ParentProps<{ session: MountedSession; active?: boolean }>) {
   const host = usePluginHost()
   const markdown = useMarkdown()
+  const desktop = usePlatform().platform === "desktop"
 
   // Checks untracked: markdown calls this inside its render effect, which must not follow the routed session.
   const localFileExists = createLinkCheck(
@@ -163,6 +170,7 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
 
   const Links = (inner: ParentProps<{ codeBlocks: MarkdownCodeBlocks | false }>) => (
     <MarkdownProvider
+      appLinks={desktop}
       readImage={markdown?.readImage}
       openLocalFile={(href) => void host.links.open({ href, session: props.session })}
       localFileExists={localFileExists}
@@ -185,6 +193,48 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
       </SourcesProvider>
     </Links>
   )
+}
+
+/**
+ * Offers a plain click on a web link in the session screen (its conversation and side panels) to the LinkHandler
+ * contributions first, as `Links.open({ href, session })`. A click with a modifier key, or one no handler takes, keeps
+ * the link's own behavior: the system browser.
+ */
+export function createWebLinks(session: () => MountedSession) {
+  const host = usePluginHost()
+  const language = useLanguage()
+  const platform = usePlatform()
+
+  if (platform.platform === "desktop") createAppLinks((href) => {
+    const handler = host.items(BuiltinAppLink)[0]
+    const route = appLinkRoute(href, !!handler)
+
+    if (route === "mail") return platform.openExternal(href)
+
+    if (route === "review") return handler?.value.review(href)
+    void navigator.clipboard.writeText(href).then(
+      () => showToast({ title: language.t("common.copied") }),
+      () => showToast({ title: language.t("common.requestFailed") }),
+    )
+  })
+
+  makeEventListener(document, "click", (event) => {
+    const href = webLink(event, session)
+
+    if (href && host.links.open({ href, session: session() })) event.preventDefault()
+  })
+}
+
+function webLink(event: MouseEvent, session: () => MountedSession) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    return
+  const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null
+
+  // `data-pane-row` holds the conversation and the side panels; dialogs and menus render outside it.
+  if (!(anchor instanceof HTMLAnchorElement) || !anchor.closest("[data-pane-row]") || anchor.hasAttribute("download"))
+    return
+
+  return webHref(anchor.getAttribute("href") ?? "", session().server.url)
 }
 
 /**

@@ -258,6 +258,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M9.5 3.5V1.5H1.5V10.5H4.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M6.5 14.5V5.5H14.5V14.5H6.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
   },
+  "text-wrap": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 3.5H14.5M1.5 8H11.5C12.8807 8 14 9.11929 14 10.5C14 11.8807 12.8807 13 11.5 13H8.5M10 11.5L8.5 13L10 14.5M1.5 12.5H5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
+  },
   check: {
     viewBox: "0 0 16 16",
     body: `<path d="M4.5 7.5L7 11.5L11.5 4.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
@@ -370,10 +374,6 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M3 14.5V15H4V14.5H3.5H3ZM4 1.5V1H3V1.5H3.5H4ZM8.5 1.5V1H8V1.5H8.5ZM14.5 1.5H15V1H14.5V1.5ZM14.5 6.5V7H15V6.5H14.5ZM8.5 6.5H8V7H8.5V6.5ZM8.5 9.5V9H8V9.5H8.5ZM14.5 9.5H15V9H14.5V9.5ZM14.5 14.5V15H15V14.5H14.5ZM8.5 14.5H8V15H8.5V14.5ZM3.5 6H4V1.5H3.5H3V6H3.5ZM8.5 1.5V2H14.5V1.5V1H8.5V1.5ZM14.5 1.5H14V6.5H14.5H15V1.5H14.5ZM14.5 6.5V6H8.5V6.5V7H14.5V6.5ZM8.5 6.5H9V1.5H8.5H8V6.5H8.5ZM8.5 9.5V10H14.5V9.5V9H8.5V9.5ZM14.5 9.5H14V14.5H14.5H15V9.5H14.5ZM14.5 14.5V14H8.5V14.5V15H14.5V14.5ZM8.5 14.5H9V9.5H8.5H8V14.5H8.5ZM3.5 10V10.5C4.8807 10.5 6 9.38075 6 8H5.5H5C5 8.82845 4.32843 9.5 3.5 9.5V10ZM5.5 8H6C6 6.61925 4.8807 5.5 3.5 5.5V6V6.5C4.32843 6.5 5 7.17155 5 8H5.5ZM3.5 6V5.5C2.1193 5.5 1 6.61925 1 8H1.5H2C2 7.17155 2.67157 6.5 3.5 6.5V6ZM1.5 8H1C1 9.38075 2.1193 10.5 3.5 10.5V10V9.5C2.67157 9.5 2 8.82845 2 8H1.5ZM3.5 14.5H4V10H3.5H3V14.5H3.5Z" fill="currentColor"/>`,
   },
-  "outline-pair": {
-    viewBox: "0 0 16 16",
-    body: `<path d="M2.5 9V2.5H13.5V3.5M2.5 9L0.5 12.5H7.5M2.5 9H7.5" stroke-linecap="square" stroke-linejoin="round" stroke="currentColor"/><path d="M11.5 12.5H13.5M9.5 5.5V14.5H15.5V5.5H9.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
-  },
   lock: {
     viewBox: "0 0 16 16",
     body: `<path d="M2.5 14.5V7.5H13.5V14.5H2.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M5.5 7.5V4C5.5 2.61929 6.61929 1.5 8 1.5C9.38071 1.5 10.5 2.61929 10.5 4V7.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M7.5 10.5C7.5 10.2239 7.72386 10 8 10C8.27614 10 8.5 10.2239 8.5 10.5V12.5C8.5 12.7761 8.27614 13 8 13C7.72386 13 7.5 12.7761 7.5 12.5V10.5Z" fill="currentColor"/>`,
@@ -389,6 +389,10 @@ const icons = {
   flask: {
     viewBox: "0 0 16 16",
     body: `<path d="M10.5 2.5V6.5L11.3571 8.5M10.5 2.5H5.5M10.5 2.5H12.5M5.5 2.5V6.5L4.21429 9.5M5.5 2.5H3.5M4.21429 9.5L2.5 13.5H13.5L11.3571 8.5M4.21429 9.5L11.3571 8.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
+  },
+  "sessions-stack": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M3.5 3.5H12.5M1.5 5.5V12.5H14.5V5.5H12.5H3.5H1.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
   },
   "grid-plus": {
     viewBox: "0 0 16 16",
@@ -470,6 +474,12 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M14.1992 8C14.1992 9.18669 13.8473 10.3467 13.188 11.3334C12.5288 12.3201 11.5917 13.0892 10.4953 13.5433C9.39897 13.9974 8.19257 14.1162 7.02868 13.8847C5.86479 13.6532 4.7957 13.0818 3.95658 12.2426C3.11747 11.4035 2.54602 10.3344 2.31451 9.17054C2.083 8.00666 2.20182 6.80026 2.65594 5.7039C3.11007 4.60754 3.87911 3.67047 4.8658 3.01118C5.85249 2.35189 7.01253 2 8.19922 2C9.87922 2 11.4859 2.66667 12.6926 3.82667L14.1992 5.33333M10.866 5.33333L14.1992 5.33333L14.1993 2" stroke="currentColor" stroke-linecap="square" stroke-linejoin="round"/>`,
   },
+  // A browser extension, as every browser draws it: a piece with a tab on top and on the right, and a notch on the
+  // left and at the bottom. OpenCode's own extensions keep `extensions`.
+  puzzle: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 4.5H4.5V3.5a2 2 0 0 1 4 0V4.5H11.5V7.5H12.5a2 2 0 0 1 0 4H11.5V14.5H8.5V13.5a2 2 0 0 0-4 0V14.5H1.5V11.5H2.5a2 2 0 0 0 0-4H1.5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
   "outline-globe-plus": {
     viewBox: "0 0 16 16",
     body: `<path d="M9.5 11.5H12.5M12.5 11.5H15.5M12.5 11.5V8.5M12.5 11.5V14.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M8 1C11.866 1 15 4.13401 15 8C15 8.11231 14.9964 8.22395 14.9912 8.33496C14.9358 7.48617 14.4589 6.75503 13.7656 6.34668C13.1525 4.20296 11.3791 2.55021 9.16602 2.11426C10.0489 3.35264 10.6663 4.93158 10.8975 6.58105C10.3489 7.03965 10 7.72909 10 8.5H6.01465C6.13241 10.6267 6.98934 12.6854 8.20996 13.9941C8.44758 13.986 8.68133 13.9618 8.91113 13.9268C9.10021 13.9725 9.29688 14 9.5 14H10V14.5C10 14.5691 10.0043 14.6374 10.0098 14.7051C9.37302 14.8957 8.69876 15 8 15C4.13401 15 1 11.866 1 8C1 4.13401 4.13401 1 8 1ZM2.02246 8.5C2.24434 11.1886 4.23728 13.3729 6.83301 13.8848C5.78755 12.4178 5.11145 10.4737 5.0127 8.5H2.02246ZM6.83301 2.11426C4.23719 2.62603 2.24434 4.81135 2.02246 7.5H5.0127C5.11147 5.52603 5.78728 3.58126 6.83301 2.11426ZM8 2.24219C6.89188 3.55495 6.12676 5.49755 6.01562 7.5H9.98438C9.87324 5.49755 9.10812 3.55495 8 2.24219Z" fill="currentColor"/>`,
@@ -517,10 +527,6 @@ const icons = {
   waveform: {
     viewBox: "0 0 16 16",
     body: `<path d="M2 7V9M4.5 5V11M7 2.5V13.5M9.5 4.5V11.5M12 6V10M14.5 7.25V8.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`,
-  },
-  "outline-steer": {
-    viewBox: "0 0 16 16",
-    body: `<path d="M8 14C11.3137 14 14 11.3137 14 8C14 4.68634 11.3137 2 8 2C4.68626 2 2 4.68634 2 8C2 11.3137 4.68626 14 8 14Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M8 3.86328V12.1391C10.2854 12.1391 12.1379 10.2863 12.1379 8.00121C12.1379 5.71608 10.2854 3.86328 8 3.86328Z" fill="currentColor"/>`,
   },
   "outline-wave-audio": {
     viewBox: "0 0 16 16",

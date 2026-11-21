@@ -91,8 +91,18 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
 
 export type Error = BlockedError | CorrectedError
 
+/** Actions whose resources are file paths. */
+export const pathActions = ["external_directory", "read", "edit"] as const
+
+/** macOS volumes ignore case by default, so `.OPENCODE/x` opens `.opencode/x`; rules for file paths must match it too. */
+export function ignoresCase(action: string) {
+  return process.platform === "darwin" && pathActions.some((item) => item === action)
+}
+
 function match(action: string, resource: string, rules: Permission.Ruleset) {
-  return rules.findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource))
+  return rules.findLast(
+    (rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource, ignoresCase(action)),
+  )
 }
 
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {

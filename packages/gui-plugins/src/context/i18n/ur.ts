@@ -5,7 +5,6 @@ export default {
   "usage.usage": "استعمال",
   "usage.cost": "لاگت",
   "usage.view": "سیاق و سباق کا استعمال دیکھیں",
-  "systemPrompt.title": "سسٹم پرامپٹ",
   "rawMessages.title": "خام پیغامات",
   "export.session": "سیشن برآمد کریں",
   "stats.session": "سیشن",

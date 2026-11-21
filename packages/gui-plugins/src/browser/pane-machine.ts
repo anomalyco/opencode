@@ -1,6 +1,8 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Option, Predicate, Schema } from "effect"
 import type { PaneCloseReason, PaneEvent } from "./ipc"
+import { openersAfterClose, openersAfterOpen, openersAfterSelect, placedAfter, type Openers } from "./tab-openers"
+import type { PageEnd } from "./page-log"
 
 /** How long a binding may wait for the server's `attached` handshake before it closes. */
 export const REGISTER_TIMEOUT_MS = 15_000
@@ -11,19 +13,30 @@ export const REGISTER_TIMEOUT_MS = 15_000
  * - `unloaded`: only the tab's metadata. A restored tab stays here until the pane shows it or an agent command names
  *   it; a tab whose page crashed returns here, with `loadError`, so it can be loaded again.
  * - `live`: a page exists for `attempt`. Results from an earlier page of the same tab carry another attempt.
- *   `url` is the last address the page reported, kept while a new document has not committed one.
+ *   `url` is the last address the page reported, kept while a new document has not committed one. `unnamed`: a link
+ *   opened the tab and its first page has no name of its own yet (`named`), so the strip keeps its new-tab label.
  */
 export type TabSlot =
   | { readonly status: "unloaded"; readonly tab: Browser.Tab }
-  | { readonly status: "live"; readonly attempt: number; readonly tab: Browser.Tab; readonly url: string }
+  | {
+      readonly status: "live"
+      readonly attempt: number
+      readonly tab: Browser.Tab
+      readonly url: string
+      readonly unnamed?: true
+    }
 
 type Inventory = {
   readonly binding: string
   readonly window: number
   readonly storageKey: string
+  /** In the order the strip shows them. */
   readonly tabs: ReadonlyMap<Browser.TabID, TabSlot>
+  /** The tab each tab was opened from, which places the next tab a page opens (tab-openers.ts). */
+  readonly openers: Openers
   /** Null or a key of `tabs`. */
   readonly focusedTabID: Browser.TabID | null
+  readonly agentTabID?: Browser.TabID
   /** The attempt the next page of this binding gets. */
   readonly nextAttempt: number
 }
@@ -84,15 +97,28 @@ export type BindingEvent =
   | { readonly type: "register.timed-out" }
   /** The window navigated or was destroyed. */
   | { readonly type: "owner.closed" }
-  /** The window closed the binding; its saved tabs are forgotten. */
+  /** An explicit session deletion (not disposal of a window, location or IPC binding). */
   | { readonly type: "client.closed" }
   | { readonly type: "pane.disposed" }
   | { readonly type: "request.started"; readonly requestID: string }
   | { readonly type: "request.targeted"; readonly requestID: string; readonly tabID: Browser.TabID }
   | { readonly type: "request.cancelled"; readonly requestID: string }
   | { readonly type: "request.finished"; readonly requestID: string }
-  /** A page for `tabID` was created as `attempt`, the binding's `nextAttempt`. */
-  | { readonly type: "tab.opened"; readonly tabID: Browser.TabID; readonly attempt: number; readonly tab: Browser.Tab }
+  /**
+   * A page for `tabID` was created as `attempt`, the binding's `nextAttempt`. `beside`: the tab whose page or link
+   * opened it, and whether the new tab takes the pane (`front`) or stays behind. A new tab stands next to that tab, as
+   * in Chrome, and is reported at once; any other new tab goes to the end.
+   */
+  | {
+      readonly type: "tab.opened"
+      readonly tabID: Browser.TabID
+      readonly attempt: number
+      readonly tab: Browser.Tab
+      readonly beside?: { readonly tabID: Browser.TabID; readonly front: boolean }
+    }
+  /** The person gave the tab an address of their own, typed or picked, as opposed to following a link. */
+  | { readonly type: "tab.addressed"; readonly tabID: Browser.TabID }
+  | { readonly type: "restore.refused"; readonly tabID: Browser.TabID; readonly reason: "browser.restore.outside" | "browser.restore.refused" }
   | {
       readonly type: "tab.published"
       readonly tabID: Browser.TabID
@@ -100,15 +126,21 @@ export type BindingEvent =
       readonly tab: Browser.Tab
       readonly error?: string
     }
-  /** The page's renderer crashed, its debugger detached, or it failed to become ready. */
+  /**
+   * The page's renderer crashed, its debugger detached, or it failed to become ready. `ended` says which, for the
+   * agent's commands that were running on the tab.
+   */
   | {
       readonly type: "tab.crashed"
       readonly tabID: Browser.TabID
       readonly attempt: number
       readonly tab?: Browser.Tab
+      readonly ended?: PageEnd
     }
-  | { readonly type: "tab.focused"; readonly tabID: Browser.TabID }
-  | { readonly type: "tab.closed"; readonly tabID: Browser.TabID }
+  | { readonly type: "tab.focused"; readonly tabID: Browser.TabID; readonly fromStrip?: boolean }
+  | { readonly type: "tab.active"; readonly tabID: Browser.TabID }
+  /** `opener`: the tab that opened it, which takes the pane back when the closed tab was in front. */
+  | { readonly type: "tab.closed"; readonly tabID: Browser.TabID; readonly opener?: Browser.TabID }
 
 export type PaneMachineEvent =
   | {
@@ -116,7 +148,10 @@ export type PaneMachineEvent =
       readonly binding: string
       readonly window: number
       readonly storageKey: string
-      /** The window's inventory, which wins over the saved one. */
+      /**
+       * The window's inventory, which has each tab's title and order. It is what the window last heard, so it can
+       * lack a tab opened since: the binding lists every tab main still holds as well (`createConnecting`).
+       */
       readonly restore: Browser.State | undefined
       readonly saved: StoredRestore
     }
@@ -128,7 +163,7 @@ type StateEvent = Extract<PaneEvent, { readonly type: "state" }>
 export type PaneEffect =
   | { readonly type: "start-timer"; readonly binding: string; readonly ms: number }
   | { readonly type: "resolve-register"; readonly binding: string }
-  | { readonly type: "save-restore"; readonly storageKey: string; readonly snapshot: StoredRestore }
+  | { readonly type: "save-restore"; readonly binding: string; readonly storageKey: string; readonly snapshot: StoredRestore }
   | { readonly type: "remove-restore"; readonly storageKey: string }
   /** To the window and, as the server's copy of the inventory, to the server. */
   | {
@@ -138,7 +173,8 @@ export type PaneEffect =
     }
   /** To the window only. */
   | { readonly type: "emit"; readonly binding: string; readonly event: PaneEvent }
-  | { readonly type: "abort-requests"; readonly binding: string; readonly requestIDs: readonly string[] }
+  /** `ended` is why the page of the requests' tab stopped, when that is what aborts them. */
+  | { readonly type: "abort-requests"; readonly binding: string; readonly requestIDs: readonly string[]; readonly ended?: PageEnd }
   | { readonly type: "release-pages"; readonly binding: string; readonly attempts: readonly number[] }
   /** Rejects a pending `register` call, stops the timer and listeners, and ends the attachment. Always last. */
   | { readonly type: "teardown"; readonly binding: string }
@@ -202,10 +238,19 @@ export function transitionPane(state: PaneState, event: PaneMachineEvent): PaneT
 
   if (event.type === "registered") {
     if (state.bindings.has(event.binding)) return { state, effects: [] }
+    // A reconnect can arrive before the old attach stream observes the disconnect. The window owns one
+    // native pane for this session, even when the renderer lost the IPC that would normally close it.
+    const replaced = Array.from(state.bindings.values()).filter((old) => old.window === event.window && old.storageKey === event.storageKey)
+    const bindings = new Map(Array.from(state.bindings).filter(([, old]) => !replaced.includes(old)))
+    // The tabs the binding it replaces still holds, which the window may not have heard of yet.
+    const held = replaced.flatMap((old) => Array.from(old.tabs.values(), (slot) => slot.tab))
 
     return {
-      state: { status: "active", bindings: new Map(state.bindings).set(event.binding, createConnecting(event)) },
-      effects: [{ type: "start-timer", binding: event.binding, ms: REGISTER_TIMEOUT_MS }],
+      state: { status: "active", bindings: bindings.set(event.binding, createConnecting(event, held)) },
+      effects: [
+        ...replaced.flatMap((old) => close(old, "browser.pane.replaced", false).effects),
+        { type: "start-timer", binding: event.binding, ms: REGISTER_TIMEOUT_MS },
+      ],
     }
   }
 
@@ -228,7 +273,7 @@ export function transitionBinding(state: BindingState, event: BindingEvent): Bin
   if (state.status === "closed") return { state, effects: [] }
   const reason = closeReason(state, event)
 
-  if (reason) return close(state, reason, event.type === "client.closed" || reason === "browser.pane.missing")
+  if (reason) return close(state, reason, event.type === "client.closed")
 
   if (event.type === "control.unrecognized")
     return {
@@ -291,7 +336,7 @@ function close(state: ActiveBinding, reason: PaneCloseReason, forget: boolean): 
     binding: state.binding,
     event: {
       type: "state",
-      state: reason === "browser.pane.suspended" ? selectInventory(state) : null,
+      state: reason === "browser.pane.suspended" || (!forget && state.tabs.size > 0 && reason === "browser.pane.registration.closed") ? selectInventory(state) : null,
       error: reason,
     },
   })
@@ -329,9 +374,20 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     }
   }
 
+  if (event.type === "tab.active") {
+    if (!state.tabs.has(event.tabID) || state.agentTabID === event.tabID) return { state, effects: [] }
+
+    return publish({ ...state, agentTabID: event.tabID })
+  }
+
   if (event.type === "tab.focused") {
     if (!state.tabs.has(event.tabID)) return { state, effects: [] }
-    const next = publish({ ...state, focusedTabID: event.tabID })
+    // Only the person's own selection is them going elsewhere.
+    const openers = event.fromStrip ? openersAfterSelect(state.openers, state.focusedTabID, event.tabID) : state.openers
+    const next = publish({ ...state, focusedTabID: event.tabID, openers })
+
+    // The strip already made this selection. Echoing it can reopen a pane the user has since closed.
+    if (event.fromStrip) return next
 
     return {
       state: next.state,
@@ -345,20 +401,48 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
   if (event.type === "tab.opened") {
     if (event.attempt !== state.nextAttempt || state.tabs.get(event.tabID)?.status === "live")
       return { state, effects: [] }
+    const slot = { status: "live" as const, attempt: event.attempt, tab: event.tab, url: event.tab.url }
+    const beside = event.beside
 
-    return {
-      state: {
+    // A tab the binding lists already keeps its place, and one that nothing here opened goes to the end.
+    if (!beside || state.tabs.has(event.tabID) || !state.tabs.has(beside.tabID))
+      return {
+        state: { ...state, tabs: new Map(state.tabs).set(event.tabID, slot), nextAttempt: event.attempt + 1 },
+        effects: [],
+      }
+    const after = placedAfter(Array.from(state.tabs.keys()), state.openers, beside.tabID, beside.front)
+    const entries = Array.from(state.tabs)
+    const index = entries.findIndex(([tabID]) => tabID === after) + 1
+    const unnamed: TabSlot = { ...slot, unnamed: true }
+
+    // Reported at once, with where it stands: the window's strip holds other tabs too, and only adds this one.
+    return publish(
+      {
         ...state,
-        tabs: new Map(state.tabs).set(event.tabID, {
-          status: "live",
-          attempt: event.attempt,
-          tab: event.tab,
-          url: event.tab.url,
-        }),
+        tabs: new Map([...entries.slice(0, index), [event.tabID, unnamed], ...entries.slice(index)]),
+        openers: openersAfterOpen(state.openers, event.tabID, beside.tabID, beside.front),
         nextAttempt: event.attempt + 1,
       },
-      effects: [],
-    }
+      undefined,
+      { tabID: event.tabID, after },
+    )
+  }
+
+  if (event.type === "tab.addressed") {
+    // Chrome forgets every opener when a tab is given an address that is no link (`TabNavigating`), except for the
+    // first one given to a new tab at the end of the strip: a quick look-up that returns to where the person was.
+    const lookup = state.tabs.get(event.tabID)?.tab.url === "about:blank" && Array.from(state.tabs.keys()).at(-1) === event.tabID
+
+    return state.openers.size === 0 || lookup ? { state, effects: [] } : { state: { ...state, openers: new Map() }, effects: [] }
+  }
+
+  if (event.type === "restore.refused") {
+    const slot = state.tabs.get(event.tabID)
+
+    if (slot?.status !== "unloaded" || slot.tab.loadError === event.reason) return { state, effects: [] }
+    const tabs = new Map(state.tabs).set(event.tabID, { ...slot, tab: { ...slot.tab, loading: false, loadError: event.reason } })
+
+    return publish({ ...state, tabs })
   }
 
   if (event.type === "tab.closed") {
@@ -367,9 +451,16 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     if (!closed) return { state, effects: [] }
     const tabs = new Map(state.tabs)
     tabs.delete(event.tabID)
-    const focusedTabID = state.focusedTabID === event.tabID ? (tabs.keys().next().value ?? null) : state.focusedTabID
+    const front = state.focusedTabID === event.tabID
+    // As Chrome selects the tab that opened one closed in front of it. The window hears of the selection first, so
+    // its strip never picks a neighbour for the closed tab.
+    const opener = front && event.opener !== undefined && tabs.has(event.opener) ? event.opener : undefined
+    const focusedTabID = front ? (opener ?? tabs.keys().next().value ?? null) : state.focusedTabID
+    const next = withoutTab({ ...state, tabs, openers: openersAfterClose(state.openers, event.tabID), focusedTabID, agentTabID: event.tabID === state.agentTabID ? undefined : state.agentTabID }, event.tabID, closed, undefined)
 
-    return withoutTab({ ...state, tabs, focusedTabID }, event.tabID, closed, undefined)
+    if (!opener) return next
+
+    return { state: next.state, effects: [{ type: "emit", binding: state.binding, event: { type: "focus", tabID: opener } }, ...next.effects] }
   }
 
   if (event.type !== "tab.published" && event.type !== "tab.crashed") return { state, effects: [] }
@@ -378,9 +469,11 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
   if (slot?.status !== "live" || slot.attempt !== event.attempt) return { state, effects: [] }
 
   if (event.type === "tab.published") {
-    const tabs = new Map(state.tabs).set(event.tabID, { ...slot, tab: event.tab, url: event.tab.url || slot.url })
+    const next = { status: "live" as const, attempt: slot.attempt, tab: event.tab, url: event.tab.url || slot.url }
+    // The strip gives the tab its page's title once, when the page has the name it keeps.
+    const waiting = slot.unnamed && !named(slot.tab, event.tab)
 
-    return publish({ ...state, tabs }, event.error)
+    return publish({ ...state, tabs: new Map(state.tabs).set(event.tabID, waiting ? { ...next, unnamed: true } : next) }, event.error)
   }
 
   // A crashed page keeps its tab, unloaded, so showing it or an agent command on it loads its address again.
@@ -401,37 +494,58 @@ function transitionAttached(state: AttachedBinding, event: BindingEvent): Bindin
     },
   })
 
-  return withoutTab({ ...state, tabs }, event.tabID, slot, "page_crashed")
+  return withoutTab({ ...state, tabs }, event.tabID, slot, "page_crashed", event.ended)
+}
+
+/**
+ * Whether a page that reported `before` and now reports `tab` has the name its tab keeps: its document named itself,
+ * or its load ended (with Chromium's name for a document that has none, an error, or no document at all, as for a
+ * refused address). Chromium names a document after its URL from the commit until its <title> parses, and a failed
+ * load reports its name a moment after its error; neither is a name the strip shows.
+ */
+function named(before: Browser.Tab, tab: Browser.Tab) {
+  const blank = tab.url === "about:blank"
+
+  if (!tab.loading) return (before.loading || before.loadError !== undefined) && (blank || tab.title !== "")
+
+  return !blank && tab.generation === before.generation && tab.title !== "" && tab.title !== before.title
 }
 
 /** Aborts the requests that target a tab whose page went away, releases that page, and publishes the result. */
-function withoutTab(state: AttachedBinding, tabID: Browser.TabID, slot: TabSlot, error: string | undefined) {
+function withoutTab(state: AttachedBinding, tabID: Browser.TabID, slot: TabSlot, error: string | undefined, ended?: PageEnd) {
   const targeting = Array.from(state.requests).flatMap(([requestID, target]) => (target === tabID ? [requestID] : []))
   const requests = new Map(state.requests)
   targeting.forEach((requestID) => requests.delete(requestID))
   const next = publish({ ...state, requests }, error)
   const effects: PaneEffect[] = []
 
-  if (targeting.length) effects.push({ type: "abort-requests", binding: state.binding, requestIDs: targeting })
+  if (targeting.length) effects.push({ type: "abort-requests", binding: state.binding, requestIDs: targeting, ...(ended && { ended }) })
 
   if (slot.status === "live") effects.push({ type: "release-pages", binding: state.binding, attempts: [slot.attempt] })
 
   return { state: next.state, effects: [...effects, ...next.effects] }
 }
 
-/** Saves the tabs for the next launch, and reports the state unless it repeats the last one reported. */
-function publish(state: AttachedBinding, error?: string): AttachedTransition {
+/**
+ * Saves the tabs for the next launch, and reports the state unless it repeats the last one reported. `placed` says
+ * once, with the inventory that first lists a tab a link opened, which tab it stands after.
+ */
+function publish(state: AttachedBinding, error?: string, placed?: StateEvent["placed"]): AttachedTransition {
   const inventory = selectInventory(state)
+  const unnamed = Array.from(state.tabs).flatMap(([tabID, slot]) => (slot.status === "live" && slot.unnamed ? [tabID] : []))
 
-  const event =
-    error === undefined
-      ? { type: "state" as const, state: inventory }
-      : { type: "state" as const, state: inventory, error }
+  const event = {
+    type: "state" as const,
+    state: inventory,
+    ...(error !== undefined && { error }),
+    ...(unnamed.length > 0 && { unnamed }),
+  }
 
-  const published = JSON.stringify(event)
+  const published = JSON.stringify([event, state.agentTabID])
 
   const save: PaneEffect = {
     type: "save-restore",
+    binding: state.binding,
     storageKey: state.storageKey,
     snapshot: {
       tabs: Array.from(state.tabs.values(), (slot) => ({
@@ -445,30 +559,45 @@ function publish(state: AttachedBinding, error?: string): AttachedTransition {
 
   if (published === state.published) return { state, effects: [save] }
 
-  return { state: { ...state, published }, effects: [save, { type: "report", binding: state.binding, event }] }
+  return {
+    state: { ...state, published },
+    effects: [save, { type: "report", binding: state.binding, event: placed ? { ...event, placed } : event }],
+  }
 }
 
-function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "registered" }>): ActiveBinding {
-  const restore = event.restore ?? {
-    tabs: event.saved.tabs.map((tab) => ({
-      id: tab.id,
-      url: tab.url,
-      title: "",
-      loading: false,
-      canGoBack: false,
-      canGoForward: false,
-      generation: 0,
-    })),
-    focusedTabID: event.saved.focusedTabID,
-  }
+/**
+ * A binding for a session starts with the window's inventory and every tab main holds for the session that the window
+ * left out: `held`, the tabs of the binding it replaces, else the saved ones, which follow each report. A tab opened
+ * while the window registers again, or whose report it had not received, is in neither the window's inventory nor a
+ * page any more, and nobody closed it. Each stands after the tab before it in main's order, else at the end.
+ */
+function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "registered" }>, held: readonly Browser.Tab[]): ActiveBinding {
+  const saved = event.saved.tabs.map((tab) => ({
+    id: tab.id,
+    url: tab.url,
+    title: "",
+    loading: false,
+    canGoBack: false,
+    canGoForward: false,
+    generation: 0,
+  }))
+
+  const restore = event.restore ?? { tabs: saved, focusedTabID: event.saved.focusedTabID }
+
+  const listed = (held.length > 0 ? held : saved).reduce<readonly Browser.Tab[]>((tabs, tab, index, own) => {
+    if (tabs.some((item) => item.id === tab.id)) return tabs
+    const before = tabs.findIndex((item) => item.id === own[index - 1]?.id)
+
+    return before === -1 ? [...tabs, tab] : [...tabs.slice(0, before + 1), tab, ...tabs.slice(before + 1)]
+  }, restore.tabs)
 
   const tabs = new Map(
-    restore.tabs.map((tab): [Browser.TabID, TabSlot] => [
+    listed.map((tab): [Browser.TabID, TabSlot] => [
       tab.id,
       {
         status: "unloaded",
         // A restored page's first navigation takes the next generation.
-        tab: { ...tab, loading: false, canGoBack: false, canGoForward: false, generation: tab.generation + 1 },
+        tab: { id: tab.id, url: tab.url, title: tab.title, loading: false, canGoBack: false, canGoForward: false, generation: tab.generation + 1 },
       },
     ]),
   )
@@ -479,6 +608,7 @@ function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "reg
     window: event.window,
     storageKey: event.storageKey,
     tabs,
+    openers: new Map(),
     focusedTabID:
       restore.focusedTabID !== null && tabs.has(restore.focusedTabID)
         ? restore.focusedTabID
@@ -508,8 +638,8 @@ export function selectFileRoots(state: PaneState, binding: string): readonly str
   return entry?.status === "attached" ? entry.fileRoots : []
 }
 
-export function selectInventory(entry: ActiveBinding): Browser.State {
-  return { tabs: Array.from(entry.tabs.values(), (slot) => slot.tab), focusedTabID: entry.focusedTabID }
+export function selectInventory(entry: ActiveBinding, audience: "window" | "agent" = "window"): Browser.State {
+  return { tabs: Array.from(entry.tabs.values(), (slot) => slot.tab), focusedTabID: audience === "agent" ? entry.agentTabID ?? entry.focusedTabID : entry.focusedTabID }
 }
 
 export function selectTabSlot(state: PaneState, binding: string, tabID: Browser.TabID) {

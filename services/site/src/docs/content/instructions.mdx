@@ -45,9 +45,9 @@ In any directory without an `AGENTS.md`, OpenCode reads `CLAUDE.md` instead. Wit
 `~/.config/opencode/AGENTS.md`, it reads `~/.claude/CLAUDE.md`. A directory's `AGENTS.md` always wins over its
 `CLAUDE.md`, so a symlink between the two loads once.
 
-Set `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1` to skip only `~/.claude/CLAUDE.md`, or `OPENCODE_DISABLE_CLAUDE_CODE=1` to
-skip every `CLAUDE.md` and `.claude` skills. The server reads both when it starts. For the background service, persist
-them with `opencode service set env` and run `opencode service restart`.
+Set `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1` to skip every `CLAUDE.md`, or `OPENCODE_DISABLE_CLAUDE_CODE=1` to also skip
+`.claude` skills. The server reads both when it starts. For the background service, persist them with
+`opencode service set env` and run `opencode service restart`.
 
 ## Discovery
 

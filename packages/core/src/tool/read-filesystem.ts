@@ -2,9 +2,8 @@ export * as ReadToolFileSystem from "./read-filesystem.js"
 
 import path from "path"
 import { pathToFileURL } from "url"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { TextBoundary } from "@opencode/util/text-boundary"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Environment } from "../environment/index.js"
 import type { Files } from "../environment/index.js"
 import { Mime } from "../mime.js"
@@ -105,17 +104,6 @@ export type Output = typeof Output.Type
 
 // Media bytes travel beside the reference so the tool can attach them without storing them in its output.
 export type Media = MediaContent & { readonly name: string; readonly bytes: Uint8Array }
-
-export interface Interface {
-  readonly list: (path: AbsolutePath) => ReturnType<Files["list"]>
-  readonly read: (
-    path: AbsolutePath,
-    resource: string,
-    page?: PageInput,
-  ) => Effect.Effect<TextContent | DirectoryContent | Media, ReadError>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/ReadToolFileSystem") {}
 
 export const read = Effect.fn("ReadTool.read")(function* (
   files: Files,
@@ -353,16 +341,3 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep =
 
 const clampLine = (line: string) =>
   line.length <= MAX_LINE_LENGTH ? line : TextBoundary.head(line, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX
-
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const environment = yield* Environment.Service
-    return Service.of({
-      list: environment.files.list,
-      read: (path, resource, page) => read(environment.files, path, resource, page),
-    })
-  }),
-)
-
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node] })

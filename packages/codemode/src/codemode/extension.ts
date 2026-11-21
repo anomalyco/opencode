@@ -22,6 +22,8 @@ import type { Effect } from "effect"
 export type Extension<Globals extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>> = {
   readonly name: string
   readonly globals: Globals
+  /** Module names that load one of these globals, as `{ bun: "Bun" }` makes `import { file } from "bun"` work. */
+  readonly modules?: Readonly<Record<string, keyof Globals & string>> | undefined
   /** How a suspended run saves the values this extension's functions returned; see `Snapshot`. */
   readonly snapshot?: Snapshot | undefined
 }
@@ -60,13 +62,14 @@ export const make = <const Globals extends Readonly<Record<string, unknown>>>(
   return {
     name: options.name,
     globals: { ...options.globals },
+    ...(options.modules === undefined ? {} : { modules: { ...options.modules } }),
     ...(options.snapshot === undefined ? {} : { snapshot: options.snapshot }),
   }
 }
 
 const asyncGlobals = new WeakSet<Function>()
 
-export { StreamingResponse } from "../language/streaming-response.js"
+export { StreamingResponse } from "psychoscript/effect"
 const AsyncFunction = (async () => {}).constructor
 
 /** Marks a global that returns a Promise or an Effect, so a denied call rejects its promise instead of throwing. */

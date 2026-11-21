@@ -64,7 +64,6 @@ const it = testEffect(
             type: "document",
             info: new Info({
               experimental: new ConfigExperimental.Info({
-                automations: true,
                 location_idle_timeout: Duration.seconds(1),
                 mcp_events: true,
               }),

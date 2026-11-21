@@ -2,6 +2,21 @@
   content-visibility: auto;
 }
 
+[data-component="file"]:focus-visible {
+  outline: none;
+}
+
+/* The rendered code fills the viewer to its edges and would paint over a normal inset outline. */
+[data-component="file"]:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+  pointer-events: none;
+}
+
 [data-timeline-row] [data-component="file"] {
   content-visibility: visible;
 }

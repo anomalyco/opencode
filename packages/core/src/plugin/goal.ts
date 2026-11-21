@@ -145,12 +145,12 @@ export const Plugin = define({
       if (goal?.status !== "active") return
       if (goal.boot !== boot())
         return yield* settle(sessionID, goal, "paused", "The server restarted while the goal was active")
-      // The Session's own running subagent, image or script wakes it with its notice, and the hook runs again then. A
+      // The Session's own running subagent, image, video or script wakes it with its notice, and the hook runs again then. A
       // grandchild reports to its own parent, so it would never wake this Session.
       if (
         background.some(
           (work) =>
-            (work.kind === "subagent" || work.kind === "image" || work.kind === "codemode") &&
+            (work.kind === "subagent" || work.kind === "image" || work.kind === "video" || work.kind === "codemode") &&
             work.sessionID === sessionID,
         )
       )

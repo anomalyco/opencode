@@ -1,4 +1,4 @@
-import { Component } from "solid-js"
+import type { Component } from "solid-js"
 import { Switch } from "@opencode/ui/switch"
 import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -29,6 +29,20 @@ export const SettingsExperimental: Component = () => {
       <div class="settings-tab-body">
         <div class="settings-section">
           <SettingsList>
+            <SettingsRow
+              title={language.t("settings.experimental.row.tabGroups.title")}
+              description={language.t("settings.experimental.row.tabGroups.description")}
+            >
+              <div data-action="settings-tab-groups">
+                <Switch
+                  checked={settings.general.tabGroups()}
+                  onChange={(checked) => settings.general.setTabGroups(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.tabGroups.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
             <SettingsRow
               title={language.t("settings.experimental.row.sidebarOrganize.title")}
               description={language.t("settings.experimental.row.sidebarOrganize.description")}

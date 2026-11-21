@@ -254,6 +254,17 @@ export const SettingsGeneral: Component = () => {
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
       <SettingsList>
         <InterfaceModeSetting />
+        <SettingsRow
+          title={language.t("settings.general.row.sharedSidePanel.title")}
+          description={language.t("settings.general.row.sharedSidePanel.description")}
+        >
+          <div data-action="settings-shared-side-panel">
+            <Switch
+              checked={settings.general.sharedSidePanel()}
+              onChange={(checked) => settings.general.setSharedSidePanel(checked)}
+            />
+          </div>
+        </SettingsRow>
         <LanguageSetting />
 
         <WorkspaceDestinationSetting />
@@ -369,6 +380,17 @@ export const SettingsGeneral: Component = () => {
                 <Switch
                   checked={settings.general.showTurnDiffs()}
                   onChange={(checked) => settings.general.setShowTurnDiffs(checked)}
+                />
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.timeline.row.wrapCodeBlocks.title")}
+              description={language.t("settings.timeline.row.wrapCodeBlocks.description")}
+            >
+              <div data-action="settings-wrap-code-blocks">
+                <Switch
+                  checked={settings.general.wrapCodeBlocks()}
+                  onChange={(checked) => settings.general.setWrapCodeBlocks(checked)}
                 />
               </div>
             </SettingsRow>

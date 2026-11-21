@@ -142,7 +142,10 @@ const decode = Effect.fnUntraced(function* (directory: string, filepath: string,
     yield* Effect.logWarning("command file skipped", { filepath, reason: "markdown" })
     return
   }
-  const info = decodeCommand({ ...markdown.data, template: markdown.content.trim() })
+  const info = decodeCommand({
+    ...ConfigMarkdown.joinLegacyVariant(markdown.data),
+    template: markdown.content.trim(),
+  })
   if (Result.isFailure(info)) {
     yield* Effect.logWarning("command file skipped", {
       filepath,

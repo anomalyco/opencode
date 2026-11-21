@@ -554,8 +554,8 @@ Existing `AGENTS.md` files stay in place. V2 discovers the global `~/.config/ope
 files from the current directory up to home. For projects outside home, discovery stops at the project root.
 
 V2 keeps the V1 `CLAUDE.md` fallback: a directory without `AGENTS.md` uses its `CLAUDE.md`, and `~/.claude/CLAUDE.md`
-stands in for a missing global `AGENTS.md`. As before, `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` skips only
-`~/.claude/CLAUDE.md` and `OPENCODE_DISABLE_CLAUDE_CODE` skips every `CLAUDE.md`. Unlike V1, which stopped at the
+stands in for a missing global `AGENTS.md`. `OPENCODE_DISABLE_CLAUDE_CODE` skips every `CLAUDE.md`, and so does
+`OPENCODE_DISABLE_CLAUDE_CODE_PROMPT`, which in V1 skipped only `~/.claude/CLAUDE.md`. Unlike V1, which stopped at the
 first file name found anywhere up the tree, V2 picks per directory, so an `AGENTS.md` at the root no longer hides a
 nested `CLAUDE.md`. See [Instructions](/instructions).
 

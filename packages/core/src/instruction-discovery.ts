@@ -41,10 +41,8 @@ export interface Interface extends State.Transformable<Editor> {
   // Move it into plugin config once plugins can consume their own options.
   readonly project: boolean
   readonly global: boolean
-  // Also read CLAUDE.md where no AGENTS.md exists.
+  // Read CLAUDE.md where no AGENTS.md exists, and ~/.claude/CLAUDE.md when the global AGENTS.md is missing.
   readonly claude: boolean
-  // Read ~/.claude/CLAUDE.md when the global AGENTS.md is missing.
-  readonly claudeGlobal: boolean
   readonly list: () => Effect.Effect<File[] | Instructions.Unavailable>
   readonly load: () => Effect.Effect<Instructions.List>
 }
@@ -53,7 +51,6 @@ export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
   global: Schema.optional(Schema.Boolean),
   claude: Schema.optional(Schema.Boolean),
-  claudeGlobal: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
@@ -106,7 +103,6 @@ export const layer = (options?: Options) =>
         project: options?.project !== false,
         global: options?.global !== false,
         claude: options?.claude !== false,
-        claudeGlobal: options?.claudeGlobal !== false,
         transform: state.transform,
         reload: state.reload,
         list,

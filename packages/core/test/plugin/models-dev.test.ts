@@ -1,5 +1,6 @@
 import path from "path"
 import { describe, expect } from "bun:test"
+import { Document, Event, Info } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
 import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
@@ -7,6 +8,8 @@ import { Integration } from "@opencode/core/integration"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { ModelsDev } from "@opencode/core/models-dev"
@@ -18,6 +21,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
+import { drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 import { providerHost, host, integrationHost } from "./host"
 import { PluginTestLayer } from "./fixture"
@@ -29,7 +33,7 @@ const locationLayer = Layer.succeed(
 const layer = AppNodeBuilder.build(LayerNode.group([Provider.node, Model.node, Integration.node, Bus.node]), [
   Location.node.replace(locationLayer),
 ])
-const it = testEffect(layer)
+const it = testEffect(Layer.merge(layer, Flag.testLayer()))
 const real = testEffect(PluginTestLayer)
 const isolated = testEffect(Layer.empty)
 const models = (file: string) =>
@@ -124,6 +128,44 @@ const richSnapshot = (name = "Acme") => {
 }
 
 describe("ModelsDevPlugin", () => {
+  for (const enabled of [true, false]) {
+    isolated.effect(`uses the ${enabled ? "recommended" : "first"} API and its variants`, () =>
+      Effect.gen(function* () {
+        const providerID = Provider.ID.make("acme")
+        const modelID = Model.ID.make("acme-1")
+        const source = yield* ModelsDev.Service
+        const location = yield* owner
+        const config = Context.get(location.context, Config.Test)
+        const configure = (recommended_api: boolean) =>
+          config.setEntries([
+            new Document({ type: "document", info: Info.make({ experimental: { recommended_api } }) }),
+          ])
+        yield* configure(false)
+        yield* ModelsDevPlugin.effect(location.host).pipe(
+          Effect.provideService(ModelsDev.Service, source),
+          Effect.provideContext(location.context),
+        )
+        yield* activate(location.providers)
+        if (enabled) {
+          yield* source.get(true)
+          yield* configure(true)
+          yield* location.bus.publish(Event.Updated, {}).pipe(Effect.provideContext(location.context))
+          yield* drain
+        }
+        const model = required(yield* location.models.get(providerID, modelID))
+        expect(model.package).toBe(
+          enabled ? "@opencode/ai/providers/google/interactions" : "@opencode/ai/providers/google",
+        )
+        expect(model.settings?.baseURL).toBe(`https://api.acme.test/${enabled ? "v1beta" : "v1"}`)
+        expect(model.variants.find((variant) => variant.id === "low")?.settings).toEqual(
+          enabled
+            ? { thinkingLevel: "low", thinkingSummaries: "auto" }
+            : { thinkingConfig: { includeThoughts: true, thinkingLevel: "low" } },
+        )
+      }).pipe(Effect.provide(models(path.join(import.meta.dir, "fixtures", "models-dev.json")))),
+    )
+  }
+
   isolated.effect("shares definitions between Locations while provider and model edits own their copies", () =>
     Effect.gen(function* () {
       const { providerID, modelID, snapshot } = richSnapshot()

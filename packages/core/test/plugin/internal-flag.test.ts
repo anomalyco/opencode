@@ -3,6 +3,7 @@ import { Duration, Effect, Layer, LayerMap, Stream } from "effect"
 import { App } from "@opencode/core/app"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Flag } from "@opencode/core/flag"
 import { Instance } from "@opencode/core/instance"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
@@ -50,6 +51,8 @@ const instances = Layer.effect(
             resolve: (name) => Effect.succeed({ directory: "", name }),
             check: () => Effect.succeed(false),
             update: unexpected,
+            follows: () => Effect.succeed(false),
+            reject: () => Effect.succeed(false),
             which: () => Effect.undefined,
           }),
         ),
@@ -72,19 +75,27 @@ const it = testEffect(
 )
 
 describe("PluginInternal flags", () => {
-  it.live("turns a flagged built-in tool on for a dev-channel server with no config", () =>
+  it.live("turns flagged built-in tools on for a dev-channel server with no config while keeping todo off", () =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()
       const locations = yield* LocationServiceMap.Service
-      const names = yield* Effect.gen(function* () {
-        yield* (yield* Plugin.Service).awaitActivation
-        return (yield* toolDefinitions(yield* Tool.Service)).map((definition) => definition.name)
+      const { registered, direct } = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        const tools = yield* Tool.Service
+        return {
+          registered: (yield* tools.list()).map((tool) => tool.id),
+          direct: (yield* toolDefinitions(tools)).map((definition) => definition.name),
+        }
       }).pipe(
         Effect.scoped,
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
       )
 
-      expect(names).toContain(TodoTool.name)
-    }),
+      expect(registered).toContain("opencode_artifact_create")
+      expect(registered).toContain("shell")
+      expect(registered).not.toContain(TodoTool.name)
+      expect(direct).not.toContain("shell")
+    }).pipe(Effect.provideService(Flag.Overrides, undefined)),
   )
 })

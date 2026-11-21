@@ -1,12 +1,11 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Stream } from "effect"
-import * as TestClock from "effect/testing/TestClock"
+import { Effect, Layer, Stream } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { Media } from "../src/effect.js"
 import { Transcription, TranscriptionClient, type TranscriptionEvent } from "../src/experimental.js"
 import { AssemblyAI, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
-import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
+import { dynamicResponse, json, observe, settle, type Call } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
@@ -408,9 +407,7 @@ describe("Transcription", () => {
           ),
         )
 
-        const fiber = yield* Effect.forkChild(program)
-        yield* TestClock.adjust("5 seconds")
-        const { response, failure } = yield* Fiber.join(fiber)
+        const { response, failure } = yield* settle(program, 5)
 
         expect(calls.slice(0, 2).map((call) => [call.method, call.url, call.auth])).toEqual([
           ["POST", "https://assemblyai.test/v2/upload", "aai-key"],

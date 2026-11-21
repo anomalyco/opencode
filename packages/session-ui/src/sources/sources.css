@@ -67,8 +67,8 @@
   }
 
   &:focus-visible {
-    outline: 1px solid var(--v2-border-border-focus);
-    outline-offset: 1px;
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
   }
 
   [data-slot="sources-chip-icons"] {
@@ -132,8 +132,8 @@
     }
 
     &:focus-visible {
-      outline: 1px solid var(--v2-border-border-focus);
-      outline-offset: -1px;
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: -2px;
     }
   }
 
@@ -233,8 +233,8 @@
     }
 
     &:focus-visible {
-      outline: 1px solid var(--v2-border-border-focus);
-      outline-offset: -1px;
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: -2px;
     }
   }
 

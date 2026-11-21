@@ -31,7 +31,6 @@ export class TitleShimmerRenderable extends TextRenderable {
   private pendingTitle: string | undefined
   private elapsed = 0
   private blend = 0
-  private fresh = true
   private arrival: number | undefined
   private scratch: OptimizedBuffer | undefined
   private previous: OptimizedBuffer | undefined
@@ -46,7 +45,7 @@ export class TitleShimmerRenderable extends TextRenderable {
     this._backdrop = options.backdrop ?? RGBA.defaultBackground()
     this.matrix[15] = 1
     this.updateBackdrop()
-    this.live = this.animating
+    this.changed()
   }
 
   private get animating() {
@@ -99,9 +98,10 @@ export class TitleShimmerRenderable extends TextRenderable {
     this.matrix[11] = this._backdrop.b
   }
 
+  // The app's frame rate, on the shared clock, only while animating and drawn. The clock's first tick measures
+  // from the subscription, so a fade never inherits time spent idle before it started.
   private changed() {
-    if (!this.live && this.animating) this.fresh = true
-    this.live = this.animating
+    this.animationFps = this.animating ? 60 : undefined
     if (!this.animating) {
       this.previous?.destroy()
       this.previous = undefined
@@ -109,12 +109,7 @@ export class TitleShimmerRenderable extends TextRenderable {
     this.requestRender()
   }
 
-  protected override renderSelf(buffer: OptimizedBuffer, deltaTime = 0) {
-    if (!this.visible || this.isDestroyed || !Number.isFinite(this.width) || this.width <= 0 || this.height <= 0) return
-    if (!this.animating) return super.renderSelf(buffer)
-    // A newly live title must not inherit time spent idle before its fade started.
-    const delta = this.fresh ? 0 : deltaTime
-    this.fresh = false
+  protected override onAnimationTick(delta: number) {
     this.elapsed = (this.elapsed + delta) % SHIMMER_DURATION
     if (this.arrival !== undefined) {
       this.arrival += delta
@@ -127,12 +122,12 @@ export class TitleShimmerRenderable extends TextRenderable {
       0,
       Math.min(1, this.blend + (this.shimmering || this.arrival !== undefined ? delta : -delta) / SHIMMER_FADE),
     )
-    this.live = this.animating
-    if (!this.animating) {
-      this.previous?.destroy()
-      this.previous = undefined
-      return super.renderSelf(buffer)
-    }
+    this.changed()
+  }
+
+  protected override renderSelf(buffer: OptimizedBuffer) {
+    if (!this.visible || this.isDestroyed || !Number.isFinite(this.width) || this.width <= 0 || this.height <= 0) return
+    if (!this.animating) return super.renderSelf(buffer)
     if (!this.scratch)
       this.scratch = OptimizedBuffer.create(this.width, this.height, this._ctx.widthMethod, {
         owner: this._ctx.nativeScene,

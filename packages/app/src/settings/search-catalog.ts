@@ -37,6 +37,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.sharedSidePanel.title",
+    description: "settings.general.row.sharedSidePanel.description",
+    target: "settings-shared-side-panel",
+    section: "settings.general.section.general",
+    keywords: "right side panel review sidebar persist keep open sessions switch",
+  },
+  {
+    tab: "general",
     label: "settings.workspaces.default.title",
     target: "settings-workspace-destination",
     description: "settings.workspaces.default.description",
@@ -131,6 +139,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     target: "settings-new-question-ui",
     description: "settings.experimental.row.newQuestionUI.description",
     keywords: "question answers keyboard dock redesign",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.tabGroups.title",
+    target: "settings-tab-groups",
+    description: "settings.experimental.row.tabGroups.description",
+    keywords: "tab groups server project colors drag organize search sessions",
   },
   {
     tab: "experimental",
