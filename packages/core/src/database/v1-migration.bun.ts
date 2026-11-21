@@ -218,6 +218,7 @@ type NextMessage = {
 
 const lock = Semaphore.makeUnsafe(1)
 const MIGRATION_STATE_KEY = "migration.v1-v2"
+const REPAIR_STATE_KEY = "migration.v1-v2.global-sessions"
 const EVENT_DELETE_BATCH_SIZE = 1_000
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const decodeMessage = Schema.decodeUnknownOption(SessionV1.Info)
@@ -546,7 +547,13 @@ export function run(
       const db = (yield* Database.Service).db
       const global = yield* Global.Service
       const state = yield* readState(db)
-      if (state?.phase === "completed") return { status: "completed" as const }
+      if (state?.phase === "completed") {
+        if (yield* hasLegacySessions(db))
+          yield* repairGlobalSessions(db).pipe(
+            Effect.catchDefect((defect) => Effect.logWarning("Failed to repair V1 global sessions", { defect })),
+          )
+        return { status: "completed" as const }
+      }
       if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
       const now = Date.now()
       yield* db.run(sql`
@@ -755,12 +762,76 @@ export function run(
                 set: { value: { phase: "completed" }, time_updated: Date.now() },
               })
               .run()
+            // This import already attributed global sessions to their folders' projects.
+            yield* tx
+              .insert(KVTable)
+              .values({ key: REPAIR_STATE_KEY, value: { phase: "completed" } })
+              .onConflictDoNothing()
+              .run()
           }),
         )
         .pipe(Effect.orDie)
       return { status: "completed" as const }
     }).pipe(Effect.orDie),
   )
+}
+
+// Imports that completed before global sessions were attributed left them under global, hidden from
+// V2's per-folder session lists. Resolve each folder once, the same way the import does, and move only
+// sessions that came from V1 and are still under global. Updated times are kept.
+function repairGlobalSessions(db: Database.Interface["db"]) {
+  return Effect.gen(function* () {
+    if (yield* db.get(sql`SELECT 1 FROM kv WHERE key = ${REPAIR_STATE_KEY}`)) return
+    const folders = yield* db.all<{ directory: string; time_updated: number }>(sql`
+      SELECT directory, MAX(time_updated) AS time_updated
+      FROM session_v2
+      WHERE project_id = ${Project.ID.global} AND workspace_id IS NULL AND directory != ''
+        AND EXISTS (SELECT 1 FROM session WHERE session.id = session_v2.id)
+      GROUP BY directory
+    `)
+    for (const [index, folder] of folders.entries()) {
+      updateProgress({ label: "Repairing V1 sessions", numerator: index, denominator: folders.length })
+      const resolved = yield* resolveDirectory(folder.directory)
+      // One hung folder (e.g. a dead network mount) usually means more; leave the rest under global.
+      if (Option.isNone(resolved)) {
+        yield* Effect.logWarning("Stopped repairing V1 global sessions after a timeout", {
+          directory: folder.directory,
+        })
+        break
+      }
+      const owner = resolved.value
+      if (!owner || owner.project.id === Project.ID.global) continue
+      yield* db
+        .transaction((tx) =>
+          Effect.gen(function* () {
+            yield* tx
+              .insert(ProjectTable)
+              .values({
+                id: owner.project.id,
+                worktree: owner.project.canonical,
+                vcs: owner.project.vcs?.type,
+                sandboxes: [],
+                time_active: folder.time_updated,
+              })
+              .onConflictDoNothing()
+              .run()
+            // Raw SQL so the ORM does not bump time_updated.
+            yield* tx.run(sql`
+              UPDATE session_v2 SET project_id = ${owner.project.id}, path = ${owner.path}
+              WHERE directory = ${folder.directory} AND project_id = ${Project.ID.global} AND workspace_id IS NULL
+                AND EXISTS (SELECT 1 FROM session WHERE session.id = session_v2.id)
+            `)
+          }),
+        )
+        .pipe(Effect.orDie)
+    }
+    yield* db
+      .insert(KVTable)
+      .values({ key: REPAIR_STATE_KEY, value: { phase: "completed" } })
+      .onConflictDoNothing()
+      .run()
+      .pipe(Effect.orDie)
+  })
 }
 
 // V1 grouped non-git sessions under global; V2 resolves an owner for each directory.
