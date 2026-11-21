@@ -3,7 +3,7 @@ export * as Provider from "./provider.js"
 import { Effect, Schema } from "effect"
 import { Integration } from "./integration.js"
 import { ProviderCompatibility } from "./model-compatibility.js"
-import { optional, statics } from "./schema.js"
+import { optional, PositiveInt, statics } from "./schema.js"
 import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(
@@ -35,12 +35,13 @@ export type Package = typeof Package.Type
 export const Activation = Schema.Literals(["auto", "enabled", "disabled"])
 export type Activation = typeof Activation.Type
 
-export const Compaction = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("summary") }),
-  Schema.Struct({ type: Schema.Literal("native") }),
-])
-  .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Provider.Compaction" })
+export const Compaction = Schema.Struct({
+  type: Schema.Literals(["summary", "native"]).pipe(optional),
+  window: PositiveInt.pipe(optional).annotate({
+    description:
+      "Target context window for automatic compaction in tokens; overrides the top-level compaction.window and caps at the model's limit.",
+  }),
+}).annotate({ identifier: "Provider.Compaction" })
 export type Compaction = typeof Compaction.Type
 
 /** "websocket" on a route without a WebSocket channel warns and falls back to HTTP. */

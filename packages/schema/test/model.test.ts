@@ -88,6 +88,16 @@ describe("Model.Info", () => {
     expect(() => Schema.decodeUnknownSync(Provider.Compaction)({ type: "automatic" })).toThrow()
   })
 
+  test("provider compaction window decodes and rejects non-positive values", () => {
+    expect(Schema.decodeUnknownSync(Provider.Compaction)({ type: "native", window: 180_000 })).toEqual({
+      type: "native",
+      window: 180_000,
+    })
+    expect(Schema.decodeUnknownSync(Provider.Compaction)({ window: 180_000 })).toEqual({ window: 180_000 })
+    expect(() => Schema.decodeUnknownSync(Provider.Compaction)({ window: 0 })).toThrow()
+    expect(() => Schema.decodeUnknownSync(Provider.Compaction)({ window: -1 })).toThrow()
+  })
+
   test("uses practical token limits for unknown models", () => {
     const model = Model.Info.default(Provider.ID.make("custom"), Model.ID.make("gpt-5.6"))
 
