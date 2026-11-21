@@ -146,7 +146,8 @@ export type ProviderDialogEvent =
   | { readonly type: "model.selected"; readonly modelKey: string }
   | { readonly type: "group.collapsed"; readonly providerID: string; readonly collapsed: boolean }
   | { readonly type: "model.confirmed"; readonly selection: ModelChoice }
-  | { readonly type: "back" }
+  /** A breadcrumb in the header: the provider list, or the provider's accounts or sign-in methods. */
+  | { readonly type: "navigate"; readonly target: ProviderBackTarget }
   | { readonly type: "disposed" }
 
 export type ProviderDialogEffect =
@@ -255,7 +256,11 @@ export function transitionProviderDialog(
 
   if (event.type === "provider.cleared") return toPicker(state)
 
-  if (event.type === "back") return back(state)
+  if (event.type === "navigate") {
+    if (event.target === "picker") return toPicker(state)
+
+    return event.target === providerBackTarget(state) ? back(state) : unchanged(state)
+  }
 
   if (event.type === "accounts.synced") return synced(state, event.accounts)
 
@@ -338,7 +343,10 @@ export function providerBackTarget(state: ProviderDialogState): ProviderBackTarg
 /** Which dialog shell the step uses: the searchable list, the model choice, or a provider step. */
 export type ProviderDialogFrame = "picker" | "models" | "accounts" | "provider"
 
-export type ProviderDialogTitle = "connect" | "console-error" | "console-sign-in" | "anthropic-max"
+/** The header path of a provider step: the provider list, then the provider. A crumb with a `target` links back. */
+export type ProviderDialogCrumb =
+  | { readonly kind: "root"; readonly target?: "picker" }
+  | { readonly kind: "provider"; readonly target?: "accounts" | "methods" }
 
 export type ProviderDialogBody =
   | { readonly kind: "picker" }
@@ -361,7 +369,6 @@ export function selectProviderDialogView(state: ProviderDialogState) {
   const connect = step && "connect" in step ? selectProviderConnectView(step.connect) : undefined
   const target = providerBackTarget(state)
   const body = selectBody(state, connect)
-  const isConsole = provider?.provider === CONSOLE_INTEGRATION
 
   const frame: ProviderDialogFrame = !step
     ? "picker"
@@ -374,17 +381,7 @@ export function selectProviderDialogView(state: ProviderDialogState) {
     frame,
     connect,
     body,
-    canBack: target !== undefined,
-    title: ((): ProviderDialogTitle => {
-      if (isConsole && connect?.status === "failed") return "console-error"
-
-      if (body.kind === "console-sign-in") return "console-sign-in"
-
-      if (provider?.provider === "anthropic" && connect?.method?.label?.toLowerCase().includes("max"))
-        return "anthropic-max"
-
-      return "connect"
-    })(),
+    crumbs: crumbs(state, target),
     // Closing on a stray backdrop click would abandon a sign-in the user is finishing in the browser.
     preventBackdropDismiss: !!provider && !provider.closed && !!connect?.authorizing,
     completed: state.completed,
@@ -393,6 +390,15 @@ export function selectProviderDialogView(state: ProviderDialogState) {
 }
 
 export type ProviderDialogView = ReturnType<typeof selectProviderDialogView>
+
+function crumbs(state: ProviderDialogState, target: ProviderBackTarget | undefined): readonly ProviderDialogCrumb[] {
+  if (state.status !== "provider" || state.step.kind === "models") return []
+
+  return [
+    { kind: "root", target: state.standalone ? undefined : "picker" },
+    { kind: "provider", target: target === "picker" ? undefined : target },
+  ]
+}
 
 function selectBody(
   state: ProviderDialogState,

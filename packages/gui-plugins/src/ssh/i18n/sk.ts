@@ -38,4 +38,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Pridať server",
   "menu.delete": "Odstrániť",
+  "error.unavailable": "SSH nie je dostupné",
 }

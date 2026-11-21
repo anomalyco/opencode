@@ -1,0 +1,40 @@
+name: Prefetch Ghostty dependencies
+description: Prepare the pinned source and Zig packages for process-daemon's native build
+runs:
+  using: composite
+  steps:
+    - name: Check out pinned Ghostty source
+      id: pins
+      shell: bash
+      env:
+        GHOSTTY_SOURCE_DIR: ${{ runner.temp }}/ghostty
+        ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache
+      run: |
+        revision=$(git show HEAD:packages/process-daemon/ghostty-revision)
+        git init --quiet "$GHOSTTY_SOURCE_DIR"
+        git -C "$GHOSTTY_SOURCE_DIR" fetch --depth=1 https://github.com/ghostty-org/ghostty.git "$revision"
+        git -C "$GHOSTTY_SOURCE_DIR" -c core.longpaths=true checkout --detach "$revision"
+        echo "revision=$revision" >> "$GITHUB_OUTPUT"
+        echo "zig=$(zig version)" >> "$GITHUB_OUTPUT"
+        echo "GHOSTTY_SOURCE_DIR=$GHOSTTY_SOURCE_DIR" >> "$GITHUB_ENV"
+        echo "ZIG_GLOBAL_CACHE_DIR=$ZIG_GLOBAL_CACHE_DIR" >> "$GITHUB_ENV"
+
+    # Zig 0.16 stores portable, content-addressed source tarballs in p/.
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: .zig-cache/p
+        key: ghostty-packages-${{ steps.pins.outputs.zig }}-${{ steps.pins.outputs.revision }}
+        enableCrossOsArchive: true
+
+    - name: Fetch Zig packages
+      shell: bash
+      working-directory: ${{ env.GHOSTTY_SOURCE_DIR }}
+      run: |
+        for attempt in 1 2 3 4; do
+          echo "zig build --fetch=all (attempt $attempt/4)"
+          if zig build --fetch=all; then exit 0; fi
+          if [[ $attempt == 4 ]]; then exit 1; fi
+          delay=$((5 * 2 ** (attempt - 1)))
+          echo "Retrying in ${delay}s"
+          sleep "$delay"
+        done

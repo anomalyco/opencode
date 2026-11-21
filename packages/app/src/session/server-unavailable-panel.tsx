@@ -32,7 +32,7 @@ export function ServerUnavailablePanel(props: { reason: "incompatible" | "unreac
           </div>
         </div>
         <Show when={props.onClose}>
-          <Button variant="neutral" size="normal" icon="xmark-small" onClick={() => props.onClose?.()}>
+          <Button variant="neutral" size="normal" icon="close" onClick={() => props.onClose?.()}>
             {language.t("session.error.notFound.closeTab")}
           </Button>
         </Show>

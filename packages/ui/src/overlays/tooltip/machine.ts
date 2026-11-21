@@ -6,8 +6,9 @@ export type TooltipState =
   /** Kobalte is not mounted yet. Most triggers are never hovered, so it mounts on the first hover or focus. */
   | { readonly status: "unmounted"; readonly disabled: boolean }
   | { readonly status: "idle"; readonly hovered: boolean; readonly disabled: boolean }
-  /** `pressing` lasts from a press on the trigger until that press ends, so its click keeps the tooltip open. */
-  | { readonly status: "open"; readonly hovered: boolean; readonly pressing: boolean }
+  | { readonly status: "open"; readonly hovered: boolean }
+  /** A press keeps the tooltip hidden until the next hover or keyboard focus. */
+  | { readonly status: "dismissed"; readonly disabled: boolean }
   /**
    * A popup the trigger opened (a menu, a popover) hides the tooltip. While it is open, a modal layer turns pointer
    * events off for the page, so the trigger's own enter and leave events lie and `hovered` follows the pointer's
@@ -33,19 +34,16 @@ export type TooltipEvent =
   | { readonly type: "pointer.left" }
   /** Where a pointer move landed while a popup suppresses the tooltip, measured against the trigger's box. */
   | { readonly type: "pointer.moved"; readonly inside: boolean }
-  /** The trigger element itself took focus. */
+  /** The trigger received focus independently of a pointer press. */
   | { readonly type: "focused" }
   | { readonly type: "trigger.pressed" }
-  /** The press ended, after the click it caused, if any. */
-  | { readonly type: "press.ended" }
   /** The microtask after the pointer left, once Kobalte has seen the tooltip open and started its skip-delay window. */
   | { readonly type: "leave.settled" }
   | { readonly type: "popup.changed"; readonly expanded: boolean }
   | { readonly type: "kobalte.changed"; readonly open: boolean }
   | { readonly type: "disposed" }
 
-/** `replay` forwards the mounting hover or focus to Kobalte, which attached its listeners too late to receive it. */
-export type TooltipEffect = "replay" | "schedule-leave"
+export type TooltipEffect = "replay" | "schedule-leave" | "cancel-opening" | "hide"
 
 export type TooltipTransition = {
   readonly state: TooltipState
@@ -69,7 +67,9 @@ const UNMOUNTED = [false, true].map((disabled) => freeze({ status: "unmounted", 
 
 const IDLE = [0, 1, 2, 3].map((key) => freeze({ status: "idle", hovered: !!(key & 1), disabled: !!(key & 2) }))
 
-const OPEN = [0, 1, 2, 3].map((key) => freeze({ status: "open", hovered: !!(key & 1), pressing: !!(key & 2) }))
+const OPEN = [false, true].map((hovered) => freeze({ status: "open", hovered }))
+
+const DISMISSED = [false, true].map((disabled) => freeze({ status: "dismissed", disabled }))
 
 const POPUP_OPEN = [0, 1, 2, 3].map((key) =>
   freeze({ status: "suppressed", popup: "open", hovered: !!(key & 1), disabled: !!(key & 2) }),
@@ -93,7 +93,7 @@ const unmounted = (disabled: boolean) => UNMOUNTED[bit(disabled)]
 
 const idle = (hovered: boolean, disabled: boolean) => IDLE[bit(hovered) | (bit(disabled) << 1)]
 
-const open = (hovered: boolean, pressing: boolean) => OPEN[bit(hovered) | (bit(pressing) << 1)]
+const open = (hovered: boolean) => OPEN[bit(hovered)]
 
 const popupOpen = (hovered: boolean, disabled: boolean) => POPUP_OPEN[bit(hovered) | (bit(disabled) << 1)]
 
@@ -102,16 +102,17 @@ const popupClosed = (disabled: boolean) => POPUP_CLOSED[bit(disabled)]
 const controlled = (open: boolean, hovered: boolean, expanded: boolean, disabled: boolean) =>
   CONTROLLED[bit(open) | (bit(hovered) << 1) | (bit(expanded) << 2) | (bit(disabled) << 3)]
 
-const REPLAY: readonly TooltipEffect[] = Object.freeze(["replay"])
+function withEffect(state: TooltipState, effect: TooltipEffect): TooltipTransition {
+  return Object.freeze({ state, effects: Object.freeze([effect]) })
+}
 
-const REPLAY_HOVER: TooltipTransition = Object.freeze({ state: idle(true, false), effects: REPLAY })
+const REPLAY_HOVER = withEffect(idle(true, false), "replay")
 
-const REPLAY_FOCUS: TooltipTransition = Object.freeze({ state: idle(false, false), effects: REPLAY })
+const LEAVING = withEffect(open(false), "schedule-leave")
 
-const LEAVING: TooltipTransition = Object.freeze({
-  state: open(false, false),
-  effects: Object.freeze<TooltipEffect[]>(["schedule-leave"]),
-})
+const CANCEL_OPENING = withEffect(DISMISSED[0], "cancel-opening")
+
+const HIDE = withEffect(DISMISSED[0], "hide")
 
 export const POINTER_ENTERED: TooltipEvent = Object.freeze({ type: "pointer.entered" })
 
@@ -124,8 +125,6 @@ export const POINTER_OUTSIDE: TooltipEvent = Object.freeze({ type: "pointer.move
 export const FOCUSED: TooltipEvent = Object.freeze({ type: "focused" })
 
 export const TRIGGER_PRESSED: TooltipEvent = Object.freeze({ type: "trigger.pressed" })
-
-export const PRESS_ENDED: TooltipEvent = Object.freeze({ type: "press.ended" })
 
 export const LEAVE_SETTLED: TooltipEvent = Object.freeze({ type: "leave.settled" })
 
@@ -178,9 +177,8 @@ export function selectTooltipForceOpen(state: TooltipState) {
   return state.status === "controlled" ? state.open : undefined
 }
 
-/** A press is in progress, so the driver listens for its end. */
-export function selectTooltipPressing(state: TooltipState) {
-  return state.status === "open" && state.pressing
+export function selectTooltipDismissed(state: TooltipState) {
+  return state.status === "dismissed"
 }
 
 /** A popup suppresses the tooltip, so the driver reports where the pointer moves. */
@@ -200,7 +198,7 @@ function next(state: TooltipState, event: TooltipEvent): TooltipState | TooltipT
 
     if (event.type === "pointer.entered") return REPLAY_HOVER
 
-    if (event.type === "focused") return REPLAY_FOCUS
+    if (event.type === "focused") return idle(false, false)
 
     return state
   }
@@ -212,28 +210,35 @@ function next(state: TooltipState, event: TooltipEvent): TooltipState | TooltipT
 
     if (event.type === "popup.changed" && event.expanded) return popupOpen(state.hovered, state.disabled)
 
-    if (event.type === "kobalte.changed" && event.open && !state.disabled) return open(state.hovered, false)
+    if (event.type === "trigger.pressed" && state.hovered && !state.disabled) return CANCEL_OPENING
+
+    if (event.type === "kobalte.changed" && event.open && !state.disabled) return open(state.hovered)
 
     return state
   }
 
   if (state.status === "open") {
-    if (event.type === "pointer.entered") return open(true, state.pressing)
+    if (event.type === "pointer.entered") return open(true)
 
-    if (event.type === "pointer.left") return state.hovered || state.pressing ? LEAVING : state
+    if (event.type === "pointer.left") return state.hovered ? LEAVING : state
 
     if (event.type === "leave.settled") return state.hovered ? state : idle(false, false)
 
-    if (event.type === "trigger.pressed") return open(state.hovered, true)
-
-    if (event.type === "press.ended") return open(state.hovered, false)
+    if (event.type === "trigger.pressed") return HIDE
 
     if (event.type === "popup.changed" && event.expanded) return popupOpen(state.hovered, false)
 
-    // Kobalte closes the tooltip on every click of its trigger; the click that ends a press keeps it open.
-    if (event.type === "kobalte.changed" && !event.open) {
-      return state.pressing ? open(state.hovered, false) : idle(state.hovered, false)
-    }
+    if (event.type === "kobalte.changed" && !event.open) return idle(state.hovered, false)
+
+    return state
+  }
+
+  if (state.status === "dismissed") {
+    if (event.type === "pointer.left") return idle(false, state.disabled)
+
+    if (event.type === "focused") return idle(true, state.disabled)
+
+    if (event.type === "popup.changed" && event.expanded) return popupOpen(true, state.disabled)
 
     return state
   }
@@ -281,7 +286,9 @@ function sync(state: TooltipState, forceOpen: boolean | undefined, disabled: boo
       return controlled(forceOpen, state.hovered, true, disabled)
     }
 
-    if (state.status === "suppressed") return controlled(forceOpen, true, false, disabled)
+    if (state.status === "suppressed" || state.status === "dismissed") {
+      return controlled(forceOpen, true, false, disabled)
+    }
 
     return controlled(forceOpen, state.hovered, false, disabled)
   }
@@ -291,6 +298,8 @@ function sync(state: TooltipState, forceOpen: boolean | undefined, disabled: boo
   if (state.status === "idle") return idle(state.hovered, disabled)
 
   if (state.status === "open") return disabled ? idle(state.hovered, true) : state
+
+  if (state.status === "dismissed") return DISMISSED[bit(disabled)]
 
   if (state.status === "suppressed" && state.popup === "open") return popupOpen(state.hovered, disabled)
 

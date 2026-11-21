@@ -23,6 +23,14 @@ dry_run() {
   [ "${OPENCODE_DRY_RUN:-false}" = true ]
 }
 
+stage_account() {
+  case "$1" in
+    dev) echo d8e944f537ceef3f06a5bd3aec1d7a53 ;;
+    production) echo 15d29c8639fd3733b1b5486a2acfd968 ;;
+    *) die "Unknown Cloudflare stage: $1" ;;
+  esac
+}
+
 sha256() {
   if command -v sha256sum > /dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi
 }

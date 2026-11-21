@@ -40,8 +40,8 @@ type Item = {
 /**
  * Settings › Docs switcher › lockup: the docs section word after the site's logo, like the Data and
  * Console headers (public/nav-demo/switcher.js). One button opens a menu of the docs sections, where
- * "Docs" has a submenu of versions. On an older version, "/ V1" after the word shows it and switches
- * back. The menus are always in the page, hidden while closed, so pages that never hydrate (the docs)
+ * "Docs" has a submenu of versions. On the V1 docs the word reads "V1 docs" and the same menu marks V1
+ * under "Docs". The menus are always in the page, hidden while closed, so pages that never hydrate (the docs)
  * can open them from a delegated listener (src/docs/client.ts).
  */
 export function DocsLockup(props: {
@@ -63,10 +63,18 @@ export function DocsLockup(props: {
   }
 }) {
   const i18n = useI18n()
+  // On the V1 docs the product name says so: "V1 docs", with the same chevron and menu as the latest docs.
+  const v1 = () => props.version?.current === "v1"
   const name = (label: string) =>
-    label === "Docs"
-      ? docsSectionName(i18n, label)
-      : i18n.t("docs.lockup.sectionDocs", { section: docsSectionName(i18n, label) })
+    v1()
+      ? i18n.t("docs.lockup.sectionDocs", { section: "V1" })
+      : label === "Docs"
+        ? docsSectionName(i18n, label)
+        : i18n.t("docs.lockup.sectionDocs", { section: docsSectionName(i18n, label) })
+  // The sections menu names each section's docs: "CLI docs", "API docs". The main docs are about OpenCode
+  // itself, so they're "OpenCode docs" rather than "Docs docs".
+  const menuName = (label: string) =>
+    i18n.t("docs.lockup.sectionDocs", { section: label === "Docs" ? "OpenCode" : docsSectionName(i18n, label) })
   // V1 is a version, not a section: "Docs" has a submenu of versions, V2 (these docs) and V1 (the old
   // docs site). The /docs demo can pass its own (?version= switches in place).
   const sections = () => docsProducts.filter((product) => product.label !== "V1")
@@ -115,8 +123,8 @@ export function DocsLockup(props: {
         triggerLabel={(label) => i18n.t("docs.lockup.switchLabel", { name: name(label) })}
         items={sections().map((product) => ({
           id: product.label,
-          label: docsSectionName(i18n, product.label),
-          ariaLabel: name(product.label),
+          label: menuName(product.label),
+          ariaLabel: menuName(product.label),
           href: props.href?.(product.label) ?? product.href,
           sub:
             product.label !== "Docs"
@@ -132,30 +140,8 @@ export function DocsLockup(props: {
         }))}
         current={props.current}
         onSelect={props.onSelect}
-        split={{ label: i18n.t("docs.lockup.switch"), onSelect: props.onSelect }}
+        split={{ label: i18n.t("docs.lockup.switch"), onSelect: props.onSelect, href: v1() ? v1DocsUrl() : undefined }}
       />
-      {/* Only the main docs have versions, and only an older one shows here. */}
-      <Show when={props.current === "Docs" && props.version?.current !== "latest" && props.version}>
-        {(version) => (
-          <>
-            <span data-slot="separator" aria-hidden="true">
-              |
-            </span>
-            <Dropdown
-              id={`docs-version-menu${suffix}`}
-              variant="version"
-              menuLabel={i18n.t("docs.version.label")}
-              trigger={(id) => docsVersions.find((item) => item.id === id)!.label}
-              triggerLabel={(id) =>
-                i18n.t("docs.version.switch", { version: docsVersions.find((item) => item.id === id)!.label })
-              }
-              items={versionItems(version())}
-              current={version().current}
-              onSelect={(id) => version().onSelect(id as DocsVersion)}
-            />
-          </>
-        )}
-      </Show>
     </div>
   )
   if (props.inline) return lockup()
@@ -186,8 +172,11 @@ function Dropdown(props: {
   items: Item[]
   current: string
   onSelect?: (id: string) => void
-  /** Settings › Docs nav › split: the word links to the section's home; `label` names the chevron. */
-  split?: { label: string; onSelect?: (id: string) => void }
+  /**
+   * Settings › Docs nav › split: the word links to the section's home (or `href`, the V1 docs' home);
+   * `label` names the chevron.
+   */
+  split?: { label: string; onSelect?: (id: string) => void; href?: string }
 }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
@@ -323,11 +312,7 @@ function Dropdown(props: {
             <a
               data-slot="word"
               data-design="docsNav sectionMenuStyle menuActive menuColor menuAlign docsSubmenu"
-              href={props.items[currentIndex()].href}
-              data-nav-product="docs"
-              data-nav-product-chevron="none"
-              aria-haspopup="menu"
-              aria-expanded="false"
+              href={split().href ?? props.items[currentIndex()].href}
               aria-label={i18n.t("docs.lockup.home", { name: props.trigger(props.items[currentIndex()].id) })}
               onClick={(event) => {
                 close()

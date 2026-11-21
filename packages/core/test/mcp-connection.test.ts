@@ -102,7 +102,12 @@ const connection = (failure: "network" | number | Error = 503) =>
     })
     const current: McpConnection.Connection = McpConnection.make({
       name: "test",
-      config: new ConfigMCP.Remote({ type: "remote", url: "https://mcp.example.test/mcp", oauth: false }),
+      config: new ConfigMCP.Remote({
+        type: "remote",
+        url: "https://mcp.example.test/mcp",
+        oauth: false,
+        protocol: "legacy",
+      }),
       directory: import.meta.dir,
       authProvider: Effect.succeed(undefined),
       environment: yield* Environment.Service,

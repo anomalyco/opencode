@@ -329,7 +329,6 @@ export const node = makeLocationNode({ service: Service, layer, deps: [Provider.
 const PREFERRED_FREE = [
   "big-pickle",
   "deepseek-v4.1-flash-free",
-  "glm-5.3-flash-free",
   "muse-spark-1.3-contributor-free",
 ]
 

@@ -125,7 +125,7 @@ export function SessionGoLimitTray(props: {
               type="button"
               size="small"
               variant="ghost-muted"
-              icon={<Icon name="outline-xmark" />}
+              icon={<Icon name="close" />}
               aria-label={language.t("common.dismiss")}
               onClick={() => setLimit(undefined)}
             />

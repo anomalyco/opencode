@@ -211,6 +211,8 @@ export interface Interface {
   readonly move: SessionMove.Interface["move"]
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
+    /** A bounded durability step after successful admission and wake, in the same interruption mask. */
+    onAccepted?: Effect.Effect<void>,
   ) => ReturnType<Session.Handle["prompt"]>
   /** Generates text from current Session context without admitting input or mutating history. Its usage counts toward the Session's totals. */
   readonly generate: (input: {
@@ -406,10 +408,13 @@ const layer = Layer.effect(
         yield* jobs.cancelSession(sessionID)
         yield* transport.close(sessionID)
         const children = yield* store.list({ parentID: sessionID })
-        yield* Effect.forEach(children, (child) => result.remove(child.id), { concurrency: 1, discard: true })
+        // Delete the parent before its children: an interrupted child settles through the report
+        // path, and a report admitted just before the parent's deletion wakes an execution whose
+        // lifecycle write then fails on the deleted row.
         yield* environments.clear(sessionID)
         yield* bus.publish(SessionEvent.Deleted, { sessionID })
         yield* bus.remove(sessionID)
+        yield* Effect.forEach(children, (child) => result.remove(child.id), { concurrency: 1, discard: true })
       }),
       list: Effect.fn("Session.list")(function* (input = {}) {
         const filter =
@@ -489,7 +494,7 @@ const layer = Layer.effect(
               Bus.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
+      prompt: (input, onAccepted) => sessions.forSession(input.sessionID).prompt(input, onAccepted),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
         return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(

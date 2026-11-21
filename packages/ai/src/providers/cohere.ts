@@ -4,7 +4,7 @@ import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { ProviderID, type ModelID, type OpenString, type RequestOptions } from "../schema/index.js"
+import { mergeTransport, ProviderID, type ModelID, type OpenString, type RequestOptions } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
@@ -40,8 +40,7 @@ export const configure = (input: Config = {}) => {
     provider: id,
     endpoint: compatibility.endpoint,
     auth: options.auth,
-    headers: input.headers,
-    http: input.http,
+    ...mergeTransport(input),
   })
   return {
     id,

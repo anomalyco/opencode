@@ -218,7 +218,8 @@ interface Options {
   readonly config: typeof ConfigMCP.Remote.Type
   readonly store: Store
   readonly redirect: {
-    readonly url: string
+    readonly url: () => string
+    readonly registered: string[]
     readonly state: string
     readonly open: (url: URL) => void | Promise<void>
   }
@@ -232,7 +233,9 @@ const provider = (options: Options): OAuthClientProvider => {
   const redirect = options.redirect
   let discovery = options.discovery
   return {
-    redirectUrl: redirect.url,
+    get redirectUrl() {
+      return redirect.url()
+    },
     discoveryState: async () => discovery,
     saveDiscoveryState: (state) => {
       discovery = state
@@ -241,7 +244,7 @@ const provider = (options: Options): OAuthClientProvider => {
     ...(options.clientMetadataUrl ? { clientMetadataUrl: options.clientMetadataUrl } : {}),
     state: () => redirect.state,
     clientMetadata: {
-      redirect_uris: [redirect.url],
+      redirect_uris: redirect.registered,
       client_name: "opencode",
       client_uri: "https://opencode.ai",
       logo_uri: "https://opencode.ai/web-app-manifest-512x512.png",
@@ -521,7 +524,10 @@ export const authorize = (input: {
       const client = clientFromCredential(previous)
       if (client) yield* Effect.promise(() => store.saveClientInformation(client))
     }
-    const code = yield* Deferred.make<{ code: string; iss: string | undefined; response?: ServerResponse }, Error>()
+    const code = yield* Deferred.make<
+      { code: string; iss: string | undefined; host?: string; response?: ServerResponse },
+      Error
+    >()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
@@ -558,7 +564,12 @@ export const authorize = (input: {
       // The page waits for the token exchange so the browser never reports success for a rejected code.
       if (
         !Effect.runSync(
-          Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined, response }),
+          Deferred.succeed(code, {
+            code: value,
+            iss: url.searchParams.get("iss") ?? undefined,
+            host: request.headers.host,
+            response,
+          }),
         )
       )
         response.writeHead(409).end("OAuth callback already received")
@@ -616,6 +627,10 @@ export const authorize = (input: {
       registration: oauth?.client_id ? "static" : cimd ? "cimd" : "dcr",
     })
 
+    // Some authorization servers (Clerk) rewrite a 127.0.0.1 redirect to localhost before sending the browser back,
+    // and issue the code for the rewritten URI. Both are registered, and the token exchange repeats the one used.
+    const loopback = (host: string) => `http://${host}:${port}${redirectPath}`
+    let reached = "127.0.0.1"
     let authorizationUrl: URL | undefined
     const oauthProvider = provider({
       config: input.config,
@@ -623,7 +638,8 @@ export const authorize = (input: {
       clientMetadataUrl: cimd ? CLIENT_METADATA_URL : undefined,
       discovery: { ...discovery, resourceMetadataUrl: resourceMetadataUrl?.toString() },
       redirect: {
-        url: oauth?.redirect_uri ?? `http://127.0.0.1:${port}${redirectPath}`,
+        url: () => oauth?.redirect_uri ?? loopback(reached),
+        registered: oauth?.redirect_uri ? [oauth.redirect_uri] : [loopback("127.0.0.1"), loopback("localhost")],
         state,
         open: (url) => {
           authorizationUrl = url
@@ -666,6 +682,7 @@ export const authorize = (input: {
     const completed = yield* Deferred.make<Credential.OAuth, Error>()
     yield* Deferred.await(code).pipe(
       Effect.flatMap((value) => {
+        if (value.host === `localhost:${port}`) reached = "localhost"
         const respond = (error?: string) =>
           Effect.sync(() =>
             value.response

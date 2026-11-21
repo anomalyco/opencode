@@ -1,7 +1,7 @@
 import { bindings, defineConfig, triggers } from "cf/config"
 import { LOCALES } from "../../packages/data/app/src/lib/language"
 import { ogWorkerName } from "./og.config"
-import { stage, stageHost } from "./stage"
+import { stage, stageAccount, stageHost } from "./stage"
 
 // The data site (packages/data/app, SolidStart) at /data and /<locale>/data on the main host. `--mode dev` deploys
 // opencode-data-dev on dev.opencode.ai and `--mode production` opencode-data-production on opencode.ai; any other
@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
   const host = stageHost(current)
   return {
     // Anomaly
-    accountId: "15d29c8639fd3733b1b5486a2acfd968",
+    accountId: stageAccount(current),
     worker: {
       name: `opencode-data-${current}`,
       compatibilityDate: "2026-07-25",
@@ -33,7 +33,7 @@ export default defineConfig(({ mode }) => {
         DATA_DATABASE_PASSWORD: bindings.secret(),
       },
       triggers: ["data", ...LOCALES.map((locale) => `${locale}/data`)].map((prefix) =>
-        triggers.fetch({ pattern: `${host}/${prefix}*`, zone: "opencode.ai" }),
+        triggers.fetch({ pattern: `${host}/${prefix}*`, zone: host }),
       ),
       workersDev: false,
       previewUrls: false,

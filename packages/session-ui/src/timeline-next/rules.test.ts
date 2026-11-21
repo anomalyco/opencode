@@ -1,27 +1,43 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
 import { timelinePresets, type TimelineDetail } from "../timeline/detail"
-import {
-  contentGroup,
-  contentOpens,
-  contentShows,
-  echoesUserShell,
-  noticePlacement,
-  thoughtOpens,
-  toolFailed,
-  toolStopped,
-  userShellOpens,
-} from "./rules"
+import { toolEvent } from "./events"
+import { placeContent, placeNotice } from "../timeline/place"
+import { factsOf, toolStopped } from "../timeline/facts"
+import { echoesUserShell, thoughtOpens } from "./rules"
+import { timelineStatus } from "./status"
 
 const preset = (id: string) => timelinePresets.find((item) => item.id === id)!.value
 
+type Content = Parameters<typeof placeContent>[0]
+
+const contentGroup = (detail: TimelineDetail, content: Content, commentary: ReadonlySet<Content>) => {
+  const group = placeContent(content, detail, "next", commentary.has(content)).group
+
+  return group === "part" ? undefined : group
+}
+
+const contentOpens = (detail: TimelineDetail, content: Content) => placeContent(content, detail, "next").opens
+
+const contentShows = (detail: TimelineDetail, content: Content) =>
+  placeContent(content, detail, "next").placement !== "hidden"
+
+const noticePlacement = (detail: TimelineDetail, message: SessionMessageInfo) => placeNotice(message, detail, "next")
+
+const toolFailed = (tool: SessionMessageAssistantTool) =>
+  factsOf([tool]).some((fact) => fact.kind === "call" && fact.failed)
+
 const custom = (overrides: Partial<TimelineDetail>): TimelineDetail => ({ ...preset("compact"), ...overrides })
 
-const tool = (name: string, input: { [key: string]: string | boolean } = {}): SessionMessageAssistantTool => ({
+const tool = (
+  name: string,
+  input: { [key: string]: string | boolean } = {},
+  metadata: { [key: string]: string } = {},
+): SessionMessageAssistantTool => ({
   id: name,
   type: "tool",
   name,
-  state: { status: "completed", input, content: [{ type: "text", text: "" }], metadata: {} },
+  state: { status: "completed", input, content: [{ type: "text", text: "" }], metadata },
   time: { created: 0 },
 })
 
@@ -47,9 +63,33 @@ const report = (source: "shell" | "subagent", state = "completed") =>
   }) satisfies SessionMessageInfo
 
 describe("starting work that runs on follows its own setting", () => {
+  test("a subagent launch leaves the parent working unless approval is pending", () => {
+    const content = [{ ...tool("subagent"), state: { status: "running" as const, input: {}, metadata: {} } }]
+
+    expect(timelineStatus({ content })).toBe("working")
+    expect(timelineStatus({ content, blocked: "approval" })).toBe("waitingApproval")
+  })
+
+  test("a failed subagent launch says Started; a stored foreground result says Ran", () => {
+    expect(
+      toolEvent(errored("subagent", { type: "ToolExecutionError", message: "Failed to prompt subagent" })),
+    ).toMatchObject({ verb: "started", failed: true })
+    expect(toolEvent(tool("subagent", { background: true }))).toMatchObject({ verb: "started" })
+    expect(toolEvent(tool("subagent", {}, { status: "completed" }))).toMatchObject({ verb: "ran", failed: false })
+  })
+
   test("a background shell joins the activity group where shells are grouped, and stands alone where separate", () => {
     expect(contentGroup(preset("compact"), backgroundShell, new Set())).toBe("context")
     expect(contentGroup(preset("everything"), backgroundShell, new Set())).toBe("events")
+  })
+
+  test("prompting an existing child produces an update linked to that session", () => {
+    expect(toolEvent(tool("subagent", { sessionID: "child", agent: "explore" }))).toMatchObject({
+      verb: "updated",
+      agent: "explore",
+      sessionID: "child",
+      title: undefined,
+    })
   })
 
   test("a launch that failed keeps its own row, whatever the setting", () => {
@@ -62,9 +102,9 @@ describe("starting work that runs on follows its own setting", () => {
     expect(contentGroup(preset("compact"), failed, new Set())).toBe("events")
   })
 
-  test("a subagent follows the subagent setting, not the tools or shell one", () => {
-    expect(contentGroup(preset("compact"), tool("subagent"), new Set())).toBe("events")
-    expect(contentGroup(custom({ subagents: { placement: "grouped" } }), tool("subagent"), new Set())).toBe("context")
+  test.each(["subagent", "task"])("%s has its own row in both visible placements", (name) => {
+    expect(contentGroup(preset("compact"), tool(name), new Set())).toBe("subagent")
+    expect(contentGroup(custom({ subagents: { placement: "grouped" } }), tool(name), new Set())).toBe("subagent")
   })
 
   test("a background shell's report follows the shell setting", () => {
@@ -89,12 +129,10 @@ describe("echoesUserShell", () => {
 })
 
 describe("details", () => {
-  test("shell details decide whether a command's whole output shows, for the agent's commands and the user's", () => {
+  test("shell details decide whether an agent's command opens to its whole output", () => {
     expect(contentOpens(preset("everything"), tool("shell"))).toBe(true)
     expect(contentOpens(preset("compact"), tool("shell"))).toBe(false)
     expect(contentOpens(preset("compact"), tool("execute"))).toBe(false)
-    expect(userShellOpens(preset("everything"))).toBe(true)
-    expect(userShellOpens(preset("compact"))).toBe(false)
   })
 
   test("thinking details stream the live thought in view, and every finished thought starts closed", () => {

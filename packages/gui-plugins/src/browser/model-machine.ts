@@ -78,11 +78,12 @@ export function selectBrowserModelError<M>(state: BrowserModelState<M>) {
 }
 
 /**
- * A stored tab stays listed but hidden until the model knows it. Once the load failed it shows, so the panel can say
- * why and offer a retry.
+ * A stored tab stays listed but hidden until the model knows it, unless its page is saved from the last run (`saved`):
+ * the strip draws that one at once, before the model loads and the desktop reports it. Once the load failed it shows,
+ * so the panel can say why and offer a retry.
  */
-export function selectBrowserTabHidden<M>(state: BrowserModelState<M>, known: (model: M) => boolean) {
-  if (state.status === "failed") return false
+export function selectBrowserTabHidden<M>(state: BrowserModelState<M>, known: (model: M) => boolean, saved: boolean) {
+  if (saved || state.status === "failed") return false
 
   return state.status !== "loaded" || !known(state.model)
 }

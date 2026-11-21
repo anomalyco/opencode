@@ -55,16 +55,6 @@ export function tokensPerSecond(messages: readonly Message[], message: Message, 
   return output / (total / 1_000)
 }
 
-/**
- * Milliseconds from the dispatch of the turn's first token-producing step to its first streamed token, or undefined
- * until a step records one.
- */
-export function timeToFirstToken(messages: readonly Message[], message: Message, options: Options = {}) {
-  const step = turnSteps(messages, message, options).find((item) => item.time.firstToken !== undefined)
-  if (step?.time.firstToken === undefined) return
-  return Math.max(0, step.time.firstToken - step.time.created)
-}
-
 export function legacy(messages: readonly Message[]) {
   return !messages.some((message) => message.type === "idle")
 }

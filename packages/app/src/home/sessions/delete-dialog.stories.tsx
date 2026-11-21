@@ -6,7 +6,9 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { sessionTitle } from "@/session/title"
 
-function DeleteSessionStory(props: { sessionTitle?: string }) {
+type Args = { sessionTitle: string; deleting: boolean }
+
+function DeleteSessionStory(props: Args) {
   const dialog = useDialog()
 
   const language = useLanguage()
@@ -20,16 +22,17 @@ function DeleteSessionStory(props: { sessionTitle?: string }) {
           <DialogTitleGroup
             title={language.t("session.delete.title")}
             description={language.t("session.delete.confirm", {
-              name: sessionTitle(props.sessionTitle) ?? language.t("command.session.new"),
+              name: sessionTitle(props.sessionTitle || undefined) ?? language.t("command.session.new"),
             })}
           />
         </DialogHeader>
         <DialogFooter>
-          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
+          <Button variant="ghost" autofocus disabled={props.deleting} onClick={() => dialog.close()}>
             {language.t("common.cancel")}
           </Button>
           <Button
             variant="danger"
+            disabled={props.deleting}
             onClick={() => {
               setStore("status", "Session deleted")
               dialog.close()
@@ -56,12 +59,12 @@ function DeleteSessionStory(props: { sessionTitle?: string }) {
 export default {
   title: "App/Dialogs/Delete Session",
   id: "app-dialog-delete-session",
+  args: { sessionTitle: "Refactor the dialog primitives", deleting: false } satisfies Args,
+  render: (args: Args) => <DeleteSessionStory {...args} />,
 }
 
-export const Default = {
-  render: () => <DeleteSessionStory sessionTitle="Refactor the dialog primitives" />,
-}
+export const Default = {}
 
-export const Untitled = {
-  render: () => <DeleteSessionStory />,
-}
+export const Untitled = { args: { sessionTitle: "" } }
+
+export const Deleting = { args: { deleting: true } }

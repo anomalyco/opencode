@@ -15,4 +15,13 @@ export default {
   "settings.wrapLines.title": "Quebrar linhas",
   "settings.wrapLines.description":
     "Quebrar linhas longas nos diffs para dispositivos móveis em vez de rolar horizontalmente",
+  "menu.count.one": "{{count}} arquivo alterado",
+  "menu.count.many": "{{count}} arquivos alterados",
+  "menu.count.other": "{{count}} arquivos alterados",
+  "folder.more": "{{count}} · mais itens não exibidos",
+  "folder.failed": "Não foi possível carregar as alterações",
+  "command.open": "Abrir revisão",
+  "load.failed": "Não foi possível carregar as alterações",
+  "load.timeout": "O servidor demorou demais para responder",
+  offline: "Não foi possível acessar este servidor",
 }

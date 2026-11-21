@@ -144,8 +144,10 @@
     display: grid;
     place-items: center;
     overflow: hidden;
-    /* The heroes' own backdrop in each theme (videos.ts), so the box matches them before they load. */
+    /* The heroes' own backdrop in each theme (videos.ts), so the box matches them before they load.
+       grey-ok: matches the encoded video backdrop */
     background: light-dark(#161616, #1e1e1e);
+    /* grey-ok-end */
 
     video,
     img {
@@ -167,7 +169,7 @@
       width: 2rem;
       height: 2rem;
       padding: 0;
-      color: #fff;
+      color: var(--fixed-white);
       background: rgb(0 0 0 / 0.6);
       opacity: 0.8;
 
@@ -197,14 +199,16 @@
   /* No real footage yet: plain black in both themes, with a hairline edge on the dark page so the
      box still reads against the near-black background. */
   [data-component="product-hero"][data-empty] {
-    background: #000;
-    box-shadow: inset 0 0 0 1px light-dark(transparent, hsl(0, 0%, 20%));
+    background: var(--media-black);
+    box-shadow: inset 0 0 0 1px light-dark(transparent, var(--border));
   }
 
   /* The phone recording has its own near-black backdrop, which fills the hero edge to edge in both
      themes (edits/hero-mobile-*.json): the box matches it before the poster paints. */
   [data-component="product-hero"][data-product="mobile"] {
+    /* grey-ok: matches the encoded video backdrop */
     background: #0a0a0a;
+    /* grey-ok-end */
   }
 
   [data-component="product-hero"][data-product="sdk"] {
@@ -216,14 +220,14 @@
       font-size: clamp(0.75rem, 2.2cqw, 1.5rem);
       line-height: 1.55;
       white-space: pre;
-      color: #eeeeee;
+      color: var(--fixed-dark-text);
     }
   }
 
   [data-slot="caption"] {
     font-family: var(--font-mono);
     font-size: var(--fs-meta);
-    color: #808080;
+    color: var(--fixed-dark-weak);
   }
 
   /* Title and description across three columns, the main action at the right edge. */
@@ -488,7 +492,7 @@
 
     [data-slot="media"] {
       aspect-ratio: 16 / 10;
-      background: #0a0a0a;
+      background: var(--fixed-dark);
 
       position: relative;
       overflow: hidden;

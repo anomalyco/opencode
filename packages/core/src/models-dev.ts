@@ -119,6 +119,7 @@ const SourceModel = Schema.Struct({
   cost: Schema.optional(SourceCost),
   // Ordered: the first API is the model's default.
   api: Schema.Record(Schema.String, Schema.Unknown),
+  recommended_api: Schema.optional(Schema.Unknown),
   experimental: Schema.optional(
     Schema.Struct({ modes: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)) }),
   ),
@@ -133,7 +134,7 @@ const SourceProvider = Schema.Struct({
 })
 
 // The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request.
-const TYPES: readonly string[] = ["chat", "decision", "image"]
+const TYPES: readonly string[] = ["chat", "decision", "image", "video"]
 
 const ContextCondition = Schema.Struct({ gt: Schema.optional(Schema.Finite), gte: Schema.optional(Schema.Finite) })
 const decodeModel = Schema.decodeUnknownResult(SourceModel)
@@ -179,19 +180,21 @@ const BUILDS_OWN_URL = new Set([
   "aisdk:watsonx-ai-provider",
 ])
 
-const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>) {
+const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>, recommended: boolean) {
   const failed: { readonly model: string; readonly issue: unknown }[] = []
   const unknown = new Set<string>()
   const snapshots = Object.values(isV1(catalog) ? toV2(catalog) : catalog).flatMap((value) => {
     const item = Option.getOrUndefined(decodeProvider(value))
     if (!item) return []
     const providerID = Provider.ID.make(item.id)
+    // Vertex needs separate handling for location and Express Mode.
+    const prefer = recommended && providerID !== Provider.ID.googleVertex
     const sources = Object.entries(item.models).flatMap(([key, value]) => {
       const decoded = decodeModel(value)
       if (Result.isFailure(decoded)) failed.push({ model: `${item.id}/${key}`, issue: decoded.failure })
       const model = Result.isSuccess(decoded) ? decoded.success : undefined
       // The fetch already asks for these types, but custom files and v1 catalogs may hold any type.
-      const target = model && TYPES.includes(model.type) && route(providerID, model, unknown)
+      const target = model && TYPES.includes(model.type) && route(providerID, model, unknown, prefer)
       return model && target ? [{ model, route: target }] : []
     })
     if (sources.length === 0) return []
@@ -249,17 +252,17 @@ function entries<A>(record: Record<string, unknown> | undefined, decode: (input:
   )
 }
 
-function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>): Route | undefined {
+function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>, recommended: boolean) {
   // A chat model uses its first API with a package. Other types (image, decision…) only run through the
   // opencode entrypoint for their type (`providers/<P>/images`) that this build can load, and are skipped
   // without one: a chat entrypoint loads a chat model, which can't generate images or decisions.
   const apis = entries(model.api, decodeApi).map(
     ([protocol, entry]) => [protocol, entry, loadable(entry.sdk?.opencodeai, unknown)] as const,
   )
-  const [protocol, api, opencodeai] =
-    (model.type === "chat"
-      ? apis.find(([, entry, opencodeai]) => opencodeai || entry.sdk?.aisdk)
-      : apis.find(([, , opencodeai]) => opencodeai?.endsWith(`/${model.type}s`))) ?? []
+  const eligible = ([, entry, opencodeai]: (typeof apis)[number]) =>
+    model.type === "chat" ? opencodeai || entry.sdk?.aisdk : opencodeai?.endsWith(`/${model.type}s`)
+  const preferred = recommended ? apis.find((api) => api[0] === model.recommended_api && eligible(api)) : undefined
+  const [protocol, api, opencodeai] = preferred ?? apis.find(eligible) ?? []
   if (!protocol || !api) return undefined
   const aisdk = api.sdk?.aisdk
   const packageName =
@@ -474,7 +477,7 @@ function modelInfo(
 export { Event } from "@opencode/schema/models-dev"
 
 export interface Interface {
-  readonly get: () => Effect.Effect<readonly Snapshot[]>
+  readonly get: (recommended?: boolean) => Effect.Effect<readonly Snapshot[]>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
@@ -507,26 +510,26 @@ const defaultSource = "https://models.opencode.ai"
 // The experimental v2 API, limited to the model types opencode keeps.
 export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}`
 
-export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.flatMap(normalize))
+export const decodeSnapshot = (text: string, recommended = false) =>
+  decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended)))
 
 // Bundled snapshot of the catalog at `catalogPath`, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
 // `bun run script/update-models-snapshot.ts`. Release builds bundle the live
 // catalog in its place when it can be fetched. Decoded and normalized once per
-// isolate: the snapshot is a multi-MB module-level constant and one isolate can
+// flag value per isolate: the snapshot is a multi-MB module-level constant and one isolate can
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
-let bundledCache: readonly Snapshot[] | undefined
-const bundledSnapshot = Effect.suspend(() =>
-  bundledCache
-    ? Effect.succeed(bundledCache)
-    : decodeSnapshot(snapshotText).pipe(
-        Effect.map((snapshot) => {
-          bundledCache = snapshot
-          return bundledCache
-        }),
-      ),
-)
+const bundledCache = new Map<boolean, readonly Snapshot[]>()
+const bundledSnapshot = (recommended: boolean) =>
+  Effect.suspend(() => {
+    const cached = bundledCache.get(recommended)
+    return cached
+      ? Effect.succeed(cached)
+      : decodeSnapshot(snapshotText, recommended).pipe(
+          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(recommended, snapshot))),
+        )
+  })
 
 // Versioned so an entry cached from the v1 API is never read as v2.
 function cacheKey(source: string) {
@@ -612,10 +615,6 @@ export const layer = (options?: Options) =>
           )
         : Effect.undefined
 
-      // The bundled snapshot is the boot-time floor for the catalog; the
-      // periodic fetch below still refreshes on top.
-      const loadSnapshot = options?.snapshot === false ? Effect.undefined : bundledSnapshot
-
       const writeMeta = (updatedAt: number, digest: string | undefined, etag: string | undefined) =>
         kv.set(metaKey, { updatedAt, ...(digest ? { digest } : {}), ...(etag ? { etag } : {}) })
 
@@ -646,12 +645,13 @@ export const layer = (options?: Options) =>
         return catalog
       })
 
-      const populate = Effect.gen(function* () {
+      const populate = Effect.fn("ModelsDev.populate")(function* (recommended: boolean) {
         const fromFile = yield* loadFromFile
-        if (fromFile) return yield* normalize(fromFile)
+        if (fromFile) return yield* normalize(fromFile, recommended)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return yield* normalize(cached.catalog)
-        const bundled = yield* loadSnapshot
+        if (cached) return yield* normalize(cached.catalog, recommended)
+        // The bundled snapshot is the boot-time floor until the periodic fetch refreshes it.
+        const bundled = options?.snapshot === false ? undefined : yield* bundledSnapshot(recommended)
         if (bundled) return bundled
         if (!fetch) return []
         const catalog = yield* lock.withPermit(
@@ -661,12 +661,13 @@ export const layer = (options?: Options) =>
             return yield* fetchAndWrite()
           }),
         )
-        return yield* normalize(catalog)
-      }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
+        return yield* normalize(catalog, recommended)
+      }, Effect.orDie)
 
-      const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
-
-      const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
+      const caches = yield* Effect.forEach([false, true], (recommended) =>
+        Effect.cachedInvalidateWithTTL(populate(recommended), Duration.infinity),
+      )
+      const get = (recommended = false) => caches[Number(recommended)][0]
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
         yield* lock
@@ -688,7 +689,7 @@ export const layer = (options?: Options) =>
               if (!response) return
               yield* decodeCatalog(response.text)
               yield* writeCache(response.text, response.etag, digest)
-              yield* invalidate
+              yield* Effect.forEach(caches, ([, invalidate]) => invalidate, { discard: true })
               yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
             }),
           )

@@ -9,6 +9,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { focusField } from "@opencode/ui/context/field-focus"
 import { setCursorPosition } from "@/composer/editor/dom"
 import {
   createComposerFocusState,
@@ -62,12 +63,17 @@ function createComposerFocus() {
   let timer: ReturnType<typeof setTimeout> | undefined
   let preparing: ComposerSurface | undefined
   let real: ComposerSurface | undefined
+  // What held focus when the session opened, such as a control a tab shortcut was pressed in. Like the tab link, it
+  // passes focus on.
+  let opener: Element | null = null
 
   const dispatch = (event: ComposerFocusEvent) => {
     const previous = untrack(state)
     const result = transitionComposerFocus(previous, event)
 
     if (result.state === previous) return
+
+    if (event.type === "target.changed") opener = document.activeElement
     setState(result.state)
     result.effects.forEach(run)
   }
@@ -116,8 +122,8 @@ function createComposerFocus() {
     if (active && element.contains(active)) return "focused"
 
     // A control chosen while the session was loading owns focus now.
-    if (active && active !== document.body && !isTitlebarTabLink(active)) return "claimed"
-    element.focus({ preventScroll: true })
+    if (active && active !== document.body && active !== opener && !isTitlebarTabLink(active)) return "claimed"
+    focusField(element, false, { preventScroll: true })
     setCursorPosition(element, effect.cursor)
 
     return "focused"

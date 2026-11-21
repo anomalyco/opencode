@@ -28,7 +28,7 @@ import { ConfigMigrateV1 } from "../v1/config/migrate.js"
 import { PositiveInt } from "../schema.js"
 
 export interface Diagnostic {
-  readonly kind: "conflict" | "invalid" | "unsupported"
+  readonly kind: "conflict" | "invalid" | "removed" | "unsupported"
   readonly path: readonly string[]
   readonly message: string
 }
@@ -211,6 +211,7 @@ export function normalize(input: unknown): Result {
     enterprise: Info.fields.enterprise,
     username: Info.fields.username,
     timezone: Info.fields.timezone,
+    automations: Info.fields.automations,
     snapshots: Info.fields.snapshots,
     media: Info.fields.media,
     tool_output: Info.fields.tool_output,
@@ -353,14 +354,15 @@ function normalizeCompaction(
   unsupportedIfPresent(input.compaction, "tail_turns", ["compaction", "tail_turns"], diagnostics)
   unsupportedIfPresent(input.compaction, "prune", ["compaction", "prune"], diagnostics)
   const result: Record<string, unknown> = {}
-  if (own(input.compaction, "auto")) {
+  for (const key of ["auto", "background"] as const) {
+    if (!own(input.compaction, key)) continue
     const value = decodeEncoded(
-      ConfigCompaction.Info.fields.auto,
-      input.compaction.auto,
-      ["compaction", "auto"],
+      ConfigCompaction.Info.fields[key],
+      input.compaction[key],
+      ["compaction", key],
       diagnostics,
     )
-    if (value !== undefined) result.auto = value
+    if (value !== undefined) result[key] = value
   }
   const legacyTokens = own(input.compaction, "preserve_recent_tokens")
     ? decodeEncoded(
@@ -459,6 +461,14 @@ function normalizeExperimental(
       unsupportedExperimental.forEach((key) =>
         unsupportedIfPresent(experimental, key, ["experimental", key], diagnostics),
       )
+      for (const key of ["automations", "schedules"]) {
+        if (!own(experimental, key)) continue
+        diagnostics.push({
+          kind: "removed",
+          path: ["experimental", key],
+          message: "Use the top-level automations setting. Automations are enabled by default.",
+        })
+      }
       // `policies` merges into top-level `policies` in normalizePolicies.
       Object.entries(ConfigExperimental.Info.fields).forEach(([key, schema]) => {
         if (key === "policies" || !own(experimental, key)) return

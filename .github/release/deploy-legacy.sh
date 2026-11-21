@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy-legacy.sh <dev|production> <dir> <secrets.json>: deploys the legacy
+# deploy-legacy.sh <dev|production> <dir> [production-secrets.json]: deploys the legacy
 # Worker from a verified Build Output artifact (services/legacy/.cloudflare/output)
 # with the cf CLI pinned in cf/package-lock.json.
 #
@@ -12,7 +12,6 @@
 
 mode=$1
 src=$(cd "$2" && pwd)
-secrets=$(posix "$3")
 release=$(cd "$(dirname "$0")" && pwd)
 
 case "$mode" in
@@ -24,7 +23,8 @@ target="$release/targets/legacy/$mode"
 
 : "${CLOUDFLARE_API_TOKEN:?Set CLOUDFLARE_API_TOKEN}"
 # Pinned in targets/ and in the token issuer's config (anomalyco/secrets).
-export CLOUDFLARE_ACCOUNT_ID=15d29c8639fd3733b1b5486a2acfd968
+CLOUDFLARE_ACCOUNT_ID=$(stage_account "$mode")
+export CLOUDFLARE_ACCOUNT_ID
 
 unexpected=$(cd "$src" && find . ! -type d ! -type f -o -type f ! -path ./SHA256SUMS \
   ! -path ./v0/config.json \
@@ -36,8 +36,13 @@ unexpected=$(cd "$src" && find . ! -type d ! -type f -o -type f ! -path ./SHA256
 expect_json "$src/v0/config.json" "$target/root.json" "The legacy Worker's root config"
 expect_json "$src/v0/workers/default/worker.config.json" "$target/worker.json" "The legacy Worker's config"
 
-jq -e 'keys == ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY"] and all(.[]; type == "string" and length > 0)' \
-  "$secrets" > /dev/null || die "The secrets file does not hold exactly GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY"
+args=()
+if [[ "$mode" == production ]]; then
+  secrets=$(posix "$3")
+  jq -e 'keys == ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY"] and all(.[]; type == "string" and length > 0)' \
+    "$secrets" > /dev/null || die "The secrets file does not hold exactly GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY"
+  args=(--secrets-file "$secrets")
+fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -51,4 +56,4 @@ cf="$release/cf/node_modules/.bin/cf"
 [ -x "$cf" ] || die "Install the pinned cf CLI first: npm ci --ignore-scripts in .github/release/cf"
 
 cd "$work"
-"$cf" deploy --prebuilt --mode "$mode" --secrets-file "$secrets"
+"$cf" deploy --prebuilt --mode "$mode" "${args[@]}"

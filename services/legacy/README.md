@@ -9,13 +9,13 @@ One Worker that answers by hostname:
   Session sharing was retired in #55716 and V2 has no sharing. They serve the "Session sharing has
   been discontinued" page, and the old `/api/share` endpoints still answer so V1 clients keep working
   (`src/share.ts`).
-- `api.opencode.ai` (production) and `api.dev.opencode.ai` (development) exchange a GitHub Actions
+- `api.opencode.ai` (production) exchanges a GitHub Actions
   OIDC token for a GitHub App installation token for the V1 GitHub Action
-  (`POST /exchange_github_app_token`, `src/api.ts`).
+  (`POST /exchange_github_app_token`, `src/api.ts`). The dev endpoint returns 503.
 
 `cloudflare.config.ts` defines the Worker. `deploy:dev` and `deploy:production` deploy it with `cf`
-from `.github/workflows/deploy.yml`. The deploy job reads the `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` Worker
-secrets from AWS Secrets Manager (`opencode/<stage>/GITHUB_APP_*`) and uploads them with
+from `.github/workflows/deploy.yml`. The production deploy reads the `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` Worker
+secrets from AWS Secrets Manager (`opencode/production/GITHUB_APP_*`) and uploads them with
 `--secrets-file`.
 
 | Environment | Worker                       | Hostnames                             |

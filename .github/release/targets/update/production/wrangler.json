@@ -7,7 +7,6 @@
   "preview_urls": false,
   "pipelines": [{ "binding": "EVENTS", "stream": "251a89241c3a461c9007f6b6f345ed8b" }],
   "routes": [
-    { "pattern": "update.opencode.ai", "custom_domain": true },
     { "pattern": "opencode.ai/update", "zone_name": "opencode.ai" },
     { "pattern": "opencode.ai/update/*", "zone_name": "opencode.ai" }
   ],

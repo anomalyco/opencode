@@ -12,6 +12,10 @@ set +x
 
 url=${CLOUDFLARE_TOKEN_URL:-https://kjivkui2evldapbok5fhrrl6oy0fctkp.lambda-url.us-east-1.on.aws/}
 account=${CLOUDFLARE_ACCOUNT_ID:-15d29c8639fd3733b1b5486a2acfd968}
+if [[ $# == 1 ]]; then
+  . "$(dirname "$0")/lib.sh"
+  account=$(stage_account "$1")
+fi
 
 # One argv value, never a line in curl's config: a newline in an override must not be able to
 # inject curl options or move the AWS credentials into Basic auth.

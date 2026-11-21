@@ -6,7 +6,7 @@ import en from "./i18n/en"
 
 const ReleaseNotes = Schema.Struct({ enabled: Schema.Boolean })
 
-const Seen = Schema.Struct({ version: Schema.optional(Schema.String), commit: Schema.optional(Schema.String) })
+const Seen = Schema.Struct({ version: Schema.optional(Schema.String) })
 
 export default Plugin.define({
   stores: {
@@ -23,8 +23,7 @@ export default Plugin.define({
         },
       },
     ),
-    // The version whose What's New was last shown or skipped, and on beta its commit; stored before under the app's
-    // own key.
+    // The version whose What's New was last shown or skipped; stored before under the app's own key.
     seen: Store.global(Seen, {}, "highlights.v1"),
   },
   i18n: builtinCatalog({

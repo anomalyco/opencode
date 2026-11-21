@@ -1,13 +1,14 @@
 export * as DesktopFiles from "./index"
 
 import { execFile, spawn } from "node:child_process"
-import { clipboard, dialog, nativeImage, shell, webContents } from "electron"
+import { app, clipboard, dialog, nativeImage, shell, webContents } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions } from "../../shared/ipc-contract"
 import { scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { assertAttachmentBudget, createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
-import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { resolveExternalURL } from "./external-url"
+import { pickerStarts } from "./picker-start"
 
 export type Interface = ReturnType<typeof make>
 
@@ -59,13 +60,24 @@ function make(
   path: Path.Path,
   pickedFiles: ReturnType<typeof createPickedFileAuthorizations>,
 ) {
+  // The first start that exists; none when even home is gone, which leaves the system to choose.
+  const start = Effect.fnUntraced(function* (requested: string | undefined, save = false) {
+    for (const candidate of pickerStarts(requested, app.getPath("home"), save)) {
+      if (yield* fs.exists(candidate.check).pipe(Effect.orElseSucceed(() => false))) return candidate.use
+    }
+
+    return undefined
+  })
+
   return {
     openDirectoryPicker: Effect.fn("DesktopFiles.openDirectoryPicker")(function* (options?: DirectoryPickerOptions) {
+      const defaultPath = yield* start(options?.defaultPath)
+
       const result = yield* Effect.promise(() =>
         dialog.showOpenDialog({
           properties: ["openDirectory", ...(options?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
           title: options?.title ?? nativeT("desktop.dialog.chooseFolder"),
-          defaultPath: options?.defaultPath,
+          defaultPath,
         }),
       )
 
@@ -79,11 +91,13 @@ function make(
       if (picker === undefined) return null
 
       return yield* Effect.gen(function* () {
+        const defaultPath = yield* start(options?.defaultPath)
+
         const result = yield* Effect.promise(() =>
           dialog.showOpenDialog({
             properties: ["openFile", ...(options?.multiple ? ["multiSelections" as const] : [])],
             title: options?.title ?? nativeT("desktop.dialog.chooseFile"),
-            defaultPath: options?.defaultPath,
+            defaultPath,
             filters: pickerFilters(options?.extensions),
           }),
         )
@@ -109,10 +123,12 @@ function make(
     readPickedFile: pickedFiles.read,
     releasePickedFiles: pickedFiles.release,
     saveFile: Effect.fn("DesktopFiles.saveFile")(function* (options: SaveFilePickerOptions, content: string) {
+      const defaultPath = yield* start(options?.defaultPath, true)
+
       const result = yield* Effect.promise(() =>
         dialog.showSaveDialog({
           title: options?.title ?? nativeT("desktop.dialog.saveFile"),
-          defaultPath: options?.defaultPath,
+          defaultPath,
         }),
       )
 
@@ -132,7 +148,25 @@ function make(
         return
       }
 
-      if (process.platform === "win32" && /^powershell(\.exe)?$/i.test(path.basename(application))) {
+      if (process.platform === "win32" && /^wt(?:\.exe)?$/i.test(path.basename(application))) {
+        const info = yield* fs.stat(target)
+        const cwd = info.type === "Directory" ? target : path.dirname(target)
+
+        // Windows Terminal splits its command line on `;` even inside quotes, so the folder goes only to `cwd`,
+        // never onto its command line, and it opens a window of its own rather than a tab in one the user has open.
+        return yield* Effect.tryPromise(() =>
+          new Promise<void>((resolve, reject) => {
+            const child = spawn(application, windowsTerminalArgs, { cwd, stdio: "ignore", detached: true })
+            child.once("error", reject)
+            child.once("spawn", () => {
+              child.unref()
+              resolve()
+            })
+          }),
+        )
+      }
+
+      if (process.platform === "win32" && /^(?:powershell|pwsh)(?:\.exe)?$/i.test(path.basename(application))) {
         const info = yield* fs.stat(target)
         const cwd = info.type === "Directory" ? target : path.dirname(target)
 
@@ -170,6 +204,23 @@ function make(
 
       return true
     }),
+    // Windows runs the drag in a nested loop, so this returns once the file was dropped or the drag was cancelled.
+    startDrag: Effect.fn("DesktopFiles.startDrag")(function* (contents: Electron.WebContents, target: string) {
+      if (process.platform !== "win32" || !path.isAbsolute(target)) return false
+      const exists = yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
+
+      if (!exists) return false
+
+      const icon = yield* Effect.promise(() =>
+        app.getFileIcon(target, { size: "normal" }).catch(() => nativeImage.createEmpty()),
+      )
+
+      if (contents.isDestroyed()) return false
+      // The tree's paths use `/`; the app that takes the drop gets the file's Windows path.
+      contents.startDrag({ file: path.normalize(target), icon })
+
+      return true
+    }),
     readClipboardImage: Effect.fn("DesktopFiles.readClipboardImage")(function* () {
       const items = yield* Effect.promise(() => clipboard.read())
 
@@ -200,6 +251,9 @@ function make(
 // Chromium exposes copied bitmaps as image/png; JPEG only appears when an app placed one explicitly.
 const clipboardImageTypes = ["image/png", "image/jpeg"]
 
+// A new Windows Terminal window whose first tab starts in the launch's working directory.
+const windowsTerminalArgs = ["-w", "new", "-d", "."]
+
 export const openExternalURL = Effect.fn("DesktopFiles.openExternalURL")(function* (value: string) {
   const url = resolveExternalURL(value)
 
@@ -215,20 +269,6 @@ export const openExternalURL = Effect.fn("DesktopFiles.openExternalURL")(functio
       scoped("window", Effect.logError("failed to open external target", { url, error })).pipe(Effect.as(false)),
     ),
   )
-})
-
-export const openLocalFileURL = Effect.fn("DesktopFiles.openLocalFileURL")(function* (value: string) {
-  const path = resolveLocalFilePath(value)
-
-  if (!path) {
-    yield* scoped("window", Effect.logWarning("blocked local file target", { url: value }))
-
-    return
-  }
-
-  const error = yield* Effect.promise(() => shell.openPath(path))
-
-  if (error) yield* scoped("window", Effect.logError("failed to open local file", { path, error }))
 })
 
 function pickerFilters(extensions?: string[]) {

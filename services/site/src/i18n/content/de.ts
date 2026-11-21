@@ -18,11 +18,6 @@ export const content = {
       action: "Installieren",
     },
     sdk: { body: "Steuere OpenCode aus deinen eigenen Skripten, CI-Jobs und Tools.", action: "Doku lesen" },
-    ide: {
-      name: "IDE-Extensions",
-      body: "Öffne OpenCode in VS Code, Cursor und Windsurf, oder über ACP in Zed und JetBrains-IDEs.",
-      action: "Installieren",
-    },
     mini: {
       body: "Ein minimales Terminal-Interface. Antworten landen in deinem Scrollback, darunter steht ein Prompt.",
       action: "Installieren",
@@ -207,32 +202,6 @@ export const content = {
         },
       },
     },
-    ide: {
-      title: "OpenCode | Editor-Integrationen für VS Code, Cursor und Zed",
-      description:
-        "Nutze OpenCode in deinem Editor, mit der Extension für VS Code, Cursor, Windsurf und VSCodium und mit opencode acp für Zed, JetBrains-IDEs und andere ACP-Editoren.",
-      intro:
-        "Nutze OpenCode in deinem Editor. In VS Code, Cursor, Windsurf und VSCodium führst du opencode im integrierten Terminal aus, und die Extension installiert sich selbst. Zed, JetBrains-IDEs und andere Editoren mit Unterstützung für das Agent Client Protocol starten OpenCode mit opencode acp.",
-      features: {
-        "quick-launch": {
-          title: "Schnellstart",
-          body: "Cmd+Esc oder Ctrl+Esc öffnet OpenCode in einem geteilten Terminal.",
-        },
-        "new-session": {
-          title: "Neue Session",
-          body: "Cmd+Shift+Esc oder Ctrl+Shift+Esc startet eine weitere Session.",
-        },
-        context: { title: "Kontext", body: "Teilt deine aktuelle Auswahl oder deinen Tab mit OpenCode." },
-        "file-references": { title: "Dateiverweise", body: "Cmd+Option+K oder Alt+Ctrl+K fügt @File#L37-42 ein." },
-        "installs-itself": {
-          title: "Auto-Installation",
-          body: "Führe opencode im integrierten Terminal aus, um sie hinzuzufügen.",
-        },
-        "acp-editors": { title: "ACP-Editoren", body: "Zed, JetBrains-IDEs, Avante.nvim und CodeCompanion.nvim." },
-        "open-vsx": { title: "Open VSX", body: "Auch auf Open VSX für Cursor, Windsurf und VSCodium." },
-        "same-agent": { title: "Derselbe Agent", body: "Das OpenCode aus deinem Terminal, direkt neben deinem Code." },
-      },
-    },
     mini: {
       title: "OpenCode | Mini, ein minimales Terminal-Interface für den Agent",
       description:
@@ -270,9 +239,9 @@ export const content = {
       body: "Lass Agents deinen echten Browser nutzen.",
       title: "OpenCode | Browse, dein echter Browser für Coding-Agents",
       description:
-        "Mit Browse nutzen OpenCode und andere MCP-Clients deinen echten Browser. Agents steuern Tabs im Hintergrund mit Playwright und geben Logins und 2FA an dich zurück.",
+        "Mit Browse nutzen OpenCode und andere MCP-Clients deinen echten Browser. Agents lesen, klicken, tippen, machen Screenshots, nehmen Tabs auf und geben Logins und 2FA an dich zurück.",
       intro:
-        "Ein MCP-Server und eine Chromium-Extension, mit denen deine Agents deinen echten Browser nutzen, mit deinen Tabs, Logins und Extensions. Sie öffnen und steuern Tabs mit Playwright, machen Screenshots und Bildschirmaufnahmen, in Hintergrund-Tabs, die gruppiert und dir aus dem Weg sind. Bist du dran, etwa für einen Login, eine 2FA-Abfrage oder eine Zahlung, geben sie dir den Tab zurück und machen weiter, sobald du auf Continue klickst.",
+        "Ein MCP-Server und eine Chromium-Extension, mit denen deine Agents deinen echten Browser nutzen, mit deinen Tabs, Logins und Extensions. Sie öffnen Tabs im Hintergrund, gruppiert und dir aus dem Weg, und lesen Seiten, klicken, tippen, machen Screenshots und nehmen Tabs auf. Bist du dran, etwa für einen Login, eine 2FA-Abfrage oder eine Zahlung, geben sie dir den Tab zurück und machen weiter, sobald du auf Continue klickst.",
       features: {
         "your-real-browser": {
           title: "Dein echter Browser",
@@ -289,7 +258,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Aufnehmen",
-          body: "Screenshots, Bildschirmaufnahmen und Netzwerkverkehr als HAR.",
+          body: "Screenshots, Tab-Aufnahmen und Netzwerkverkehr.",
         },
         "any-mcp-client": {
           title: "Jeder MCP-Client",
@@ -299,7 +268,7 @@ export const content = {
           title: "Alle deine Logins",
           body: "Agents nutzen die Websites, bei denen du schon angemeldet bist. Keine Keys, kein Setup.",
         },
-        allowlists: { title: "Allowlists", body: "Beschränke die Tabs einer Session auf die Websites, die du nennst." },
+        "allowed-sites": { title: "Erlaubte Sites", body: "Halte den Tab eines Agents auf den Websites, die du nennst." },
       },
       install:
         "Installiere zuerst die [Chrome-Extension]. Sie führt dich durch die restlichen Schritte. Um die CLI direkt zu installieren (das solltest du nicht brauchen), nimm einen dieser Befehle.",
@@ -382,7 +351,7 @@ export const content = {
     },
     colors: {
       title: "Farben",
-      body: "Logo und Wortmarke nutzen eine Farbe in drei Deckkräften, mit einer helleren Farbe für dunkle Hintergründe. Die Werte unten zeigen diese Farbe auf Weiß oder #0B0B0B, wie in den Standarddateien. Klick auf einen Wert, um ihn zu kopieren.",
+      body: "Logo und Wortmarke nutzen eine Farbe in drei Deckkräften, mit einer helleren Farbe für dunkle Hintergründe. Die Werte unten sind die Farben in den Standarddateien. Verwende sie nur für Logo und Wortmarke, nicht für anderen Text oder Hintergründe. Klick auf einen Wert, um ihn zu kopieren.",
       palettes: {
         light: {
           name: "Hell",
@@ -738,14 +707,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "Skript" } } },
     sdk: { more: { label: "SDK-Doku lesen" } },
-    ide: {
-      lead: "Führe opencode im integrierten Terminal deines Editors aus, und die Extension installiert sich selbst. Oder installiere sie manuell.",
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      more: { label: "Zed, JetBrains-IDEs und andere ACP-Editoren einrichten" },
-    },
     mini: {
       commands: { curl: { name: "Skript" } },
       lead: "Mini ist Teil der OpenCode CLI. Installiere sie auf einem dieser Wege und führe dann opencode mini aus.",

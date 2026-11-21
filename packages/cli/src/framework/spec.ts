@@ -3,6 +3,8 @@ import { Command, type GlobalFlag } from "effect/cli"
 type Options<Config extends Command.Command.Config, Commands extends ReadonlyArray<Any>> = {
   readonly description?: string
   readonly aliases?: ReadonlyArray<string>
+  // Hidden commands still parse, but stay out of parent help, completions and typo suggestions.
+  readonly hidden?: boolean
   readonly params?: Config
   readonly globalFlags?: ReadonlyArray<GlobalFlag.GlobalFlag<any>>
   readonly commands?: Commands
@@ -34,9 +36,10 @@ export function make<
   const flagged = options.globalFlags?.length
     ? described.pipe(Command.withGlobalFlags(options.globalFlags))
     : described
+  const listed = options.hidden ? flagged.pipe(Command.unlisted) : flagged
   // Effect supports a single native alias, shown inline as `name, alias` in help.
   // Extra aliases become sibling commands sharing params and subcommands.
-  const spec = aliases.length > 0 ? flagged.pipe(Command.withAlias(aliases[0])) : flagged
+  const spec = aliases.length > 0 ? listed.pipe(Command.withAlias(aliases[0])) : listed
   const commands = Object.fromEntries(
     (options.commands ?? []).map((command) => [command.name, command]),
   ) as ChildrenOf<Commands>
@@ -48,7 +51,7 @@ export function make<
     const aliasSpec = options.globalFlags?.length
       ? aliasDescribed.pipe(Command.withGlobalFlags(options.globalFlags))
       : aliasDescribed
-    return { name: alias, spec: aliasSpec, commands, aliases: [] }
+    return { name: alias, spec: options.hidden ? aliasSpec.pipe(Command.unlisted) : aliasSpec, commands, aliases: [] }
   })
   return {
     name,
