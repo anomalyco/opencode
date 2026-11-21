@@ -10,11 +10,10 @@ import type { Project } from "@/runtime/server/types"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { TabStorage } from "@/shell/tabs/schema"
-import { useTabs } from "@/shell/tabs/tabs"
 import { createScrollPersistence, type SessionScroll } from "./scroll"
 import type { ClosedSideTab } from "@/runtime/plugin/closed-tabs"
 import { SessionStateKey } from "@/runtime/server/scope"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys, sessionKeyOpen } from "./helpers"
+import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
 import {
   appendSessionTab,
@@ -254,10 +253,13 @@ export function initialLayout(server?: ServerConnection.Key): typeof layoutSchem
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   gate: false,
-  init: () => {
+  /**
+   * `open`: whether a layout key's session is open in a shell tab, from whoever mounts the provider under the shell
+   * tabs. Undefined until those are known: the layout then forgets no session's state, as any may be an open one.
+   */
+  init: (props: { open: Accessor<((key: string) => boolean) | undefined> }) => {
     const servers = useServers()
     const platform = usePlatform()
-    const tabs = useTabs()
 
     const [store, setStore, _, ready] = persisted(
       { ...Persist.global("layout"), previousKey: "layout.v6" },
@@ -429,6 +431,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     function prune(keep?: string) {
       if (!canPruneSessions(untrack(scopedState))) return
+      const open = untrack(props.open)
+
+      // Which sessions are open is not known: any stored session may be one, so none is forgotten.
+      if (!open) return
 
       const drop = pruneSessionKeys({
         keep,
@@ -436,8 +442,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         used,
         view: Object.keys(store.sessionView),
         tabs: Object.keys(store.sessionTabs),
-        // A session open in a shell tab keeps its side tabs, however long ago the person looked at it.
-        open: (key) => sessionKeyOpen(key, untrack(() => tabs.store), servers.scope),
+        open,
       })
 
       if (drop.length === 0) return
@@ -493,8 +498,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const ensureKey = (key: string) => ensureSessionKey(key, touch, (sessionKey) => scroll.seed(sessionKey))
 
+    // The first prune waits for the shell tabs as well as the stored layout: it runs once the open sessions are known.
     createEffect(() => {
-      if (ready() && scopedReady()) untrack(() => dispatchScoped({ type: "hydrated" }))
+      if (ready() && scopedReady() && props.open()) untrack(() => dispatchScoped({ type: "hydrated" }))
     })
     onCleanup(() => dispatchScoped({ type: "disposed" }))
 
