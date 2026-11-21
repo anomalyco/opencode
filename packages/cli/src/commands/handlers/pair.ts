@@ -142,7 +142,7 @@ const remoteURL = Effect.fnUntraced(function* (client: ReturnType<typeof OpenCod
         Effect.fail(
           new Error(
             [
-              "Timed out waiting for the remote tunnel; run `opencode pair --remote` again to retry.",
+              "Timed out waiting for the remote tunnel; run `opencode service restart`, then `opencode pair --remote` to retry.",
               // The service may not inherit the shell's environment, and Bun ignores the Windows system (WinINET) proxy.
               "Behind an HTTP proxy, give the background service its address with `opencode service set env HTTPS_PROXY <url>` (and `NO_PROXY` for hosts to reach directly).",
             ].join(EOL),
