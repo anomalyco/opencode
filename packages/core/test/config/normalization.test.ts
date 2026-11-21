@@ -622,15 +622,18 @@ describe("ConfigNormalize", () => {
         media_blob: false,
         artifacts: "yes",
         full_codemode: true,
-        automations: true,
-        schedules: true,
+        automations: false,
+        schedules: false,
       },
     })
     expect(result.encoded.automations).toBe(false)
     expect(result.encoded.experimental).toEqual({ todo: true, media_blob: false, full_codemode: true })
     expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["removed", ["experimental", "automations"]],
+      ["removed", ["experimental", "schedules"]],
       ["invalid", ["experimental", "artifacts"]],
     ])
+    expect(normalized({ experimental: { automations: false, schedules: false } }).encoded).toEqual({})
   })
 
   test("accepts deprecated codemode_vm and ignores retired codemodeVm without diagnostics", () => {
