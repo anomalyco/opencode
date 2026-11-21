@@ -4,6 +4,7 @@ import { Global } from "@opencode/util/global"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { expect, test } from "bun:test"
 import { parse } from "jsonc-parser"
+import { lstat, mkdir, readlink, symlink } from "node:fs/promises"
 import path from "path"
 import { Config } from "../src/config"
 import { tmpdir } from "./fixture/tmpdir"
@@ -69,6 +70,77 @@ test("preserves the schema in an existing cli.json", async () => {
 
   expect(config).toEqual({ $schema: "https://opencode.ai/v2/cli.json", animations: false })
   expect(await Bun.file(file).json()).toEqual(config)
+})
+
+test("preserves a symlinked cli.json when updating preferences", async () => {
+  await using directory = await tmpdir()
+  const target = path.join(directory.path, "dotfiles", "cli.json")
+  const file = path.join(directory.path, "cli.json")
+  const link = path.relative(directory.path, target)
+  await mkdir(path.dirname(target), { recursive: true })
+  await Bun.write(target, JSON.stringify({ $schema: "https://opencode.ai/v2/cli.json", animations: true }))
+  await symlink(link, file)
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.update((draft) => {
+        draft.animations = false
+      })
+    }),
+  )
+
+  expect(config).toEqual({ $schema: "https://opencode.ai/v2/cli.json", animations: false })
+  expect((await lstat(file)).isSymbolicLink()).toBe(true)
+  expect(await readlink(file)).toBe(link)
+  expect(await Bun.file(target).json()).toEqual(config)
+})
+
+test("preserves a symlinked cli.json when migrating legacy settings", async () => {
+  await using directory = await tmpdir()
+  const target = path.join(directory.path, "dotfiles", "cli.json")
+  const file = path.join(directory.path, "cli.json")
+  const link = path.relative(directory.path, target)
+  await mkdir(path.dirname(target), { recursive: true })
+  await Bun.write(target, JSON.stringify({ terminal: { copy_on_select: true } }))
+  await symlink(link, file)
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.get()
+    }),
+  )
+
+  expect(config.terminal).toEqual({ copy: "select" })
+  expect((await lstat(file)).isSymbolicLink()).toBe(true)
+  expect(await readlink(file)).toBe(link)
+  expect(await Bun.file(target).json()).toEqual({ terminal: { copy: "select" } })
+})
+
+test("writes through a dangling cli.json symlink", async () => {
+  await using directory = await tmpdir()
+  const target = path.join(directory.path, "dotfiles", "cli.json")
+  const file = path.join(directory.path, "cli.json")
+  const link = path.relative(directory.path, target)
+  await symlink(link, file)
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.update((draft) => {
+        draft.animations = false
+      })
+    }),
+  )
+
+  expect(config).toEqual({ $schema: "https://opencode.ai/v2/cli.json", animations: false })
+  expect((await lstat(file)).isSymbolicLink()).toBe(true)
+  expect(await readlink(file)).toBe(link)
+  expect(await Bun.file(target).json()).toEqual(config)
 })
 
 test("merges inline CLI config content over the global config", async () => {
