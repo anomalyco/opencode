@@ -34,8 +34,6 @@ export type Reply = typeof Reply.Type
 export interface AssertInput extends Omit<Request, "id" | "message"> {
   readonly id?: ID
   readonly agent?: Agent.ID
-  /** Internal callers may skip ordinary prompts when OS confinement applies. Denies still apply. */
-  readonly prompt?: "skip"
 }
 
 /** The requester fields of a permission request made by a tool call. */
@@ -93,16 +91,12 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
 
 export type Error = BlockedError | CorrectedError
 
+function match(action: string, resource: string, rules: Permission.Ruleset) {
+  return rules.findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource))
+}
+
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
-  return (
-    rulesets
-      .flat()
-      .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
-      action,
-      resource: "*",
-      effect: "ask",
-    }
-  )
+  return match(action, resource, rulesets.flat()) ?? { action, resource: "*", effect: "ask" }
 }
 
 export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
@@ -113,6 +107,10 @@ export interface Interface {
   readonly close: Effect.Effect<void>
   readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionErrors.NotFoundError>
   readonly assert: (input: AssertInput) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
+  /** Applies normal shell rules, allowing unmatched resources when the launch is OS-confined. */
+  readonly assertSandboxedShell: (
+    input: AssertInput & { action: "shell" | "external_directory" },
+  ) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
   /** Fails only when the rules deny the request; never asks the user. */
   readonly assertNotDenied: (input: AssertInput) => Effect.Effect<void, BlockedError | SessionErrors.NotFoundError>
   /** True only when the rules already allow the request; never asks the user. */
@@ -200,12 +198,14 @@ const layer = Layer.effect(
       return parent ? { ...source, id: parent } : source
     }
 
-    const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
+    const evaluateInput = Effect.fnUntraced(function* (input: AssertInput, fallback: "ask" | "allow" = "ask") {
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
-      const effect: Permission.Effect = input.prompt === "skip" ? "allow" : effects.includes("ask") ? "ask" : "allow"
+      const needsApproval = input.resources.some(
+        (resource) => (match(input.action, resource, all)?.effect ?? fallback) === "ask",
+      )
+      const effect = needsApproval ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
         sessionID: input.sessionID,
         agent: input.agent,
@@ -219,7 +219,9 @@ const layer = Layer.effect(
       if (event.effect !== "ask" || unattended === undefined)
         return { effect: event.effect, message: event.message, rules: all }
       const settled = [...all, ...unattended]
-      const allowed = input.resources.every((resource) => evaluate(input.action, resource, settled).effect === "allow")
+      const allowed = input.resources.every(
+        (resource) => (match(input.action, resource, settled)?.effect ?? fallback) === "allow",
+      )
       if (allowed) return { effect: "allow" as const, rules: all }
       return {
         effect: "deny" as const,
@@ -272,10 +274,10 @@ const layer = Layer.effect(
       return { id: value.id, effect: result.effect }
     })
 
-    const assert = Effect.fn("Permission.assert")((input: AssertInput) =>
+    const assertWithFallback = Effect.fn("Permission.assert")((input: AssertInput, fallback: "ask" | "allow") =>
       Effect.gen(function* () {
         if (closed) return yield* Effect.die(new DeclinedError())
-        const result = yield* evaluateInput(input)
+        const result = yield* evaluateInput(input, fallback)
         return yield* Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             if (result.effect === "deny") {
@@ -397,7 +399,19 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
-    return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, nested, close })
+    return Service.of({
+      ask,
+      assert: (input) => assertWithFallback(input, "ask"),
+      assertSandboxedShell: (input) => assertWithFallback(input, "allow"),
+      assertNotDenied,
+      allows,
+      reply,
+      get,
+      forSession,
+      list,
+      nested,
+      close,
+    })
   }),
 )
 

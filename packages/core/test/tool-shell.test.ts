@@ -63,23 +63,23 @@ const assertions: Permission.AssertInput[] = []
 let denyAction: string | undefined
 let afterPermission = (_input: Permission.AssertInput): Effect.Effect<void> => Effect.void
 
-const permission = permissionLayer({
-  assert: (input) =>
-    Effect.sync(() => assertions.push(input)).pipe(
-      Effect.andThen(Effect.suspend(() => afterPermission(input))),
-      Effect.andThen(
-        input.action === denyAction
-          ? Effect.fail(
-              new Permission.BlockedError({
-                rules: [],
-                permission: input.action,
-                resources: input.resources,
-              }),
-            )
-          : Effect.void,
-      ),
+const assertPermission = (input: Permission.AssertInput) =>
+  Effect.sync(() => assertions.push(input)).pipe(
+    Effect.andThen(Effect.suspend(() => afterPermission(input))),
+    Effect.andThen(
+      input.action === denyAction
+        ? Effect.fail(
+            new Permission.BlockedError({
+              rules: [],
+              permission: input.action,
+              resources: input.resources,
+            }),
+          )
+        : Effect.void,
     ),
-})
+  )
+
+const permission = permissionLayer({ assert: assertPermission, assertSandboxedShell: assertPermission })
 
 const reset = () => {
   assertions.length = 0
@@ -346,9 +346,7 @@ const seatbelt =
             const success = yield* executeTool(registry, call({ command: "printf ready > result; cat result" }))
             expect(success.metadata).toMatchObject({ exit: 0 })
             expect(success.content).toEqual([{ type: "text", text: "ready" }])
-            expect(assertions).toEqual(
-              expect.arrayContaining([expect.objectContaining({ action: "shell", prompt: "skip" })]),
-            )
+            expect(assertions).toEqual(expect.arrayContaining([expect.objectContaining({ action: "shell" })]))
             const deniedRead = yield* executeTool(registry, call({ command: `cat '${outside}'` }, "call-outside"))
             expect(deniedRead.metadata?.exit).not.toBe(0)
             expect(JSON.stringify(deniedRead.content)).not.toContain("secret")

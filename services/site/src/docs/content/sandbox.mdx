@@ -31,7 +31,7 @@ Settings are read when the server starts. Restart the background service with `o
 
 Sandboxed shell commands and their descendants can write to the workspace, a dedicated scratch directory, and configured writable roots, except for protected metadata and credentials. Reads are restricted to those roots, configured readable roots, and selected system and Homebrew runtime paths. The sandbox blocks command network access.
 
-Shell commands run without ordinary allow or ask prompts, but existing explicit deny rules still apply. The sandbox does not currently support requesting an unsandboxed shell command. Commands that need access outside the sandbox must be run separately by the user, or the server must be restarted with the sandbox disabled.
+Shell commands skip the default approval prompt when no rule matches. Explicit shell and external-directory rules still apply, including rules that ask for approval or deny a command. The sandbox does not currently support requesting an unsandboxed shell command. Commands that need access outside the sandbox must be run separately by the user, or the server must be restarted with the sandbox disabled.
 
 Git configuration and runtime dependencies outside the default readable paths may need explicit readable roots.
 
