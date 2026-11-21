@@ -57,7 +57,7 @@ shows whether a scenario is deterministic. Rust tests that run TypeScript helper
 | `bun run check:deny` | Licences, banned crates and sources of the dependencies (`deny.toml`) |
 | `bun run check:advisories` | Security advisories of the dependencies |
 | `bun run check:luau-types` | Every Luau plugin in the repository type-checks with `luau-analyze` |
-| `bun run test` | The TypeScript reader of the plugin state machine |
+| `bun run parity:machines` | The TypeScript reader of the plugin state machine |
 | `sh script/check-windows.sh [x64\|arm64]` | The workspace compiles for Windows, and `script/lint-windows.sh` finds no path code that is wrong there |
 | `sh script/check-target.sh <target>` | The workspace compiles for another target; nothing is linked or run |
 
@@ -275,8 +275,9 @@ normalized transcripts differ. Transcripts are kept in `$TMPDIR/opencode-parity/
 
 `parity/machines/plugins.json` is a state machine of a plugin's life, read by both clients:
 `crates/tui/tests/all/plugin_machines.rs`, and `parity/machines/plugins.test.tsx`, which drives the TypeScript TUI.
-`bun run test` covers each edge once and the seeded walks; `bun run parity:machines` adds every path to the file's
-depth and the fault trials. The Rust side runs the plugin as its Luau twin, `parity/plugins/life/init.luau`, beside
+`bun run parity:machines` covers each edge once and the seeded walks; `bun run parity:machines:deep` adds every path
+to the file's depth and the fault trials. The package has no `test` script, so the repository's `turbo test` does not
+run this suite on every pull request that touches a package it depends on, such as `@opencode/tui`. The Rust side runs the plugin as its Luau twin, `parity/plugins/life/init.luau`, beside
 the TypeScript `tui.tsx`.
 
 ## Generated files and drift

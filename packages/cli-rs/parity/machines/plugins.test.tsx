@@ -2,10 +2,10 @@
 // the life, project, manager and viewer machines of plugins.json, with parity/plugins/life loaded as a local plugin or found in a
 // project, each path on a fresh app,
 // observing after every action. The Rust reader is crates/tui/tests/all/plugin_machines.rs; both read the file and
-// neither reads the other. `bun run test` in packages/cli-rs, which CI runs, covers each edge once and the seeded walks;
-// `bun run parity:machines` adds every path to the file's depth and the fault trials, which take a few minutes. Both
+// neither reads the other. `bun run parity:machines` in packages/cli-rs covers each edge once and the seeded walks;
+// `bun run parity:machines:deep` adds every path to the file's depth and the fault trials, which take a few minutes. Both
 // run with parity/ as the working directory, whose bunfig.toml loads the TUI's preloads.
-import { InputRenderable } from "@opentui/core"
+import { CodeRenderable, InputRenderable, type Renderable } from "@opentui/core"
 import { expect, test } from "bun:test"
 import { existsSync } from "node:fs"
 import { mkdir, symlink } from "node:fs/promises"
@@ -380,7 +380,20 @@ async function openViewer() {
   })
   await setup.ready
   await until(setup, (frame) => frame.includes("Ask anything"), "home")
-  return { setup, [Symbol.asyncDispose]: () => setup[Symbol.asyncDispose]() }
+  return {
+    setup,
+    // A highlight still in flight when the renderer goes is rejected, and OpenTUI warns about it with a stack trace.
+    async [Symbol.asyncDispose]() {
+      await highlighted(setup.renderer.root)
+      await setup[Symbol.asyncDispose]()
+    },
+  }
+}
+
+// Waits for every code block under `node` to finish highlighting.
+async function highlighted(node: Renderable): Promise<void> {
+  if (node instanceof CodeRenderable) await node.highlightingDone
+  await Promise.all(node.getChildren().map(highlighted))
 }
 
 // Draws until three frames in a row are the same.

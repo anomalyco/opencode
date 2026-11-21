@@ -35,6 +35,7 @@ checks. Put `timeout` on anything that could hang. Before merging, the whole pac
 - `bun run cargo clippy --locked --workspace --all-targets -- -D warnings`
 - `bun run cargo test --locked --workspace --no-fail-fast`
 - `bun run check:drift`
+- `bun run parity:machines`
 
 Run `cargo fmt` before every final commit; `cargo fmt --check` must be clean. `rustfmt.toml` matches OpenTUI's
 `packages/rust/rustfmt.toml`.
@@ -43,6 +44,10 @@ The integration tests of `opencode-tui` and `opencode-ui` link the static OpenTU
 has one test binary, `tests/all/main.rs`, with one module per area and the shared helpers under
 `tests/all/support`. Add a new test file there as a module, not as a new `tests/*.rs`. Run one area
 with `cargo test -p opencode-tui --test all <module>::`, the unit tests with `--lib`.
+
+The package has no `test` script on purpose: the repository's CI runs every package's `test` through turbo, also for
+pull requests that only touch a package this one depends on, and the parity machines are slow. Run them with
+`bun run parity:machines`; `parity:machines:deep` adds every path to the file's depth and the fault trials.
 
 ## Dependencies
 
