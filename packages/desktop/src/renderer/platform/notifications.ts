@@ -75,8 +75,10 @@ export function createDesktopNotify(
         notification.close()
       }
     },
+    // Main holds the toasts, also ones this page posted before a reload or another window posted.
     dismissNotification: (tag) => {
-      if (!toasts.delete(tag)) return
+      if (!windows) return
+      toasts.delete(tag)
       void api.dismissToast(tag).catch(() => undefined)
     },
   }
