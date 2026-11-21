@@ -334,6 +334,23 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }
   }
 
+  // Mirrors the TUI's `/cd`. The server resolves `~` and relative paths against the session's directory.
+  const changeDirectory = async (input?: string) => {
+    const sessionID = actions.session.identity.params.id
+    const directory = input?.trim()
+
+    if (!sessionID) return
+    if (!directory) return void showToast({ variant: "error", title: language.t("command.session.cd.required") })
+
+    await serverSDK.api.session.move({ sessionID, directory }).catch((cause: unknown) =>
+      showToast({
+        variant: "error",
+        title: language.t("command.session.cd.failed"),
+        description: formatServerError(cause, language.t, language.t("common.requestFailed")),
+      }),
+    )
+  }
+
   const copyProjectID = async () => {
     const projectID = actions.session.data.info()?.projectID
 
@@ -534,6 +551,18 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         !actions.session.identity.params.id ||
         exporter.exporting({ server: server.key, sessionID: actions.session.identity.params.id }),
       onSelect: exportSession,
+    }),
+    sessionCommand({
+      id: "session.cd",
+      title: language.t("command.session.cd"),
+      description: language.t("command.session.cd.description"),
+      slash: "cd",
+      slashArguments: true,
+      slashComplete: "directory",
+      // Needs a directory argument, which only the composer can supply.
+      hidden: true,
+      disabled: !actions.session.identity.params.id,
+      onSelect: (_source, input) => changeDirectory(input),
     }),
     sessionCommand({
       id: "session.copyID",

@@ -44,7 +44,13 @@ export type MentionSearchState =
   | { readonly status: "disposed" }
 
 export type MentionSearchEvent =
-  | { readonly type: "context.changed"; readonly query: string; readonly hasSessions: boolean }
+  | {
+      readonly type: "context.changed"
+      readonly query: string
+      readonly hasSessions: boolean
+      /** Search a blank query or one with spaces too, as a directory path does. */
+      readonly literal?: boolean
+    }
   | { readonly type: "context.closed" }
   | { readonly type: "file.debounce.fired"; readonly attempt: number }
   | { readonly type: "file.resolved"; readonly attempt: number; readonly items: readonly ComposerSuggestion[] }
@@ -85,7 +91,7 @@ export function transitionMentionSearch(state: MentionSearchState, event: Mentio
   if (event.type === "disposed")
     return { state: DISPOSED, effects: state.status === "active" ? abortSearches(state) : NO_EFFECTS }
 
-  if (event.type === "context.changed") return change(state, event.query, event.hasSessions)
+  if (event.type === "context.changed") return change(state, event.query, event.hasSessions, event.literal === true)
 
   if (state.status === "closed") return stay(state)
 
@@ -161,13 +167,16 @@ function change(
   state: Exclude<MentionSearchState, { status: "disposed" }>,
   query: string,
   hasSessions: boolean,
+  literal: boolean,
 ): MentionSearchTransition {
   const active = state.status === "active" ? state : undefined
 
   if (active?.query === query && (active.sessions.status !== "disabled") === hasSessions) return stay(state)
   const effects: MentionSearchEffect[] = []
   const issued = { value: state.issued }
-  const files = active?.query === query ? active.files : nextFiles(active?.files ?? IDLE_FILES, query, issued, effects)
+
+  const files =
+    active?.query === query ? active.files : nextFiles(active?.files ?? IDLE_FILES, query, literal, issued, effects)
   const previous = active?.sessions ?? DISABLED_SESSIONS
   const word = mentionSearchWord(query)
 
@@ -183,6 +192,7 @@ function change(
 function nextFiles(
   previous: MentionFileSearchState,
   query: string,
+  literal: boolean,
   issued: { value: number },
   effects: MentionSearchEffect[],
 ): MentionFileSearchState {
@@ -190,7 +200,7 @@ function nextFiles(
     effects.push({ type: "file.abort", attempt: previous.attempt })
 
   // Only paths are searched: an empty query lists recent files, and a space means prose or a session title.
-  if (!query.trim() || /\s/.test(query)) return IDLE_FILES
+  if (!literal && (!query.trim() || /\s/.test(query))) return IDLE_FILES
   const attempt = ++issued.value
   effects.push({ type: "file.debounce", attempt, delayMs: MENTION_FILE_DEBOUNCE_MS })
 

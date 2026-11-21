@@ -14,6 +14,8 @@ const command: ComposerSuggestion = { id: "review", kind: "command", label: "/re
 
 const file: ComposerSuggestion = { id: "src/index.ts", kind: "file", label: "index.ts", path: "src/index.ts" }
 
+const directory: ComposerSuggestion = { id: "code", kind: "directory", label: "~/code/", path: "~/code/" }
+
 function persisted(value = "", cursor = value.length): ComposerPersistedState {
   return {
     prompt: [{ type: "text", content: value, start: 0, end: value.length }],
@@ -229,6 +231,53 @@ test.each<{
     event: { type: "input.changed", value: "@ses" },
     draft: persisted("@ses"),
     popover: { type: "context", query: "ses" },
+  },
+  {
+    name: "lists directories for the argument of a directory command",
+    event: { type: "input.changed", value: "/cd ~/co", directoryCommands: ["cd"] },
+    draft: persisted("/cd ~/co"),
+    popover: { type: "directory", command: "cd", query: "~/co" },
+  },
+  {
+    name: "lists nothing for the argument of another command",
+    from: { popover: { type: "directory", command: "cd", query: "" } },
+    event: { type: "input.changed", value: "/btw ~/co", directoryCommands: ["cd"] },
+    draft: persisted("/btw ~/co"),
+    popover: { type: "closed" },
+  },
+  {
+    name: "Tab completes the highlighted directory",
+    from: { popover: { type: "directory", command: "cd", query: "~/co", activeID: "code" } },
+    event: key("Tab", { ids: ["code"] }),
+    command: { type: "suggestion.select", id: "code", complete: true },
+    handled: true,
+  },
+  {
+    name: "Enter with no directory listed leaves the command to send",
+    from: { popover: { type: "directory", command: "cd", query: "~/missing" } },
+    event: key("Enter"),
+    popover: { type: "directory", command: "cd", query: "~/missing" },
+  },
+  {
+    name: "Tab stays in the editor while directories load",
+    from: { popover: { type: "directory", command: "cd", query: "pa" } },
+    event: key("Tab"),
+    popover: { type: "directory", command: "cd", query: "pa" },
+    handled: true,
+  },
+  {
+    name: "completing a directory fills it in and lists inside it",
+    from: { popover: { type: "directory", command: "cd", query: "~/co", activeID: "code" } },
+    event: { type: "popover.select", item: directory, complete: true },
+    popover: { type: "directory", command: "cd", query: "~/code/" },
+    command: { type: "draft.setText", value: "/cd ~/code/" },
+  },
+  {
+    name: "choosing a directory fills it in and closes the list",
+    from: { popover: { type: "directory", command: "cd", query: "~/co", activeID: "code" } },
+    event: { type: "popover.select", item: directory },
+    popover: { type: "closed" },
+    command: { type: "draft.setText", value: "/cd ~/code/" },
   },
 ])("$name", (row) => {
   const result = transitionComposer(

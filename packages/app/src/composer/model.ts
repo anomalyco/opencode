@@ -36,6 +36,9 @@ import { composerSubmitView } from "./machine"
 import { isComposerPopoverOpen } from "./suggestions/machine"
 import { useAttachmentDestination } from "./attachments/destination"
 import { parseClientSlashCommand } from "./client-slash-command"
+import { listPickerDirectory } from "@/workspaces/selection/domain"
+import { directoryCompletionExact, directoryCompletionMatches, directoryCompletionSearch } from "./directory-completion"
+import { inferHomeDirectory } from "@/runtime/server/global-sync/bootstrap"
 
 export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
@@ -278,9 +281,14 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         title: item.title,
         description: item.description,
         arguments: item.slashArguments,
+        complete: item.slashComplete,
         type: "builtin" as const,
       })),
   ])
+
+  const directoryCommands = createMemo(() =>
+    slashCommands().flatMap((item) => (item.type === "builtin" && item.complete === "directory" ? [item.trigger] : [])),
+  )
 
   const commands = createMemo<ComposerSuggestion[]>(() => [
     ...slashCommands().map((item) => ({
@@ -423,6 +431,26 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         path,
         mention: { type: "file", path, content: `@${path}`, start: 0, end: 0 },
       })),
+    directoryCommands,
+    searchDirectories: async (query, signal) => {
+      const directory = sdk().directory
+      const search = directoryCompletionSearch(
+        query,
+        directory,
+        server.ctx.sync.data.path.home || inferHomeDirectory(directory),
+      )
+      const entries = await listPickerDirectory(server.ctx.sdk, { directory }, search.directory, signal)
+      const exact = directoryCompletionExact(query, search)
+
+      return [
+        ...(exact ? [exact] : []),
+        ...entries.flatMap((entry) =>
+          entry.type === "directory" && directoryCompletionMatches(entry.name, search.query)
+            ? [search.prefix + entry.name + "/"]
+            : [],
+        ),
+      ].map((path) => ({ id: `directory:${path}`, kind: "directory", label: path, path }))
+    },
     onQuoteComment: (item, comment) => prompt.context.updateComment(item.commentID, { comment }),
     quoteComment: prompt.quoteComment,
     onContextRemove(item) {

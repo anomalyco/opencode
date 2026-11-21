@@ -98,6 +98,24 @@ describe("transitionMentionSearch", () => {
     expect(transitionMentionSearch(refined.state, changed("auth token")).state).toBe(refined.state)
   })
 
+  test("a literal path searches when blank or spaced", () => {
+    const blank = replay([{ type: "context.changed", query: "", hasSessions: false, literal: true }])
+
+    expect(blank.effects).toEqual([{ type: "file.debounce", attempt: 1, delayMs: MENTION_FILE_DEBOUNCE_MS }])
+
+    const spaced = transitionMentionSearch(blank.state, {
+      type: "context.changed",
+      query: "~/My Code",
+      hasSessions: false,
+      literal: true,
+    })
+
+    expect(spaced.effects).toEqual([
+      { type: "file.abort", attempt: 1 },
+      { type: "file.debounce", attempt: 2, delayMs: MENTION_FILE_DEBOUNCE_MS },
+    ])
+  })
+
   test("ignores stale results and everything after dispose", () => {
     const first = replay([changed("re", false), changed("res", false)])
 

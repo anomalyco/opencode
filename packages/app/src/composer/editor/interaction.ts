@@ -103,6 +103,9 @@ export function createComposerEditor(input: {
   commands: Accessor<ComposerSuggestion[]>
   context: Accessor<ComposerSuggestion[]>
   searchContextFiles: (query: string, signal?: AbortSignal) => ComposerSuggestion[] | Promise<ComposerSuggestion[]>
+  /** Slash commands whose argument completes as a directory, listed by `searchDirectories`. */
+  directoryCommands?: Accessor<readonly string[]>
+  searchDirectories?: (query: string, signal: AbortSignal) => Promise<ComposerSuggestion[]>
   /** Reads reactively, so newly found sessions refresh the list without waiting on file search. */
   searchSessions?: (query: string) => ComposerSuggestion[]
   /** Loads sessions matching `word` into what `searchSessions` reads; settles once they are in. */
@@ -233,73 +236,24 @@ export function createComposerEditor(input: {
     )
   }
 
-  // Debounced and abortable: each keystroke or close replaces the pending searches instead of queueing behind them.
-  const [mentionSearch, setMentionSearch] = createSignal(INITIAL_MENTION_SEARCH_STATE)
-  const mentionRuns = new Map<number, { timer: ReturnType<typeof setTimeout>; controller?: AbortController }>()
-
-  const dispatchMentionSearch = (event: MentionSearchEvent) => {
-    const previous = untrack(mentionSearch)
-    const next = transitionMentionSearch(previous, event)
-
-    if (next.state !== previous) setMentionSearch(next.state)
-    next.effects.forEach(runMentionSearch)
-  }
-
-  const runMentionSearch = (effect: MentionSearchEffect) => {
-    const attempt = effect.attempt
-
-    if (effect.type === "file.debounce") {
-      mentionRuns.set(attempt, {
-        timer: setTimeout(() => dispatchMentionSearch({ type: "file.debounce.fired", attempt }), effect.delayMs),
-      })
-
-      return
-    }
-
-    clearTimeout(mentionRuns.get(attempt)?.timer)
-
-    if (effect.type === "file.abort" || effect.type === "session.abort") {
-      const controller = mentionRuns.get(attempt)?.controller
-      mentionRuns.delete(attempt)
-
-      if (controller) abort(controller)
-
-      return
-    }
-
-    const controller = new AbortController()
-
-    if (effect.type === "file.search") {
-      mentionRuns.set(attempt, {
-        controller,
-        timer: setTimeout(() => dispatchMentionSearch({ type: "file.timed-out", attempt }), effect.timeoutMs),
-      })
-      void Promise.try(() => input.searchContextFiles(effect.query, controller.signal)).then(
-        (items) => dispatchMentionSearch({ type: "file.resolved", attempt, items }),
-        () => dispatchMentionSearch({ type: "file.failed", attempt }),
-      )
-
-      return
-    }
-
-    mentionRuns.set(attempt, {
-      controller,
-      timer: setTimeout(() => dispatchMentionSearch({ type: "session.timed-out", attempt }), effect.timeoutMs),
-    })
-    // A failed search settles too: the titles already known still match locally.
-    const settled = () => dispatchMentionSearch({ type: "session.settled", attempt })
-    void Promise.try(() => input.requestSessionSearch?.(effect.word, controller.signal)).then(settled, settled)
-  }
+  const mentionSearch = createMentionSearch(input.searchContextFiles, input.requestSessionSearch)
+  const directorySearch = createMentionSearch((query, signal) => input.searchDirectories?.(query, signal) ?? [])
 
   createEffect(() => {
-    if (state.popover.type !== "context") return untrack(() => dispatchMentionSearch(MENTION_CONTEXT_CLOSED))
+    if (state.popover.type !== "context") return untrack(() => mentionSearch.dispatch(MENTION_CONTEXT_CLOSED))
     const query = state.popover.query
-    untrack(() => dispatchMentionSearch({ type: "context.changed", query, hasSessions: !!input.requestSessionSearch }))
+    untrack(() => mentionSearch.dispatch({ type: "context.changed", query, hasSessions: !!input.requestSessionSearch }))
   })
-  onCleanup(() => dispatchMentionSearch({ type: "disposed" }))
+
+  createEffect(() => {
+    if (state.popover.type !== "directory") return untrack(() => directorySearch.dispatch(MENTION_CONTEXT_CLOSED))
+    const query = state.popover.query
+    untrack(() => directorySearch.dispatch({ type: "context.changed", query, hasSessions: false, literal: true }))
+  })
 
   const contextOpen = createMemo(() => state.popover.type === "context")
-  const fileRows = createMemo(() => selectMentionFiles(mentionSearch()))
+  const fileRows = createMemo(() => selectMentionFiles(mentionSearch.state()))
+  const directoryRows = createMemo(() => selectMentionFiles(directorySearch.state()))
 
   const contextList = useFilteredList<ComposerSuggestion>({
     items: (query) => {
@@ -361,15 +315,22 @@ export function createComposerEditor(input: {
   )
 
   // Files from the previous query stay listed while the next search runs, but the keyboard can't highlight or pick them.
-  const stale = (item: ComposerSuggestion) =>
-    state.popover.type === "context" &&
-    item.kind === "file" &&
-    !item.recent &&
-    isMentionFileStale(mentionSearch(), state.popover.query)
+  const stale = (item: ComposerSuggestion) => {
+    if (state.popover.type === "directory") return isMentionFileStale(directorySearch.state(), state.popover.query)
+
+    return (
+      state.popover.type === "context" &&
+      item.kind === "file" &&
+      !item.recent &&
+      isMentionFileStale(mentionSearch.state(), state.popover.query)
+    )
+  }
 
   const selectable = () => suggestions().flatMap((item) => (stale(item) ? [] : [item.id]))
 
   const suggestions = () => {
+    if (state.popover.type === "directory") return directoryRows()
+
     if (state.popover.type !== "history") return list().flat()
     const query = state.popover.query.trim().toLowerCase()
 
@@ -440,7 +401,7 @@ export function createComposerEditor(input: {
     if (command.type === "suggestion.select") {
       const item = suggestions().find((entry) => entry.id === command.id)
 
-      if (item) dispatch({ type: "popover.select", item })
+      if (item) dispatch({ type: "popover.select", item, complete: command.complete })
 
       return
     }
@@ -564,7 +525,7 @@ export function createComposerEditor(input: {
   createEffect(() => {
     if (state.popover.type !== "context" || !/\s/.test(state.popover.query)) return
 
-    if (selectMentionSessionsPending(mentionSearch(), state.popover.query, !!input.requestSessionSearch)) return
+    if (selectMentionSessionsPending(mentionSearch.state(), state.popover.query, !!input.requestSessionSearch)) return
 
     if (contextList.grouped.state === "ready" && contextList.flat().length === 0) dispatch({ type: "popover.close" })
   })
@@ -721,7 +682,7 @@ export function createComposerEditor(input: {
       if (prompt) draft.setPrompt(prompt, cursor)
 
       if (input.view.draftOnly) return
-      dispatch({ type: "input.changed", value, persist: !prompt })
+      dispatch({ type: "input.changed", value, persist: !prompt, directoryCommands: input.directoryCommands?.() })
     },
     onCursor(cursor: number) {
       draft.setCursor(cursor)
@@ -831,6 +792,73 @@ export function createComposerEditor(input: {
 }
 
 export type ComposerEditorModel = ReturnType<typeof createComposerEditor>
+
+// Debounced and abortable: each keystroke or close replaces the pending searches instead of queueing behind them.
+function createMentionSearch(
+  search: (query: string, signal: AbortSignal) => ComposerSuggestion[] | Promise<ComposerSuggestion[]>,
+  requestSessionSearch?: (word: string, signal: AbortSignal) => Promise<void>,
+) {
+  const [state, setState] = createSignal(INITIAL_MENTION_SEARCH_STATE)
+  const runs = new Map<number, { timer: ReturnType<typeof setTimeout>; controller?: AbortController }>()
+
+  const dispatch = (event: MentionSearchEvent) => {
+    const previous = untrack(state)
+    const next = transitionMentionSearch(previous, event)
+
+    if (next.state !== previous) setState(next.state)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: MentionSearchEffect) => {
+    const attempt = effect.attempt
+
+    if (effect.type === "file.debounce") {
+      runs.set(attempt, {
+        timer: setTimeout(() => dispatch({ type: "file.debounce.fired", attempt }), effect.delayMs),
+      })
+
+      return
+    }
+
+    clearTimeout(runs.get(attempt)?.timer)
+
+    if (effect.type === "file.abort" || effect.type === "session.abort") {
+      const controller = runs.get(attempt)?.controller
+      runs.delete(attempt)
+
+      if (controller) abort(controller)
+
+      return
+    }
+
+    const controller = new AbortController()
+
+    if (effect.type === "file.search") {
+      runs.set(attempt, {
+        controller,
+        timer: setTimeout(() => dispatch({ type: "file.timed-out", attempt }), effect.timeoutMs),
+      })
+      void Promise.try(() => search(effect.query, controller.signal)).then(
+        (items) => dispatch({ type: "file.resolved", attempt, items }),
+        () => dispatch({ type: "file.failed", attempt }),
+      )
+
+      return
+    }
+
+    runs.set(attempt, {
+      controller,
+      timer: setTimeout(() => dispatch({ type: "session.timed-out", attempt }), effect.timeoutMs),
+    })
+    // A failed search settles too: the titles already known still match locally.
+    const settled = () => dispatch({ type: "session.settled", attempt })
+    void Promise.try(() => requestSessionSearch?.(effect.word, controller.signal)).then(settled, settled)
+  }
+
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  return { state, dispatch }
+}
 
 export function shouldHandlePasteAsAttachment(clipboard: DataTransfer | null, readClipboardImage: boolean) {
   if (Array.from(clipboard?.items ?? []).some((item) => item.kind === "file")) return true

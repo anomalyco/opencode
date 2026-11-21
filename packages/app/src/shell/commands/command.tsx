@@ -80,6 +80,8 @@ export interface CommandOption {
   follows?: string
   slash?: string
   slashArguments?: boolean
+  /** The composer suggests directories for the slash argument. */
+  slashComplete?: "directory"
   /** Listed right after the option whose slash name this is, when one is registered. */
   slashAfter?: string
   suggested?: boolean
