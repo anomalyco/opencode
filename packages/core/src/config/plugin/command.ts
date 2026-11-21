@@ -105,6 +105,7 @@ export const Plugin = define({
                   ...input.prompt,
                   sessionID: input.sessionID,
                   text,
+                  metadata: { command: { name, arguments: input.prompt.text } },
                   delivery: input.delivery,
                 })
               }).pipe(Effect.asVoid),

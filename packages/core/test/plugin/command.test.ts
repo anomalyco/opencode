@@ -39,6 +39,7 @@ describe("CommandPlugin.Plugin", () => {
       const prompts: {
         text: string
         files?: readonly { readonly uri: string }[]
+        metadata?: { readonly [key: string]: unknown }
         delivery?: "steer" | "queue"
       }[] = []
       yield* CommandPlugin.Plugin.effect(
@@ -51,7 +52,12 @@ describe("CommandPlugin.Plugin", () => {
           session: {
             prompt: (input) =>
               Effect.sync(() => {
-                prompts.push({ text: input.text, files: input.files, delivery: input.delivery })
+                prompts.push({
+                  text: input.text,
+                  files: input.files,
+                  metadata: input.metadata,
+                  delivery: input.delivery,
+                })
                 return SessionInbox.User.make({
                   id: SessionMessage.ID.make("msg_test"),
                   sessionID: input.sessionID,
@@ -114,21 +120,25 @@ describe("CommandPlugin.Plugin", () => {
         {
           text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", "extra context"),
           files: [{ uri: "file:///tmp/context.md" }],
+          metadata: { command: { name: "init", arguments: "extra context" } },
           delivery: "queue",
         },
         {
           text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", () => "branch $& $$ $` $'"),
           files: undefined,
+          metadata: { command: { name: "review", arguments: "  branch $& $$ $` $'  " } },
           delivery: "steer",
         },
         {
           text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
           files: undefined,
+          metadata: { command: { name: "init", arguments: "" } },
           delivery: "steer",
         },
         {
           text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
           files: undefined,
+          metadata: { command: { name: "review", arguments: "   " } },
           delivery: "steer",
         },
       ])

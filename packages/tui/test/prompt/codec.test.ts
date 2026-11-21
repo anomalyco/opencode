@@ -133,4 +133,39 @@ describe("restored prompt input", () => {
     expect(output.text).toBe(message.text)
     expect(output.files?.map((file) => file.uri)).toEqual(["data:image/jpeg;base64,YWJj"])
   })
+
+  test("brings back the slash command a prompt was expanded from", async () => {
+    const output = await restoredPromptInput(
+      {
+        text: "Review the uncommitted changes.\n\n@scan",
+        agents: [{ name: "scan", mention: { start: 8, end: 13, text: "@scan" } }],
+        metadata: { command: { name: "review", arguments: "@scan" } },
+      },
+      () => Promise.reject(new Error("unexpected read")),
+    )
+
+    expect(output).toEqual({
+      text: "/review @scan",
+      files: undefined,
+      agents: [{ name: "scan", mention: { start: 8, end: 13, text: "@scan" } }],
+    })
+  })
+
+  test("brings back a command typed without arguments", async () => {
+    const output = await restoredPromptInput(
+      { text: "Set up AGENTS.md.", metadata: { command: { name: "init", arguments: "" } } },
+      () => Promise.reject(new Error("unexpected read")),
+    )
+
+    expect(output.text).toBe("/init")
+  })
+
+  test("keeps the sent text when the metadata names no command", async () => {
+    const output = await restoredPromptInput(
+      { text: "Keep going.", metadata: { source: "goal", command: { name: "init" } } },
+      () => Promise.reject(new Error("unexpected read")),
+    )
+
+    expect(output.text).toBe("Keep going.")
+  })
 })
