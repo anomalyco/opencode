@@ -1379,10 +1379,10 @@ export function FileAccordionGroup(props: { children: JSX.Element }) {
   )
 }
 
-// A file's diff shows this much before the rest folds away. One just past the limit stays whole.
-const FILE_DIFF_FOLD = { over: 480, show: 420 }
+// A file's diff shows this much until its toggle opens the rest.
+const FILE_DIFF_FOLD = 420
 
-/** Folds a tall file diff as a long user message folds: laid out whole, clipped, and opened by the toggle below it. */
+/** Folds a tall file diff as a long user message folds: laid out whole, clipped, and opened by its toggle. */
 export function FileDiffFold(props: { children: JSX.Element }) {
   const i18n = useI18n()
   const id = createUniqueId()
@@ -1391,14 +1391,12 @@ export function FileDiffFold(props: { children: JSX.Element }) {
   let fold: HTMLDivElement | undefined
   let toggle: HTMLButtonElement | undefined
 
+  // The limit always applies and the toggle lies over the fold, so measuring moves nothing. A height changed during
+  // this delivery would reach the timeline's row observer a frame late, as a ResizeObserver loop error.
   createResizeObserver(
     () => fold,
-    () => {
-      if (fold!.scrollHeight > FILE_DIFF_FOLD.over) setState("tall", true)
-    },
+    () => setState("tall", fold!.scrollHeight >= FILE_DIFF_FOLD),
   )
-
-  const folded = () => state.tall && !state.expanded
 
   // Closing shrinks the diff above the toggle, which would leave the reader far past its end, so the toggle stays
   // where it was pressed. Opening moves nothing above it.
@@ -1416,12 +1414,12 @@ export function FileDiffFold(props: { children: JSX.Element }) {
         ref={fold}
         id={id}
         data-slot="file-diff-fold"
-        data-folded={folded() ? "" : undefined}
-        style={{ "max-height": folded() ? `${FILE_DIFF_FOLD.show}px` : undefined }}
+        data-folded={state.tall && !state.expanded ? "" : undefined}
+        style={{ "max-height": state.expanded ? undefined : `${FILE_DIFF_FOLD}px` }}
       >
         {props.children}
       </div>
-      <Show when={state.tall}>
+      <Show when={state.tall || state.expanded}>
         <button
           ref={toggle}
           type="button"

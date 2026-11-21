@@ -1819,17 +1819,18 @@
   }
 }
 
-/* A folded diff clips and fades into the toggle. */
+/* A folded diff fades out under its toggle, which lies over the last of it. */
 [data-slot="file-diff-fold"] {
+  overflow: hidden;
   border-radius: inherit;
 
   &[data-folded] {
-    overflow: hidden;
-    mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 72px), transparent calc(100% - 24px));
   }
 }
 
 [data-slot="file-diff-fold-toggle"] {
+  position: relative;
   display: flex;
   width: 100%;
   align-items: center;
@@ -1849,6 +1850,10 @@
 
   [data-slot="icon-svg"] {
     color: var(--v2-icon-icon-muted);
+  }
+
+  &[aria-expanded="false"] {
+    margin-top: -32px;
   }
 
   &[aria-expanded="true"] [data-slot="icon-svg"] {
