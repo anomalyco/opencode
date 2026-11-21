@@ -828,6 +828,8 @@ fn the_execute_dialog_fits_wrapped_code() {
     let messages =
         turn(vec![timed("c1", "execute", completed(json!({ "code": code }), output, json!({ "toolCalls": [] })))]);
     let h = open(120, 40, messages, Vec::new());
+    // The transcript reads its messages on the app's runtime: the first frame can show the header alone.
+    h.wait_for("✓ execute");
     let (x, y) = h.find("✓ execute");
     h.app.click(x + 2, y);
     h.app.advance(Duration::from_millis(1));
