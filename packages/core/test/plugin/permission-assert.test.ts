@@ -26,6 +26,7 @@ const permission = Layer.succeed(
       if (input.action === "declined") return Effect.die(new Permission.DeclinedError())
       return Effect.void
     },
+    assertSandboxedShell: () => Effect.void,
     assertNotDenied: () => Effect.void,
     allows: () => Effect.succeed(false),
     reply: () => Effect.void,

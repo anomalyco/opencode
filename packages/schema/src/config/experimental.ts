@@ -6,7 +6,28 @@ import { ConfigFlag } from "./flag.js"
 import { ConfigModel } from "./model.js"
 import { ConfigPolicy } from "./policy.js"
 
+export const Sandbox = Schema.Struct({
+  enabled: Schema.Boolean.pipe(optional).annotate({
+    description: "Enable the macOS shell sandbox. Defaults to false.",
+  }),
+  full_disk_read: Schema.Boolean.pipe(optional).annotate({
+    description: "Allow broad reads with protected-path exclusions.",
+  }),
+  allow_git_writes: Schema.Boolean.pipe(optional).annotate({
+    description: "Allow writes to .git metadata within the workspace. Defaults to false.",
+  }),
+  readable_roots: Schema.Array(Schema.String)
+    .pipe(optional)
+    .annotate({ description: "Additional existing absolute paths shell commands may read." }),
+  writable_roots: Schema.Array(Schema.String)
+    .pipe(optional)
+    .annotate({ description: "Additional existing absolute paths shell commands may write." }),
+})
+
 export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
+  sandbox: Sandbox.pipe(optional).annotate({
+    description: "Shell sandbox settings are read from global configuration only.",
+  }),
   portable_shell_scanner: Schema.Boolean.pipe(optional).annotate({
     description: "Deprecated: the built-in shell permission scanner is now always enabled.",
   }),

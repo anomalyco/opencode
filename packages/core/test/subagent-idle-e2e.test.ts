@@ -17,6 +17,7 @@ import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Provider } from "@opencode/core/provider"
+import { Sandbox } from "@opencode/core/sandbox"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
@@ -73,6 +74,7 @@ const pluginSupervisor = makeLocationNode({
     Model.node,
     Permission.node,
     PluginHooks.node,
+    Sandbox.node,
     Session.node,
     Shell.node,
     ShellSelect.node,

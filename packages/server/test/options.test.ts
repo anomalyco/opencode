@@ -8,6 +8,14 @@ test("accepts ephemeral port zero", () => {
   expect(Option.isSome(decode({ port: 0 }))).toBe(true)
 })
 
+test("accepts shell sandbox options and rejects invalid values", () => {
+  expect(Option.getOrThrow(decode({ sandbox: { enabled: true, readableRoots: ["/usr"] } })).sandbox).toEqual({
+    enabled: true,
+    readableRoots: ["/usr"],
+  })
+  expect(Option.isNone(decode({ sandbox: { enabled: "true" } }))).toBe(true)
+})
+
 test("rejects ports outside the valid range", () => {
   expect(Option.isNone(decode({ port: -1 }))).toBe(true)
   expect(Option.isNone(decode({ port: 65_536 }))).toBe(true)
