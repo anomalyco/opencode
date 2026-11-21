@@ -31,6 +31,7 @@ import {
   TextAttributes,
   RGBA,
   MouseEvent,
+  TextareaRenderable,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import {
@@ -405,6 +406,20 @@ export function Session(props: {
     seeded = true
     r.set(route.prompt)
   }
+
+  // The picker and cursor movement both default to Down. While the editor can move, prefer its configured binding.
+  Keymap.createLayer(() => ({
+    priority: 1,
+    enabled: () => {
+      if (!prompt()?.focused) return false
+      const editor = renderer.currentFocusedEditor
+      return (
+        editor instanceof TextareaRenderable &&
+        editor.scrollY + editor.visualCursor.visualRow < editor.editorView.getTotalVirtualLineCount() - 1
+      )
+    },
+    bindings: ["input.move.down"],
+  }))
 
   /** Runs after the next frame's layout and before it paints, unless the transcript was torn down. */
   const afterLayout = (continuation: () => void) => {
