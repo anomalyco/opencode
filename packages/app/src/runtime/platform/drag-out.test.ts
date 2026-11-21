@@ -9,11 +9,8 @@ function rowDrag(platform: Parameters<typeof startDragOut>[0]) {
   const row = document.createElement("button")
   host.attachShadow({ mode: "open" }).append(row)
   document.body.append(host)
-  const handled = { started: false, event: undefined as DragEvent | undefined }
-  host.addEventListener("dragstart", (event) => {
-    handled.event = event
-    handled.started = startDragOut(platform, event, path)
-  })
+  const seen: Array<{ event: DragEvent; started: boolean }> = []
+  host.addEventListener("dragstart", (event) => seen.push({ event, started: startDragOut(platform, event, path) }))
 
   const dataTransfer = new DataTransfer()
   dataTransfer.setData("text/plain", "file:src/index.ts")
@@ -22,7 +19,7 @@ function rowDrag(platform: Parameters<typeof startDragOut>[0]) {
   Object.defineProperty(event, "dataTransfer", { value: dataTransfer })
   row.dispatchEvent(event)
 
-  return { ...handled, row }
+  return { row, started: seen[0]?.started, event: seen[0]?.event }
 }
 
 describe("drag out", () => {
