@@ -335,10 +335,12 @@ export function createRegion(input: {
   // Focus leaves before the close starts, back to where it was; otherwise the panel hands it to its toggle.
   const giveBackFocus = () => {
     const focused = document.activeElement
+
     // The review toggle in the panel's strip belongs to the session, so the panel hands its focus to the header's copy.
     const inside =
       !!document.getElementById("review-panel")?.contains(focused) &&
       !focused?.closest('[data-slot="session-review-panel-toggle"]')
+
     const back = returnFocus
     returnFocus = undefined
 
