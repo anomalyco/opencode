@@ -1,70 +1,50 @@
-import type { BrowserWindow, NativeImage, Rectangle } from "electron"
+import { nativeImage, screen, type BrowserWindow, type NativeImage } from "electron"
 import { renderTaskbarBadgeBitmap } from "./taskbar-badge-icon"
-import {
-  INITIAL_TASKBAR_BADGE_STATE,
-  selectTaskbarBadgeGlyph,
-  transitionTaskbarBadge,
-  type TaskbarBadgeState,
-} from "./taskbar-badge-machine"
 
 export type TaskbarBadgeWindow = Pick<BrowserWindow, "isDestroyed" | "getBounds" | "setOverlayIcon">
 
-export type TaskbarBadgeDeps<Icon = NativeImage> = {
-  readonly scaleFactor: (bounds: Rectangle) => number
-  readonly createImage: (buffer: Buffer, options: { width: number; height: number; scaleFactor: number }) => Icon
+type Badge = { readonly count: number; readonly description: string; readonly scale: number }
+
+// What each window's overlay shows, so a repeat makes no shell call and an idle launch makes none at all.
+const shown = new WeakMap<TaskbarBadgeWindow, Badge>()
+
+const icons = new Map<string, NativeImage>()
+
+/** Shows `count` over the window's taskbar button (1 to 9, then "9+"), drawn for its display's scale; 0 clears it. */
+export function setTaskbarBadge(win: TaskbarBadgeWindow | null | undefined, count: number, description: string) {
+  if (process.platform !== "win32" || !win || win.isDestroyed()) return
+  const last = shown.get(win)
+
+  if (count <= 0) {
+    if (!last) return
+    shown.delete(win)
+    win.setOverlayIcon(null, "")
+
+    return
+  }
+
+  const scale = Math.max(1, screen.getDisplayMatching(win.getBounds()).scaleFactor)
+
+  if (last?.count === count && last.description === description && last.scale === scale) return
+  shown.set(win, { count, description, scale })
+  win.setOverlayIcon(badgeIcon(Math.min(count, 10), Math.round(16 * scale)), description)
 }
 
-/** Manages cached DPI-scaled overlay badge icons and per-window taskbar badge state on Windows. */
-export function createTaskbarBadgeController<Icon extends NativeImage | null = NativeImage>(
-  deps: TaskbarBadgeDeps<Icon>,
-) {
-  const states = new WeakMap<TaskbarBadgeWindow, TaskbarBadgeState>()
-  const icons = new Map<string, Icon>()
+/** Draws a window's badge again after it moved, in case its new display has another scale. */
+export function refreshTaskbarBadge(win: TaskbarBadgeWindow) {
+  const last = shown.get(win)
 
-  const iconFor = (win: TaskbarBadgeWindow, count: number) => {
-    const glyph = selectTaskbarBadgeGlyph(count)
-    const scaleFactor = Math.max(1, deps.scaleFactor(win.getBounds()))
-    const size = Math.max(16, Math.round(16 * scaleFactor))
-    const key = `${glyph}@${size}`
+  if (last) setTaskbarBadge(win, last.count, last.description)
+}
 
-    if (icons.has(key)) return icons.get(key) ?? null
-    const bitmap = renderTaskbarBadgeBitmap(glyph, size)
+function badgeIcon(glyph: number, size: number) {
+  const key = `${glyph}@${size}`
+  const cached = icons.get(key)
 
-    const created = deps.createImage(bitmap.buffer, {
-      width: bitmap.width,
-      height: bitmap.height,
-      scaleFactor: size / 16,
-    })
+  if (cached) return cached
+  const bitmap = renderTaskbarBadgeBitmap(glyph, size)
+  const icon = nativeImage.createFromBitmap(bitmap.buffer, { width: size, height: size, scaleFactor: size / 16 })
+  icons.set(key, icon)
 
-    icons.set(key, created)
-
-    return created
-  }
-
-  return {
-    set(win: TaskbarBadgeWindow | null | undefined, count: number, description: string) {
-      if (process.platform !== "win32" || !win || win.isDestroyed()) return
-      const current = states.get(win) ?? INITIAL_TASKBAR_BADGE_STATE
-      const next = transitionTaskbarBadge(current, { type: "badge.reported", count, description })
-      states.set(win, next.state)
-      next.commands.forEach((command) => {
-        if (win.isDestroyed()) return
-
-        if (command.type === "clear") {
-          win.setOverlayIcon(null, "")
-
-          return
-        }
-
-        win.setOverlayIcon(iconFor(win, command.count), command.description)
-      })
-    },
-    clear(win: TaskbarBadgeWindow | null | undefined) {
-      if (!win) return
-      const current = states.get(win)
-
-      if (!current) return
-      states.set(win, transitionTaskbarBadge(current, { type: "window.closed" }).state)
-    },
-  }
+  return icon
 }

@@ -5,40 +5,20 @@ const DISC_GREEN = 0x2b
 
 const DISC_BLUE = 0x1c
 
-const DIGITS = {
-  1: ["..#..", ".##..", "..#..", "..#..", "..#..", "..#..", ".###."],
-  2: [".###.", "#...#", "....#", "..##.", ".#...", "#....", "#####"],
-  3: [".###.", "#...#", "....#", "..##.", "....#", "#...#", ".###."],
-  4: ["...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#."],
-  5: ["#####", "#....", "####.", "....#", "....#", "#...#", ".###."],
-  6: [".###.", "#....", "####.", "#...#", "#...#", "#...#", ".###."],
-  7: ["#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."],
-  8: [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."],
-  9: [".###.", "#...#", "#...#", ".####", "....#", "...#.", ".##.."],
-  10: [".##.....", "#..#..#.", ".###.###", "...#..#.", ".##....."],
-} as const satisfies Record<number, readonly string[]>
-
-function glyphFor(count: number): readonly string[] {
-  if (count === 1) return DIGITS[1]
-
-  if (count === 2) return DIGITS[2]
-
-  if (count === 3) return DIGITS[3]
-
-  if (count === 4) return DIGITS[4]
-
-  if (count === 5) return DIGITS[5]
-
-  if (count === 6) return DIGITS[6]
-
-  if (count === 7) return DIGITS[7]
-
-  if (count === 8) return DIGITS[8]
-
-  if (count === 9) return DIGITS[9]
-
-  return DIGITS[10]
-}
+// 5x7 digits for 1 to 9, and a smaller "9+" for ten or more.
+const GLYPHS: readonly (readonly string[])[] = [
+  [],
+  ["..#..", ".##..", "..#..", "..#..", "..#..", "..#..", ".###."],
+  [".###.", "#...#", "....#", "..##.", ".#...", "#....", "#####"],
+  [".###.", "#...#", "....#", "..##.", "....#", "#...#", ".###."],
+  ["...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#."],
+  ["#####", "#....", "####.", "....#", "....#", "#...#", ".###."],
+  [".###.", "#....", "####.", "#...#", "#...#", "#...#", ".###."],
+  ["#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."],
+  [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."],
+  [".###.", "#...#", "#...#", ".####", "....#", "...#.", ".##.."],
+  [".##.....", "#..#..#.", ".###.###", "...#..#.", ".##....."],
+]
 
 export type TaskbarBadgeBitmap = {
   readonly width: number
@@ -53,7 +33,7 @@ export type TaskbarBadgeBitmap = {
 export function renderTaskbarBadgeBitmap(count: number, size: number): TaskbarBadgeBitmap {
   const clamped = Math.min(Math.max(1, Math.floor(count)), 10)
   const dimension = Math.max(16, Math.round(size))
-  const glyph = glyphFor(clamped)
+  const glyph = GLYPHS[clamped]
   const rows = glyph.length
   const cols = glyph[0].length
   const glyphHeight = dimension * (clamped >= 10 ? 0.48 : 0.62)
