@@ -9,7 +9,7 @@ import { Join } from "@opencode/core/machine/join"
 import { Link } from "@opencode/core/machine/link"
 import { Machines } from "@opencode/core/machine/machines"
 import { Global } from "@opencode/util/global"
-import { Context, Deferred, Effect, Layer, Option, Scope, Stream } from "effect"
+import { Context, Deferred, Effect, Exit, Layer, Option, Scope, Stream } from "effect"
 import { HttpRouter, HttpServer, type HttpServerRequest, type HttpServerResponse } from "effect/http"
 import { randomBytes } from "node:crypto"
 import { createServer } from "node:http"
@@ -136,6 +136,7 @@ const home = Effect.fnUntraced(function* (machines: boolean) {
   yield* Deferred.succeed(routes, Context.get(context, HttpRouter.HttpRouter).asHttpEffect())
   return {
     state,
+    context,
     machines: Context.get(context, Machines.Service),
     api: OpenCode.make({
       baseUrl: HttpServer.formatAddress(http.address),
@@ -220,6 +221,20 @@ it.live("pairs a worker over Iroh, carries its frames, and refuses a bad join wi
     yield* files.write("/note.bin", bytes)
     expect(Buffer.compare((yield* files.read("/note.bin")).bytes, bytes)).toBe(0)
     expect(server.state.loads).toBe(1)
+  }),
+)
+
+it.live("refuses an Iroh connection while machines are off", () =>
+  Effect.gen(function* () {
+    const server = yield* home(true)
+    const endpoint = yield* Iroh.listen(Effect.succeed(false)).pipe(
+      Effect.provide(server.context),
+      Effect.provideService(Iroh.Testing, { offline: true, load: loadBinding, watch: () => {} }),
+    )
+    const identity = Context.get(server.context, Identity.Service)
+    const dial = yield* workerEndpoint(endpoint)
+    const dialed = yield* Effect.exit(Effect.scoped(dial(yield* identity.publicKey())))
+    expect(Exit.isFailure(dialed)).toBe(true)
   }),
 )
 

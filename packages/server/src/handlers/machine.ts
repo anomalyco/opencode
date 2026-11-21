@@ -278,7 +278,7 @@ export const makeMachine = Effect.gen(function* () {
     return yield* new ForbiddenError({ message: "Machines are disabled; enable experimental.machines" })
   })
   const iroh = yield* Effect.cached(
-    Iroh.listen().pipe(
+    Iroh.listen(enabled).pipe(
       Effect.tapError((error) =>
         Effect.logWarning("Machines connect over WebSockets only: Iroh is unavailable", error),
       ),

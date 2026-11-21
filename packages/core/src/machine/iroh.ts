@@ -36,10 +36,10 @@ export const Testing = Context.Reference<{
 
 /**
  * Binds the home's endpoint with the home key and serves every link that arrives on it, each as the WebSocket route
- * serves one, until the scope closes. Fails when the binding is missing or cannot bind; links then keep coming over
- * WebSockets only.
+ * serves one, until the scope closes. `admit` is asked before each connection, as the route reads its flag on each
+ * upgrade. Fails when the binding is missing or cannot bind; links then keep coming over WebSockets only.
  */
-export const listen = Effect.fn("Iroh.listen")(function* () {
+export const listen = Effect.fn("Iroh.listen")(function* (admit: Effect.Effect<boolean>) {
   const testing = yield* Testing
   const identity = yield* Identity.Service
   const services = yield* Effect.context<Machines.Service | Identity.Service>()
@@ -64,7 +64,7 @@ export const listen = Effect.fn("Iroh.listen")(function* () {
       while (true) {
         const incoming = yield* Effect.tryPromise(() => endpoint.acceptNext())
         if (!incoming) return
-        yield* Effect.forkScoped(serve(incoming, handshakes).pipe(Effect.provide(services)))
+        yield* Effect.forkScoped(serve(incoming, handshakes, admit).pipe(Effect.provide(services)))
       }
     }).pipe(Effect.ignore),
   )
@@ -72,8 +72,10 @@ export const listen = Effect.fn("Iroh.listen")(function* () {
 })
 
 /** One connection, from its QUIC handshake to the end of its link, as the WebSocket route serves an upgrade. */
-const serve = (incoming: Incoming, handshakes: Semaphore.Semaphore) =>
+const serve = (incoming: Incoming, handshakes: Semaphore.Semaphore, admit: Effect.Effect<boolean>) =>
   Effect.gen(function* () {
+    const on = yield* admit
+    if (!on) return yield* Effect.promise(() => incoming.refuse())
     const admitted = yield* handshakes.withPermitsIfAvailable(1)(
       Effect.gen(function* () {
         const connection = yield* Effect.acquireRelease(
