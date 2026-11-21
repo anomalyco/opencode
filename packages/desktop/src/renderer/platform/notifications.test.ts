@@ -66,6 +66,7 @@ const api = {
   },
   onToastActivated: (cb: (activation: { tag: string; action?: string }) => void) => {
     activations.push(cb)
+
     return () => {}
   },
 }
@@ -181,6 +182,7 @@ describe("desktop notifications", () => {
   test("on windows a toast's buttons answer through onAction, and only once", async () => {
     const desktop = createDesktopNotify(api, "windows")
     const tag = "server\0request:per_2"
+
     const actions = [
       { id: "once", label: "Allow once" },
       { id: "reject", label: "Deny" },

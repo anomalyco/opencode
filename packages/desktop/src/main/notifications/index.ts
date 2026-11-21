@@ -25,6 +25,7 @@ export function show(sender: WebContents, tag: string, input: ToastInput) {
 
   const token = randomUUID()
   const buttons = input.actions.length > 0 && app.isDefaultProtocolClient("opencode")
+
   const notification = buttons
     ? new Notification({ toastXml: toastXml(token, input) })
     : new Notification({ title: input.title, body: input.body, silent: true })
