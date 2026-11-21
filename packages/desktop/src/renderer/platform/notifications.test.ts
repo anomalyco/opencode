@@ -25,7 +25,7 @@ class FakeNotification extends EventTarget implements Notification {
   readonly icon: string
   readonly lang = ""
   readonly silent: boolean | null
-  readonly tag: string
+  readonly tag = ""
   readonly title: string
 
   constructor(title: string, options?: NotificationOptions) {
@@ -34,18 +34,37 @@ class FakeNotification extends EventTarget implements Notification {
     this.body = options?.body ?? ""
     this.icon = options?.icon ?? ""
     this.silent = options?.silent ?? null
-    this.tag = options?.tag ?? ""
     events.push(`created:${title}:${this.body}`)
     created.push(this)
   }
 
   close() {
-    events.push(`notification.close${this.tag ? `:${this.tag}` : ""}`)
+    events.push("notification.close")
     this.onclose?.call(this, new Event("close"))
   }
 }
 
+// The calls main gets, and the toast activation it would send back.
+const activations: Array<(tag: string) => void> = []
+
+const api = {
+  getWindowFocused: async () => false,
+  showWindow: async () => {},
+  setWindowFocus: async () => {},
+  showToast: async (toast: { tag: string; title: string; body: string }) => {
+    events.push(`api.showToast:${toast.tag}:${toast.title}:${toast.body}`)
+  },
+  dismissToast: async (tag: string) => {
+    events.push(`api.dismissToast:${tag}`)
+  },
+  onToastActivated: (cb: (tag: string) => void) => {
+    activations.push(cb)
+    return () => {}
+  },
+}
+
 afterEach(() => {
+  activations.length = 0
   created.length = 0
   events.length = 0
   globalThis.Notification = originalNotification
@@ -56,7 +75,7 @@ describe("desktop notifications", () => {
     globalThis.Notification = FakeNotification
 
     const notify = createDesktopNotify({
-      getWindowFocused: async () => false,
+      ...api,
       showWindow: async () => {
         events.push("api.showWindow")
       },
@@ -91,11 +110,7 @@ describe("desktop notifications", () => {
     async ({ event }) => {
       globalThis.Notification = FakeNotification
 
-      const notify = createDesktopNotify({
-        getWindowFocused: async () => false,
-        showWindow: async () => {},
-        setWindowFocus: async () => {},
-      }).notify
+      const notify = createDesktopNotify(api).notify
 
       await notify("Session error")
 
@@ -117,63 +132,43 @@ describe("desktop notifications", () => {
   test("suppresses desktop notifications while the window is already focused", async () => {
     globalThis.Notification = FakeNotification
 
-    const notify = createDesktopNotify({
-      getWindowFocused: async () => true,
-      showWindow: async () => {},
-      setWindowFocus: async () => {},
-    }).notify
+    const notify = createDesktopNotify({ ...api, getWindowFocused: async () => true }).notify
 
     await notify("Response ready", "Active session")
     expect(events).toEqual([])
     expect(created).toEqual([])
   })
 
-  test.each([
-    {
-      os: "windows" as const,
-      icon: "favicon-96x96-v3.png",
-      events: [
-        "created:Permission required:Fix login\nbash: git status",
-        "notification.close:server\0request:per_1",
-        "created:Permission required:Fix login\nbash: git push",
-        "notification.close:server\0request:per_1",
-      ],
-    },
-    {
-      os: "macos" as const,
-      icon: "https://opencode.ai/favicon-96x96-v3.png",
-      events: ["created:Permission required:Fix login", "created:Permission required:Fix login"],
-    },
-  ])("on $os a tagged notification replaces its predecessor and its dismissal takes it back", async (input) => {
-    globalThis.Notification = FakeNotification
-
-    const desktop = createDesktopNotify(
-      { getWindowFocused: async () => false, showWindow: async () => {}, setWindowFocus: async () => {} },
-      input.os,
-    )
-
+  test("on windows a tagged notification is a toast main posts, with its detail line; a click runs the callback and an answer takes it back", async () => {
+    const desktop = createDesktopNotify(api, "windows")
     const tag = "server\0request:per_1"
-    await desktop.notify("Permission required", "Fix login", undefined, { tag, detail: "bash: git   status" })
-    await desktop.notify("Permission required", "Fix login", undefined, { tag, detail: "bash: git push" })
+
+    await desktop.notify("Permission required", "Fix login", () => events.push("session.select"), {
+      tag,
+      detail: "bash:  git   push",
+    })
+    activations.forEach((activate) => activate(tag))
+    await desktop.notify("Permission required", "Fix login", undefined, { tag, detail: "bash: git status" })
+    desktop.dismissNotification?.(tag)
     desktop.dismissNotification?.(tag)
 
-    expect(events).toEqual(input.events)
-    expect(created.map((notification) => notification.icon)).toEqual([input.icon, input.icon])
+    expect(events).toEqual([
+      "api.showToast:server\0request:per_1:Permission required:Fix login\nbash: git push",
+      "session.select",
+      "api.showToast:server\0request:per_1:Permission required:Fix login\nbash: git status",
+      "api.dismissToast:server\0request:per_1",
+    ])
+    expect(created).toEqual([])
   })
 
-  test("on windows a tagged toast that timed out into the notification center is still taken back", async () => {
+  test("on macos a tagged notification stays a page notification", async () => {
     globalThis.Notification = FakeNotification
 
-    const desktop = createDesktopNotify(
-      { getWindowFocused: async () => false, showWindow: async () => {}, setWindowFocus: async () => {} },
-      "windows",
-    )
+    await createDesktopNotify(api, "macos").notify("Response ready", "Fix login", undefined, {
+      tag: "server\0session:ses_1",
+    })
+    createDesktopNotify(api, "macos").dismissNotification?.("server\0session:ses_1")
 
-    await desktop.notify("Response ready", "Fix login", undefined, { tag: "server\0session:ses_1" })
-    // Windows fires `close` when the toast leaves the screen for the notification center.
-    created[0]?.onclose?.call(created[0], new Event("close"))
-    desktop.dismissNotification?.("server\0session:ses_1")
-
-    expect(events).toEqual(["created:Response ready:Fix login", "notification.close:server\0session:ses_1"])
+    expect(events).toEqual(["created:Response ready:Fix login"])
   })
 })
