@@ -10,6 +10,7 @@ import type {
   PickedFiles,
   SaveFilePickerOptions,
   ServerReadyData,
+  TaskbarProgressMode,
   TitlebarTheme,
 } from "../shared/ipc-contract"
 
@@ -72,6 +73,7 @@ export type ElectronAPI = {
   setTitlebar(theme: TitlebarTheme): Promise<void>
   setTrafficLightsPosition(position: { x: number; y: number }): Promise<void>
   setTaskbarBadge(count: number, description: string): Promise<void>
+  setTaskbarProgress(mode: TaskbarProgressMode): Promise<void>
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>
   setBackgroundColor(color: string): Promise<void>
   exportDebugLogs(): Promise<string>

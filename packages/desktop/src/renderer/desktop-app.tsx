@@ -13,6 +13,7 @@ import {
   useLanguage,
   usePluginServers,
   useTabs,
+  useWindowTabActivity,
   useWindowTaskbarBadgeCount,
   type LayoutRoute,
   type Platform,
@@ -24,6 +25,7 @@ import type { ElectronAPI } from "./api-types"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
+import { selectTaskbarProgressMode } from "../shared/ipc-contract"
 import { createSidecarResolver, localServerStartupError, sidecarHttp } from "./startup/initialization"
 import { preloadStoredLocale } from "./startup/locale"
 import {
@@ -273,11 +275,12 @@ function DesktopStartupReady(props: { dispatch: (event: StartupEvent) => void })
   return null
 }
 
-function DesktopEffects(props: { api: ElectronAPI; os?: "macos" | "windows" | "linux" }) {
+function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "linux" | undefined }) {
   const command = useCommand()
   onCleanup(bindDesktopMenu((id) => command.trigger(id)))
   const theme = useTheme()
   const language = useLanguage()
+  const activity = useWindowTabActivity()
   const badgeCount = useWindowTaskbarBadgeCount()
 
   createEffect(() => {
@@ -290,13 +293,20 @@ function DesktopEffects(props: { api: ElectronAPI; os?: "macos" | "windows" | "l
 
   createEffect(() => {
     if (props.os !== "windows") return
+    const mode = selectTaskbarProgressMode(activity())
+    void props.api.setTaskbarProgress(mode)
+  })
+
+  createEffect(() => {
+    if (props.os !== "windows") return
     const count = badgeCount()
-    const description = count > 0 ? language.plural("notification.taskbar.badge", count) : ""
-    void props.api.setTaskbarBadge(count, description).catch(() => undefined)
+    void props.api.setTaskbarBadge(count, count > 0 ? language.plural("notification.taskbar.badge", count) : "")
   })
 
   onCleanup(() => {
-    if (props.os === "windows") void props.api.setTaskbarBadge(0, "").catch(() => undefined)
+    if (props.os !== "windows") return
+    void props.api.setTaskbarProgress("none")
+    void props.api.setTaskbarBadge(0, "")
   })
 
   return null

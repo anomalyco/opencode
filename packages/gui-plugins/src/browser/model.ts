@@ -162,9 +162,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const key = (tabID: string) => `${ctx.id}:${tabID}`
 
   // A failure code `failure.ts` has no sentence for still reads as what the person tried. It is logged with its code,
-  // so a new one is noticed and gets a sentence of its own.
+  // which is main's message, and the action, so a new one is noticed and gets a sentence of its own. As one string:
+  // the desktop log writes each argument with `String()`, which turns an object of fields into "[object Object]".
   const noteFailure = (code: string, action: Browser.Action | undefined) => {
-    if (!commandFailure(code, action?.type).known) console.warn("[browser] unmapped failure", { code, action: action?.type })
+    if (!commandFailure(code, action?.type).known)
+      console.warn(`[browser] unmapped failure: ${code.slice(0, 300)} (action: ${action?.type ?? "none"})`)
   }
 
   const dispatch = (event: Event) => {
@@ -194,11 +196,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (effect.type === "present-held") {
       const drive = drives.get(effect.sessionKey)
 
-      // Asked again as a request that arrives now, so the screen, the pane and the setting are read now.
-      if (drive)
-        dispatch({ ...presentation(drive), type: "pane.activity", attempt: effect.attempt, tabID: effect.tabID, reveal: effect.reveal, visible: layout.state(key(effect.tabID), drive.ref) === "visible" })
+      if (!drive) return
+      restore(drive.ref)
 
-      return
+      // Asked again as a request that arrives now, so the screen, the pane and the setting are read now.
+      return dispatch({ ...presentation(drive), type: "pane.activity", attempt: effect.attempt, tabID: effect.tabID, reveal: effect.reveal, visible: layout.state(key(effect.tabID), drive.ref) === "visible" })
     }
 
     if (effect.type === "present-file") {
@@ -351,6 +353,17 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     opened: layout.side.opened(drive.ref),
   })
 
+  // The browser tabs the session's strip stores, once the stored layout has loaded: before that it reads as empty.
+  const stored = (ref: SessionRef) => (layout.ready() ? untrack(() => layout.stored(ref)) : undefined)
+
+  // The host can drop a session's strip with no plugin hearing of it. Before the strip is written for one tab, and
+  // when the person comes to the session, it gets back the tabs the desktop still holds, so no tab stands alone.
+  const restore = (ref: SessionRef) => {
+    const kept = stored(ref)
+
+    if (kept) dispatch({ type: "strip.read", sessionKey: ref.key, stored: kept })
+  }
+
   const receive = (drive: Drive, attempt: number, event: PaneEvent) => {
     const sessionKey = drive.ref.key
 
@@ -386,16 +399,21 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (event.error !== undefined) noteFailure(event.error, undefined)
 
-      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error, unnamed: event.unnamed, placed: event.placed })
+      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error, unnamed: event.unnamed, placed: event.placed, stored: stored(drive.ref) })
     }
 
     if (event.type === "embed")
       return dispatch({ type: "pane.embed", sessionKey, attempt, tabID: event.tabID, embed: event.embed })
 
-    if (event.type === "focus") return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
+    if (event.type === "focus") {
+      restore(drive.ref)
+
+      return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
+    }
 
     if (event.type === "activity" || event.type === "preview") {
       if (event.type === "preview") return dispatch({ ...presentation(drive), attempt, type: "pane.file", path: event.path })
+      restore(drive.ref)
 
       return dispatch({ ...presentation(drive), attempt, type: "pane.activity", tabID: event.tabID, reveal: event.reveal, visible: layout.state(key(event.tabID), drive.ref) === "visible" })
     }
@@ -454,7 +472,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     )
   }
 
-  // Closes every stored tab a native inventory lacks, then adds the tabs it newly lists.
+  // Closes every stored tab a native inventory lacks, then adds the tabs it newly lists and the ones the strip lost.
   const syncStrip = (effect: Extract<MachineEffect, { type: "sync-strip" }>) => {
     const ref = drives.get(effect.sessionKey)?.ref
 
@@ -478,9 +496,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       effect.open.forEach((tabID) => {
         if (layout.state(key(tabID), ref) !== "closed") return
-        // A tab a page or link opened stands after the tab it came from; the strip holds other panels' tabs too.
-        const after = effect.placed?.tabID === tabID ? key(effect.placed.after) : undefined
-        builtinContext(ctx).layout.open(key(tabID), ref, { tab: "append", after })
+        // A tab a page or link opened stands after the tab it came from, and one the strip lost after the tab before
+        // it; the strip holds other panels' tabs too.
+        const after = effect.placed?.find((item) => item.tabID === tabID)?.after
+        builtinContext(ctx).layout.open(key(tabID), ref, { tab: "append", after: after && key(after) })
       })
     })
   }
@@ -680,7 +699,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   createKeyed(
     () => sessions.current()?.key,
     (sessionKey) => {
+      const drive = drives.get(sessionKey)
+
       dispatch({ type: "session.routed", sessionKey })
+
+      // Now, not with the desktop's next report, which a quiet page never sends.
+      if (drive) restore(drive.ref)
       wakeCurrent()
       // The route moved on: the person no longer sees this session.
       onCleanup(() => dispatch({ type: "screen.left", sessionKey }))

@@ -53,6 +53,10 @@ export const WindowSetTaskbarBadge = Rpc.make("WindowSetTaskbarBadge", {
   payload: { count: Schema.Int, description: Schema.String },
 })
 
+export const WindowSetTaskbarProgress = Rpc.make("WindowSetTaskbarProgress", {
+  payload: { mode: Schema.Literals(["none", "indeterminate", "paused", "error"]) },
+})
+
 export const WindowRpcs = RpcGroup.make(
   WindowRequestMicrophone,
   WindowSetVoiceCallActive,
@@ -70,4 +74,5 @@ export const WindowRpcs = RpcGroup.make(
   WindowSetTitlebar,
   WindowSetTrafficLightsPosition,
   WindowSetTaskbarBadge,
+  WindowSetTaskbarProgress,
 )
