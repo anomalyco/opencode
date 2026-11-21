@@ -17,9 +17,9 @@ import ranges from "../../asset/fonts/openmono.json"
 // monospace face for every visitor (--font-mono in site.css). script/openmono.py builds each
 // style's files from the app build of OpenMono 1.000, the build OpenCode Desktop takes its files
 // from (no ligatures, every character one cell wide): "latin" (Latin, punctuation, arrows, shapes,
-// box drawing and the keys shortcuts name), "cyrillic" (with the stress marks) and "rest" (the
-// font's other characters, such as Greek, Vietnamese and math), each fetched only when a page uses
-// one of its characters. Every character advances 0.6 em.
+// box drawing, the keys shortcuts name and common symbols such as ✓ and ≈), "cyrillic" (with the
+// stress marks) and "rest" (the font's other characters, such as Greek, Vietnamese and math), each
+// fetched only when a page uses one of its characters. Every character advances 0.6 em.
 export const monoFontLatin = regularLatin
 
 // Settings › Mono font (development only): the family ahead of the stack. IBM Plex Mono loads from
