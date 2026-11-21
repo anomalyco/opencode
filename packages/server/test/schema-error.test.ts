@@ -14,7 +14,6 @@ const generate = makeLocationNode({
     Generate.Service.of({
       text: () => Effect.succeed(42 as unknown as string),
       image: () => Effect.die("unused"),
-      checkImage: () => Effect.void,
       decisions: () => Effect.die("unused"),
       video: {
         start: () => Effect.die("unused"),

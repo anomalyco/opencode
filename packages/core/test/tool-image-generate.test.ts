@@ -67,7 +67,6 @@ const it = testEffect(
               Effect.suspend(() => (fixture.failure ? Effect.fail(fixture.failure) : Effect.succeed(fixture.result))),
             ),
           ),
-        checkImage: () => Effect.void,
         decisions: () => Effect.die("unused"),
         video: {
           start: () => Effect.die("unused"),

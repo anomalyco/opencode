@@ -40,7 +40,11 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     )
     const imageCreate = Effect.fn("server.generate.image.create")(
       function* (request: { readonly payload: ImageRequest }) {
-        return { data: yield* images.start(request.payload).pipe(Effect.mapError(generateError)) }
+        return {
+          data: yield* images
+            .start(request.payload)
+            .pipe(Effect.mapError((error) => new ServiceUnavailableError({ message: error.message }))),
+        }
       },
       Effect.provide(services),
       locationErrors,

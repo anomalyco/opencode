@@ -39,14 +39,21 @@ const app = (dir: string, release: Deferred.Deferred<void>) =>
             Generate.Service,
             Generate.Service.of({
               text: () => Effect.die("unused"),
-              // Each request waits until the test releases it; a crab never finishes.
+              // Each request waits until the test releases it; a crab never finishes, and an unknown model fails.
               image: (input) =>
-                input.prompt === "a crab"
-                  ? Effect.never
-                  : Deferred.await(release).pipe(
-                      Effect.as({ images: [{ type: "image" as const, data: PNG, mime: "image/png" }] }),
-                    ),
-              checkImage: () => Effect.void,
+                input.model.id === "nope"
+                  ? Effect.fail(
+                      new Generate.ModelNotFoundError({
+                        providerID: "test",
+                        modelID: "nope",
+                        message: "Model not found: test/nope",
+                      }),
+                    )
+                  : input.prompt === "a crab"
+                    ? Effect.never
+                    : Deferred.await(release).pipe(
+                        Effect.as({ images: [{ type: "image" as const, data: PNG, mime: "image/png" }] }),
+                      ),
               decisions: () => Effect.die("unused"),
               video: {
                 start: () => Effect.die("unused"),
@@ -71,37 +78,49 @@ const settled = (id: ImageID) =>
     (job) => job.status !== "running",
   )
 
-it.effect("runs a job in the background, cancels one, and fails one whose server stopped", () =>
-  Effect.gen(function* () {
-    const dir = (yield* tmpdirScoped("opencode-image-generation-")).path
-    const release = yield* Deferred.make<void>()
-    const stuck = yield* Effect.gen(function* () {
-      const images = yield* ImageGeneration.Service
-      const done = yield* images.start({ model, prompt: "a cat" })
-      const cancelled = yield* images.start({ model, prompt: "a dog" })
-      const stuck = yield* images.start({ model, prompt: "a crab" })
-      expect(yield* images.get(done.id)).toEqual({ id: done.id, status: "running" })
+it.effect(
+  "runs a job in the background, fails one for an unknown model, cancels one, and fails one whose server stopped",
+  () =>
+    Effect.gen(function* () {
+      const dir = (yield* tmpdirScoped("opencode-image-generation-")).path
+      const release = yield* Deferred.make<void>()
+      const stuck = yield* Effect.gen(function* () {
+        const images = yield* ImageGeneration.Service
+        const done = yield* images.start({ model, prompt: "a cat" })
+        const cancelled = yield* images.start({ model, prompt: "a dog" })
+        const stuck = yield* images.start({ model, prompt: "a crab" })
+        expect(yield* images.get(done.id)).toEqual({ id: done.id, status: "running" })
 
-      yield* images.cancel(cancelled.id)
-      expect(yield* images.wait(cancelled.id)).toMatchObject({ status: "error", reason: "cancelled" })
+        const unknown = yield* images.start({
+          model: Model.Ref.make({ providerID: model.providerID, id: Model.ID.make("nope") }),
+          prompt: "a cat",
+        })
+        expect(yield* images.wait(unknown.id)).toMatchObject({
+          status: "error",
+          reason: "failed",
+          error: "Model not found: test/nope",
+        })
 
-      yield* Deferred.succeed(release, undefined)
-      expect(yield* settled(done.id)).toMatchObject({
-        status: "completed",
-        blobs: [{ mime: "image/png", bytes: Buffer.from(PNG, "base64").length }],
-      })
-      return stuck.id
-    }).pipe(Effect.provide(app(dir, release)))
+        yield* images.cancel(cancelled.id)
+        expect(yield* images.wait(cancelled.id)).toMatchObject({ status: "error", reason: "cancelled" })
 
-    // The server making the crab's request stopped, so its record stays running until the deadline.
-    yield* Effect.gen(function* () {
-      const images = yield* ImageGeneration.Service
-      expect(yield* images.get(stuck)).toEqual({ id: stuck, status: "running" })
-      yield* TestClock.adjust("31 minutes")
-      expect(yield* settled(stuck)).toMatchObject({ status: "error", reason: "unknown" })
-      expect(yield* images.get(ImageID.create()).pipe(Effect.flip)).toMatchObject({
-        _tag: "ImageGeneration.NotFoundError",
-      })
-    }).pipe(Effect.provide(app(dir, release)))
-  }),
+        yield* Deferred.succeed(release, undefined)
+        expect(yield* settled(done.id)).toMatchObject({
+          status: "completed",
+          blobs: [{ mime: "image/png", bytes: Buffer.from(PNG, "base64").length }],
+        })
+        return stuck.id
+      }).pipe(Effect.provide(app(dir, release)))
+
+      // The server making the crab's request stopped, so its record stays running until the deadline.
+      yield* Effect.gen(function* () {
+        const images = yield* ImageGeneration.Service
+        expect(yield* images.get(stuck)).toEqual({ id: stuck, status: "running" })
+        yield* TestClock.adjust("31 minutes")
+        expect(yield* settled(stuck)).toMatchObject({ status: "error", reason: "unknown" })
+        expect(yield* images.get(ImageID.create()).pipe(Effect.flip)).toMatchObject({
+          _tag: "ImageGeneration.NotFoundError",
+        })
+      }).pipe(Effect.provide(app(dir, release)))
+    }),
 )

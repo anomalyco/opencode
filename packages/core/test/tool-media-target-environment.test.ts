@@ -37,7 +37,6 @@ const imageProvider = (requests: ImageRequest[]) =>
         const result: ImageResult = { images: [{ type: "image", data: PNG, mime: "image/png" }] }
         return Effect.sync(() => void requests.push(input)).pipe(Effect.as(result))
       },
-      checkImage: () => Effect.void,
       decisions: () => Effect.die("unused"),
       video: {
         start: () => Effect.die("unused"),
@@ -54,7 +53,6 @@ const videoProvider = (starts: Generate.VideoInput[]) =>
     Generate.Service.of({
       text: () => Effect.succeed(""),
       image: () => Effect.die("unused"),
-      checkImage: () => Effect.void,
       decisions: () => Effect.die("unused"),
       video: {
         start: (input) =>
