@@ -2666,6 +2666,7 @@ export type ConfigEntry =
           home_memory?: boolean
           project_overlay?: boolean
           sqlite_fts?: boolean
+          openai_compatible_discovery?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
