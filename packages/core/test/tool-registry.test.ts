@@ -625,20 +625,54 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("gives the program expression for a Code Mode tool's path or registry ID", () =>
+  it.effect("resolves top-level Code Mode calls to execute programs and aliases to their tool", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { echo: make(), "kebab-echo": make() }, { namespace: "acme.tools" })
       yield* transform(service, { direct: make() }, { codemode: false })
       const snapshot = yield* service.snapshot()
-      expect(snapshot.codeModeExpression?.("acme.tools.echo")).toBe("tools.acme.tools.echo")
-      expect(snapshot.codeModeExpression?.("acme_tools_echo")).toBe("tools.acme.tools.echo")
-      expect(snapshot.codeModeExpression?.("acme.tools.kebab-echo")).toBe('tools.acme.tools["kebab-echo"]')
-      for (const name of ["direct", "execute", "missing", "tools.acme.tools.echo"])
-        expect(snapshot.codeModeExpression?.(name)).toBeUndefined()
-      // A tool this request doesn't offer has no expression.
+      expect(snapshot.resolve?.("acme.tools.echo")).toEqual({ name: "execute", expression: "tools.acme.tools.echo" })
+      expect(snapshot.resolve?.("acme_tools_echo")).toEqual({ name: "execute", expression: "tools.acme.tools.echo" })
+      expect(snapshot.resolve?.("acme.tools.kebab-echo")).toEqual({
+        name: "execute",
+        expression: 'tools.acme.tools["kebab-echo"]',
+      })
+      for (const name of ["direct", "execute", "missing", "bash", "tools.acme.tools.echo"])
+        expect(snapshot.resolve?.(name)).toBeUndefined()
+      // A denied tool, or a request that doesn't advertise execute, resolves to nothing.
       const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
-      expect(denied.codeModeExpression?.("acme.tools.echo")).toBeUndefined()
+      expect(denied.resolve?.("acme.tools.echo")).toBeUndefined()
+      const definitions = new Map(snapshot.definitions.map((definition) => [definition.name, definition]))
+      definitions.delete("execute")
+      expect(snapshot.resolve?.("acme.tools.echo", definitions)).toBeUndefined()
+      // A session context rename of execute is what the program is recorded under.
+      const renamed = new Map(
+        snapshot.definitions.map((definition) => [
+          definition.name === "execute" ? "run_code" : definition.name,
+          definition,
+        ]),
+      )
+      expect(snapshot.resolve?.("acme.tools.echo", renamed)).toEqual({
+        name: "run_code",
+        expression: "tools.acme.tools.echo",
+      })
+
+      // bash means shell: as a direct tool, under its advertised name, or as a program when shell is in Code Mode.
+      yield* transform(service, { shell: make() }, { codemode: false })
+      const direct = yield* service.snapshot()
+      expect(direct.resolve?.("bash")).toEqual({ name: "shell" })
+      const shellRenamed = new Map(
+        direct.definitions.map((definition) => [
+          definition.name === "shell" ? "run_shell" : definition.name,
+          definition,
+        ]),
+      )
+      expect(direct.resolve?.("bash", shellRenamed)).toEqual({ name: "run_shell" })
+      expect(
+        (yield* service.snapshot([{ action: "shell", resource: "*", effect: "deny" }])).resolve?.("bash"),
+      ).toBeUndefined()
+      yield* transform(service, { shell: make() })
+      expect((yield* service.snapshot()).resolve?.("bash")).toEqual({ name: "execute", expression: "tools.shell" })
     }),
   )
 
