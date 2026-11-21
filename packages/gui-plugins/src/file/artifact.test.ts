@@ -27,6 +27,35 @@ describe("parseDelimited", () => {
     expect(parsed.columns).toBe(2)
   })
 
+  test.each([
+    ["LF", 'value\n""\nnonempty\n""\n', ","],
+    ["CRLF", 'value\r\n""\r\nnonempty\r\n""\r\n', ","],
+    ["EOF", 'value\n""\nnonempty\n""', ","],
+    ["TSV", 'value\n""\nnonempty\n""\n', "\t"],
+  ])("keeps quoted-empty records (%s)", (_, text, delimiter) => {
+    expect(parseDelimited(text, delimiter)).toEqual({
+      rows: [["value"], [""], ["nonempty"], [""]],
+      total: 4,
+      columns: 1,
+    })
+  })
+
+  test("skips physical blank lines without dropping quoted-empty records", () => {
+    expect(parseDelimited('value\n\n""\n\nnonempty\n\n', ",")).toEqual({
+      rows: [["value"], [""], ["nonempty"]],
+      total: 3,
+      columns: 1,
+    })
+  })
+
+  test("counts quoted-empty records past the row limit", () => {
+    expect(parseDelimited('value\n""\nnonempty\n""', ",", 2)).toEqual({
+      rows: [["value"], [""]],
+      total: 4,
+      columns: 1,
+    })
+  })
+
   test("counts rows past the limit without keeping them", () => {
     const parsed = parseDelimited("a\tb\n1\t2\n3\t4\n5\t6", "\t", 2)
     expect(parsed.rows).toHaveLength(2)

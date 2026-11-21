@@ -25,12 +25,14 @@ export function parseDelimited(text: string, delimiter: string, limit = 1000) {
   let row: string[] = []
   let field = ""
   let quoted = false
+  let rowQuoted = false
   let total = 0
 
   const endRow = () => {
     row.push(field)
     field = ""
-    const blank = row.length === 1 && row[0] === ""
+    const blank = row.length === 1 && row[0] === "" && !rowQuoted
+    rowQuoted = false
 
     if (!blank) {
       total++
@@ -62,6 +64,7 @@ export function parseDelimited(text: string, delimiter: string, limit = 1000) {
 
     if (char === '"' && field === "") {
       quoted = true
+      rowQuoted = true
       continue
     }
 
@@ -81,7 +84,7 @@ export function parseDelimited(text: string, delimiter: string, limit = 1000) {
     field += char
   }
 
-  if (field !== "" || row.length > 0) endRow()
+  if (field !== "" || row.length > 0 || rowQuoted) endRow()
   const columns = rows.reduce((max, current) => Math.max(max, current.length), 0)
 
   return { rows, total, columns }
