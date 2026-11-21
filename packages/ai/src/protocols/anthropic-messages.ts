@@ -1043,6 +1043,20 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
         }))
   const messages = yield* lowerMessages(flattened.request, breakpoints)
   yield* Cache.warnDropped(breakpoints, "Anthropic Messages", ANTHROPIC_BREAKPOINT_CAP)
+  // Read the markers from the finished body: a held system update goes out after the user turns that follow it.
+  // A tool added mid-conversation carries its marker on the definition inside the block.
+  Cache.orderLifetimes(
+    [
+      ...(tools ?? []).map((tool) => tool.cache_control),
+      ...(system ?? []).map((part) => part.cache_control),
+      ...messages.flatMap((message) =>
+        message.content.map((block) => {
+          if (block.type === "tool_addition") return block.tool.definition.cache_control
+          return "cache_control" in block ? block.cache_control : undefined
+        }),
+      ),
+    ].filter((marker) => marker !== undefined),
+  )
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
   const maxTokens = request.maxTokens ?? DEFAULT_MAX_TOKENS
