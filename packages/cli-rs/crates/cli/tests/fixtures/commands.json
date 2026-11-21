@@ -119,7 +119,7 @@
     "name": "machine",
     "aliases": [],
     "description": "Manage remote machines",
-    "globalFlags": [],
+    "globalFlags": ["standalone","server"],
     "arguments": [],
     "flags": [],
     "commands": [
