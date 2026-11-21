@@ -18,7 +18,12 @@ const defaults = {
 }
 
 /** `ttl` is how long the provider keeps a cache entry after the request that last sent it. */
-type Settings = typeof defaults & { interval: Duration.Duration; ttl: Duration.Duration }
+type Settings = typeof defaults & {
+  interval: Duration.Duration
+  ttl: Duration.Duration
+  model: string
+  reportsCacheRead: boolean
+}
 
 /** Whether a session is warmed after a request, and why not. */
 type Decision = Data.TaggedEnum<{
@@ -43,7 +48,9 @@ export const Plugin = define({
     // A model's or provider's `cache.warming` overrides the top-level `warming`.
     const decide = Effect.fn("WarmingPlugin.decide")(function* (event: SessionHooks["context"]) {
       // Warming must never fail the request it hooks, so an unreadable catalog falls back to the top-level setting.
-      const cache = (yield* resolveModel(ctx, event).pipe(Effect.orElseSucceed(() => undefined)))?.settings?.cache
+      const resolved = yield* resolveModel(ctx, event).pipe(Effect.orElseSucceed(() => undefined))
+      const cache = resolved?.settings?.cache
+      const reportsCacheRead = resolved?.cost.some((tier) => tier.cache.read > 0) ?? false
       const local = cache?.warming === undefined ? undefined : Option.getOrUndefined(decodeWarming(cache.warming))
       if (cache?.warming !== undefined && local === undefined)
         yield* Effect.logWarning("invalid cache.warming setting; using the top-level warming setting", {
@@ -76,7 +83,13 @@ export const Plugin = define({
       // Without a cache.ttl, an explicit interval longer than five minutes implies a cache that lasts at least that long.
       if (valid)
         return Decision.Warm({
-          settings: { ...settings, interval, ttl: ttl ?? Duration.max(fallbackTTL, interval) },
+          settings: {
+            ...settings,
+            interval,
+            ttl: ttl ?? Duration.max(fallbackTTL, interval),
+            model: modelKey(event.model),
+            reportsCacheRead,
+          },
         })
       return Decision.InvalidInterval({ interval, duration })
     })
@@ -89,6 +102,11 @@ export const Plugin = define({
     const running = new Map<Session.ID, Deferred.Deferred<void>>()
     // Sessions already told their cache outlives the window; the check runs on every request.
     const outlived = new Set<Session.ID>()
+    // Models observed reporting cached reads, distinguishing implicit-cache misses (cache.write === 0) from providers
+    // that never report cache usage.
+    const cacheReadModels = new Set<string>()
+    const sessionModels = new Map<Session.ID, string>()
+    const pingModels = new Map<Session.ID, { readonly model: string; readonly reportsCacheRead: boolean }>()
 
     // The interval counts from when the latest request or ping was sent, since that is when the cache's lifetime starts.
     const warm = Effect.fn("WarmingPlugin.warm")(function* (sessionID: Session.ID, settings: Settings, sent: number) {
@@ -109,6 +127,7 @@ export const Plugin = define({
         }
 
         sent = yield* Clock.currentTimeMillis
+        pingModels.delete(sessionID)
         yield* Effect.logInfo("warming session", { sessionID })
         const result = yield* ctx.session
           .generate({ sessionID, prompt: settings.prompt })
@@ -119,28 +138,49 @@ export const Plugin = define({
                 : Effect.logWarning("failed to warm session", { sessionID, cause }).pipe(Effect.as(undefined)),
             ),
           )
-        // A ping that wrote more than it read rebuilt the cache instead of keeping it, so later pings would keep
-        // paying for that. Providers that report no cache usage never count as a miss.
-        if (result && result.tokens.cache.read < result.tokens.cache.write)
-          return yield* Effect.logInfo("stopped warming session after a cache miss", {
-            sessionID,
-            read: result.tokens.cache.read,
-            write: result.tokens.cache.write,
-          })
+        const ping = pingModels.get(sessionID) ?? {
+          model: settings.model,
+          reportsCacheRead: settings.reportsCacheRead,
+        }
+        pingModels.delete(sessionID)
+        // Explicit caches signal a miss via cache.write > cache.read; implicit caches (Gemini, OpenAI, DeepSeek)
+        // never report cache.write, so stop when a cache-reporting model sends more uncached input than cache read.
+        if (result) {
+          const { input, cache } = result.tokens
+          if (cache.read > 0) cacheReadModels.add(ping.model)
+          const missed =
+            cache.read < cache.write ||
+            ((ping.reportsCacheRead || cacheReadModels.has(ping.model)) && cache.read < input)
+          if (missed)
+            return yield* Effect.logInfo("stopped warming session after a cache miss", {
+              sessionID,
+              input,
+              read: cache.read,
+              write: cache.write,
+            })
+        }
       }
     })
 
-    const hook = (tracked: boolean) => (event: SessionHooks["context"]) =>
+    const hook = (kind: "context" | "compaction" | "generate") => (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
         const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
         if (session.parentID) return
-        if (tracked && !running.has(event.sessionID)) running.set(event.sessionID, yield* Deferred.make<void>())
+        if (kind === "context") sessionModels.set(event.sessionID, modelKey(event.model))
+        if (kind !== "generate" && !running.has(event.sessionID))
+          running.set(event.sessionID, yield* Deferred.make<void>())
         const stop = FiberMap.remove(loops, event.sessionID)
         yield* Decision.$match(yield* decide(event), {
           Warm: ({ settings }) =>
             Effect.gen(function* () {
               // Our own ping runs these hooks too. Once generate exposes request metadata, tag it instead.
-              if (text(event) === settings.prompt) return
+              if (text(event) === settings.prompt) {
+                pingModels.set(event.sessionID, {
+                  model: settings.model,
+                  reportsCacheRead: settings.reportsCacheRead,
+                })
+                return
+              }
               outlived.delete(event.sessionID)
               if (!(yield* FiberMap.has(loops, event.sessionID)))
                 yield* Effect.logInfo("scheduled session warming", {
@@ -172,10 +212,10 @@ export const Plugin = define({
             }),
         })
       })
-    yield* ctx.session.hook("context", hook(true))
-    yield* ctx.session.hook("compaction", hook(true))
+    yield* ctx.session.hook("context", hook("context"))
+    yield* ctx.session.hook("compaction", hook("compaction"))
     // Generate requests report no end, so they don't count as running.
-    yield* ctx.session.hook("generate", hook(false))
+    yield* ctx.session.hook("generate", hook("generate"))
 
     // A turn always ends with an execution event and a compaction with its own, so a request that ends without its
     // own event can't stay running past them.
@@ -183,6 +223,7 @@ export const Plugin = define({
       .subscribe({
         types: [
           "session.step.streamed",
+          "session.step.ended",
           "session.step.failed",
           "session.compaction.ended",
           "session.compaction.failed",
@@ -196,11 +237,18 @@ export const Plugin = define({
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             const sessionID = event.data.sessionID
+            if (event.type === "session.step.ended") {
+              const key = sessionModels.get(sessionID)
+              if (key && event.data.tokens.cache.read > 0) cacheReadModels.add(key)
+              return
+            }
             const request = running.get(sessionID)
             running.delete(sessionID)
             if (request) yield* Deferred.succeed(request, undefined)
             if (event.type !== "session.deleted") return
             outlived.delete(sessionID)
+            sessionModels.delete(sessionID)
+            pingModels.delete(sessionID)
             yield* FiberMap.remove(loops, sessionID)
           }),
         ),
@@ -208,6 +256,10 @@ export const Plugin = define({
       )
   }),
 })
+
+function modelKey(model: SessionHooks["context"]["model"]) {
+  return `${model.providerID}/${model.id}`
+}
 
 function text(event: SessionHooks["context"]) {
   const message = event.messages.at(-1)
