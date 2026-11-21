@@ -20,7 +20,6 @@ export const requests = Effect.fnUntraced(function* <E>(
     readonly command: string
     readonly program: string
     readonly target: FileAccess.Target
-    readonly local: boolean
     readonly once?: boolean
     /** The agent's and session's rules, read only for a command the scanner can't analyze. */
     readonly rules: Effect.Effect<Permission.Ruleset, E>
@@ -28,7 +27,7 @@ export const requests = Effect.fnUntraced(function* <E>(
 ) {
   const scanned = yield* Effect.result(
     ShellParse.scan(input.command, input.program, input.target.absolute, {
-      home: input.local ? undefined : null,
+      home: input.target.machine === undefined ? undefined : null,
     }),
   )
   if (Result.isFailure(scanned)) {
