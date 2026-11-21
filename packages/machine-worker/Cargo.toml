@@ -1,0 +1,20 @@
+[package]
+name = "opencode-machine-worker"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+description = "Machine worker link handshake and framing for OpenCode"
+license = "MIT"
+repository = "https://github.com/anomalyco/opencode"
+
+[dependencies]
+base64 = "0.22"
+ed25519-dalek = "2.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# `snow 0.10.0` only imports `KeyInit`/`AeadInPlace` under `use-chacha20poly1305`, so an
+# AES-only build fails to compile without it. This links unused ChaChaPoly code, while
+# `default-features = false` still avoids `ring` and `blake2`; drop `use-chacha20poly1305`
+# once `snow` fixes the import.
+snow = { version = "0.10", default-features = false, features = ["use-aes-gcm", "use-chacha20poly1305", "use-sha2", "use-curve25519", "use-getrandom"] }
+zeroize = { version = "1.8", features = ["derive"] }
