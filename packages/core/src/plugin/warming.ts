@@ -133,7 +133,7 @@ export const Plugin = define({
     const hook = (tracked: boolean) => (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
         const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
-        if (session.parentID) return
+        if (session.parentID || session.time.archived) return
         if (tracked && !running.has(event.sessionID)) running.set(event.sessionID, yield* Deferred.make<void>())
         const stop = FiberMap.remove(loops, event.sessionID)
         yield* Decision.$match(yield* decide(event), {
@@ -189,6 +189,7 @@ export const Plugin = define({
           "session.execution.succeeded",
           "session.execution.failed",
           "session.execution.interrupted",
+          "session.archived",
           "session.deleted",
         ],
       })
@@ -196,6 +197,11 @@ export const Plugin = define({
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             const sessionID = event.data.sessionID
+            if (event.type === "session.archived") {
+              outlived.delete(sessionID)
+              yield* FiberMap.remove(loops, sessionID)
+              return
+            }
             const request = running.get(sessionID)
             running.delete(sessionID)
             if (request) yield* Deferred.succeed(request, undefined)
