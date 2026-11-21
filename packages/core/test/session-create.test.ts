@@ -39,6 +39,7 @@ import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { initGit } from "./fixture/git"
 import { countingSpawner } from "./fixture/spawn"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -94,6 +95,7 @@ const liveIt = testEffect(
       Bus.node.replace(Bus.configured({ persist: true })),
       SessionExecution.node.replace(SessionExecution.noopLayer),
       offlineModels,
+      disabledWatcher,
     ],
   ),
 )
@@ -196,6 +198,7 @@ describe("Session.create", () => {
             Bus.node.replace(Bus.configured({ persist: true })),
             SessionExecution.node.replace(SessionExecution.noopLayer),
             offlineModels,
+            disabledWatcher,
             counter.node,
           ],
         )

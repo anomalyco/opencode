@@ -50,6 +50,7 @@ import { fakeDaemon } from "./fixture/persistent-pty-daemon"
 import { tmpdir, tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { Expected } from "./lib/session-message"
@@ -172,6 +173,7 @@ const daemonReplacements = [
   Permission.node.replace(permission),
   Global.node.replace(tempGlobalLayer),
   offlineModels,
+  disabledWatcher,
 ] satisfies LayerNode.Replacements
 // Most suites spawn commands from the server, so CI starts no daemon for them; `parity` runs a subset on both.
 const replacements = [
@@ -226,6 +228,7 @@ const permissionIt = testEffect(
     PluginSupervisor.node.replace(shellPluginSupervisor),
     PersistentPty.node.replace(disabledPersistentPtyLayer),
     offlineModels,
+    disabledWatcher,
   ]).pipe(Layer.provide(noFlagOverrides)),
 )
 

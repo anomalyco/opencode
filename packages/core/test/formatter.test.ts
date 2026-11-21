@@ -17,13 +17,14 @@ import { Formatter } from "../src/formatter"
 import { Location } from "../src/location"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, Global.node]),
-    [Global.node.replace(tempGlobalLayer), offlineModels],
+    [Global.node.replace(tempGlobalLayer), offlineModels, disabledWatcher],
   ),
 )
 type ConfigInput = typeof Info.Encoded
