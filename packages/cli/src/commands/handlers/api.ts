@@ -59,30 +59,50 @@ export function resolveOperation(spec: OpenApi, operationID: string, params: Rec
   throw new Error(`Operation not found: ${operationID}`)
 }
 
-export function rawRequest(input: readonly string[]) {
+export function rawRequest(input: readonly string[], params: Record<string, string> = {}) {
   if (input.length !== 2 || !methods.has(input[0].toLowerCase()) || !input[1].startsWith("/")) return
-  return { method: input[0].toUpperCase(), path: input[1] }
+  return { method: input[0].toUpperCase(), path: interpolate(input[1], params) }
 }
 
-function resolveRequest(endpoint: Endpoint, input: readonly string[], params: Record<string, string>) {
-  const raw = rawRequest(input)
-  if (raw) return Effect.succeed(raw)
-  if (input.length !== 1) return Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
-  return Effect.tryPromise(async () => {
-    const response = await fetch(new URL("/openapi.json", endpoint.url), { headers: Service.headers(endpoint) })
-    if (!response.ok) throw new Error(`Failed to load OpenAPI document: HTTP ${response.status}`)
-    return resolveOperation((await response.json()) as OpenApi, input[0], params)
+export function resolveRequest(endpoint: Endpoint, input: readonly string[], params: Record<string, string>) {
+  return Effect.gen(function* () {
+    const raw = yield* Effect.try({
+      try: () => rawRequest(input, params),
+      catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+    })
+    if (raw) return raw
+    if (input.length !== 1)
+      return yield* Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
+    return yield* Effect.tryPromise(async () => {
+      const response = await fetch(new URL("/openapi.json", endpoint.url), { headers: Service.headers(endpoint) })
+      if (!response.ok) throw new Error(`Failed to load OpenAPI document: HTTP ${response.status}`)
+      return resolveOperation((await response.json()) as OpenApi, input[0], params)
+    })
   })
 }
 
 function interpolate(path: string, params: Record<string, string>) {
+  // Placeholders only live in the pathname: braces in an existing query string or fragment are literal.
+  const hashIndex = path.indexOf("#")
+  const hash = hashIndex === -1 ? "" : path.slice(hashIndex)
+  const target = hashIndex === -1 ? path : path.slice(0, hashIndex)
+  const queryIndex = target.indexOf("?")
+  const search = queryIndex === -1 ? "" : target.slice(queryIndex + 1)
+
   const used = new Set<string>()
-  const pathname = path.replaceAll(/\{([^}]+)\}/g, (_, name: string) => {
-    const value = params[name]
-    if (value === undefined) throw new Error(`Missing path parameter: ${name}`)
-    used.add(name)
-    return encodeURIComponent(value)
-  })
-  const query = new URLSearchParams(Object.entries(params).filter(([name]) => !used.has(name))).toString()
-  return query ? `${pathname}?${query}` : pathname
+  const pathname = (queryIndex === -1 ? target : target.slice(0, queryIndex)).replaceAll(
+    /\{([^}]+)\}/g,
+    (_, name: string) => {
+      if (!Object.hasOwn(params, name)) throw new Error(`Missing path parameter: ${name}`)
+      used.add(name)
+      return encodeURIComponent(params[name])
+    },
+  )
+
+  // Send the user's query string as written unless --param adds to it; an explicit --param wins over a duplicate key.
+  const extra = Object.entries(params).filter(([name]) => !used.has(name))
+  if (!extra.length) return `${pathname}${search ? `?${search}` : ""}${hash}`
+  const query = new URLSearchParams(search)
+  extra.forEach(([name, value]) => query.set(name, value))
+  return `${pathname}?${query}${hash}`
 }

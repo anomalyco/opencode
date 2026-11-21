@@ -143,7 +143,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           Flag.withDescription("Request header in name:value form"),
           Flag.atMost(100),
         ),
-        param: Flag.KeyValuePair("param").pipe(Flag.withDescription("OpenAPI path or query parameter"), Flag.optional),
+        param: Flag.KeyValuePair("param").pipe(Flag.withDescription("Path or query parameter"), Flag.optional),
       },
     }),
     Spec.make("debug", {
