@@ -25,7 +25,7 @@ this. Clients only; the server knows nothing about it.
   plus `down`/`up` with `button`. `widget.releasePointer()` (or dropping the root prop) gives it back. When capture is
   granted the program gets `{ id: "", type: "capture", value: true }`; when it ends for any reason,
   `{ id: "", type: "capture", value: false }`.
-- Without capture, pointer events are as before (absolute `x`, `y` on canvas/shader nodes with an `onPointer`
+- Without capture, pointer events are as before (absolute `x`, `y` on canvas nodes with an `onPointer`
   handler). On desktop and web they also include **hover moves**: `{ kind: "move", x, y, down: false, width, height }`
   while the pointer is over the node with no button held, at most once per frame. Touch devices have no hover. Both
   kinds go to the node's `onPointer`; capture changes go to `onCapture` / `widget.on("capture")`.

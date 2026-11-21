@@ -130,7 +130,8 @@ test("system events go only to widget.on hooks, control events only to handlers"
       widget.on("fullscreen", (on, close) => seen.push("fullscreen:" + on + ":" + (close && close.width)))
       const off = widget.on("key", (key) => seen.push("key:" + key.code + ":" + [...widget.keys].join("+")))
       widget.render(ui.column([
-        ui.shader("fn shade(p: vec2f) -> vec4f { return vec4f(1.0); }", {
+        ui.canvas({
+          wgsl: "fn shade(p: vec2f) -> vec4f { return vec4f(1.0); }",
           height: 10,
           onPointer: (p) => seen.push("pointer:" + JSON.stringify(p)),
         }),
@@ -140,7 +141,7 @@ test("system events go only to widget.on hooks, control events only to handlers"
     }
   `)
   await widget.when((current) => current.view !== undefined)
-  const shader = idOf(widget, "shader")
+  const shader = idOf(widget, "canvas")
   const button = idOf(widget, "button")
   widget.event({ id: button, type: "focus", value: true })
   widget.event({ id: "", type: "capture", value: true })
@@ -238,6 +239,11 @@ test("a program that throws, renders an invalid view, draws too much or fails in
   expect(
     await failure(`widget.render(ui.canvas({ key: "c", height: 1 })); widget.draw("c", [["rect"]])`),
   ).toMatchObject({ kind: "invalid" })
+  expect(
+    await failure(
+      `widget.render(ui.canvas({ key: "gpu", wgsl: "fn shade(p: vec2f) -> vec4f { return vec4f(1.0); }", height: 1 })); widget.draw("gpu", [])`,
+    ),
+  ).toMatchObject({ kind: "error", message: expect.stringContaining('Canvas "gpu" is drawn by its wgsl') })
   expect(await failure(`widget.draw("nope", [])`)).toMatchObject({
     kind: "error",
     message: expect.stringContaining('No canvas with key "nope"'),

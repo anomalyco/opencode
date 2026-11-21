@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test"
 import {
   builtins,
+  type Canvas,
   type Command,
   type Frame,
   NAME,
   type Node,
   type Pointer,
-  type Shader,
   program,
   validateData,
   WidgetSession,
@@ -371,18 +371,19 @@ test("chart data schema checks the kind and colors", () => {
   ])
 })
 
-test("backdrop: a shader per preset driven by the speed slider", async () => {
+test("backdrop: a GPU canvas per preset driven by the speed slider", async () => {
   const session = await start("backdrop", {
     title: "Launch",
     preset: "aurora",
     text: "We **shipped**.",
     accent: "#f0a",
   })
-  const shader = () => nodes(session.view).find((node): node is Shader => node.type === "shader")
+  const shader = () =>
+    nodes(session.view).find((node): node is Canvas => node.type === "canvas" && node.wgsl !== undefined)
   expect(shader()).toMatchObject({ height: 200, fps: 60, values: [1, 1, 0, 2 / 3] })
   expect(shader()).not.toHaveProperty("id")
   expect(shader()?.wgsl).toContain("fn shade(frag: vec2f) -> vec4f")
-  expect(nodes(session.view).map((node) => node.type)).toEqual(["column", "shader", "text", "markdown", "slider"])
+  expect(nodes(session.view).map((node) => node.type)).toEqual(["column", "canvas", "text", "markdown", "slider"])
   await changeOn(session, labeled("Speed"), 0.25)
   expect(shader()).toMatchObject({ fps: 60, values: [0.3, 1, 0, 2 / 3] })
   const paused = await changeOn(session, labeled("Speed"), 0)
@@ -391,7 +392,7 @@ test("backdrop: a shader per preset driven by the speed slider", async () => {
   const presets = await Promise.all(
     (["plasma", "aurora", "waves"] as const).map(async (preset) => {
       const view = (await start("backdrop", { title: "x", preset })).view
-      return find(view, (node) => node.type === "shader").map((node) => node.type === "shader" && node.wgsl)[0]
+      return find(view, (node) => node.type === "canvas").map((node) => node.type === "canvas" && node.wgsl)[0]
     }),
   )
   expect(new Set(presets).size).toBe(3)

@@ -17,13 +17,13 @@ const drawn = (body: string) =>
 
 const failure = (body: string) => drawn(body).catch((error: unknown) => error)
 
-test("canvas and shader builders build their nodes", async () => {
+test("the canvas builder builds 2D and GPU canvases", async () => {
   const output = await step(
     program(`
       function view() {
         return ui.column([
           ui.canvas({ key: "c", height: 120, width: 300, fps: 30, duration: 0.6, alt: "A chart" }),
-          ui.shader("fn shade(frag: vec2f) -> vec4f { return vec4f(1.0); }", { height: 80, values: [1, 2], poster: "p.png", alt: "Glow" }),
+          ui.canvas({ wgsl: "fn shade(frag: vec2f) -> vec4f { return vec4f(1.0); }", height: 80, values: [1, 2], poster: "p.png", alt: "Glow" }),
           ui.canvas({ height: 40, type: "image" }),
         ])
       }
@@ -35,7 +35,7 @@ test("canvas and shader builders build their nodes", async () => {
     children: [
       { type: "canvas", id: "0/:c", height: 120, width: 300, fps: 30, duration: 0.6, alt: "A chart" },
       {
-        type: "shader",
+        type: "canvas",
         wgsl: "fn shade(frag: vec2f) -> vec4f { return vec4f(1.0); }",
         height: 80,
         values: [1, 2],
@@ -47,17 +47,26 @@ test("canvas and shader builders build their nodes", async () => {
   })
 })
 
-test("canvas and shader nodes are validated", async () => {
+test("canvas nodes are validated", async () => {
   const invalid = (node: string) =>
     step(program(`function view() { return ${node} }`), { phase: "init", data: null }).catch((error: unknown) => error)
   expect(await invalid(`ui.canvas({})`)).toMatchObject({ kind: "invalid" })
   expect(await invalid(`ui.canvas({ height: 10, fps: 120 })`)).toMatchObject({ kind: "invalid" })
-  expect(await invalid(`ui.shader("x", { height: 10, values: Array(17).fill(0) })`)).toMatchObject({ kind: "invalid" })
-  expect(await invalid(`ui.shader("é".repeat(8193), { height: 10 })`)).toMatchObject({
+  expect(await invalid(`ui.canvas({ wgsl: "x", height: 10, values: Array(17).fill(0) })`)).toMatchObject({
+    kind: "invalid",
+  })
+  expect(await invalid(`ui.canvas({ wgsl: "é".repeat(8193), height: 10 })`)).toMatchObject({
     kind: "invalid",
     message: expect.stringContaining("16 KB"),
   })
-  expect(await invalid(`ui.shader("x".repeat(16384), { height: 10 })`)).toMatchObject({ view: { type: "shader" } })
+  expect(await invalid(`ui.canvas({ wgsl: "x".repeat(16384), height: 10 })`)).toMatchObject({
+    view: { type: "canvas" },
+  })
+  // A canvas draws with commands or with WGSL, never both: `values` belong to a GPU canvas.
+  expect(await invalid(`ui.canvas({ height: 10, values: [1] })`)).toMatchObject({
+    kind: "invalid",
+    message: expect.stringContaining("`values` need `wgsl`"),
+  })
 })
 
 test("the draw builder emits the spec's compact commands", async () => {

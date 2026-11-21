@@ -8,11 +8,11 @@ The `widget` tool shows an interactive surface inline in the conversation, rende
 
 - **Choices, forms, confirmations**: cards with images, text inputs, sliders, checkboxes, selects, buttons.
 - **Data pictures**: charts and 17 diagram types (built in), or your own **canvas** drawing (2D commands).
-- **GPU shaders**: a WGSL fragment shader for animated, generative or 3D (raymarched) visuals.
+- **GPU canvases**: a canvas drawn by a WGSL fragment shader for animated, generative or 3D (raymarched) visuals.
 - **Live programs**: an `async main` running while the widget is open, with timers, frames, pointer input and HTTPS
   fetch: games, timers, simulations, animations, self-refreshing dashboards.
 - **Full screen**: `fullscreen: true` on the root node lets clients offer a full-screen button (games, big visuals);
-  `fill: true` on a canvas or shader grows it to the screen's height. The close button then covers the top-right
+  `fill: true` on a canvas grows it to the screen's height. The close button then covers the top-right
   corner: keep content out of the area in `close` (`onFullscreen`'s third argument; `frame.close` on a canvas).
 
 Decide in this order:
@@ -20,8 +20,8 @@ Decide in this order:
 1. A **built-in** fits (table below)? Use it with data; nothing to write.
 2. It changes only when the user acts? Write a **step** widget template (cheaper, works everywhere, the terminal included).
 3. Something happens on its own (time, frames, polling)? Write a **live** widget template (`mode: "live"`).
-4. Inside either: plain nodes for UI and text, `canvas` for exact 2D shapes and pointer input, `shader` for
-   full-surface GPU effects (it can't draw text; put text in nodes beside it).
+4. Inside either: plain nodes for UI and text, a `canvas` for exact 2D shapes and pointer input, or a `canvas` with
+   `wgsl` for full-surface GPU effects (it can't draw text; put text in nodes beside it).
 
 Not for one free-text question, a passing yes/no or an explanation (use `question` for text-only choices).
 
@@ -91,7 +91,7 @@ pointer, dark }` · `await widget.sleep(ms)` · `widget.now()` (pauses don't cou
 "fullscreen" | "capture" | "resumed", fn)` → unsubscribe · `widget.keys` (held codes) · `widget.pointer` ·
 `await widget.fetch(url, init)` · `widget.submit(v)` / `dismiss()` / `send(v, { wake })` ·
 `widget.capturePointer()` / `releasePointer()`. After `main` returns, the view's handlers keep running. Ask for frames
-only while something moves; render only when the view (or a shader's `values`) changes.
+only while something moves; render only when the view (or a canvas's `values`) changes.
 
 ```js
 async function main(data) {
@@ -107,16 +107,16 @@ async function main(data) {
 · `carousel({ index, onChange }, children)` · `card({ selected, onPress }, children)` · `button(label, { variant,
 disabled, onPress })` · `checkbox(label, checked, { onChange })` · `slider({ label, value, min, max, step, onChange })`
 · `select(options, { value, multiple, onChange })` · `input(value, { placeholder, multiline, onChange })` · `divider()`
-· `canvas({ height, width, fps, duration, alt, fill, key, onPointer })` · `shader(wgsl, { height, values, fps, alt,
-poster, fill, onPointer })`. Pointers are `{ kind: down|move|up, x, y, width, height }`, or `{ kind, dx, dy, button }`
-under capture (`widget.capturePointer()` or root `capture: "pointer"`; Esc always releases it; not on mobile).
+· `canvas({ height, width, fps, duration, alt, poster, fill, key, onPointer, wgsl, values })`: drawn by `draw` with 2D
+commands, or with `wgsl` by that shader (never both). Pointers are `{ kind: down|move|up, x, y, width, height }`, or
+`{ kind, dx, dy, button }` under capture (`widget.capturePointer()` or root `capture: "pointer"`; Esc always releases it; not on mobile).
 
 **Draw** (`const g = ui.draw()`, chainable): `save restore translate rotate scale alpha rect rrect circle line path
 text(x, y, s, { size, weight, align, color, mono }) image`; paint is a color, a theme name (`text muted accent bg
 surface border success warning error`) or `{ fill | stroke, width, gradient }`. Lay out from `frame.width`; ≤ 2,000
 commands per draw.
 
-**Shader.** `wgsl` defines `fn shade(frag: vec2f) -> vec4f` (physical pixels, origin top left; premultiplied sRGB).
+**GPU canvas.** `wgsl` defines `fn shade(frag: vec2f) -> vec4f` (physical pixels, origin top left; premultiplied sRGB).
 The client provides `widget: { resolution, time, scale, pointer: (x, y, down, 0), values: array<vec4f, 4> }` (don't
 redeclare it). Pass state as `values` (≤ 16 numbers); a view that changes only `values` just updates the uniforms, so a
 live program can re-render every frame (3D games: physics in `main`, a raymarched scene, ≤ 64 march steps). ≤ 16 KB.
@@ -126,4 +126,4 @@ only; the local network is blocked; ≤ 4 in flight and 10 a second; 15 s; 2 MB.
 while open; otherwise fetch the data yourself and pass it in `data`.
 
 **Limits.** A step must finish in 250 ms; a live program must `await` at least every 50 ms; ≤ 240 posts a second;
-pausing (out of view) freezes timers and frames. Always set `alt` on canvas and shader nodes: the terminal shows it.
+pausing (out of view) freezes timers and frames. Always set `alt` on canvases: the terminal shows it.

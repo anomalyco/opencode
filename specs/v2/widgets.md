@@ -19,8 +19,8 @@ This document is the contract between the server, the shared TypeScript runtime 
 | TUI renderer | `packages/tui` | tui |
 | Rune desktop renderer (Rust PsychoScript) | `anomalyco/rune-desktop` (`crates/opencode-widget` runner, `crates/opencode-widget-view` renderer) | rune |
 | Mobile runner bindings (UniFFI: step, draw, WGSL translation via naga) | `anomalyco/rune-desktop` `crates/opencode-widget-ffi` | ffi |
-| iOS renderer (SwiftUI, Metal for `shader`) | `anomalyco/opencode-ios` | ios |
-| Android renderer (Jetpack Compose, GLES 3 for `shader`) | `anomalyco/opencode-android` | android |
+| iOS renderer (SwiftUI, Metal for GPU canvases) | `anomalyco/opencode-ios` | ios |
+| Android renderer (Jetpack Compose, GLES 3 for GPU canvases) | `anomalyco/opencode-android` | android |
 
 Clients in scope: TUI, Rune desktop, native iOS and Android. Web/Electron is out. Mobile apps run no JavaScript: they
 run programs with the Rust PsychoScript through `opencode-widget-ffi` and render natively.
@@ -93,7 +93,7 @@ The prelude is canonical JavaScript in `packages/widget/src/prelude.js`. It defi
   `image(src, props?)`, `button(label, props?)`, `checkbox(label, checked, props?)`, `slider(props)` (`props` holds
   `value`, `min`, `max`), `select(options, props?)` (options may be strings), `input(value, props?)`, `divider()`.
   `children` may nest arrays and contain `null`/`undefined`/`false`, which are dropped (`cond && ui.text(...)`).
-  Also `canvas(props)`, `shader(wgsl, props)` and `draw()`, the draw command builder (see Canvas). Authors never set
+  Also `canvas(props)` (with `wgsl` in `props` for a GPU canvas) and `draw()`, the draw command builder (see Canvas). Authors never set
   `id`; any `node.key` (string or number) names a node among its siblings.
 - `submit(value)` and `dismiss()`: final, the widget closes; the state stays. `submit(undefined)` submits `null`.
 - `send(value, { wake = true, state })`: a non-final message to the agent; the widget stays open and can send again,
@@ -107,7 +107,7 @@ path: the root is `0` (or `:key`), a child appends `/` and its index among its p
 the second item of a nested array at index 2; a `null`/`false` hole keeps its index) or `:key` when it has a `key`
 (URI-encoded; a repeated key gets `~2`, `~3`, ...). So `0/:alice/1` is the second child of the sibling keyed `alice`.
 `button`, `checkbox`, `slider`, `select` and `input` always get an id; `card` and `carousel` get one with a handler;
-`canvas` and `shader` with `onPointer` or a `key`. The same node keeps its id from one view to the next as long as its
+`canvas` with `onPointer` or a `key`. The same node keeps its id from one view to the next as long as its
 path does, which keys make true for lists that change shape. The prelude keeps an id → handler table for the view.
 
 **Steps.** `init` runs `init(data)` (`undefined` gives `{}`) and `view`. `event` routes `input.event`:
@@ -179,7 +179,7 @@ handlers and never see them. The value a client sends, and what the handler gets
 | `select` | `change`, `value: string` or `string[]` when `multiple` | `onChange(state, value)`, only known option values |
 | `input` | `change`, `value: string` (on commit / blur / debounce >= 300 ms) | `onChange(state, text)` |
 | `carousel` | `change`, `value: number` (new page index) | `onChange(state, index)` |
-| `canvas`, `shader` | `pointer`, `value: { kind, x, y, width, height }` in the node's logical pixels; `move` only while down, at most once per frame (see Canvas) | `onPointer(state, p)`; under pointer capture `p` is `{ kind, dx, dy, button }` |
+| `canvas` | `pointer`, `value: { kind, x, y, width, height }` in the node's logical pixels; `move` only while down, at most once per frame (see Canvas) | `onPointer(state, p)`; under pointer capture `p` is `{ kind, dx, dy, button }` |
 | none (`id: ""`) | `key`, `focus`, `fullscreen`, `capture` | the hooks (Widget template source) |
 
 In live mode the same props take closures that get only the value (`onPress()`, `onChange(value)`,
@@ -209,12 +209,11 @@ type Node =
       value?: string | string[]; multiple?: boolean }
   | { type: "input"; id: string; label?: string; value: string; placeholder?: string; multiline?: boolean }
   | { type: "divider" }
-  | { type: "canvas"; id?: string; height: number; width?: number; fps?: number; duration?: number; alt?: string }
-  | { type: "shader"; id?: string; height: number; width?: number; wgsl: string; values?: number[]; fps?: number;
-      alt?: string; poster?: string }
+  | { type: "canvas"; id?: string; height: number; width?: number; fps?: number; duration?: number; alt?: string;
+      poster?: string; wgsl?: string; values?: number[] }   // values only with wgsl
 ```
 
-`canvas` and `shader` take the full available width unless `width` is set; sizes are logical pixels.
+A `canvas` takes the full available width unless `width` is set; sizes are logical pixels.
 
 Gap units are client-relative (TUI: rows/cols; GUI: 4/8/12 px).
 
@@ -227,7 +226,18 @@ page indicator. A carousel without `id` pages locally; with one (it has an `onCh
 
 ## Canvas
 
-A `canvas` node is drawn by the widget template's optional `draw(state, data, frame)` function, which returns draw commands.
+A `canvas` node is a drawing surface, like an HTML canvas with either a 2D or a GPU context. It is drawn one of two
+ways, never both:
+
+- **2D** (no `wgsl`): by the widget template's optional `draw(state, data, frame)` function, which returns draw
+  commands (below).
+- **GPU** (`wgsl` set): by that WGSL fragment shader, fed the canvas's `values` (see GPU canvases). `draw` is never
+  called for it, and live `widget.draw` refuses it.
+
+Everything else is the same for both: size and `width`, `fps` and `duration`, `alt` and `poster` (an image src shown
+where the canvas can't be drawn: the TUI, a shader that fails to compile), `fill` and full screen, `onPointer` and
+pointer capture, `close`, and ids and keys. `fps` defaults to 0 for a 2D canvas and 60 for a GPU one.
+
 `draw` is pure: it can't change state. Animate with `frame.t`; keep anything that must persist in state via handlers.
 
 Draw step input / output (same `__widget_step` entry point):
@@ -248,7 +258,7 @@ type Frame = {
 type DrawOutput = { commands: Command[] }
 ```
 
-Clients call it once when the canvas appears or state changes, then every frame while `fps > 0` (default 0, max 60;
+Clients call it once when the canvas appears or state changes, then every frame while `fps > 0` (max 60;
 clients may lower it, e.g. off screen, in low-power mode, or in the TUI). With `duration` (seconds), a canvas animates
 only until it has drawn a frame with `t >= duration` and then draws again only on state changes (for intro
 animations: `{ fps: 60, duration: 0.6 }`); `t` keeps counting from when the canvas appeared, across view updates. Budget: 8 ms per draw step and 2,000 commands
@@ -287,9 +297,10 @@ TypeScript runtime rejects a draw output that breaks these shapes or exceeds 2,0
 State works as in the Canvas 2D API: `alpha` sets the opacity (clamped to 0–1) for the commands after it, replacing
 the current value rather than multiplying it, and `save`/`restore` save and restore the transform and opacity.
 
-## Shader
+## GPU canvases
 
-A `shader` node runs a WGSL fragment shader on the GPU, free-running at `fps` (default 60). The node's `wgsl` must define
+A canvas with `wgsl` runs that WGSL fragment shader on the GPU, free-running at `fps` (default 60). Its `wgsl` must
+define
 
 ```wgsl
 fn shade(frag: vec2f) -> vec4f   // frag: pixel position, origin top-left; returns premultiplied RGBA
@@ -305,17 +316,17 @@ struct Widget { resolution: vec2f, time: f32, scale: f32, pointer: vec4f, values
 ```
 
 `frag`, `widget.resolution` and `widget.pointer` are in physical pixels (logical × `widget.scale`), `widget.time` in
-seconds since the shader appeared. Colors are sRGB-encoded: clients write them to the surface without a linear-to-sRGB
-conversion. With `fps: 0` the shader renders once, and again when its `values` change.
+seconds since the canvas appeared. Colors are sRGB-encoded: clients write them to the surface without a linear-to-sRGB
+conversion. With `fps: 0` it renders once, and again when its `values` change.
 `widget.pointer` is `(x, y, down, 0)`; `widget.values` carries the node's `values` (up to 16 floats, row-major, zero
 padded), which the widget template sets from state in `view`. Rune passes WGSL to wgpu as is; iOS gets MSL and Android GLSL
 ES 3.00 translated with naga (`opencode-widget-ffi`). Source is capped at 16 KB. A shader that fails to compile shows
 `poster` (an image src) or `alt` with the error inline; one that takes over 50 ms per frame three frames in a row stops
-and shows its last frame. The TUI shows `poster`/`alt` for `shader` and `alt` for `canvas`.
+and shows its last frame. The TUI shows `alt` and `poster` for every canvas.
 
-A `shader` node with an `id` (it has an `onPointer`) sends `pointer` events like a canvas (see Events). When a new view changes only a shader's
-`values` (same `wgsl`, same place in the tree), clients update its uniforms in place: no recompile, no rebuilt view, no
-restart of `widget.time`. Live programs drive shader games that way, re-rendering with new `values` every frame.
+When a new view changes only a GPU canvas's `values` (same `wgsl`, same place in the tree), clients update its uniforms
+in place: no recompile, no rebuilt view, no restart of `widget.time`. Live programs drive shader games that way,
+re-rendering with new `values` every frame.
 
 ## Failures
 
@@ -592,7 +603,7 @@ It animates in over 0.65 s (`fps: 60, duration: 0.65`), then draws only on state
 down. Pressing or dragging shows the value under the pointer (a tooltip and a caption under the chart); the selection
 stays after release, and a tap outside the plot clears it.
 
-`backdrop` — a `shader` demo: `data: { title: string; preset: "plasma" | "aurora" | "waves"; text?: string /* markdown */;
+`backdrop` — a GPU canvas demo: `data: { title: string; preset: "plasma" | "aurora" | "waves"; text?: string /* markdown */;
 accent?: string /* #rgb | #rrggbb */ }`, submits nothing. The banner is followed by the title, the text and a speed
 slider (0–2, 0 pauses with `fps: 0`); `values` is `[speed, accent r, g, b]`.
 

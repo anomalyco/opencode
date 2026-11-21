@@ -136,7 +136,8 @@ function init(data) {
 
 function view(state, data) {
   return ui.column({ gap: 2, align: "stretch" }, [
-    ui.shader(PRESETS[data.preset], {
+    ui.canvas({
+      wgsl: PRESETS[data.preset],
       height: 200,
       values: [state.speed, ...rgb(data.accent ?? ACCENTS[data.preset])],
       fps: state.speed > 0 ? 60 : 0,

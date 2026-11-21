@@ -228,7 +228,7 @@ test("a submitted widget shows its response summary", async () => {
   expect(done).toContain("name: Spring update · rollout: 50")
 })
 
-test("a canvas shows its alt text and a shader its alt text", async () => {
+test("2D and GPU canvases show their alt text", async () => {
   using chart = await render("chart")
   const drawn = await frame(chart, (current) => current.includes("Weekly signups"))
   expect(drawn).toContain("◈ Bar chart. Organic: W1 4.2k")

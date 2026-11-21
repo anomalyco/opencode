@@ -7,9 +7,9 @@ import { WidgetLint } from "../src/lint.js"
 // A complete shader game (a raymarched tunnel runner), run on the reference live host the way a client would run it.
 const source = await Bun.file(new URL("./fixtures/tunnel-runner.js", import.meta.url)).text()
 
-const shader = (node: Node | undefined): Extract<Node, { type: "shader" }> | undefined => {
+const shader = (node: Node | undefined): Extract<Node, { type: "canvas" }> | undefined => {
   if (!node) return
-  if (node.type === "shader") return node
+  if (node.type === "canvas" && node.wgsl !== undefined) return node
   return "children" in node ? node.children.map(shader).find((found) => found !== undefined) : undefined
 }
 const texts = (node: Node | undefined): string[] =>

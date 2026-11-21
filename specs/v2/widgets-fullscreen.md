@@ -10,7 +10,7 @@ unknown props are ignored by the server and the TUI):
 
 - `true`: offer full screen.
 - `false`: never.
-- absent: offer it for live widgets and whenever the current view contains a `canvas` or `shader` node.
+- absent: offer it for live widgets and whenever the current view contains a `canvas` node.
 
 The button is a small expand icon in the widget's top-right corner: shown on hover and keyboard focus on desktop,
 always visible on touch devices. It is not offered for submitted or dismissed widgets.
@@ -37,7 +37,7 @@ widget holds keyboard focus or pointer capture (closing releases both). A widget
 
 The root node fills the safe area minus the full-screen **padding**, the same on every side: 12 pt on iOS, 12 dp on
 Android, 16 logical px on Rune desktop and 16 CSS px on the web host. Nothing is full-bleed: canvases sit inside the
-padding too, and the padding shows the widget's background. In full screen every `canvas` and `shader` grows by default to share the remaining
+padding too, and the padding shows the widget's background. In full screen every `canvas` grows by default to share the remaining
 height equally (its `height` is the minimum); `fill: false` keeps it at its `height`. Width is the available width as
 usual. Content taller than the screen scrolls. Inline (not full screen), sizes are unchanged.
 
@@ -71,6 +71,6 @@ sits at the trailing (left) edge and `x = 8 - P`. The TUI has no full screen.
   a hook it changes nothing.
 - `Frame` (canvas `draw` and live `widget.frame()`) gains `fullscreen: boolean` and `close: Rect | null`: the close
   button's area in that canvas's coordinates when it overlaps the canvas, otherwise (or not in full screen) `null`.
-  An absolute `pointer` event value from that canvas or a `shader` carries the same `close` (absent when `null`), so
+  An absolute `pointer` event value from that canvas carries the same `close` (absent when `null`), so
   hit tests can use the layout the drawing used. `width`/`height` change with full screen.
 - The view is re-rendered on enter and exit, and on window/screen resize (`width`/`height` change in the next frame).

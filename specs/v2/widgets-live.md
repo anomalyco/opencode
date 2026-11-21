@@ -65,12 +65,12 @@ timer or a fetch). A handler that throws, or an async one that rejects, fails th
 `main` returns, the widget stays open while its view has handlers or hooks are registered; the run ends when none are
 left (`return`) or the program submits or dismisses.
 
-## Shaders
+## GPU canvases
 
-A live program animates a `shader` by calling `widget.render` with the same view and new `values` (up to 16 floats)
-once per frame; clients must apply that as a uniform update without recompiling the shader or rebuilding the view (see
-`widgets.md`, Shader). A `shader` with `onPointer` gets `pointer` events like a canvas, so a tap on a full-screen shader can
-drive a game.
+A live program animates a GPU canvas (`wgsl`) by calling `widget.render` with the same view and new `values` (up to 16
+floats) once per frame; clients must apply that as a uniform update without recompiling the shader or rebuilding the
+view (see `widgets.md`, GPU canvases). With `onPointer` it gets `pointer` events like any canvas, so a tap on a
+full-screen GPU canvas can drive a game.
 
 ## Client ↔ program messages
 

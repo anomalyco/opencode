@@ -58,7 +58,8 @@ async function main(data) {
     widget.render(
       ui.column({ gap: 1, fullscreen: true }, [
         ui.row({ gap: 2 }, [ui.text(data.title ?? "Tunnel runner", { style: "title" }), ui.text("Score " + run.score)]),
-        ui.shader(WGSL, {
+        ui.canvas({
+          wgsl: WGSL,
           height: 280,
           fill: true,
           values: [run.y, run.distance, run.next - run.distance, run.score, run.alive ? 1 : 0],

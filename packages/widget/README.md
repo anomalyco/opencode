@@ -105,12 +105,12 @@ and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
 Event `id`s come from the nodes, where the prelude put them (widget templates attach handlers and never see ids): `button`
 and `card` (with `id`) send `press`; `checkbox` (`boolean`), `slider` (`number`, on release), `select` (`string`, or
 `string[]` when `multiple`), `input` (`string`, on commit or after 300 ms) and `carousel` (with `id`, new page index)
-send `change`. `canvas` and `shader` (with `id`) send `pointer` with `{ kind: "down" | "move" | "up", x, y, width,
+send `change`. `canvas` (with `id`) sends `pointer` with `{ kind: "down" | "move" | "up", x, y, width,
 height }`. Keyboard, focus, full-screen and capture events (`specs/v2/widgets-input.md`) carry `id: ""`. The prelude
 routes each event to the right handler or hook and drops the rest, so a client may send any event without harm.
 
-`canvas` and `shader` nodes need a GPU-backed renderer; where you can't draw (a terminal), show `alt` (and a
-`shader`'s `poster`). A `canvas` with `duration` animates until it has drawn a frame with `t >= duration`.
+`canvas` nodes need a GPU-backed renderer (a 2D context for `draw` commands, a GPU one for `wgsl`); where you can't
+draw (a terminal), show `alt` and `poster`. A `canvas` with `duration` animates until it has drawn a frame with `t >= duration`.
 
 The `backdrop` shaders are checked with naga (`naga backdrop.wgsl out.metal`, and
 `naga --shader-stage frag --entry-point widget_main --profile es300 backdrop.wgsl out.frag`) after wrapping them in

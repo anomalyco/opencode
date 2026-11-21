@@ -1,4 +1,4 @@
-// A shader whose speed follows a slider: state drives `values`.
+// A GPU canvas whose speed follows a slider: state drives `values`.
 const WGSL = `
 fn shade(frag: vec2f) -> vec4f {
   let uv = frag / widget.resolution;
@@ -11,7 +11,7 @@ function init() {
 }
 function view(state) {
   return ui.column({ gap: 1 }, [
-    ui.shader(WGSL, { height: 160, values: [state.speed], alt: "Shifting colors" }),
+    ui.canvas({ wgsl: WGSL, height: 160, values: [state.speed], alt: "Shifting colors" }),
     ui.slider({
       label: "Speed",
       value: state.speed,

@@ -41,6 +41,12 @@ test("reports shape problems with their positions, without running anything", ()
   ])
 })
 
+test("ui.shader is reported with what replaces it", () => {
+  expect(WidgetLint.lint('function view() { return ui.shader("x", { height: 1 }) }', "step")).toEqual([
+    { message: "`ui.shader` is gone: a GPU canvas is `ui.canvas({ wgsl, values, height, ... })`", line: 1, column: 26 },
+  ])
+})
+
 test("the removed event API is reported with what replaces it", () => {
   const source = [
     "async function main() {",

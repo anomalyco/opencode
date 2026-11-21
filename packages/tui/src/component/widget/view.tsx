@@ -323,7 +323,7 @@ function NodeView(props: { item: Item }): JSX.Element {
       <Match when={node().type === "divider"}>
         <DividerNode />
       </Match>
-      <Match when={node().type === "canvas" || node().type === "shader"}>
+      <Match when={node().type === "canvas"}>
         <SurfaceNode item={props.item} />
       </Match>
     </Switch>
@@ -410,18 +410,15 @@ function ImageNode(props: { item: Item }) {
   )
 }
 
-// The terminal draws neither canvases nor shaders: it shows their alt text, and a shader's poster source like an image.
+// The terminal draws no canvases, 2D or GPU: it shows their alt text, and a poster's source like an image.
 function SurfaceNode(props: { item: Item }) {
   const theme = useTheme()
-  const node = () => props.item.node as Extract<Node, { type: "canvas" | "shader" }>
-  const poster = () => {
-    const current = node()
-    return current.type === "shader" ? current.poster : undefined
-  }
+  const node = () => props.item.node as Extract<Node, { type: "canvas" }>
+  const poster = () => node().poster
   return (
     <box flexDirection="column" flexShrink={0}>
       <text fg={theme.text.base} wrapMode="word">
-        ◈ {node().alt || (node().type === "canvas" ? "Canvas" : "Shader")}
+        ◈ {node().alt || "Canvas"}
       </text>
       <Show when={poster()}>
         {(value) => (

@@ -92,33 +92,27 @@ export interface Input {
 export interface Divider {
   readonly type: "divider"
 }
-/** Drawn by the widget template's `draw(state, data, frame)`; sends `pointer` events when it has an `id` (prelude-assigned). */
+/**
+ * A drawing surface, drawn one of two ways, never both: with 2D commands from the widget template's
+ * `draw(state, data, frame)`, or, when it has `wgsl`, by that WGSL fragment shader on the GPU (see the spec's Canvas
+ * section). Sends `pointer` events when it has an `id` (prelude-assigned).
+ */
 export interface Canvas {
   readonly type: "canvas"
   readonly id?: string
   /** Logical pixels; the canvas takes the full available width unless `width` is set. */
   readonly height: number
   readonly width?: number
-  /** Frames per second while animating: 0 (default) draws only when it appears or the state changes; max 60. */
+  /** Frames per second while animating, max 60: default 0 (draw on appearing and state changes), 60 with `wgsl`. */
   readonly fps?: number
   /** Seconds after the canvas appears to animate at `fps`, ending with a frame at `t >= duration`; default forever. */
   readonly duration?: number
   readonly alt?: string
-}
-/** A WGSL fragment shader defining `fn shade(frag: vec2f) -> vec4f` (see the spec's Shader section). */
-export interface Shader {
-  readonly type: "shader"
-  readonly id?: string
-  readonly height: number
-  readonly width?: number
-  /** At most 16 KB of UTF-8. */
-  readonly wgsl: string
-  /** Up to 16 floats, available to the shader as `widget.values` (4 vec4f, row-major, zero padded). */
+  /** A GPU canvas: WGSL defining `fn shade(frag: vec2f) -> vec4f`, at most 16 KB of UTF-8. `draw` isn't called. */
+  readonly wgsl?: string
+  /** With `wgsl`: up to 16 floats, available as `widget.values` (4 vec4f, row-major, zero padded). */
   readonly values?: ReadonlyArray<number>
-  /** Default 60, max 60. */
-  readonly fps?: number
-  readonly alt?: string
-  /** An image src shown where the shader can't run. */
+  /** An image src shown where the canvas can't be drawn (a terminal, a shader that fails to compile). */
   readonly poster?: string
 }
 
@@ -137,7 +131,6 @@ export type Node =
   | Input
   | Divider
   | Canvas
-  | Shader
 
 /** A rectangle in a node's logical pixels. */
 export interface Rect {
@@ -147,7 +140,7 @@ export interface Rect {
   readonly height: number
 }
 
-/** Pointer input on a canvas or shader with an `id`: `move` only while down, at most once per frame. */
+/** Pointer input on a canvas with an `id`: `move` only while down, at most once per frame. */
 export interface Pointer {
   readonly kind: "down" | "move" | "up"
   readonly x: number
@@ -278,7 +271,7 @@ export interface StepOutput {
   readonly warnings?: ReadonlyArray<string>
 }
 
-/** The most a shader's `wgsl` may hold, in UTF-8 bytes. */
+/** The most a canvas's `wgsl` may hold, in UTF-8 bytes. */
 export const WGSL_BYTES = 16 * 1024
 /** The most commands one draw step may return. */
 export const MAX_COMMANDS = 2000
@@ -376,20 +369,19 @@ export const Node: Schema.Codec<Node> = Schema.Union([
     fps: optional(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 60 }))),
     duration: optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
     alt: optional(Schema.String),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("shader"),
-    id: optional(Schema.String),
-    height: Schema.Finite.check(Schema.isGreaterThan(0)),
-    width: optional(Schema.Finite.check(Schema.isGreaterThan(0))),
-    wgsl: Schema.String.check(
-      Schema.makeFilter((wgsl: string) => Buffer.byteLength(wgsl) <= WGSL_BYTES || `must be at most 16 KB of WGSL`),
+    wgsl: optional(
+      Schema.String.check(
+        Schema.makeFilter((wgsl: string) => Buffer.byteLength(wgsl) <= WGSL_BYTES || `must be at most 16 KB of WGSL`),
+      ),
     ),
     values: optional(Schema.Array(Schema.Finite).check(Schema.isMaxLength(16))),
-    fps: optional(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 60 }))),
-    alt: optional(Schema.String),
     poster: optional(Schema.String),
-  }),
+  }).check(
+    Schema.makeFilter(
+      (canvas: { readonly wgsl?: string; readonly values?: ReadonlyArray<number> }) =>
+        canvas.values === undefined || canvas.wgsl !== undefined || "`values` need `wgsl`",
+    ),
+  ),
 ])
 
 export const types: ReadonlyArray<Node["type"]> = [
@@ -407,7 +399,6 @@ export const types: ReadonlyArray<Node["type"]> = [
   "input",
   "divider",
   "canvas",
-  "shader",
 ]
 
 export const StepOutput = Schema.Struct({

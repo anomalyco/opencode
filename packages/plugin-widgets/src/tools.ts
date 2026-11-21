@@ -7,7 +7,7 @@ import { Schema } from "effect"
 export const name = "widget"
 export const widgetTemplateName = "widget_template"
 
-export const description = `Show the user an interactive widget inline in the conversation: choices with images, forms, confirmations, charts and diagrams, canvas drawings, GPU shaders, or live programs such as games and timers. The answer arrives as your next message.
+export const description = `Show the user an interactive widget inline in the conversation: choices with images, forms, confirmations, charts and diagrams, canvas drawings (2D or GPU shaders), or live programs such as games and timers. The answer arrives as your next message.
 
 Built-ins (schemas via widget_template "list"): suggestions, form, confirm, chart, backdrop, and diagrams (pie, scatter, histogram, area, heatmap, treemap, sankey, graph, tree, timeline, funnel, radar, gauge, boxplot, flowchart, sequence, table). Load the "widgets" skill before writing your own widget template.
 
@@ -23,10 +23,10 @@ export const widgetTemplateDescription = `List, read, save and edit widget templ
 - "edit": name and edits [{ oldText, newText }] applied to the latest source (each oldText must match exactly once), optionally description, data and example (required when data changes); saves a new version. Prefer it over resending the whole source. To start from a built-in or another widget template, add from: "<widget template>" and a new name.
 - Edit or save over an existing widget template only when the user asks or you created it in this session; otherwise copy it with from under a new name.
 
-Load the "widgets" skill for handlers, the step ABI, the live API, nodes, drawing and shaders.`
+Load the "widgets" skill for handlers, the step ABI, the live API, nodes and canvases (2D drawing and WGSL).`
 
 export const skillDescription =
-  "Use when showing the user an interactive widget with the widget tool or writing a widget template: what widgets can do (choices, forms, charts and diagrams, canvas, GPU shaders, live programs and games, full screen), the built-ins, and the widget template contracts."
+  "Use when showing the user an interactive widget with the widget tool or writing a widget template: what widgets can do (choices, forms, charts and diagrams, canvas (2D or GPU), live programs and games, full screen), the built-ins, and the widget template contracts."
 
 export const Input = Schema.Struct({
   widgetTemplate: Schema.String.annotate({

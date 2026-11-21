@@ -39,19 +39,21 @@ const RUNS = new Set([
   "UpdateExpression",
 ])
 const DEFERRED = new Set(["FunctionExpression", "ArrowFunctionExpression"])
-// Parts of the event API that handlers replaced, with what to use instead.
+// Removed parts of the widget API (keyed by `object.property` for members), with what to use instead.
 const GONE: Record<string, string> = {
   update:
     "`update(state, event)` is gone: attach handlers to nodes (`onPress`, `onChange`, `onPointer`) and define `onKey`/`onFocus`/`onFullscreen`/`onCapture` for other events",
-  event:
+  "widget.event":
     "`widget.event()` is gone: attach handlers to nodes, or `widget.on(...)` for keys, focus, full screen and capture",
-  next: "`widget.next()` is gone: await `widget.frame()` or `widget.sleep(ms)`; input arrives through handlers",
+  "widget.next":
+    "`widget.next()` is gone: await `widget.frame()` or `widget.sleep(ms)`; input arrives through handlers",
+  "ui.shader": "`ui.shader` is gone: a GPU canvas is `ui.canvas({ wgsl, values, height, ... })`",
 }
 
 /**
  * Parses (never runs) a widget template's source and checks its shape: the entry functions its mode needs, only function and
  * `const` declarations at the top level so nothing runs when the program loads, no redeclared prelude names, no use of
- * the removed event API (`update`, `widget.event`, `widget.next`), and the size cap. Returns every issue found, in
+ * the removed API (`update`, `widget.event`, `widget.next`, `ui.shader`), and the size cap. Returns every issue found, in
  * source order.
  */
 export function lint(source: string, mode: Widget.Mode): Issue[] {
@@ -143,18 +145,16 @@ function runs(node: Node): Node | undefined {
   }
 }
 
-// Every `widget.event` and `widget.next` anywhere in the program.
+// Every use of a removed member (`widget.event`, `widget.next`, `ui.shader`) anywhere in the program.
 function removed(root: Node) {
   const found: Array<{ node: Node; name: string }> = []
   const visit = (node: Node) => {
     const member = node as Node & { object?: Node & { name?: string }; property?: Node & { name?: string } }
-    if (
-      node.type === "MemberExpression" &&
-      member.object?.type === "Identifier" &&
-      member.object.name === "widget" &&
-      (member.property?.name === "event" || member.property?.name === "next")
-    )
-      found.push({ node, name: member.property.name })
+    const name =
+      node.type === "MemberExpression" && member.object?.type === "Identifier"
+        ? `${member.object.name}.${member.property?.name}`
+        : undefined
+    if (name !== undefined && GONE[name] !== undefined) found.push({ node, name })
     for (const [key, value] of Object.entries(node)) {
       if (key === "loc") continue
       for (const child of Array.isArray(value) ? value : [value])

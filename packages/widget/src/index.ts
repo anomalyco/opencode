@@ -28,7 +28,6 @@ export {
   type Segment,
   type Select,
   type SelectOption,
-  type Shader,
   type Slider,
   type StepInput,
   StepOutput,
