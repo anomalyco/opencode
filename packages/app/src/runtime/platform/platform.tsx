@@ -57,6 +57,9 @@ type PlatformBase = {
   /** Send a system notification */
   notify(title: string, description?: string, onClick?: () => void): Promise<void>
 
+  /** Draw the user to a window in the background, as a flashing taskbar button on Windows (desktop only) */
+  requestAttention?(): Promise<void>
+
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?<Value>(
     opts: OpenAttachmentPickerOptions,
