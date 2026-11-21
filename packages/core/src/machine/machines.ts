@@ -86,8 +86,11 @@ export interface InviteOptions {
 export interface Interface {
   /** Makes the machine known for good, returning its validated ID. Its live state is whatever its next connection reports. */
   readonly add: (name: string) => Effect.Effect<Environment.ID, InvalidName | AlreadyExists>
-  /** Forgets the machine and ends it, failing what waits on it as `NotFound` and its processes at once. */
-  readonly remove: (id: Environment.ID) => Effect.Effect<void>
+  /**
+   * Forgets the machine and ends it, failing what waits on it as `NotFound` and its processes at once. False when there
+   * was no such machine.
+   */
+  readonly remove: (id: Environment.ID) => Effect.Effect<boolean>
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
   /** The machine's environment, connected or not: calls on an offline machine fail with `NotSent`. */
   readonly get: (id: Environment.ID) => Effect.Effect<Environment.Interface, NotFound>
@@ -170,15 +173,16 @@ const layer = Layer.effect(
         return id
       }),
       remove: Effect.fn("Machines.remove")(function* (id) {
-        yield* locks.withLock(id)(
+        return yield* locks.withLock(id)(
           Effect.gen(function* () {
             const machine = instances.get(id)
-            if (!machine) return
+            if (!machine) return false
             yield* db.delete(MachineTable).where(eq(MachineTable.id, id)).run().pipe(Effect.orDie)
             invitations.delete(id)
             keys.delete(id)
             instances.delete(id)
             machine.close(new NotFound({ machine: id }))
+            return true
           }).pipe(Effect.uninterruptible),
         )
       }),

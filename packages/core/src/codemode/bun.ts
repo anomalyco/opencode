@@ -375,7 +375,7 @@ const glob = (host: Host, given: string, cwd: string, dot: boolean) =>
     yield* host.permission.assert({
       action: "read",
       resources: [target.resource],
-      save: ["*"],
+      save: [FileAccess.always(target)],
       metadata: { root: cwd },
       ...Permission.invocation(host.context),
     })

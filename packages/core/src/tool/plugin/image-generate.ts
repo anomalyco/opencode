@@ -285,7 +285,7 @@ export const Plugin = {
                 yield* permission.assert({
                   action: "edit",
                   resources: [target.resource],
-                  save: ["*"],
+                  save: [FileAccess.always(target)],
                   ...Permission.invocation(context),
                 })
               }
@@ -330,7 +330,9 @@ export const Plugin = {
                     resources: [actual.resource],
                     ...Permission.invocation(context),
                   }
-                  yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
+                  yield* replaces
+                    ? permission.assert({ ...request, save: [FileAccess.always(actual)] })
+                    : permission.assertNotDenied(request)
                 }
                 yield* files.write(file, bytes)
                 return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`

@@ -137,10 +137,18 @@ it.live("adds, invites, lists, protects paired machines, and removes machines", 
     expect(replaced.join).not.toBe(second.join)
     expect(Option.isSome(Join.decode(replaced.join))).toBe(true)
 
-    // Removing deletes the machine; removing an unknown name matches Machines.remove (204 no-op).
+    // Removing deletes the machine; removing it again, or any unknown name, is 404 MachineNotFoundError.
     yield* Effect.promise(() => server.api.experimental.machine.remove({ name: "gpu" }))
     expect(yield* Effect.promise(() => server.api.experimental.machine.list())).toEqual([])
-    yield* Effect.promise(() => server.api.experimental.machine.remove({ name: "unknown" }))
+    for (const name of ["gpu", "unknown"]) {
+      const missing = yield* Effect.promise(() =>
+        server.api.experimental.machine.remove({ name }).then(
+          () => undefined,
+          (error) => error,
+        ),
+      )
+      expect(missing).toMatchObject({ _tag: "MachineNotFoundError", machine: name })
+    }
   }),
 )
 

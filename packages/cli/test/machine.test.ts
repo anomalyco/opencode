@@ -93,5 +93,8 @@ describe("machine output formatting", () => {
     const conflict = formatMachineError({ _tag: "ConflictError", resource: "gpu", message: "paired" }, "gpu")
     expect(conflict).toContain("--replace")
     expect(conflict).toContain("stops being able to connect")
+    expect(formatMachineError({ _tag: "MachineNotFoundError", machine: "x", message: "missing" }, "x")).toBe(
+      'No machine named "x".',
+    )
   })
 })

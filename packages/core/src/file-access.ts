@@ -50,6 +50,8 @@ export interface Target {
   readonly externalDirectory?: ExternalDirectoryAuthorization
   /** Where the target lives. Tools act on the target through this, not through a captured Environment. */
   readonly environment: Environment.Interface
+  /** The machine the file is on, when it is not on this server. */
+  readonly machine?: Environment.ID
 }
 
 export function externalDirectoryRequest(targets: readonly Target[]) {
@@ -71,6 +73,9 @@ export function externalDirectoryRequest(targets: readonly Target[]) {
  */
 export const key = (target: { readonly absolute: string; readonly environment: { readonly id: Environment.ID } }) =>
   `${target.environment.id.length}:${target.environment.id}:${target.absolute}`
+
+/** The rule "always" saves for a file action: every file on the target's machine, which only that machine's rules allow. */
+export const always = (target: Target) => (target.machine ? `${target.machine}:*` : "*")
 
 export type Invocation = Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id">
 
@@ -226,6 +231,7 @@ const layer = Layer.effect(
           save: `${prefix}${path.posix.join(directory, "*")}`,
         },
         environment: machineEnvironment,
+        machine: place.environment.id,
       } satisfies Target
     })
 
@@ -268,7 +274,7 @@ const layer = Layer.effect(
       yield* permission.assert({
         action: "read",
         resources: [target.resource],
-        save: ["*"],
+        save: [always(target)],
         ...Permission.invocation(context),
       })
       return target

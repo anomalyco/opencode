@@ -14034,6 +14034,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "MachineNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Forget a machine by name, closing any live link and revoking its key. Behind the machines flag. Experimental: may change without compatibility guarantees.",

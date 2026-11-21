@@ -30,6 +30,8 @@ const fs = { type: Schema.Literal("fs"), req: Schema.Number }
  */
 export const Hello = Schema.Struct({
   type: Schema.Literal("hello"),
+  /** The version of the messages after the handshake: a home that does not know a worker's version ends the connection. */
+  protocol: Schema.Literal(1),
   os: Schema.String,
   arch: Schema.String,
   /** The worker's home directory, an absolute POSIX path: where `~` in a path on this machine starts. */

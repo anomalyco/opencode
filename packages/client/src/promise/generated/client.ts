@@ -1804,7 +1804,7 @@ export function make(options: ClientOptions) {
               method: "DELETE",
               path: `/api/experimental/machine/${encodeURIComponent(input.name)}`,
               successStatus: 204,
-              declaredStatuses: [400, 401, 403],
+              declaredStatuses: [400, 401, 403, 404],
               empty: true,
             },
             requestOptions,
