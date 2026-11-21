@@ -1,8 +1,10 @@
+import { isStoreFile } from "./legacy"
+
 export function hasExistingAppState(entries: Array<{ name: string; directory: boolean }>) {
   return entries.some((entry) => {
     if (entry.name === "opencode.settings") return true
 
-    if (entry.name.endsWith(".dat")) return true
+    if (isStoreFile(entry.name)) return true
 
     if (entry.name === "drafts.sqlite") return true
 
