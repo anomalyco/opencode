@@ -8,6 +8,7 @@ import type { Server, ServerResponse } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
+import { IntegrationConnection } from "../../integration/connection.js"
 // import { IntegrationConnection } from "../../integration/connection.js"
 import { Model } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
@@ -228,20 +229,19 @@ export const ChatGPTPlugin = define({
     const credentials = yield* Credential.Service
     const loading = Semaphore.makeUnsafe(1)
     let chatgpt: Credential.OAuth | undefined
-    // let available: ReadonlyArray<RemoteModel> | undefined
+    let available: ReadonlyArray<RemoteModel> | undefined
     let source: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
 
     const load = Effect.fn("ChatGPTPlugin.load")(function* () {
-      // const previous = IntegrationConnection.key(source)
+      const previous = IntegrationConnection.key(source)
       const { connection, credential } = yield* storedCredential(ctx, integrationID)
       chatgpt = credential?.type === "oauth" && credential.methodID === methodID ? credential : undefined
-      const previous = source
       source = chatgpt ? connection : undefined
-      // if (previous !== IntegrationConnection.key(source)) {
-      //   const metadata = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))
-      //   const stored = metadata ? yield* ctx.storage.get(modelCacheKey(metadata.clientID)) : undefined
-      //   available = Option.getOrUndefined(decodeCachedModels(stored))
-      // }
+      if (previous !== IntegrationConnection.key(source)) {
+        const metadata = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))
+        const stored = metadata ? yield* ctx.storage.get(modelCacheKey(metadata.clientID)) : undefined
+        available = Option.getOrUndefined(decodeCachedModels(stored))
+      }
       return !Equal.equals(previous, source)
     })
 
@@ -312,12 +312,19 @@ export const ChatGPTPlugin = define({
       })
       const updated = providers.get(providerID)
       if (!updated) return
+      // The models the sign-in serves are the catalog models the account's own
+      // list names, plus the ones the list omits but the catalog and the pinned
+      // fallback both know work. The account's list only ever adds: OpenAI's
+      // /models omits models and marks models hidden that the sign-in still
+      // serves, so a model it leaves out is not a model to take away.
+      const reported = available?.map((model) => model.slug)
+      const catalog = Array.from(item.models.values())
+      const supported = catalog.filter(
+        (model) => fallbackModels.has(model.id) || reported?.includes(model.modelID),
+      )
       providers.add({
         info: updated.provider,
-        // models: available
-        //   ? deriveModels(available, Array.from(item.models.values()))
-        //   : Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
-        models: Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
+        models: available ? deriveModels(available, supported) : supported,
         sourceConnection: source,
       })
     })
@@ -332,51 +339,59 @@ export const ChatGPTPlugin = define({
             draft.enabled = false
             return
           }
-          // if (available && !available.some((remote) => remote.slug === (draft.modelID ?? draft.id))) {
-          //   draft.enabled = false
-          //   return
-          // }
           draft.cost = []
         })
       }
     })
-    // const refreshModels = Effect.fn("ChatGPTPlugin.refreshModels")(function* () {
-    //   const connection = source
-    //   const credential =
-    //     connection?.type === "credential"
-    //       ? (yield* credentials.get(Credential.ID.make(connection.id)))?.value
-    //       : undefined
-    //   if (credential?.type !== "oauth" || credential.methodID !== methodID || credential.expires <= Date.now() + 60_000)
-    //     return
-    //   const metadata = Option.getOrUndefined(decodeMetadata(credential.metadata))
-    //   if (!metadata) return
-    //   const models = yield* fetchModels(credential.access, ctx.app).pipe(
-    //     Effect.timeout(15_000),
-    //     Effect.catch(() => Effect.logWarning("failed to refresh ChatGPT models").pipe(Effect.as(undefined))),
-    //   )
-    //   if (!models) return
-    //   yield* loading.withPermit(
-    //     Effect.gen(function* () {
-    //       if (
-    //         IntegrationConnection.key(connection) !== IntegrationConnection.key(source) ||
-    //         IntegrationConnection.key(connection) !==
-    //           IntegrationConnection.key(yield* ctx.integration.connection.active(integrationID))
-    //       )
-    //         return
-    //       if (JSON.stringify(models) === JSON.stringify(available)) return
-    //       yield* ctx.storage.set(modelCacheKey(metadata.clientID), models)
-    //       available = models
-    //       yield* ctx.provider.reload()
-    //     }),
-    //   )
-    // })
-    // .pipe(Effect.andThen(refreshModels().pipe(Effect.forkScoped, Effect.asVoid)))
+    const refreshModels = Effect.fn("ChatGPTPlugin.refreshModels")(function* () {
+      const connection = source
+      const credential =
+        connection?.type === "credential"
+          ? (yield* credentials.get(Credential.ID.make(connection.id)))?.value
+          : undefined
+      if (credential?.type !== "oauth" || credential.methodID !== methodID || credential.expires <= Date.now() + 60_000)
+        return
+      const metadata = Option.getOrUndefined(decodeMetadata(credential.metadata))
+      if (!metadata) return
+      const models = yield* fetchModels(credential.access, ctx.app).pipe(
+        Effect.timeout(15_000),
+        Effect.catch(() => Effect.logWarning("failed to refresh ChatGPT models").pipe(Effect.as(undefined))),
+      )
+      if (!models) return
+      yield* loading.withPermit(
+        Effect.gen(function* () {
+          if (
+            IntegrationConnection.key(connection) !== IntegrationConnection.key(source) ||
+            IntegrationConnection.key(connection) !==
+              IntegrationConnection.key(yield* ctx.integration.connection.active(integrationID))
+          )
+            return
+          if (JSON.stringify(models) === JSON.stringify(available)) return
+          yield* ctx.storage.set(modelCacheKey(metadata.clientID), models)
+          available = models
+          yield* ctx.provider.reload()
+        }),
+      )
+    })
     yield* ProviderRefresh.onSwitch(
       integrationID,
-      loading.withPermit(ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload())),
+      Effect.gen(function* () {
+        const changed = yield* loading.withPermit(
+          Effect.gen(function* () {
+            const changed = yield* load()
+            if (changed) yield* ctx.provider.reload()
+            return changed
+          }),
+        )
+        // The account's own model list is fetched once a sign-in is in place,
+        // outside the permit the fetch takes of its own.
+        if (changed) yield* refreshModels().pipe(Effect.forkScoped)
+      }),
     )
-    // yield* refreshModels().pipe(Effect.forkScoped)
-    // yield* Effect.sleep(Duration.minutes(15)).pipe(Effect.andThen(refreshModels), Effect.forever, Effect.forkScoped)
+    // A first fetch for an account that was already signed in when opencode
+    // started. A fetch that fails leaves the pinned fallback in place, so a
+    // broken /models never empties the picker.
+    yield* refreshModels().pipe(Effect.forkScoped)
   }),
 } satisfies PluginInternal.InternalPlugin)
 
@@ -461,13 +476,22 @@ export function fetchModels(token: string, app: App.Info, baseURL = resource) {
   })
 }
 
+/**
+ * The provider's models, from the account's own list and the catalog's.
+ *
+ * The account's list is additive: a model it names is added, and a model it
+ * leaves out is kept. OpenAI's /models omits models and marks models hidden
+ * that the ChatGPT sign-in still serves, so a model missing from that list is
+ * not a model to take away -- dropping those is what hid working models and
+ * why the sync was switched off.
+ */
 export function deriveModels(remote: ReadonlyArray<RemoteModel>, existing: ReadonlyArray<Model.Info>) {
   const byID = new Map(remote.map((model) => [model.slug, model]))
   const known = new Set(existing.map((model) => model.id))
   return [
-    ...existing.flatMap((model) => {
+    ...existing.map((model) => {
       const found = byID.get(model.modelID)
-      return found ? [deriveModel(found, model)] : []
+      return found ? deriveModel(found, model) : model
     }),
     ...remote
       .filter((model) => !known.has(Model.ID.make(model.slug)))
