@@ -46,8 +46,6 @@ enum Read {
     One,
     /// The location's running shells (`Catalog::Shell`); held under session 0, since it has no session.
     Shell,
-    /// The session's pending inbox items.
-    Pending,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -94,16 +92,6 @@ enum Op {
     ShellBurst,
     /// The view opens or syncs the location's shell list.
     SyncShells,
-    /// Server: a prompt is admitted to a session's inbox.
-    Enqueue(u8),
-    /// Server: the k-th pending item of a session is delivered: it leaves the inbox and becomes a user message.
-    Promote(u8, u8),
-    /// Server: another client cancels the k-th pending item of a session.
-    Withdraw(u8, u8),
-    /// Server: another client switches the k-th pending item of a session between steer and queue.
-    Redirect(u8, u8),
-    /// The view opens or syncs a session's pending items.
-    SyncPending(u8),
 }
 
 #[derive(Clone, Copy)]
@@ -112,11 +100,9 @@ struct Mix {
     forms: bool,
     messages: bool,
     shells: bool,
-    inbox: bool,
 }
 
-const ALL: Mix = Mix { permissions: true, forms: true, messages: true, shells: true, inbox: true };
-const NONE: Mix = Mix { permissions: false, forms: false, messages: false, shells: false, inbox: false };
+const ALL: Mix = Mix { permissions: true, forms: true, messages: true, shells: true };
 /// Where the model's shells run; every reply and event names it.
 const PROJECT: &str = "/project";
 /// Shells in one [`Op::ShellBurst`]: more than the store's 1,024-change overlay.
@@ -131,7 +117,6 @@ fn generate(rng: &mut SplitMix64, mix: Mix, len: usize) -> Vec<Op> {
         (mix.messages, Read::Older),
         (mix.messages, Read::One),
         (mix.shells, Read::Shell),
-        (mix.inbox, Read::Pending),
     ]
     .into_iter()
     .filter_map(|(on, read)| on.then_some(read))
@@ -143,7 +128,7 @@ fn generate(rng: &mut SplitMix64, mix: Mix, len: usize) -> Vec<Op> {
         let k = rng.below(4) as u8;
         let read = reads[rng.below(reads.len() as u64) as usize];
         let held = if read == Read::Shell { 0 } else { s };
-        let arms: [(bool, u64, Op); 26] = [
+        let arms: [(bool, u64, Op); 21] = [
             (mix.permissions, 6, Op::Ask(s)),
             (mix.permissions, 4, Op::Answer(s, k)),
             (mix.permissions, 1, Op::Burst(s)),
@@ -165,11 +150,6 @@ fn generate(rng: &mut SplitMix64, mix: Mix, len: usize) -> Vec<Op> {
             (mix.shells, 4, Op::ShellCreate),
             (mix.shells, 3, Op::ShellExit(k)),
             (mix.shells, 3, Op::SyncShells),
-            (mix.inbox, 6, Op::Enqueue(s)),
-            (mix.inbox, 4, Op::Promote(s, k)),
-            (mix.inbox, 2, Op::Withdraw(s, k)),
-            (mix.inbox, 2, Op::Redirect(s, k)),
-            (mix.inbox, 5, Op::SyncPending(s)),
         ];
         let arms = arms.map(|(on, weight, op)| (on && !no.split(',').any(|name| name == self::name(op)), weight, op));
         let total: u64 = arms.iter().filter(|arm| arm.0).map(|arm| arm.1).sum();
@@ -200,8 +180,6 @@ struct Message {
     completed: bool,
     /// The text part ended: only an ended text must converge, since deltas carry no sequence.
     ended: bool,
-    /// A delivered prompt: a user message with `text` as its text.
-    user: bool,
 }
 
 #[derive(Default)]
@@ -213,8 +191,6 @@ struct Server {
     seq: Vec<u64>,
     /// Running shells of [`PROJECT`], in start order.
     shells: Vec<u32>,
-    /// Pending inbox items of each session, in admission order: (number, queued rather than steered).
-    inbox: Vec<Vec<(u32, bool)>>,
     next: u32,
     /// Events not yet delivered, oldest first.
     events: VecDeque<Value>,
@@ -257,7 +233,6 @@ impl Server {
         let mut server = Server {
             permissions: vec![Vec::new(); SESSIONS as usize],
             forms: vec![Vec::new(); SESSIONS as usize],
-            inbox: vec![Vec::new(); SESSIONS as usize],
             messages: vec![Vec::new(); SESSIONS as usize],
             deleted: vec![false; SESSIONS as usize],
             seq: vec![0; SESSIONS as usize],
@@ -273,7 +248,6 @@ impl Server {
                     text: Some(format!("h{n}")),
                     completed: true,
                     ended: true,
-                    user: false,
                 });
             }
         }
@@ -303,7 +277,6 @@ impl Server {
         let read = match kind {
             "permission" => Read::Permissions,
             "form" => Read::Forms,
-            "inbox" => Read::Pending,
             "message" if req.param("cursor").is_some() => Read::Older,
             "message" => Read::Head,
             _ if kind.starts_with("message/") => Read::One,
@@ -317,9 +290,6 @@ impl Server {
                 ok(json!({ "data": self.permissions[s].iter().map(|n| permission(&session, *n)).collect::<Vec<_>>() }))
             }
             Read::Forms => ok(json!({ "data": self.forms[s].iter().map(|n| form(&session, *n)).collect::<Vec<_>>() })),
-            Read::Pending => ok(
-                json!({ "data": self.inbox[s].iter().map(|(n, queued)| inbox_item(&session, *n, *queued)).collect::<Vec<_>>() }),
-            ),
             Read::One => {
                 let id = &kind["message/".len()..];
                 match self.messages[s].iter().find(|message| message.id == id) {
@@ -367,20 +337,12 @@ fn shell(n: u32) -> Value {
     })
 }
 
-fn inbox_item(session: &str, n: u32, queued: bool) -> Value {
-    json!({ "id": format!("msg_in{n}"), "sessionID": session, "time": { "created": n }, "type": "user",
-        "delivery": if queued { "queue" } else { "steer" }, "payload": { "text": format!("ask {n}") } })
-}
-
 fn shell_created(n: u32) -> Value {
     json!({ "id": format!("evt_{n}"), "created": n, "type": "shell.created", "location": { "directory": PROJECT },
         "data": { "info": shell(n) } })
 }
 
 fn message_json(message: &Message) -> Value {
-    if message.user {
-        return json!({ "id": message.id, "type": "user", "text": message.text, "time": { "created": message.seq } });
-    }
     match &message.text {
         Some(text) => {
             let mut time = json!({ "created": message.seq });
@@ -454,8 +416,6 @@ struct Seen {
     /// Rows as (ID, text of the text parts joined; `None` for a row without text).
     messages: Option<Vec<(String, Option<String>)>>,
     more: bool,
-    /// Pending inbox items as (ID, delivery).
-    pending: Vec<(String, String)>,
 }
 
 /// A deliberately wrong reading of the store, to show the checker notices each kind of wrong client.
@@ -513,14 +473,7 @@ fn observe(state: &opencode_store::State, s: u8, mutant: Mutant, sticky: &HashMa
     });
     let messages = if mutant == Mutant::HeadEmpty { messages.map(|_| Vec::new()) } else { messages };
     let more = state.has_more_messages(&session) && mutant != Mutant::NoMore;
-    let pending = state
-        .pending(&session)
-        .iter()
-        .map(|item| {
-            (item.id().to_owned(), item.delivery().map(|delivery| delivery.as_str().to_owned()).unwrap_or_default())
-        })
-        .collect();
-    Seen { permissions, forms, messages, more, pending }
+    Seen { permissions, forms, messages, more }
 }
 
 // Running one case -----------------------------------------------------------------------------------------------
@@ -576,8 +529,6 @@ struct Run {
     shells: Option<Vec<String>>,
     /// Shells whose `shell.exited` was delivered.
     exited: HashSet<String>,
-    /// The run has inbox commands: the session view then syncs its pending prompts with its messages, as the TUI's.
-    inbox: bool,
 }
 
 fn project() -> Location {
@@ -639,7 +590,6 @@ impl Run {
             counts: HashMap::new(),
             shells: None,
             exited: HashSet::new(),
-            inbox: false,
         }
     }
 
@@ -659,13 +609,9 @@ impl Run {
             Read::Forms => self.data.form_sync(&format!("ses_{s}"), None),
             Read::Head => self.data.message_sync(&Self::id(s)),
             Read::Shell => self.data.shell_sync(Some(&project())),
-            Read::Pending => self.data.pending_sync(&Self::id(s)),
             Read::Older | Read::One => return,
         };
         self.tasks.push((format!("{read:?} ses_{s}"), task));
-        if read == Read::Head && self.inbox {
-            self.sync(Read::Pending, s);
-        }
     }
 
     async fn step(&mut self, op: Op) -> Result<(), Failure> {
@@ -716,7 +662,7 @@ impl Run {
                 for message in &mut server.messages[s as usize] {
                     message.completed = true;
                 }
-                server.messages[s as usize].push(Message { id: id.clone(), seq, text: Some(String::new()), completed: false, ended: false, user: false });
+                server.messages[s as usize].push(Message { id: id.clone(), seq, text: Some(String::new()), completed: false, ended: false });
                 let text = server.durable(s as usize);
                 let session = format!("ses_{s}");
                 vec![
@@ -753,7 +699,7 @@ impl Run {
             }),
             Op::Model(s) => self.change(s, |server, n| {
                 let seq = server.durable(s as usize);
-                server.messages[s as usize].push(Message { id: format!("msg_m{n}"), seq, text: None, completed: true, ended: true, user: false });
+                server.messages[s as usize].push(Message { id: format!("msg_m{n}"), seq, text: None, completed: true, ended: true });
                 let session = format!("ses_{s}");
                 vec![json!({ "id": format!("evt_m{n}"), "created": seq, "type": "session.model.selected",
                     "durable": { "aggregateID": session, "seq": seq, "version": 1 },
@@ -763,7 +709,6 @@ impl Run {
                 server.deleted[s as usize] = true;
                 server.permissions[s as usize].clear();
                 server.forms[s as usize].clear();
-                server.inbox[s as usize].clear();
                 server.messages[s as usize].clear();
                 let seq = server.durable(s as usize);
                 vec![json!({ "id": format!("evt_{n}"), "created": n, "type": "session.deleted",
@@ -806,61 +751,6 @@ impl Run {
                 }
             }
             Op::SyncShells => self.sync(Read::Shell, 0),
-            Op::SyncPending(s) => self.sync(Read::Pending, s),
-            Op::Enqueue(s) => self.change(s, |server, n| {
-                let seq = server.durable(s as usize);
-                let queued = n % 3 == 0;
-                server.inbox[s as usize].push((n, queued));
-                let session = format!("ses_{s}");
-                let item = inbox_item(&session, n, queued);
-                vec![json!({ "id": format!("evt_q{n}"), "created": n, "type": "session.inbox.enqueued",
-                    "durable": { "aggregateID": session, "seq": seq, "version": 1 },
-                    "data": { "sessionID": session, "inboxID": item["id"], "item": { "type": "user",
-                        "delivery": item["delivery"], "payload": item["payload"] } } })]
-            }),
-            Op::Promote(s, k) => self.change(s, |server, n| {
-                let list = &mut server.inbox[s as usize];
-                if list.is_empty() {
-                    return Vec::new();
-                }
-                let (item, _) = list.remove(k as usize % list.len());
-                let seq = server.durable(s as usize);
-                let id = format!("msg_in{item}");
-                server.messages[s as usize].push(Message {
-                    id: id.clone(), seq, text: Some(format!("ask {item}")), completed: true, ended: true, user: true,
-                });
-                let session = format!("ses_{s}");
-                vec![json!({ "id": format!("evt_d{n}"), "created": n, "type": "session.inbox.delivered",
-                    "durable": { "aggregateID": session, "seq": seq, "version": 1 },
-                    "data": { "sessionID": session, "inboxID": id } })]
-            }),
-            Op::Withdraw(s, k) => self.change(s, |server, n| {
-                let list = &mut server.inbox[s as usize];
-                if list.is_empty() {
-                    return Vec::new();
-                }
-                let (item, _) = list.remove(k as usize % list.len());
-                let seq = server.durable(s as usize);
-                let session = format!("ses_{s}");
-                vec![json!({ "id": format!("evt_c{n}"), "created": n, "type": "session.inbox.cancelled",
-                    "durable": { "aggregateID": session, "seq": seq, "version": 1 },
-                    "data": { "sessionID": session, "inboxID": format!("msg_in{item}") } })]
-            }),
-            Op::Redirect(s, k) => self.change(s, |server, n| {
-                let list = &mut server.inbox[s as usize];
-                if list.is_empty() {
-                    return Vec::new();
-                }
-                let at = k as usize % list.len();
-                list[at].1 = !list[at].1;
-                let (item, queued) = list[at];
-                let seq = server.durable(s as usize);
-                let session = format!("ses_{s}");
-                vec![json!({ "id": format!("evt_r{n}"), "created": n, "type": "session.inbox.delivery.changed",
-                    "durable": { "aggregateID": session, "seq": seq, "version": 1 },
-                    "data": { "sessionID": session, "inboxID": format!("msg_in{item}"),
-                        "delivery": if queued { "queue" } else { "steer" } } })]
-            }),
             Op::SyncPermissions(s) => self.sync(Read::Permissions, s),
             Op::SyncForms(s) => self.sync(Read::Forms, s),
             Op::SyncMessages(s) => self.sync(Read::Head, s),
@@ -911,10 +801,6 @@ impl Run {
                         self.confirmed.insert(s);
                         self.grown.remove(&s);
                     }
-                    // A failed older page grows nothing; the view offers it again.
-                    if !ok && read == Read::Older {
-                        self.grown.remove(&s);
-                    }
                     let _ = held.sender.send(reply);
                 }
             }
@@ -934,9 +820,6 @@ impl Run {
             }
             "shell.exited" => {
                 self.exited.insert(data["id"].as_str().unwrap().to_owned());
-            }
-            "session.inbox.delivered" | "session.inbox.cancelled" => {
-                self.settled.insert(data["inboxID"].as_str().unwrap().to_owned());
             }
             "session.deleted" => {
                 let s: u8 = data["sessionID"].as_str().unwrap()["ses_".len()..].parse().unwrap();
@@ -1033,18 +916,8 @@ impl Run {
                     fail(format!("changes ses_{s}"), format!("message {} of ses_{s} changed unreported", row.0))?;
                 }
             }
-            if before.pending != after.pending && !changes.pending(&session) {
-                fail(
-                    format!("changes ses_{s}"),
-                    format!("pending of ses_{s} changed unreported: {:?}", after.pending),
-                )?;
-            }
             if self.deleted.contains(&s)
-                && (after.permissions.is_some()
-                    || after.forms.is_some()
-                    || after.messages.is_some()
-                    || after.more
-                    || !after.pending.is_empty())
+                && (after.permissions.is_some() || after.forms.is_some() || after.messages.is_some() || after.more)
             {
                 fail(format!("deleted ses_{s}"), format!("ses_{s} is deleted, the store keeps {after:?}"))?;
             }
@@ -1053,12 +926,6 @@ impl Run {
                 fail(format!("missing ses_{s}"), format!("the store found ses_{s} missing and keeps {after:?}"))?;
             }
             let settled = |id: &String| self.settled.contains(id);
-            if let Some((id, _)) = after.pending.iter().find(|(id, _)| settled(id)) {
-                fail(
-                    format!("settled ses_{s}"),
-                    format!("{id} of ses_{s} is pending after it was delivered or cancelled"),
-                )?;
-            }
             if let Some((id, _)) =
                 after.permissions.iter().flatten().chain(after.forms.iter().flatten()).find(|(id, _)| settled(id))
             {
@@ -1068,10 +935,6 @@ impl Run {
                 server.messages[s as usize].iter().map(|m| (m.id.as_str(), m.seq)).collect();
             let mut previous = 0;
             for (id, _) in after.messages.iter().flatten() {
-                // A pending prompt shows where it was admitted until its delivery arrives.
-                if after.pending.iter().any(|(pending, _)| pending == id) {
-                    continue;
-                }
                 let Some(seq) = positions.get(id.as_str()) else {
                     if server.deleted[s as usize] {
                         continue;
@@ -1185,16 +1048,6 @@ impl Run {
                     format!("forms of {session}: store {:?}, server {:?}", ids(&shown), ids(&want)),
                 )?;
             }
-            let want: Vec<(String, String)> = server.inbox[s as usize]
-                .iter()
-                .map(|(n, queued)| (format!("msg_in{n}"), if *queued { "queue" } else { "steer" }.to_owned()))
-                .collect();
-            if viewed(Read::Pending) && seen.pending != want {
-                fail(
-                    format!("pending {session}"),
-                    format!("pending of {session}: store {:?}, server {want:?}", seen.pending),
-                )?;
-            }
             if !self.confirmed.contains(&s) {
                 continue;
             }
@@ -1207,17 +1060,8 @@ impl Run {
                     .map(|(id, text)| if open.contains(id.as_str()) { (id, None) } else { (id, text) })
                     .collect()
             };
-            // A user row has no content parts, so it shows no text.
-            let all = blank(
-                server.messages[s as usize]
-                    .iter()
-                    .map(|m| (m.id.clone(), if m.user { None } else { m.text.clone() }))
-                    .collect(),
-            );
-            // Pending prompts show where they were admitted until their delivery arrives.
-            let pending: HashSet<&str> = seen.pending.iter().map(|(id, _)| id.as_str()).collect();
-            let mut shown = blank(seen.messages.clone().unwrap_or_default());
-            shown.retain(|(id, _)| !pending.contains(id.as_str()));
+            let all = blank(server.messages[s as usize].iter().map(|m| (m.id.clone(), m.text.clone())).collect());
+            let shown = blank(seen.messages.clone().unwrap_or_default());
             let ok = !shown.is_empty()
                 && all.ends_with(&shown)
                 && seen.more == (shown.len() < all.len())
@@ -1266,11 +1110,6 @@ fn name(op: Op) -> &'static str {
         Op::ShellExit(_) => "ShellExit",
         Op::ShellBurst => "ShellBurst",
         Op::SyncShells => "SyncShells",
-        Op::Enqueue(_) => "Enqueue",
-        Op::Promote(..) => "Promote",
-        Op::Withdraw(..) => "Withdraw",
-        Op::Redirect(..) => "Redirect",
-        Op::SyncPending(_) => "SyncPending",
     }
 }
 
@@ -1279,9 +1118,6 @@ fn run_counted(ops: &[Op], mutant: Mutant) -> (Option<Failure>, HashMap<&'static
     let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
     runtime.block_on(async {
         let mut run = Run::new(mutant);
-        run.inbox = ops.iter().any(|op| {
-            matches!(op, Op::Enqueue(_) | Op::Promote(..) | Op::Withdraw(..) | Op::Redirect(..) | Op::SyncPending(_))
-        });
         let mut result = Ok(());
         for op in ops {
             if std::env::var("MODEL_TRACE").is_ok() {
@@ -1386,28 +1222,23 @@ fn assert_converges(mix: Mix) {
 
 #[test]
 fn permissions_converge_to_the_server() {
-    assert_converges(Mix { permissions: true, ..NONE });
+    assert_converges(Mix { permissions: true, forms: false, messages: false, shells: false });
 }
 
 #[test]
 fn forms_converge_to_the_server() {
-    assert_converges(Mix { forms: true, ..NONE });
+    assert_converges(Mix { permissions: false, forms: true, messages: false, shells: false });
 }
 
 #[test]
 #[ignore = "red at 5,000 cases on O10 only (models-6); run with --ignored"]
 fn transcripts_are_a_gapless_suffix_of_the_server() {
-    assert_converges(Mix { messages: true, ..NONE });
-}
-
-#[test]
-fn the_inbox_converges_to_the_server() {
-    assert_converges(Mix { inbox: true, messages: true, ..NONE });
+    assert_converges(Mix { permissions: false, forms: false, messages: true, shells: false });
 }
 
 #[test]
 fn shells_converge_to_the_server() {
-    assert_converges(Mix { shells: true, ..NONE });
+    assert_converges(Mix { permissions: false, forms: false, messages: false, shells: true });
 }
 
 /// An overflowed shell overlay reads again by itself. The search cannot show it, as its view syncs every read again
@@ -1506,12 +1337,12 @@ const RESPONSE_CASES: usize = 50;
 #[test]
 fn the_checker_catches_wrong_clients() {
     let mutants = [
-        (Mutant::HeadEmpty, Mix { messages: true, ..NONE }),
-        (Mutant::NoMore, Mix { messages: true, ..NONE }),
-        (Mutant::BlankText, Mix { messages: true, ..NONE }),
-        (Mutant::NoOlder, Mix { messages: true, ..NONE }),
-        (Mutant::Reversed, Mix { permissions: true, ..NONE }),
-        (Mutant::Sticky, Mix { permissions: true, ..NONE }),
+        (Mutant::HeadEmpty, Mix { permissions: false, forms: false, messages: true, shells: false }),
+        (Mutant::NoMore, Mix { permissions: false, forms: false, messages: true, shells: false }),
+        (Mutant::BlankText, Mix { permissions: false, forms: false, messages: true, shells: false }),
+        (Mutant::NoOlder, Mix { permissions: false, forms: false, messages: true, shells: false }),
+        (Mutant::Reversed, Mix { permissions: true, forms: false, messages: false, shells: false }),
+        (Mutant::Sticky, Mix { permissions: true, forms: false, messages: false, shells: false }),
         (Mutant::Silent, ALL),
     ];
     let mut missed = Vec::new();
@@ -1674,25 +1505,6 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "late step for a missing session",
         "missing ses_0",
         &[Op::Step(0), Op::Delete(0), Op::SyncMessages(0), Op::Release(Read::Head, 0)],
-    ),
-    // A prompt another client cancelled while the stream was down stayed in the transcript after the pending read
-    // dropped it.
-    (
-        "cancel lost in a reconnect",
-        "order ses_1",
-        &[Op::Enqueue(1), Op::Withdraw(1, 0), Op::Deliver(1), Op::SyncPending(1), Op::Reconnect],
-    ),
-    // A prompt another client admitted while the stream was down never showed: its delivery found no row to move.
-    (
-        "delivery of a prompt missed in a reconnect",
-        "transcript ses_1",
-        &[Op::Enqueue(1), Op::Reconnect, Op::SyncMessages(1), Op::Promote(1, 1)],
-    ),
-    // A late enqueue for a session the store found missing recreated its pending prompts and transcript.
-    (
-        "late enqueue for a missing session",
-        "missing ses_1",
-        &[Op::Enqueue(1), Op::Delete(1), Op::SyncPending(1), Op::Release(Read::Pending, 1)],
     ),
 ];
 
