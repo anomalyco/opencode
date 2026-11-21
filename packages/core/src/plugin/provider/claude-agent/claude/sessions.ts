@@ -17,6 +17,7 @@ import { SessionRecord } from "../sync/record.js"
 import { Checkpoints } from "../sync/checkpoints.js"
 import { SyncDecision } from "../sync/decide.js"
 import { CatchUp } from "../sync/catch-up.js"
+import { ClaudeAgentError } from "../language-model/claude-agent-error.js"
 import { ConvertToClaudeMessage } from "../language-model/convert-to-claude-message.js"
 import { PendingTools } from "../tools/pending.js"
 import { ToolNames } from "../tools/names.js"
@@ -258,6 +259,7 @@ export function registry() {
           message.type === "assistant" &&
           message.parent_tool_use_id === null &&
           !message.error &&
+          !ClaudeAgentError.isSynthetic(message) &&
           !seen.has(message.uuid)
         ) {
           seen.add(message.uuid)
@@ -368,7 +370,7 @@ export function registry() {
       source?: SessionRecord.Record,
     ) {
       const boundary = SyncDecision.boundary(request.prompt, source)
-      if (!source || !boundary) return 0
+      if (!source || !boundary || boundary.start >= request.prompt.length) return 0
       // Validate catch-up input before creating a forked transcript on disk.
       yield* attemptSync(() => CatchUp.content(request.prompt, boundary.start))
       const fork = yield* attempt(() =>

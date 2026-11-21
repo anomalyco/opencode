@@ -85,8 +85,8 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
       }
     }
     if (message.type === "assistant" && message.parent_tool_use_id === null) {
-      // Synthetic API errors are diagnostics, not assistant answers.
-      if (message.error) return parts
+      // Synthetic messages (API errors and placeholders like "No response requested.") are not assistant answers.
+      if (message.error || ClaudeAgentError.isSynthetic(message)) return parts
       // Stream events carry API message IDs; only the complete assistant message carries the transcript UUID.
       metadata = { [Provider.ID.claudeAgent]: { sessionID: message.session_id, messageID: message.uuid } }
       usage.update(message.message.id, message.message.usage)

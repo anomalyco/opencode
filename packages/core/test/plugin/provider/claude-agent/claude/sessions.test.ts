@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
 import path from "node:path"
 import { Effect, Fiber, SubscriptionRef } from "effect"
 import { TestClock } from "effect/testing"
@@ -14,6 +15,73 @@ import { TestTools } from "../lib/tools"
 import { Recorder } from "../lib/recorder"
 
 const first = TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker.")
+
+function syntheticPlaceholder(template: Extract<SDKMessage, { type: "assistant" }>, uuid = crypto.randomUUID()) {
+  const { error: _error, ...rest } = template
+  return {
+    ...rest,
+    uuid,
+    message: {
+      ...template.message,
+      id: `synthetic-${uuid}`,
+      model: "<synthetic>",
+      stop_reason: "stop_sequence" as const,
+      usage: {
+        ...template.message.usage,
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+      content: [{ type: "text" as const, text: "No response requested.", citations: null }],
+    },
+  }
+}
+
+// A non-error synthetic placeholder turn, like Claude Code's "No response requested." with stop_sequence.
+function syntheticTurn(uuid = crypto.randomUUID()) {
+  const turn = FakeClaude.expectTurn({ recording: "api-error" })
+  const replies: SDKMessage[] = []
+  for (const message of turn.replies as SDKMessage[]) {
+    if (message.type === "assistant") {
+      replies.push(syntheticPlaceholder(message, uuid))
+      continue
+    }
+    if (message.type === "result" && message.subtype === "success") {
+      replies.push({
+        ...message,
+        is_error: false,
+        api_error_status: null,
+        stop_reason: "stop_sequence",
+        result: "No response requested.",
+        usage: {
+          ...message.usage,
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      })
+      continue
+    }
+    replies.push(message)
+  }
+  return { ...turn, replies }
+}
+
+// A real streamed text turn followed by a stray non-error synthetic placeholder right before result.
+function turnWithTrailingSynthetic(uuid = crypto.randomUUID()) {
+  const turn = FakeClaude.expectTurn()
+  const replies: SDKMessage[] = []
+  for (const message of turn.replies as SDKMessage[]) {
+    if (message.type === "result") {
+      const real = replies.findLast((item) => item.type === "assistant")!
+      replies.push(syntheticPlaceholder(real, uuid))
+    }
+    replies.push(message)
+  }
+  return { ...turn, replies }
+}
 
 describe("Claude sessions", () => {
   it.effect("streams consecutive turns once, on one process, with per-turn usage", () =>
@@ -486,5 +554,149 @@ describe("Claude sessions", () => {
       expect(test.storage.data.size).toBe(0)
       claude.check()
     }),
+  )
+
+  it.effect(
+    "a synthetic-only placeholder turn fails without polluting text or checkpoints, and follow-up turns recover cleanly",
+    () =>
+      Effect.gen(function* () {
+        const syntheticID = crypto.randomUUID()
+        const claude = FakeClaude.make([
+          FakeClaude.expectStartup(),
+          FakeClaude.expectTurn(),
+          syntheticTurn(syntheticID),
+          FakeClaude.expectInterrupt(),
+          FakeClaude.expectStartup(),
+          FakeClaude.expectTurn({ index: 1 }),
+          FakeClaude.expectTurn({ index: 1 }),
+          FakeClaude.expectInterrupt(),
+        ])
+        const test = yield* TestSessions.start(claude)
+        const records = SessionRecord.make(test.storage)
+
+        const one = yield* TestSessions.reply(test.model, first)
+        expect(TestSessions.text(one)).toBe("COPPER-OTTER")
+        const afterOne = (yield* records.get("session-a"))!
+        const realAssistantID = afterOne.history![1]!.claudeMessageID!
+
+        const secondPrompt = TestSessions.followup("Status update please")
+        const two = yield* TestSessions.reply(test.model, secondPrompt)
+        expect(TestSessions.text(two)).toBe("")
+        expect(two.some((part) => part.type === "finish")).toBe(false)
+        const error = two.find((part) => part.type === "error")
+        expect(String(error?.error)).toContain("Claude Code returned no response.")
+
+        const afterTwo = (yield* records.get("session-a"))!
+        expect(afterTwo.history).toHaveLength(3)
+        expect(afterTwo.history!.map((checkpoint) => checkpoint.claudeMessageID)).not.toContain(syntheticID)
+
+        // Follow-up after the failed synthetic turn omits the empty failed assistant message, forks before it, and recovers.
+        const thirdPrompt = [
+          ...secondPrompt,
+          { role: "user" as const, content: [{ type: "text" as const, text: "I don't see your reply" }] },
+        ]
+        const three = yield* TestSessions.reply(test.model, thirdPrompt)
+        expect(TestSessions.text(three)).toBe("COPPER-OTTER")
+        expect(three.some((part) => part.type === "error")).toBe(false)
+        expect(claude.forks).toHaveLength(1)
+        expect(claude.forks[0]!.boundary).toBe(realAssistantID)
+        expect(claude.runs[1]!.received.find((message) => message.type === "user").message.content).toEqual([
+          { type: "text", text: "Status update please" },
+          { type: "text", text: "I don't see your reply" },
+        ])
+
+        // The next turn stays in sync on the forked process without forking again.
+        const fourthPrompt = [
+          ...thirdPrompt,
+          { role: "assistant" as const, content: [{ type: "text" as const, text: "COPPER-OTTER" }] },
+          { role: "user" as const, content: [{ type: "text" as const, text: "One more time" }] },
+        ]
+        const four = yield* TestSessions.reply(test.model, fourthPrompt)
+        expect(TestSessions.text(four)).toBe("COPPER-OTTER")
+        expect(claude.forks).toHaveLength(1)
+        expect(claude.runs).toHaveLength(2)
+        expect(claude.runs[1]!.received.filter((message) => message.type === "user")[1].message.content).toEqual([
+          { type: "text", text: "One more time" },
+        ])
+
+        yield* test.registry.close()
+        claude.check()
+      }),
+  )
+
+  it.effect("retrying the same prompt after a synthetic-only turn forks cleanly and resends it", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        syntheticTurn(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn({ index: 1 }),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude)
+      const records = SessionRecord.make(test.storage)
+
+      yield* TestSessions.reply(test.model, first)
+      const realAssistantID = (yield* records.get("session-a"))!.history![1]!.claudeMessageID!
+
+      const prompt = TestSessions.followup("Status update please")
+      const failed = yield* TestSessions.reply(test.model, prompt)
+      expect(TestSessions.text(failed)).toBe("")
+      expect(String(failed.find((part) => part.type === "error")?.error)).toContain("Claude Code returned no response.")
+
+      const retried = yield* TestSessions.reply(test.model, prompt)
+      expect(TestSessions.text(retried)).toBe("COPPER-OTTER")
+      expect(claude.forks).toHaveLength(1)
+      expect(claude.forks[0]!.boundary).toBe(realAssistantID)
+      expect(claude.runs[1]!.received.find((message) => message.type === "user").message.content).toEqual([
+        { type: "text", text: "Status update please" },
+      ])
+
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
+  it.effect(
+    "a trailing synthetic placeholder after real text keeps real text, usage, and checkpoints on one process",
+    () =>
+      Effect.gen(function* () {
+        const syntheticID = crypto.randomUUID()
+        const claude = FakeClaude.make([
+          FakeClaude.expectStartup(),
+          turnWithTrailingSynthetic(syntheticID),
+          FakeClaude.expectTurn({ index: 1 }),
+          FakeClaude.expectInterrupt(),
+        ])
+        const test = yield* TestSessions.start(claude)
+        const records = SessionRecord.make(test.storage)
+
+        const one = yield* TestSessions.reply(test.model, first)
+        expect(TestSessions.text(one)).toBe("COPPER-OTTER")
+        expect(one.some((part) => part.type === "error")).toBe(false)
+        const finish = one.find((part) => part.type === "finish")!
+        const usage = Recorder.result("text").usage
+        expect(finish.usage.inputTokens).toEqual({
+          total: usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens,
+          noCache: usage.input_tokens,
+          cacheRead: usage.cache_read_input_tokens,
+          cacheWrite: usage.cache_creation_input_tokens,
+        })
+        expect(finish.usage.outputTokens.total).toBe(usage.output_tokens)
+
+        const saved = (yield* records.get("session-a"))!
+        expect(saved.history).toHaveLength(2)
+        expect(saved.history![1]!.claudeMessageID).not.toBe(syntheticID)
+
+        const two = yield* TestSessions.reply(test.model, TestSessions.followup())
+        expect(TestSessions.text(two)).toBe("COPPER-OTTER")
+        expect(claude.runs).toHaveLength(1)
+        expect(claude.forks).toHaveLength(0)
+
+        yield* test.registry.close()
+        claude.check()
+      }),
   )
 })
