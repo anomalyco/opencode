@@ -373,6 +373,46 @@ describe("search tools", () => {
     ),
   )
 
+  it.live("searches an absolute glob pattern from its literal directory", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Promise.all(["src/a.ts", "src/nested/b.ts"].map((file) => Bun.write(path.join(tmp.path, file), "needle\n"))),
+      )
+      const root = tmp.path.replaceAll("\\", "/")
+      yield* withTools(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const recursive = yield* executeTool(registry, call("glob", { pattern: `${root}/src/**/*.ts` }))
+          const direct = yield* executeTool(registry, call("glob", { pattern: `${root}/src/*.ts` }))
+
+          expect(recursive.output).toHaveLength(2)
+          expect(recursive.output).toEqual(
+            expect.arrayContaining(
+              ["src/a.ts", "src/nested/b.ts"].map((file) => ({ path: path.normalize(file), type: "file" })),
+            ),
+          )
+          expect(direct.output).toEqual([{ path: path.normalize("src/a.ts"), type: "file" }])
+
+          const anchored = yield* executeTool(registry, call("glob", { pattern: "/src/*.ts" }))
+          expect(anchored.output).toEqual([{ path: path.normalize("src/a.ts"), type: "file" }])
+        }),
+      )
+    }),
+  )
+
+  it.live("keeps a root-anchored glob in the project when the same folder exists at the filesystem root", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => Bun.write(path.join(tmp.path, "bin/a.ts"), "needle\n"))
+      yield* withTools(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const anchored = yield* executeTool(registry, call("glob", { pattern: "/bin/*.ts" }))
+          expect(anchored.output).toEqual([{ path: path.normalize("bin/a.ts"), type: "file" }])
+        }),
+      )
+    }),
+  )
+
   it.live("globs through an in-location external symlink without external approval", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),

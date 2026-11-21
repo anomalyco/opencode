@@ -63,8 +63,22 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const searchPath = input.path === "undefined" || input.path === "null" ? undefined : input.path
-              const target = yield* access.resolve({ path: searchPath ?? ".", kind: "directory" })
+              const explicit = input.path === "undefined" || input.path === "null" ? undefined : input.path
+              // ripgrep matches globs relative to the search root. `/src/**` stays anchored there when that folder exists under it; otherwise an absolute pattern searches from its literal directory.
+              const segments = path.isAbsolute(input.pattern) ? input.pattern.split("/") : []
+              const wildcard = segments.findIndex((segment) => /[*?[{]/.test(segment))
+              const split = wildcard === -1 ? segments.length - 1 : wildcard
+              const directory = split > 0 ? segments.slice(0, split).join("/") || "/" : undefined
+              const base = yield* access.resolve({ path: explicit ?? ".", kind: "directory" })
+              const anchored =
+                directory === undefined ||
+                (yield* Environment.typeFollowing(base.environment.files, path.join(base.absolute, directory)).pipe(
+                  Effect.map((type) => type === "directory"),
+                  Effect.orElseSucceed(() => false),
+                ))
+              const pattern = anchored ? input.pattern : `/${segments.slice(split).join("/")}`
+              const searchPath = anchored ? explicit : directory
+              const target = anchored ? base : yield* access.resolve({ path: directory, kind: "directory" })
               // Search walks files with a ripgrep binary on this server, so another machine's files cannot be searched here.
               if (target.environment.id !== environment.id)
                 return yield* new ToolFailure({
@@ -93,7 +107,7 @@ export const Plugin = {
                 ripgrep.glob({
                   environment: target.environment,
                   cwd: root,
-                  pattern: input.pattern,
+                  pattern,
                   hidden: input.hidden,
                   limit,
                 }),
