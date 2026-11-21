@@ -60,6 +60,28 @@ Run `/btw <question>` to ask a quick question about the conversation so far. The
 /btw why did the test in step 2 fail?
 ```
 
+## Advisor
+
+Run `/advisor` to let the agent ask a second model for guidance while it works, for example while planning, when it
+isn't sure of an answer, when an error keeps recurring, or before it says it is done. The agent decides when to ask,
+and checks the advice before acting on it. The advisor can't run tools or change files.
+
+```text
+/advisor
+```
+
+It asks what the advisor may see, then which model to use:
+
+- **Advisor** sends the conversation so far.
+- **Advisor (secure)** never sends the conversation. The agent writes a short brief without secrets, paths or
+  hostnames, and only the brief is sent.
+
+Pick **Off** to turn it off. The choice is saved for every session; while it's on, sessions show `⊙ advisor` under
+the prompt. Each consultation appears in the session as an "Advisor reviewed" row; click it to see what was sent to
+the advisor and its reply. The advisor's tokens count toward the session's cost.
+
+The advisor is experimental. Turn it on with [`"advisor": true`](/config#advisor) under `experimental`.
+
 ## Models
 
 Press **Ctrl+X**, then **M** to choose a model, or run `/models`. Press **F2** to cycle through recently used models.
