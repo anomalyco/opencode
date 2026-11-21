@@ -2,8 +2,10 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Exit } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { AppProcess } from "@opencode/util/process"
 import { Git } from "@opencode/core/git"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { VcsPatch } from "@opencode/core/vcs/patch"
@@ -524,6 +526,108 @@ describe("Git capture", () => {
     }),
   )
 
+  it.live("evicts untracked files that grow past the size cap while preserving source-tracked large files", () =>
+    Effect.gen(function* () {
+      const { project, repository, capture } = yield* captureSetup
+      yield* Effect.promise(() => Bun.write(path.join(project, "grow.log"), "ok\n"))
+      const first = yield* capture({ maximumUntrackedFileBytes: 8 })
+      expect(yield* treeEntries(repository, first)).toEqual(["a.txt", "b.txt", "grow.log"])
+
+      // Both files grow past the 8-byte cap: `grow.log` is untracked in source, `a.txt` is tracked in source.
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(project, "grow.log"), "0123456789abcdef\n")
+        await Bun.write(path.join(project, "a.txt"), "0123456789abcdef\n")
+      })
+      const second = yield* capture({ maximumUntrackedFileBytes: 8 })
+      expect(yield* treeEntries(repository, second)).toEqual(["a.txt", "b.txt"])
+      expect(yield* indexEntries(repository)).toEqual(["a.txt", "b.txt"])
+      expect(
+        yield* Effect.promise(() => $`git --git-dir ${repository.gitDirectory} cat-file -p ${second}:a.txt`.text()),
+      ).toBe("0123456789abcdef\n")
+      // Repeated capture while still oversized keeps the same tree without re-adding `grow.log`.
+      expect(yield* capture({ maximumUntrackedFileBytes: 8 })).toBe(second)
+
+      // Shrinking back within the cap allows `grow.log` to be captured again.
+      yield* Effect.promise(() => Bun.write(path.join(project, "grow.log"), "tiny\n"))
+      const third = yield* capture({ maximumUntrackedFileBytes: 8 })
+      expect(yield* treeEntries(repository, third)).toEqual(["a.txt", "b.txt", "grow.log"])
+    }),
+  )
+
+  it.live("prunes both modified and untouched files when their directory is added to .gitignore or info/exclude", () =>
+    Effect.gen(function* () {
+      const { project, repository, capture } = yield* captureSetup
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(project, "data", "a.dat"), "a\n")
+        await Bun.write(path.join(project, "data", "b.dat"), "b\n")
+        await Bun.write(path.join(project, "extra", "untouched.dat"), "u\n")
+      })
+      const first = yield* capture()
+      expect(yield* treeEntries(repository, first)).toEqual([
+        "a.txt",
+        "b.txt",
+        "data/a.dat",
+        "data/b.dat",
+        "extra/untouched.dat",
+      ])
+
+      // Ignore `data/` via .gitignore, modify `data/a.dat`, leave `data/b.dat` untouched, and add `data/new.dat`.
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(project, ".gitignore"), "data/\n")
+        await Bun.write(path.join(project, "data", "a.dat"), "changed\n")
+        await Bun.write(path.join(project, "data", "new.dat"), "new\n")
+      })
+      const second = yield* capture()
+      expect(yield* treeEntries(repository, second)).toEqual([".gitignore", "a.txt", "b.txt", "extra/untouched.dat"])
+      expect(yield* indexEntries(repository)).toEqual([".gitignore", "a.txt", "b.txt", "extra/untouched.dat"])
+
+      // Ignore `extra/` via source info/exclude without modifying any worktree file.
+      yield* Effect.promise(() => Bun.write(path.join(project, ".git", "info", "exclude"), "extra/\n"))
+      const third = yield* capture()
+      expect(yield* treeEntries(repository, third)).toEqual([".gitignore", "a.txt", "b.txt"])
+      expect(yield* indexEntries(repository)).toEqual([".gitignore", "a.txt", "b.txt"])
+    }),
+  )
+
+  it.live(
+    "skips untracked batches exceeding aggregate file-count or total-bytes limits while capturing tracked edits",
+    () =>
+      Effect.gen(function* () {
+        const { project, repository, capture } = yield* captureSetup
+        yield* Effect.promise(() =>
+          Promise.all(
+            Array.from({ length: 4 }, (_, index) => Bun.write(path.join(project, `u${index}.txt`), "0123456789")),
+          ),
+        )
+
+        // 4 untracked files exceed maximumUntrackedFiles: 3 — skip all untracked so prefixes do not creep in across captures.
+        const first = yield* capture({ maximumUntrackedFiles: 3 })
+        expect(yield* treeEntries(repository, first)).toEqual(["a.txt", "b.txt"])
+        expect(yield* capture({ maximumUntrackedFiles: 3 })).toBe(first)
+
+        // Tracked edits still capture cleanly while the untracked batch is over budget.
+        yield* Effect.promise(() => Bun.write(path.join(project, "a.txt"), "edited\n"))
+        const edited = yield* capture({ maximumUntrackedFiles: 3 })
+        expect(yield* treeEntries(repository, edited)).toEqual(["a.txt", "b.txt"])
+        expect(
+          yield* Effect.promise(() => $`git --git-dir ${repository.gitDirectory} cat-file -p ${edited}:a.txt`.text()),
+        ).toBe("edited\n")
+
+        // 4 * 10 = 40 bytes exceed maximumUntrackedTotalBytes: 25 even when file count is within budget.
+        const totalCapped = yield* capture({ maximumUntrackedFiles: 10, maximumUntrackedTotalBytes: 25 })
+        expect(totalCapped).toBe(edited)
+        expect(yield* treeEntries(repository, totalCapped)).toEqual(["a.txt", "b.txt"])
+
+        // Once untracked files shrink within both limits, they are captured normally.
+        yield* Effect.promise(async () => {
+          await fs.rm(path.join(project, "u2.txt"))
+          await fs.rm(path.join(project, "u3.txt"))
+        })
+        const recovered = yield* capture({ maximumUntrackedFiles: 3, maximumUntrackedTotalBytes: 25 })
+        expect(yield* treeEntries(repository, recovered)).toEqual(["a.txt", "b.txt", "u0.txt", "u1.txt"])
+      }),
+  )
+
   it.live("seeds and rebuilds the store from a source with a split index", () =>
     Effect.gen(function* () {
       const root = yield* tmpdirScoped()
@@ -574,10 +678,25 @@ const captureSetup = Effect.gen(function* () {
     gitDirectory: AbsolutePath.make(path.join(root.path, "storage")),
     seed: source,
   })
-  const capture = (options?: { maximumUntrackedFileBytes?: number }) =>
-    service.tree.capture({ repository, scopes: [RelativePath.make(".")], ignores: source, ...options })
+  const capture = (options?: {
+    maximumUntrackedFileBytes?: number
+    maximumUntrackedFiles?: number
+    maximumUntrackedTotalBytes?: number
+  }) => service.tree.capture({ repository, scopes: [RelativePath.make(".")], ignores: source, ...options })
   return { root, project, repository, service, capture }
 })
+
+const treeEntries = (repository: Git.Repository, tree: Git.TreeID) =>
+  Effect.promise(async () =>
+    (await $`git --git-dir ${repository.gitDirectory} ls-tree -r --name-only ${tree}`.text())
+      .split("\n")
+      .filter(Boolean),
+  )
+
+const indexEntries = (repository: Git.Repository) =>
+  Effect.promise(async () =>
+    (await $`git --git-dir ${repository.gitDirectory} ls-files`.text()).split("\n").filter(Boolean),
+  )
 
 const traced = (file: string) =>
   Effect.promise(async () =>
@@ -653,6 +772,71 @@ describe("Git capture recovery", () => {
       yield* Effect.promise(() => fs.rename(moved, project))
       expect(yield* Effect.promise(() => Bun.file(path.join(repository.gitDirectory, "index")).exists())).toBe(true)
       expect(yield* capture()).toBe(before)
+    }),
+  )
+
+  testEffect(Layer.empty).live("cleans up temporary index lockfiles when a capture is interrupted or fails", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const project = path.join(root.path, "project")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(project)
+        await initRepo(project)
+        await Bun.write(path.join(project, "a.txt"), "a\n")
+        await $`git add . && git commit -q -m initial`.cwd(project).quiet()
+      })
+      const baseProc = yield* AppProcess.Service.pipe(Effect.provide(LayerNode.compile(AppProcess.node)))
+      const lockCreated = yield* Deferred.make<string>()
+      let mode: "hang" | "fail" = "hang"
+      const instrumentedProc = AppProcess.Service.of({
+        ...baseProc,
+        run: (command, options) => {
+          const index = command._tag === "StandardCommand" ? command.options.env?.GIT_INDEX_FILE : undefined
+          const isUpdate = command._tag === "StandardCommand" && command.args.includes("update-index")
+          if (!index || !isUpdate) return baseProc.run(command, options)
+          return Effect.gen(function* () {
+            const lock = `${index}.lock`
+            yield* Effect.promise(() => Bun.write(lock, ""))
+            if (mode === "hang") {
+              yield* Deferred.succeed(lockCreated, lock)
+              return yield* Effect.never
+            }
+            return yield* Effect.fail(
+              new AppProcess.AppProcessError({ command: "git update-index", stderr: "injected failure" }),
+            )
+          })
+        },
+      })
+      const layer = AppNodeBuilder.build(Git.node, [
+        AppProcess.node.replace(Layer.succeed(AppProcess.Service, instrumentedProc)),
+      ])
+      yield* Effect.gen(function* () {
+        const git = yield* Git.Service
+        const source = yield* git.repo.discover(AbsolutePath.make(project))
+        if (!source) throw new Error("Repository not found")
+        const storage = AbsolutePath.make(path.join(root.path, "storage"))
+        const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+
+        yield* Effect.promise(() => Bun.write(path.join(project, "a.txt"), "modified\n"))
+        const hanging = yield* git.tree
+          .capture({ repository, scopes: [RelativePath.make(".")], ignores: source })
+          .pipe(Effect.forkChild({ startImmediately: true }))
+        const lockPath = yield* Deferred.await(lockCreated)
+        expect(yield* Effect.promise(() => Bun.file(lockPath).exists())).toBe(true)
+        yield* Fiber.interrupt(hanging)
+        expect(
+          (yield* Effect.promise(() => fs.readdir(storage))).filter((entry) => entry.startsWith("index.opencode-")),
+        ).toEqual([])
+
+        mode = "fail"
+        const failed = yield* git.tree
+          .capture({ repository, scopes: [RelativePath.make(".")], ignores: source })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(failed)).toBe(true)
+        expect(
+          (yield* Effect.promise(() => fs.readdir(storage))).filter((entry) => entry.startsWith("index.opencode-")),
+        ).toEqual([])
+      }).pipe(Effect.provide(layer))
     }),
   )
 })
