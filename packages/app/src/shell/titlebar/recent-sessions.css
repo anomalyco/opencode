@@ -1,0 +1,50 @@
+@property --sidebar-recent-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --sidebar-recent-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* The navigation prototype's List: the list starts right under the sidebar's actions and runs to the window's bottom
+   edge, with room at both ends so the first and last rows rest where they did; each edge fades in once rows scroll
+   behind it, as the settings page list does. */
+[data-slot="sidebar-recent-scroll"][data-edge-fade] {
+  padding-top: 16px;
+  padding-bottom: calc(4px + var(--sidebar-list-bleed, 0px));
+}
+
+@supports (animation-timeline: scroll()) {
+  [data-slot="sidebar-recent-scroll"][data-edge-fade] {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--sidebar-recent-fade-start),
+      #000 calc(100% - var(--sidebar-recent-fade-end)),
+      transparent
+    );
+    animation:
+      sidebar-recent-fade-start linear both,
+      sidebar-recent-fade-end linear both;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range:
+      0 32px,
+      calc(100% - 32px) 100%;
+  }
+}
+
+@keyframes sidebar-recent-fade-start {
+  to {
+    --sidebar-recent-fade-start: 32px;
+  }
+}
+
+@keyframes sidebar-recent-fade-end {
+  from {
+    --sidebar-recent-fade-end: 32px;
+  }
+}

@@ -5,8 +5,10 @@ import {
   EMPTY_PINS,
   groupOf,
   isPinned,
+  moveGroup,
   moveToGroup,
   pin,
+  place,
   pinnedRefs,
   removeFromGroup,
   toggleGroup,
@@ -64,5 +66,30 @@ describe("pins", () => {
     expect(pin(state, ref("a"))).toBe(state)
     expect(unpin(state, ref("zzz"))).toBe(state)
     expect(moveToGroup(state, ref("a"), "g1")).toBe(state)
+  })
+
+  test("place pins a session at a position, moves it between pins and groups, and drops an emptied group", () => {
+    const names = (state: ReturnType<typeof pin>) =>
+      state.items.map((item) =>
+        item.type === "group" ? `${item.id}[${item.sessions.map((s) => s.sessionId)}]` : item.sessionId,
+      )
+
+    const start = createGroup(pin(pin(EMPTY_PINS, ref("a")), ref("b")), ref("b"), group("g"))
+
+    expect(names(place(start, ref("c"), { index: 0 }))).toEqual(["c", "a", "g[b]"])
+    expect(names(place(start, ref("a"), { index: 0, group: "g" }))).toEqual(["g[a,b]"])
+    expect(names(place(start, ref("b"), { index: 0 }))).toEqual(["b", "a"])
+    expect(place(start, ref("b"), { index: 0, group: "g" })).toBe(start)
+    expect(place(start, ref("c"), { index: 0, group: "missing" })).toBe(start)
+  })
+
+  test("moveGroup reorders a group among the top-level pins", () => {
+    const start = createGroup(pin(pin(EMPTY_PINS, ref("a")), ref("b")), ref("a"), group("g"))
+
+    expect(moveGroup(start, "g", 1).items.map((item) => (item.type === "group" ? item.id : item.sessionId))).toEqual([
+      "b",
+      "g",
+    ])
+    expect(moveGroup(start, "g", 0)).toBe(start)
   })
 })

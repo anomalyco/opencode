@@ -162,3 +162,54 @@
 [data-component="pinned-group"][data-orientation="vertical"] [data-slot="pinned-group-mark"] {
   inset-inline-end: 0;
 }
+
+/* A session held over a closed group drops into it, so the group lights up like a folder row. */
+[data-component="pinned-group"][data-drop="into"] {
+  border-radius: 8px;
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+/* With nothing pinned, the divider a drag reveals grows in and shrinks away, so the tabs slide rather than jump. */
+[data-component="pinned-area"][data-preview] {
+  overflow: hidden;
+  transition:
+    max-height 180ms cubic-bezier(0.2, 0, 0, 1),
+    max-width 180ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 140ms ease;
+}
+
+[data-component="pinned-area"][data-orientation="vertical"][data-preview="open"] {
+  max-height: 96px;
+  opacity: 1;
+
+  @starting-style {
+    max-height: 0;
+    opacity: 0;
+  }
+}
+
+[data-component="pinned-area"][data-orientation="horizontal"][data-preview="open"] {
+  max-width: 64px;
+  opacity: 1;
+
+  @starting-style {
+    max-width: 0;
+    opacity: 0;
+  }
+}
+
+[data-component="pinned-area"][data-orientation="vertical"][data-preview="closing"] {
+  max-height: 0;
+  opacity: 0;
+}
+
+[data-component="pinned-area"][data-orientation="horizontal"][data-preview="closing"] {
+  max-width: 0;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="pinned-area"][data-preview] {
+    transition: none;
+  }
+}
