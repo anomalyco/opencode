@@ -315,6 +315,14 @@ describe("ShellParse", () => {
 
     const quotedArity = await Effect.runPromise(ShellParse.scan('"git" status', "/bin/bash", "/workspace"))
     expect(quotedArity.commands[0]?.save).toBe('"git" status *')
+
+    const interiorQuotes = await Effect.runPromise(ShellParse.scan('s""udo rm -rf /', "/bin/bash", "/workspace"))
+    expect(interiorQuotes.commands[0]?.save).toBe('s""udo rm *')
+
+    const quotedOption = await Effect.runPromise(
+      ShellParse.scan('"/usr/bin/sudo" "-u" root rm -rf /', "/bin/bash", "/workspace"),
+    )
+    expect(quotedOption.commands[0]?.save).toBe('"/usr/bin/sudo" "-u" root rm *')
   })
 
   test("saves nothing when the exact command contains a wildcard character", async () => {

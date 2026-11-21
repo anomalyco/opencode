@@ -90,7 +90,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       {},
       { commands: [], directories: ["$HOME", path.join(os.homedir(), "outside")] },
     ],
-    ["bash", 'g""it status', {}, { commands: [{ resource: 'g""it status', save: 'g""it *' }], directories: [] }],
+    ["bash", 'g""it status', {}, { commands: [{ resource: 'g""it status', save: 'g""it status *' }], directories: [] }],
     [
       "bash",
       'npm "run" test',

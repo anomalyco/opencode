@@ -191,6 +191,9 @@ export function scan(
         continue
       }
       const words = item.redirectWordCount === undefined ? item.rawWords : item.rawWords.slice(0, item.redirectWordCount)
+      // Name resolution reads the decoded words (quoting is spelling, not structure) while saved patterns keep
+      // the raw tokens.
+      const decoded = words.map((word, index) => item.words[index] ?? word)
       // Bare statement-head foreach blocks act as PowerShell control flow rather than cmdlet invocations.
       if (
         powershell &&
@@ -232,7 +235,7 @@ export function scan(
         output.directories.push(...resolved.directories)
         if (directoryCommand === parts && resolved.complete) continue
       }
-      const selected = prefix(words)
+      const selected = prefix(words, decoded)
       // A wrapper whose options cannot be unwrapped saves the exact command rather than any wildcard. The
       // pattern syntax has no escape for `*` or `?`, so a resource containing them saved as the exact
       // command would still match other commands; save nothing instead.
@@ -750,23 +753,17 @@ const COMMAND_RUNNERS = new Set([
 ])
 
 // Path-qualified and version-qualified tokens (`/bin/bash`, `python3.13`) resolve to the same command as
-// their bare names, so callers normalize before set membership checks. Raw words keep shell quoting, so a
-// fully quoted token (`"/usr/bin/sudo"`) loses its quotes here, and a trailing slash (`/usr/bin/sudo/`)
-// would otherwise leave an empty final segment.
+// their bare names, so callers normalize before set membership checks. The trailing slash of
+// `/usr/bin/sudo/` would otherwise leave an empty final segment.
 function commandBase(token: string): string {
-  const quoted =
-    token.length >= 2 &&
-    ((token.startsWith(`"`) && token.endsWith(`"`)) || (token.startsWith(`'`) && token.endsWith(`'`)))
-      ? token.slice(1, -1)
-      : token
-  return (quoted.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "").toLowerCase().replace(/\.exe$/, "")
+  return (token.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "").toLowerCase().replace(/\.exe$/, "")
 }
 
-function prefix(tokens: string[]): string[] {
-  const head = tokens[0] ? commandBase(tokens[0]) : undefined
-  if (head && ESCALATION_WRAPPERS.has(head)) return escalationPrefix(tokens, head)
+function prefix(tokens: string[], names: string[]): string[] {
+  const head = names[0] ? commandBase(names[0]) : undefined
+  if (head && ESCALATION_WRAPPERS.has(head)) return escalationPrefix(tokens, names, head)
   for (let length = Math.min(tokens.length, PREFIX_LENGTH); length > 0; length--) {
-    const arity = ARITY[tokens.slice(0, length).map(commandBase).join(" ")]
+    const arity = ARITY[names.slice(0, length).map(commandBase).join(" ")]
     if (arity !== undefined) return tokens.slice(0, arity)
   }
   return tokens.slice(0, 1)
@@ -775,12 +772,14 @@ function prefix(tokens: string[]): string[] {
 // Resolves an escalation wrapper's options so the saved pattern covers the wrapped command rather than every
 // command run through the wrapper. Returns [] when the wrapper cannot be unwrapped to a concrete inner
 // command, which saves the exact command instead of a bare escalation wildcard.
-function escalationPrefix(tokens: string[], wrapper: string): string[] {
+function escalationPrefix(tokens: string[], names: string[], wrapper: string): string[] {
   // `su` takes its command through -c or a login shell, so its arguments never unwrap to an inner command.
   if (wrapper === "su") return []
   let index = 1
   while (index < tokens.length) {
-    const token = tokens[index]
+    // Name and option resolution reads the decoded words: quoting is spelling, not structure, so `"-u"`
+    // is an option the same way `-u` is. The saved pattern keeps the raw tokens.
+    const token = names[index]
     // sudo takes VAR=value environment assignments before the command.
     if (wrapper === "sudo" && /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
       index++
@@ -795,12 +794,12 @@ function escalationPrefix(tokens: string[], wrapper: string): string[] {
     if (consumed === undefined) return []
     index += consumed
   }
-  if (index >= tokens.length || tokens[index].startsWith("-")) return []
+  if (index >= tokens.length || names[index].startsWith("-")) return []
   // Path-qualified and version-qualified runners (`/bin/bash`, `python3.13`) run the same wrapped commands
   // as their bare names, so normalize the token before the COMMAND_RUNNERS check.
-  const base = commandBase(tokens[index])
+  const base = commandBase(names[index])
   if (COMMAND_RUNNERS.has(base) || COMMAND_RUNNERS.has(base.replace(/\d+(?:\.\d+)*$/, ""))) return []
-  const inner = prefix(tokens.slice(index))
+  const inner = prefix(tokens.slice(index), names.slice(index))
   if (inner.length === 0) return []
   return [...tokens.slice(0, index), ...inner]
 }
