@@ -892,17 +892,13 @@ const layer = () =>
       ) {
         const sessionID = input.metadata?.sessionID
         const target = input.environment ?? environment
-        // Local only on this server's own machine: the Location's environment, by id, outside a workspace. A command
-        // anywhere else takes none of this machine's variables, keeps its cwd as given and is spawned from the server.
-        const local = location.workspaceID === undefined && target.id === environment.id
-        const baseEnv = local
+        // A command anywhere else takes none of this server's variables, keeps its cwd as given and is spawned through
+        // its environment.
+        const baseEnv = target.hostsServer
           ? ((Schema.is(SessionSchema.ID)(sessionID) ? yield* environments.get(sessionID) : undefined) ?? process.env)
           : undefined
-        // A command anywhere else has none of this server's shell paths, and the driver runs only argv, cwd and env.
-        // `sh -c` is the contract every POSIX worker can meet; the command is parsed as `sh` for the same reason.
-        // Only a command outside this Location's environment takes it: a workspace session keeps its own shell.
-        const program =
-          target.id === environment.id ? (input.shell ?? (yield* shell.resolve({ priority: "config" }))) : "sh"
+        // An environment that names its shell runs every command under it, and the command is parsed as that shell.
+        const program = target.shell ?? input.shell ?? (yield* shell.resolve({ priority: "config" }))
         const invocation: ShellCreateBefore = {
           command: input.command,
           cwd: input.cwd ?? workingDirectory.absolute,
@@ -916,8 +912,8 @@ const layer = () =>
         }
         yield* hooks.trigger("shell", "create.before", invocation)
         if (before) yield* before(invocation)
-        // Absolute for local commands, so the command reports the same cwd wherever it runs.
-        if (local) invocation.cwd = path.resolve(workingDirectory.absolute, invocation.cwd)
+        // Absolute for the server's own commands, so the command reports the same cwd wherever it runs.
+        if (target.hostsServer) invocation.cwd = path.resolve(workingDirectory.absolute, invocation.cwd)
 
         // Created per command: the directory can be removed while the Location stays open.
         yield* fs
@@ -940,7 +936,7 @@ const layer = () =>
         }
         yield* annotate(info)
 
-        if (runs && local) {
+        if (runs && target.hostsServer) {
           const created = yield* runs
             .create({
               info,
@@ -1072,9 +1068,9 @@ const layer = () =>
                     Effect.catch((error) => {
                       const cause = error.cause
                       const signal = cause instanceof CrossSpawnSpawner.KilledBySignal ? cause.signal : undefined
-                      // A signal reads as one. A command on another machine that cannot read its exit reports the
-                      // driver's own sentence instead of nothing; a local one is unchanged.
-                      if (signal === undefined && target.id !== environment.id)
+                      // A signal reads as one. Where a lost exit says why, the command reports that sentence
+                      // instead of nothing.
+                      if (signal === undefined && target.explainsLostExit)
                         command.killed = cause instanceof Error ? cause.message : String(cause)
                       return Effect.succeed({ exit: undefined, signal })
                     }),

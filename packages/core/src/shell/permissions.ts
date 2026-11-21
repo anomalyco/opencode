@@ -10,12 +10,11 @@ export const requests = Effect.fnUntraced(function* (
     readonly command: string
     readonly program: string
     readonly target: FileAccess.Target
-    readonly local: boolean
     readonly once?: boolean
   },
 ) {
   const parsed = yield* ShellParse.scan(input.command, input.program, input.target.absolute, {
-    home: input.local ? undefined : null,
+    home: input.target.machine === undefined ? undefined : null,
   })
   // Directory arguments are relative to the command's working directory on the same machine.
   const directories = yield* Effect.forEach(parsed.directories, (directory) =>

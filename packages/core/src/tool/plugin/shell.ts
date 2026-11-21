@@ -305,7 +305,6 @@ export const Plugin = {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
     const access = yield* FileAccess.Service
-    const environment = yield* Environment.Service
     const workingDirectory = yield* Environment.workingDirectory
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
@@ -328,7 +327,10 @@ export const Plugin = {
           ? requested.target
           : yield* access.resolve({
               path: invocation.cwd,
-              base: requested.target.environment.id === environment.id ? workingDirectory : requested.target,
+              base:
+                requested.target.environment.id === workingDirectory.environment.id
+                  ? workingDirectory
+                  : requested.target,
               kind: "directory",
             })
       invocation.cwd = target.absolute
@@ -337,7 +339,6 @@ export const Plugin = {
         command: invocation.command,
         program: invocation.shell,
         target,
-        local: target.environment.id === environment.id,
       })
       yield* Effect.forEach(
         requests,
